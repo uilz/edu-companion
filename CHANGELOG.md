@@ -4,6 +4,44 @@
 
 ---
 
+## [0.3.0] - 2026-05-17
+
+### 新增 - 对话系统 ⭐
+- **树结构会话**：Partition(分区) → Branch(分支) → TreeNode(消息节点)
+- **多模态消息**：单条消息支持文字+图片+语音+视频+文档任意组合
+- **智能分区**：Embedding+关键词权重分类，自动归类到学科分区
+- **分支管理**：从任意节点分叉，支持修改/删除，虚拟根节点兜底
+- **LLM对话**：DeepSeek流式回复，上下文自动构建(分区摘要+最近8条)
+- **多模态回复**：ToolExecutor支持5种工具(视频搜索/练习题/图片/思维导图/文档)
+- **后台任务**：慢任务异步执行，WebSocket推送完成状态
+- **元消息历史**：按月分片JSONL存储，删除不丢数据
+- **Branch Workspace**：文件挂载到分支，跨分支引用
+
+### 后端新增
+- `schemas/conversation.py` — 13个Pydantic数据模型
+- `services/storage.py` — JSON文件存储引擎(线程安全+缓存)
+- `services/tree_ops.py` — 树操作(CRUD+分叉+切换+修改+删除)
+- `services/classifier.py` — 分类服务(Embedding+关键词，可降级)
+- `services/conversation_llm.py` — LLM对话(流式+工具调用)
+- `services/tool_executor.py` — 工具执行器(5种工具+规则预判)
+- `services/background_jobs.py` — 后台任务管理器
+- `api/conversation.py` — 9个API端点+WebSocket端点
+
+### 前端新增
+- `components/conversation/PartitionSidebar.tsx` — 分区列表+新建
+- `components/conversation/BranchList.tsx` — 分支列表+切换
+- `components/conversation/MessageList.tsx` — 消息展示+流式渲染
+- `components/conversation/ChatInput.tsx` — 多模态输入框
+- `components/conversation/ResponseBlockRenderer.tsx` — 6种回复块渲染
+
+### 修复
+- KaTeX公式渲染接入(练习页+对话页)
+- 暗色主题统一(CSS变量+data-theme)
+- 前端元素块大小修复
+- 全局主题切换(设置按钮)
+
+---
+
 ## [0.2.0] - 2026-05-17
 
 ### 重构
