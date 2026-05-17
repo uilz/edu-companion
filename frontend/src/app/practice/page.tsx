@@ -1,113 +1,230 @@
 "use client";
 
-import { useState } from "react";
-import { CheckCircle, XCircle, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import {
+  CheckCircle,
+  XCircle,
+  ChevronLeft,
+  ChevronRight,
+  RotateCcw,
+  Lightbulb,
+  Loader2,
+} from "lucide-react";
 import Card from "@/components/ui/Card";
 import MathContent from "@/components/ui/MathContent";
 
-interface Question {
-  id: number;
-  subject: string;
-  difficulty: "基础" | "进阶" | "挑战";
-  question: string;
-  options: string[];
-  answer: string;
-  explanation: string;
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+interface QuestionOption {
+  letter: string;
+  text: string;
+  is_correct: boolean;
 }
 
-const questions: Question[] = [
-  {
-    id: 1,
-    subject: "高等数学",
-    difficulty: "进阶",
-    question: "求函数 $f(x) = x^3 - 3x^2 + 2$ 在区间 $[0, 3]$ 上的最大值和最小值。",
-    options: [
-      "最大值 2，最小值 -2",
-      "最大值 2，最小值 -4",
-      "最大值 4，最小值 -2",
-      "最大值 4，最小值 0",
-    ],
-    answer: "A",
-    explanation:
-      "求导得 $f'(x) = 3x^2 - 6x = 3x(x-2)$，临界点 $x=0, 2$。\n\n$f(0) = 2$，$f(2) = 8-12+2 = -2$，$f(3) = 27-27+2 = 2$\n\n最大值为 $f(0) = f(3) = 2$，最小值为 $f(2) = -2$。",
-  },
-  {
-    id: 2,
-    subject: "线性代数",
-    difficulty: "基础",
-    question: "设 $A$ 是 $3 \\times 3$ 矩阵，$\\det(A) = 2$，则 $\\det(2A)$ 等于多少？",
-    options: ["4", "8", "16", "6"],
-    answer: "C",
-    explanation:
-      "$\\det(kA) = k^n \\det(A)$，其中 $n$ 为矩阵阶数。\n\n$n=3$，$k=2$，所以 $\\det(2A) = 2^3 \\times 2 = 16$。",
-  },
-  {
-    id: 3,
-    subject: "大学物理",
-    difficulty: "进阶",
-    question: "一个质点沿 $x$ 轴运动，其位置随时间变化为 $x(t) = 4t^3 - 2t + 1$（国际单位），求 $t = 1\\text{s}$ 时的加速度。",
-    options: ["$12 \\text{m/s}^2$", "$24 \\text{m/s}^2$", "$6 \\text{m/s}^2$", "$10 \\text{m/s}^2$"],
-    answer: "B",
-    explanation:
-      "速度 $v(t) = x'(t) = 12t^2 - 2$\n\n加速度 $a(t) = v'(t) = 24t$\n\n$t=1$ 时，$a = 24 \\times 1 = 24 \\text{m/s}^2$。",
-  },
-  {
-    id: 4,
-    subject: "概率论",
-    difficulty: "挑战",
-    question: "设随机变量 $X \\sim N(2, 4)$，则 $P(X > 4)$ 等于（已知 $\\Phi(1) = 0.8413$）：",
-    options: ["0.1587", "0.3085", "0.8413", "0.1613"],
-    answer: "A",
-    explanation:
-      "$X \\sim N(\\mu, \\sigma^2) = N(2, 4)$，即 $\\mu = 2$，$\\sigma = 2$\n\n$P(X > 4) = P\\left(\\frac{X-2}{2} > \\frac{4-2}{2}\\right) = P(Z > 1)$\n\n$= 1 - \\Phi(1) = 1 - 0.8413 = 0.1587$",
-  },
-  {
-    id: 5,
-    subject: "高等数学",
-    difficulty: "基础",
-    question: "计算不定积分 $\\int x \\cdot e^x \\, dx$。",
-    options: [
-      "$xe^x - e^x + C$",
-      "$xe^x + e^x + C$",
-      "$\\frac{1}{2}x^2 e^x + C$",
-      "$x^2 e^x - e^x + C$",
-    ],
-    answer: "A",
-    explanation:
-      "使用分部积分法，令 $u = x$，$dv = e^x dx$：\n\n$du = dx$，$v = e^x$\n\n$\\int x e^x dx = xe^x - \\int e^x dx = xe^x - e^x + C$",
-  },
-];
+interface Question {
+  question_id: string;
+  skill_id: string;
+  subject: string;
+  bloom_level: string;
+  text: string;
+  options: QuestionOption[] | null;
+  correct_answer: string;
+  explanation: string;
+  hints: string[];
+  difficulty: number;
+}
+
+interface Session {
+  session_id: string;
+  question_ids: string[];
+  planned_skills: string[];
+  mode: string;
+  status: string;
+}
+
+interface SubmitResult {
+  is_correct: boolean;
+  correct_answer: string;
+  explanation: string;
+  knowledge_update?: {
+    skill_id: string;
+    p_known_before: number;
+    p_known_after: number;
+    mastery_level: string;
+  };
+  error_analysis?: {
+    type: string;
+    suggestion: string;
+  };
+  emotional_feedback?: string;
+}
+
+interface HintResult {
+  level: number;
+  text: string;
+  type: string;
+}
 
 export default function PracticePage() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
-  const [difficulty, setDifficulty] = useState<string>("全部");
+  const [submitResult, setSubmitResult] = useState<SubmitResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [hint, setHint] = useState<HintResult | null>(null);
+  const [hintLevel, setHintLevel] = useState(0);
+  const [startTime, setStartTime] = useState<number>(0);
 
   const q = questions[currentIndex];
-  const isCorrect = selected === q.answer;
+  const isCorrect = submitResult?.is_correct;
 
-  const handleSubmit = () => {
-    if (!selected) return;
-    setSubmitted(true);
+  // 创建练习会话
+  const createSession = useCallback(async (skillIds?: string[]) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/practice/sessions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          skill_ids: skillIds || [],
+          duration_minutes: 30,
+          mode: "adaptive",
+        }),
+      });
+      const data = await res.json();
+      setSession(data.session);
+      setQuestions(data.questions);
+      setCurrentIndex(0);
+      setSelected(null);
+      setSubmitted(false);
+      setSubmitResult(null);
+      setHint(null);
+      setHintLevel(0);
+      setStartTime(Date.now());
+    } catch (err) {
+      console.error("Failed to create session:", err);
+    }
+    setLoading(false);
+  }, []);
+
+  // 自动创建会话
+  useEffect(() => {
+    if (!session) {
+      createSession();
+    }
+  }, [session, createSession]);
+
+  // 提交答案
+  const handleSubmit = async () => {
+    if (!selected || !session || !q) return;
+
+    setLoading(true);
+    try {
+      const timeSpent = (Date.now() - startTime) / 1000;
+      const res = await fetch(`${API_BASE}/api/practice/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: session.session_id,
+          question_id: q.question_id,
+          answer: selected,
+          time_spent_seconds: timeSpent,
+          hints_used: hintLevel,
+        }),
+      });
+      const result: SubmitResult = await res.json();
+      setSubmitResult(result);
+      setSubmitted(true);
+    } catch (err) {
+      console.error("Submit failed:", err);
+    }
+    setLoading(false);
   };
 
+  // 获取提示
+  const handleHint = async () => {
+    if (!q) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/practice/hint`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question_id: q.question_id,
+          current_level: hintLevel,
+        }),
+      });
+      const data = await res.json();
+      setHint(data.hint);
+      setHintLevel(data.hint.level);
+    } catch (err) {
+      console.error("Hint failed:", err);
+    }
+  };
+
+  // 下一题
   const handleNext = () => {
-    setSelected(null);
-    setSubmitted(false);
-    setCurrentIndex((i) => (i + 1) % questions.length);
+    if (currentIndex < questions.length - 1) {
+      setCurrentIndex((i) => i + 1);
+      setSelected(null);
+      setSubmitted(false);
+      setSubmitResult(null);
+      setHint(null);
+      setHintLevel(0);
+      setStartTime(Date.now());
+    }
   };
 
+  // 上一题
   const handlePrev = () => {
-    setSelected(null);
-    setSubmitted(false);
-    setCurrentIndex((i) => (i - 1 + questions.length) % questions.length);
+    if (currentIndex > 0) {
+      setCurrentIndex((i) => i - 1);
+      setSelected(null);
+      setSubmitted(false);
+      setSubmitResult(null);
+      setHint(null);
+      setHintLevel(0);
+      setStartTime(Date.now());
+    }
   };
 
-  const handleReset = () => {
-    setSelected(null);
-    setSubmitted(false);
+  // 重新开始
+  const handleRestart = () => {
+    createSession();
   };
+
+  // 加载中
+  if (loading && !q) {
+    return (
+      <main className="min-h-screen bg-[var(--color-bg)]">
+        <div className="max-w-3xl mx-auto px-6 py-16 flex items-center justify-center">
+          <Loader2 className="animate-spin text-[var(--color-accent)]" size={24} />
+          <span className="ml-3 text-[var(--color-text-muted)]">加载中...</span>
+        </div>
+      </main>
+    );
+  }
+
+  // 无题目
+  if (!q) {
+    return (
+      <main className="min-h-screen bg-[var(--color-bg)]">
+        <div className="max-w-3xl mx-auto px-6 py-16 text-center">
+          <h1 className="text-4xl font-bold tracking-tight text-[var(--color-text)] mb-4">
+            练习
+          </h1>
+          <p className="text-[var(--color-text-muted)] mb-8">暂无可用题目</p>
+          <button
+            onClick={handleRestart}
+            className="px-6 py-2.5 bg-[var(--color-accent)] text-[var(--color-text)] text-sm font-medium hover:bg-[var(--color-accent-hover)] transition-colors"
+          >
+            重新生成
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
@@ -117,29 +234,20 @@ export default function PracticePage() {
           <h1 className="text-4xl font-bold tracking-tight text-[var(--color-text)]">
             练习
           </h1>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-[var(--color-text-muted)]">难度</span>
-            {["全部", "基础", "进阶", "挑战"].map((d) => (
-              <button
-                key={d}
-                onClick={() => setDifficulty(d)}
-                className={`text-xs px-3 py-1.5 border transition-colors ${
-                  difficulty === d
-                    ? "border-[var(--color-accent)] text-[var(--color-accent)] bg-[var(--color-accent)]/10"
-                    : "border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-border-hover)]"
-                }`}
-              >
-                {d}
-              </button>
-            ))}
-          </div>
+          <button
+            onClick={handleRestart}
+            className="flex items-center gap-1.5 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+          >
+            <RotateCcw size={14} />
+            重新开始
+          </button>
         </div>
 
         {/* Progress */}
         <div className="mb-8">
           <div className="flex items-center justify-between text-xs text-[var(--color-text-muted)] mb-2">
             <span>
-              {q.subject} · {q.difficulty}
+              {q.subject} · {q.bloom_level} · 难度 {q.difficulty}
             </span>
             <span>
               {currentIndex + 1} / {questions.length}
@@ -148,7 +256,9 @@ export default function PracticePage() {
           <div className="w-full bg-[var(--color-surface)] h-1">
             <div
               className="h-full bg-[var(--color-accent)] transition-all"
-              style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }}
+              style={{
+                width: `${((currentIndex + 1) / questions.length) * 100}%`,
+              }}
             />
           </div>
         </div>
@@ -156,64 +266,92 @@ export default function PracticePage() {
         {/* Question */}
         <Card>
           <MathContent
-            text={q.question}
+            text={q.text}
             className="text-base text-[var(--color-text)] leading-relaxed mb-8 message-content"
           />
 
           {/* Options */}
-          <div className="space-y-3">
-            {q.options.map((opt, i) => {
-              const letter = String.fromCharCode(65 + i);
-              const isSelected = selected === letter;
-              const showResult = submitted && isSelected;
+          {q.options && (
+            <div className="space-y-3">
+              {q.options.map((opt) => {
+                const isSelected = selected === opt.letter;
+                const showResult = submitted;
+                const isCorrectOption = opt.is_correct;
 
-              return (
-                <button
-                  key={letter}
-                  onClick={() => !submitted && setSelected(letter)}
-                  disabled={submitted}
-                  className={`w-full text-left p-4 border text-sm transition-colors ${
-                    submitted
-                      ? letter === q.answer
-                        ? "border-[var(--color-success)] bg-[var(--color-success)]/10 text-[var(--color-success)]"
-                        : showResult && !isCorrect
-                        ? "border-[var(--color-error)] bg-[var(--color-error)]/10 text-[var(--color-error)]"
-                        : "border-[var(--color-border)] text-[var(--color-text-muted)]"
-                      : isSelected
-                      ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-text)]"
-                      : "border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)]"
-                  }`}
-                >
-                  <span className="font-semibold mr-3">{letter}.</span>
-                  {opt}
-                </button>
-              );
-            })}
-          </div>
+                return (
+                  <button
+                    key={opt.letter}
+                    onClick={() => !submitted && setSelected(opt.letter)}
+                    disabled={submitted}
+                    className={`w-full text-left p-4 border text-sm transition-colors ${
+                      showResult
+                        ? isCorrectOption
+                          ? "border-[var(--color-success)] bg-[var(--color-success)]/10 text-[var(--color-success)]"
+                          : isSelected && !isCorrectOption
+                          ? "border-[var(--color-error)] bg-[var(--color-error)]/10 text-[var(--color-error)]"
+                          : "border-[var(--color-border)] text-[var(--color-text-muted)]"
+                        : isSelected
+                        ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-text)]"
+                        : "border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)]"
+                    }`}
+                  >
+                    <span className="font-semibold mr-3">{opt.letter}.</span>
+                    {opt.text}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Hint */}
+          {hint && (
+            <div className="mt-4 p-4 border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/5 text-sm">
+              <div className="flex items-center gap-2 mb-1 text-[var(--color-accent)] font-semibold">
+                <Lightbulb size={14} />
+                提示 Level {hint.level}
+              </div>
+              <div className="text-[var(--color-text-secondary)]">
+                {hint.text}
+              </div>
+            </div>
+          )}
 
           {/* Action buttons */}
           <div className="flex items-center gap-3 mt-8">
             {!submitted ? (
-              <button
-                onClick={handleSubmit}
-                disabled={!selected}
-                className="px-6 py-2.5 bg-[var(--color-accent)] text-[var(--color-text)] text-sm font-medium disabled:opacity-30 hover:bg-[var(--color-accent-hover)] transition-colors"
-              >
-                提交答案
-              </button>
+              <>
+                <button
+                  onClick={handleSubmit}
+                  disabled={!selected || loading}
+                  className="px-6 py-2.5 bg-[var(--color-accent)] text-[var(--color-text)] text-sm font-medium disabled:opacity-30 hover:bg-[var(--color-accent-hover)] transition-colors"
+                >
+                  {loading ? (
+                    <Loader2 className="animate-spin inline" size={14} />
+                  ) : (
+                    "提交答案"
+                  )}
+                </button>
+                <button
+                  onClick={handleHint}
+                  className="flex items-center gap-1.5 px-4 py-2.5 border border-[var(--color-border)] text-[var(--color-text-secondary)] text-sm hover:border-[var(--color-border-hover)] transition-colors"
+                >
+                  <Lightbulb size={14} />
+                  提示
+                </button>
+              </>
             ) : (
               <button
-                onClick={handleReset}
+                onClick={handleRestart}
                 className="px-6 py-2.5 border border-[var(--color-border)] text-[var(--color-text-secondary)] text-sm hover:border-[var(--color-border-hover)] transition-colors"
               >
                 <RotateCcw size={14} className="inline mr-1.5" />
-                重做
+                重新开始
               </button>
             )}
           </div>
 
           {/* Result feedback */}
-          {submitted && (
+          {submitted && submitResult && (
             <div
               className={`mt-6 p-5 border text-sm leading-relaxed ${
                 isCorrect
@@ -224,27 +362,61 @@ export default function PracticePage() {
               <div className="flex items-center gap-2 mb-3 font-semibold">
                 {isCorrect ? (
                   <>
-                    <CheckCircle size={16} className="text-[var(--color-success)]" />
-                    <span className="text-[var(--color-success)]">回答正确！</span>
+                    <CheckCircle
+                      size={16}
+                      className="text-[var(--color-success)]"
+                    />
+                    <span className="text-[var(--color-success)]">
+                      回答正确！
+                    </span>
                   </>
                 ) : (
                   <>
-                    <XCircle size={16} className="text-[var(--color-error)]" />
+                    <XCircle
+                      size={16}
+                      className="text-[var(--color-error)]"
+                    />
                     <span className="text-[var(--color-error)]">
-                      回答错误，正确答案是 {q.answer}
+                      回答错误，正确答案是 {submitResult.correct_answer}
                     </span>
                   </>
                 )}
               </div>
-              <div
-                className="text-[var(--color-text-secondary)] message-content"
-              >
-                {q.explanation.split("\n\n").map((para, i) => (
-                  <p key={i} className="mb-2 last:mb-0">
-                    <MathContent text={para.replace(/\n/g, " ")} as="span" />
-                  </p>
-                ))}
+
+              {/* 知识状态更新 */}
+              {submitResult.knowledge_update && (
+                <div className="text-xs text-[var(--color-text-muted)] mb-3">
+                  掌握度：{(submitResult.knowledge_update.p_known_before * 100).toFixed(0)}%
+                  → {(submitResult.knowledge_update.p_known_after * 100).toFixed(0)}%
+                  （{submitResult.knowledge_update.mastery_level}）
+                </div>
+              )}
+
+              {/* 解析 */}
+              <div className="text-[var(--color-text-secondary)] message-content">
+                {submitResult.explanation
+                  .split("\n\n")
+                  .map((para, i) => (
+                    <p key={i} className="mb-2 last:mb-0">
+                      <MathContent text={para.replace(/\n/g, " ")} as="span" />
+                    </p>
+                  ))}
               </div>
+
+              {/* 错因分析 */}
+              {submitResult.error_analysis && (
+                <div className="mt-3 p-3 bg-[var(--color-surface)] text-xs">
+                  <span className="font-semibold">错因分析：</span>
+                  {submitResult.error_analysis.suggestion}
+                </div>
+              )}
+
+              {/* 情感反馈 */}
+              {submitResult.emotional_feedback && (
+                <div className="mt-3 text-sm text-[var(--color-accent)]">
+                  {submitResult.emotional_feedback}
+                </div>
+              )}
             </div>
           )}
         </Card>
@@ -253,14 +425,16 @@ export default function PracticePage() {
         <div className="flex items-center justify-between mt-6">
           <button
             onClick={handlePrev}
-            className="flex items-center gap-1 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+            disabled={currentIndex === 0}
+            className="flex items-center gap-1 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors disabled:opacity-30"
           >
             <ChevronLeft size={16} />
             上一题
           </button>
           <button
             onClick={handleNext}
-            className="flex items-center gap-1 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+            disabled={currentIndex >= questions.length - 1 || !submitted}
+            className="flex items-center gap-1 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors disabled:opacity-30"
           >
             下一题
             <ChevronRight size={16} />
