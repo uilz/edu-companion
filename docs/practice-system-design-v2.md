@@ -28,6 +28,8 @@
 6. **苏格拉底引导**：错误时给提示而非直接答案，引导发现错误
 7. **多模态**：数学公式、几何图形、物理示意图、代码片段
 8. **情感伴随**：连续挫败时调整策略，成功时强化正反馈
+9. **刻意练习+引导发现**：不只是"动手做"，要有结构化的引导发现（self-explanation、对比案例、个性化反馈），研究显示引导发现比纯动手练习效果好4倍，组合使用效果好10倍+（Chen et al., Active Learning is About More Than Hands-On）
+10. **用户资料驱动**：支持上传自己的题库/资料，建立语义索引，从用户真实材料中生成练习题
 
 ---
 
@@ -52,6 +54,26 @@
 │  │              练习会话管理器                        │    │
 │  │  • 会话状态机  • 实时评分  • 进度追踪             │    │
 │  └─────────────────────────────────────────────────┘    │
+│         │                 │                 │           │
+│         ▼                 ▼                 ▼           │
+│  ┌──────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │ 交互层   │  │  反馈引擎    │  │  数据层      │      │
+│  │          │  │              │  │              │      │
+│  │ • 选择题 │  │ • 即时解析   │  │ • BKT/AKT   │      │
+│  │ • 填空题 │  │ • 苏格拉底   │  │ • 遗忘曲线   │      │
+│  │ • 解答题 │  │ • 提示系统   │  │ • 错题本     │      │
+│  │ • 计算题 │  │ • 情感安抚   │  │ • 统计面板   │      │
+│  │ • 语音   │  │ • 视频推荐   │  │ • 行为日志   │      │
+│  └──────────┘  └──────────────┘  └──────────────┘      │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │        📚 用户资料索引引擎（NEW）                 │    │
+│  │  • OCR/解析 → 分块 → Embedding → 向量存储        │    │
+│  │  • 语义搜索 → 题目生成 → 知识点提取               │    │
+│  └─────────────────────────────────────────────────┘    │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
 │         │                 │                 │           │
 │         ▼                 ▼                 ▼           │
 │  ┌──────────┐  ┌──────────────┐  ┌──────────────┐      │
@@ -1195,14 +1217,330 @@ class SocraticGuide:
 
 ---
 
-## 8. 游戏化设计（谨慎使用）
+## 8. 刻意练习与引导发现（Deliberate Practice + Guided Discovery）
 
-### 8.1 设计原则
+> 基于 Chen et al. "Active Learning is About More Than Hands-On" 的研究发现
+
+### 8.1 核心发现
+
+| 方法 | 效果 | 说明 |
+|------|------|------|
+| 纯动手练习（construction） | 基线 | 学生自由探索，无引导 |
+| 引导发现（guided discovery） | **4倍**提升 | self-explanation + 对比案例 + 个性化反馈 |
+| 引导发现 + 动手练习 | **10倍+**提升 | 组合使用效果最佳 |
+
+**关键洞察**：单纯的"做题"（hands-on）不如"有引导的做题"（guided discovery）。系统不只是出题+判对错，而要主动引导学生思考。
+
+### 8.2 三大引导机制
+
+#### Self-Explanation（自我解释）
+
+学生答完题后，**要求用自己的话解释为什么选这个答案**，而不是直接看解析。
+
+```python
+class SelfExplanationPrompt:
+    """答完题后追问：用自己的话说说为什么选这个"""
+    
+    def generate_prompt(self, question: Question, student_answer: str) -> str:
+        if student_answer == question.correct_answer:
+            return "答对了！能用自己的话解释一下为什么是这个答案吗？"
+        else:
+            return "答错了。先别看解析，你觉得正确答案的逻辑是什么？试着推导一下。"
+```
+
+**效果**：强迫学生把"模糊的感觉"变成"清晰的逻辑"，暴露隐藏的迷思概念。
+
+#### Contrasting Cases（对比案例）
+
+展示两道**相似但关键点不同**的题目，让学生发现差异。
+
+```python
+class ContrastingCasesGenerator:
+    """生成对比案例：两道看似相似但解法不同的题"""
+    
+    def generate_contrast(self, question: Question) -> dict:
+        return {
+            "case_a": question,  # 原题
+            "case_b": self._modify_key_difference(question),  # 改变一个关键条件
+            "prompt": "这两道题看起来很像，但解法完全不同。你能找出关键区别吗？",
+        }
+    
+    def _modify_key_difference(self, q: Question) -> Question:
+        """修改一个关键条件，生成对比题"""
+        # 例：原题 f(x)=x² 在 [0,1] 求最值
+        # 对比题 f(x)=x² 在 [-1,1] 求最值（多了负半轴）
+        # 学生需要发现"区间不同→端点值不同"这个关键差异
+        ...
+```
+
+#### Personalized Interactive Feedback（个性化交互反馈）
+
+不是固定解析，而是根据学生的**具体错误**给出针对性反馈。
+
+```python
+class AdaptiveFeedback:
+    """根据错误模式生成个性化反馈"""
+    
+    def generate(self, error_analysis: ErrorAnalysis, history: list) -> str:
+        base = error_analysis.explanation
+        
+        if error_analysis.error_type == ErrorType.CONCEPTUAL:
+            return f"你对{error_analysis.misconception}的理解有问题。\n" \
+                   f"正确理解：{base}\n" \
+                   f"💡 看看这个对比案例加深理解。"
+        
+        if error_analysis.error_type == ErrorType.PROCEDURAL:
+            return f"你的方向对了，但第{error_analysis.error_subtype}步有问题。\n" \
+                   f"正确步骤：{base}\n" \
+                   f"🔍 对比一下你的步骤和正确步骤的差异。"
+        
+        if error_analysis.error_type == ErrorType.COMPUTATION:
+            return f"思路完全正确！只是在{error_analysis.error_subtype}计算时出了点差错。\n" \
+                   f"再算一遍这个步骤？"
+```
+
+### 8.3 引导发现 vs 直接解析
+
+| 场景 | 直接解析 | 引导发现 |
+|------|---------|---------|
+| 首次做错 | 立即给完整解析 | 先追问"你为什么选这个？" → 再引导 |
+| 同类错误≥2次 | 给对比案例 | 展示两道相似题，引导发现差异 |
+| 概念性错误 | 给定义 | self-explanation + 对比案例 |
+| 计算错误 | 给正确计算 | 指出具体步骤，让学生自己找到 |
+| 连续对≥5题 | — | 挑战更高Bloom层次 |
+
+---
+
+## 9. 用户上传资料索引与题库构建
+
+### 9.1 设计目标
+
+用户可以上传自己的学习资料（PDF讲义、Word笔记、图片题目、习题集），系统自动：
+1. **解析**：OCR/文本提取
+2. **分块**：按知识点/题目切分
+3. **索引**：Embedding向量化，存入pgvector
+4. **生成**：基于用户资料生成练习题
+5. **搜索**：语义搜索用户资料中的相关内容
+
+### 9.2 支持的文件格式
+
+| 格式 | 处理方式 | 输出 |
+|------|---------|------|
+| PDF | pymupdf提取文本+图片 | 结构化文本 + 图片块 |
+| Word(.docx) | python-docx解析 | 结构化文本 |
+| 图片(JPG/PNG) | Vision模型OCR | 文本 + 图片描述 |
+| 手写笔记 | Vision模型OCR+手写识别 | 文本 |
+| PPT | python-pptx提取 | 幻灯片文本+图片 |
+| Markdown/TXT | 直接读取 | 文本 |
+
+### 9.3 索引流水线
+
+```
+用户上传文件
+  ↓
+[Step 1] 格式解析
+  ├── PDF → pymupdf → 文本块 + 图片
+  ├── Word → python-docx → 文本块
+  ├── 图片 → Vision模型OCR → 文本 + 图片描述
+  └── 其他 → 对应解析器
+  ↓
+[Step 2] 智能分块
+  ├── 按章节/标题分块（PDF目录/Word标题样式）
+  ├── 按题目分块（识别"题目"、"解答"等标记）
+  ├── 按知识点分块（LLM辅助识别）
+  └── 固定长度分块（fallback，overlap 100字）
+  ↓
+[Step 3] 知识点标注
+  ├── LLM提取每个chunk的知识点ID
+  ├── 标注Bloom层次
+  └── 标注难度估计
+  ↓
+[Step 4] Embedding向量化
+  ├── 文本chunk → Granite Embedding → 向量
+  ├── 图片 → CLIP embedding（可选）
+  └── 存入pgvector
+  ↓
+[Step 5] 题目提取（可选）
+  ├── 识别chunk中的题目（模式匹配+LLM）
+  ├── 提取题干、选项、答案、解析
+  ├── 标注难度、知识点、Bloom层次
+  └── 存入practice_questions表
+```
+
+### 9.4 数据模型
+
+```python
+class MaterialChunk(BaseModel):
+    """用户上传资料的一个分块"""
+    chunk_id: str
+    user_id: str
+    material_id: str          # 所属资料
+    
+    # 内容
+    text: str                 # 文本内容
+    image_urls: list[str]     # 关联图片
+    chunk_type: str           # "text" | "question" | "solution" | "diagram" | "formula"
+    
+    # 知识点
+    skill_ids: list[str]      # 提取的知识点ID
+    bloom_level: BloomLevel
+    difficulty_estimate: float
+    
+    # 向量
+    embedding: list[float]    # Embedding向量（存pgvector）
+    
+    # 来源
+    source_file: str          # 原始文件名
+    page_number: int | None   # 页码（PDF）
+    chunk_index: int          # 在文件中的顺序
+    
+    # 元数据
+    created_at: datetime
+    indexed_at: datetime
+    indexing_status: str      # "pending" | "processing" | "done" | "failed"
+
+class Material(BaseModel):
+    """用户上传的一份完整资料"""
+    material_id: str
+    user_id: str
+    file_name: str
+    file_type: str
+    file_size: int
+    
+    # 状态
+    status: str               # "uploading" | "processing" | "ready" | "failed"
+    chunk_count: int = 0
+    question_count: int = 0   # 提取出的题目数
+    
+    # 知识点覆盖
+    skills_covered: list[str] = []
+    
+    created_at: datetime
+    indexed_at: datetime | None
+```
+
+### 9.5 语义搜索API
+
+```yaml
+POST /api/materials/upload:
+  description: "上传资料并触发索引"
+  request:
+    file: UploadFile
+    auto_extract_questions: bool = true
+  response:
+    material: Material
+    indexing_job_id: string
+
+GET /api/materials:
+  description: "获取用户资料列表"
+  response:
+    materials: list[Material]
+
+GET /api/materials/{material_id}/chunks:
+  description: "获取资料的分块列表"
+  response:
+    chunks: list[MaterialChunk]
+
+POST /api/materials/search:
+  description: "语义搜索用户资料"
+  request:
+    query: string
+    material_ids: list[string]?
+    skill_id: string?
+    top_k: int = 10
+  response:
+    results: list[SearchResult]
+    # 每个结果包含：chunk文本、相关度分数、来源文件、页码
+
+POST /api/practice/generate-from-material:
+  description: "基于用户资料生成练习题"
+  request:
+    material_ids: list[string]
+    skill_id: string?
+    count: int = 5
+    bloom_level: BloomLevel?
+    difficulty: float?
+  response:
+    questions: list[Question]
+    source_chunks: list[MaterialChunk]  # 题目来源的资料片段
+```
+
+### 9.6 题目生成策略
+
+从用户资料中生成题目的三种策略：
+
+| 策略 | 说明 | 适用场景 |
+|------|------|---------|
+| **原题提取** | 直接识别资料中的题目 | 习题集、试卷 |
+| **改题生成** | 改变原题的数字/条件 | 同类练习 |
+| **知识点生成** | 根据资料中的知识点，LLM出新题 | 讲义、笔记 |
+
+```python
+class MaterialQuestionGenerator:
+    """基于用户资料生成题目"""
+    
+    def generate(self, request: GenerateRequest) -> list[Question]:
+        # 1. 语义搜索相关chunk
+        chunks = self.vector_store.search(
+            query=request.skill_id or request.query,
+            material_ids=request.material_ids,
+            top_k=20,
+        )
+        
+        questions = []
+        for chunk in chunks:
+            if chunk.chunk_type == "question":
+                # 策略1：原题提取
+                q = self._extract_existing_question(chunk)
+                if q: questions.append(q)
+            
+            # 策略2：改题生成
+            q = self._modify_question(chunk, request.difficulty)
+            if q: questions.append(q)
+        
+        # 策略3：知识点生成（用剩余chunk）
+        knowledge_chunks = [c for c in chunks if c.chunk_type != "question"]
+        new_questions = self._generate_from_knowledge(
+            knowledge_chunks, request.count - len(questions)
+        )
+        questions.extend(new_questions)
+        
+        return questions[:request.count]
+```
+
+### 9.7 与练习系统的集成
+
+```
+用户上传PDF讲义
+  ↓
+系统解析 → 建立语义索引
+  ↓
+用户："根据我的讲义出几道极限的题"
+  ↓
+语义搜索 → 找到讲义中"极限"相关章节
+  ↓
+LLM基于讲义内容生成题目
+  ↓
+练习 → 答题 → 错因分析
+  ↓
+如果错误：推荐讲义中对应章节复习
+```
+
+**关键价值**：练习题不是凭空生成的，而是**基于用户自己的学习材料**，确保：
+1. 题目内容与用户正在学的教材一致
+2. 术语、符号、风格与教材匹配
+3. 错误时能精确定位到教材的对应章节
+
+---
+
+## 10. 游戏化设计（谨慎使用）
+
+### 10.1 设计原则
 
 > **研究警告**：过度游戏化会削弱内在动机（Deci & Ryan, 2000）。  
 > 我们的游戏化应该是**锦上添花**，不是**本末倒置**。
 
-### 8.2 实现的游戏化元素
+### 10.2 实现的游戏化元素
 
 ```python
 class GamificationSystem:
@@ -1237,7 +1575,7 @@ class GamificationSystem:
 
 ---
 
-## 9. 实施路线图
+## 11. 实施路线图
 
 ### Phase 1: MVP（2-3周）
 
@@ -1275,7 +1613,7 @@ class GamificationSystem:
 
 ---
 
-## 10. 技术决策记录
+## 12. 技术决策记录
 
 | 决策 | 选择 | 理由 |
 |------|------|------|
