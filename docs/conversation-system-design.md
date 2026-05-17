@@ -71,9 +71,9 @@ interface TreeNode {
   partition_id: string;          // 所属分区
   branch_id: string;             // 所属分支ID (见3.6)
 
-  // 多模态内容
-  content_blocks: ContentBlock[]; // 多模态内容块
-  text_summary: string;          // 纯文本摘要（用于搜索/索引）
+  // 多模态内容 (引用 MessagePayload)
+  content_blocks: ContentBlock[]; // 多模态内容块 (任意数量任意类型)
+  text_summary: string;          // 纯文本摘要（自动从text块+转文字生成）
 
   // 摘要
   summary?: string;              // 消息摘要（仅长消息生成）
@@ -95,37 +95,121 @@ interface TreeNode {
 }
 ```
 
-### 3.2 多模态内容块（ContentBlock）
+### 3.2 消息内容（MessageContent）
 
-单条消息可包含多个内容块，支持混合输入：
+单条消息支持**任意数量、任意类型**的内容块组合。一条消息可以同时包含：2段文字 + 5张图片 + 1条语音 + 2个视频 + 1个Word + 1个PDF，完全自由组合。
 
 ```typescript
-interface ContentBlock {
-  type: "text" | "image" | "audio" | "video";
-  // 文字
-  text?: string;
-  // 媒体
-  media_url?: string;            // 本地路径或URL
-  media_mime?: string;           // MIME类型
-  media_size?: number;           // 文件大小(bytes)
-  // 语音专用
-  duration_ms?: number;          // 时长(ms)
-  transcription?: string;        // 语音转文字结果
-  // 视频专用
-  thumbnail_url?: string;        // 缩略图
-  clip_start_ms?: number;        // 片段起始
-  clip_end_ms?: number;          // 片段结束
+// ── 内容块类型 ──
+
+type ContentBlock =
+  | TextBlock
+  | ImageBlock
+  | AudioBlock
+  | VideoBlock
+  | DocumentBlock;
+
+interface TextBlock {
+  type: "text";
+  text: string;
 }
 
-// 示例：一条包含文字+图片+语音的消息
-const msg: TreeNode = {
-  content_blocks: [
-    { type: "text", text: "这道题怎么做？" },
-    { type: "image", media_url: "/uploads/photo_001.jpg", media_mime: "image/jpeg" },
-    { type: "audio", media_url: "/uploads/voice_001.mp3", duration_ms: 5000, transcription: "这道题我不太会" },
+interface ImageBlock {
+  type: "image";
+  file_id: string;               // 文件ID（引用FileRecord）
+}
+
+interface AudioBlock {
+  type: "audio";
+  file_id: string;
+  duration_ms?: number;
+  transcription?: string;        // ASR转文字（异步生成）
+}
+
+interface VideoBlock {
+  type: "video";
+  file_id: string;
+  duration_ms?: number;
+  thumbnail_file_id?: string;    // 缩略图文件ID
+  transcription?: string;        // 字幕/转文字（异步生成）
+}
+
+interface DocumentBlock {
+  type: "document";
+  file_id: string;
+  document_kind: "word" | "pdf" | "ppt" | "excel" | "markdown" | "code" | "other";
+  page_count?: number;           // 页数（PDF/Word/PPT）
+  text_content?: string;         // 提取的纯文本（异步OCR/解析生成）
+  preview_text?: string;         // 前N字预览
+}
+
+// ── 文件记录（独立存储） ──
+
+interface FileRecord {
+  id: string;                    // 文件唯一ID
+  user_id: string;
+  original_name: string;         // 原始文件名 "题目截图.png"
+  storage_path: string;          // 存储路径
+  mime_type: string;             // "image/png"
+  file_size: number;             // bytes
+  file_type: FileType;          // "image" | "audio" | "video" | "document"
+  
+  // 异步处理结果
+  processing_status: "pending" | "processing" | "done" | "failed";
+  transcription?: string;        // 语音/视频转文字
+  text_content?: string;         // 文档提取文本
+  thumbnail_path?: string;       // 缩略图
+  ocr_text?: string;             // 图片OCR文字
+  
+  // 元数据
+  width?: number;                // 图片/视频宽度
+  height?: number;               // 图片/视频高度
+  duration_ms?: number;          // 音频/视频时长
+  page_count?: number;           // 文档页数
+  
+  created_at: number;
+}
+
+type FileType = "image" | "audio" | "video" | "document";
+
+// ── 一条消息的完整结构 ──
+
+interface MessagePayload {
+  blocks: ContentBlock[];        // 任意数量、任意类型组合
+  text_summary: string;          // 纯文本摘要（自动从text块+转文字结果生成）
+}
+```
+
+**示例：一条包含7个内容块的消息**
+
+```typescript
+const msg: MessagePayload = {
+  blocks: [
+    { type: "text", text: "老师，这道题和上次的视频里讲的不太一样，我整理了笔记和截图" },
+    { type: "image", file_id: "file_001" },   // 题目截图1
+    { type: "image", file_id: "file_002" },   // 题目截图2
+    { type: "image", file_id: "file_003" },   // 笔记照片1
+    { type: "image", file_id: "file_004" },   // 笔记照片2
+    { type: "image", file_id: "file_005" },   // 笔记照片3
+    { type: "video", file_id: "file_006" },   // B站视频片段
+    { type: "audio", file_id: "file_007" },   // 语音说明
+    { type: "text", text: "重点看第3张笔记" },
+    { type: "document", file_id: "file_008" }, // 老师发的PDF讲义
   ],
-  text_summary: "用户问这道题怎么做，附带图片和语音",
+  text_summary: "用户问题目，附5张图片(题目+笔记)、1段视频、1段语音、1份PDF讲义",
 };
+```
+
+**发给LLM时的压缩格式**：
+
+```
+[Media] 5张图片, 1段视频(3min), 1段语音(8s), 1份PDF(12页)
+[Image 1] 题目截图（OCR: 求函数f(x)=x³-3x²+2在[0,3]上的最值）
+[Image 3] 笔记（OCR: 极限定义...）
+[Audio] 转文字："这道题和视频里讲的不太一样"
+[Video] 转文字："今天我们讲..."
+[Document] PDF前100字："第三章 极限与连续..."
+```
 ```
 
 ### 3.3 虚拟根节点（Virtual Root）
@@ -561,9 +645,11 @@ msg2 标记 has_modified_version = true
   "branch_id": "branch_xxx",
   "role": "user",
   "content_blocks": [
-    {"type": "text", "text": "什么是极限？"},
-    {"type": "image", "media_url": "/uploads/photo.jpg"}
+    {"type": "text", "text": "这道题怎么做？"},
+    {"type": "image", "file_id": "file_001"},
+    {"type": "document", "file_id": "file_002", "document_kind": "pdf"}
   ],
+  "text_summary": "用户问题目，附1张图片和1份PDF",
   "timestamp": 1715980800000,
   "tree_metadata": {
     "parent_id": "msg_yyy",
@@ -575,7 +661,71 @@ msg2 标记 has_modified_version = true
 
 ---
 
-## 十、树结构存储挑战与解法
+## 十、文件上传与异步处理
+
+### 10.1 上传流程
+
+```
+用户选择文件（图片/音频/视频/文档）
+  ↓
+前端上传 → 后端保存到 ~/.companion/uploads/{user_id}/{type}/
+  ↓
+创建 FileRecord (processing_status = "pending")
+  ↓
+返回 file_id 给前端，立即插入消息的 ContentBlock
+  ↓
+消息发送成功（用户立即看到消息）
+  ↓
+后台异步处理：
+  ├── 图片 → OCR提取文字 → 更新 FileRecord.ocr_text
+  ├── 音频 → ASR转文字 → 更新 FileRecord.transcription
+  ├── 视频 → 截缩略图 + ASR转文字 → 更新对应字段
+  └── 文档 → 提取纯文本 → 更新 FileRecord.text_content
+  ↓
+处理完成 → 前端可通过轮询/WebSocket获取更新
+```
+
+### 10.2 文件存储结构
+
+```
+~/.companion/uploads/{user_id}/
+├── images/
+│   ├── file_001.jpg
+│   ├── file_002.png
+│   └── ...
+├── audio/
+│   ├── file_003.mp3
+│   └── ...
+├── video/
+│   ├── file_004.mp4
+│   ├── file_004_thumb.jpg    # 缩略图
+│   └── ...
+└── documents/
+    ├── file_005.pdf
+    ├── file_006.docx
+    └── ...
+```
+
+### 10.3 文件大小限制
+
+| 类型 | 单文件上限 | 单消息上限 | 单用户总上限 |
+|------|-----------|-----------|-------------|
+| 图片 | 20MB | 10张 = 200MB | 5GB |
+| 音频 | 50MB | 5条 = 250MB | 2GB |
+| 视频 | 500MB | 3个 = 1.5GB | 10GB |
+| 文档 | 100MB | 5个 = 500MB | 5GB |
+
+### 10.4 处理队列
+
+异步处理使用任务队列（MVP用asyncio，后续可换Celery）：
+- 图片OCR：使用PaddleOCR或云端API
+- 音频ASR：使用Whisper本地模型或云端API
+- 视频：ffmpeg截帧 + ASR
+- 文档：pymupdf(PDF) / python-docx(Word) 提取文本
+
+---
+
+## 十一、树结构存储挑战与解法
 
 | 挑战 | 解法 |
 |------|------|
@@ -588,7 +738,7 @@ msg2 标记 has_modified_version = true
 
 ---
 
-## 十一、多用户隔离
+## 十二、多用户隔离
 
 ### 11.1 数据隔离
 
@@ -628,7 +778,7 @@ msg2 标记 has_modified_version = true
 
 ---
 
-## 十二、前端设计要点
+## 十三、前端设计要点
 
 ### 12.1 两种会话管理视图
 
@@ -693,7 +843,7 @@ msg2 标记 has_modified_version = true
 
 ---
 
-## 十三、开放问题
+## 十四、开放问题
 
 1. **Embedding模型选择** — 用什么模型生成中文embedding？
 2. **分区自动合并** — 两个高度相似的分区是否建议合并？
