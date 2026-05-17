@@ -663,63 +663,104 @@ msg2 标记 has_modified_version = true
 
 ## 十、文件上传与异步处理
 
-### 10.1 上传流程
+### 10.1 架构：Branch Workspace（分支工作空间）
+
+文件**不直接绑定消息**，而是挂载到**分支工作空间**。消息通过 `file_id` 引用工作空间中的文件。
+
+```
+Branch Workspace (branch_id: "branch_abc")
+├── files/
+│   ├── file_001.jpg          # 用户上传的题目截图
+│   ├── file_002.pdf          # 老师发的讲义
+│   ├── file_003.mp3          # 用户的语音提问
+│   └── ...
+├── metadata.json             # FileRecord 列表
+└── workspace.json            # 工作空间状态
+```
+
+**好处**：
+- 同一分支内多条消息引用同一文件（"看第3页"、"刚才那个图"）
+- 分支归档时，工作空间一起归档
+- 分支删除时，文件移入"孤儿存储"（可通过元历史恢复）
+- 跨分支引用文件时，只复制 file_id 引用，不复制文件本身
+
+### 10.2 上传流程
 
 ```
 用户选择文件（图片/音频/视频/文档）
   ↓
-前端上传 → 后端保存到 ~/.companion/uploads/{user_id}/{type}/
+前端上传 → 后端保存到 branch workspace
   ↓
 创建 FileRecord (processing_status = "pending")
   ↓
-返回 file_id 给前端，立即插入消息的 ContentBlock
+返回 file_id，前端插入消息的 ContentBlock
   ↓
 消息发送成功（用户立即看到消息）
   ↓
 后台异步处理：
-  ├── 图片 → OCR提取文字 → 更新 FileRecord.ocr_text
-  ├── 音频 → ASR转文字 → 更新 FileRecord.transcription
-  ├── 视频 → 截缩略图 + ASR转文字 → 更新对应字段
-  └── 文档 → 提取纯文本 → 更新 FileRecord.text_content
+  ├── 图片 → OCR → FileRecord.ocr_text
+  ├── 音频 → ASR → FileRecord.transcription
+  ├── 视频 → 截帧 + ASR → 对应字段
+  └── 文档 → 提取文本 → FileRecord.text_content
   ↓
-处理完成 → 前端可通过轮询/WebSocket获取更新
+处理完成 → 前端通过 WebSocket 推送更新
 ```
 
-### 10.2 文件存储结构
+### 10.3 文件存储结构
 
 ```
-~/.companion/uploads/{user_id}/
-├── images/
-│   ├── file_001.jpg
-│   ├── file_002.png
-│   └── ...
-├── audio/
-│   ├── file_003.mp3
-│   └── ...
-├── video/
-│   ├── file_004.mp4
-│   ├── file_004_thumb.jpg    # 缩略图
-│   └── ...
-└── documents/
-    ├── file_005.pdf
-    ├── file_006.docx
+~/.companion/
+├── uploads/{user_id}/
+│   ├── {branch_id}/          # Branch Workspace
+│   │   ├── images/
+│   │   ├── audio/
+│   │   ├── video/
+│   │   ├── documents/
+│   │   └── metadata.json
+│   └── orphaned/              # 分支删除后的孤儿文件
+│       ├── file_xxx.jpg
+│       └── ...
+└── history/{user_id}/
     └── ...
 ```
 
-### 10.3 文件大小限制
+### 10.4 文件生命周期
 
-| 类型 | 单文件上限 | 单消息上限 | 单用户总上限 |
-|------|-----------|-----------|-------------|
-| 图片 | 20MB | 10张 = 200MB | 5GB |
-| 音频 | 50MB | 5条 = 250MB | 2GB |
-| 视频 | 500MB | 3个 = 1.5GB | 10GB |
-| 文档 | 100MB | 5个 = 500MB | 5GB |
+```
+文件上传 → 挂载到 Branch Workspace
+  ↓
+分支活跃期间 → 所有消息自由引用
+  ↓
+分支归档 → 工作空间一起归档，文件保留
+  ↓
+分支删除 → 文件移入 orphaned/，保留30天
+  ↓
+30天后 → 彻底删除（不可恢复）
+```
 
-### 10.4 处理队列
+### 10.5 跨分支文件引用
+
+用户在分支B中想引用分支A上传的文件：
+- 消息 ContentBlock 中的 `file_id` 指向分支A的工作空间
+- 系统自动在分支B的工作空间创建一个**符号引用**（不复制文件）
+- 被引用的文件不会因为分支A删除而丢失（已移入orphaned的文件仍可引用）
+
+### 10.6 文件大小限制
+
+| 类型 | 单文件上限 | 单分支工作空间上限 | 单用户总上限 |
+|------|-----------|-------------------|-------------|
+| 图片 | 20MB | 无限制 | 无限制 |
+| 音频 | 50MB | 无限制 | 无限制 |
+| 视频 | 500MB | 无限制 | 无限制 |
+| 文档 | 100MB | 无限制 | 无限制 |
+
+**不设上限**，按需扩展存储。
+
+### 10.7 处理队列
 
 异步处理使用任务队列（MVP用asyncio，后续可换Celery）：
-- 图片OCR：使用PaddleOCR或云端API
-- 音频ASR：使用Whisper本地模型或云端API
+- 图片OCR：PaddleOCR 或云端API
+- 音频ASR：Whisper本地模型 或 云端API
 - 视频：ffmpeg截帧 + ASR
 - 文档：pymupdf(PDF) / python-docx(Word) 提取文本
 
@@ -843,11 +884,95 @@ msg2 标记 has_modified_version = true
 
 ---
 
-## 十四、开放问题
+## 十四、分区合并
 
-1. **Embedding模型选择** — 用什么模型生成中文embedding？
-2. **分区自动合并** — 两个高度相似的分区是否建议合并？
-3. **媒体存储上限** — 单用户媒体文件总大小限制？
-4. **分支命名AI** — 是否用LLM自动为分支生成有意义的名称？
-5. **导出功能** — 是否支持导出单个分区/分支为Markdown/PDF？
-6. **搜索功能** — 是否需要跨分区全文搜索？
+### 14.1 触发条件
+
+- 两个分区的 embedding 中心相似度 > 0.8
+- 或者用户手动选择合并
+- 系统建议但不自动执行
+
+### 14.2 合并流程
+
+```
+用户确认合并 Partition A → Partition B
+  ↓
+1. Partition A 的所有 Branch 整体移入 Partition B
+   - branch_id 不变（UUID无冲突）
+   - 每个 Branch 的 partition_id 更新为 B
+  ↓
+2. 更新 Branch 路径缓存
+   - 所有 Branch 的 active_branch_path 重新计算
+  ↓
+3. 重建 Partition B 的 context_summary
+   - 合并 A 和 B 的所有分支摘要
+   - 生成新的分区级上下文摘要
+  ↓
+4. 更新跨分区引用
+   - 所有 LinkNode 中 target_partition_id = A 的 → 改为 B
+   - 所有 LinkNode 中 source_partition_id = A 的 → 改为 B
+   - 同一分区内出现重复 LinkNode → 去重
+  ↓
+5. 更新文件引用
+   - Partition A 的 Branch Workspace 文件保留
+   - 文件路径从 uploads/{user_id}/{branch_id_A}/ 保持不变
+   - 只更新 metadata.json 中的 partition_id
+  ↓
+6. 删除 Partition A
+   - 从 partitions.json 中移除
+   - 虚拟根节点删除
+   - 元历史保留（不删除任何记录）
+```
+
+### 14.3 合并后命名
+
+- 默认名称：取两个分区名称的交集部分
+- 例："高等数学-极限" + "高等数学-积分" → "高等数学"
+- 用户可手动修改
+
+### 14.4 不可合并的情况
+
+- 两个分区的 subject 不同（如"高等数学"和"英语"）
+- 合并后总分支数 > 100（建议先归档旧分支）
+
+---
+
+## 十五、分支自动命名
+
+### 15.1 初始命名
+
+分支创建时，根据第一条消息生成名称：
+- 简单规则：取第一条消息的前20字
+- 可选LLM增强：生成更精确的名称
+
+### 15.2 重新命名（摘要驱动）
+
+当分支对话达到一定轮次后，根据累计摘要重新命名：
+
+| 条件 | 行为 |
+|------|------|
+| 分支对话 ≤ 5轮 | 保持初始名称 |
+| 分支对话 > 5轮 | 用分支摘要 + LLM 生成新名称 |
+| 分支对话 > 20轮 | 再次重新命名（反映最新进展） |
+
+**重新命名的LLM提示词**：
+```
+根据以下对话摘要，为这条对话分支生成一个简短的名称（≤15字）。
+摘要：{branch_summary}
+当前名称：{current_name}
+```
+
+### 15.3 用户手动命名
+
+用户可随时修改分支名称，修改后不再自动重命名。
+
+---
+
+## 十六、开放问题
+
+1. **Embedding模型选择** — 待定，可用选项：bge-m3、text2vec-large-chinese、m3e-base
+2. ~~分区自动合并~~ → 已设计（§十四）
+3. ~~存储上限~~ → 不设上限
+4. ~~分支自动命名~~ → 已设计（§十五）
+5. **导出功能** — 未来扩展
+6. **跨分区搜索** — 未来扩展
