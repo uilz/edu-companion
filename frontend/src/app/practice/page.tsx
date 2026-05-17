@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CheckCircle, XCircle, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
 import Card from "@/components/ui/Card";
+import MathContent from "@/components/ui/MathContent";
 
 interface Question {
   id: number;
@@ -154,9 +155,9 @@ export default function PracticePage() {
 
         {/* Question */}
         <Card>
-          <div
+          <MathContent
+            text={q.question}
             className="text-base text-[var(--color-text)] leading-relaxed mb-8 message-content"
-            dangerouslySetInnerHTML={{ __html: q.question.replace(/\$([^$]+)\$/g, (_, m) => `<span class="katex-render" data-formula="${m}">\$${m}\$</span>`) }}
           />
 
           {/* Options */}
@@ -237,15 +238,13 @@ export default function PracticePage() {
               </div>
               <div
                 className="text-[var(--color-text-secondary)] message-content"
-                dangerouslySetInnerHTML={{
-                  __html: q.explanation
-                    .replace(/\n/g, "<br/>")
-                    .replace(
-                      /\$([^$]+)\$/g,
-                      (_, m) => `<span class="katex-render" data-formula="${m}">\$${m}\$</span>`
-                    ),
-                }}
-              />
+              >
+                {q.explanation.split("\n\n").map((para, i) => (
+                  <p key={i} className="mb-2 last:mb-0">
+                    <MathContent text={para.replace(/\n/g, " ")} as="span" />
+                  </p>
+                ))}
+              </div>
             </div>
           )}
         </Card>
