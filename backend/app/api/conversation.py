@@ -1,6 +1,7 @@
 """
 对话系统 API 路由
 提供分区、分支、消息的 CRUD 操作
+集成多模态响应块和后台任务
 """
 
 from __future__ import annotations
@@ -111,9 +112,40 @@ async def list_messages(branch_id: str, limit: int = 50, offset: int = 0):
     return {"messages": messages, "total": len(branch.path)}
 
 
+@router.get("/partitions/{partition_id}/messages")
+async def list_partition_messages(partition_id: str, limit: int = 50, offset: int = 0):
+    """列出分区所有分支的消息，包含 response_blocks"""
+    data = storage.load(USER_ID)
+    partition = data.partitions.get(partition_id)
+    if not partition:
+        raise HTTPException(404, "Partition not found")
+
+    branch = data.branches.get(partition.active_branch_id)
+    if not branch:
+        return {"messages": [], "total": 0, "response_blocks": []}
+
+    messages = []
+    for nid in branch.path[offset : offset + limit]:
+        node = data.nodes.get(nid)
+        if node and not node.is_deleted:
+            messages.append(node)
+
+    # 获取关联的 response_blocks
+    response_blocks = []
+    for block in data.response_blocks.values():
+        if block.partition_id == partition_id:
+            response_blocks.append(block)
+
+    return {
+        "messages": messages,
+        "total": len(branch.path),
+        "response_blocks": response_blocks,
+    }
+
+
 @router.post("/message")
 async def send_message(req: SendMessageRequest):
-    """发送消息：分类 → 存储 → LLM回复 → 存储回复"""
+    """发送消息：分类 → 存储 → LLM回复 → 存储回复（含工具调用）"""
     from app.services.conversation_llm import send_and_reply
 
     # 如果没指定分区，自动分类
@@ -129,13 +161,14 @@ async def send_message(req: SendMessageRequest):
             )
             partition_id = partition.id
 
-    # 发送消息并获取 LLM 回复
+    # 发送消息并获取 LLM 回复（含工具调用）
     outcome = await send_and_reply(USER_ID, partition_id, req.text)
 
     return {
         "user_message": outcome["user_message"],
         "assistant_message": outcome["assistant_message"],
         "partition_id": partition_id,
+        "response_blocks": outcome.get("response_blocks", []),
     }
 
 
@@ -196,6 +229,64 @@ async def websocket_conversation(websocket: WebSocket) -> None:
 
     except WebSocketDisconnect:
         logger.info("对话WebSocket断开")
+
+
+# ── 后台任务端点 ──
+
+@router.get("/jobs/{job_id}")
+async def get_job_status(job_id: str):
+    """获取后台任务状态"""
+    from app.services.background_jobs import job_manager
+
+    job = job_manager.get_job(USER_ID, job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+
+    return {"job": job}
+
+
+@router.post("/jobs/{job_id}/cancel")
+async def cancel_job(job_id: str):
+    """取消后台任务"""
+    from app.services.background_jobs import job_manager
+
+    success = await job_manager.cancel(USER_ID, job_id)
+    if not success:
+        raise HTTPException(404, "Job not found or already completed")
+
+    return {"ok": True, "job_id": job_id}
+
+
+@router.get("/jobs/{job_id}/block")
+async def get_job_response_block(job_id: str):
+    """获取任务关联的 ResponseBlock（用于轮询）"""
+    from app.services.background_jobs import job_manager
+
+    job = job_manager.get_job(USER_ID, job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+
+    data = storage.load(USER_ID)
+    block = data.response_blocks.get(job.block_id)
+    if not block:
+        raise HTTPException(404, "ResponseBlock not found")
+
+    return {
+        "job": job,
+        "block": block,
+    }
+
+
+# ── Response Blocks ──
+
+@router.get("/response-blocks/{block_id}")
+async def get_response_block(block_id: str):
+    """获取单个 ResponseBlock"""
+    data = storage.load(USER_ID)
+    block = data.response_blocks.get(block_id)
+    if not block:
+        raise HTTPException(404, "ResponseBlock not found")
+    return {"block": block}
 
 
 @router.put("/messages/{message_id}")

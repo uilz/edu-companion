@@ -159,3 +159,37 @@ class UserData(BaseModel):
     link_nodes: dict[str, LinkNode] = Field(default_factory=dict)
     files: dict[str, FileRecord] = Field(default_factory=dict)
     active_partition_id: str | None = None
+    response_blocks: dict[str, 'ResponseBlock'] = Field(default_factory=dict)
+    background_jobs: dict[str, 'BackgroundJob'] = Field(default_factory=dict)
+
+
+# ── Response Block（多模态响应块） ──
+
+class ResponseBlock(BaseModel):
+    """助手回复的内容块"""
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    message_id: str = ""
+    partition_id: str = ""
+    branch_id: str = ""
+    type: str  # text | practice | video | image | mindmap | document
+    status: str = "ready"  # streaming | ready | generating | failed
+    content: dict = Field(default_factory=dict)
+    order: int = 0
+    created_at: float = Field(default_factory=time.time)
+    updated_at: float = Field(default_factory=time.time)
+
+
+class BackgroundJob(BaseModel):
+    """后台任务"""
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    tool_name: str
+    status: str = "queued"  # queued | processing | done | failed
+    params: dict = Field(default_factory=dict)
+    result: dict | None = None
+    progress: float = 0.0
+    block_id: str = ""  # 关联的ResponseBlock ID
+    partition_id: str = ""
+    branch_id: str = ""
+    created_at: float = Field(default_factory=time.time)
+    completed_at: float | None = None
+    error: str | None = None
