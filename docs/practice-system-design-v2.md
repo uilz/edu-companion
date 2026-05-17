@@ -1575,6 +1575,383 @@ class GamificationSystem:
 
 ---
 
+## 13. 模块联动闭环设计（修复断裂点）
+
+> 各模块不应是孤岛，必须形成数据流动的闭环。
+
+### 断裂点一览
+
+| # | 断裂 | 问题 | 修复方案 |
+|---|------|------|---------|
+| 1 | Self-Explanation → 知识状态 | 解释质量没有反馈回BKT | 解释评分 → 调整BKT参数 |
+| 2 | Contrasting Cases → 调度 | 对比案例何时插入不清楚 | 调度器感知"需要对比"的信号 |
+| 3 | 错误分析 → 题目生成 | 发现迷思概念后没有针对性出题 | 错误驱动的题目生成 |
+| 4 | 材料索引 → 间隔重复 | 材料chunk不参与复习调度 | 材料chunk = 知识点，纳入SM-2 |
+| 5 | 提示使用 → BKT打折 | 提示了还答对≠真正掌握 | hint_weight打折p_known更新 |
+| 6 | 疲劳 → ZPD调整 | session后半段难度应降低 | fatigue_factor动态调整ZPD |
+| 7 | 错题本 → 材料索引 | 错题无法关联到用户笔记 | 错题→材料chunk反向索引 |
+
+### 修复1：Self-Explanation 评分 → 知识状态反馈
+
+```python
+class SelfExplanationScorer:
+    """
+    评估学生的自我解释质量，反馈到知识状态
+    
+    评分维度：
+    - 正确性：解释的核心逻辑是否正确
+    - 完整性：是否覆盖了关键步骤
+    - 一致性：解释是否与答案一致
+    
+    关键洞察：
+    - 答对 + 解释正确 → 真正掌握（p_known大幅提升）
+    - 答对 + 解释模糊 → 可能是猜对的（p_known小幅提升）
+    - 答错 + 解释正确 → 可能是slip（计算失误），p_known不降
+    - 答错 + 解释错误 → 真正的misconception（p_known大幅下降）
+    """
+    
+    def score_and_update(
+        self,
+        attempt: AttemptRecord,
+        explanation_text: str,
+        knowledge_state: KnowledgeState,
+    ) -> KnowledgeState:
+        # LLM评估解释质量 (0-1)
+        explanation_score = self._llm_score(explanation_text, attempt)
+        
+        if attempt.is_correct:
+            if explanation_score > 0.8:
+                # 真正掌握：大幅提升
+                knowledge_state.p_known = min(0.99, knowledge_state.p_known + 0.15)
+            elif explanation_score > 0.5:
+                # 可能猜对：小幅提升
+                knowledge_state.p_known = min(0.99, knowledge_state.p_known + 0.05)
+            else:
+                # 猜对但不理解：不提升，标记为"伪掌握"
+                knowledge_state.pseudo_mastery_flags.append(attempt.skill_id)
+        else:
+            if explanation_score > 0.7:
+                # 理解正确但计算失误(slip)：p_known不降，增加p_slip
+                knowledge_state.p_slip = min(0.5, knowledge_state.p_slip + 0.05)
+            else:
+                # 真正不理解：大幅下降
+                knowledge_state.p_known = max(0.0, knowledge_state.p_known - 0.1)
+                knowledge_state.misconception_flags.append(
+                    f"{attempt.skill_id}:{explanation_text[:50]}"
+                )
+        
+        return knowledge_state
+```
+
+### 修复2：Contrasting Cases → 调度集成
+
+```python
+class InterleavingScheduler:
+    """在调度中集成对比案例"""
+    
+    def plan_practice_session(self, student_profile, ...):
+        questions = []
+        
+        for skill in skills:
+            for _ in range(n_questions):
+                q = self.zpd.select_next_question(...)
+                
+                # ★ 新增：判断是否需要插入对比案例
+                if self._should_insert_contrast(skill, student_profile):
+                    contrast_q = self._generate_contrasting_question(q)
+                    # 对比案例紧挨着原题插入
+                    questions.append(q)
+                    questions.append(ContrastPair(
+                        case_a=q, case_b=contrast_q,
+                        prompt="这两道题看起来很像，但解法不同。找出关键区别！"
+                    ))
+                else:
+                    questions.append(q)
+        
+        return PracticeSessionPlan(questions=self._interleave(questions))
+    
+    def _should_insert_contrast(self, skill_id: str, profile) -> bool:
+        """
+        什么时候插入对比案例：
+        - 学生在同一知识点上犯过类似错误 → 需要对比来区分
+        - 学生p_known在0.4-0.7之间（发展中）→ 对比有助于突破
+        - 该知识点有常见的易混淆概念 → 对比能澄清
+        """
+        state = profile.knowledge_states.get(skill_id)
+        if not state:
+            return False
+        
+        # 发展中 + 有过错因记录 → 插入对比
+        if 0.4 <= state.p_known <= 0.7 and state.attempt_count >= 3:
+            return True
+        
+        # 有迷思概念标记 → 插入对比
+        if state.misconception_flags:
+            return True
+        
+        return False
+```
+
+### 修复3：错误驱动的题目生成
+
+```python
+class MisconceptionDrivenGenerator:
+    """
+    发现迷思概念后，自动生成针对性题目
+    
+    流程：
+    错误分析 → 发现迷思概念 → 生成"反例题" → 让学生对比
+    """
+    
+    def generate_for_misconception(
+        self,
+        misconception: str,
+        skill_id: str,
+        student_state: KnowledgeState,
+    ) -> list[Question]:
+        """
+        例：学生错选了 sin(A+B) = sinA + sinB
+        → 生成一道题：sin(30°+60°) 等于多少？
+          A. sin30°+sin60° (错误选项，就是这个迷思)
+          B. 1 (正确答案)
+          C. sin30°·cos60°+cos30°·sin60° (展开式)
+        → 让学生先做，再对比自己的错误思路
+        """
+        
+        prompt = f"""
+        学生在{skill_id}上有迷思概念：{misconception}
+        请生成一道对比题，要求：
+        1. 题目表面看起来支持学生的错误理解
+        2. 但正确解法能揭示错误
+        3. 选项中包含学生的迷思概念作为干扰项
+        """
+        
+        return self.llm.generate(prompt, count=2)
+```
+
+### 修复4：材料Chunk → 间隔重复
+
+```python
+class MaterialReviewScheduler:
+    """
+    用户上传的资料chunk也纳入间隔重复
+    
+    原理：阅读资料 = 学习知识点 → 需要复习
+    """
+    
+    def schedule_material_review(
+        self,
+        user_id: str,
+        material_chunks: list[MaterialChunk],
+    ) -> list[ReviewTask]:
+        tasks = []
+        now = datetime.now()
+        
+        for chunk in material_chunks:
+            # 为每个chunk维护一个"阅读掌握度"
+            read_state = self._get_read_state(user_id, chunk.chunk_id)
+            
+            # 基于遗忘曲线计算复习优先级
+            days_since_read = (now - read_state.last_read).days
+            forgetting_prob = math.exp(-days_since_read / max(read_state.stability, 0.1))
+            
+            if forgetting_prob > 0.3:  # 超过30%遗忘风险 → 需要复习
+                tasks.append(ReviewTask(
+                    type="material_review",
+                    chunk_id=chunk.chunk_id,
+                    priority=forgetting_prob,
+                    skill_ids=chunk.skill_ids,
+                ))
+        
+        return sorted(tasks, key=lambda t: t.priority, reverse=True)
+```
+
+### 修复5：提示使用 → BKT更新打折
+
+```python
+def update_with_hint_discount(
+    self,
+    state: KnowledgeState,
+    is_correct: bool,
+    hint_level: int,
+) -> KnowledgeState:
+    """
+    提示等级越高，p_known更新幅度越小
+    
+    Level 0 (无提示): 更新幅度 = 100%
+    Level 1 (方向):   更新幅度 = 70%
+    Level 2 (步骤):   更新幅度 = 40%
+    Level 3 (部分):   更新幅度 = 20%
+    Level 4 (完整):   更新幅度 = 5%  (几乎不更新)
+    """
+    discount_factors = {0: 1.0, 1: 0.7, 2: 0.4, 3: 0.2, 4: 0.05}
+    discount = discount_factors.get(hint_level, 0.05)
+    
+    # 原始更新
+    original_update = self.bkt.update(state, is_correct)
+    
+    # 打折后的更新：只取discount比例的变化量
+    delta = original_update.p_known - state.p_known
+    state.p_known = state.p_known + delta * discount
+    state.attempt_count += 1
+    if is_correct:
+        state.correct_count += 1
+    
+    return state
+```
+
+### 修复6：疲劳 → ZPD动态调整
+
+```python
+class FatigueAwareZPD:
+    """
+    疲劳感知的ZPD调度
+    
+    研究发现：认知疲劳导致有效ZPD下移
+    - 开始时：θ+1.0 难度最合适
+    - 30分钟后：θ+0.8 更合适
+    - 60分钟后：θ+0.5 更合适
+    """
+    
+    def adjusted_zpd_center(
+        self,
+        student_ability: float,
+        session_elapsed_minutes: float,
+        consecutive_wrong: int,
+    ) -> float:
+        # 基础ZPD偏移
+        base_offset = 1.0
+        
+        # 时间衰减：每30分钟降低0.2
+        time_decay = max(0.5, 1.0 - session_elapsed_minutes / 150)
+        
+        # 连续错误惩罚：每连续错1题降低0.15
+        error_penalty = consecutive_wrong * 0.15
+        
+        # 最终ZPD中心
+        adjusted = student_ability + max(0.0, base_offset * time_decay - error_penalty)
+        
+        return adjusted
+```
+
+### 修复7：错题本 → 材料反向索引
+
+```python
+class ErrorBookWithMaterialLink:
+    """
+    错题本与材料索引联动
+    
+    答错时：自动搜索用户资料中相关内容
+    展示："你上传的讲义第X页有这个知识点"
+    """
+    
+    def enrich_error_entry(
+        self,
+        error_entry: ErrorBookEntry,
+        material_store: MaterialVectorStore,
+    ) -> ErrorBookEntry:
+        # 用错题的知识点搜索用户资料
+        related_chunks = material_store.search(
+            query=error_entry.misconception or error_entry.skill_id,
+            user_id=error_entry.user_id,
+            top_k=3,
+        )
+        
+        if related_chunks:
+            error_entry.referenced_materials = [
+                {
+                    "chunk_id": c.chunk_id,
+                    "source_file": c.source_file,
+                    "page_number": c.page_number,
+                    "preview": c.text[:100],
+                }
+                for c in related_chunks
+            ]
+        
+        return error_entry
+```
+
+### 完整数据流闭环图
+
+```
+                    ┌─────────────────────────────────────────────┐
+                    │              用户上传资料                     │
+                    └──────────────────┬──────────────────────────┘
+                                       ↓
+                    ┌─────────────────────────────────────────────┐
+                    │        Material Indexing (§9)                │
+                    │   OCR → 分块 → Embedding → pgvector         │
+                    └──────────────────┬──────────────────────────┘
+                                       ↓
+                    ┌─────────────────────────────────────────────┐
+                    │   Material Question Generator (§9.6)        │
+                    │   原题提取 / 改题生成 / 知识点生成            │
+                    └──────────────────┬──────────────────────────┘
+                                       ↓
+┌──────────────────────────────────────┼──────────────────────────────────────┐
+│ 练习会话                              ↓                                      │
+│  ┌─────────────────────────────────────────────────────────────────┐        │
+│  │  Interleaving Scheduler (§3.3.3)                               │        │
+│  │  ├── ZPD Scheduler → 选题难度                                   │        │
+│  │  ├── Spaced Repetition → 复习调度                                │        │
+│  │  ├── ★ FatigueAware → 疲劳降难度                                │        │
+│  │  └── ★ ContrastInserter → 对比案例插入                          │        │
+│  └─────────────────────────────────────────────────────────────────┘        │
+│         ↓                                                                  │
+│  ┌─────────────────────────────────────────────────────────────────┐        │
+│  │  学生答题                                                       │        │
+│  └─────────────────────────────────────────────────────────────────┘        │
+│         ↓                                                                  │
+│  ┌─────────────────────────────────────────────────────────────────┐        │
+│  │  诊断引擎 (§3.4)                                                │        │
+│  │  ├── ErrorAnalysis → 错因分类                                    │        │
+│  │  ├── MisconceptionDetector → 迷思概念检测                        │        │
+│  │  └── ★ SelfExplanationScorer → 解释质量评分                      │        │
+│  └─────────────────────────────────────────────────────────────────┘        │
+│         ↓                                                                  │
+│  ┌─────────────────────────────────────────────────────────────────┐        │
+│  │  反馈引擎 (§3.5 + §8)                                          │        │
+│  │  ├── HintSystem → 渐进提示                                       │        │
+│  │  ├── ★ HintDiscount → 提示打折(BKT)                             │        │
+│  │  ├── AdaptiveFeedback → 个性化解析                                │        │
+│  │  ├── ★ MisconceptionDriven → 错误驱动出题                        │        │
+│  │  ├── ★ ContrastingCases → 对比案例                               │        │
+│  │  └── EmotionalFeedback → 情感安抚                                 │        │
+│  └─────────────────────────────────────────────────────────────────┘        │
+│         ↓                                                                  │
+│  ┌─────────────────────────────────────────────────────────────────┐        │
+│  │  知识状态更新 (§3.1)                                             │        │
+│  │  MDKS.update() ← 接收: is_correct + hint_level + explanation_score│       │
+│  │  → 更新 concept/procedure/application/transfer 四维度            │        │
+│  │  → 更新 misconception_flags                                      │        │
+│  │  → 更新 pseudo_mastery_flags (答对但不会解释)                     │        │
+│  └─────────────────────────────────────────────────────────────────┘        │
+│         ↓                                                                  │
+│  ┌─────────────────────────────────────────────────────────────────┐        │
+│  │  间隔重复调度 (§3.3.2)                                          │        │
+│  │  ← 接收: 更新后的knowledge_state                                │        │
+│  │  → 计算下次复习时间                                               │        │
+│  │  → 同时调度: 知识点复习 + ★材料chunk复习                         │        │
+│  └─────────────────────────────────────────────────────────────────┘        │
+│         ↓                                                                  │
+│  ┌─────────────────────────────────────────────────────────────────┐        │
+│  │  错题本 (§4.2)                                                   │        │
+│  │  ← 记录: 错因 + 迷思概念                                         │        │
+│  │  → ★ 反向搜索用户材料: "你讲义第X页有这个知识点"                  │        │
+│  └─────────────────────────────────────────────────────────────────┘        │
+│         ↓                                                                  │
+│  ┌─────────────────────────────────────────────────────────────────┐        │
+│  │  统计面板 (§5.5)                                                 │        │
+│  │  ← 汇总: 掌握度 + 错因分布 + 学习速度 + 疲劳曲线               │        │
+│  │  → 输出: 推荐 + 知识图谱 + 材料薄弱章节                          │        │
+│  └─────────────────────────────────────────────────────────────────┘        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+★ = 新增的联动修复
+```
+
+---
+
 ## 11. 实施路线图
 
 ### Phase 1: MVP（2-3周）
