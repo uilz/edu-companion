@@ -1,7 +1,7 @@
 # 智能伴学系统 · 对话系统设计文档
 
 > 最后更新: 2026-05-17
-> 版本: v0.2-draft
+> 版本: v0.3-draft
 
 ---
 
@@ -811,12 +811,19 @@ Branch Workspace (branch_id: "branch_abc")
         └── ...
 ```
 
-### 11.2 登录系统预留
+### 11.2 用户隔离与权限
 
-- MVP阶段：单用户模式，user_id = "default_user"
-- 所有接口预留 user_id 参数
-- 后续加登录：JWT token → 解析 user_id → 隔离数据
-- 数据模型已支持多用户，无需重构
+- **MVP阶段**：单用户模式，user_id = "default_user"
+- **多用户隔离**：数据按 user_id 完全隔离（分区、分支、文件、历史）
+- **角色/组织预留**：
+  - 用户模型预留 `role: "student" | "teacher" | "admin"` 字段
+  - 预留 `org_id` 字段支持组织/班级维度
+  - 后续加登录：JWT token → 解析 user_id + role + org_id → 隔离+鉴权
+  - 教师角色可查看班级学生的学情（只读）
+  - 数据模型已支持，无需重构
+- **登录系统预留**：
+  - 所有接口预留 user_id 参数
+  - 后续加登录：JWT token → 解析 user_id → 隔离数据
 
 ---
 
