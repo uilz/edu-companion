@@ -1,6 +1,11 @@
 """
 WebSocket 聊天端点
-处理实时聊天、语音消息、流式响应
+处理实时聊天、流式响应
+
+修复：
+- WebSocket 路径改为 /ws（匹配前端）
+- 接受前端简化消息格式 { conversationId, message, settings }
+- HTTP POST 接受 JSON body
 """
 
 from __future__ import annotations
@@ -12,15 +17,10 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel, Field
 
 from app.core.learner_model import learner_engine
 from app.core.orchestrator import orchestrator
-from app.schemas.chat import (
-    StreamChunk,
-    WSIncomingMessage,
-    WSMessageType,
-    WSOutgoingMessage,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -31,227 +31,147 @@ class ConnectionManager:
     """WebSocket 连接管理器"""
 
     def __init__(self) -> None:
-        # user_id -> list[WebSocket]
         self._connections: dict[str, list[WebSocket]] = {}
-        # session_id -> user_id
         self._sessions: dict[str, str] = {}
 
     async def connect(self, websocket: WebSocket, user_id: str) -> str:
-        """
-        接受新的WebSocket连接
-
-        返回: session_id
-        """
         await websocket.accept()
         session_id = str(uuid.uuid4())
-
         if user_id not in self._connections:
             self._connections[user_id] = []
         self._connections[user_id].append(websocket)
         self._sessions[session_id] = user_id
-
         logger.info("WebSocket连接建立: user=%s session=%s", user_id, session_id)
         return session_id
 
     def disconnect(self, websocket: WebSocket, user_id: str) -> None:
-        """断开连接"""
         if user_id in self._connections:
             self._connections[user_id] = [
                 ws for ws in self._connections[user_id] if ws != websocket
             ]
             if not self._connections[user_id]:
                 del self._connections[user_id]
-        logger.info("WebSocket连接断开: user=%s", user_id)
 
-    async def send_to_user(self, user_id: str, message: WSOutgoingMessage) -> None:
-        """向指定用户发送消息"""
+    async def send_json(self, user_id: str, data: dict) -> None:
         connections = self._connections.get(user_id, [])
-        dead_connections: list[WebSocket] = []
+        dead: list[WebSocket] = []
         for ws in connections:
             try:
-                await ws.send_text(message.model_dump_json())
+                await ws.send_text(json.dumps(data, ensure_ascii=False))
             except Exception:
-                dead_connections.append(ws)
-        # 清理断开的连接
-        for ws in dead_connections:
+                dead.append(ws)
+        for ws in dead:
             self.disconnect(ws, user_id)
 
-    async def broadcast(self, message: WSOutgoingMessage) -> None:
-        """向所有连接广播消息"""
-        for user_id in list(self._connections.keys()):
-            await self.send_to_user(user_id, message)
 
-
-# 全局连接管理器
 manager = ConnectionManager()
 
 
-@router.websocket("/ws/chat/{user_id}")
-async def websocket_chat(
-    websocket: WebSocket,
-    user_id: str,
-) -> None:
+async def _send(websocket: WebSocket, msg_type: str, payload: dict, request_id: str = "") -> None:
+    """发送标准化消息"""
+    data = {
+        "type": msg_type,
+        "payload": payload,
+        "request_id": request_id,
+    }
+    await websocket.send_text(json.dumps(data, ensure_ascii=False))
+
+
+@router.websocket("/ws")
+async def websocket_chat(websocket: WebSocket) -> None:
     """
     WebSocket 聊天端点
 
-    连接地址: ws://host:port/ws/chat/{user_id}
+    前端连接: ws://host:3000/ws (通过 Next.js 代理到后端 :8000/ws)
 
-    消息协议：
-    客户端发送:
-        {"type": "chat", "payload": {"message": "你好", "subject": "数学"}, "request_id": "xxx"}
-        {"type": "voice", "payload": {"audio_base64": "..."}, "request_id": "xxx"}
-        {"type": "ping"}
+    前端发送格式:
+        {"conversationId": "xxx", "message": "你好", "settings": {...}}
 
-    服务端发送:
-        {"type": "status", "payload": {"message": "正在分析..."}, "request_id": "xxx"}
+    后端返回格式:
         {"type": "stream", "payload": {"content": "你"}, "request_id": "xxx"}
-        {"type": "stream", "payload": {"content": "好"}, "request_id": "xxx"}
-        {"type": "done", "payload": {"agent": "tutor", "intent": "question"}, "request_id": "xxx"}
+        {"type": "done", "payload": {}, "request_id": "xxx"}
         {"type": "error", "payload": {"message": "出错了"}, "request_id": "xxx"}
     """
+    # 使用默认 user_id（MVP 单用户模式）
+    user_id = "default_user"
     session_id = await manager.connect(websocket, user_id)
 
     try:
         while True:
-            # 接收消息
             raw_data = await websocket.receive_text()
+            logger.info("收到消息: %s", raw_data[:200])
 
             try:
-                msg = WSIncomingMessage.model_validate_json(raw_data)
+                data = json.loads(raw_data)
+            except json.JSONDecodeError as e:
+                await _send(websocket, "error", {"message": f"JSON解析失败: {e}"})
+                continue
+
+            # 兼容前端格式：{ conversationId, message, settings }
+            conversation_id = data.get("conversationId", "")
+            user_message = data.get("message", "")
+            settings = data.get("settings", {})
+            request_id = data.get("request_id", str(uuid.uuid4())[:8])
+
+            if not user_message or not user_message.strip():
+                await _send(websocket, "error", {"message": "消息内容不能为空"}, request_id)
+                continue
+
+            # 发送"正在思考"状态
+            await _send(websocket, "status", {"message": "正在思考..."}, request_id)
+
+            try:
+                # 流式处理消息
+                async for chunk in orchestrator.process_message_stream(
+                    user_id=user_id,
+                    user_message=user_message,
+                    session_id=session_id,
+                    subject=None,
+                ):
+                    await _send(websocket, "stream", {"content": chunk}, request_id)
+
+                # 发送完成标记
+                await _send(websocket, "done", {
+                    "session_id": session_id,
+                }, request_id)
+
             except Exception as e:
-                logger.warning("消息解析失败: %s", str(e))
-                await websocket.send_text(
-                    WSOutgoingMessage(
-                        type=WSMessageType.ERROR,
-                        payload={"message": f"消息格式错误: {str(e)}"},
-                    ).model_dump_json()
-                )
-                continue
-
-            request_id = msg.request_id or str(uuid.uuid4())
-
-            # 处理心跳
-            if msg.type == WSMessageType.PING:
-                await websocket.send_text(
-                    WSOutgoingMessage(
-                        type=WSMessageType.PONG,
-                        request_id=request_id,
-                    ).model_dump_json()
-                )
-                continue
-
-            # 处理聊天消息
-            if msg.type == WSMessageType.CHAT:
-                user_message = msg.payload.get("message", "")
-                subject = msg.payload.get("subject")
-
-                if not user_message.strip():
-                    await websocket.send_text(
-                        WSOutgoingMessage(
-                            type=WSMessageType.ERROR,
-                            payload={"message": "消息内容不能为空"},
-                            request_id=request_id,
-                        ).model_dump_json()
-                    )
-                    continue
-
-                # 发送"正在处理"状态
-                await websocket.send_text(
-                    WSOutgoingMessage(
-                        type=WSMessageType.STATUS,
-                        payload={"message": "正在分析你的问题..."},
-                        request_id=request_id,
-                    ).model_dump_json()
-                )
-
-                try:
-                    # 流式处理消息
-                    async for chunk in orchestrator.process_message_stream(
-                        user_id=user_id,
-                        user_message=user_message,
-                        session_id=session_id,
-                        subject=subject,
-                    ):
-                        await websocket.send_text(
-                            WSOutgoingMessage(
-                                type=WSMessageType.STREAM,
-                                payload={"content": chunk},
-                                request_id=request_id,
-                            ).model_dump_json()
-                        )
-
-                    # 发送完成标记
-                    await websocket.send_text(
-                        WSOutgoingMessage(
-                            type=WSMessageType.DONE,
-                            payload={
-                                "session_id": session_id,
-                                "timestamp": datetime.now().isoformat(),
-                            },
-                            request_id=request_id,
-                        ).model_dump_json()
-                    )
-                except Exception as e:
-                    logger.error("消息处理失败: %s", str(e), exc_info=True)
-                    await websocket.send_text(
-                        WSOutgoingMessage(
-                            type=WSMessageType.ERROR,
-                            payload={"message": f"处理出错，请重试: {str(e)}"},
-                            request_id=request_id,
-                        ).model_dump_json()
-                    )
-
-            # 处理语音消息
-            elif msg.type == WSMessageType.VOICE:
-                audio_base64 = msg.payload.get("audio_base64", "")
-                if not audio_base64:
-                    await websocket.send_text(
-                        WSOutgoingMessage(
-                            type=WSMessageType.ERROR,
-                            payload={"message": "语音数据为空"},
-                            request_id=request_id,
-                        ).model_dump_json()
-                    )
-                    continue
-
-                # MVP: 语音转文字功能占位
-                # 后续可集成 Whisper 或其他语音识别模型
-                await websocket.send_text(
-                    WSOutgoingMessage(
-                        type=WSMessageType.STATUS,
-                        payload={"message": "语音识别功能开发中，目前请使用文字消息"},
-                        request_id=request_id,
-                    ).model_dump_json()
-                )
+                logger.error("消息处理失败: %s", str(e), exc_info=True)
+                await _send(websocket, "error", {
+                    "message": f"处理出错: {str(e)}"
+                }, request_id)
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, user_id)
-        logger.info("用户 %s 主动断开连接", user_id)
+        logger.info("用户断开连接")
     except Exception as e:
         logger.error("WebSocket异常: %s", str(e), exc_info=True)
         manager.disconnect(websocket, user_id)
 
 
+# ── HTTP 备用接口 ──
+
+class ChatRequestBody(BaseModel):
+    """HTTP聊天请求体"""
+    conversationId: str = ""
+    message: str
+    subject: str | None = None
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+
 @router.post("/api/chat")
-async def http_chat(
-    user_id: str,
-    message: str,
-    subject: str | None = None,
-    session_id: str | None = None,
-) -> dict[str, Any]:
+async def http_chat(body: ChatRequestBody) -> dict[str, Any]:
     """
     HTTP 方式的聊天接口（备用，非流式）
-
-    适用于不需要实时流式输出的场景
     """
-    if not session_id:
-        session_id = learner_engine.create_session(user_id, subject)
+    user_id = "default_user"
+    session_id = learner_engine.create_session(user_id, body.subject)
 
     result = await orchestrator.process_message(
         user_id=user_id,
-        user_message=message,
+        user_message=body.message,
         session_id=session_id,
-        subject=subject,
+        subject=body.subject,
     )
 
     result["session_id"] = session_id
