@@ -1133,86 +1133,326 @@ GET /api/practice/recommendations:
 
 ---
 
-## 7. 与对话系统的集成
+## 7. 对话系统 × 练习系统 完整联动
 
-### 7.1 对话触发练习
+> 现有设计只有"对话触发练习"（单向），需要完整的双向数据流。
+
+### 7.1 联动全景图
+
+```
+对话 → 练习（已有）              练习 → 对话（缺失→补）
+┌──────────────────┐            ┌──────────────────┐
+│ "出几道极限的题"  │            │ 错误→推荐对话深度 │
+│ → PracticeTool   │            │ "想聊聊这个吗？"  │
+│ → ResponseBlock  │            │ → 深度讲解        │
+└──────────────────┘            └──────────────────┘
+
+对话 → 练习（缺失→补）          练习 → 对话（缺失→补）
+┌──────────────────┐            ┌──────────────────┐
+│ 对话上下文→选题   │            │ 练习数据→对话记忆 │
+│ "刚聊到导数"     │            │ "你上次练了60%"   │
+│ → 优先出导数题   │            │ → AI知道薄弱点    │
+└──────────────────┘            └──────────────────┘
+
+共享状态（缺失→补）
+┌─────────────────────────────────────────────┐
+│ 统一知识状态(MDKS) ← 对话和练习共同读写      │
+│ 统一会话上下文 ← 练习session挂在对话branch上  │
+└─────────────────────────────────────────────┘
+```
+
+### 7.2 共享知识状态（统一MDKS）
+
+**问题**：对话系统和练习系统各自维护知识状态，数据不同步。
+
+**方案**：一个用户只有一个MDKS实例，两个系统共同读写。
 
 ```python
-class PracticeTool:
-    """对话中的练习工具（集成到ToolExecutor）"""
+class SharedKnowledgeState:
+    """统一知识状态管理器"""
     
-    # 用户说："出几道极限的题" → 触发
-    # 用户说："我想练练线性代数" → 触发
-    # 用户说："考考我" → 触发
+    def __init__(self, user_id: str, store: KnowledgeStateStore):
+        self.user_id = user_id
+        self.store = store  # PostgreSQL持久化
     
-    def execute(self, intent: dict) -> ResponseBlock:
-        """执行练习生成"""
-        # 1. 解析意图
-        subject = intent.get("subject", "数学")
-        skill_id = intent.get("skill_id")
-        count = intent.get("count", 5)
+    # ── 练习系统调用 ──
+    def update_from_practice(
+        self, skill_id: str, is_correct: bool,
+        hint_level: int, error_analysis: ErrorAnalysis | None,
+        explanation_score: float | None,
+    ) -> KnowledgeState:
+        """练习答题后更新"""
+        state = self.store.get(self.user_id, skill_id)
+        # 根据提示等级打折 + BKT更新 + 解释评分调整
+        # ... (见§13修复1和修复5)
+        self.store.save(self.user_id, skill_id, state)
+        return state
+    
+    # ── 对话系统调用 ──
+    def update_from_conversation(
+        self, skill_id: str, interaction_type: str, depth: int,
+    ) -> KnowledgeState:
+        """
+        对话交互后更新
         
-        # 2. 查询学生状态
-        student_state = self.learner_model.get_knowledge_states(user_id)
+        interaction_type:
+        - "question_asked": 学生主动提问（说明在思考）
+        - "explanation_given": 学生尝试解释
+        - "concept_discussed": 深度讨论了概念
+        - "misconception_corrected": 对话中纠正了迷思概念
+        """
+        state = self.store.get(self.user_id, skill_id)
         
-        # 3. 自适应生成题目
-        questions = self.question_engine.generate(
-            subject=subject,
-            skill_id=skill_id,
-            student_state=student_state,
-            count=count,
+        if interaction_type == "misconception_corrected":
+            state.dimensions["concept"].p_known = min(
+                0.99, state.dimensions["concept"].p_known + 0.1
+            )
+        if interaction_type == "explanation_given" and depth >= 3:
+            state.dimensions["application"].p_known = min(
+                0.99, state.dimensions["application"].p_known + 0.05
+            )
+        
+        self.store.save(self.user_id, skill_id, state)
+        return state
+```
+
+### 7.3 对话上下文 → 练习选题
+
+**问题**：从对话触发练习时，没有利用对话上下文。学生刚在聊导数，触发的练习却可能是随机题目。
+
+```python
+class ContextAwarePracticeTrigger:
+    """利用对话上下文智能选题"""
+    
+    def infer_skills_from_context(
+        self, conversation_branch: Branch, partition_context: str,
+    ) -> list[str]:
+        """从当前对话分支推断应该练习的知识点"""
+        recent_texts = [
+            node.text_summary 
+            for node in conversation_branch.recent_messages(5)
+        ]
+        combined_text = " ".join(recent_texts)
+        return self.skill_index.search(combined_text, top_k=3)
+    
+    def trigger_practice(
+        self, conversation_context: dict, student_state: SharedKnowledgeState,
+    ) -> PracticeSession:
+        """基于对话上下文创建练习session"""
+        # 1. 从对话推断知识点
+        inferred_skills = self.infer_skills_from_context(
+            conversation_context["branch"],
+            conversation_context["partition_summary"],
         )
         
-        # 4. 返回练习ResponseBlock
-        return ResponseBlock(
-            block_type="practice",
-            data={
-                "questions": questions,
-                "session_id": session_id,
-                "mode": "dialogue_triggered",
-            }
+        # 2. 判断Bloom层次
+        #    问"为什么" → 概念题
+        #    问"怎么做" → 程序题
+        #    问"有什么用" → 应用题
+        bloom_level = self._infer_bloom_from_conversation(
+            conversation_context["branch"]
+        )
+        
+        return self.practice_engine.create_session(
+            skill_ids=inferred_skills, bloom_level=bloom_level,
+            mode="contextual",
         )
 ```
 
-### 7.2 对话中的苏格拉底引导
+### 7.4 练习结果 → 对话记忆
+
+**问题**：练习完成后，对话系统不知道学生的表现。下次对话时AI不了解练习情况。
 
 ```python
-class SocraticGuide:
-    """
-    当学生在对话中问"这道题怎么做"时，不直接给答案
+class PracticeResultIntegrator:
+    """练习结果写入对话记忆"""
     
-    策略：
-    1. 先问学生理解了多少
-    2. 引导学生发现自己的错误
-    3. 给出方向性提示
-    4. 最后才给完整解答
-    """
+    def integrate_to_conversation(
+        self, session: PracticeSession, branch: Branch, partition: Partition,
+    ):
+        # 1. 在branch上挂一条系统消息（元数据，不占token）
+        system_node = TreeNode(
+            role="system",
+            content_blocks=[{
+                "type": "text",
+                "text": f"练习记录：{session.correct_count}/{len(session.questions)}正确，"
+                        f"薄弱点：{', '.join(session.struggling_skills)}",
+            }],
+            metadata={
+                "type": "practice_summary",
+                "session_id": session.id,
+                "accuracy": session.accuracy,
+                "skills_tested": session.tested_skills,
+                "error_patterns": session.error_patterns,
+            }
+        )
+        branch.append(system_node)
+        
+        # 2. 更新分区摘要
+        partition.context_summary += (
+            f"\n练习记录({session.date}): {session.tested_skills} "
+            f"正确率{session.accuracy:.0%}"
+        )
+        
+        # 3. AI下次回复时注入：
+        # [Practice] 最近练习: 极限(70%), 导数(40%←薄弱), 积分(85%)
+        self._update_ai_context_injection(partition)
+```
+
+### 7.5 对话中的内联练习
+
+**问题**：当前练习必须跳转到独立页面。对话中应该能直接做题不离开。
+
+```python
+class InlinePracticeHandler:
+    """对话内联练习：不跳转页面，在对话流中完成"""
     
-    def guide(
-        self,
-        question: Question,
-        student_answer: str,
-        conversation_history: list[Message],
-    ) -> str:
-        # 1. 分析学生答案
-        error = self.error_analyzer.analyze(question, student_answer)
+    def handle_inline_answer(
+        self, branch: Branch, practice_block_id: str,
+        student_answer: str, hint_level: int = 0,
+    ) -> tuple[str, KnowledgeState]:
+        """处理内联练习的答案"""
+        question = self.question_store.get(practice_block_id)
+        is_correct = student_answer.strip() == question.correct_answer.strip()
         
-        # 2. 生成引导性问题
-        if error.error_type == ErrorType.CONCEPTUAL:
-            return f"你觉得{error.misconception}这个理解对吗？再想想定义是什么？"
-        elif error.error_type == ErrorType.PROCEDURAL:
-            return "步骤方向是对的，但第二步好像有点问题。你能再说说你的思路吗？"
-        elif error.error_type == ErrorType.COMPUTATION:
-            return "思路完全正确！只是在计算{error.error_subtype}时出了点小问题，再算一遍？"
+        state = self.shared_ks.update_from_practice(
+            skill_id=question.skill_id, is_correct=is_correct,
+            hint_level=hint_level, error_analysis=None,
+            explanation_score=None,
+        )
         
-        # 3. 根据对话轮次调整
-        turns = len(conversation_history)
-        if turns < 3:
-            return "先告诉我你是怎么想的？"
-        elif turns < 5:
-            return f"你的方向是对的。试试从{error.related_skills[0]}的角度想想？"
+        if is_correct:
+            reply = f"✅ 正确！{question.explanation}\n\n要继续下一题吗？"
         else:
-            return self._give_full_explanation(question)
+            reply = (
+                f"❌ 不对哦。你觉得哪里出了问题？\n"
+                f"提示：{question.hints[0] if question.hints else '再想想'}\n"
+                f"选 A/B/C/D 还是想让我详细讲解？"
+            )
+        
+        branch.append(TreeNode(role="assistant", content_blocks=[{
+            "type": "text", "text": reply
+        }]))
+        
+        return reply, state
+```
+
+### 7.6 练习错误 → 推荐对话深度
+
+```python
+class PracticeToDialogueRecommendation:
+    """练习后推荐深度对话"""
+    
+    def should_recommend_dialogue(
+        self, session: PracticeSession, latest_error: ErrorAnalysis,
+    ) -> str | None:
+        skill = latest_error.related_skills[0] if latest_error.related_skills else None
+        
+        # 同一知识点连续错2次
+        recent_errors = session.recent_errors_for_skill(skill, n=2)
+        if len(recent_errors) >= 2:
+            return "连续错了两次，要不要在对话中详细讨论一下？💬"
+        
+        # 概念性错误
+        if latest_error.error_type == ErrorType.CONCEPTUAL:
+            return "这个是概念理解的问题，聊聊会更有效。要切换到对话吗？💬"
+        
+        # 有未解决的迷思概念
+        if latest_error.misconception:
+            return f"检测到误解：{latest_error.misconception[:30]}... 要聊聊吗？💬"
+        
+        return None
+```
+
+### 7.7 对话中的"练习回顾"
+
+```python
+class PracticeRecallInConversation:
+    """在对话中回答关于练习表现的问题"""
+    
+    def generate_recall(
+        self, user_id: str, partition_id: str | None = None, time_range: str = "7d",
+    ) -> str:
+        stats = self.practice_stats.get(user_id, time_range)
+        
+        if not stats or stats.total_questions == 0:
+            return "你还没有做过练习哦，要不要现在开始？📝"
+        
+        lines = [f"📊 过去{time_range}的练习情况："]
+        lines.append(f"共练习 {stats.total_questions} 题，正确率 {stats.accuracy:.0%}\n")
+        
+        if stats.weak_skills:
+            lines.append("🔴 薄弱点：" + "、".join(
+                f"{s}({a:.0%})" for s, a in stats.weak_skills[:3]
+            ))
+        if stats.strong_skills:
+            lines.append("🟢 掌握好的：" + "、".join(
+                f"{s}({a:.0%})" for s, a in stats.strong_skills[:3]
+            ))
+        
+        return "\n".join(lines)
+```
+
+### 7.8 练习Session挂载到对话Branch
+
+```python
+class Branch:
+    # ... 现有字段 ...
+    practice_sessions: list[str] = []  # 关联的session_id列表
+    practice_summary: str = ""         # "已练12题,正确率70%,薄弱:导数"
+```
+
+**效果**：
+- 打开对话branch时，侧边栏显示练习统计
+- AI回复时注入："你在当前话题下已经练了10题，正确率60%"
+- 学生问"这个话题我掌握了吗"，AI能基于练习数据回答
+
+### 7.9 完整对话↔练习数据流
+
+```
+学生在对话中问"导数的几何意义是什么"
+  ↓
+AI回复解释（对话系统）
+  ↓
+学生说"出几道题考考我"
+  ↓
+┌──────────────────────────────────────────────┐
+│ ContextAwarePracticeTrigger                   │
+│ 1. 提取对话上下文："导数"、"几何意义"、"切线" │
+│ 2. 匹配知识点：calculus_derivative_concept     │
+│ 3. 查询MDKS：该知识点 p_known=0.45（发展中）  │
+│ 4. 选择Bloom层次：概念+应用                     │
+└──────────────────────────────────────────────┘
+  ↓
+练习在对话中内联进行（InlinePracticeHandler）
+  ↓
+学生答对3题、错1题（概念错误）
+  ↓
+┌──────────────────────────────────────────────┐
+│ SharedKnowledgeState.update_from_practice     │
+│ concept: 0.45→0.52  procedure: 0.45→0.60     │
+└──────────────────────────────────────────────┘
+  ↓
+PracticeToDialogueRecommendation:
+  概念性错误 + 迷思概念"切线斜率=函数值"
+  → 推荐："要不要聊聊为什么切线斜率不是函数值？"
+  ↓
+学生选择继续对话
+  ↓
+AI回复（已注入练习上下文）：
+  "你刚才做题时，我发现你对'切线斜率'的理解有点偏差..."
+  ↓
+┌──────────────────────────────────────────────┐
+│ SharedKnowledgeState.update_from_conversation │
+│ interaction_type="misconception_corrected"    │
+│ concept: 0.52→0.62                           │
+└──────────────────────────────────────────────┘
+  ↓
+PracticeResultIntegrator写入branch记忆：
+  "练习记录：3/4正确，概念错误→已通过对话纠正"
+  ↓
+下次打开branch时AI能看到：
+  "你在导数几何意义上练过一次，概念有偏差但已讨论纠正"
 ```
 
 ---
