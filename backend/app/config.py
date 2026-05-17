@@ -84,7 +84,7 @@ class Settings(BaseSettings):
     )
 
     # ── BKT 知识追踪参数 ──
-    bkt_default_p_know: float = Field(default=0.0, description="初始掌握概率")
+    bkt_default_p_know: float = Field(default=0.1, description="初始掌握概率")
     bkt_default_p_learn: float = Field(default=0.3, description="初始学习概率")
     bkt_default_p_guess: float = Field(default=0.25, description="猜测概率")
     bkt_default_p_slip: float = Field(default=0.1, description="失误概率")

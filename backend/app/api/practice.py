@@ -1,193 +1,461 @@
 """
-练习题 REST API 端点
-管理练习题的获取、提交答案、错题分析
+练习系统API v2.0
+端点：题目生成、会话管理、答题提交、统计查询
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+import uuid
+from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
-from app.core.learner_model import learner_engine
-from app.schemas.learner import (
-    Difficulty,
-    PracticeQuestion,
-    PracticeResult,
+from app.config import settings
+from app.core.knowledge_trace import bkt_engine
+from app.schemas.practice import (
+    AnswerType,
+    AttemptRecord,
+    BloomLevel,
+    CoverageGap,
+    DailyStat,
+    ErrorAnalysis,
+    ErrorBookEntry,
+    ErrorType,
+    Material,
+    MaterialChunk,
+    PracticeSession,
+    PracticeStats,
+    PracticeSessionPlan,
+    Question,
+    QuestionOption,
+    ReviewTask,
+    SessionStatus,
+    SkillStat,
 )
 
 logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/practice", tags=["practice"])
 
-router = APIRouter(prefix="/api/practice", tags=["练习"])
+# ── 内存存储（MVP，后续迁移PostgreSQL）──
+
+_question_bank: dict[str, list[Question]] = {}  # skill_id → questions
+_sessions: dict[str, PracticeSession] = {}       # session_id → session
+_error_book: dict[str, list[ErrorBookEntry]] = {} # user_id → entries
+_materials: dict[str, list[Material]] = {}        # user_id → materials
+_material_chunks: dict[str, list[MaterialChunk]] = {}  # material_id → chunks
 
 
-@router.get("/questions", response_model=list[PracticeQuestion])
+# ──────────────────────────────────────────────
+# 请求/响应模型
+# ──────────────────────────────────────────────
+
+class GenerateQuestionRequest(BaseModel):
+    subject: str = "数学"
+    skill_id: str = ""
+    bloom_level: BloomLevel = BloomLevel.UNDERSTAND
+    difficulty: float = 0.5
+    count: int = 5
+    content_type: str = "choice"
+    material_ids: Optional[list[str]] = None  # 从用户资料生成
+
+
+class CreateSessionRequest(BaseModel):
+    subject: Optional[str] = None
+    skill_ids: Optional[list[str]] = None
+    duration_minutes: int = 30
+    mode: str = "adaptive"  # adaptive/targeted/review/challenge/contextual
+
+
+class SubmitAnswerRequest(BaseModel):
+    session_id: str
+    question_id: str
+    answer: str
+    time_spent_seconds: float = 0.0
+    hints_used: int = 0
+    explanation_text: Optional[str] = None
+
+
+class HintRequest(BaseModel):
+    question_id: str
+    current_level: int = 0
+
+
+# ──────────────────────────────────────────────
+# 题目管理
+# ──────────────────────────────────────────────
+
+def _generate_sample_questions(skill_id: str, subject: str, count: int) -> list[Question]:
+    """LLM题目生成（MVP用模板生成）"""
+    # MVP: 生成示例题目
+    templates = {
+        "calculus_limit": [
+            Question(
+                skill_id=skill_id, subject=subject, bloom_level=BloomLevel.UNDERSTAND,
+                text="求极限：lim(x→0) sin(x)/x",
+                options=[
+                    QuestionOption(letter="A", text="0", is_correct=False),
+                    QuestionOption(letter="B", text="1", is_correct=True),
+                    QuestionOption(letter="C", text="∞", is_correct=False),
+                    QuestionOption(letter="D", text="不存在", is_correct=False),
+                ],
+                correct_answer="B",
+                explanation="这是第一个重要极限：lim(x→0) sin(x)/x = 1",
+                hints=["想想sin(x)在x=0附近的行为", "用洛必达法则试试"],
+                difficulty=0.4,
+            ),
+            Question(
+                skill_id=skill_id, subject=subject, bloom_level=BloomLevel.APPLY,
+                text="求极限：lim(x→∞) (1+1/x)^x",
+                options=[
+                    QuestionOption(letter="A", text="1", is_correct=False),
+                    QuestionOption(letter="B", text="e", is_correct=True),
+                    QuestionOption(letter="C", text="∞", is_correct=False),
+                    QuestionOption(letter="D", text="0", is_correct=False),
+                ],
+                correct_answer="B",
+                explanation="这是第二个重要极限：lim(x→∞) (1+1/x)^x = e",
+                difficulty=0.5,
+            ),
+        ],
+        "calculus_derivative": [
+            Question(
+                skill_id=skill_id, subject=subject, bloom_level=BloomLevel.APPLY,
+                text="求导数：f(x) = x³ - 3x² + 2，求 f'(x)",
+                options=[
+                    QuestionOption(letter="A", text="3x² - 6x", is_correct=True),
+                    QuestionOption(letter="B", text="3x² - 3x", is_correct=False),
+                    QuestionOption(letter="C", text="x³ - 6x", is_correct=False),
+                    QuestionOption(letter="D", text="3x - 6", is_correct=False),
+                ],
+                correct_answer="A",
+                explanation="f'(x) = 3x² - 6x",
+                difficulty=0.4,
+            ),
+        ],
+    }
+
+    if skill_id in templates:
+        return templates[skill_id][:count]
+
+    # 默认：生成通用题目
+    return [
+        Question(
+            skill_id=skill_id, subject=subject,
+            text=f"关于{skill_id}的练习题 {i+1}",
+            correct_answer="A",
+            difficulty=0.5,
+        )
+        for i in range(count)
+    ]
+
+
+@router.post("/questions/generate")
+async def generate_questions(req: GenerateQuestionRequest):
+    """生成练习题"""
+    questions = _generate_sample_questions(req.skill_id, req.subject, req.count)
+
+    # 存入题库
+    if req.skill_id not in _question_bank:
+        _question_bank[req.skill_id] = []
+    _question_bank[req.skill_id].extend(questions)
+
+    return {
+        "questions": [q.model_dump() for q in questions],
+        "count": len(questions),
+    }
+
+
+@router.get("/questions")
 async def get_questions(
     subject: Optional[str] = None,
     skill_id: Optional[str] = None,
-    difficulty: Optional[str] = None,
-    limit: int = 5,
-) -> list[PracticeQuestion]:
-    """
-    获取练习题列表
+    bloom_level: Optional[BloomLevel] = None,
+    limit: int = 20,
+):
+    """获取题目列表"""
+    all_questions = []
+    for skill_questions in _question_bank.values():
+        all_questions.extend(skill_questions)
 
-    支持按学科、知识点、难度筛选
-
-    参数:
-        subject: 学科（如"数学"、"语文"）
-        skill_id: 知识点ID
-        difficulty: 难度 (easy/medium/hard)
-        limit: 返回数量限制
-
-    返回:
-        练习题列表
-    """
-    questions = learner_engine.get_questions(
-        subject=subject,
-        skill_id=skill_id,
-        difficulty=difficulty,
-        limit=limit,
-    )
-    return questions
-
-
-@router.get("/questions/{question_id}", response_model=PracticeQuestion)
-async def get_question(question_id: str) -> PracticeQuestion:
-    """
-    获取单个练习题详情
-
-    参数:
-        question_id: 题目ID
-
-    返回:
-        练习题详情
-    """
-    # 在题库中搜索
-    for questions in learner_engine._question_bank.values():
-        for q in questions:
-            if q.question_id == question_id:
-                return q
-
-    raise HTTPException(status_code=404, detail=f"题目未找到: {question_id}")
-
-
-@router.post("/submit", response_model=PracticeResult)
-async def submit_answer(
-    user_id: str,
-    question_id: str,
-    answer: str,
-    time_spent: float = 0.0,
-) -> PracticeResult:
-    """
-    提交练习答案
-
-    系统会自动：
-    1. 判断答案是否正确
-    2. 使用BKT模型更新知识状态
-    3. 返回详细的反馈信息
-
-    参数:
-        user_id: 用户ID
-        question_id: 题目ID
-        answer: 用户的答案
-        time_spent: 花费时间（秒）
-
-    返回:
-        练习结果，包含正误判断和知识状态更新
-    """
-    result = learner_engine.submit_answer(
-        user_id=user_id,
-        question_id=question_id,
-        answer=answer,
-        time_spent=time_spent,
-    )
-
-    if not result:
-        raise HTTPException(status_code=404, detail=f"题目未找到: {question_id}")
-
-    return result
-
-
-@router.get("/recommend/{user_id}", response_model=list[PracticeQuestion])
-async def recommend_practice(
-    user_id: str,
-    limit: int = 5,
-) -> list[PracticeQuestion]:
-    """
-    根据用户知识状态推荐练习题
-
-    优先推荐用户薄弱的知识点相关的题目
-
-    参数:
-        user_id: 用户ID
-        limit: 推荐数量
-
-    返回:
-        推荐的练习题列表
-    """
-    profile = learner_engine.get_or_create_profile(user_id)
-
-    # 获取推荐知识点
-    recommendations = learner_engine.bkt.recommend_practice(
-        profile.knowledge_states, top_n=limit
-    )
-
-    if not recommendations:
-        # 如果没有数据，返回一些通用练习题
-        return learner_engine.get_questions(limit=limit)
-
-    # 根据推荐的知识点获取练习题
-    recommended_questions: list[PracticeQuestion] = []
-    for rec in recommendations:
-        skill_id = str(rec["skill_id"])
-        questions = learner_engine.get_questions(skill_id=skill_id, limit=2)
-        recommended_questions.extend(questions)
-
-    # 去重
-    seen_ids: set[str] = set()
-    unique_questions: list[PracticeQuestion] = []
-    for q in recommended_questions:
-        if q.question_id not in seen_ids:
-            seen_ids.add(q.question_id)
-            unique_questions.append(q)
-
-    return unique_questions[:limit]
-
-
-@router.get("/skills/{user_id}")
-async def get_skill_status(user_id: str) -> dict[str, Any]:
-    """
-    获取用户各知识点的状态
-
-    参数:
-        user_id: 用户ID
-
-    返回:
-        各知识点的掌握状态
-    """
-    profile = learner_engine.get_or_create_profile(user_id)
-
-    skills: list[dict[str, Any]] = []
-    for skill_id, state in profile.knowledge_states.items():
-        level = learner_engine.bkt.get_mastery_level(state)
-        predicted_correct = learner_engine.bkt.predict_correct_prob(state)
-        skills.append({
-            "skill_id": skill_id,
-            "p_known": round(state.p_known, 4),
-            "attempt_count": state.attempt_count,
-            "correct_count": state.correct_count,
-            "accuracy": round(state.accuracy, 4),
-            "mastery_level": level,
-            "predicted_correct_prob": round(predicted_correct, 4),
-            "is_mastered": state.is_mastered,
-        })
-
-    # 按掌握程度排序（最弱的在前）
-    skills.sort(key=lambda x: x["p_known"])
+    if subject:
+        all_questions = [q for q in all_questions if q.subject == subject]
+    if skill_id:
+        all_questions = [q for q in all_questions if q.skill_id == skill_id]
+    if bloom_level:
+        all_questions = [q for q in all_questions if q.bloom_level == bloom_level]
 
     return {
-        "user_id": user_id,
-        "total_skills": len(skills),
-        "skills": skills,
+        "questions": [q.model_dump() for q in all_questions[:limit]],
+        "total": len(all_questions),
     }
+
+
+# ──────────────────────────────────────────────
+# 练习会话
+# ──────────────────────────────────────────────
+
+@router.post("/sessions")
+async def create_session(req: CreateSessionRequest):
+    """创建练习会话"""
+    user_id = "default_user"  # MVP单用户
+
+    # 确定练习的知识点
+    skill_ids = req.skill_ids or []
+    if not skill_ids:
+        # 自动选择：从题库中选有题的知识点
+        skill_ids = [s for s, qs in _question_bank.items() if qs][:4]
+
+    # 选题
+    questions = []
+    for skill_id in skill_ids:
+        pool = _question_bank.get(skill_id, [])
+        if pool:
+            # 简单选题：按难度匹配
+            target_diff = 0.5  # MVP默认
+            sorted_q = sorted(pool, key=lambda q: abs(q.difficulty - target_diff))
+            questions.extend(sorted_q[:3])
+
+    session = PracticeSession(
+        user_id=user_id,
+        planned_skills=skill_ids,
+        estimated_minutes=req.duration_minutes,
+        mode=req.mode,
+        question_ids=[q.question_id for q in questions],
+    )
+
+    _sessions[session.session_id] = session
+
+    return {
+        "session": session.model_dump(),
+        "questions": [q.model_dump() for q in questions],
+    }
+
+
+@router.get("/sessions/{session_id}")
+async def get_session(session_id: str):
+    """获取会话详情"""
+    session = _sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    return {"session": session.model_dump()}
+
+
+@router.post("/sessions/{session_id}/complete")
+async def complete_session(session_id: str):
+    """结束会话"""
+    session = _sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session.status = SessionStatus.COMPLETED
+    session.completed_at = datetime.now()
+
+    return {
+        "session": session.model_dump(),
+        "accuracy": session.accuracy,
+        "total_questions": session.total_questions,
+        "correct_count": session.correct_count,
+        "struggling_skills": session.struggling_skills,
+    }
+
+
+# ──────────────────────────────────────────────
+# 答题与反馈
+# ──────────────────────────────────────────────
+
+@router.post("/submit")
+async def submit_answer(req: SubmitAnswerRequest):
+    """提交答案"""
+    session = _sessions.get(req.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # 查找题目
+    question = None
+    for pool in _question_bank.values():
+        for q in pool:
+            if q.question_id == req.question_id:
+                question = q
+                break
+        if question:
+            break
+
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    # 判对错
+    is_correct = req.answer.strip().upper() == question.correct_answer.strip().upper()
+
+    # 创建答题记录
+    attempt = AttemptRecord(
+        user_id=session.user_id,
+        question_id=req.question_id,
+        session_id=req.session_id,
+        user_answer=req.answer,
+        is_correct=is_correct,
+        time_spent_seconds=req.time_spent_seconds,
+        hints_used=req.hints_used,
+        explanation_text=req.explanation_text,
+    )
+
+    # 更新知识状态
+    from app.schemas.practice import KnowledgeState
+    state = bkt_engine.create_knowledge_state(question.skill_id)
+    updated_state = bkt_engine.update(
+        state, is_correct,
+        hint_level=req.hints_used,
+        explanation_score=None,  # 需要LLM评分，MVP先跳过
+    )
+
+    attempt.knowledge_before = {question.skill_id: state.p_known}
+    attempt.knowledge_after = {question.skill_id: updated_state.p_known}
+
+    # 更新会话
+    session.attempts.append(attempt)
+    if is_correct:
+        session.correct_count += 1
+
+    # 生成反馈
+    feedback = {
+        "is_correct": is_correct,
+        "correct_answer": question.correct_answer,
+        "explanation": question.explanation,
+        "knowledge_update": {
+            "skill_id": question.skill_id,
+            "p_known_before": state.p_known,
+            "p_known_after": updated_state.p_known,
+            "mastery_level": bkt_engine.get_mastery_level(updated_state),
+        },
+    }
+
+    # 错误时添加错因分析
+    if not is_correct and question.options:
+        chosen = next((o for o in question.options if o.letter.upper() == req.answer.upper()), None)
+        if chosen and chosen.distractor_type:
+            feedback["error_analysis"] = {
+                "type": "misconception",
+                "distractor_type": chosen.distractor_type,
+                "suggestion": f"你选择了{chosen.letter}，可能的原因是{chosen.distractor_type}",
+            }
+
+    # 情感反馈
+    recent = session.last_n_results(5)
+    consecutive_wrong = sum(1 for a in reversed(recent) if not a.is_correct)
+    if consecutive_wrong >= 3:
+        feedback["emotional_feedback"] = "别着急，困难的知识点需要多花时间。要不要先看看相关视频讲解？🎬"
+    elif consecutive_wrong >= 2:
+        feedback["emotional_feedback"] = "这个知识点确实有点难，我们一步步来 🤝"
+
+    return feedback
+
+
+@router.post("/hint")
+async def get_hint(req: HintRequest):
+    """获取提示"""
+    # 查找题目
+    question = None
+    for pool in _question_bank.values():
+        for q in pool:
+            if q.question_id == req.question_id:
+                question = q
+                break
+        if question:
+            break
+
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    level = req.current_level + 1
+    hints = question.hints or []
+
+    if level == 0:
+        text = "试着自己想想看 💪"
+        hint_type = "encouragement"
+    elif level <= len(hints):
+        text = hints[level - 1]
+        hint_type = "direction"
+    else:
+        text = question.explanation
+        hint_type = "full"
+
+    return {
+        "hint": {"level": level, "text": text, "type": hint_type},
+        "next_level_available": level < 4,
+    }
+
+
+# ──────────────────────────────────────────────
+# 错题本
+# ──────────────────────────────────────────────
+
+@router.get("/errors")
+async def get_error_book(
+    resolved: Optional[bool] = None,
+    skill_id: Optional[str] = None,
+    limit: int = 20,
+):
+    """获取错题本"""
+    user_id = "default_user"
+    entries = _error_book.get(user_id, [])
+
+    if resolved is not None:
+        entries = [e for e in entries if e.is_resolved == resolved]
+    if skill_id:
+        entries = [e for e in entries if e.skill_id == skill_id]
+
+    return {
+        "entries": [e.model_dump() for e in entries[:limit]],
+        "total": len(entries),
+        "unresolved_count": sum(1 for e in _error_book.get(user_id, []) if not e.is_resolved),
+    }
+
+
+# ──────────────────────────────────────────────
+# 统计
+# ──────────────────────────────────────────────
+
+@router.get("/stats")
+async def get_stats(time_range: str = "week"):
+    """获取练习统计"""
+    user_id = "default_user"
+    all_attempts = []
+    for session in _sessions.values():
+        if session.user_id == user_id:
+            all_attempts.extend(session.attempts)
+
+    if not all_attempts:
+        return PracticeStats(user_id=user_id).model_dump()
+
+    total = len(all_attempts)
+    correct = sum(1 for a in all_attempts if a.is_correct)
+
+    # 按知识点统计
+    skill_stats: dict[str, SkillStat] = {}
+    for attempt in all_attempts:
+        if attempt.error_analysis:
+            for skill in attempt.error_analysis.related_skills:
+                if skill not in skill_stats:
+                    skill_stats[skill] = SkillStat(skill_id=skill)
+                skill_stats[skill].total_attempts += 1
+                if attempt.is_correct:
+                    skill_stats[skill].correct_count += 1
+
+    for stat in skill_stats.values():
+        if stat.total_attempts > 0:
+            stat.accuracy = stat.correct_count / stat.total_attempts
+
+    weak = [(s.skill_id, s.accuracy) for s in skill_stats.values() if s.accuracy < 0.6]
+    strong = [(s.skill_id, s.accuracy) for s in skill_stats.values() if s.accuracy >= 0.8]
+
+    return PracticeStats(
+        user_id=user_id,
+        total_questions=total,
+        total_correct=correct,
+        accuracy=correct / total if total > 0 else 0.0,
+        weak_skills=sorted(weak, key=lambda x: x[1])[:5],
+        strong_skills=sorted(strong, key=lambda x: x[1], reverse=True)[:5],
+    ).model_dump()

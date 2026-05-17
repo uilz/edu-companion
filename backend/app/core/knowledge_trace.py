@@ -1,38 +1,40 @@
 """
-BKT（贝叶斯知识追踪）引擎
-完全实现 BKT 模型的前后向更新算法
-
-BKT 模型参数：
-- P(K): 掌握概率 — 学习者已经学会该知识点的概率
-- P(L): 初始学习概率 — 在练习前已学会的概率
-- P(G): 猜对概率 — 没学会但猜对的概率
-- P(S): 失手概率 — 学会了但做错的概率
-- P(T): 学习转移概率 — 练习后从"未学会"变为"学会"的概率
+增强版BKT知识追踪引擎 v2.0
+支持：多维知识状态、提示打折、解释评分、疲劳感知
 """
 
 from __future__ import annotations
 
 import logging
+import math
 from typing import Optional
 
 from app.config import settings
-from app.schemas.learner import KnowledgeState
+from app.schemas.practice import (
+    ErrorType,
+    ExplanationState,
+    KnowledgeDimension,
+    KnowledgeState,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class BKT:
+class BKTEngine:
     """
-    贝叶斯知识追踪引擎
+    增强版BKT引擎
+    
+    核心更新：
+    1. 多维知识状态（concept/procedure/application/transfer）
+    2. 提示打折（hint_level影响p_known更新幅度）
+    3. 解释评分反馈（explanation_score调整更新方向）
+    4. 伪掌握检测（答对但解释不出来）
+    """
 
-    核心公式：
-    1. P(L|obs) = P(L) * P(obs|L) / P(obs)
-    2. P(K|obs) = P(K) + P(L|¬K) * P(T)
-    3. P(obs) = P(obs|L)*P(L) + P(obs|¬L)*P(L)
-    """
+    # 提示等级 → 更新折扣因子
+    HINT_DISCOUNT = {0: 1.0, 1: 0.7, 2: 0.4, 3: 0.2, 4: 0.05}
 
     def __init__(self) -> None:
-        # 从配置读取默认BKT参数
         self.default_p_learn = settings.bkt_default_p_learn
         self.default_p_guess = settings.bkt_default_p_guess
         self.default_p_slip = settings.bkt_default_p_slip
@@ -48,17 +50,7 @@ class BKT:
         p_slip: Optional[float] = None,
         p_transit: Optional[float] = None,
     ) -> KnowledgeState:
-        """
-        创建一个新的知识点状态
-
-        参数:
-            skill_id: 知识点ID
-            p_known: 初始掌握概率
-            p_learn: 初始学习概率
-            p_guess: 猜对概率
-            p_slip: 失手概率
-            p_transit: 学习转移概率
-        """
+        """创建新的知识点状态"""
         return KnowledgeState(
             skill_id=skill_id,
             p_known=p_known if p_known is not None else self.default_p_know,
@@ -69,138 +61,124 @@ class BKT:
         )
 
     def update_correct(self, state: KnowledgeState) -> KnowledgeState:
-        """
-        根据正确作答更新知识点状态
+        """正确回答后更新"""
+        p_k, p_l, p_g, p_s = state.p_known, state.p_learned, state.p_guess, state.p_slip
 
-        BKT 更新公式（回答正确时）：
-        P(K|correct) = P(K) * (1 - P(S)) / P(correct)
-        P(L|correct) = P(L) * (1 - P(S)) / P(correct)
-
-        其中 P(correct) = P(K)(1-P(S)) + (1-P(K))(P(L)(1-P(S)) + (1-P(L))*P(G))
-        """
-        p_k = state.p_known
-        p_l = state.p_learned
-        p_g = state.p_guess
-        p_s = state.p_slip
-
-        # 回答正确的概率
         p_correct = p_k * (1 - p_s) + (1 - p_k) * (p_l * (1 - p_s) + (1 - p_l) * p_g)
-
         if p_correct == 0:
-            p_correct = 1e-10  # 防止除零
+            p_correct = 1e-10
 
-        # 后验更新：回答正确后
-        p_k_given_correct = p_k * (1 - p_s) / p_correct
-        p_l_given_correct = p_l * (1 - p_s) / p_correct
-
-        # 更新状态
-        state.p_known = p_k_given_correct
-        state.p_learned = p_l_given_correct
+        state.p_known = p_k * (1 - p_s) / p_correct
+        state.p_learned = p_l * (1 - p_s) / p_correct
         state.attempt_count += 1
         state.correct_count += 1
 
-        logger.debug(
-            "BKT [正确] skill=%s: P(K) %.4f->%.4f",
-            state.skill_id, p_k, state.p_known,
-        )
         return state
 
     def update_incorrect(self, state: KnowledgeState) -> KnowledgeState:
-        """
-        根据错误作答更新知识点状态
+        """错误回答后更新"""
+        p_k, p_l, p_g, p_s = state.p_known, state.p_learned, state.p_guess, state.p_slip
 
-        BKT 更新公式（回答错误时）：
-        P(K|incorrect) = P(K) * P(S) / P(incorrect)
-        P(L|incorrect) = P(L) * P(S) / P(incorrect)
-
-        其中 P(incorrect) = P(K)*P(S) + (1-P(K))*(P(L)*P(S) + (1-P(L))*(1-P(G)))
-        """
-        p_k = state.p_known
-        p_l = state.p_learned
-        p_g = state.p_guess
-        p_s = state.p_slip
-
-        # 回答错误的概率
         p_incorrect = p_k * p_s + (1 - p_k) * (p_l * p_s + (1 - p_l) * (1 - p_g))
-
         if p_incorrect == 0:
-            p_incorrect = 1e-10  # 防止除零
+            p_incorrect = 1e-10
 
-        # 后验更新：回答错误后
-        p_k_given_incorrect = p_k * p_s / p_incorrect
-        p_l_given_incorrect = p_l * p_s / p_incorrect
+        p_k_new = p_k * p_s / p_incorrect
+        p_l_new = p_l * p_s / p_incorrect
 
-        # 更新状态（含学习转移）
-        # 错误后仍然可能发生学习转移
-        state.p_learned = p_l_given_incorrect + (1 - p_l_given_incorrect) * state.p_transit
-        state.p_known = p_k_given_incorrect + (1 - p_k_given_incorrect) * state.p_transit * state.p_learned
-
+        state.p_learned = p_l_new + (1 - p_l_new) * state.p_transit
+        state.p_known = p_k_new + (1 - p_k_new) * state.p_transit * state.p_learned
         state.attempt_count += 1
 
-        logger.debug(
-            "BKT [错误] skill=%s: P(K) %.4f->%.4f",
-            state.skill_id, p_k, state.p_known,
-        )
         return state
 
-    def update(self, state: KnowledgeState, is_correct: bool) -> KnowledgeState:
+    def update(
+        self,
+        state: KnowledgeState,
+        is_correct: bool,
+        hint_level: int = 0,
+        explanation_score: Optional[float] = None,
+    ) -> KnowledgeState:
         """
-        根据作答结果更新知识点状态（统一入口）
-
+        统一更新入口
+        
         参数:
             state: 当前知识点状态
-            is_correct: 是否回答正确
+            is_correct: 是否正确
+            hint_level: 提示等级 (0-4)
+            explanation_score: 解释质量评分 (0-1)，None表示未提供
+        """
+        # 保存原始值（update_correct/update_inplace会原地修改）
+        original_p_known = state.p_known
 
-        返回:
-            更新后的知识点状态
+        # 1. 基础BKT更新
+        if is_correct:
+            state = self.update_correct(state)
+        else:
+            state = self.update_incorrect(state)
+
+        # 2. 提示打折
+        discount = self.HINT_DISCOUNT.get(hint_level, 0.05)
+        delta = state.p_known - original_p_known
+        state.p_known = original_p_known + delta * discount
+
+        # 更新维度
+        if is_correct:
+            state.correct_count += 1
+        state.attempt_count += 1
+
+        # 3. 解释评分调整
+        if explanation_score is not None:
+            state = self._apply_explanation_adjustment(state, is_correct, explanation_score)
+
+        state.last_updated = __import__("datetime").datetime.now()
+        return state
+
+    def _apply_explanation_adjustment(
+        self,
+        state: KnowledgeState,
+        is_correct: bool,
+        explanation_score: float,
+    ) -> KnowledgeState:
+        """
+        解释评分调整
+        
+        答对 + 解释好(>0.8) → 大幅提升（真正掌握）
+        答对 + 解释差(<0.5) → 不提升（伪掌握）
+        答错 + 解释好(>0.7) → p_known不降，增加p_slip
+        答错 + 解释差(<0.5) → 大幅下降（真正不理解）
         """
         if is_correct:
-            return self.update_correct(state)
+            if explanation_score > 0.8:
+                state.p_known = min(0.99, state.p_known + 0.1)
+            elif explanation_score < 0.5:
+                state.pseudo_mastery_flags.append(state.skill_id)
         else:
-            return self.update_incorrect(state)
+            if explanation_score > 0.7:
+                # 理解正确但计算失误 → 增加slip概率
+                state.p_slip = min(0.5, state.p_slip + 0.05)
+            elif explanation_score < 0.5:
+                state.p_known = max(0.0, state.p_known - 0.1)
+                state.misconception_flags.append(f"{state.skill_id}:explanation_wrong")
 
-    def batch_update(
-        self,
-        states: dict[str, KnowledgeState],
-        results: list[tuple[str, bool]],
-    ) -> dict[str, KnowledgeState]:
-        """
-        批量更新多个知识点的状态
+        # 更新解释状态
+        if state.explanation_state is None:
+            state.explanation_state = ExplanationState()
+        state.explanation_state.explanation_count += 1
+        state.explanation_state.last_explained = __import__("datetime").datetime.now()
+        old_avg = state.explanation_state.avg_explanation_score
+        n = state.explanation_state.explanation_count
+        state.explanation_state.avg_explanation_score = (old_avg * (n - 1) + explanation_score) / n
 
-        参数:
-            states: 知识点ID -> 状态 的映射
-            results: [(skill_id, is_correct), ...] 的列表
-
-        返回:
-            更新后的状态映射
-        """
-        for skill_id, is_correct in results:
-            if skill_id not in states:
-                states[skill_id] = self.create_knowledge_state(skill_id)
-            self.update(states[skill_id], is_correct)
-        return states
+        return state
 
     def predict_correct_prob(self, state: KnowledgeState) -> float:
-        """
-        预测下一次回答正确的概率
-
-        P(correct) = P(K)(1-P(S)) + (1-P(K))(P(L)(1-P(S)) + (1-P(L))*P(G))
-        """
-        p_k = state.p_known
-        p_l = state.p_learned
-        p_g = state.p_guess
-        p_s = state.p_slip
-
-        p_correct = p_k * (1 - p_s) + (1 - p_k) * (p_l * (1 - p_s) + (1 - p_l) * p_g)
-        return p_correct
+        """预测下一次答对的概率"""
+        p_k, p_l, p_g, p_s = state.p_known, state.p_learned, state.p_guess, state.p_slip
+        return p_k * (1 - p_s) + (1 - p_k) * (p_l * (1 - p_s) + (1 - p_l) * p_g)
 
     def get_mastery_level(self, state: KnowledgeState) -> str:
-        """
-        获取知识点掌握等级
-
-        返回:
-            "未接触" | "初学" | "发展中" | "接近掌握" | "已掌握"
-        """
+        """获取掌握等级"""
         p = state.p_known
         if state.attempt_count == 0:
             return "未接触"
@@ -217,37 +195,20 @@ class BKT:
         self,
         states: dict[str, KnowledgeState],
         top_n: int = 5,
-    ) -> list[dict[str, str | float]]:
-        """
-        根据知识状态推荐需要练习的知识点
-
-        策略：
-        1. 优先推荐"接近掌握"的（最容易突破）
-        2. 然后是"发展中"的
-        3. 最后是"初学"的
-
-        参数:
-            states: 所有知识点状态
-            top_n: 推荐数量
-
-        返回:
-            推荐列表 [{"skill_id": ..., "level": ..., "priority": ...}, ...]
-        """
-        recommendations: list[dict[str, str | float]] = []
+    ) -> list[dict]:
+        """推荐需要练习的知识点"""
+        recommendations = []
 
         for skill_id, state in states.items():
             level = self.get_mastery_level(state)
-            # 计算优先级分数
-            if level == "接近掌握":
-                priority = 1.0
-            elif level == "发展中":
-                priority = 0.7
-            elif level == "初学":
-                priority = 0.5
-            elif level == "未接触":
-                priority = 0.3
-            else:  # 已掌握
-                priority = 0.0
+            priority_map = {
+                "接近掌握": 1.0,
+                "发展中": 0.7,
+                "初学": 0.5,
+                "未接触": 0.3,
+                "已掌握": 0.0,
+            }
+            priority = priority_map.get(level, 0.0)
 
             recommendations.append({
                 "skill_id": skill_id,
@@ -256,14 +217,17 @@ class BKT:
                 "p_known": state.p_known,
             })
 
-        # 按优先级降序排序
-        recommendations.sort(key=lambda x: float(x["priority"]), reverse=True)
+        recommendations.sort(key=lambda x: x["priority"], reverse=True)
+        return [r for r in recommendations if r["priority"] > 0][:top_n]
 
-        # 排除已掌握的
-        recommendations = [r for r in recommendations if r["priority"] > 0]
+    def compute_forgetting_prob(self, state: KnowledgeState, days_since: float) -> float:
+        """
+        计算遗忘概率（Ebbinghaus遗忘曲线）
+        R = e^(-t/S)，S为知识稳定性
+        """
+        stability = state.explanation_state.stability if state.explanation_state else 1.0
+        return math.exp(-days_since / max(stability, 0.1))
 
-        return recommendations[:top_n]
 
-
-# ── 全局BKT引擎实例 ──
-bkt_engine = BKT()
+# 全局实例
+bkt_engine = BKTEngine()
