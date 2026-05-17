@@ -1,118 +1,303 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-@import "katex/dist/katex.min.css";
 
 :root {
-  --color-bg-primary: #0d1117;
-  --color-bg-secondary: #161b22;
-  --color-bg-tertiary: #21262d;
-  --color-bg-hover: #30363d;
-  --color-text-primary: #e6edf3;
-  --color-text-secondary: #8b949e;
-  --color-text-muted: #6e7681;
-  --color-border-default: #30363d;
-  --color-accent: #58a6ff;
-  --color-accent-hover: #79c0ff;
-  --color-user-bubble: #1f3a5f;
-  --color-assistant-bubble: #1c2333;
+  --color-black: #0a0a0a;
+  --color-white: #fafafa;
+  --color-accent: #0066FF;
+  --color-gray-50: #f5f5f5;
+  --color-gray-100: #e5e5e5;
+  --color-gray-300: #a3a3a3;
+  --color-gray-600: #525252;
+  --color-gray-800: #262626;
+  --sidebar-width: 240px;
+  --bottom-nav-height: 64px;
 }
 
-html, body {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  background-color: var(--color-bg-primary);
-  color: var(--color-text-primary);
-  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif;
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    font-family: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  body {
+    background-color: var(--color-white);
+    color: var(--color-black);
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Swiss Design Typography Scale */
+  h1 {
+    font-weight: 900;
+    font-size: 2rem;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    margin: 0 0 1.5rem 0;
+  }
+
+  h2 {
+    font-weight: 800;
+    font-size: 1.5rem;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    margin: 0 0 1rem 0;
+  }
+
+  h3 {
+    font-weight: 700;
+    font-size: 1.125rem;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    margin: 0 0 0.75rem 0;
+  }
+
+  p {
+    font-weight: 400;
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    margin: 0 0 1rem 0;
+    color: var(--color-gray-600);
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  /* Smooth page transitions */
+  main {
+    animation: fadeIn 0.2s ease-out;
+  }
 }
 
-/* Scrollbar */
+@layer components {
+  /* Swiss Design Card */
+  .swiss-card {
+    background-color: var(--color-white);
+    border: 1px solid var(--color-gray-100);
+    border-radius: 0;
+    padding: 1.5rem;
+    transition: border-color 0.15s ease;
+  }
+
+  .swiss-card:hover {
+    border-color: var(--color-accent);
+  }
+
+  /* Swiss Design Button */
+  .swiss-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    border: 2px solid transparent;
+    border-radius: 0;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .swiss-btn-primary {
+    background-color: var(--color-accent);
+    color: var(--color-white);
+  }
+
+  .swiss-btn-primary:hover {
+    background-color: #0052cc;
+  }
+
+  .swiss-btn-outline {
+    background-color: transparent;
+    color: var(--color-black);
+    border-color: var(--color-black);
+  }
+
+  .swiss-btn-outline:hover {
+    background-color: var(--color-black);
+    color: var(--color-white);
+  }
+
+  /* Swiss Design Grid Container */
+  .swiss-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+
+  /* Swiss Design Divider */
+  .swiss-divider {
+    border: none;
+    border-top: 1px solid var(--color-gray-100);
+    margin: 1.5rem 0;
+  }
+
+  /* Accent underline */
+  .swiss-underline {
+    display: inline;
+    box-shadow: inset 0 -2px 0 0 var(--color-accent);
+    padding-bottom: 2px;
+  }
+
+  /* Navigation items shared styles */
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 400;
+    color: var(--color-gray-600);
+    transition: all 0.15s ease;
+    cursor: pointer;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+  }
+
+  .nav-item:hover {
+    color: var(--color-black);
+    background-color: var(--color-gray-50);
+  }
+
+  .nav-item-active {
+    color: var(--color-black);
+    font-weight: 600;
+  }
+}
+
+@layer utilities {
+  /* Swiss Design spacing utilities */
+  .spacing-xs { padding: 0.5rem; }
+  .spacing-sm { padding: 1rem; }
+  .spacing-md { padding: 1.5rem; }
+  .spacing-lg { padding: 2rem; }
+  .spacing-xl { padding: 3rem; }
+
+  /* Grid utilities */
+  .grid-swiss {
+    display: grid;
+    gap: 1.5rem;
+  }
+
+  .grid-swiss-2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .grid-swiss-3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .grid-swiss-4 {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  /* Responsive grid */
+  @media (max-width: 768px) {
+    .grid-swiss-2,
+    .grid-swiss-3,
+    .grid-swiss-4 {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (min-width: 769px) and (max-width: 1024px) {
+    .grid-swiss-3,
+    .grid-swiss-4 {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Dark mode support */
+.dark {
+  --color-black: #fafafa;
+  --color-white: #0a0a0a;
+  --color-gray-50: #262626;
+  --color-gray-100: #333333;
+  --color-gray-300: #a3a3a3;
+  --color-gray-600: #a3a3a3;
+  --color-gray-800: #e5e5e5;
+}
+
+.dark body {
+  background-color: #0a0a0a;
+  color: #fafafa;
+}
+
+.dark .swiss-card {
+  background-color: #111111;
+  border-color: #262626;
+}
+
+.dark .swiss-card:hover {
+  border-color: #0066FF;
+}
+
+.dark .nav-item:hover {
+  background-color: #1a1a1a;
+}
+
+.dark .swiss-divider {
+  border-top-color: #262626;
+}
+
+/* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: var(--color-bg-hover);
-  border-radius: 3px;
+  background: var(--color-gray-300);
 }
 
-/* KaTeX overrides */
-.katex-display {
-  margin: 0.5em 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-}
-.katex {
-  font-size: 1.05em;
-  color: var(--color-text-primary);
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-gray-600);
 }
 
-/* Markdown content styles */
-.message-content pre {
-  background: var(--color-bg-primary);
-  border: 1px solid var(--color-border-default);
-  border-radius: 8px;
-  padding: 12px;
-  overflow-x: auto;
-  margin: 8px 0;
-  font-size: 0.875rem;
-}
-.message-content code {
-  background: var(--color-bg-tertiary);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 0.875em;
-}
-.message-content pre code {
-  background: transparent;
-  padding: 0;
-}
-.message-content p {
-  margin: 0.5em 0;
-}
-.message-content p:first-child {
-  margin-top: 0;
-}
-.message-content p:last-child {
-  margin-bottom: 0;
-}
-.message-content ul, .message-content ol {
-  padding-left: 1.5em;
-  margin: 0.5em 0;
-}
-.message-content li {
-  margin: 0.25em 0;
-}
-.message-content strong {
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-.message-content blockquote {
-  border-left: 3px solid var(--color-accent);
-  padding-left: 12px;
-  margin: 8px 0;
-  color: var(--color-text-secondary);
-}
-
-/* Typing indicator */
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
-}
-.typing-dot {
-  animation: blink 1.4s ease-in-out infinite;
-}
-.typing-dot:nth-child(2) {
-  animation-delay: 0.2s;
-}
-.typing-dot:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-/* Sidebar transition */
-.sidebar-overlay {
-  transition: opacity 0.3s ease;
+/* Safe area support for iOS */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-bottom {
+    padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
+  }
 }
