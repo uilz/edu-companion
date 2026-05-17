@@ -10,7 +10,7 @@ import logging
 from typing import Any, AsyncGenerator, Optional
 
 import litellm
-from litellm import acompletion, ascreen
+from litellm import acompletion
 
 from app.config import settings
 
