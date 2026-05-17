@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import AppShell from '@/components/layout/AppShell';
+import ClientProviders from '@/components/layout/ClientProviders';
 
 export const metadata: Metadata = {
   title: '智学伴 - 智能学习伴侣',
@@ -38,7 +39,9 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased">
-        <AppShell>{children}</AppShell>
+        <ClientProviders>
+          <AppShell>{children}</AppShell>
+        </ClientProviders>
       </body>
     </html>
   );

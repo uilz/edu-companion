@@ -109,23 +109,23 @@ export default function PracticePage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#0a0a0a]">
+    <main className="min-h-screen bg-[var(--color-bg)]">
       <div className="max-w-3xl mx-auto px-6 py-16">
         {/* Header */}
         <div className="flex items-center justify-between mb-12">
-          <h1 className="text-4xl font-bold tracking-tight text-white">
+          <h1 className="text-4xl font-bold tracking-tight text-[var(--color-text)]">
             练习
           </h1>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-[#737373]">难度</span>
+            <span className="text-sm text-[var(--color-text-muted)]">难度</span>
             {["全部", "基础", "进阶", "挑战"].map((d) => (
               <button
                 key={d}
                 onClick={() => setDifficulty(d)}
                 className={`text-xs px-3 py-1.5 border transition-colors ${
                   difficulty === d
-                    ? "border-[#0066FF] text-[#0066FF] bg-[#0066FF]/10"
-                    : "border-[#262626] text-[#737373] hover:border-[#525252]"
+                    ? "border-[var(--color-accent)] text-[var(--color-accent)] bg-[var(--color-accent)]/10"
+                    : "border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-border-hover)]"
                 }`}
               >
                 {d}
@@ -136,7 +136,7 @@ export default function PracticePage() {
 
         {/* Progress */}
         <div className="mb-8">
-          <div className="flex items-center justify-between text-xs text-[#737373] mb-2">
+          <div className="flex items-center justify-between text-xs text-[var(--color-text-muted)] mb-2">
             <span>
               {q.subject} · {q.difficulty}
             </span>
@@ -144,9 +144,9 @@ export default function PracticePage() {
               {currentIndex + 1} / {questions.length}
             </span>
           </div>
-          <div className="w-full bg-[#1a1a1a] h-1">
+          <div className="w-full bg-[var(--color-surface)] h-1">
             <div
-              className="h-full bg-[#0066FF] transition-all"
+              className="h-full bg-[var(--color-accent)] transition-all"
               style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }}
             />
           </div>
@@ -155,7 +155,7 @@ export default function PracticePage() {
         {/* Question */}
         <Card>
           <div
-            className="text-base text-[#e5e5e5] leading-relaxed mb-8 message-content"
+            className="text-base text-[var(--color-text)] leading-relaxed mb-8 message-content"
             dangerouslySetInnerHTML={{ __html: q.question.replace(/\$([^$]+)\$/g, (_, m) => `<span class="katex-render" data-formula="${m}">\$${m}\$</span>`) }}
           />
 
@@ -174,13 +174,13 @@ export default function PracticePage() {
                   className={`w-full text-left p-4 border text-sm transition-colors ${
                     submitted
                       ? letter === q.answer
-                        ? "border-[#22c55e] bg-[#22c55e]/10 text-[#22c55e]"
+                        ? "border-[var(--color-success)] bg-[var(--color-success)]/10 text-[var(--color-success)]"
                         : showResult && !isCorrect
-                        ? "border-[#ef4444] bg-[#ef4444]/10 text-[#ef4444]"
-                        : "border-[#262626] text-[#525252]"
+                        ? "border-[var(--color-error)] bg-[var(--color-error)]/10 text-[var(--color-error)]"
+                        : "border-[var(--color-border)] text-[var(--color-text-muted)]"
                       : isSelected
-                      ? "border-[#0066FF] bg-[#0066FF]/10 text-white"
-                      : "border-[#262626] text-[#a3a3a3] hover:border-[#525252]"
+                      ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-text)]"
+                      : "border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)]"
                   }`}
                 >
                   <span className="font-semibold mr-3">{letter}.</span>
@@ -196,14 +196,14 @@ export default function PracticePage() {
               <button
                 onClick={handleSubmit}
                 disabled={!selected}
-                className="px-6 py-2.5 bg-[#0066FF] text-white text-sm font-medium disabled:opacity-30 hover:bg-[#0052CC] transition-colors"
+                className="px-6 py-2.5 bg-[var(--color-accent)] text-[var(--color-text)] text-sm font-medium disabled:opacity-30 hover:bg-[var(--color-accent-hover)] transition-colors"
               >
                 提交答案
               </button>
             ) : (
               <button
                 onClick={handleReset}
-                className="px-6 py-2.5 border border-[#262626] text-[#a3a3a3] text-sm hover:border-[#525252] transition-colors"
+                className="px-6 py-2.5 border border-[var(--color-border)] text-[var(--color-text-secondary)] text-sm hover:border-[var(--color-border-hover)] transition-colors"
               >
                 <RotateCcw size={14} className="inline mr-1.5" />
                 重做
@@ -216,27 +216,27 @@ export default function PracticePage() {
             <div
               className={`mt-6 p-5 border text-sm leading-relaxed ${
                 isCorrect
-                  ? "border-[#22c55e]/30 bg-[#22c55e]/5"
-                  : "border-[#ef4444]/30 bg-[#ef4444]/5"
+                  ? "border-[var(--color-success)]/30 bg-[var(--color-success)]/5"
+                  : "border-[var(--color-error)]/30 bg-[var(--color-error)]/5"
               }`}
             >
               <div className="flex items-center gap-2 mb-3 font-semibold">
                 {isCorrect ? (
                   <>
-                    <CheckCircle size={16} className="text-[#22c55e]" />
-                    <span className="text-[#22c55e]">回答正确！</span>
+                    <CheckCircle size={16} className="text-[var(--color-success)]" />
+                    <span className="text-[var(--color-success)]">回答正确！</span>
                   </>
                 ) : (
                   <>
-                    <XCircle size={16} className="text-[#ef4444]" />
-                    <span className="text-[#ef4444]">
+                    <XCircle size={16} className="text-[var(--color-error)]" />
+                    <span className="text-[var(--color-error)]">
                       回答错误，正确答案是 {q.answer}
                     </span>
                   </>
                 )}
               </div>
               <div
-                className="text-[#a3a3a3] message-content"
+                className="text-[var(--color-text-secondary)] message-content"
                 dangerouslySetInnerHTML={{
                   __html: q.explanation
                     .replace(/\n/g, "<br/>")
@@ -254,14 +254,14 @@ export default function PracticePage() {
         <div className="flex items-center justify-between mt-6">
           <button
             onClick={handlePrev}
-            className="flex items-center gap-1 text-sm text-[#737373] hover:text-white transition-colors"
+            className="flex items-center gap-1 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
           >
             <ChevronLeft size={16} />
             上一题
           </button>
           <button
             onClick={handleNext}
-            className="flex items-center gap-1 text-sm text-[#737373] hover:text-white transition-colors"
+            className="flex items-center gap-1 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
           >
             下一题
             <ChevronRight size={16} />

@@ -8,8 +8,12 @@ import {
   MessageSquare,
   BarChart3,
   Network,
+  Settings,
+  Sun,
+  Moon,
   LucideIcon,
 } from 'lucide-react';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface NavItem {
   href: string;
@@ -27,6 +31,7 @@ const navItems: NavItem[] = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { theme, toggleTheme } = useTheme();
 
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/';
@@ -35,20 +40,20 @@ export default function Sidebar() {
 
   return (
     <aside
-      className="hidden md:flex flex-col fixed left-0 top-0 bottom-0 z-40 bg-[#0a0a0a] border-r border-[#262626]"
+      className="hidden md:flex flex-col fixed left-0 top-0 bottom-0 z-40 bg-[var(--color-bg)] border-r border-[var(--color-border)]"
       style={{ width: 'var(--sidebar-width)' }}
     >
       {/* App Logo / Name */}
-      <div className="px-6 py-6 border-b border-[#262626]">
+      <div className="px-6 py-6 border-b border-[var(--color-border)]">
         <Link href="/" className="flex items-center gap-3">
           <div
-            className="w-8 h-8 bg-[#0066FF] flex items-center justify-center"
+            className="w-8 h-8 bg-[var(--color-accent)] flex items-center justify-center"
             style={{ borderRadius: '2px' }}
           >
-            <span className="text-white font-bold text-sm">学</span>
+            <span className="text-[#ffffff] font-bold text-sm">学</span>
           </div>
           <span
-            className="font-bold text-[#fafafa] tracking-tight"
+            className="font-bold text-[var(--color-text)] tracking-tight"
             style={{ fontSize: '18px' }}
           >
             智学伴
@@ -67,13 +72,10 @@ export default function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`
-                  nav-item
-                  ${active ? 'nav-item-active' : ''}
-                `}
+                className={`nav-item ${active ? 'nav-item-active' : ''}`}
                 style={{
                   borderLeft: active
-                    ? '3px solid #0066FF'
+                    ? '3px solid var(--color-accent)'
                     : '3px solid transparent',
                   paddingLeft: active ? '0.9375rem' : '1rem',
                   fontWeight: active ? 600 : 400,
@@ -83,7 +85,7 @@ export default function Sidebar() {
                 <Icon
                   size={18}
                   strokeWidth={active ? 2.2 : 1.6}
-                  className={active ? 'text-[#0066FF]' : 'text-[#a3a3a3]'}
+                  className={active ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-secondary)]'}
                 />
                 <span
                   style={{
@@ -99,10 +101,24 @@ export default function Sidebar() {
         </div>
       </nav>
 
+      {/* Theme toggle & Settings */}
+      <div className="px-3 py-3 border-t border-[var(--color-border)]">
+        <button
+          onClick={toggleTheme}
+          className="nav-item w-full"
+          style={{ borderLeft: '3px solid transparent' }}
+        >
+          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          <span style={{ fontSize: '14px' }}>
+            {theme === 'dark' ? '浅色模式' : '深色模式'}
+          </span>
+        </button>
+      </div>
+
       {/* Footer area */}
-      <div className="px-6 py-4 border-t border-[#262626]">
+      <div className="px-6 py-4 border-t border-[var(--color-border)]">
         <div
-          className="text-[#a3a3a3] text-xs leading-relaxed"
+          className="text-[var(--color-text-secondary)] text-xs leading-relaxed"
           style={{ fontSize: '11px', letterSpacing: '0.02em' }}
         >
           智学伴 v1.0

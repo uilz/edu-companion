@@ -153,33 +153,33 @@ export default function GraphPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#0a0a0a]">
+    <main className="min-h-screen bg-[var(--color-bg)]">
       <div className="max-w-6xl mx-auto px-6 py-16">
-        <h1 className="text-4xl font-bold tracking-tight text-white mb-8">
+        <h1 className="text-4xl font-bold tracking-tight text-[var(--color-text)] mb-8">
           知识图谱
         </h1>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Graph area */}
           <div className="lg:col-span-3">
-            <div className="border border-[#262626] bg-[#0d0d0d] overflow-hidden relative">
+            <div className="border border-[var(--color-border)] bg-[var(--color-card)] overflow-hidden relative">
               {/* Controls */}
               <div className="absolute top-4 right-4 z-10 flex gap-1">
                 <button
                   onClick={() => setZoom((z) => Math.min(2, z + 0.2))}
-                  className="w-8 h-8 flex items-center justify-center bg-[#1a1a1a] border border-[#262626] text-[#a3a3a3] hover:text-white transition-colors"
+                  className="w-8 h-8 flex items-center justify-center bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
                 >
                   <ZoomIn size={14} />
                 </button>
                 <button
                   onClick={() => setZoom((z) => Math.max(0.3, z - 0.2))}
-                  className="w-8 h-8 flex items-center justify-center bg-[#1a1a1a] border border-[#262626] text-[#a3a3a3] hover:text-white transition-colors"
+                  className="w-8 h-8 flex items-center justify-center bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
                 >
                   <ZoomOut size={14} />
                 </button>
                 <button
                   onClick={resetView}
-                  className="w-8 h-8 flex items-center justify-center bg-[#1a1a1a] border border-[#262626] text-[#a3a3a3] hover:text-white transition-colors"
+                  className="w-8 h-8 flex items-center justify-center bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
                 >
                   <Maximize2 size={14} />
                 </button>
@@ -290,11 +290,11 @@ export default function GraphPage() {
                       className="w-3 h-3 flex-shrink-0"
                       style={{ backgroundColor: color }}
                     />
-                    <span className="text-[#a3a3a3]">{subject}</span>
+                    <span className="text-[var(--color-text-secondary)]">{subject}</span>
                   </div>
                 ))}
               </div>
-              <div className="mt-4 pt-3 border-t border-[#1a1a1a] text-xs text-[#525252]">
+              <div className="mt-4 pt-3 border-t border-[var(--color-surface)] text-xs text-[var(--color-text-muted)]">
                 圆环表示掌握进度
               </div>
             </Card>
@@ -304,17 +304,17 @@ export default function GraphPage() {
               <Card title="知识点详情">
                 <div className="space-y-3">
                   <div>
-                    <div className="text-lg font-bold text-white">
+                    <div className="text-lg font-bold text-[var(--color-text)]">
                       {selectedNode.label}
                     </div>
-                    <div className="text-xs text-[#737373] mt-0.5">
+                    <div className="text-xs text-[var(--color-text-muted)] mt-0.5">
                       {selectedNode.subject}
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-[#737373] mb-1">掌握度</div>
+                    <div className="text-xs text-[var(--color-text-muted)] mb-1">掌握度</div>
                     <div className="flex items-center gap-2">
-                      <div className="flex-1 bg-[#1a1a1a] h-2">
+                      <div className="flex-1 bg-[var(--color-surface)] h-2 min-h-[8px]">
                         <div
                           className="h-full"
                           style={{
@@ -323,19 +323,19 @@ export default function GraphPage() {
                           }}
                         />
                       </div>
-                      <span className="text-sm text-white font-medium">
+                      <span className="text-sm text-[var(--color-text)] font-medium">
                         {selectedNode.mastery}%
                       </span>
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-[#737373] mb-1">描述</div>
-                    <div className="text-sm text-[#a3a3a3] leading-relaxed">
+                    <div className="text-xs text-[var(--color-text-muted)] mb-1">描述</div>
+                    <div className="text-sm text-[var(--color-text-secondary)] leading-relaxed">
                       {selectedNode.description}
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-[#737373] mb-1">前置知识</div>
+                    <div className="text-xs text-[var(--color-text-muted)] mb-1">前置知识</div>
                     <div className="flex flex-wrap gap-1.5">
                       {edges
                         .filter((e) => e.to === selectedNode.id)
@@ -345,14 +345,14 @@ export default function GraphPage() {
                             <span
                               key={e.from}
                               onClick={() => fromNode && setSelectedNode(fromNode)}
-                              className="text-xs px-2 py-1 border border-[#262626] text-[#a3a3a3] hover:border-[#525252] hover:text-white cursor-pointer transition-colors"
+                              className="text-xs px-2 py-1 border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)] hover:text-[var(--color-text)] cursor-pointer transition-colors"
                             >
                               {fromNode?.label}
                             </span>
                           );
                         })}
                       {edges.filter((e) => e.to === selectedNode.id).length === 0 && (
-                        <span className="text-xs text-[#525252]">无</span>
+                        <span className="text-xs text-[var(--color-text-muted)]">无</span>
                       )}
                     </div>
                   </div>
@@ -361,8 +361,8 @@ export default function GraphPage() {
             ) : (
               <Card>
                 <div className="text-center py-4">
-                  <Info size={20} className="text-[#525252] mx-auto mb-2" />
-                  <div className="text-sm text-[#737373]">点击节点查看详情</div>
+                  <Info size={20} className="text-[var(--color-text-muted)] mx-auto mb-2" />
+                  <div className="text-sm text-[var(--color-text-muted)]">点击节点查看详情</div>
                 </div>
               </Card>
             )}
@@ -371,16 +371,16 @@ export default function GraphPage() {
             <Card title="统计">
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-[#737373]">知识点</span>
-                  <span className="text-white font-medium">{nodes.length}</span>
+                  <span className="text-[var(--color-text-muted)]">知识点</span>
+                  <span className="text-[var(--color-text)] font-medium">{nodes.length}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#737373]">关联数</span>
-                  <span className="text-white font-medium">{edges.length}</span>
+                  <span className="text-[var(--color-text-muted)]">关联数</span>
+                  <span className="text-[var(--color-text)] font-medium">{edges.length}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#737373]">平均掌握</span>
-                  <span className="text-white font-medium">
+                  <span className="text-[var(--color-text-muted)]">平均掌握</span>
+                  <span className="text-[var(--color-text)] font-medium">
                     {Math.round(nodes.reduce((s, n) => s + n.mastery, 0) / nodes.length)}%
                   </span>
                 </div>

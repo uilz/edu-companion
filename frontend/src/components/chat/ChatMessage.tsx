@@ -78,8 +78,8 @@ export default function ChatMessage({ role, content, timestamp }: ChatMessagePro
       <div
         className={`max-w-[80%] px-4 py-3 ${
           isUser
-            ? "bg-[#0066FF] text-white"
-            : "bg-[#262626] text-[#e5e5e5]"
+            ? "bg-[var(--color-accent)] text-[#ffffff]"
+            : "bg-[var(--color-surface)] text-[var(--color-text)]"
         }`}
       >
         <div
@@ -89,7 +89,7 @@ export default function ChatMessage({ role, content, timestamp }: ChatMessagePro
         />
         <div
           className={`text-[10px] mt-1 ${
-            isUser ? "text-white/50 text-right" : "text-[#737373]"
+            isUser ? "text-[#ffffff]/50 text-right" : "text-[var(--color-text-muted)]"
           }`}
         >
           {time}

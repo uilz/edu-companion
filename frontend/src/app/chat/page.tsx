@@ -109,17 +109,17 @@ export default function ChatPage() {
   const isEmpty = messages.length === 0;
 
   return (
-    <main className="flex flex-col h-screen bg-[#0a0a0a]">
+    <main className="flex flex-col h-screen bg-[var(--color-bg)]">
       {/* Header */}
-      <div className="flex-shrink-0 border-b border-[#262626] px-6 py-4">
+      <div className="flex-shrink-0 border-b border-[var(--color-border)] px-6 py-4">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Bot size={20} className="text-[#0066FF]" />
-            <h1 className="text-lg font-semibold text-white">对话</h1>
+            <Bot size={20} className="text-[var(--color-accent)]" />
+            <h1 className="text-lg font-semibold text-[var(--color-text)]">对话</h1>
           </div>
           <button
             onClick={() => setShowSettings(!showSettings)}
-            className="text-[#737373] hover:text-white transition-colors p-1"
+            className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors p-1"
           >
             <Settings size={16} />
           </button>
@@ -128,51 +128,51 @@ export default function ChatPage() {
 
       {/* Settings panel */}
       {showSettings && (
-        <div className="flex-shrink-0 border-b border-[#262626] px-6 py-4 bg-[#0d0d0d]">
+        <div className="flex-shrink-0 border-b border-[var(--color-border)] px-6 py-4 bg-[var(--color-card)]">
           <div className="max-w-3xl mx-auto space-y-3">
             <div>
-              <label className="text-xs text-[#737373] block mb-1">API 端点</label>
+              <label className="text-xs text-[var(--color-text-muted)] block mb-1">API 端点</label>
               <input
                 value={settings.apiEndpoint}
                 onChange={(e) =>
                   setSettings((s) => ({ ...s, apiEndpoint: e.target.value }))
                 }
-                className="w-full bg-[#171717] border border-[#262626] text-[#e5e5e5] text-sm px-3 py-2 focus:outline-none focus:border-[#525252]"
+                className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 focus:outline-none focus:border-[var(--color-border-hover)]"
                 placeholder="留空使用默认"
               />
             </div>
             <div>
-              <label className="text-xs text-[#737373] block mb-1">API Key</label>
+              <label className="text-xs text-[var(--color-text-muted)] block mb-1">API Key</label>
               <input
                 type="password"
                 value={settings.apiKey}
                 onChange={(e) =>
                   setSettings((s) => ({ ...s, apiKey: e.target.value }))
                 }
-                className="w-full bg-[#171717] border border-[#262626] text-[#e5e5e5] text-sm px-3 py-2 focus:outline-none focus:border-[#525252]"
+                className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 focus:outline-none focus:border-[var(--color-border-hover)]"
                 placeholder="sk-..."
               />
             </div>
             <div>
-              <label className="text-xs text-[#737373] block mb-1">模型名称</label>
+              <label className="text-xs text-[var(--color-text-muted)] block mb-1">模型名称</label>
               <input
                 value={settings.modelName}
                 onChange={(e) =>
                   setSettings((s) => ({ ...s, modelName: e.target.value }))
                 }
-                className="w-full bg-[#171717] border border-[#262626] text-[#e5e5e5] text-sm px-3 py-2 focus:outline-none focus:border-[#525252]"
+                className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 focus:outline-none focus:border-[var(--color-border-hover)]"
                 placeholder="gpt-4o"
               />
             </div>
             <div>
-              <label className="text-xs text-[#737373] block mb-1">系统提示词</label>
+              <label className="text-xs text-[var(--color-text-muted)] block mb-1">系统提示词</label>
               <textarea
                 value={settings.systemPrompt}
                 onChange={(e) =>
                   setSettings((s) => ({ ...s, systemPrompt: e.target.value }))
                 }
                 rows={3}
-                className="w-full bg-[#171717] border border-[#262626] text-[#e5e5e5] text-sm px-3 py-2 focus:outline-none focus:border-[#525252] resize-none"
+                className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 focus:outline-none focus:border-[var(--color-border-hover)] resize-none"
               />
             </div>
           </div>
@@ -183,11 +183,11 @@ export default function ChatPage() {
       <div className="flex-1 overflow-y-auto">
         {isEmpty ? (
           <div className="h-full flex flex-col items-center justify-center text-center px-6">
-            <div className="w-12 h-12 border border-[#262626] flex items-center justify-center mb-4">
-              <Sparkles size={20} className="text-[#0066FF]" />
+            <div className="w-12 h-12 border border-[var(--color-border)] flex items-center justify-center mb-4">
+              <Sparkles size={20} className="text-[var(--color-accent)]" />
             </div>
-            <h2 className="text-xl font-bold text-white mb-2">开始提问</h2>
-            <p className="text-sm text-[#737373] max-w-md">
+            <h2 className="text-xl font-bold text-[var(--color-text)] mb-2">开始提问</h2>
+            <p className="text-sm text-[var(--color-text-muted)] max-w-md">
               我是你的 AI 学习助手，可以帮你解答学科问题、解释概念、批改作业。
               <br />
               试着问我任何学习上的问题。
@@ -197,7 +197,7 @@ export default function ChatPage() {
                 <button
                   key={q}
                   onClick={() => handleSend(q)}
-                  className="text-xs px-4 py-2 border border-[#262626] text-[#a3a3a3] hover:border-[#525252] hover:text-white transition-colors"
+                  className="text-xs px-4 py-2 border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)] hover:text-[var(--color-text)] transition-colors"
                 >
                   {q}
                 </button>
@@ -218,10 +218,10 @@ export default function ChatPage() {
             {/* Typing indicator */}
             {isLoading && messages[messages.length - 1]?.content === "" && (
               <div className="flex justify-start mb-3">
-                <div className="bg-[#262626] px-4 py-3 flex gap-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#737373] typing-dot" />
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#737373] typing-dot" />
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#737373] typing-dot" />
+                <div className="bg-[var(--color-surface)] px-4 py-3 flex gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-muted)] typing-dot" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-muted)] typing-dot" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-muted)] typing-dot" />
                 </div>
               </div>
             )}

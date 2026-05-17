@@ -56,9 +56,9 @@ export default function ProgressPage() {
   const pieGradient = `conic-gradient(${gradientStops.join(", ")})`;
 
   return (
-    <main className="min-h-screen bg-[#0a0a0a]">
+    <main className="min-h-screen bg-[var(--color-bg)]">
       <div className="max-w-5xl mx-auto px-6 py-16">
-        <h1 className="text-4xl font-bold tracking-tight text-white mb-12">
+        <h1 className="text-4xl font-bold tracking-tight text-[var(--color-text)] mb-12">
           学情
         </h1>
 
@@ -70,9 +70,9 @@ export default function ProgressPage() {
             { label: "连续学习", value: "12 天" },
             { label: "知识点掌握", value: "156 个" },
           ].map((s) => (
-            <div key={s.label} className="border border-[#262626] bg-[#0d0d0d] p-5">
-              <div className="text-2xl font-bold text-white">{s.value}</div>
-              <div className="text-xs text-[#737373] mt-1">{s.label}</div>
+            <div key={s.label} className="border border-[var(--color-border)] bg-[var(--color-card)] p-5">
+              <div className="text-2xl font-bold text-[var(--color-text)]">{s.value}</div>
+              <div className="text-xs text-[var(--color-text-muted)] mt-1">{s.label}</div>
             </div>
           ))}
         </div>
@@ -84,20 +84,20 @@ export default function ProgressPage() {
               {subjects.map((sub) => (
                 <div key={sub.name}>
                   <div className="flex items-center justify-between text-sm mb-1.5">
-                    <span className="text-[#e5e5e5]">{sub.name}</span>
-                    <span className="text-[#737373]">{sub.mastery}%</span>
+                    <span className="text-[var(--color-text)]">{sub.name}</span>
+                    <span className="text-[var(--color-text-muted)]">{sub.mastery}%</span>
                   </div>
-                  <div className="w-full bg-[#1a1a1a] h-2">
+                  <div className="w-full bg-[var(--color-surface)] h-2 min-h-[8px]">
                     <div
                       className="h-full transition-all"
                       style={{
                         width: `${sub.mastery}%`,
                         backgroundColor:
                           sub.mastery >= 80
-                            ? "#22c55e"
+                            ? "var(--color-success)"
                             : sub.mastery >= 60
-                            ? "#0066FF"
-                            : "#f59e0b",
+                            ? "var(--color-accent)"
+                            : "var(--color-warning)",
                       }}
                     />
                   </div>
@@ -112,14 +112,14 @@ export default function ProgressPage() {
               {weeklyTrend.map((d) => (
                 <div key={d.day} className="flex-1 flex flex-col items-center gap-1">
                   <div
-                    className="w-full bg-[#0066FF]/80 hover:bg-[#0066FF] transition-colors cursor-pointer group relative"
+                    className="w-full bg-[var(--color-accent)]/80 hover:bg-[var(--color-accent)] transition-colors cursor-pointer group relative"
                     style={{ height: `${(d.hours / maxHours) * 100}%` }}
                   >
-                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] text-[#737373] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] text-[var(--color-text-muted)] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
                       {d.hours}h / {d.questions}题
                     </div>
                   </div>
-                  <span className="text-[9px] text-[#525252]">{d.day.slice(-2)}</span>
+                  <span className="text-[9px] text-[var(--color-text-muted)]">{d.day.slice(-2)}</span>
                 </div>
               ))}
             </div>
@@ -135,20 +135,20 @@ export default function ProgressPage() {
                   key={i}
                   className={`aspect-square flex items-center justify-center text-[10px] ${
                     active
-                      ? "bg-[#0066FF]"
-                      : "bg-[#1a1a1a]"
+                      ? "bg-[var(--color-accent)]"
+                      : "bg-[var(--color-surface)]"
                   }`}
                   title={active ? "已学习" : "未学习"}
                 />
               ))}
             </div>
-            <div className="flex items-center gap-4 mt-4 text-xs text-[#737373]">
+            <div className="flex items-center gap-4 mt-4 text-xs text-[var(--color-text-muted)]">
               <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 bg-[#0066FF]" />
+                <div className="w-3 h-3 bg-[var(--color-accent)]" />
                 已学习
               </div>
               <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 bg-[#1a1a1a]" />
+                <div className="w-3 h-3 bg-[var(--color-surface)]" />
                 未学习
               </div>
             </div>
@@ -168,8 +168,8 @@ export default function ProgressPage() {
                       className="w-3 h-3 flex-shrink-0"
                       style={{ backgroundColor: cat.color }}
                     />
-                    <span className="text-sm text-[#a3a3a3]">{cat.label}</span>
-                    <span className="text-sm text-white font-medium ml-auto">
+                    <span className="text-sm text-[var(--color-text-secondary)]">{cat.label}</span>
+                    <span className="text-sm text-[var(--color-text)] font-medium ml-auto">
                       {cat.value}%
                     </span>
                   </div>

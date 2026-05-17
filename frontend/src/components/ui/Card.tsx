@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 interface CardProps {
   title?: string;
@@ -9,10 +9,10 @@ interface CardProps {
 export default function Card({ title, children, className = "" }: CardProps) {
   return (
     <div
-      className={`border border-[#262626] bg-[#0d0d0d] p-6 ${className}`}
+      className={`border border-[var(--color-border)] bg-[var(--color-card)] p-6 ${className}`}
     >
       {title && (
-        <h3 className="text-xs font-bold uppercase tracking-widest text-[#737373] mb-4">
+        <h3 className="text-xs font-bold uppercase tracking-widest text-[var(--color-text-muted)] mb-4">
           {title}
         </h3>
       )}

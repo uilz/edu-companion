@@ -38,7 +38,7 @@ export default function ChatInput({ onSend, disabled = false }: ChatInputProps) 
   };
 
   return (
-    <div className="border-t border-[#262626] bg-[#0a0a0a] p-4">
+    <div className="border-t border-[var(--color-border)] bg-[var(--color-bg)] p-4">
       <div className="flex items-end gap-3 max-w-3xl mx-auto">
         <textarea
           ref={textareaRef}
@@ -48,12 +48,12 @@ export default function ChatInput({ onSend, disabled = false }: ChatInputProps) 
           disabled={disabled}
           placeholder="输入你的问题..."
           rows={1}
-          className="flex-1 resize-none bg-[#171717] border border-[#262626] text-[#e5e5e5] placeholder-[#525252] px-4 py-3 text-sm focus:outline-none focus:border-[#525252] disabled:opacity-50"
+          className="flex-1 resize-none bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] placeholder-[var(--color-text-muted)] px-4 py-3 text-sm focus:outline-none focus:border-[var(--color-border-hover)] disabled:opacity-50"
         />
         <button
           onClick={handleSend}
           disabled={disabled || !text.trim()}
-          className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-[#0066FF] text-white disabled:opacity-30 hover:bg-[#0052CC] transition-colors"
+          className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-[var(--color-accent)] text-[#ffffff] disabled:opacity-30 hover:bg-[var(--color-accent-hover)] transition-colors"
         >
           <Send size={16} />
         </button>

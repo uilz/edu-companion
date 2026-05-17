@@ -44,15 +44,15 @@ export default function HomePage() {
   const streak = 12;
 
   return (
-    <main className="min-h-screen bg-[#0a0a0a]">
+    <main className="min-h-screen bg-[var(--color-bg)]">
       <div className="max-w-5xl mx-auto px-6 py-16">
         {/* Header */}
         <header className="mb-16">
-          <h1 className="text-5xl font-bold tracking-tight text-white mb-3">
+          <h1 className="text-5xl font-bold tracking-tight text-[var(--color-text)] mb-3">
             {greeting}
           </h1>
-          <p className="text-lg text-[#737373]">
-            今天是学习的第 <span className="text-white font-semibold">{streak}</span> 天
+          <p className="text-lg text-[var(--color-text-muted)]">
+            今天是学习的第 <span className="text-[var(--color-text)] font-semibold">{streak}</span> 天
           </p>
         </header>
 
@@ -60,33 +60,33 @@ export default function HomePage() {
         <div className="grid grid-cols-3 gap-4 mb-12">
           <Link
             href="/chat"
-            className="border border-[#262626] bg-[#0d0d0d] p-6 hover:border-[#525252] transition-colors group"
+            className="border border-[var(--color-border)] bg-[var(--color-card)] p-6 hover:border-[var(--color-border-hover)] transition-colors group min-h-[120px]"
           >
             <div className="text-2xl mb-3">💬</div>
-            <div className="text-sm font-semibold text-white group-hover:text-[#0066FF] transition-colors">
+            <div className="text-sm font-semibold text-[var(--color-text)] group-hover:text-[var(--color-accent)] transition-colors">
               提问
             </div>
-            <div className="text-xs text-[#737373] mt-1">向 AI 助手提问</div>
+            <div className="text-xs text-[var(--color-text-muted)] mt-1">向 AI 助手提问</div>
           </Link>
           <Link
             href="/practice"
-            className="border border-[#262626] bg-[#0d0d0d] p-6 hover:border-[#525252] transition-colors group"
+            className="border border-[var(--color-border)] bg-[var(--color-card)] p-6 hover:border-[var(--color-border-hover)] transition-colors group min-h-[120px]"
           >
             <div className="text-2xl mb-3">📝</div>
-            <div className="text-sm font-semibold text-white group-hover:text-[#0066FF] transition-colors">
+            <div className="text-sm font-semibold text-[var(--color-text)] group-hover:text-[var(--color-accent)] transition-colors">
               练习
             </div>
-            <div className="text-xs text-[#737373] mt-1">做题巩固知识</div>
+            <div className="text-xs text-[var(--color-text-muted)] mt-1">做题巩固知识</div>
           </Link>
           <Link
             href="/graph"
-            className="border border-[#262626] bg-[#0d0d0d] p-6 hover:border-[#525252] transition-colors group"
+            className="border border-[var(--color-border)] bg-[var(--color-card)] p-6 hover:border-[var(--color-border-hover)] transition-colors group min-h-[120px]"
           >
             <div className="text-2xl mb-3">🎬</div>
-            <div className="text-sm font-semibold text-white group-hover:text-[#0066FF] transition-colors">
+            <div className="text-sm font-semibold text-[var(--color-text)] group-hover:text-[var(--color-accent)] transition-colors">
               知识图谱
             </div>
-            <div className="text-xs text-[#737373] mt-1">查看知识关联</div>
+            <div className="text-xs text-[var(--color-text-muted)] mt-1">查看知识关联</div>
           </Link>
         </div>
 
@@ -94,7 +94,7 @@ export default function HomePage() {
           {/* Today's Plan */}
           <div className="lg:col-span-2">
             <Card title="今日学习计划">
-              <div className="space-y-0 divide-y divide-[#1a1a1a]">
+              <div className="space-y-0 divide-y divide-[var(--color-surface)]">
                 {todayTasks.map((task) => (
                   <label
                     key={task.id}
@@ -103,26 +103,26 @@ export default function HomePage() {
                     <input
                       type="checkbox"
                       defaultChecked={task.done}
-                      className="mt-0.5 accent-[#0066FF] w-4 h-4"
+                      className="mt-0.5 accent-[var(--color-accent)] w-4 h-4"
                     />
                     <div className="flex-1">
                       <div
                         className={`text-sm ${
                           task.done
-                            ? "text-[#525252] line-through"
-                            : "text-white"
+                            ? "text-[var(--color-text-muted)] line-through"
+                            : "text-[var(--color-text)]"
                         }`}
                       >
                         {task.task}
                       </div>
-                      <div className="text-xs text-[#737373] mt-0.5">
+                      <div className="text-xs text-[var(--color-text-muted)] mt-0.5">
                         {task.subject}
                       </div>
                     </div>
                   </label>
                 ))}
               </div>
-              <div className="mt-4 pt-4 border-t border-[#1a1a1a] text-xs text-[#737373]">
+              <div className="mt-4 pt-4 border-t border-[var(--color-surface)] text-xs text-[var(--color-text-muted)]">
                 已完成 {completedCount}/{todayTasks.length}
               </div>
             </Card>
@@ -132,12 +132,12 @@ export default function HomePage() {
           <div>
             <Card title="本周概览">
               <div className="mb-4">
-                <div className="text-3xl font-bold text-white">
+                <div className="text-3xl font-bold text-[var(--color-text)]">
                   {totalHours.toFixed(1)}
-                  <span className="text-sm font-normal text-[#737373] ml-1">小时</span>
+                  <span className="text-sm font-normal text-[var(--color-text-muted)] ml-1">小时</span>
                 </div>
-                <div className="text-xs text-[#737373] mt-1">
-                  连续学习 <span className="text-[#0066FF] font-semibold">{streak}</span> 天
+                <div className="text-xs text-[var(--color-text-muted)] mt-1">
+                  连续学习 <span className="text-[var(--color-accent)] font-semibold">{streak}</span> 天
                 </div>
               </div>
 
@@ -147,7 +147,7 @@ export default function HomePage() {
                   <div
                     key={i}
                     className={`h-1.5 flex-1 ${
-                      i < 12 ? "bg-[#0066FF]" : "bg-[#1a1a1a]"
+                      i < 12 ? "bg-[var(--color-accent)]" : "bg-[var(--color-surface)]"
                     }`}
                   />
                 ))}
@@ -157,14 +157,14 @@ export default function HomePage() {
               <div className="space-y-2">
                 {weeklyData.map((d) => (
                   <div key={d.day} className="flex items-center gap-2">
-                    <span className="text-xs text-[#737373] w-4">{d.day}</span>
-                    <div className="flex-1 bg-[#1a1a1a] h-2">
+                    <span className="text-xs text-[var(--color-text-muted)] w-4">{d.day}</span>
+                    <div className="flex-1 bg-[var(--color-surface)] h-2">
                       <div
-                        className="h-full bg-[#e5e5e5]"
+                        className="h-full bg-[var(--color-text)]"
                         style={{ width: `${(d.hours / maxHours) * 100}%` }}
                       />
                     </div>
-                    <span className="text-xs text-[#525252] w-8 text-right">
+                    <span className="text-xs text-[var(--color-text-muted)] w-8 text-right">
                       {d.hours}h
                     </span>
                   </div>
@@ -184,11 +184,11 @@ export default function HomePage() {
           ].map((stat) => (
             <div
               key={stat.label}
-              className="border border-[#262626] bg-[#0d0d0d] p-5"
+              className="border border-[var(--color-border)] bg-[var(--color-card)] p-5"
             >
-              <div className="text-[#737373] mb-2">{stat.icon}</div>
-              <div className="text-2xl font-bold text-white">{stat.value}</div>
-              <div className="text-xs text-[#737373] mt-1">{stat.label}</div>
+              <div className="text-[var(--color-text-muted)] mb-2">{stat.icon}</div>
+              <div className="text-2xl font-bold text-[var(--color-text)]">{stat.value}</div>
+              <div className="text-xs text-[var(--color-text-muted)] mt-1">{stat.label}</div>
             </div>
           ))}
         </div>

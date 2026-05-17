@@ -8,6 +8,7 @@ import {
   MessageSquare,
   BarChart3,
   Network,
+  Settings,
   LucideIcon,
 } from 'lucide-react';
 
@@ -24,6 +25,7 @@ const navItems: NavItem[] = [
   { href: '/chat', label: '对话', icon: MessageSquare, emoji: '💬' },
   { href: '/analytics', label: '学情', icon: BarChart3, emoji: '📊' },
   { href: '/knowledge', label: '图谱', icon: Network, emoji: '🗺️' },
+  { href: '/settings', label: '设置', icon: Settings, emoji: '⚙️' },
 ];
 
 export default function BottomNav() {
@@ -36,7 +38,7 @@ export default function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 bg-[#0a0a0a] border-t border-[#262626] md:hidden"
+      className="fixed bottom-0 left-0 right-0 z-50 bg-[var(--color-bg)] border-t border-[var(--color-border)] md:hidden"
       style={{
         height: 'var(--bottom-nav-height)',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
@@ -59,8 +61,8 @@ export default function BottomNav() {
                 relative
                 ${
                   active
-                    ? 'text-[#0066FF] font-semibold'
-                    : 'text-[#a3a3a3] hover:text-[#fafafa]'
+                    ? 'text-[var(--color-accent)] font-semibold'
+                    : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
                 }
               `}
               aria-label={item.label}
@@ -68,7 +70,7 @@ export default function BottomNav() {
               {/* Active indicator - 2px top border */}
               {active && (
                 <div
-                  className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[2px] bg-[#0066FF]"
+                  className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[2px] bg-[var(--color-accent)]"
                   style={{ borderRadius: '0 0 1px 1px' }}
                 />
               )}
