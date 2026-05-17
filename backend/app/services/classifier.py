@@ -55,9 +55,12 @@ def get_embedding_model():
     return _model
 
 
-def compute_embedding(text: str) -> list[float]:
-    """计算文本的 embedding 向量"""
-    model = get_embedding_model()
+def compute_embedding(text: str) -> list[float] | None:
+    """计算文本的 embedding 向量，无模型时返回 None"""
+    try:
+        model = get_embedding_model()
+    except ImportError:
+        return None
     embedding = model.encode(text)
     return embedding.tolist()
 

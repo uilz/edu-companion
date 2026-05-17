@@ -5,14 +5,20 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+import json
+import logging
+import uuid
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 from app.schemas.conversation import TextBlock
 from app.services.storage import storage
 from app.services.tree_ops import tree_ops
+from app.services.classifier import classifier
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 
 # ── 请求模型 ──
@@ -107,11 +113,12 @@ async def list_messages(branch_id: str, limit: int = 50, offset: int = 0):
 
 @router.post("/message")
 async def send_message(req: SendMessageRequest):
-    """发送消息：分类 → 添加到树 → 返回"""
+    """发送消息：分类 → 存储 → LLM回复 → 存储回复"""
+    from app.services.conversation_llm import send_and_reply
+
     # 如果没指定分区，自动分类
     partition_id = req.partition_id
     if not partition_id:
-        from app.services.classifier import classifier
         result = classifier.classify_partition(USER_ID, req.text)
         partition_id = result.get("partition_id")
 
@@ -122,15 +129,73 @@ async def send_message(req: SendMessageRequest):
             )
             partition_id = partition.id
 
-    # 添加消息到树
-    blocks = [TextBlock(text=req.text)]
-    node = tree_ops.add_message(USER_ID, partition_id, "user", blocks, req.text)
+    # 发送消息并获取 LLM 回复
+    outcome = await send_and_reply(USER_ID, partition_id, req.text)
 
-    # TODO: 用 LLM 生成助手回复
     return {
-        "user_message": node,
+        "user_message": outcome["user_message"],
+        "assistant_message": outcome["assistant_message"],
         "partition_id": partition_id,
     }
+
+
+@router.websocket("/ws")
+async def websocket_conversation(websocket: WebSocket) -> None:
+    """
+    WebSocket 对话端点（流式）。
+    前端发送: {"text": "...", "partition_id": "...", "conversation_id": "..."}
+    后端返回: {"type": "token|done|error|status", ...}
+    """
+    await websocket.accept()
+    user_id = USER_ID
+    conversation_id = str(uuid.uuid4())[:8]
+
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                await websocket.send_text(json.dumps({"type": "error", "message": "JSON解析失败"}))
+                continue
+
+            text = data.get("text", "").strip()
+            partition_id = data.get("partition_id")
+            request_id = data.get("request_id", str(uuid.uuid4())[:8])
+
+            if not text:
+                await websocket.send_text(json.dumps({"type": "error", "message": "消息不能为空"}))
+                continue
+
+            # 发送状态
+            await websocket.send_text(json.dumps({
+                "type": "status", "message": "正在思考...", "request_id": request_id
+            }))
+
+            try:
+                # 分类（如果没指定分区）
+                if not partition_id:
+                    cls_result = classifier.classify_partition(user_id, text)
+                    partition_id = cls_result.get("partition_id")
+                    if not partition_id:
+                        partition = tree_ops.create_partition(user_id, text[:20], emoji="💬")
+                        partition_id = partition.id
+
+                # 流式生成回复
+                from app.services.conversation_llm import send_and_reply_stream
+                async for event in send_and_reply_stream(user_id, partition_id, text):
+                    event["request_id"] = request_id
+                    event["partition_id"] = partition_id
+                    await websocket.send_text(json.dumps(event, ensure_ascii=False, default=str))
+
+            except Exception as e:
+                logger.error("消息处理失败: %s", str(e), exc_info=True)
+                await websocket.send_text(json.dumps({
+                    "type": "error", "message": str(e), "request_id": request_id
+                }))
+
+    except WebSocketDisconnect:
+        logger.info("对话WebSocket断开")
 
 
 @router.put("/messages/{message_id}")
