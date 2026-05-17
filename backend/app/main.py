@@ -22,6 +22,7 @@ from app.api.study import router as study_router
 from app.api.practice import router as practice_router
 from app.api.progress import router as progress_router
 from app.api.content import router as content_router
+from app.api.conversation import router as conversation_router
 from app.config import settings
 from app.core.learner_model import learner_engine
 
@@ -94,6 +95,8 @@ app.include_router(practice_router)
 app.include_router(progress_router)
 # 内容搜索
 app.include_router(content_router)
+# 对话系统（树结构）
+app.include_router(conversation_router, prefix="/api/conversations", tags=["conversations"])
 
 
 # ── 健康检查 ──
