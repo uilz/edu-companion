@@ -1,0 +1,303 @@
+"""
+Agent 编排器（Orchestrator）
+根据用户意图和情绪，选择最合适的Agent来处理请求
+这是整个系统的"大脑"，协调各组件协同工作
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any, AsyncGenerator, Optional
+
+from app.agents.base import BaseAgent
+from app.agents.tutor import TutorAgent
+from app.agents.coach import CoachAgent
+from app.core.learner_model import learner_engine
+from app.schemas.learner import IntentType, EmotionType
+from app.services.llm_service import LLMService, llm_service
+
+logger = logging.getLogger(__name__)
+
+
+class Orchestrator:
+    """
+    Agent 编排器
+
+    工作流程：
+    1. 接收用户消息
+    2. 分析意图和情绪
+    3. 选择合适的Agent
+    4. 收集上下文（知识状态等）
+    5. 调用Agent处理
+    6. 返回结果
+    """
+
+    def __init__(self, llm: Optional[LLMService] = None) -> None:
+        self.llm = llm or llm_service
+
+        # 初始化所有Agent
+        self.agents: dict[str, BaseAgent] = {
+            "tutor": TutorAgent(self.llm),
+            "coach": CoachAgent(self.llm),
+        }
+
+        # 默认Agent
+        self.default_agent_name = "tutor"
+
+        logger.info(
+            "编排器初始化完成，已注册Agent: %s",
+            list(self.agents.keys()),
+        )
+
+    def _select_agent(
+        self,
+        intent: IntentType,
+        emotion: EmotionType,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> BaseAgent:
+        """
+        根据意图和情绪选择最合适的Agent
+
+        选择策略：
+        1. 遍历所有Agent，看谁最匹配
+        2. 如果多个Agent匹配，根据优先级选择
+        3. 如果没有Agent匹配，使用默认Agent
+
+        参数:
+            intent: 检测到的意图
+            emotion: 检测到的情绪
+            metadata: 额外上下文
+
+        返回:
+            选中的Agent实例
+        """
+        # 优先级映射（数字越小越优先）
+        priority_map = {
+            "coach": 1,  # 练习/挫败感场景优先
+            "tutor": 2,  # 知识讲解次之
+        }
+
+        candidates: list[tuple[int, BaseAgent]] = []
+
+        for name, agent in self.agents.items():
+            if agent.should_handle(intent, emotion, metadata):
+                priority = priority_map.get(name, 99)
+                candidates.append((priority, agent))
+
+        if candidates:
+            # 选择优先级最高的
+            candidates.sort(key=lambda x: x[0])
+            selected = candidates[0][1]
+            logger.info(
+                "选择Agent [%s] 处理意图=%s 情绪=%s",
+                selected.agent_name, intent.value, emotion.value,
+            )
+            return selected
+
+        # 使用默认Agent
+        default = self.agents[self.default_agent_name]
+        logger.info("使用默认Agent [%s]", default.agent_name)
+        return default
+
+    async def analyze_message(
+        self,
+        user_message: str,
+        session_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """
+        分析用户消息的意图和情绪
+
+        参数:
+            user_message: 用户消息
+            session_id: 会话ID
+
+        返回:
+            分析结果 {"intent": ..., "emotion": ..., "confidence": ..., "subject": ...}
+        """
+        context = None
+        if session_id:
+            session = learner_engine.get_session(session_id)
+            if session and session.get("messages"):
+                # 取最近几条消息作为上下文
+                recent = session["messages"][-3:]
+                context = [
+                    {"role": msg["role"], "content": msg["content"]}
+                    for msg in recent
+                ]
+
+        result = await self.llm.classify_intent(user_message, context)
+        return result
+
+    async def process_message(
+        self,
+        user_id: str,
+        user_message: str,
+        session_id: Optional[str] = None,
+        subject: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """
+        处理用户消息的完整流程
+
+        参数:
+            user_id: 用户ID
+            user_message: 用户消息
+            session_id: 会话ID
+            subject: 学科
+
+        返回:
+            完整的处理结果
+        """
+        # 1. 分析意图和情绪
+        analysis = await self.analyze_message(user_message, session_id)
+        intent_str = analysis.get("intent", "unknown")
+        emotion_str = analysis.get("emotion", "neutral")
+        confidence = analysis.get("confidence", 0.0)
+
+        # 转换为枚举
+        try:
+            intent = IntentType(intent_str)
+        except ValueError:
+            intent = IntentType.UNKNOWN
+        try:
+            emotion = EmotionType(emotion_str)
+        except ValueError:
+            emotion = EmotionType.NEUTRAL
+
+        detected_subject = analysis.get("subject") or subject
+
+        # 2. 获取学习者上下文
+        profile = learner_engine.get_or_create_profile(user_id)
+        metadata: dict[str, Any] = {
+            "emotion": emotion_str,
+            "subject": detected_subject,
+            "user_id": user_id,
+        }
+
+        # 3. 选择Agent
+        agent = self._select_agent(intent, emotion, metadata)
+
+        # 4. 构建上下文消息
+        context_messages: list[dict[str, str]] = []
+
+        # 添加学科信息到上下文
+        if detected_subject:
+            context_messages.append({
+                "role": "system",
+                "content": f"当前讨论的学科是: {detected_subject}",
+            })
+
+        # 添加知识状态摘要到上下文（如果适用）
+        if profile.knowledge_states:
+            state_summary = ", ".join(
+                f"{sid}: 掌握度 {s.p_known:.2f}"
+                for sid, s in list(profile.knowledge_states.items())[:5]
+            )
+            context_messages.append({
+                "role": "system",
+                "content": f"学生的知识状态概览: {state_summary}",
+            })
+
+        # 5. 调用Agent处理
+        reply = await agent.handle(user_message, context_messages, metadata)
+
+        # 6. 更新会话
+        if session_id:
+            learner_engine.add_message_to_session(session_id, "user", user_message)
+            learner_engine.add_message_to_session(session_id, "assistant", reply)
+
+        return {
+            "reply": reply,
+            "agent_used": agent.agent_name,
+            "intent_detected": intent_str,
+            "emotion_detected": emotion_str,
+            "confidence": confidence,
+            "subject": detected_subject,
+        }
+
+    async def process_message_stream(
+        self,
+        user_id: str,
+        user_message: str,
+        session_id: Optional[str] = None,
+        subject: Optional[str] = None,
+    ) -> AsyncGenerator[str, None]:
+        """
+        流式处理用户消息
+
+        参数:
+            user_id: 用户ID
+            user_message: 用户消息
+            session_id: 会话ID
+            subject: 学科
+
+        产出:
+            逐片段的回复文本
+        """
+        # 1. 分析意图和情绪
+        analysis = await self.analyze_message(user_message, session_id)
+        intent_str = analysis.get("intent", "unknown")
+        emotion_str = analysis.get("emotion", "neutral")
+
+        try:
+            intent = IntentType(intent_str)
+        except ValueError:
+            intent = IntentType.UNKNOWN
+        try:
+            emotion = EmotionType(emotion_str)
+        except ValueError:
+            emotion = EmotionType.NEUTRAL
+
+        detected_subject = analysis.get("subject") or subject
+
+        # 2. 获取上下文
+        profile = learner_engine.get_or_create_profile(user_id)
+        metadata: dict[str, Any] = {
+            "emotion": emotion_str,
+            "subject": detected_subject,
+            "user_id": user_id,
+        }
+
+        # 3. 选择Agent
+        agent = self._select_agent(intent, emotion, metadata)
+
+        # 4. 构建上下文
+        context_messages: list[dict[str, str]] = []
+        if detected_subject:
+            context_messages.append({
+                "role": "system",
+                "content": f"当前讨论的学科是: {detected_subject}",
+            })
+        if profile.knowledge_states:
+            state_summary = ", ".join(
+                f"{sid}: 掌握度 {s.p_known:.2f}"
+                for sid, s in list(profile.knowledge_states.items())[:5]
+            )
+            context_messages.append({
+                "role": "system",
+                "content": f"学生的知识状态概览: {state_summary}",
+            })
+
+        # 5. 流式处理
+        full_reply = ""
+        async for chunk in agent.handle_stream(user_message, context_messages, metadata):
+            full_reply += chunk
+            yield chunk
+
+        # 6. 更新会话
+        if session_id:
+            learner_engine.add_message_to_session(session_id, "user", user_message)
+            learner_engine.add_message_to_session(session_id, "assistant", full_reply)
+
+    def get_available_agents(self) -> list[dict[str, str]]:
+        """获取所有可用Agent的信息"""
+        return [
+            {
+                "name": agent.agent_name,
+                "description": agent.agent_description,
+            }
+            for agent in self.agents.values()
+        ]
+
+
+# ── 全局编排器实例 ──
+orchestrator = Orchestrator()

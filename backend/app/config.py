@@ -1,0 +1,118 @@
+"""
+应用配置模块
+使用 pydantic-settings 从 config.yaml 和 .env 文件加载配置
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Any, Optional
+
+import yaml
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# 项目根目录
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def _load_yaml_config() -> dict[str, Any]:
+    """从 config.yaml 加载配置"""
+    yaml_path = BASE_DIR / "config.yaml"
+    if yaml_path.exists():
+        with open(yaml_path, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+
+class Settings(BaseSettings):
+    """
+    应用全局配置
+    优先级：环境变量 > .env 文件 > config.yaml > 默认值
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=str(BASE_DIR / ".env"),
+        env_file_encoding="utf-8",
+        env_nested_delimiter="__",
+        extra="ignore",
+    )
+
+    # ── 应用基础配置 ──
+    app_name: str = Field(default="智能学习伴侣", description="应用名称")
+    app_version: str = Field(default="0.1.0", description="版本号")
+    debug: bool = Field(default=False, description="调试模式")
+    host: str = Field(default="0.0.0.0", description="服务监听地址")
+    port: int = Field(default=8000, description="服务端口")
+
+    # ── CORS 配置 ──
+    cors_origins: list[str] = Field(
+        default=["*"], description="允许的跨域来源"
+    )
+
+    # ── LLM 模型配置（通过 LiteLLM 路由） ──
+    # 默认模型（用于一般对话）
+    default_model: str = Field(
+        default="openai/gpt-4o-mini",
+        description="默认LLM模型（LiteLLM格式）",
+    )
+    # 推理能力强的模型（用于复杂问题）
+    reasoning_model: str = Field(
+        default="openai/gpt-4o",
+        description="推理模型",
+    )
+    # 轻量模型（用于意图识别、情绪分析等）
+    fast_model: str = Field(
+        default="openai/gpt-4o-mini",
+        description="轻量模型",
+    )
+
+    # 模型 API Key（也可以通过环境变量单独配置）
+    openai_api_key: Optional[str] = Field(default=None, description="OpenAI API Key")
+    anthropic_api_key: Optional[str] = Field(default=None, description="Anthropic API Key")
+
+    # 自定义模型端点（LiteLLM 代理兼容）
+    custom_api_base: Optional[str] = Field(
+        default=None, description="自定义API端点地址"
+    )
+
+    # ── LiteLLM 代理配置 ──
+    litellm_model_list: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="LiteLLM模型列表配置",
+    )
+
+    # ── BKT 知识追踪参数 ──
+    bkt_default_p_know: float = Field(default=0.0, description="初始掌握概率")
+    bkt_default_p_learn: float = Field(default=0.3, description="初始学习概率")
+    bkt_default_p_guess: float = Field(default=0.25, description="猜测概率")
+    bkt_default_p_slip: float = Field(default=0.1, description="失误概率")
+    bkt_mastery_threshold: float = Field(
+        default=0.8, description="掌握判定阈值"
+    )
+
+    # ── 会话管理 ──
+    max_history_messages: int = Field(
+        default=20, description="保留的最大历史消息数"
+    )
+    session_timeout_minutes: int = Field(
+        default=60, description="会话超时时间（分钟）"
+    )
+
+    # ── 内容库（MVP 使用内存） ──
+    content_store_type: str = Field(
+        default="memory", description="内容存储类型: memory / db"
+    )
+
+    def load_from_yaml(self) -> "Settings":
+        """从 config.yaml 加载并覆盖默认值"""
+        yaml_data = _load_yaml_config()
+        for key, value in yaml_data.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+        return self
+
+
+# ── 全局设置实例 ──
+settings = Settings().load_from_yaml()

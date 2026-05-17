@@ -1,0 +1,46 @@
+FROM node:20-alpine AS base
+
+WORKDIR /app
+
+RUN apk add --no-cache libc6-compat
+
+FROM base AS deps
+
+COPY frontend/package.json frontend/package-lock.json* frontend/yarn.lock* frontend/pnpm-lock.yaml* ./
+
+RUN \
+  if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
+  elif [ -f package-lock.json ]; then npm ci; \
+  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm install --frozen-lockfile; \
+  else npm install; \
+  fi
+
+FROM base AS builder
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY frontend/ .
+
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN npm run build
+
+FROM base AS runner
+
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1
+
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT=3000 \
+    HOSTNAME="0.0.0.0"
+
+CMD ["node", "server.js"]

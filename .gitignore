@@ -1,0 +1,82 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# Type checking
+.mypy_cache/
+.pytype/
+
+# Node.js
+node_modules/
+.next/
+out/
+.nuxt/
+.nitro/
+.output/
+
+# Frontend build artifacts
+.env*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+.classpath
+*.launch
+*.sublime-workspace
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Docker
+docker/volumes/
+docker/*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.tmp
+*~
+
+# Logs
+*.log
+logs/
+
+# Temp files
+.tmp/
+tmp/
+
+# Database
+*.sqlite3
+*.db
+
+# Jupyter
+.ipynb_checkpoints/

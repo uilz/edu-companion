@@ -1,0 +1,27 @@
+# ========================================
+# 智能学习伴侣 - Python 依赖
+# ========================================
+
+# Web 框架
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+websockets>=12.0
+
+# 数据模型和配置
+pydantic>=2.6.0
+pydantic-settings>=2.2.0
+pyyaml>=6.0
+
+# LLM 集成（LiteLLM 统一路由）
+litellm>=1.35.0
+
+# HTTP 客户端（用于LLM API调用）
+httpx>=0.27.0
+aiohttp>=3.9.0
+
+# 工具库
+python-dotenv>=1.0.0
+python-multipart>=0.0.9
+
+# 日志
+loguru>=0.7.0

@@ -1,0 +1,65 @@
+# ========================================
+# 智能学习伴侣 - 主配置文件
+# ========================================
+# 此文件中的配置可通过环境变量覆盖
+# 环境变量格式: APP_VARIABLE_NAME
+
+# ── 应用配置 ──
+app_name: "智能学习伴侣"
+app_version: "0.1.0"
+debug: true
+
+# ── 服务配置 ──
+host: "0.0.0.0"
+port: 8000
+
+# ── CORS 配置 ──
+cors_origins:
+  - "*"
+  # 生产环境请限制来源:
+  # - "http://localhost:3000"
+  # - "https://yourdomain.com"
+
+# ── LLM 模型配置 ──
+# 使用 LiteLLM 格式指定模型
+# 支持: openai/xxx, anthropic/xxx, 以及自定义端点
+
+# 默认模型（一般对话）
+default_model: "openai/gpt-4o-mini"
+
+# 推理模型（复杂问题）
+reasoning_model: "openai/gpt-4o"
+
+# 轻量模型（意图识别、情绪分析）
+fast_model: "openai/gpt-4o-mini"
+
+# 自定义API端点（兼容OpenAI格式的第三方服务）
+# 例如：通义千问、文心一言、DeepSeek等
+# custom_api_base: "https://api.deepseek.com/v1"
+# custom_api_base: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+# ── BKT 知识追踪参数 ──
+bkt_default_p_know: 0.0      # 初始掌握概率
+bkt_default_p_learn: 0.3     # 初始学习概率
+bkt_default_p_guess: 0.25    # 猜对概率
+bkt_default_p_slip: 0.1      # 失手概率
+bkt_mastery_threshold: 0.8   # 掌握判定阈值
+
+# ── 会话管理 ──
+max_history_messages: 20       # 保留的最大历史消息数
+session_timeout_minutes: 60    # 会话超时时间（分钟）
+
+# ── 存储配置 ──
+content_store_type: "memory"   # MVP使用内存存储
+# content_store_type: "db"     # 后续可切换为数据库
+
+# ── LiteLLM 模型列表（可选，用于自定义模型路由） ──
+# litellm_model_list:
+#   - model_name: "deepseek-chat"
+#     litellm_params:
+#       model: "deepseek/deepseek-chat"
+#       api_base: "https://api.deepseek.com"
+#   - model_name: "qwen-turbo"
+#     litellm_params:
+#       model: "openai/qwen-turbo"
+#       api_base: "https://dashscope.aliyuncs.com/compatible-mode/v1"
