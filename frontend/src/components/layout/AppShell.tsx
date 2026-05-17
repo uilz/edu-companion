@@ -28,7 +28,7 @@ export default function AppShell({ children }: AppShellProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-[#0a0a0a]">
       {/* Desktop Sidebar */}
       {isDesktop && <Sidebar />}
 

@@ -37,7 +37,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="bg-white text-[#0a0a0a] antialiased">
+      <body className="antialiased">
         <AppShell>{children}</AppShell>
       </body>
     </html>

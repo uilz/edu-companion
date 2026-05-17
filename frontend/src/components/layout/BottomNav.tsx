@@ -36,7 +36,7 @@ export default function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-100 md:hidden"
+      className="fixed bottom-0 left-0 right-0 z-50 bg-[#0a0a0a] border-t border-[#262626] md:hidden"
       style={{
         height: 'var(--bottom-nav-height)',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
@@ -60,7 +60,7 @@ export default function BottomNav() {
                 ${
                   active
                     ? 'text-[#0066FF] font-semibold'
-                    : 'text-[#a3a3a3] hover:text-[#262626]'
+                    : 'text-[#a3a3a3] hover:text-[#fafafa]'
                 }
               `}
               aria-label={item.label}

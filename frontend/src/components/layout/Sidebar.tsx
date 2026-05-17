@@ -35,11 +35,11 @@ export default function Sidebar() {
 
   return (
     <aside
-      className="hidden md:flex flex-col fixed left-0 top-0 bottom-0 z-40 bg-white border-r border-gray-100"
+      className="hidden md:flex flex-col fixed left-0 top-0 bottom-0 z-40 bg-[#0a0a0a] border-r border-[#262626]"
       style={{ width: 'var(--sidebar-width)' }}
     >
       {/* App Logo / Name */}
-      <div className="px-6 py-6 border-b border-gray-100">
+      <div className="px-6 py-6 border-b border-[#262626]">
         <Link href="/" className="flex items-center gap-3">
           <div
             className="w-8 h-8 bg-[#0066FF] flex items-center justify-center"
@@ -48,7 +48,7 @@ export default function Sidebar() {
             <span className="text-white font-bold text-sm">学</span>
           </div>
           <span
-            className="font-bold text-[#0a0a0a] tracking-tight"
+            className="font-bold text-[#fafafa] tracking-tight"
             style={{ fontSize: '18px' }}
           >
             智学伴
@@ -100,7 +100,7 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer area */}
-      <div className="px-6 py-4 border-t border-gray-100">
+      <div className="px-6 py-4 border-t border-[#262626]">
         <div
           className="text-[#a3a3a3] text-xs leading-relaxed"
           style={{ fontSize: '11px', letterSpacing: '0.02em' }}
