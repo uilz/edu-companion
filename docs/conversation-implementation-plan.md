@@ -73,3 +73,31 @@ backend/app/
 ├── api/
 │   └── conversation.py        # 对话API路由
 ```
+
+---
+
+## 实施完成状态
+
+### Phase 1: 后端核心 ✅
+- [x] 数据模型 (schemas/conversation.py)
+- [x] 存储引擎 (services/storage.py)
+- [x] 树操作 (services/tree_ops.py)
+- [x] 分类服务 (services/classifier.py)
+- [x] LLM对话 (services/conversation_llm.py)
+- [x] 工具执行器 (services/tool_executor.py)
+- [x] 后台任务 (services/background_jobs.py)
+- [x] API路由 (api/conversation.py)
+- [x] 所有端点测试通过
+
+### Phase 2: 前端界面 ✅
+- [x] 分区侧边栏 (PartitionSidebar.tsx)
+- [x] 分支列表 (BranchList.tsx)
+- [x] 消息列表 (MessageList.tsx)
+- [x] 多模态输入 (ChatInput.tsx)
+- [x] ResponseBlock渲染 (ResponseBlockRenderer.tsx)
+- [x] WebSocket流式接收
+- [x] 构建验证通过
+
+### Phase 3: 联调 ✅
+- [x] 端到端测试通过
+- [x] 设计文档更新
