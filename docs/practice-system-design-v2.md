@@ -2192,6 +2192,349 @@ class ErrorBookWithMaterialLink:
 
 ---
 
+## 14. 第二轮遗漏修复（6个深层机制）
+
+### 14.1 题目质量反馈闭环
+
+**问题**：LLM生成的题如果100%答对/0%答对，说明题目有问题。
+
+```python
+class QuestionQualityMonitor:
+    """
+    题目质量监控
+    
+    自动降权/淘汰的条件：
+    - 正确率 > 95%：太简单，降权
+    - 正确率 < 10%：可能有歧义或太难，标记人工审核
+    - 区分度 < 0.2：不能区分高低能力学生，降权
+    - 答题时间 < 3秒：可能是猜测，题目质量存疑
+    """
+    
+    def evaluate(self, question_id: str, attempts: list[AttemptRecord]) -> float:
+        if len(attempts) < 5:
+            return question.quality_score  # 样本不够，不调整
+        
+        correct_rate = sum(a.is_correct for a in attempts) / len(attempts)
+        avg_time = sum(a.time_spent_seconds for a in attempts) / len(attempts)
+        
+        # 计算区分度（高能力组 vs 低能力组的正确率差）
+        discrimination = self._compute_discrimination(attempts)
+        
+        # 质量分 = 区分度 × 难度适中度
+        difficulty_fit = 1.0 - abs(correct_rate - 0.6)  # 60%正确率最优
+        quality = discrimination * difficulty_fit
+        
+        # 自动降权
+        if correct_rate > 0.95:
+            quality *= 0.3  # 太简单
+        elif correct_rate < 0.10:
+            quality *= 0.5  # 可能有歧义
+            self._flag_for_review(question_id, "正确率过低")
+        
+        if avg_time < 3:
+            quality *= 0.7  # 答题太快
+        
+        return quality
+```
+
+### 14.2 前置知识点卡控
+
+**问题**：MDKS有prerequisite_states但调度没用它。
+
+```python
+class PrerequisiteGate:
+    """
+    前置知识点卡控
+    
+    知识点前置关系示例：
+    - 极限 → 连续 → 导数 → 积分
+    - 集合 → 函数 → 极限
+    - 向量 → 矩阵 → 特征值
+    
+    规则：
+    - 前置知识点p_known < 0.5 → 不推荐后续知识点的新题
+    - 前置知识点p_known < 0.7 → 后续知识点的高阶题降权
+    - 前置知识点p_known ≥ 0.8 → 正常开放后续知识点
+    """
+    
+    PREREQUISITES = {
+        "calculus_continuity": ["calculus_limit"],
+        "calculus_derivative": ["calculus_continuity"],
+        "calculus_integral": ["calculus_derivative"],
+        "linear_eigenvalue": ["linear_matrix"],
+        "linear_matrix": ["linear_vector"],
+    }
+    
+    def can_practice(
+        self, skill_id: str, knowledge_states: dict[str, KnowledgeState],
+    ) -> tuple[bool, str]:
+        """检查是否可以练习某个知识点"""
+        prereqs = self.PREREQUISITES.get(skill_id, [])
+        
+        for prereq in prereqs:
+            state = knowledge_states.get(prereq)
+            if not state or state.p_known < 0.5:
+                return False, f"需要先掌握前置知识：{prereq}"
+        
+        return True, ""
+    
+    def adjust_difficulty(
+        self, skill_id: str, target_difficulty: float,
+        knowledge_states: dict[str, KnowledgeState],
+    ) -> float:
+        """根据前置掌握度调整难度上限"""
+        prereqs = self.PREREQUISITES.get(skill_id, [])
+        
+        if not prereqs:
+            return target_difficulty
+        
+        min_prereq_mastery = min(
+            knowledge_states.get(p, KnowledgeState(skill_id=p)).p_known
+            for p in prereqs
+        )
+        
+        # 前置掌握度低 → 难度上限降低
+        max_difficulty = 0.3 + min_prereq_mastery * 0.7  # 0.3~1.0
+        return min(target_difficulty, max_difficulty)
+```
+
+### 14.3 自适应Session时长
+
+**问题**：当前固定30分钟，但心流时不该打断，疲劳时不该硬撑。
+
+```python
+class AdaptiveSessionLength:
+    """
+    基于Flow理论的自适应session管理
+    
+    Csikszentmihalyi的心流通道：
+    - 挑战 > 能力 → 焦虑
+    - 挑战 < 能力 → 无聊
+    - 挑战 ≈ 能力 → 心流（最佳学习状态）
+    
+    策略：
+    - 检测到心流（连续正确+答题速度快）→ 延长session
+    - 检测到疲劳（正确率下降+答题变慢）→ 建议结束
+    - 检测到焦虑（连续错误+长时间停顿）→ 降低难度或建议休息
+    """
+    
+    def should_continue(
+        self, session: PracticeSession, elapsed_minutes: float,
+    ) -> tuple[bool, str]:
+        recent = session.last_n_results(5)
+        
+        if len(recent) < 3:
+            return True, ""  # 数据不够，继续
+        
+        # 心流检测
+        accuracy = sum(r.is_correct for r in recent) / len(recent)
+        avg_time = sum(r.time_spent for r in recent) / len(recent)
+        
+        if accuracy >= 0.8 and avg_time < 30:
+            # 心流状态：建议延长
+            if elapsed_minutes < 60:
+                return True, "🔥 状态很好，要不要继续？"
+            else:
+                return True, "已经练了1小时了，状态不错但记得休息哦"
+        
+        # 疲劳检测
+        if accuracy < 0.4 or avg_time > 120:
+            return False, "看起来有点累了，要不要先休息一下？休息后效果会更好 💤"
+        
+        # 焦虑检测
+        consecutive_wrong = self._count_consecutive(recent, correct=False)
+        if consecutive_wrong >= 4:
+            return False, "这个知识点确实有难度，先看看讲解视频再来？🎬"
+        
+        return True, ""
+```
+
+### 14.4 题目覆盖度检测
+
+**问题**：用户有100个知识点但只有20个有题→80个知识死角。
+
+```python
+class CoverageDetector:
+    """检测知识点的题目覆盖度"""
+    
+    def detect_gaps(
+        self, user_id: str, knowledge_states: dict[str, KnowledgeState],
+        question_bank: dict[str, list[Question]],
+    ) -> list[CoverageGap]:
+        gaps = []
+        
+        for skill_id, state in knowledge_states.items():
+            available_questions = question_bank.get(skill_id, [])
+            
+            if len(available_questions) == 0:
+                gaps.append(CoverageGap(
+                    skill_id=skill_id,
+                    gap_type="no_questions",
+                    severity="critical",
+                    suggestion=f"知识点'{skill_id}'没有任何题目，需要生成",
+                ))
+            elif len(available_questions) < 3:
+                gaps.append(CoverageGap(
+                    skill_id=skill_id,
+                    gap_type="insufficient_questions",
+                    severity="warning",
+                    suggestion=f"知识点'{skill_id}'只有{len(available_questions)}道题，建议补充",
+                ))
+            
+            # 检查Bloom层次覆盖
+            covered_blooms = set(q.bloom_level for q in available_questions)
+            all_blooms = {BloomLevel.REMEMBER, BloomLevel.UNDERSTAND, BloomLevel.APPLY}
+            missing_blooms = all_blooms - covered_blooms
+            
+            if missing_blooms and state.p_known > 0.3:
+                gaps.append(CoverageGap(
+                    skill_id=skill_id,
+                    gap_type="missing_bloom_levels",
+                    severity="info",
+                    suggestion=f"缺少{missing_blooms}层次的题目",
+                ))
+        
+        return gaps
+```
+
+### 14.5 学习行为分析 + 习惯养成
+
+**问题**：原始需求有"学习行为分析心理陪伴学习习惯养成"，当前只做了游戏化的皮。
+
+```python
+class LearningBehaviorAnalyzer:
+    """
+    学习行为分析
+    
+    追踪维度：
+    - 时间模式：什么时间段学习、每次学多久
+    - 效率模式：不同时间段的正确率差异
+    - 习惯形成：连续学习天数、固定学习时间
+    - 疲劳曲线：session内正确率随时间的变化
+    """
+    
+    def analyze_patterns(self, user_id: str) -> BehaviorReport:
+        sessions = self.session_store.get_all(user_id)
+        
+        # 时间模式分析
+        hourly_accuracy = defaultdict(list)
+        for s in sessions:
+            hour = s.started_at.hour
+            hourly_accuracy[hour].append(s.accuracy)
+        
+        # 找出最佳学习时段
+        best_hours = sorted(
+            hourly_accuracy.items(),
+            key=lambda x: sum(x[1]) / len(x[1]),
+            reverse=True,
+        )[:3]
+        
+        # 习惯形成度
+        streak = self._compute_streak(sessions)
+        regularity = self._compute_regularity(sessions)  # 时间规律性
+        
+        # 疲劳曲线
+        fatigue_curve = self._compute_fatigue_curve(sessions)
+        
+        return BehaviorReport(
+            best_study_hours=[h for h, _ in best_hours],
+            current_streak=streak,
+            regularity_score=regularity,
+            fatigue_curve=fatigue_curve,
+            recommendations=self._generate_recommendations(best_hours, streak, fatigue_curve),
+        )
+    
+    def _generate_recommendations(self, best_hours, streak, fatigue_curve):
+        recs = []
+        
+        if best_hours:
+            best_h = best_hours[0][0]
+            recs.append(f"你在{best_h}:00左右效率最高，建议安排重点学习")
+        
+        if streak < 3:
+            recs.append("试着每天固定时间学习10分钟，养成习惯比一次学很久更重要")
+        
+        if fatigue_curve.get("drop_at_minutes", 999) < 20:
+            recs.append("你的专注力在20分钟左右会下降，建议用番茄钟：学20分钟休息5分钟")
+        
+        return recs
+
+
+class HabitFormation:
+    """
+    习惯养成系统
+    
+    基于BJ Fogg的Tiny Habits方法：
+    1. 从小开始（每天2题就行）
+    2. 锚定时间（每天同一时间提醒）
+    3. 庆祝成功（答对后给正反馈）
+    """
+    
+    DAILY_TARGETS = {
+        "beginner": {"questions": 5, "minutes": 10},
+        "regular": {"questions": 10, "minutes": 20},
+        "intensive": {"questions": 20, "minutes": 40},
+    }
+    
+    def check_daily_goal(self, user_id: str, today_stats: DailyStat) -> str:
+        level = self._get_user_level(user_id)
+        target = self.DAILY_TARGETS[level]
+        
+        if today_stats.questions_done >= target["questions"]:
+            return f"✅ 今日目标已完成！已练{today_stats.questions_done}题"
+        else:
+            remaining = target["questions"] - today_stats.questions_done
+            return f"今天还差{remaining}题就完成目标了，要现在做吗？🎯"
+```
+
+### 14.6 间隔重复扩展到Self-Explanation
+
+**问题**：不仅复习"会不会"，还要复习"能不能解释出来"。
+
+```python
+class ExplanationReviewScheduler:
+    """
+    解释能力的间隔重复
+    
+    原理：学生能做对题 ≠ 能解释清楚
+    解释能力也会遗忘
+    
+    调度：
+    - 刚学会解释 → 1天后复习
+    - 能稳定解释 → 3天后复习
+    - 解释能力退化 → 立即复习
+    """
+    
+    def schedule_explanation_reviews(
+        self, user_id: str, knowledge_states: dict[str, KnowledgeState],
+    ) -> list[ReviewTask]:
+        tasks = []
+        
+        for skill_id, state in knowledge_states.items():
+            # 只对"已掌握"的知识点做解释复习
+            if state.p_known < 0.7:
+                continue
+            
+            explanation_state = state.explanation_state  # 新增字段
+            if not explanation_state:
+                continue
+            
+            days_since = (datetime.now() - explanation_state.last_explained).days
+            forgetting = math.exp(-days_since / max(explanation_state.stability, 0.1))
+            
+            if forgetting > 0.4:  # 解释能力遗忘风险
+                tasks.append(ReviewTask(
+                    type="explanation_review",
+                    skill_id=skill_id,
+                    priority=forgetting * 0.8,  # 略低于做题复习
+                    instruction="请用自己的话解释这个知识点",
+                ))
+        
+        return sorted(tasks, key=lambda t: t.priority, reverse=True)
+```
+
+---
+
 ## 11. 实施路线图
 
 ### Phase 1: MVP（2-3周）
