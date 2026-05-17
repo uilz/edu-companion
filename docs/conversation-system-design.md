@@ -14,15 +14,16 @@
 ### 核心特性
 
 1. **树结构会话** — 消息是节点，支持分支、回溯、修改
-2. **多模态消息** — 单条消息可包含多段文字+图片+语音+视频
-3. **智能分区** — LLM + Embedding 自动分类对话到学科/方向分区
-4. **分支管理** — 分区内自动判断延续/新建分支
-5. **跨分区关联** — 支持跨学科讨论，标记关联分区
-6. **分层摘要** — 消息级摘要（索引）+ 分区级上下文摘要（给LLM）
-7. **元消息历史** — 所有消息异步写入历史文件夹，删除只从活跃树移除
-8. **手动编辑** — 用户可进入树的任意节点，从该点创建新分支
-9. **虚拟根节点** — 所有修改操作在父节点下挂新节点，不原地修改
-10. **多用户隔离** — 数据按用户隔离，为后续登录系统预留
+2. **多模态消息** — 单条消息可包含多段文字+图片+语音+视频+文档
+3. **多模态回复** — 助手回复支持文字+练习题+视频+图片+思维导图+文档混合
+4. **智能分区** — LLM + Embedding 自动分类对话到学科/方向分区
+5. **分支管理** — 分区内自动判断延续/新建分支
+6. **跨分区关联** — 支持跨学科讨论，标记关联分区
+7. **分层摘要** — 消息级摘要（索引）+ 分区级上下文摘要（给LLM）
+8. **元消息历史** — 所有消息异步写入历史文件夹，删除只从活跃树移除
+9. **手动编辑** — 用户可进入树的任意节点，从该点创建新分支
+10. **虚拟根节点** — 所有修改操作在父节点下挂新节点，不原地修改
+11. **多用户隔离** — 数据按用户隔离，为后续登录系统预留
 
 ---
 
@@ -968,7 +969,232 @@ Branch Workspace (branch_id: "branch_abc")
 
 ---
 
-## 十六、开放问题
+## 十六、多模态回复系统
+
+### 16.1 设计目标
+
+助手回复不再是纯文本，而是**混合内容**。一条回复可能同时包含：
+- 文字解释（流式输出，1-3s）
+- 嵌入式视频（搜索结果，1-3s）
+- 练习题（结构化数据，1-2s）
+- 生成的图片（后台生成，10-60s）
+- 思维导图（后台生成，5-30s）
+- 生成的文档（后台生成，5-20s）
+
+### 16.2 架构：规则预判 + 分离式回复
+
+```
+用户消息
+  ↓
+[意图预判] 规则快速检测
+  ├── 纯文字 → 直接流式回复（0额外token开销）
+  ├── 单工具命中 → 执行工具 + LLM生成附带文字
+  └── 多工具/模糊 → LLM(注入tools) → 执行工具
+  ↓
+[执行层] ToolExecutor
+  ├── 快任务 → 内联返回（<5s）
+  └── 慢任务 → 后台队列 → WebSocket推送完成
+  ↓
+[存储] ResponseBlock 独立存储，关联message_id
+  ↓
+[前端] 文字流式 + 工具结果逐个出现 + 占位符动态更新
+```
+
+### 16.3 意图预判：规则优先
+
+不每条消息都调LLM做tool calling（节省80%消息的token开销）：
+
+```python
+TOOL_RULES: dict[str, str] = {
+    # 正则模式 → 工具名
+    r"视频|bilibili|b站|讲解视频|搜.*视频": "search_bilibili",
+    r"出题|练习|做题|测试|考我": "generate_practice",
+    r"画|图像|函数图|图表|可视化": "generate_image",
+    r"思维导图|脑图|知识结构|整理.*知识": "generate_mindmap",
+    r"笔记|文档|PDF|讲义|总结.*笔记": "generate_document",
+}
+
+def predict_tools(text: str) -> list[str]:
+    """规则预判：返回需要调用的工具列表"""
+    import re
+    matched = set()
+    for pattern, tool in TOOL_RULES.items():
+        if re.search(pattern, text):
+            matched.add(tool)
+    return list(matched)
+
+# 决策逻辑：
+# predict_tools() 返回0个 → 纯文字回复
+# predict_tools() 返回1个 → 直接执行该工具，不调LLM决策
+# predict_tools() 返回≥2个 → 注入tools给LLM决策
+```
+
+### 16.4 ResponseBlock 数据模型
+
+助手回复由多个ResponseBlock组成，独立存储：
+
+```python
+class ResponseBlock(BaseModel):
+    """助手回复的内容块"""
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    message_id: str              # 关联的助手TreeNode ID
+    partition_id: str
+    branch_id: str
+    type: str                    # block类型
+    status: str                  # streaming | ready | generating | failed
+    content: dict                # 类型特定的数据
+    order: int = 0               # 显示顺序
+    created_at: float = Field(default_factory=time.time)
+    updated_at: float = Field(default_factory=time.time)
+```
+
+**Block类型定义**：
+
+| type | status | content结构 | 生成方式 |
+|------|--------|-------------|----------|
+| `text` | ready | `{"text": "..."}` | LLM流式 |
+| `practice` | ready | `{"subject", "question", "options", "answer", "explanation"}` | 快任务内联 |
+| `video` | ready | `{"title", "url", "thumbnail", "duration", "source"}` | 快任务内联 |
+| `image` | generating→ready | `{"prompt", "url", "generation_id"}` | 慢任务后台 |
+| `mindmap` | generating→ready | `{"topic", "nodes", "edges", "generation_id"}` | 慢任务后台 |
+| `document` | generating→ready | `{"title", "format", "url", "page_count", "generation_id"}` | 慢任务后台 |
+
+### 16.5 工具注册与执行
+
+```python
+# 快工具（内联执行，<5s）
+FAST_TOOLS = {
+    "search_bilibili": bilibili_handler,    # B站搜索
+    "generate_practice": practice_handler,  # 练习题生成
+}
+
+# 慢工具（后台队列，>5s）
+SLOW_TOOLS = {
+    "generate_image": image_handler,        # 文生图
+    "generate_mindmap": mindmap_handler,    # 思维导图
+    "generate_document": document_handler,  # 文档生成
+}
+```
+
+**ToolExecutor**：
+
+```python
+class ToolExecutor:
+    async def execute(self, tool_name: str, params: dict) -> ResponseBlock:
+        if tool_name in FAST_TOOLS:
+            result = await FAST_TOOLS[tool_name](params)
+            return ResponseBlock(type=tool_name, status="ready", content=result)
+        else:
+            job_id = await job_queue.submit(tool_name, params)
+            return ResponseBlock(
+                type=tool_name, status="generating",
+                content={"job_id": job_id, "progress": 0}
+            )
+```
+
+### 16.6 后台任务管理
+
+```python
+class BackgroundJob(BaseModel):
+    id: str
+    tool_name: str
+    status: str  # queued | processing | done | failed
+    params: dict
+    result: dict | None = None
+    progress: float = 0.0
+    created_at: float
+    completed_at: float | None = None
+    error: str | None = None
+```
+
+**任务生命周期**：
+
+```
+提交 → queued → processing → done（WebSocket推送）/ failed
+                                ↓
+                          前端更新ResponseBlock状态
+                          占位符 → 实际内容
+```
+
+**失败处理**：
+- 超时：60s无结果 → 标记failed
+- 自动重试：1次
+- 用户可手动重试：点击"重试"按钮
+- WebSocket推送：`{"type": "job_failed", "block_id": "...", "error": "..."}`
+
+### 16.7 前端渲染
+
+```
+助手回复区域
+├── [TextBlock] "让我帮你找视频并解释一下..."
+│   (流式输出，立即显示)
+│
+├── [VideoBlock] (内联，文字后立即出现)
+│   ┌─────────────────────────────┐
+│   │ 🎬 【3Blue1Brown】微积分   │
+│   │ [缩略图] 15:32  bilibili   │
+│   └─────────────────────────────┘
+│
+├── [PracticeBlock] (内联，紧跟视频)
+│   ┌─────────────────────────────┐
+│   │ 📝 练习题：求 f(x)=x³-... │
+│   │ A. 最大值2  B. 最大值4     │
+│   │ [提交答案]                  │
+│   └─────────────────────────────┘
+│
+├── [ImageBlock] (生成中，占位符)
+│   ┌─────────────────────────────┐
+│   │ 🎨 正在生成函数图像...     │
+│   │ ████████████░░░░ 70%       │
+│   └─────────────────────────────┘
+│
+└── [MindMapBlock] (生成中，占位符)
+    ┌─────────────────────────────┐
+    │ 🧠 正在生成思维导图...     │
+    │ ████░░░░░░░░░░░ 25%        │
+    └─────────────────────────────┘
+```
+
+### 16.8 Token成本优化
+
+| 场景 | Token消耗 | 说明 |
+|------|-----------|------|
+| 纯文字（80%消息） | 0 额外 | 不注入tools |
+| 单工具命中（15%） | ~200 额外 | LLM生成工具附带文字 |
+| 多工具/模糊（5%） | ~1100 额外 | 完整tool calling |
+| **日均100条消息** | **~3-5k 额外** | 几乎可忽略 |
+
+### 16.9 扩展新工具
+
+注册新工具只需3步：
+
+1. 在 `TOOL_RULES` 添加关键词规则
+2. 实现 handler 函数
+3. 在 `FAST_TOOLS` 或 `SLOW_TOOLS` 注册
+
+```python
+# 示例：添加"代码运行"工具
+TOOL_RULES[r"运行|执行代码|跑一下"] = "run_code"
+FAST_TOOLS["run_code"] = run_code_handler
+```
+
+### 16.10 与Branch Workspace的关系
+
+```
+Branch Workspace/
+├── files/                    # 用户上传的文件
+├── generated/                # AI生成的文件（新增）
+│   ├── images/               # 文生图结果
+│   ├── mindmaps/             # 思维导图(SVG/JSON)
+│   └── documents/            # 生成的文档(PDF/Word)
+└── metadata.json
+```
+
+AI生成的文件统一放在 `generated/` 目录，归档/删除分支时跟随处理。跨分支可引用。
+
+---
+
+## 十七、开放问题
 
 全部已解决 ✅
 
