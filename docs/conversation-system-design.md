@@ -664,6 +664,10 @@ msg2 标记 has_modified_version = true
 
 ## 十、文件上传与异步处理
 
+> **实现状态：✅ 已实现 (2026-05-19)**
+> 
+> 4 API (`POST /workspace/upload`, `GET /workspace/files`, `GET /workspace/files/{id}`, `DELETE /workspace/files/{id}`) 已添加到 `api/conversation.py`。前端 `WorkspacePanel.tsx` + `ChatInput.tsx` 改造已完成。存储于 `~/.companion/uploads/{user}/{branch}/`。设计文档 §10.1-10.6 详见下方。
+
 ### 10.1 架构：Branch Workspace（分支工作空间）
 
 文件**不直接绑定消息**，而是挂载到**分支工作空间**。消息通过 `file_id` 引用工作空间中的文件。
