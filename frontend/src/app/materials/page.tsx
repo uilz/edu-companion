@@ -20,12 +20,14 @@ interface Material {
   file_name: string;
   file_type: string;
   file_size: number;
+  purpose: string;
   status: string;
   chunk_count: number;
   question_count: number;
   skills_covered: string[];
   created_at: string | null;
   indexed_at: string | null;
+  expires_at: string | null;
 }
 
 interface SearchResult {
@@ -69,25 +71,35 @@ function formatDate(iso: string | null): string {
   });
 }
 
-// ── Status badge ──
-function StatusBadge({ status }: { status: string }) {
-  const config: Record<string, { icon: React.ReactNode; label: string; color: string }> = {
-    ready: { icon: <CheckCircle2 size={12} />, label: "已索引", color: "#22c55e" },
-    indexing: { icon: <Loader2 size={12} className="animate-spin" />, label: "索引中", color: "#f59e0b" },
-    uploaded: { icon: <File size={12} />, label: "已上传", color: "#3b82f6" },
-    uploaded_only: { icon: <File size={12} />, label: "已上传", color: "#3b82f6" },
-    parse_failed: { icon: <XCircle size={12} />, label: "解析失败", color: "#ef4444" },
-    index_failed: { icon: <XCircle size={12} />, label: "索引失败", color: "#ef4444" },
+// ── Status + Purpose badge ──
+function MaterialBadge({ status, purpose }: { status: string; purpose: string }) {
+  const purposeLabels: Record<string, { icon: string; label: string }> = {
+    permanent: { icon: "📚", label: "永久" },
+    session: { icon: "📸", label: "临时·7天" },
+    reference: { icon: "📝", label: "参考" },
   };
+  const pl = purposeLabels[purpose] || { icon: "📄", label: "" };
 
-  const c = config[status] || config.uploaded;
+  const statusIcons: Record<string, { icon: React.ReactNode; color: string }> = {
+    ready: { icon: <CheckCircle2 size={12} />, color: "#22c55e" },
+    indexing: { icon: <Loader2 size={12} className="animate-spin" />, color: "#f59e0b" },
+    stored: { icon: <File size={12} />, color: "#3b82f6" },
+    stored_index_failed: { icon: <XCircle size={12} />, color: "#ef4444" },
+    uploaded: { icon: <File size={12} />, color: "#3b82f6" },
+  };
+  const si = statusIcons[status] || statusIcons.stored;
+
   return (
-    <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px]"
-      style={{ color: c.color, border: `1px solid ${c.color}30` }}
-    >
-      {c.icon}
-      {c.label}
+    <span className="inline-flex items-center gap-1.5">
+      <span className="text-[9px] px-1.5 py-0.5 border border-[var(--color-border)] text-[var(--color-text-muted)]">
+        {pl.icon} {pl.label}
+      </span>
+      <span
+        className="inline-flex items-center gap-1 text-[10px]"
+        style={{ color: si.color }}
+      >
+        {si.icon}
+      </span>
     </span>
   );
 }
@@ -105,8 +117,9 @@ export default function MaterialsPage() {
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
 
-  // Upload ref
+  // Upload ref + purpose state
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadPurpose, setUploadPurpose] = useState("auto");
 
   // ── Load materials ──
   const loadMaterials = useCallback(async () => {
@@ -149,6 +162,7 @@ export default function MaterialsPage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("purpose", uploadPurpose);
 
       const res = await fetch("/api/materials/upload", {
         method: "POST",
@@ -222,7 +236,7 @@ export default function MaterialsPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.docx,.pptx,.md,.txt"
+            accept=".pdf,.docx,.pptx,.md,.txt,.mp3,.wav,.m4a,.jpg,.jpeg,.png,.webp"
             onChange={handleUpload}
             className="hidden"
           />
@@ -242,14 +256,38 @@ export default function MaterialsPage() {
               <>
                 <Upload size={24} className="text-[var(--color-text-muted)]" />
                 <span className="text-sm text-[var(--color-text-secondary)]">
-                  点击上传资料 (PDF/Word/PPT/Markdown/TXT, 最大 50MB)
+                  点击上传 (PDF/Word/PPT/MD/TXT · 图片 · 音频, max 50MB)
                 </span>
                 <span className="text-[10px] text-[var(--color-text-muted)]">
-                  支持自动解析和语义索引
+                  永久资料自动解析索引 · 临时资料7天自动清理
                 </span>
               </>
             )}
           </button>
+
+          {/* Purpose selector */}
+          <div className="flex items-center gap-2 mt-2">
+            <span className="text-[10px] text-[var(--color-text-muted)]">用途:</span>
+            {[
+              { value: "auto", label: "🤖 自动" },
+              { value: "permanent", label: "📚 永久资料" },
+              { value: "session", label: "📸 临时(7天)" },
+              { value: "reference", label: "📝 参考" },
+            ].map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setUploadPurpose(opt.value)}
+                className={`text-[10px] px-2 py-1 border transition-colors ${
+                  uploadPurpose === opt.value
+                    ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
+                    : "border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-text-muted)]"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
           {uploadStatus && !uploading && (
             <div className="mt-2 text-xs text-[var(--color-text-secondary)] px-2">
               {uploadStatus}
@@ -375,7 +413,7 @@ export default function MaterialsPage() {
                       <span className="text-sm text-[var(--color-text)] truncate">
                         {m.file_name}
                       </span>
-                      <StatusBadge status={m.status} />
+                      <MaterialBadge status={m.status} purpose={m.purpose || "permanent"} />
                     </div>
                     <div className="flex items-center gap-3 text-[10px] text-[var(--color-text-muted)]">
                       <span>{formatSize(m.file_size)}</span>
@@ -383,6 +421,11 @@ export default function MaterialsPage() {
                       {m.chunk_count > 0 && <span>{m.chunk_count} 块</span>}
                       {m.status === "ready" && (
                         <span>{formatDate(m.indexed_at)}</span>
+                      )}
+                      {m.expires_at && (
+                        <span className="text-[var(--color-warning)]">
+                          过期: {formatDate(m.expires_at)}
+                        </span>
                       )}
                     </div>
                     {m.skills_covered && m.skills_covered.length > 0 && (
