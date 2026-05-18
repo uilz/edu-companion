@@ -88,6 +88,45 @@ def _build_context_messages(
     except Exception:
         pass
 
+    # P2: 检测练习回顾查询，注入回顾数据
+    try:
+        from app.services.practice_recall import practice_recall
+        if practice_recall.is_recall_query(user_text):
+            from app.services.storage import storage as _storage
+            from app.api.practice import _sessions as _p_sessions
+            recall_sessions = list(_p_sessions.values())
+            if recall_sessions:
+                recall_text = practice_recall.generate_recall(
+                    sessions=recall_sessions,
+                    days=7,
+                    subject_filter=partition.subject or "",
+                )
+                system_content += f"\n\n[练习回顾]\n{recall_text}\n\n请在回复中自然地引用这些练习数据来回答用户。"
+    except Exception:
+        pass
+
+    # P2: 上下文感知练习选题建议
+    try:
+        from app.services.context_trigger import context_trigger
+        from app.services.storage import storage as _storage2
+        data = _storage2.load(user_id)
+        if branch:
+            recent_msgs = []
+            for nid in branch.path[-5:]:
+                node = data.nodes.get(nid)
+                if node and not node.is_deleted:
+                    recent_msgs.append(node)
+            ctx = context_trigger.trigger(
+                user_id=user_id,
+                branch=branch,
+                recent_messages=recent_msgs,
+            )
+            system_content += f"\n\n[选题建议] 当前对话主题涉及: {ctx['skill_ids']}, Bloom: {ctx['bloom_level']}, 推荐难度: {ctx['difficulty']:.2f}"
+            if ctx.get('confused'):
+                system_content += ", ⚠️ 检测到困惑信号"
+    except Exception:
+        pass
+
     # 添加分区上下文
     if partition.context_summary:
         system_content += f"\n\n当前分区：{partition.name}"

@@ -509,3 +509,175 @@ async def get_stats(time_range: str = "week"):
         weak_skills=sorted(weak, key=lambda x: x[1])[:5],
         strong_skills=sorted(strong, key=lambda x: x[1], reverse=True)[:5],
     ).model_dump()
+
+
+# ──────────────────────────────────────────────
+# 对话×练习 P2: 上下文触发 + 内联练习 + 练习回顾
+# ──────────────────────────────────────────────
+
+class ContextTriggerRequest(BaseModel):
+    target_branch_id: str = ""       # 目标branch ID（空=当前活跃）
+    subject_hint: str = ""           # 学科提示
+    count: int = 3                   # 生成题数
+
+
+class InlineAnswerRequest(BaseModel):
+    block_id: str                    # 练习块的block_id
+    answer: str                      # 学生答案
+    explanation_text: str = ""       # 可选解释文本
+
+
+class InlineHintRequest(BaseModel):
+    block_id: str
+
+
+class DialogueRecommendRequest(BaseModel):
+    session_id: str
+
+
+@router.post("/context-trigger")
+async def trigger_from_context(req: ContextTriggerRequest):
+    """
+    从对话上下文触发练习：分析当前branch → 推断知识点+难度+Bloom → 创建session
+    """
+    from app.services.context_trigger import context_trigger
+    from app.services.storage import storage
+
+    data = storage.load(user_id)
+    branch = None
+    recent_messages = []
+
+    if req.target_branch_id:
+        branch = data.branches.get(req.target_branch_id)
+    else:
+        # 找第一个活跃分区
+        for pid, partition in data.partitions.items():
+            branch = data.branches.get(partition.active_branch_id)
+            if branch:
+                break
+
+    if branch:
+        for nid in branch.path[-5:]:
+            node = data.nodes.get(nid)
+            if node and not node.is_deleted:
+                recent_messages.append(node)
+
+    result = context_trigger.trigger(
+        user_id=user_id,
+        branch=branch,
+        recent_messages=recent_messages,
+        subject_hint=req.subject_hint,
+        count=req.count,
+    )
+    return result
+
+
+@router.post("/inline/create")
+async def create_inline(req: ContextTriggerRequest):
+    """
+    创建内联练习：生成练习题作为 ResponseBlock
+    """
+    from app.services.inline_practice import inline_practice
+    from app.services.context_trigger import context_trigger
+    from app.services.storage import storage
+
+    data = storage.load(user_id)
+    branch = None
+    recent_messages = []
+
+    if req.target_branch_id:
+        branch = data.branches.get(req.target_branch_id)
+    else:
+        for pid, partition in data.partitions.items():
+            branch = data.branches.get(partition.active_branch_id)
+            if branch:
+                break
+
+    if branch:
+        for nid in branch.path[-5:]:
+            node = data.nodes.get(nid)
+            if node and not node.is_deleted:
+                recent_messages.append(node)
+
+    # 从对话推断选题
+    ctx = context_trigger.trigger(
+        user_id=user_id,
+        branch=branch,
+        recent_messages=recent_messages,
+        subject_hint=req.subject_hint,
+        count=req.count,
+    )
+
+    blocks = inline_practice.create_inline_question(
+        user_id=user_id,
+        skill_id=ctx.get("skill_ids", ["calculus_derivative"])[0],
+        bloom_level=ctx.get("bloom_level", "understand"),
+        difficulty=ctx.get("difficulty", 0.5),
+        count=req.count,
+    )
+
+    return {"blocks": [b.model_dump() for b in blocks]}
+
+
+@router.post("/inline/answer")
+async def submit_inline_answer(req: InlineAnswerRequest):
+    """
+    提交内联练习答案
+    """
+    from app.services.inline_practice import inline_practice
+    result = inline_practice.handle_answer(
+        block_id=req.block_id,
+        student_answer=req.answer,
+        explanation_text=req.explanation_text or None,
+    )
+    return result
+
+
+@router.post("/inline/hint")
+async def get_inline_hint(req: InlineHintRequest):
+    """
+    获取内联练习下一级提示
+    """
+    from app.services.inline_practice import inline_practice
+    return inline_practice.get_hint(req.block_id)
+
+
+@router.get("/recall")
+async def recall_practice(subject: str = "", days: int = 7):
+    """
+    练习回顾：生成自然语言练习总结
+    """
+    from app.services.practice_recall import practice_recall
+
+    sessions = list(_sessions.values())
+    result = practice_recall.generate_recall(
+        sessions=sessions,
+        days=days,
+        subject_filter=subject or None,
+    )
+    return {"recall": result}
+
+
+@router.post("/dialogue-recommend")
+async def recommend_dialogue(req: DialogueRecommendRequest):
+    """
+    练习后推荐深度对话
+    """
+    from app.services.dialogue_recommender import practice_to_dialogue
+
+    session = _sessions.get(req.session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+
+    latest_error = None
+    if session.attempts:
+        last_attempt = session.attempts[-1]
+        if not last_attempt.is_correct:
+            latest_error = last_attempt.error_analysis
+
+    recommendation = practice_to_dialogue.should_recommend(
+        session=session,
+        latest_error=latest_error,
+    )
+
+    return {"recommend": recommendation}

@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { Loader2, Video, FileText, Image, GitBranch as MindMap, BookOpen } from "lucide-react";
 import MathContent from "@/components/ui/MathContent";
+import InlinePracticeBlock from "./InlinePracticeBlock";
 import { renderMath, renderMarkdown } from "@/lib/math";
 import type { ResponseBlock } from "@/types";
 
@@ -36,7 +37,7 @@ export default function ResponseBlockRenderer({ block }: ResponseBlockRendererPr
     case "video":
       return <VideoBlock content={content} />;
     case "practice":
-      return <PracticeBlock content={content} />;
+      return <PracticeBlockRouter content={content} />;
     case "image":
       return <ImageBlock content={content} />;
     case "mindmap":
@@ -146,6 +147,40 @@ function VideoBlock({ content }: { content: Record<string, unknown> }) {
       </div>
     </div>
   );
+}
+
+function PracticeBlockRouter({ content }: { content: Record<string, unknown> }) {
+  // Check if this is an interactive inline practice block (has block_id + stem)
+  const blockId = content.block_id as string;
+  const stem = content.stem as string;
+  const options = (content.options as Option[]) || [];
+  const answerType = (content.answer_type as string) || "choice";
+  const hint = (content.hint as string) || "再想想思路";
+
+  if (blockId && stem) {
+    // Interactive inline practice
+    return (
+      <InlinePracticeBlock
+        blockId={blockId}
+        questionId={(content.question_id as string) || ""}
+        stem={stem}
+        options={options}
+        answerType={answerType}
+        hint={hint}
+        onAnswer={async (_blockId, _answer) => {
+          // Answer callback - handled internally by the component
+        }}
+      />
+    );
+  }
+
+  // Fallback to passive display (old format)
+  return <PracticeBlock content={content} />;
+}
+
+interface Option {
+  letter: string;
+  text: string;
 }
 
 function PracticeBlock({ content }: { content: Record<string, unknown> }) {
