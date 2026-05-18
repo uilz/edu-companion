@@ -196,7 +196,7 @@ async def get_questions(
 
 @router.post("/sessions")
 async def create_session(req: CreateSessionRequest):
-    """创建练习会话"""
+    """创建练习会话（含前置知识卡控）"""
     user_id = "default_user"
 
     # 从数据库选题
@@ -206,8 +206,45 @@ async def create_session(req: CreateSessionRequest):
         rows = db.fetchall("SELECT DISTINCT skill_id FROM questions WHERE status = 'active' LIMIT 4")
         skill_ids = [r["skill_id"] for r in rows] if rows else []
 
-    questions = []
+    # ── 前置知识卡控 ──
+    from domain.knowledge.checker import PrerequisiteChecker
+    from domain.knowledge.prerequisites import ALL_PREREQUISITES
+    from app.core.knowledge_trace import bkt_engine
+    from app.services.storage import storage
+
+    # 构造简易 PracticeService adapter（现有架构过渡方案）
+    class _KnowledgeAdapter:
+        async def get_knowledge_state(self, uid: str, sid: str):
+            return bkt_engine.load_or_create(uid, sid).model_dump()
+
+    checker = PrerequisiteChecker(_KnowledgeAdapter())
+    blocked_skills: list[str] = []
+    prerequisites_info: list[dict] = []
+
     for sid in skill_ids:
+        result = await checker.can_practice(user_id, sid)
+        if not result.can_practice:
+            blocked_skills.append(sid)
+            prerequisites_info.append({
+                "skill_id": sid,
+                "blocked_by": result.blocked,
+                "reason": result.reason,
+            })
+
+    # 过滤掉被卡控的技能
+    allowed_skills = [s for s in skill_ids if s not in blocked_skills]
+
+    # 如果所有技能都被卡控
+    if not allowed_skills and skill_ids:
+        return {
+            "blocked": True,
+            "message": "当前知识基础不足以练习所选内容，建议先完成前置知识",
+            "prerequisites": prerequisites_info,
+            "session": None,
+        }
+
+    questions = []
+    for sid in allowed_skills:
         db = get_db()
         rows = db.fetchall(
             "SELECT * FROM questions WHERE skill_id = %s AND status = 'active' ORDER BY difficulty LIMIT 3",
@@ -224,7 +261,7 @@ async def create_session(req: CreateSessionRequest):
     db.upsert("practice_sessions", {
         "session_id": session_id,
         "user_id": user_id,
-        "planned_skills_json": skill_ids,
+        "planned_skills_json": allowed_skills,
         "question_ids_json": [q["question_id"] for q in questions],
         "estimated_minutes": req.duration_minutes,
         "mode": req.mode,
@@ -232,16 +269,25 @@ async def create_session(req: CreateSessionRequest):
         "started_at": now,
     }, "session_id")
 
-    return {"session": {"session_id": session_id, "question_ids": [q["question_id"] for q in questions],
-                         "planned_skills": skill_ids, "mode": req.mode, "status": "active"},
-            "questions": [{"question_id": q["question_id"], "skill_id": q.get("skill_id",""),
-                          "subject": q.get("subject",""), "bloom_level": q.get("bloom_level",""),
-                          "text": q.get("text",""),
-                          "options": q.get("options_json") if isinstance(q.get("options_json"), list) else [],
-                          "correct_answer": q.get("correct_answer",""),
-                          "explanation": q.get("explanation",""),
-                          "hints": q.get("hints_json") if isinstance(q.get("hints_json"), list) else [],
-                          "difficulty": q.get("difficulty",0.5)} for q in questions]}
+    response_data = {
+        "session": {"session_id": session_id, "question_ids": [q["question_id"] for q in questions],
+                     "planned_skills": allowed_skills, "mode": req.mode, "status": "active"},
+        "questions": [{"question_id": q["question_id"], "skill_id": q.get("skill_id",""),
+                      "subject": q.get("subject",""), "bloom_level": q.get("bloom_level",""),
+                      "text": q.get("text",""),
+                      "options": q.get("options_json") if isinstance(q.get("options_json"), list) else [],
+                      "correct_answer": q.get("correct_answer",""),
+                      "explanation": q.get("explanation",""),
+                      "hints": q.get("hints_json") if isinstance(q.get("hints_json"), list) else [],
+                      "difficulty": q.get("difficulty",0.5)} for q in questions],
+    }
+
+    # 附上卡控信息
+    if blocked_skills:
+        response_data["prerequisites_info"] = prerequisites_info
+        response_data["blocked_skills"] = blocked_skills
+
+    return response_data
 
 
 @router.get("/sessions")

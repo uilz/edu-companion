@@ -44,15 +44,17 @@ class ZPDScheduler:
         student_ability: float,
         count: int = 3,
         target_bloom: Optional[BloomLevel] = None,
+        blocked_skills: list[str] | None = None,
     ) -> list[Question]:
         """
         从候选池中选择最适合的题目
-        
+
         参数:
             question_pool: 候选题目
             student_ability: 学生当前能力估计 θ (0-1)
             count: 选择数量
             target_bloom: 目标Bloom层次
+            blocked_skills: 前置知识卡控 — 被阻塞的技能列表，其题目直接过滤
         """
         if not question_pool:
             return []
@@ -62,6 +64,12 @@ class ZPDScheduler:
         if target_bloom:
             candidates = [q for q in candidates if q.bloom_level == target_bloom]
 
+        if not candidates:
+            return []
+
+        # 前置知识卡控: 过滤被阻塞的技能
+        if blocked_skills:
+            candidates = [q for q in candidates if q.skill_id not in blocked_skills]
         if not candidates:
             return []
 

@@ -220,13 +220,13 @@ def can_practice(skill_id, user_knowledge_states, graph):
 
 | # | 源模块 | 目标模块 | 数据 | 状态 |
 |---|--------|---------|------|:--:|
-| 1 | BKT | Graph(前端) | p_known → node.mastery | 🔴 未连接 |
-| 2 | Graph Edge | ZPD Scheduler | 前置依赖 → 卡控选题 | 🔴 未实现 |
-| 3 | Graph Path | Study Plan | 推荐路径 → plan items | 🔴 未实现 |
-| 4 | Practice Stats | Graph(前端) | 实时更新掌握度环 | 🔴 未连接 |
+| 1 | BKT | Graph(API) | p_known → node.mastery | ✅ 已实现 |
+| 2 | Graph Edge | ZPD Scheduler | 前置依赖 → 卡控选题 | ✅ 已实现 |
+| 3 | Graph Path | Study Plan | 推荐路径 → plan items | ✅ 已实现 |
+| 4 | Practice Stats | Graph(前端) | 实时更新掌握度环 | 🔴 前端待对接 |
 | 5 | Graph Node | Content Search | 知识点 → 推荐资料 | 🔴 未实现 |
 | 6 | Graph | Conversation | 对话中引用知识图谱 | 🔴 未实现 |
-| 7 | Graph | Analytics | 掌握热力图数据源 | 🟡 部分(analytics独立查询) |
+| 7 | Graph | Analytics | 掌握热力图数据源 | 🟡 部分 |
 
 ---
 
@@ -247,8 +247,11 @@ def can_practice(skill_id, user_knowledge_states, graph):
 
 | 阶段 | 内容 | 复杂度 | 依赖 |
 |------|------|:--:|------|
-| P0 | 新增 `GET /api/knowledge/graph` 后端API | 🟡 | — |
-| P0 | 创建 `knowledge_graph_nodes/edges` 表 | 🟢 | PostgreSQL |
+| P0 | 新增 `GET /api/knowledge/graph` 后端API | 🟡 | **✅ 已完成** |
+| P0 | 创建 `knowledge_graph_nodes/edges` 表 | 🟢 | 🟡 YAML 定义替代 |
+| P0 | 前置知识卡控引擎 (PrerequisiteChecker) | 🟡 | **✅ 已完成** |
+| P0 | 集成到 create_session / ZPD 调度 | 🟡 | **✅ 已完成** |
+| P0 | API 端点 (graph/prerequisites/check/blocked/ready/path) | 🟡 | **✅ 已完成 6个** |
 | P1 | 前端从 API 读取（替换硬编码） | 🟢 | P0 |
 | P1 | 掌握度实时注入（BKT → mastery） | 🟡 | P0 |
 | P1 | 图自动布局（力导向算法） | 🔴 | P0 |
