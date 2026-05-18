@@ -374,10 +374,7 @@ export default function ChatPage() {
           streamBufferRef.current = "";
         }
 
-        // 异步软刷新（不阻塞UI，不覆盖流式结果）
-        if (activeBranchId) {
-          setTimeout(() => loadMessages(activeBranchId), 500);
-        }
+        // 轻轻刷新分区列表（不刷新消息，避免覆盖流式结果造成闪烁）
         setTimeout(() => loadPartitions(), 300);
       },
       onError: (msg) => {
@@ -599,7 +596,10 @@ export default function ChatPage() {
   // ── Mobile layout ──
   if (!isDesktop) {
     return (
-      <div className="flex flex-col h-screen bg-[var(--color-bg)]">
+      <div
+        className="fixed inset-0 bg-[var(--color-bg)] z-30 flex flex-col"
+        style={{ bottom: "var(--bottom-nav-height)" }}
+      >
         {/* Mobile header */}
         <div className="flex-shrink-0 border-b border-[var(--color-border)] px-4 py-3 flex items-center gap-3">
           <button
@@ -690,7 +690,10 @@ export default function ChatPage() {
 
   // ── Desktop layout ──
   return (
-    <div className="flex h-screen bg-[var(--color-bg)]">
+    <div
+      className="fixed top-0 right-0 bottom-0 bg-[var(--color-bg)] z-30 flex"
+      style={{ left: "var(--sidebar-width)" }}
+    >
       {/* Partition sidebar */}
       {!collapsedPartition && (
       <div className="flex-shrink-0 relative" style={{ width: "200px" }}>

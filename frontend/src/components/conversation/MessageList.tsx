@@ -53,9 +53,16 @@ export default function MessageList({
     setEditingText("");
   };
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom only if user is already near bottom (within 150px)
+  // This respects user's reading position when new messages arrive
   useEffect(() => {
-    if (bottomRef.current) {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const isNearBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+
+    if (isNearBottom && bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, responseBlocks]);

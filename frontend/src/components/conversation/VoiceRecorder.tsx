@@ -45,8 +45,12 @@ export default function VoiceRecorder({ onTranscription, disabled }: VoiceRecord
   const [interimText, setInterimText] = useState("");
   const [error, setError] = useState("");
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const stateRef = useRef<RecorderState>("idle");
   const isSupported = typeof window !== "undefined" &&
     (!!window.SpeechRecognition || !!window.webkitSpeechRecognition);
+
+  // Sync state to ref for use in callbacks
+  useEffect(() => { stateRef.current = state; }, [state]);
 
   const startRecording = useCallback(() => {
     setError("");
@@ -91,7 +95,8 @@ export default function VoiceRecorder({ onTranscription, disabled }: VoiceRecord
       };
 
       recognition.onend = () => {
-        if (state === "recording") {
+        // Use ref to get current state, avoiding stale closure
+        if (stateRef.current === "recording") {
           setState("idle");
         }
       };
@@ -104,7 +109,7 @@ export default function VoiceRecorder({ onTranscription, disabled }: VoiceRecord
       setError("语音识别启动失败");
       setState("idle");
     }
-  }, [onTranscription, state]);
+  }, [onTranscription]); // 去掉 state 依赖，用 ref 替代
 
   const stopRecording = useCallback(() => {
     if (recognitionRef.current) {
