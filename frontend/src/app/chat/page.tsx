@@ -341,14 +341,16 @@ export default function ChatPage() {
       onDone: (_partitionId, assistantMessage) => {
         setIsLoading(false);
         setStatusMessage("");
-        streamBufferRef.current = "";
-        streamingMsgIdRef.current = null;
 
         // Replace streaming message with final version
         if (assistantMessage) {
+          const currentStreamingId = streamingMsgIdRef.current;  // 先保存
+          streamingMsgIdRef.current = null;
+          streamBufferRef.current = "";
+
           setMessages((prev) => {
             const idx = prev.findIndex(
-              (m) => m.id === streamingMsgIdRef.current || m.id === assistantMessage.id
+              (m) => m.id === currentStreamingId || m.id === assistantMessage.id
             );
             if (idx >= 0) {
               const updated = [...prev];
@@ -357,13 +359,16 @@ export default function ChatPage() {
             }
             return [...prev, assistantMessage];
           });
+        } else {
+          streamingMsgIdRef.current = null;
+          streamBufferRef.current = "";
         }
 
-        // Reload messages to get full response blocks
+        // 异步软刷新（不阻塞UI，不覆盖流式结果）
         if (activeBranchId) {
-          loadMessages(activeBranchId);
+          setTimeout(() => loadMessages(activeBranchId), 500);
         }
-        loadPartitions();
+        setTimeout(() => loadPartitions(), 300);
       },
       onError: (msg) => {
         setIsLoading(false);

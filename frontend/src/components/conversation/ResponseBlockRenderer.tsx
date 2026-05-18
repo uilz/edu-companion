@@ -6,7 +6,7 @@ import MathContent from "@/components/ui/MathContent";
 import InlinePracticeBlock from "./InlinePracticeBlock";
 import MediaSearchBlock from "./MediaSearchBlock";
 import VideoEmbed from "./VideoEmbed";
-import { renderMath, renderMarkdown } from "@/lib/math";
+import { renderContent } from "@/lib/math";
 import type { ResponseBlock } from "@/types";
 
 interface ResponseBlockRendererProps {
@@ -84,10 +84,7 @@ function GeneratingPlaceholder({ type }: { type: string }) {
 
 function TextBlock({ content, sources }: { content: Record<string, unknown>; sources?: string[] }) {
   const text = (content.text as string) || "";
-  const renderedHtml = useMemo(() => {
-    const withMath = renderMath(text);
-    return renderMarkdown(withMath);
-  }, [text]);
+  const renderedHtml = useMemo(() => renderContent(text), [text]);
 
   return (
     <div>
@@ -175,10 +172,9 @@ function PracticeBlock({ content }: { content: Record<string, unknown> }) {
   const answer = (content.answer as string) || "";
   const explanation = (content.explanation as string) || "";
 
-  const questionHtml = useMemo(() => {
-    const withMath = renderMath(question);
-    return renderMarkdown(withMath);
-  }, [question]);
+  const questionHtml = useMemo(() => renderContent(question), [question]);
+
+  const explanationHtml = useMemo(() => renderContent(explanation), [explanation]);
 
   return (
     <div className="border border-[var(--color-border)] bg-[var(--color-surface)] mt-2">
