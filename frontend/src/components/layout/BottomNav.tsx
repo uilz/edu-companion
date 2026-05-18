@@ -16,16 +16,15 @@ interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
-  emoji: string;
 }
 
 const navItems: NavItem[] = [
-  { href: '/', label: '首页', icon: Home, emoji: '🏠' },
-  { href: '/practice', label: '练习', icon: Dumbbell, emoji: '📝' },
-  { href: '/chat', label: '对话', icon: MessageSquare, emoji: '💬' },
-  { href: '/analytics', label: '学情', icon: BarChart3, emoji: '📊' },
-  { href: '/knowledge', label: '图谱', icon: Network, emoji: '🗺️' },
-  { href: '/settings', label: '设置', icon: Settings, emoji: '⚙️' },
+  { href: '/', label: '首页', icon: Home },
+  { href: '/practice', label: '练习', icon: Dumbbell },
+  { href: '/chat', label: '对话', icon: MessageSquare },
+  { href: '/analytics', label: '学情', icon: BarChart3 },
+  { href: '/knowledge', label: '图谱', icon: Network },
+  { href: '/settings', label: '设置', icon: Settings },
 ];
 
 export default function BottomNav() {

@@ -108,9 +108,9 @@ export default function Sidebar() {
           className="nav-item w-full"
           style={{ borderLeft: '3px solid transparent' }}
         >
-          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          {theme === 'dark' ? <Moon size={18} /> : <Sun size={18} />}
           <span style={{ fontSize: '14px' }}>
-            {theme === 'dark' ? '浅色模式' : '深色模式'}
+            {theme === 'dark' ? '深色模式' : '浅色模式'}
           </span>
         </button>
       </div>

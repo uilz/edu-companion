@@ -54,24 +54,24 @@ export default function SettingsPage() {
                   <button
                     onClick={() => setTheme("dark")}
                     className={`flex items-center gap-2 px-4 py-3 border text-sm transition-colors ${
-                      theme === "light"
-                        ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                        : "border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)]"
-                    }`}
-                  >
-                    <Moon size={16} />
-                    浅色模式
-                  </button>
-                  <button
-                    onClick={() => setTheme("light")}
-                    className={`flex items-center gap-2 px-4 py-3 border text-sm transition-colors ${
                       theme === "dark"
                         ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
                         : "border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)]"
                     }`}
                   >
-                    <Sun size={16} />
+                    <Moon size={16} />
                     深色模式
+                  </button>
+                  <button
+                    onClick={() => setTheme("light")}
+                    className={`flex items-center gap-2 px-4 py-3 border text-sm transition-colors ${
+                      theme === "light"
+                        ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
+                        : "border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)]"
+                    }`}
+                  >
+                    <Sun size={16} />
+                    浅色模式
                   </button>
                 </div>
               </div>
