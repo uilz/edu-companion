@@ -126,6 +126,9 @@ class Branch(BaseModel):
     summary_dirty: bool = False
     created_at: float = Field(default_factory=time.time)
     last_message_at: float = Field(default_factory=time.time)
+    # P0: 练习系统联动
+    practice_sessions: list[str] = Field(default_factory=list)  # 关联的练习session_id
+    practice_summary: str = ""  # "已练12题,正确率70%,薄弱:导数"
 
 
 # ── Partition ──
@@ -153,6 +156,9 @@ class Partition(BaseModel):
 
 class UserData(BaseModel):
     user_id: str
+    # P0: 角色/组织隔离预留
+    role: str = "student"  # student | teacher | admin
+    org_id: str | None = None  # 组织/班级ID
     partitions: dict[str, Partition] = Field(default_factory=dict)
     branches: dict[str, Branch] = Field(default_factory=dict)
     nodes: dict[str, TreeNode] = Field(default_factory=dict)  # all nodes indexed by id

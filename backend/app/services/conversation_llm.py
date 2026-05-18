@@ -24,8 +24,36 @@ from app.services.tool_executor import tool_executor, predict_tools, SLOW_TOOLS
 
 logger = logging.getLogger(__name__)
 
-# ── System Prompt ──
 
+# P0: Post-message hooks (meta history + branch auto-rename)
+def _p0_post_message_hooks(user_id: str, partition_id: str, node: TreeNode) -> None:
+    """消息存储后的P0钩子：异步写元历史 + 触发分支命名/摘要"""
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            from app.services.meta_history import write_to_meta_history
+            loop.create_task(write_to_meta_history(user_id, node))
+            
+            data = storage.load(user_id)
+            branch = data.branches.get(node.branch_id) if node.branch_id else None
+            if branch:
+                msg_count = len(branch.path)
+                from app.services.branch_summarizer import (
+                    try_auto_rename_branch, generate_branch_summary, update_partition_context,
+                )
+                new_name = try_auto_rename_branch(user_id, node.branch_id, msg_count)
+                if new_name:
+                    branch.name = new_name
+                if msg_count >= 10 and msg_count % 10 == 0:
+                    generate_branch_summary(user_id, node.branch_id)
+                if msg_count % 5 == 0:
+                    update_partition_context(user_id, partition_id)
+    except Exception:
+        logger.debug("P0 hooks skipped")
+
+
+# ── System Prompt ──\n
 SYSTEM_PROMPT = """你是智能伴学助手"小智"。你的角色是帮助学生学习，特点：
 
 1. 用通俗易懂的语言解释概念
@@ -316,6 +344,9 @@ async def send_and_reply(
         user_id, partition_id, "user", blocks, user_text
     )
 
+    # P0: 异步写入元历史 + 触发分支自动命名
+    _p0_post_message_hooks(user_id, partition_id, user_node)
+
     # 2. 生成回复（含工具调用）
     response_blocks = await generate_reply_with_tools(user_id, partition_id, user_text)
 
@@ -331,6 +362,9 @@ async def send_and_reply(
     assistant_node = tree_ops.add_message(
         user_id, partition_id, "assistant", reply_blocks, reply_text
     )
+
+    # P0: 异步写入助手消息的元历史
+    _p0_post_message_hooks(user_id, partition_id, assistant_node)
 
     return {
         "user_message": user_node,
@@ -356,6 +390,9 @@ async def send_and_reply_stream(
         user_id, partition_id, "user", blocks, user_text
     )
 
+    # P0: async meta history
+    _p0_post_message_hooks(user_id, partition_id, user_node)
+
     yield {"type": "user_message", "message": user_node}
 
     # 2. 流式生成回复
@@ -369,6 +406,9 @@ async def send_and_reply_stream(
     assistant_node = tree_ops.add_message(
         user_id, partition_id, "assistant", reply_blocks, full_reply
     )
+
+    # P0: async meta history for assistant
+    _p0_post_message_hooks(user_id, partition_id, assistant_node)
 
     # 4. 检测工具调用并生成响应块
     detected_tools = predict_tools(user_text)
