@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useMemo } from "react";
-import { renderMath, renderMarkdown } from "@/lib/math";
+import { renderMarkdown } from "@/lib/math";
 
 interface ChatMessageProps {
   role: "user" | "assistant";
@@ -13,8 +13,9 @@ export default function ChatMessage({ role, content, timestamp }: ChatMessagePro
   const ref = useRef<HTMLDivElement>(null);
 
   const renderedContent = useMemo(() => {
-    const withMath = renderMath(content);
-    return renderMarkdown(withMath);
+    // renderMarkdown already handles LaTeX internally (Steps 2 & 5 of pipeline).
+    // Calling renderMath first → renderMarkdown destroys KaTeX HTML (Step 3 HTML-escapes < >).
+    return renderMarkdown(content);
   }, [content]);
 
   const time = new Date(timestamp).toLocaleTimeString("zh-CN", {

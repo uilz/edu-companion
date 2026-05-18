@@ -46,6 +46,9 @@ class LLMService:
         if settings.anthropic_api_key:
             import os
             os.environ["ANTHROPIC_API_KEY"] = settings.anthropic_api_key
+        if settings.deepseek_api_key:
+            import os
+            os.environ["DEEPSEEK_API_KEY"] = settings.deepseek_api_key
 
         # 加载 LiteLLM 模型列表配置（如果有的话）
         if settings.litellm_model_list:
@@ -113,6 +116,11 @@ class LLMService:
                 **kwargs,
             )
             content = response.choices[0].message.content or ""
+            # Reasoning models (deepseek-v4-flash) may put all tokens into reasoning_content
+            if not content:
+                reasoning = getattr(response.choices[0].message, 'reasoning_content', None)
+                if reasoning:
+                    content = reasoning.strip()
             logger.info("模型生成完成 [%s]，token数: %d", model, response.usage.total_tokens if response.usage else 0)
             return content
         except Exception as e:

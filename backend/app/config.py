@@ -71,6 +71,7 @@ class Settings(BaseSettings):
     # 模型 API Key（也可以通过环境变量单独配置）
     openai_api_key: Optional[str] = Field(default=None, description="OpenAI API Key")
     anthropic_api_key: Optional[str] = Field(default=None, description="Anthropic API Key")
+    deepseek_api_key: Optional[str] = Field(default=None, description="DeepSeek API Key")
 
     # 自定义模型端点（LiteLLM 代理兼容）
     custom_api_base: Optional[str] = Field(

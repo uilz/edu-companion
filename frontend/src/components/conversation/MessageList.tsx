@@ -213,7 +213,7 @@ export default function MessageList({
                     })}
                   </span>
                   {!isUser && <SpeakButton text={text} />}
-                  {!isEditing && onEditMessage && (
+                  {!isEditing && isUser && onEditMessage && (
                     <button
                       onClick={() => handleStartEdit(msg.id, text)}
                       className="opacity-0 group-hover:opacity-100 hover:text-yellow-400 transition-all"

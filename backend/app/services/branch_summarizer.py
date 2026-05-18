@@ -108,7 +108,7 @@ async def _llm_rename_branch(recent_texts: list[str], current_name: str) -> str:
             messages=[{"role": "user", "content": prompt}],
             task_type="summary",
             temperature=0.3,
-            max_tokens=30,
+            max_tokens=200,
         )
         name = (result or "").strip().strip('"''"「」')
         if name and len(name) <= 15:

@@ -106,7 +106,7 @@ export function renderMarkdown(text: string): string {
       if (!formula) return "";
       const isDisplay = formula.startsWith("$$");
       return renderFormula(
-        formula.replace(/^\$\$|$$\$$/g, "").replace(/^\$|\$$/g, ""),
+        formula.replace(/^\$\$|\$\$$/g, "").replace(/^\$|\$$/g, ""),
         isDisplay
       );
     }
