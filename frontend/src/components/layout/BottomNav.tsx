@@ -23,7 +23,7 @@ const navItems: NavItem[] = [
   { href: '/practice', label: '练习', icon: Dumbbell },
   { href: '/chat', label: '对话', icon: MessageSquare },
   { href: '/analytics', label: '学情', icon: BarChart3 },
-  { href: '/knowledge', label: '图谱', icon: Network },
+  { href: '/graph', label: '图谱', icon: Network },
   { href: '/settings', label: '设置', icon: Settings },
 ];
 

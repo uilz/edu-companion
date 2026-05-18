@@ -238,10 +238,10 @@ function TrendChart({ data }: { data: DailyPoint[] }) {
 function HeatmapGrid({ data }: { data: HeatmapCell[] }) {
   const dayNames = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
   const hours = [8, 10, 14, 16, 20, 22];
-  const maxQ = Math.max(...data.map((d) => d.questions), 1);
+  const maxQ = Math.max(...data.map((d) => d.count), 1);
 
   const getCell = (day: number, hour: number) =>
-    data.find((d) => d.day === day && d.hour === hour)?.questions ?? 0;
+    data.find((d) => d.day === day && d.hour === hour)?.count ?? 0;
 
   const bg = (q: number) => {
     if (q === 0) return "var(--color-surface)";
