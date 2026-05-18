@@ -35,7 +35,7 @@ export default function ResponseBlockRenderer({ block }: ResponseBlockRendererPr
 
   switch (type) {
     case "text":
-      return <TextBlock content={content} />;
+      return <TextBlock content={content} sources={block.sources} />;
     case "video":
       return <VideoBlockRouter content={content} />;
     case "practice":
@@ -82,7 +82,7 @@ function GeneratingPlaceholder({ type }: { type: string }) {
   );
 }
 
-function TextBlock({ content }: { content: Record<string, unknown> }) {
+function TextBlock({ content, sources }: { content: Record<string, unknown>; sources?: string[] }) {
   const text = (content.text as string) || "";
   const renderedHtml = useMemo(() => {
     const withMath = renderMath(text);
@@ -90,10 +90,27 @@ function TextBlock({ content }: { content: Record<string, unknown> }) {
   }, [text]);
 
   return (
-    <div
-      className="message-content text-sm leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0"
-      dangerouslySetInnerHTML={{ __html: renderedHtml }}
-    />
+    <div>
+      <div
+        className="message-content text-sm leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0"
+        dangerouslySetInnerHTML={{ __html: renderedHtml }}
+      />
+      {sources && sources.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-[var(--color-border)]">
+          <div className="flex flex-wrap gap-1.5">
+            {sources.map((s, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] bg-[var(--color-accent)]/10 text-[var(--color-accent)] border border-[var(--color-accent)]/20"
+              >
+                <BookOpen size={10} />
+                {s}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

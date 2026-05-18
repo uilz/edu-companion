@@ -185,6 +185,7 @@ class ResponseBlock(BaseModel):
     status: str = "ready"  # streaming | ready | generating | failed
     content: dict = Field(default_factory=dict)
     order: int = 0
+    sources: list[str] = Field(default_factory=list)  # 引用溯源 [来源: xxx]
     created_at: float = Field(default_factory=time.time)
     updated_at: float = Field(default_factory=time.time)
 

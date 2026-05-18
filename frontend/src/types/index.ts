@@ -110,6 +110,7 @@ export interface ResponseBlock {
   status: "streaming" | "ready" | "generating" | "failed";
   content: Record<string, unknown>;
   order: number;
+  sources?: string[];
   created_at: number;
   updated_at: number;
 }

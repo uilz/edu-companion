@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import AsyncGenerator
 
 from app.schemas.conversation import (
@@ -96,6 +97,19 @@ def detect_frustration(text: str) -> bool:
     return any(signal in text for signal in FRUSTRATION_SIGNALS)
 
 
+# ── 引用溯源解析 ──
+
+SOURCE_PATTERN = re.compile(r'\[来源:\s*([^\]]+)\]')
+
+def parse_sources(text: str) -> tuple[str, list[str]]:
+    """从回复文本中提取 [来源: xxx] 标记，返回 (清理后文本, 来源列表)"""
+    sources = SOURCE_PATTERN.findall(text)
+    cleaned = SOURCE_PATTERN.sub('', text).strip()
+    # 清理多余空行
+    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+    return cleaned, sources
+
+
 def _build_context_messages(
     partition: Partition,
     branch: Branch,
@@ -177,6 +191,20 @@ def _build_context_messages(
     if partition.context_summary:
         system_content += f"\n\n当前分区：{partition.name}"
         system_content += f"\n分区摘要：{partition.context_summary}"
+
+    # 注入可用知识点（供引用溯源）
+    try:
+        from domain.knowledge.prerequisites import ALL_PREREQUISITES, SKILL_TO_SUBJECT
+        subject = partition.subject or ""
+        relevant_skills = []
+        if subject and subject in SKILL_TO_SUBJECT:
+            relevant_skills = SKILL_TO_SUBJECT[subject][:15]
+        else:
+            relevant_skills = list(ALL_PREREQUISITES.keys())[:15]
+        if relevant_skills:
+            system_content += f"\n\n可引用的知识点: {', '.join(relevant_skills)}\n回答涉及这些知识点时，在末尾标注 [来源: 知识点名称]。"
+    except Exception:
+        pass
 
     messages.append({"role": "system", "content": system_content})
 
@@ -306,10 +334,12 @@ async def generate_reply_with_tools(
             reply = "抱歉，生成回复时遇到了问题。"
 
         # 创建文本 ResponseBlock
+        cleaned_text, sources = parse_sources(reply)
         text_block = ResponseBlock(
             type="text",
             status="ready",
-            content={"text": reply},
+            content={"text": cleaned_text},
+            sources=sources,
             order=order,
         )
         response_blocks.append(text_block)
@@ -367,10 +397,12 @@ async def generate_reply_with_tools(
             logger.error("LLM generation failed: %s", e)
             reply = "抱歉，生成回复时遇到了问题。"
 
+        cleaned_text, sources = parse_sources(reply)
         text_block = ResponseBlock(
             type="text",
             status="ready",
-            content={"text": reply},
+            content={"text": cleaned_text},
+            sources=sources,
             order=0,
         )
         response_blocks.append(text_block)
