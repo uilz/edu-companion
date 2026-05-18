@@ -436,6 +436,30 @@ async def submit_answer(req: SubmitAnswerRequest):
             }, "entry_id")
             feedback["error_entry"] = "created"
 
+    # ── 自适应计划触发 ──
+    # 检测掌握度是否跨级别变化
+    old_mastery = bkt_engine.get_mastery_level(state)
+    new_mastery = bkt_engine.get_mastery_level(updated_state)
+    SIGNIFICANT = {("初学","发展中"),("发展中","接近掌握"),("接近掌握","已掌握"),
+                   ("未接触","初学"),("初学","接近掌握")}
+    if (old_mastery, new_mastery) in SIGNIFICANT:
+        try:
+            from app.services.adaptive_planner import adaptive_planner
+            await adaptive_planner.on_knowledge_updated(
+                type('Event', (), {
+                    'user_id': session["user_id"],
+                    'skill_id': question["skill_id"],
+                    'old_mastery': old_mastery,
+                    'new_mastery': new_mastery,
+                    'p_known_before': state.p_known,
+                    'p_known_after': updated_state.p_known,
+                    'attempt_count': updated_state.attempt_count,
+                })()
+            )
+            feedback["plan_updated"] = True
+        except Exception:
+            pass  # 静默降级，不影响答题流
+
     return feedback
 
 

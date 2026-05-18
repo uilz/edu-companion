@@ -1,159 +1,219 @@
 """
-学习计划 REST API 端点
-管理个性化学习计划的生成和查询
-"""
+学习计划 REST API v2.0 — 自适应计划
 
+改进: 使用 AdaptivePlanGenerator 替代旧 learner_model.generate_study_plan
+- 支持前置卡控
+- 难度自适应
+- 计划快照/历史
+"""
 from __future__ import annotations
 
 import logging
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
-from app.core.learner_model import learner_engine
-from app.schemas.learner import StudyPlan
+from app.services.adaptive_planner import adaptive_planner
+from app.core.knowledge_trace import bkt_engine
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/study", tags=["学习计划"])
 
 
-@router.post("/plan/generate", response_model=StudyPlan)
+@router.post("/plan/generate")
 async def generate_study_plan(
-    user_id: str,
+    user_id: str = "default_user",
     subject: Optional[str] = None,
-) -> StudyPlan:
+    reason: str = "manual",
+):
     """
-    为用户生成个性化学习计划
+    生成自适应学习计划
 
-    根据用户的知识状态、掌握程度和学习历史，
-    自动生成下周的学习任务安排
-
-    参数:
-        user_id: 用户ID
-        subject: 指定学科（可选）
-
-    返回:
-        生成的学习计划
+    - 基于 BKT 知识状态 + 前置依赖链
+    - 难度自适应：根据近7日正确率微调
+    - 时间预算：根据习惯等级分配任务量
     """
     try:
-        # 确保用户画像存在
-        profile = learner_engine.get_or_create_profile(user_id)
-
-        # 如果指定了学科，添加到用户学科列表
-        if subject and subject not in profile.subjects:
-            profile.subjects.append(subject)
-
-        # 生成学习计划
-        plan = learner_engine.generate_study_plan(user_id)
-        logger.info("为用户 %s 生成学习计划，共 %d 项", user_id, len(plan.items))
-        return plan
-
+        result = await adaptive_planner.generate(
+            user_id=user_id,
+            reason=reason,
+            subject=subject,
+        )
+        return result
     except Exception as e:
         logger.error("生成学习计划失败: %s", str(e), exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"生成学习计划失败: {str(e)}",
-        )
+        raise HTTPException(status_code=500, detail=f"生成失败: {e}")
 
 
-@router.get("/plan/{user_id}", response_model=Optional[StudyPlan])
-async def get_study_plan(user_id: str) -> StudyPlan:
-    """
-    获取用户当前的学习计划
-
-    如果用户还没有学习计划，会自动调用生成接口
-
-    参数:
-        user_id: 用户ID
-
-    返回:
-        当前学习计划
-    """
-    plan = learner_engine.get_study_plan(user_id)
-
-    if not plan:
-        # 自动创建
-        plan = learner_engine.generate_study_plan(user_id)
-
-    return plan
+@router.get("/plan/{user_id}")
+async def get_study_plan(user_id: str):
+    """获取当前学习计划（如无则自动生成）"""
+    result = await adaptive_planner.generate(user_id=user_id, reason="auto")
+    return result
 
 
 @router.put("/plan/{user_id}/{task_id}/complete")
-async def complete_task(
-    user_id: str,
-    task_id: str,
-) -> dict[str, Any]:
-    """
-    标记学习计划中的某个任务为已完成
-
-    参数:
-        user_id: 用户ID
-        task_id: 任务ID
-
-    返回:
-        更新后的状态信息
-    """
-    plan = learner_engine.get_study_plan(user_id)
-
-    if not plan:
-        raise HTTPException(status_code=404, detail="未找到学习计划")
-
-    # 查找并更新任务
-    task_found = False
-    for item in plan.items:
-        if item.task_id == task_id:
-            item.completed = True
-            task_found = True
-            break
-
-    if not task_found:
-        raise HTTPException(status_code=404, detail=f"未找到任务: {task_id}")
-
-    # 统计进度
-    total = len(plan.items)
-    completed = sum(1 for item in plan.items if item.completed)
-
-    return {
-        "message": "任务标记为完成",
+async def complete_task(user_id: str, task_id: str) -> dict[str, Any]:
+    """标记任务完成"""
+    # 标记完成（计划数据从plan_snapshots表读）
+    db = __import__("app.db.database", fromlist=["get_db"]).get_db()
+    db.upsert("plan_task_completions", {
+        "user_id": user_id,
         "task_id": task_id,
-        "progress": f"{completed}/{total}",
-        "completion_rate": completed / total if total > 0 else 0.0,
-    }
+        "completed_at": __import__("datetime").datetime.now().isoformat(),
+    }, "(user_id, task_id)")
+    return {"message": "任务标记完成", "task_id": task_id}
 
 
 @router.get("/plan/{user_id}/progress")
 async def get_plan_progress(user_id: str) -> dict[str, Any]:
-    """
-    获取学习计划的完成进度
+    """获取计划进度"""
+    plan = await adaptive_planner.generate(user_id=user_id, reason="progress_check")
+    plan_data = plan.get("plan", {})
+    items = plan_data.get("items", [])
 
-    参数:
-        user_id: 用户ID
-
-    返回:
-        进度统计信息
-    """
-    plan = learner_engine.get_study_plan(user_id)
-
-    if not plan:
-        return {
-            "has_plan": False,
-            "message": "暂无学习计划",
-        }
-
-    total = len(plan.items)
-    completed = sum(1 for item in plan.items if item.completed)
-    total_minutes = sum(item.estimated_minutes for item in plan.items)
-    completed_minutes = sum(
-        item.estimated_minutes for item in plan.items if item.completed
+    db = __import__("app.db.database", fromlist=["get_db"]).get_db()
+    rows = db.fetchall(
+        "SELECT task_id FROM plan_task_completions WHERE user_id = %s",
+        (user_id,),
     )
+    completed_ids = {r["task_id"] for r in rows}
+
+    total = len(items)
+    completed = sum(1 for it in items if it["task_id"] in completed_ids)
 
     return {
         "has_plan": True,
         "total_tasks": total,
         "completed_tasks": completed,
-        "completion_rate": completed / total if total > 0 else 0.0,
-        "estimated_total_minutes": total_minutes,
-        "completed_minutes": completed_minutes,
-        "week_number": plan.week_number,
+        "completion_rate": completed / max(total, 1),
+        "estimated_total_minutes": plan_data.get("estimated_total_minutes", 0),
+        "habit_level": plan_data.get("habit_level", "beginner"),
+        "week_number": plan_data.get("week_number", 0),
+    }
+
+
+# ── 计划历史/快照 ──
+
+@router.get("/plan/{user_id}/history")
+async def get_plan_history(user_id: str, limit: int = 5):
+    """获取计划变更历史"""
+    db = __import__("app.db.database", fromlist=["get_db"]).get_db()
+    try:
+        rows = db.fetchall(
+            "SELECT * FROM plan_snapshots WHERE user_id = %s "
+            "ORDER BY created_at DESC LIMIT %s",
+            (user_id, limit),
+        )
+        return {
+            "history": [
+                {
+                    "id": r.get("id"),
+                    "reason": r.get("reason", ""),
+                    "changes": r.get("changes_json"),
+                    "plan": r.get("plan_json"),
+                    "created_at": str(r.get("created_at", "")),
+                }
+                for r in rows
+            ],
+            "total": len(rows),
+        }
+    except Exception:
+        return {"history": [], "total": 0, "message": "plan_snapshots 表不存在"}
+
+
+# ── 手动触发重调 ──
+
+@router.post("/plan/refresh")
+async def refresh_plan(
+    user_id: str = "default_user",
+    force: bool = False,
+):
+    """
+    手动刷新学习计划
+
+    force=true: 强制重生成（即使没有知识变化）
+    force=false: 仅在检测到变化时重生成
+    """
+    if not force:
+        # 检查是否有变化
+        old = adaptive_planner._get_last_plan(user_id)
+        if old:
+            latest = await adaptive_planner.generate(user_id, reason="refresh_check")
+            new_skills = [it["skill_id"] for it in latest.get("plan", {}).get("items", [])]
+            if set(old) == set(new_skills):
+                return {
+                    "refreshed": False,
+                    "message": "计划无需更新，知识状态无显著变化",
+                    "plan": latest.get("plan"),
+                }
+
+    result = await adaptive_planner.generate(user_id, reason="manual_refresh")
+    return {
+        "refreshed": True,
+        "message": "计划已刷新",
+        **result,
+    }
+
+
+# ── 知识图谱驱动的学习建议 ──
+
+@router.get("/suggestions")
+async def get_learning_suggestions(
+    user_id: str = "default_user",
+    subject: Optional[str] = None,
+):
+    """
+    获取智能学习建议
+
+    综合: BKT薄弱点 + 前置依赖链 + 最近正确率
+    """
+    states = bkt_engine.load_all_states(user_id)
+    recs = bkt_engine.recommend_practice(states, top_n=10)
+
+    # 分为三组
+    urgent = []    # 接近掌握 → 差一点
+    building = []  # 发展中
+    new_topic = [] # 初学/未接触
+
+    from domain.knowledge.checker import PrerequisiteChecker
+    from domain.knowledge.prerequisites import SKILL_TO_SUBJECT
+
+    class _Adapter:
+        async def get_knowledge_state(self, uid, sid):
+            state = bkt_engine.load_or_create(uid, sid)
+            return state.model_dump()
+
+    checker = PrerequisiteChecker(_Adapter())
+
+    for rec in recs:
+        sid = rec["skill_id"]
+        if subject and SKILL_TO_SUBJECT.get(sid) != subject:
+            continue
+        entry = {
+            "skill_id": sid,
+            "label": checker._skill_display_name(sid),
+            "level": rec["level"],
+            "p_known": rec["p_known"],
+            "subject": SKILL_TO_SUBJECT.get(sid, "未知"),
+        }
+        if rec["level"] == "接近掌握":
+            urgent.append(entry)
+        elif rec["level"] == "发展中":
+            building.append(entry)
+        else:
+            new_topic.append(entry)
+
+    return {
+        "urgent": urgent[:3],       # 差一点掌握 → 优先突破
+        "building": building[:3],   # 正在学 → 稳步推进
+        "new_topic": new_topic[:3], # 新主题 → 可选扩展
+        "suggestion": (
+            f"建议优先突破「{urgent[0]['label']}」"
+            if urgent else
+            f"继续推进「{building[0]['label']}」"
+            if building else
+            "选择一个新主题开始学习吧 🌱"
+        ),
     }
