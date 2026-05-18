@@ -357,7 +357,7 @@ async def get_hint(req: HintRequest):
 
 
 # ──────────────────────────────────────────────
-# 错题本
+# 错题本（增强）
 # ──────────────────────────────────────────────
 
 @router.get("/errors")
@@ -375,6 +375,8 @@ async def get_error_book(
     if skill_id:
         entries = [e for e in entries if e.skill_id == skill_id]
 
+    entries.sort(key=lambda e: e.created_at, reverse=True)
+
     return {
         "entries": [e.model_dump() for e in entries[:limit]],
         "total": len(entries),
@@ -382,8 +384,51 @@ async def get_error_book(
     }
 
 
+@router.post("/errors/{entry_id}/review")
+async def review_error(entry_id: str, is_correct: bool = True):
+    """复习错题（标记已解决/更新间隔）"""
+    user_id = "default_user"
+    entries = _error_book.get(user_id, [])
+    
+    entry = next((e for e in entries if e.entry_id == entry_id), None)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Error entry not found")
+    
+    entry.review_count += 1
+    entry.is_resolved = is_correct
+    
+    if is_correct:
+        entry.next_review = datetime.now().__class__.now()  # 不再需要复习
+    else:
+        # SM-2: 间隔翻倍
+        interval = min(entry.review_count * 3 + 1, 60)
+        entry.next_review = datetime.now().__class__.now()
+    
+    return {
+        "entry": entry.model_dump(),
+        "review_count": entry.review_count,
+        "is_resolved": entry.is_resolved,
+    }
+
+
+@router.get("/errors/due")
+async def get_due_errors():
+    """获取待复习的错题"""
+    user_id = "default_user"
+    now = datetime.now()
+    entries = _error_book.get(user_id, [])
+    
+    due = [e for e in entries if not e.is_resolved and e.next_review <= now]
+    due.sort(key=lambda e: e.created_at)
+    
+    return {
+        "due": [e.model_dump() for e in due[:10]],
+        "total_due": len(due),
+    }
+
+
 # ──────────────────────────────────────────────
-# 统计
+# 统计（增强）
 # ──────────────────────────────────────────────
 
 @router.get("/stats")
@@ -402,28 +447,52 @@ async def get_stats(time_range: str = "week"):
     correct = sum(1 for a in all_attempts if a.is_correct)
 
     # 按知识点统计
-    skill_stats: dict[str, SkillStat] = {}
+    skill_map: dict[str, SkillStat] = {}
     for attempt in all_attempts:
-        if attempt.error_analysis:
-            for skill in attempt.error_analysis.related_skills:
-                if skill not in skill_stats:
-                    skill_stats[skill] = SkillStat(skill_id=skill)
-                skill_stats[skill].total_attempts += 1
-                if attempt.is_correct:
-                    skill_stats[skill].correct_count += 1
+        # 从题目获取skill_id
+        skill = "unknown"
+        for pool in _question_bank.values():
+            for q in pool:
+                if q.question_id == attempt.question_id:
+                    skill = q.skill_id
+                    break
 
-    for stat in skill_stats.values():
-        if stat.total_attempts > 0:
-            stat.accuracy = stat.correct_count / stat.total_attempts
+        if skill not in skill_map:
+            skill_map[skill] = SkillStat(skill_id=skill, subject=q.subject if q else "")
+        s = skill_map[skill]
+        s.total_attempts += 1
+        if attempt.is_correct:
+            s.correct_count += 1
 
-    weak = [(s.skill_id, s.accuracy) for s in skill_stats.values() if s.accuracy < 0.6]
-    strong = [(s.skill_id, s.accuracy) for s in skill_stats.values() if s.accuracy >= 0.8]
+    for s in skill_map.values():
+        if s.total_attempts > 0:
+            s.accuracy = s.correct_count / s.total_attempts
+
+    weak = [(s.skill_id, s.accuracy) for s in skill_map.values() if s.accuracy < 0.6]
+    strong = [(s.skill_id, s.accuracy) for s in skill_map.values() if s.accuracy >= 0.8]
+
+    # 每日统计
+    daily: dict[str, DailyStat] = {}
+    for session in _sessions.values():
+        if session.user_id == user_id:
+            date_key = session.started_at.strftime("%Y-%m-%d")
+            if date_key not in daily:
+                daily[date_key] = DailyStat(date=date_key)
+            d = daily[date_key]
+            d.questions_done += len(session.attempts)
+            d.correct_count += sum(1 for a in session.attempts if a.is_correct)
+            d.study_minutes += session.duration_minutes
+
+    for d in daily.values():
+        if d.questions_done > 0:
+            d.accuracy = d.correct_count / d.questions_done
 
     return PracticeStats(
         user_id=user_id,
         total_questions=total,
         total_correct=correct,
         accuracy=correct / total if total > 0 else 0.0,
+        study_minutes=sum(s.duration_minutes for s in _sessions.values() if s.user_id == user_id),
         weak_skills=sorted(weak, key=lambda x: x[1])[:5],
         strong_skills=sorted(strong, key=lambda x: x[1], reverse=True)[:5],
     ).model_dump()
