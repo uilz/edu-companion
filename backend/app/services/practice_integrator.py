@@ -20,7 +20,7 @@ from app.services.tree_ops import tree_ops
 logger = logging.getLogger(__name__)
 
 
-def integrate_practice_to_branch(
+async def integrate_practice_to_branch(
     user_id: str,
     session: PracticeSession,
     partition_id: str,
@@ -88,6 +88,24 @@ def integrate_practice_to_branch(
         f"练习结果已写入branch {branch_id}: "
         f"{session.accuracy:.0%} 准确率"
     )
+
+    # P2: 练习错误时搜索关联用户资料
+    try:
+        from app.services.material_search import material_search as ms
+        enriched = []
+        for skill in (session.struggling_skills or [])[:3]:
+            chunks = await ms.search_by_skill(user_id, skill, top_k=2)
+            for c in chunks:
+                src = c["source_file"]
+                pg = c.get("page_number")
+                label = f"{src} p{pg}" if pg else src
+                enriched.append(label)
+        if enriched:
+            branch.practice_summary += " | 资料引用: " + "; ".join(enriched[:2])
+            storage.save(user_id, data)
+    except Exception:
+        pass
+
     return system_node
 
 

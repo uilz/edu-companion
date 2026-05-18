@@ -227,7 +227,7 @@ async def complete_session(session_id: str, partition_id: str | None = None, bra
     if partition_id and branch_id:
         try:
             from app.services.practice_integrator import integrate_practice_to_branch
-            node = integrate_practice_to_branch(
+            node = await integrate_practice_to_branch(
                 "default_user", session, partition_id, branch_id,
             )
             if node:
