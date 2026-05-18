@@ -53,6 +53,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("📡 服务地址: %s:%s", settings.host, settings.port)
     logger.info("🤖 默认模型: %s", settings.default_model)
 
+    # 初始化数据库
+    from app.db.database import get_db
+    db = get_db()
+    logger.info("💾 PostgreSQL 已连接")
+
     # 清理过期会话（定期执行）
     # MVP 版本在启动时清理一次
     cleaned = learner_engine.clean_expired_sessions()

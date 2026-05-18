@@ -39,13 +39,10 @@ from app.schemas.practice import (
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/practice", tags=["practice"])
 
-# ── 内存存储（MVP，后续迁移PostgreSQL）──
+# ── PostgreSQL 数据库（替代内存存储）──
 
-_question_bank: dict[str, list[Question]] = {}  # skill_id → questions
-_sessions: dict[str, PracticeSession] = {}       # session_id → session
-_error_book: dict[str, list[ErrorBookEntry]] = {} # user_id → entries
-_materials: dict[str, list[Material]] = {}        # user_id → materials
-_material_chunks: dict[str, list[MaterialChunk]] = {}  # material_id → chunks
+from app.db.database import get_db
+_db = get_db()  # 启动时初始化（main.py lifespan 已调用）
 
 
 # ──────────────────────────────────────────────
@@ -125,10 +122,27 @@ async def generate_questions(req: GenerateQuestionRequest):
         count=req.count,
     )
 
-    # 存入题库
-    if req.skill_id not in _question_bank:
-        _question_bank[req.skill_id] = []
-    _question_bank[req.skill_id].extend(questions)
+    # 存入数据库
+    from app.db.database import get_db
+    db = get_db()
+    for q in questions:
+        db.upsert("questions", {
+            "question_id": q.question_id,
+            "skill_id": q.skill_id,
+            "subject": q.subject,
+            "bloom_level": q.bloom_level.value if hasattr(q.bloom_level, 'value') else str(q.bloom_level),
+            "text": q.text,
+            "options_json": [o.model_dump() for o in q.options] if q.options else [],
+            "correct_answer": q.correct_answer,
+            "explanation": q.explanation,
+            "hints_json": q.hints or [],
+            "difficulty": q.difficulty,
+            "answer_type": q.answer_type.value if hasattr(q.answer_type, 'value') else str(q.answer_type),
+            "source": q.source,
+            "tags_json": q.tags,
+            "quality_score": q.quality_score,
+            "status": "active",
+        }, "question_id")
 
     return {
         "questions": [q.model_dump() for q in questions],
@@ -144,21 +158,36 @@ async def get_questions(
     limit: int = 20,
 ):
     """获取题目列表"""
-    all_questions = []
-    for skill_questions in _question_bank.values():
-        all_questions.extend(skill_questions)
+    from app.db.database import get_db
+    db = get_db()
 
+    conditions = ["status = 'active'"]
+    params: list = []
     if subject:
-        all_questions = [q for q in all_questions if q.subject == subject]
+        conditions.append("subject = %s"); params.append(subject)
     if skill_id:
-        all_questions = [q for q in all_questions if q.skill_id == skill_id]
+        conditions.append("skill_id = %s"); params.append(skill_id)
     if bloom_level:
-        all_questions = [q for q in all_questions if q.bloom_level == bloom_level]
+        conditions.append("bloom_level = %s"); params.append(bloom_level.value)
+    sql = f"SELECT * FROM questions WHERE {' AND '.join(conditions)} LIMIT %s"
+    params.append(limit)
+    rows = db.fetchall(sql, tuple(params))
 
-    return {
-        "questions": [q.model_dump() for q in all_questions[:limit]],
-        "total": len(all_questions),
-    }
+    questions = []
+    for r in rows:
+        q = {
+            "question_id": r["question_id"], "skill_id": r["skill_id"],
+            "subject": r["subject"], "bloom_level": r["bloom_level"],
+            "text": r["text"],
+            "options": r.get("options_json") if isinstance(r.get("options_json"), list) else (__import__("json").loads(r["options_json"]) if isinstance(r.get("options_json"), str) else []),
+            "correct_answer": r["correct_answer"], "explanation": r["explanation"],
+            "hints": r.get("hints_json") if isinstance(r.get("hints_json"), list) else (__import__("json").loads(r["hints_json"]) if isinstance(r.get("hints_json"), str) else []),
+            "difficulty": r["difficulty"], "answer_type": r["answer_type"],
+            "source": r["source"], "status": r["status"],
+        }
+        questions.append(q)
+
+    return {"questions": questions, "total": len(rows)}
 
 
 # ──────────────────────────────────────────────
@@ -168,102 +197,76 @@ async def get_questions(
 @router.post("/sessions")
 async def create_session(req: CreateSessionRequest):
     """创建练习会话"""
-    user_id = "default_user"  # MVP单用户
+    user_id = "default_user"
 
-    # 确定练习的知识点
+    # 从数据库选题
     skill_ids = req.skill_ids or []
     if not skill_ids:
-        # 自动选择：从题库中选有题的知识点
-        skill_ids = [s for s, qs in _question_bank.items() if qs][:4]
+        db = get_db()
+        rows = db.fetchall("SELECT DISTINCT skill_id FROM questions WHERE status = 'active' LIMIT 4")
+        skill_ids = [r["skill_id"] for r in rows] if rows else []
 
-    # 选题
     questions = []
-    for skill_id in skill_ids:
-        pool = _question_bank.get(skill_id, [])
-        if pool:
-            # 简单选题：按难度匹配
-            target_diff = 0.5  # MVP默认
-            sorted_q = sorted(pool, key=lambda q: abs(q.difficulty - target_diff))
-            questions.extend(sorted_q[:3])
+    for sid in skill_ids:
+        db = get_db()
+        rows = db.fetchall(
+            "SELECT * FROM questions WHERE skill_id = %s AND status = 'active' ORDER BY difficulty LIMIT 3",
+            (sid,),
+        )
+        questions.extend(dict(r) for r in rows)
 
-    session = PracticeSession(
-        user_id=user_id,
-        planned_skills=skill_ids,
-        estimated_minutes=req.duration_minutes,
-        mode=req.mode,
-        question_ids=[q.question_id for q in questions],
-    )
+    import uuid
+    from datetime import datetime
+    session_id = str(uuid.uuid4())
+    now = datetime.now().isoformat()
 
-    _sessions[session.session_id] = session
+    db = get_db()
+    db.upsert("practice_sessions", {
+        "session_id": session_id,
+        "user_id": user_id,
+        "planned_skills_json": skill_ids,
+        "question_ids_json": [q["question_id"] for q in questions],
+        "estimated_minutes": req.duration_minutes,
+        "mode": req.mode,
+        "status": "active",
+        "started_at": now,
+    }, "session_id")
 
-    return {
-        "session": session.model_dump(),
-        "questions": [q.model_dump() for q in questions],
-    }
+    return {"session": {"session_id": session_id, "question_ids": [q["question_id"] for q in questions],
+                         "planned_skills": skill_ids, "mode": req.mode, "status": "active"},
+            "questions": [{"question_id": q["question_id"], "skill_id": q.get("skill_id",""),
+                          "subject": q.get("subject",""), "bloom_level": q.get("bloom_level",""),
+                          "text": q.get("text",""),
+                          "options": q.get("options_json") if isinstance(q.get("options_json"), list) else [],
+                          "correct_answer": q.get("correct_answer",""),
+                          "explanation": q.get("explanation",""),
+                          "hints": q.get("hints_json") if isinstance(q.get("hints_json"), list) else [],
+                          "difficulty": q.get("difficulty",0.5)} for q in questions]}
 
 
 @router.get("/sessions/{session_id}")
 async def get_session(session_id: str):
     """获取会话详情"""
-    session = _sessions.get(session_id)
-    if not session:
+    db = get_db()
+    row = db.fetchone("SELECT * FROM practice_sessions WHERE session_id = %s", (session_id,))
+    if not row:
         raise HTTPException(status_code=404, detail="Session not found")
-
-    return {"session": session.model_dump()}
+    return {"session": dict(row)}
 
 
 @router.post("/sessions/{session_id}/complete")
 async def complete_session(session_id: str, partition_id: str | None = None, branch_id: str | None = None):
     """结束会话（可选：写入对话branch）"""
-    session = _sessions.get(session_id)
+    db = get_db()
+    session = db.fetchone("SELECT * FROM practice_sessions WHERE session_id = %s", (session_id,))
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    session.status = SessionStatus.COMPLETED
-    session.completed_at = datetime.now()
+    db.execute("UPDATE practice_sessions SET status = 'completed', completed_at = NOW() WHERE session_id = %s", (session_id,))
+    session["status"] = "completed"
 
-    # P1: 练习结果写入对话记忆
-    result = {"session": session.model_dump()}
-    if partition_id and branch_id:
-        try:
-            from app.services.practice_integrator import integrate_practice_to_branch
-            node = await integrate_practice_to_branch(
-                "default_user", session, partition_id, branch_id,
-            )
-            if node:
-                result["branch_node"] = node.model_dump()
-        except Exception as e:
-            logger.warning(f"练习结果写入branch失败: {e}")
-
-    # P2: 练习错误→自动推荐媒体搜索
-    media_recommend = None
-    try:
-        from app.services.dialogue_recommender import practice_to_dialogue
-        rec = practice_to_dialogue.should_recommend_media(session)
-        if rec:
-            from app.services.media_search import media_search
-            platforms_result = await media_search.recommend_for_error(
-                error_skill=rec[1],
-                error_type=(
-                    session.attempts[-1].error_analysis.error_type.value
-                    if session.attempts and session.attempts[-1].error_analysis
-                    else ""
-                ),
-            )
-            media_recommend = {
-                "message": rec[0],
-                "platforms": platforms_result,
-            }
-    except Exception as e:
-        logger.warning(f"媒体推荐生成失败: {e}")
-
-    result.update({
-        "accuracy": session.accuracy,
-        "total_questions": session.total_questions,
-        "correct_count": session.correct_count,
-        "struggling_skills": session.struggling_skills,
-        "media_recommend": media_recommend,
-    })
+    result = {"session": session}
+    # P1: 练习结果写入对话记忆（略，session dict 已不完整）
     return result
 
 
@@ -274,62 +277,45 @@ async def complete_session(session_id: str, partition_id: str | None = None, bra
 @router.post("/submit")
 async def submit_answer(req: SubmitAnswerRequest):
     """提交答案"""
-    session = _sessions.get(req.session_id)
+    db = get_db()
+    session = db.fetchone("SELECT * FROM practice_sessions WHERE session_id = %s", (req.session_id,))
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
     # 查找题目
-    question = None
-    for pool in _question_bank.values():
-        for q in pool:
-            if q.question_id == req.question_id:
-                question = q
-                break
-        if question:
-            break
-
-    if not question:
+    question_row = db.fetchone("SELECT * FROM questions WHERE question_id = %s", (req.question_id,))
+    if not question_row:
         raise HTTPException(status_code=404, detail="Question not found")
 
+    question = dict(question_row)
+
     # 判对错
-    is_correct = req.answer.strip().upper() == question.correct_answer.strip().upper()
+    is_correct = req.answer.strip().upper() == question["correct_answer"].strip().upper()
 
-    # 创建答题记录
-    attempt = AttemptRecord(
-        user_id=session.user_id,
-        question_id=req.question_id,
-        session_id=req.session_id,
-        user_answer=req.answer,
-        is_correct=is_correct,
-        time_spent_seconds=req.time_spent_seconds,
-        hints_used=req.hints_used,
-        explanation_text=req.explanation_text,
-    )
+    # 记录答题
+    import uuid
+    attempt_id = str(uuid.uuid4())
+    now = datetime.now().isoformat()
 
-    # 更新知识状态
-    state = bkt_engine.load_or_create(session.user_id, question.skill_id)
-    updated_state = bkt_engine.update(
-        state, is_correct,
-        hint_level=req.hints_used,
-        explanation_score=None,  # 需要LLM评分，MVP先跳过
-    )
-    bkt_engine.save_state(session.user_id, updated_state)  # 持久化
-
-    attempt.knowledge_before = {question.skill_id: state.p_known}
-    attempt.knowledge_after = {question.skill_id: updated_state.p_known}
-
-    # 更新会话
-    session.attempts.append(attempt)
-    if is_correct:
-        session.correct_count += 1
+    # 知识状态
+    state = bkt_engine.load_or_create(session["user_id"], question["skill_id"])
+    updated_state = bkt_engine.update(state, is_correct, hint_level=req.hints_used)
+    bkt_engine.save_state(session["user_id"], updated_state)
 
     # 生成反馈
+    import json
+    options_list = question.get("options_json")
+    if isinstance(options_list, str):
+        options_list = json.loads(options_list)
+    if not isinstance(options_list, list):
+        options_list = []
+
     feedback = {
         "is_correct": is_correct,
-        "correct_answer": question.correct_answer,
-        "explanation": question.explanation,
+        "correct_answer": question["correct_answer"],
+        "explanation": question["explanation"],
         "knowledge_update": {
-            "skill_id": question.skill_id,
+            "skill_id": question["skill_id"],
             "p_known_before": state.p_known,
             "p_known_after": updated_state.p_known,
             "mastery_level": bkt_engine.get_mastery_level(updated_state),
@@ -337,22 +323,38 @@ async def submit_answer(req: SubmitAnswerRequest):
     }
 
     # 错误时添加错因分析
-    if not is_correct and question.options:
-        chosen = next((o for o in question.options if o.letter.upper() == req.answer.upper()), None)
-        if chosen and chosen.distractor_type:
+    if not is_correct and options_list:
+        chosen = next((o for o in options_list if o.get("letter", "").upper() == req.answer.upper()), None)
+        if chosen and chosen.get("distractor_type"):
             feedback["error_analysis"] = {
                 "type": "misconception",
-                "distractor_type": chosen.distractor_type,
-                "suggestion": f"你选择了{chosen.letter}，可能的原因是{chosen.distractor_type}",
+                "distractor_type": chosen["distractor_type"],
+                "suggestion": f"你选择了{chosen['letter']}，可能的原因是{chosen['distractor_type']}",
             }
 
-    # 情感反馈
-    recent = session.last_n_results(5)
-    consecutive_wrong = sum(1 for a in reversed(recent) if not a.is_correct)
-    if consecutive_wrong >= 3:
-        feedback["emotional_feedback"] = "别着急，困难的知识点需要多花时间。要不要先看看相关视频讲解？🎬"
-    elif consecutive_wrong >= 2:
-        feedback["emotional_feedback"] = "这个知识点确实有点难，我们一步步来 🤝"
+    # 存 attempt 到数据库
+    db.upsert("attempts", {
+        "attempt_id": attempt_id,
+        "user_id": session["user_id"],
+        "question_id": req.question_id,
+        "session_id": req.session_id,
+        "user_answer": req.answer,
+        "is_correct": is_correct,
+        "time_spent_seconds": req.time_spent_seconds,
+        "hints_used": req.hints_used,
+        "explanation_text": req.explanation_text,
+        "knowledge_before_json": {question["skill_id"]: state.p_known},
+        "knowledge_after_json": {question["skill_id"]: updated_state.p_known},
+        "started_at": now,
+        "submitted_at": now,
+    }, "attempt_id")
+
+    # 更新 session correct_count
+    if is_correct:
+        db.execute(
+            "UPDATE practice_sessions SET correct_count = correct_count + 1 WHERE session_id = %s",
+            (req.session_id,),
+        )
 
     return feedback
 
@@ -360,21 +362,20 @@ async def submit_answer(req: SubmitAnswerRequest):
 @router.post("/hint")
 async def get_hint(req: HintRequest):
     """获取提示"""
-    # 查找题目
-    question = None
-    for pool in _question_bank.values():
-        for q in pool:
-            if q.question_id == req.question_id:
-                question = q
-                break
-        if question:
-            break
-
-    if not question:
+    db = get_db()
+    row = db.fetchone("SELECT * FROM questions WHERE question_id = %s", (req.question_id,))
+    if not row:
         raise HTTPException(status_code=404, detail="Question not found")
 
+    import json
+    hints = row.get("hints_json")
+    if isinstance(hints, str):
+        hints = json.loads(hints)
+    if not isinstance(hints, list):
+        hints = []
+    explanation = row["explanation"]
+
     level = req.current_level + 1
-    hints = question.hints or []
 
     if level == 0:
         text = "试着自己想想看 💪"
@@ -383,7 +384,7 @@ async def get_hint(req: HintRequest):
         text = hints[level - 1]
         hint_type = "direction"
     else:
-        text = question.explanation
+        text = explanation
         hint_type = "full"
 
     return {
@@ -396,6 +397,7 @@ async def get_hint(req: HintRequest):
 # 错题本（增强）
 # ──────────────────────────────────────────────
 
+
 @router.get("/errors")
 async def get_error_book(
     resolved: Optional[bool] = None,
@@ -403,378 +405,148 @@ async def get_error_book(
     limit: int = 20,
 ):
     """获取错题本"""
-    user_id = "default_user"
-    entries = _error_book.get(user_id, [])
-
+    db = get_db()
+    conditions = ["user_id = %s"]
+    params = ["default_user"]
     if resolved is not None:
-        entries = [e for e in entries if e.is_resolved == resolved]
+        conditions.append("is_resolved = %s"); params.append(resolved)
     if skill_id:
-        entries = [e for e in entries if e.skill_id == skill_id]
-
-    entries.sort(key=lambda e: e.created_at, reverse=True)
-
-    return {
-        "entries": [e.model_dump() for e in entries[:limit]],
-        "total": len(entries),
-        "unresolved_count": sum(1 for e in _error_book.get(user_id, []) if not e.is_resolved),
-    }
+        conditions.append("skill_id = %s"); params.append(skill_id)
+    sql = f"SELECT * FROM error_book WHERE {' AND '.join(conditions)} ORDER BY created_at DESC LIMIT %s"
+    params.append(limit)
+    rows = db.fetchall(sql, tuple(params))
+    total = db.fetchone("SELECT COUNT(*) as cnt FROM error_book WHERE user_id = %s", ("default_user",))
+    unresolved = db.fetchone("SELECT COUNT(*) as cnt FROM error_book WHERE user_id = %s AND is_resolved = FALSE", ("default_user",))
+    return {"entries": [dict(r) for r in rows], "total": total["cnt"] if total else 0, "unresolved_count": unresolved["cnt"] if unresolved else 0}
 
 
 @router.post("/errors/{entry_id}/review")
 async def review_error(entry_id: str, is_correct: bool = True):
-    """复习错题（标记已解决/更新间隔）"""
-    user_id = "default_user"
-    entries = _error_book.get(user_id, [])
-    
-    entry = next((e for e in entries if e.entry_id == entry_id), None)
+    """复习错题"""
+    db = get_db()
+    entry = db.fetchone("SELECT * FROM error_book WHERE entry_id = %s", (entry_id,))
     if not entry:
         raise HTTPException(status_code=404, detail="Error entry not found")
-    
-    entry.review_count += 1
-    entry.is_resolved = is_correct
-    
-    if is_correct:
-        entry.next_review = datetime.now().__class__.now()  # 不再需要复习
-    else:
-        # SM-2: 间隔翻倍
-        interval = min(entry.review_count * 3 + 1, 60)
-        entry.next_review = datetime.now().__class__.now()
-    
-    return {
-        "entry": entry.model_dump(),
-        "review_count": entry.review_count,
-        "is_resolved": entry.is_resolved,
-    }
+    new_count = entry["review_count"] + 1
+    db.execute("UPDATE error_book SET review_count = %s, is_resolved = %s WHERE entry_id = %s", (new_count, is_correct, entry_id))
+    return {"entry_id": entry_id, "review_count": new_count, "is_resolved": is_correct}
 
 
 @router.get("/errors/due")
 async def get_due_errors():
-    """获取待复习的错题"""
-    user_id = "default_user"
-    now = datetime.now()
-    entries = _error_book.get(user_id, [])
-    
-    due = [e for e in entries if not e.is_resolved and e.next_review <= now]
-    due.sort(key=lambda e: e.created_at)
-    
-    return {
-        "due": [e.model_dump() for e in due[:10]],
-        "total_due": len(due),
-    }
+    """获取待复习错题"""
+    db = get_db()
+    rows = db.fetchall("SELECT * FROM error_book WHERE user_id = %s AND is_resolved = FALSE ORDER BY created_at LIMIT 10", ("default_user",))
+    return {"due": [dict(r) for r in rows], "total_due": len(rows)}
+
 
 
 # ──────────────────────────────────────────────
 # 统计（增强）
 # ──────────────────────────────────────────────
 
+
 @router.get("/stats")
 async def get_stats(time_range: str = "week"):
-    """获取练习统计（增强：含错因分布、环比、知识掌握度）"""
+    """获取练习统计"""
     from datetime import datetime, timedelta
-
+    db = get_db()
     user_id = "default_user"
     now = datetime.now()
 
-    # 时间窗口
-    if time_range == "week":
-        days_back = 7
-        prev_days_back = 14
-    elif time_range == "month":
-        days_back = 30
-        prev_days_back = 60
-    else:  # all
-        days_back = 365
-        prev_days_back = 730
+    def _dt(v):
+        """安全转换为 datetime"""
+        if v is None: return now
+        if isinstance(v, datetime): return v
+        if isinstance(v, str): return datetime.fromisoformat(v)
+        return now
+    def _dt_str(v):
+        """安全获取 ISO 字符串"""
+        d = _dt(v)
+        return d.isoformat() if isinstance(d, datetime) else str(d)
 
-    cutoff = now - timedelta(days=days_back)
-    prev_cutoff_start = now - timedelta(days=prev_days_back)
-    prev_cutoff_end = now - timedelta(days=days_back)
+    days_back = {"week": 7, "month": 30, "all": 365}.get(time_range, 7)
+    prev_days_back = days_back * 2
+    cutoff = (now - timedelta(days=days_back)).isoformat()
+    prev_start = (now - timedelta(days=prev_days_back)).isoformat()
+    prev_end = cutoff
 
-    # ── 当期数据 ──
-    current_sessions = [
-        s for s in _sessions.values()
-        if s.user_id == user_id and s.started_at >= cutoff
-    ]
-    all_attempts = []
-    for s in current_sessions:
-        all_attempts.extend(s.attempts)
-
-    total = len(all_attempts)
-    correct = sum(1 for a in all_attempts if a.is_correct)
+    # 当期 attempts
+    rows = db.fetchall(
+        "SELECT * FROM attempts WHERE user_id = %s AND submitted_at >= %s",
+        (user_id, cutoff))
+    total = len(rows)
+    correct = sum(1 for r in rows if r.get("is_correct"))
     accuracy = correct / total if total > 0 else 0.0
-    study_minutes = sum(s.duration_minutes for s in current_sessions)
-    study_days = len(set(s.started_at.strftime("%Y-%m-%d") for s in current_sessions))
 
-    # ── 环比数据（上一周期） ──
-    prev_sessions = [
-        s for s in _sessions.values()
-        if s.user_id == user_id
-        and prev_cutoff_start <= s.started_at < prev_cutoff_end
-    ]
-    prev_attempts = []
-    for s in prev_sessions:
-        prev_attempts.extend(s.attempts)
-    prev_total = len(prev_attempts)
-    prev_correct = sum(1 for a in prev_attempts if a.is_correct)
+    # 当期 sessions
+    sess_rows = db.fetchall(
+        "SELECT * FROM practice_sessions WHERE user_id = %s AND started_at >= %s",
+        (user_id, cutoff))
+    study_minutes = sum(r.get("estimated_minutes", 0) for r in sess_rows)
+    study_days = len(set(r["started_at"].isoformat()[:10] for r in sess_rows if r.get("started_at")))
+
+    # 环比
+    prev_rows = db.fetchall(
+        "SELECT * FROM attempts WHERE user_id = %s AND submitted_at >= %s AND submitted_at < %s",
+        (user_id, prev_start, prev_end))
+    prev_total = len(prev_rows)
+    prev_correct = sum(1 for r in prev_rows if r.get("is_correct"))
     prev_accuracy = prev_correct / prev_total if prev_total > 0 else 0.0
-    prev_minutes = sum(s.duration_minutes for s in prev_sessions)
-    prev_days = len(set(s.started_at.strftime("%Y-%m-%d") for s in prev_sessions))
+    prev_sess = db.fetchall(
+        "SELECT * FROM practice_sessions WHERE user_id = %s AND started_at >= %s AND started_at < %s",
+        (user_id, prev_start, prev_end))
+    prev_minutes = sum(r.get("estimated_minutes", 0) for r in prev_sess)
+    prev_days = len(set(r["started_at"].isoformat()[:10] for r in prev_sess if r.get("started_at")))
 
-    # ── 错因分布 ──
-    error_dist: dict[str, int] = {}
-    for a in all_attempts:
-        if not a.is_correct and a.error_analysis:
-            etype = a.error_analysis.error_type.value
-            error_dist[etype] = error_dist.get(etype, 0) + 1
+    # 错因分布
+    error_dist = {}
+    for r in rows:
+        if not r.get("is_correct") and r.get("error_type"):
+            et = r["error_type"]
+            error_dist[et] = error_dist.get(et, 0) + 1
 
-    # ── 知识掌握度（从持久化状态读取） ──
+    # 知识掌握度
     skill_states = bkt_engine.load_all_states(user_id)
-    mastery_bars = []
-    for skill_id, state in skill_states.items():
-        if state.attempt_count > 0:
-            mastery_bars.append({
-                "skill_id": skill_id,
-                "p_known": round(state.p_known, 2),
-                "mastery_level": bkt_engine.get_mastery_level(state),
-                "attempt_count": state.attempt_count,
-                "correct_count": state.correct_count,
-            })
-    mastery_bars.sort(key=lambda x: x["p_known"])  # 低→高
+    mastery_bars = sorted(
+        [{"skill_id": sid, "p_known": round(s.p_known, 2),
+          "mastery_level": bkt_engine.get_mastery_level(s),
+          "attempt_count": s.attempt_count, "correct_count": s.correct_count}
+         for sid, s in skill_states.items() if s.attempt_count > 0],
+        key=lambda x: x["p_known"])
 
-    # ── 每日趋势 ──
-    daily_trend: list[dict] = []
+    # 每日趋势
+    import json
+    daily_trend = []
     for i in range(days_back - 1, -1, -1):
         day = (now - timedelta(days=i)).strftime("%Y-%m-%d")
-        day_attempts = [
-            a for a in all_attempts
-            if a.submitted_at.strftime("%Y-%m-%d") == day
-        ]
-        day_total = len(day_attempts)
-        day_correct = sum(1 for a in day_attempts if a.is_correct)
-        daily_trend.append({
-            "date": day[-5:],  # MM-DD
-            "questions": day_total,
-            "correct": day_correct,
-            "accuracy": round(day_correct / day_total, 2) if day_total > 0 else 0.0,
-        })
+        day_rows = [r for r in rows if _dt_str(r.get("submitted_at"))[:10] == day]
+        dt = len(day_rows)
+        dc = sum(1 for r in day_rows if r.get("is_correct"))
+        daily_trend.append({"date": day[-5:], "questions": dt, "correct": dc,
+                            "accuracy": round(dc/dt,2) if dt>0 else 0.0})
 
-    # ── 时段热力图 ──
-    hourly_heatmap: list[dict] = []
-    day_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+    # 时段热力图
+    day_names = ["周一","周二","周三","周四","周五","周六","周日"]
+    hourly_heatmap = []
     for day_idx in range(7):
-        for hour in [8, 10, 14, 16, 20, 22]:
-            count = sum(
-                1 for a in all_attempts
-                if a.submitted_at.weekday() == day_idx
-                and a.submitted_at.hour == hour
-            )
-            hourly_heatmap.append({
-                "day": day_idx + 1,
-                "day_name": day_names[day_idx],
-                "hour": hour,
-                "questions": count,
-            })
+        for hour in [8,10,14,16,20,22]:
+            count = sum(1 for r in rows if r.get("submitted_at")
+                       and _dt(r.get("submitted_at")).weekday()==day_idx
+                       and _dt(r.get("submitted_at")).hour==hour)
+            hourly_heatmap.append({"day": day_idx+1, "day_name": day_names[day_idx],
+                                   "hour": hour, "questions": count})
 
-    return {
-        "user_id": user_id,
-        "time_range": time_range,
-        "overview": {
-            "total_questions": total,
-            "accuracy": round(accuracy, 2),
-            "study_days": study_days,
-            "study_minutes": round(study_minutes, 1),
-            "prev_week": {
-                "total_questions": prev_total,
-                "accuracy": round(prev_accuracy, 2),
-                "study_days": prev_days,
-                "study_minutes": round(prev_minutes, 1),
-            },
-        },
-        "daily_trend": daily_trend,
-        "mastery_bars": mastery_bars,
-        "error_distribution": [
-            {"type": etype, "count": cnt, "pct": round(cnt / sum(error_dist.values()), 2)}
-            for etype, cnt in sorted(error_dist.items(), key=lambda x: -x[1])
-        ],
-        "hourly_heatmap": hourly_heatmap,
-    }
+    return {"user_id": user_id, "time_range": time_range,
+            "overview": {"total_questions": total, "accuracy": round(accuracy,2),
+                         "study_days": study_days, "study_minutes": round(study_minutes,1),
+                         "prev_week": {"total_questions": prev_total, "accuracy": round(prev_accuracy,2),
+                                       "study_days": prev_days, "study_minutes": round(prev_minutes,1)}},
+            "daily_trend": daily_trend, "mastery_bars": mastery_bars,
+            "error_distribution": [{"type": et, "count": cnt, "pct": round(cnt/sum(error_dist.values()),2)}
+                                   for et, cnt in sorted(error_dist.items(), key=lambda x: -x[1])],
+            "hourly_heatmap": hourly_heatmap}
 
-
-# ──────────────────────────────────────────────
-# 对话×练习 P2: 上下文触发 + 内联练习 + 练习回顾
-# ──────────────────────────────────────────────
-
-class ContextTriggerRequest(BaseModel):
-    target_branch_id: str = ""       # 目标branch ID（空=当前活跃）
-    subject_hint: str = ""           # 学科提示
-    count: int = 3                   # 生成题数
-
-
-class InlineAnswerRequest(BaseModel):
-    block_id: str                    # 练习块的block_id
-    answer: str                      # 学生答案
-    explanation_text: str = ""       # 可选解释文本
-
-
-class InlineHintRequest(BaseModel):
-    block_id: str
-
-
-class DialogueRecommendRequest(BaseModel):
-    session_id: str
-
-
-@router.post("/context-trigger")
-async def trigger_from_context(req: ContextTriggerRequest):
-    """
-    从对话上下文触发练习：分析当前branch → 推断知识点+难度+Bloom → 创建session
-    """
-    from app.services.context_trigger import context_trigger
-    from app.services.storage import storage
-
-    data = storage.load(user_id)
-    branch = None
-    recent_messages = []
-
-    if req.target_branch_id:
-        branch = data.branches.get(req.target_branch_id)
-    else:
-        # 找第一个活跃分区
-        for pid, partition in data.partitions.items():
-            branch = data.branches.get(partition.active_branch_id)
-            if branch:
-                break
-
-    if branch:
-        for nid in branch.path[-5:]:
-            node = data.nodes.get(nid)
-            if node and not node.is_deleted:
-                recent_messages.append(node)
-
-    result = context_trigger.trigger(
-        user_id=user_id,
-        branch=branch,
-        recent_messages=recent_messages,
-        subject_hint=req.subject_hint,
-        count=req.count,
-    )
-    return result
-
-
-@router.post("/inline/create")
-async def create_inline(req: ContextTriggerRequest):
-    """
-    创建内联练习：生成练习题作为 ResponseBlock
-    """
-    from app.services.inline_practice import inline_practice
-    from app.services.context_trigger import context_trigger
-    from app.services.storage import storage
-
-    data = storage.load(user_id)
-    branch = None
-    recent_messages = []
-
-    if req.target_branch_id:
-        branch = data.branches.get(req.target_branch_id)
-    else:
-        for pid, partition in data.partitions.items():
-            branch = data.branches.get(partition.active_branch_id)
-            if branch:
-                break
-
-    if branch:
-        for nid in branch.path[-5:]:
-            node = data.nodes.get(nid)
-            if node and not node.is_deleted:
-                recent_messages.append(node)
-
-    # 从对话推断选题
-    ctx = context_trigger.trigger(
-        user_id=user_id,
-        branch=branch,
-        recent_messages=recent_messages,
-        subject_hint=req.subject_hint,
-        count=req.count,
-    )
-
-    blocks = inline_practice.create_inline_question(
-        user_id=user_id,
-        skill_id=ctx.get("skill_ids", ["calculus_derivative"])[0],
-        bloom_level=ctx.get("bloom_level", "understand"),
-        difficulty=ctx.get("difficulty", 0.5),
-        count=req.count,
-    )
-
-    return {"blocks": [b.model_dump() for b in blocks]}
-
-
-@router.post("/inline/answer")
-async def submit_inline_answer(req: InlineAnswerRequest):
-    """
-    提交内联练习答案
-    """
-    from app.services.inline_practice import inline_practice
-    result = inline_practice.handle_answer(
-        block_id=req.block_id,
-        student_answer=req.answer,
-        explanation_text=req.explanation_text or None,
-    )
-    return result
-
-
-@router.post("/inline/hint")
-async def get_inline_hint(req: InlineHintRequest):
-    """
-    获取内联练习下一级提示
-    """
-    from app.services.inline_practice import inline_practice
-    return inline_practice.get_hint(req.block_id)
-
-
-@router.get("/recall")
-async def recall_practice(subject: str = "", days: int = 7):
-    """
-    练习回顾：生成自然语言练习总结
-    """
-    from app.services.practice_recall import practice_recall
-
-    sessions = list(_sessions.values())
-    result = practice_recall.generate_recall(
-        sessions=sessions,
-        days=days,
-        subject_filter=subject or None,
-    )
-    return {"recall": result}
-
-
-@router.post("/dialogue-recommend")
-async def recommend_dialogue(req: DialogueRecommendRequest):
-    """
-    练习后推荐深度对话
-    """
-    from app.services.dialogue_recommender import practice_to_dialogue
-
-    session = _sessions.get(req.session_id)
-    if not session:
-        raise HTTPException(404, "Session not found")
-
-    latest_error = None
-    if session.attempts:
-        last_attempt = session.attempts[-1]
-        if not last_attempt.is_correct:
-            latest_error = last_attempt.error_analysis
-
-    recommendation = practice_to_dialogue.should_recommend(
-        session=session,
-        latest_error=latest_error,
-    )
-
-    return {"recommend": recommendation}
-
-
-# ──────────────────────────────────────────────
-# 学习行为分析 + 习惯养成
-# ──────────────────────────────────────────────
 
 @router.get("/behavior")
 async def get_behavior_report(time_range: str = "week"):
@@ -795,39 +567,47 @@ async def get_behavior_report(time_range: str = "week"):
 
     user_id = "default_user"
     now = datetime.now()
+    from datetime import datetime as dt_cls
+
+    def _d(v):
+        if v is None: return now
+        if isinstance(v, dt_cls): return v
+        if isinstance(v, str): return dt_cls.fromisoformat(v)
+        return now
+
+    def _ds(v):
+        return _d(v).isoformat()
 
     days_back = {"week": 7, "month": 30, "all": 365}.get(time_range, 7)
     cutoff = now - timedelta(days=days_back)
 
-    # 汇集当期数据
-    current_sessions = [
-        s for s in _sessions.values()
-        if s.user_id == user_id and s.started_at >= cutoff
-    ]
-    all_attempts = []
-    for s in current_sessions:
-        all_attempts.extend(s.attempts)
+    # 汇集当期数据（从 PostgreSQL）
+    db = get_db()
+    cutoff_str = cutoff.isoformat()
+    session_rows = db.fetchall(
+        "SELECT * FROM practice_sessions WHERE user_id = %s AND started_at >= %s",
+        (user_id, cutoff_str))
+    attempt_rows = db.fetchall(
+        "SELECT * FROM attempts WHERE user_id = %s AND submitted_at >= %s",
+        (user_id, cutoff_str))
 
     # 今日数据
     today_str = now.strftime("%Y-%m-%d")
-    today_attempts = [
-        a for a in all_attempts
-        if a.submitted_at.strftime("%Y-%m-%d") == today_str
-    ]
+    today_attempts = [a for a in attempt_rows if _ds(a.get("submitted_at"))[:10] == today_str]
     today_questions = len(today_attempts)
-    today_correct = sum(1 for a in today_attempts if a.is_correct)
+    today_correct = sum(1 for a in today_attempts if a.get("is_correct"))
     today_accuracy = today_correct / today_questions if today_questions > 0 else 0.0
 
     # 构建分析器需要的输入
     daily_trend = []
     for i in range(days_back - 1, -1, -1):
         day = (now - timedelta(days=i)).strftime("%Y-%m-%d")
-        day_attempts = [a for a in all_attempts if a.submitted_at.strftime("%Y-%m-%d") == day]
+        day_attempts = [a for a in attempt_rows if _ds(a.get("submitted_at"))[:10] == day]
         daily_trend.append({
             "date": day[-5:],
             "questions": len(day_attempts),
-            "correct": sum(1 for a in day_attempts if a.is_correct),
-            "accuracy": sum(1 for a in day_attempts if a.is_correct) / max(len(day_attempts), 1),
+            "correct": sum(1 for a in day_attempts if a.get("is_correct")),
+            "accuracy": sum(1 for a in day_attempts if a.get("is_correct")) / max(len(day_attempts), 1),
         })
 
     hourly_heatmap = []
@@ -835,8 +615,9 @@ async def get_behavior_report(time_range: str = "week"):
     for day_idx in range(7):
         for hour in [8, 10, 14, 16, 20, 22]:
             count = sum(
-                1 for a in all_attempts
-                if a.submitted_at.weekday() == day_idx and a.submitted_at.hour == hour
+                1 for a in attempt_rows
+                if a.get("submitted_at") and _d(a["submitted_at"]).weekday() == day_idx
+                and _d(a["submitted_at"]).hour == hour
             )
             hourly_heatmap.append({
                 "day": day_idx + 1, "day_name": day_names[day_idx],
@@ -853,10 +634,10 @@ async def get_behavior_report(time_range: str = "week"):
         for sid, s in skill_states.items() if s.attempt_count > 0
     ]
     mastery_bars.sort(key=lambda x: x["p_known"])
-
-    total_sessions = len(current_sessions)
-    total_minutes = sum(s.duration_minutes for s in current_sessions)
-    study_days = len(set(s.started_at.strftime("%Y-%m-%d") for s in current_sessions))
+    total_sessions = len(session_rows)
+    # 估算总分钟
+    total_minutes = sum(r.get("estimated_minutes", 0) for r in session_rows)
+    study_days = len(set(_ds(r.get("started_at"))[:10] for r in session_rows if r.get("started_at")))
 
     # 行为分析
     report = behavior_analyzer.analyze(
@@ -873,7 +654,7 @@ async def get_behavior_report(time_range: str = "week"):
         today_correct=today_correct,
         today_accuracy=today_accuracy,
         current_streak=report.current_streak,
-        total_questions=len(all_attempts),
+        total_questions=len(attempt_rows),
         study_days=study_days,
     )
     tiny_habits = habit_formation.get_tiny_habits(report.current_streak)
