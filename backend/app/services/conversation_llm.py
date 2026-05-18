@@ -124,6 +124,9 @@ def _build_context_messages(
             system_content += f"\n\n[选题建议] 当前对话主题涉及: {ctx['skill_ids']}, Bloom: {ctx['bloom_level']}, 推荐难度: {ctx['difficulty']:.2f}"
             if ctx.get('confused'):
                 system_content += ", ⚠️ 检测到困惑信号"
+            # 推荐多平台视频搜索
+            if any(s for s in ctx.get('skill_ids', []) if s != 'general_practice'):
+                system_content += "\n[Media] 如果用户需要视频讲解，推荐生成多平台搜索链接(B站/YouTube/知乎)"
     except Exception:
         pass
 
@@ -274,8 +277,8 @@ async def generate_reply_with_tools(
             tool_block = await tool_executor.execute(tool_name, {"query": user_text, "subject": user_text})
 
             # 补充工具参数（基于用户输入）
-            if tool_name == "search_bilibili":
-                tool_block = await tool_executor.execute(tool_name, {"query": user_text, "limit": 3})
+            if tool_name == "search_media":
+                tool_block = await tool_executor.execute(tool_name, {"query": user_text, "platforms": ["bilibili", "zhihu", "youtube"]})
             elif tool_name == "generate_practice":
                 tool_block = await tool_executor.execute(tool_name, {
                     "subject": "通用",

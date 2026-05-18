@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 # ── 意图预判规则 ──
 TOOL_RULES: dict[str, str] = {
-    r"视频|bilibili|b站|讲解视频|搜.*视频": "search_bilibili",
+    r"视频|bilibili|b站|讲解视频|搜.*视频|找.*视频|有.*视频吗|搜.*教程": "search_media",
     r"出.*题|练习|做题|测试|考我|来.*题": "generate_practice",
     r"画|图像|函数图|图表|可视化|示意图": "generate_image",
     r"思维导图|脑图|知识结构|整理.*知识|知识.*整理": "generate_mindmap",
@@ -32,13 +32,13 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
-            "name": "search_bilibili",
-            "description": "搜索B站教学视频",
+            "name": "search_media",
+            "description": "搜索B站/YouTube/知乎等平台的学习视频和教程",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "搜索关键词"},
-                    "limit": {"type": "integer", "description": "返回数量", "default": 3},
+                    "query": {"type": "string", "description": "搜索内容/知识点"},
+                    "platforms": {"type": "array", "items": {"type": "string"}, "description": "平台列表: bilibili/youtube/zhihu/baidu_wenku"},
                 },
                 "required": ["query"],
             },
@@ -109,27 +109,18 @@ TOOL_DEFINITIONS = [
 ]
 
 # ── 工具分类 ──
-FAST_TOOLS = {"search_bilibili", "generate_practice"}
+FAST_TOOLS = {"search_media", "generate_practice"}
 SLOW_TOOLS = {"generate_image", "generate_mindmap", "generate_document"}
 
 # ── 工具处理器 ──
-async def _handle_search_bilibili(params: dict) -> dict:
-    """搜索B站视频 (MVP: 返回模拟数据)"""
+async def _handle_search_media(params: dict) -> dict:
+    """多平台媒体搜索：生成搜索链接 + AI优化关键词"""
     query = params.get("query", "")
-    limit = params.get("limit", 3)
-    # MVP: 模拟搜索结果
-    return {
-        "results": [
-            {
-                "title": f"【教学】{query}详解 - 从入门到精通",
-                "url": "https://www.bilibili.com/video/BV1example",
-                "thumbnail": "",
-                "duration": "15:32",
-                "author": "知识区UP主",
-            }
-        ][:limit],
-        "query": query,
-    }
+    platforms = params.get("platforms", ["bilibili", "zhihu", "youtube"])
+
+    from app.services.media_search import media_search
+    results = await media_search.search(query=query, platforms=platforms)
+    return {"query": query, "platforms": results}
 
 async def _handle_generate_practice(params: dict) -> dict:
     """生成练习题 (MVP: 返回模拟数据)"""
@@ -159,7 +150,7 @@ async def _handle_generate_document(params: dict) -> dict:
     return {"topic": params.get("topic", ""), "format": params.get("format", "markdown"), "url": None, "status": "queued"}
 
 TOOL_HANDLERS = {
-    "search_bilibili": _handle_search_bilibili,
+    "search_media": _handle_search_media,
     "generate_practice": _handle_generate_practice,
     "generate_image": _handle_generate_image,
     "generate_mindmap": _handle_generate_mindmap,

@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import { Loader2, Video, FileText, Image, GitBranch as MindMap, BookOpen } from "lucide-react";
+import { Loader2, FileText, Image, GitBranch as MindMap, BookOpen } from "lucide-react";
 import MathContent from "@/components/ui/MathContent";
 import InlinePracticeBlock from "./InlinePracticeBlock";
+import MediaSearchBlock from "./MediaSearchBlock";
 import { renderMath, renderMarkdown } from "@/lib/math";
 import type { ResponseBlock } from "@/types";
 
@@ -35,7 +36,7 @@ export default function ResponseBlockRenderer({ block }: ResponseBlockRendererPr
     case "text":
       return <TextBlock content={content} />;
     case "video":
-      return <VideoBlock content={content} />;
+      return <MediaSearchBlock content={content} />;
     case "practice":
       return <PracticeBlockRouter content={content} />;
     case "image":
@@ -92,60 +93,6 @@ function TextBlock({ content }: { content: Record<string, unknown> }) {
       className="message-content text-sm leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0"
       dangerouslySetInnerHTML={{ __html: renderedHtml }}
     />
-  );
-}
-
-function VideoBlock({ content }: { content: Record<string, unknown> }) {
-  const title = (content.title as string) || "视频";
-  const url = (content.url as string) || "";
-  const thumbnail = (content.thumbnail as string) || "";
-  const duration = (content.duration as string) || "";
-  const source = (content.source as string) || "";
-
-  return (
-    <div className="border border-[var(--color-border)] bg-[var(--color-surface)] mt-2 overflow-hidden">
-      {thumbnail && (
-        <div className="relative aspect-video bg-[var(--color-bg)]">
-          <img
-            src={thumbnail}
-            alt={title}
-            className="w-full h-full object-cover"
-            loading="lazy"
-          />
-          {duration && (
-            <span className="absolute bottom-2 right-2 text-[10px] bg-[var(--color-bg)]/80 text-[var(--color-text)] px-1.5 py-0.5">
-              {duration}
-            </span>
-          )}
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="absolute inset-0 flex items-center justify-center bg-[var(--color-bg)]/40 opacity-0 hover:opacity-100 transition-opacity"
-          >
-            <Video size={32} className="text-white" />
-          </a>
-        </div>
-      )}
-      <div className="px-3 py-2">
-        <div className="flex items-center gap-2">
-          <Video size={14} className="text-[var(--color-accent)] flex-shrink-0" />
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-[var(--color-text)] hover:text-[var(--color-accent)] transition-colors truncate"
-          >
-            {title}
-          </a>
-        </div>
-        {source && (
-          <div className="text-[10px] text-[var(--color-text-muted)] mt-1">
-            来源: {source}
-          </div>
-        )}
-      </div>
-    </div>
   );
 }
 
