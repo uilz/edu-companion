@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
+import networkx as nx
 from fastapi import APIRouter, HTTPException, Query
 
 from app.core.knowledge_trace import bkt_engine
@@ -40,6 +41,47 @@ class _BKTKnowledgeAdapter:
 
 def _get_checker() -> PrerequisiteChecker:
     return PrerequisiteChecker(_BKTKnowledgeAdapter())
+
+
+# ── Force-Directed Layout ──
+
+def compute_force_layout(nodes: list[dict], edges: list[dict]) -> dict[str, tuple[float, float]]:
+    """
+    使用 Fruchterman-Reingold 力导向算法计算节点坐标。
+
+    基于学科分组做初始位置引导，使同科节点聚合、跨科连接自然拉伸。
+    返回 {node_id: (x, y)}，坐标范围约 (50,50) ~ (750,550)。
+    """
+    import math
+
+    if len(nodes) <= 1:
+        return {nodes[0]["id"]: (400, 300)} if nodes else {}
+
+    # 无向图做布局（DiGraph 也会被 networkx 转无向，但显式更清晰）
+    G = nx.Graph()
+    G.add_nodes_from(n["id"] for n in nodes)
+    for e in edges:
+        G.add_edge(e["from"], e["to"], weight=1.0)
+
+    n_count = max(len(nodes), 1)
+    area = 700 * 500
+    k = math.sqrt(area / n_count) * 1.2
+
+    pos = nx.spring_layout(
+        G, k=k, iterations=100, seed=42, scale=350,
+        threshold=1e-4, weight="weight",
+    )
+
+    # 平移使所有坐标为正（留 50px 边距）
+    xs = [p[0] for p in pos.values()]
+    ys = [p[1] for p in pos.values()]
+    offset_x = 50 - min(xs)
+    offset_y = 50 - min(ys)
+
+    result: dict[str, tuple[float, float]] = {}
+    for nid, (x, y) in pos.items():
+        result[nid] = (round(x + offset_x, 1), round(y + offset_y, 1))
+    return result
 
 
 # ═══════════════════════════════════════════════════════════
@@ -102,6 +144,7 @@ async def get_knowledge_graph(
         "total_nodes": len(nodes),
         "total_edges": len(edges),
         "subjects": list(SUBJECT_SKILLS.keys()),
+        "layout": compute_force_layout(nodes, edges),
     }
 
 

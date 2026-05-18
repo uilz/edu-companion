@@ -31,6 +31,7 @@ interface GraphData {
   total_nodes: number;
   total_edges: number;
   subjects: string[];
+  layout?: Record<string, [number, number]>;  // API-provided force-directed coords
 }
 
 // ── Subject colors ──
@@ -141,8 +142,12 @@ export default function GraphPage() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json: GraphData = await res.json();
 
-      // Apply auto-layout
-      json.nodes = computeLayout(json.nodes, json.edges);
+      // Apply layout: prefer API force-directed coords, fallback to topological
+      if (json.layout) {
+        json.nodes = json.nodes.map((n) => ({ ...n, x: json.layout![n.id]?.[0], y: json.layout![n.id]?.[1] }));
+      } else {
+        json.nodes = computeLayout(json.nodes, json.edges);
+      }
       setData(json);
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载失败");
