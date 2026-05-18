@@ -162,7 +162,7 @@ GET /behavior → streak + best_hours + regularity + pomodoro + tiny_habits
 ### P0 — 让系统"能用"
 | # | 任务 | 预计工作量 |
 |---|------|-----------|
-| 1 | PostgreSQL 迁移（内存→持久DB） | 3-5天 |
+| 1 | PostgreSQL 迁移（内存→持久DB） | ✅ 已完成 |
 | 2 | 前端错误修复 + 端到端测试 | 2-3天 |
 
 ### P1 — 让系统"好用"
