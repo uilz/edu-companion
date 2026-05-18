@@ -213,8 +213,8 @@ async def get_session(session_id: str):
 
 
 @router.post("/sessions/{session_id}/complete")
-async def complete_session(session_id: str):
-    """结束会话"""
+async def complete_session(session_id: str, partition_id: str | None = None, branch_id: str | None = None):
+    """结束会话（可选：写入对话branch）"""
     session = _sessions.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -222,13 +222,26 @@ async def complete_session(session_id: str):
     session.status = SessionStatus.COMPLETED
     session.completed_at = datetime.now()
 
-    return {
-        "session": session.model_dump(),
+    # P1: 练习结果写入对话记忆
+    result = {"session": session.model_dump()}
+    if partition_id and branch_id:
+        try:
+            from app.services.practice_integrator import integrate_practice_to_branch
+            node = integrate_practice_to_branch(
+                "default_user", session, partition_id, branch_id,
+            )
+            if node:
+                result["branch_node"] = node.model_dump()
+        except Exception as e:
+            logger.warning(f"练习结果写入branch失败: {e}")
+
+    result.update({
         "accuracy": session.accuracy,
         "total_questions": session.total_questions,
         "correct_count": session.correct_count,
         "struggling_skills": session.struggling_skills,
-    }
+    })
+    return result
 
 
 # ──────────────────────────────────────────────

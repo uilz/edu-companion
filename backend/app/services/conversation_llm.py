@@ -79,6 +79,15 @@ def _build_context_messages(
     # 系统提示
     system_content = SYSTEM_PROMPT
 
+    # P1: 注入练习上下文
+    try:
+        from app.services.practice_integrator import inject_practice_context
+        practice_ctx = inject_practice_context(user_id, partition.id)
+        if practice_ctx:
+            system_content += f"\n\n{practice_ctx}"
+    except Exception:
+        pass
+
     # 添加分区上下文
     if partition.context_summary:
         system_content += f"\n\n当前分区：{partition.name}"
