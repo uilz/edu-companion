@@ -40,13 +40,40 @@ interface MasteryBar {
   correct_count: number;
 }
 
+interface HeatmapCell {
+  day: number;
+  hour: number;
+  count: number;
+}
+
+interface RetentionPoint {
+  day: number;
+  retention: number;
+}
+
+interface RetentionSkill {
+  skill_id: string;
+  label: string;
+  subject: string;
+  mastery: number;
+  attempt_count: number;
+  curve: RetentionPoint[];
+}
+
+interface RetentionData {
+  skills: RetentionSkill[];
+  total: number;
+  avg_retention_7d: number;
+  at_risk: RetentionSkill[];
+}
+
 interface ErrorDist {
   type: string;
   count: number;
   pct: number;
 }
 
-interface HeatmapCell {
+interface BehaviorData {
   day: number;
   day_name: string;
   hour: number;
@@ -530,6 +557,77 @@ function HabitTab({ data }: { data: BehaviorData | null }) {
 
 // ── 主页面 ──
 
+// ── 遗忘曲线面板 ──
+
+function RetentionPanel() {
+  const [data, setData] = useState<RetentionData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/knowledge/retention?user_id=default_user`)
+      .then((r) => r.json())
+      .then(setData)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return null;
+  if (!data || data.skills.length === 0) return null;
+
+  const colors = ["#0066FF", "#f59e0b", "#22c55e", "#a855f7", "#ec4899"];
+  const days = [0, 1, 3, 7, 14, 30, 60, 90];
+  const w = 500, h = 220, pad = { l: 40, r: 20, t: 20, b: 30 };
+  const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
+
+  return (
+    <Card title={`🧠 遗忘曲线预估 · 7日后平均保留 ${data.avg_retention_7d}%`} className="mb-8 !p-5">
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full max-w-lg mx-auto">
+        {/* Grid lines */}
+        {[0, 25, 50, 75, 100].map((v) => (
+          <line key={v} x1={pad.l} y1={pad.t + ph * (1 - v / 100)}
+            x2={pad.l + pw} y2={pad.t + ph * (1 - v / 100)}
+            stroke="#1a1a1a" strokeWidth={0.5} />
+        ))}
+        {/* X axis labels */}
+        {days.map((d, i) => (
+          <text key={d} x={pad.l + (pw * i) / (days.length - 1)} y={h - 4}
+            textAnchor="middle" fill="#525252" fontSize={9}>{d === 0 ? "现在" : `${d}天`}</text>
+        ))}
+        {/* Curves */}
+        {data.skills.slice(0, 5).map((skill, si) => (
+          <polyline key={skill.skill_id}
+            points={skill.curve.map((p, i) =>
+              `${pad.l + (pw * i) / (days.length - 1)},${pad.t + ph * (1 - p.retention / 100)}`
+            ).join(" ")}
+            fill="none" stroke={colors[si]} strokeWidth={2} opacity={0.8}
+          />
+        ))}
+        {/* Legend */}
+        {data.skills.slice(0, 5).map((skill, si) => (
+          <text key={skill.skill_id} x={pad.l + pw + 8} y={pad.t + si * 16 + 4}
+            fill={colors[si]} fontSize={9}>{skill.label}</text>
+        ))}
+      </svg>
+      {data.at_risk.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-[var(--color-surface)]">
+          <div className="text-xs text-[var(--color-text-muted)] mb-1">
+            ⚠️ 7天后保持率 &lt; 50% 的高风险知识点：
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {data.at_risk.map((s) => (
+              <span key={s.skill_id} className="text-xs px-2 py-0.5 border border-[#f59e0b] text-[#f59e0b]">
+                {s.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ── 主导出 ──
+
 export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [behaviorData, setBehaviorData] = useState<BehaviorData | null>(null);
@@ -794,7 +892,10 @@ export default function AnalyticsPage() {
           <HeatmapGrid data={hourly_heatmap} />
         </Card>
 
-        {/* ── ⑥ Suggestions ── */}
+        {/* ── ⑥ 遗忘曲线 ── */}
+        <RetentionPanel />
+
+        {/* ── ⑦ Suggestions ── */}
         {suggestions.length > 0 && (
           <Card title="🎯 建议行动" className="!p-5">
             <div className="space-y-2">

@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any, Optional
 
 import networkx as nx
@@ -279,4 +280,59 @@ async def get_learning_path(
         "mastered_count": sum(1 for p in path if p["status"] == "已掌握"),
         "remaining_count": len(missing),
         "remaining_skills": missing,
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+# GET /api/knowledge/retention
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/retention")
+async def get_retention_curve(user_id: str = "default_user"):
+    """
+    获取遗忘曲线（艾宾浩斯估算）。
+
+    对用户已练习过的所有技能，估算随时间推移的知识保留率。
+    基于: retention = e^(-days / S)，其中 S 由 p_known 和 attempt_count 决定。
+    """
+    import math
+
+    prerequisites = ALL_PREREQUISITES
+    skills = []
+    now = datetime.now()
+
+    for skill_id in prerequisites:
+        state = bkt_engine.load_or_create(user_id, skill_id)
+        if state.attempt_count == 0:
+            continue  # 未练习过的技能跳过
+
+        # 估算记忆强度 S: 掌握度越高、练习次数越多 → S 越大
+        S = max(1.0, state.p_known * 30 + math.log(state.attempt_count + 1) * 5)
+
+        # 假设上次练习是 now（简化处理）
+        points = []
+        for days in [0, 1, 3, 7, 14, 30, 60, 90]:
+            retention = round(math.exp(-days / S) * 100, 1)
+            points.append({"day": days, "retention": min(retention, 100)})
+
+        skills.append({
+            "skill_id": skill_id,
+            "label": _get_checker()._skill_display_name(skill_id),
+            "subject": SKILL_TO_SUBJECT.get(skill_id, "未知"),
+            "mastery": round(state.p_known * 100, 1),
+            "attempt_count": state.attempt_count,
+            "curve": points,
+        })
+
+    # 按掌握度排序（低的在前——更需要复习）
+    skills.sort(key=lambda s: s["mastery"])
+
+    return {
+        "user_id": user_id,
+        "skills": skills,
+        "total": len(skills),
+        "avg_retention_7d": round(
+            sum(s["curve"][3]["retention"] for s in skills) / max(len(skills), 1), 1
+        ) if skills else 0,
+        "at_risk": [s for s in skills if s["curve"][3]["retention"] < 50],  # 7天后保持率<50%
     }
