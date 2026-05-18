@@ -9,6 +9,7 @@ import {
   BarChart3,
   BookOpen,
   Network,
+  Shield,
   Settings,
   Sun,
   Moon,
@@ -29,6 +30,7 @@ const navItems: NavItem[] = [
   { href: '/analytics', label: '学情', icon: BarChart3 },
   { href: '/study', label: '规划', icon: BookOpen },
   { href: '/graph', label: '图谱', icon: Network },
+  { href: '/quality', label: '题库', icon: Shield },
 ];
 
 export default function Sidebar() {
