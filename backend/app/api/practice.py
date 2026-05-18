@@ -358,6 +358,25 @@ async def complete_session(
         except Exception as e:
             logger.warning(f"练习结果写入branch失败: {e}")
 
+    # P0: 同步到统一知识状态
+    try:
+        from app.services.knowledge_bridge import knowledge_bridge
+        planned_skills = session.get("planned_skills", [])
+        correct_skills = [
+            a["skill_id"] for a in db.fetchall(
+                "SELECT DISTINCT skill_id FROM practice_attempts WHERE session_id = %s AND is_correct = true",
+                (session_id,)
+            )
+        ] if db else []
+        await knowledge_bridge.sync_from_practice_session(
+            skills_tested=planned_skills,
+            accuracy=accuracy,
+            correct_skills=correct_skills,
+            struggling_skills=struggling,
+        )
+    except Exception as e:
+        logger.warning(f"同步统一知识状态失败: {e}")
+
     return {
         "session": session,
         "accuracy": accuracy,
@@ -875,3 +894,63 @@ async def get_distractor_analysis(question_id: str):
             (d.option_letter for d in result.distractors if d.is_correct), ""
         ),
     }
+
+
+# ──────────────────────────────────────────────
+# 统一知识状态 API (SharedKnowledgeState)
+# ──────────────────────────────────────────────
+
+@router.get("/knowledge/state")
+async def get_knowledge_state():
+    """获取统一知识状态（练习BKT + 对话证据融合）"""
+    from app.services.knowledge_bridge import knowledge_bridge
+    return knowledge_bridge.get_all_skills_summary()
+
+
+@router.get("/knowledge/skill/{skill_id}")
+async def get_skill_knowledge(skill_id: str):
+    """获取单个技能的详细知识状态"""
+    from app.services.knowledge_bridge import knowledge_bridge
+    detail = knowledge_bridge.get_skill_detail(skill_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail=f"Skill '{skill_id}' not found in knowledge state")
+    return detail
+
+
+@router.get("/knowledge/weak")
+async def get_weak_skills(limit: int = 5):
+    """获取薄弱技能列表（用于针对性推荐）"""
+    from app.services.knowledge_bridge import knowledge_bridge
+    return {
+        "weak_skills": knowledge_bridge.get_weak_skills(limit),
+        "mastered_skills": knowledge_bridge.get_mastered_skills(),
+    }
+
+
+class EvidenceRequest(BaseModel):
+    skill_id: str
+    evidence_type: str
+    confidence: float = 0.5
+    source_text: str = ""
+    branch_id: str = ""
+
+
+@router.post("/knowledge/evidence")
+async def add_conversation_evidence(req: EvidenceRequest):
+    """手动添加对话知识证据（用于前端或 cron 任务）"""
+    from app.services.knowledge_bridge import knowledge_bridge
+    from app.domain.learning.shared_knowledge import EvidenceType
+
+    try:
+        ev_type = EvidenceType(req.evidence_type)
+    except ValueError:
+        raise HTTPException(400, f"Invalid evidence_type: {req.evidence_type}")
+
+    knowledge_bridge.state.add_conversation_evidence(
+        skill_id=req.skill_id,
+        evidence_type=ev_type,
+        confidence=req.confidence,
+        source_text=req.source_text,
+        branch_id=req.branch_id,
+    )
+    return {"ok": True, "skill_id": req.skill_id, "evidence_type": req.evidence_type}

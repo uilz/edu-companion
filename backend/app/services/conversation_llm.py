@@ -128,6 +128,15 @@ def _build_context_messages(
     if emotion_ctx:
         system_content += emotion_ctx
 
+    # P0: 统一知识状态 → 注入 LLM 上下文
+    try:
+        from app.services.knowledge_bridge import knowledge_bridge
+        knowledge_ctx = knowledge_bridge.get_knowledge_context()
+        if knowledge_ctx:
+            system_content += f"\n\n{knowledge_ctx}"
+    except Exception:
+        pass
+
     # P0: 当前消息情绪检测 → 注入即时策略
     quick_emotion = emotion_analyzer.quick_detect(user_text)
     if quick_emotion:
@@ -464,6 +473,37 @@ async def generate_reply_stream(
         yield chunk
 
 
+# ── 对话知识证据分析（异步，不阻塞回复） ──
+
+async def _analyze_conversation_evidence(
+    user_id: str,
+    partition_id: str,
+    user_text: str,
+    assistant_reply: str,
+):
+    """分析一轮对话，提取知识证据写入 SharedKnowledgeState"""
+    try:
+        from app.services.knowledge_bridge import knowledge_bridge
+        from app.services.storage import storage as _st
+
+        # 从 partition 推断涉及的技能
+        data = _st.load(user_id)
+        partition = data.partitions.get(partition_id)
+        skill_ids = []
+        if partition and partition.subject:
+            skill_ids = [partition.subject]
+
+        if skill_ids:
+            await knowledge_bridge.deep_evidence_analysis(
+                user_text=user_text,
+                assistant_reply=assistant_reply,
+                skill_ids=skill_ids,
+                branch_id=partition.active_branch_id if partition else "",
+            )
+    except Exception as e:
+        logger.debug(f"知识证据分析跳过: {e}")
+
+
 async def send_and_reply(
     user_id: str,
     partition_id: str,
@@ -510,6 +550,17 @@ async def send_and_reply(
 
     # P0: 异步写入助手消息的元历史
     _p0_post_message_hooks(user_id, partition_id, assistant_node)
+
+    # P0: 异步知识证据分析（对话 → SharedKnowledgeState）
+    import asyncio as _asyncio
+    try:
+        loop = _asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(_analyze_conversation_evidence(
+                user_id, partition_id, user_text, reply_text
+            ))
+    except Exception:
+        pass
 
     return {
         "user_message": user_node,
