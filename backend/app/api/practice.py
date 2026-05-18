@@ -770,3 +770,119 @@ async def recommend_dialogue(req: DialogueRecommendRequest):
     )
 
     return {"recommend": recommendation}
+
+
+# ──────────────────────────────────────────────
+# 学习行为分析 + 习惯养成
+# ──────────────────────────────────────────────
+
+@router.get("/behavior")
+async def get_behavior_report(time_range: str = "week"):
+    """
+    学习行为分析报告：
+    - 连续学习天数 (streak)
+    - 最佳学习时段
+    - 学习规律性评分
+    - 疲劳曲线
+    - 每日目标完成情况
+    - 微习惯推荐
+    - 番茄钟建议
+    - 个性化行动建议
+    """
+    from datetime import datetime, timedelta
+    from app.services.behavior_analyzer import behavior_analyzer
+    from app.services.habit_formation import habit_formation
+
+    user_id = "default_user"
+    now = datetime.now()
+
+    days_back = {"week": 7, "month": 30, "all": 365}.get(time_range, 7)
+    cutoff = now - timedelta(days=days_back)
+
+    # 汇集当期数据
+    current_sessions = [
+        s for s in _sessions.values()
+        if s.user_id == user_id and s.started_at >= cutoff
+    ]
+    all_attempts = []
+    for s in current_sessions:
+        all_attempts.extend(s.attempts)
+
+    # 今日数据
+    today_str = now.strftime("%Y-%m-%d")
+    today_attempts = [
+        a for a in all_attempts
+        if a.submitted_at.strftime("%Y-%m-%d") == today_str
+    ]
+    today_questions = len(today_attempts)
+    today_correct = sum(1 for a in today_attempts if a.is_correct)
+    today_accuracy = today_correct / today_questions if today_questions > 0 else 0.0
+
+    # 构建分析器需要的输入
+    daily_trend = []
+    for i in range(days_back - 1, -1, -1):
+        day = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+        day_attempts = [a for a in all_attempts if a.submitted_at.strftime("%Y-%m-%d") == day]
+        daily_trend.append({
+            "date": day[-5:],
+            "questions": len(day_attempts),
+            "correct": sum(1 for a in day_attempts if a.is_correct),
+            "accuracy": sum(1 for a in day_attempts if a.is_correct) / max(len(day_attempts), 1),
+        })
+
+    hourly_heatmap = []
+    day_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+    for day_idx in range(7):
+        for hour in [8, 10, 14, 16, 20, 22]:
+            count = sum(
+                1 for a in all_attempts
+                if a.submitted_at.weekday() == day_idx and a.submitted_at.hour == hour
+            )
+            hourly_heatmap.append({
+                "day": day_idx + 1, "day_name": day_names[day_idx],
+                "hour": hour, "questions": count,
+            })
+
+    skill_states = bkt_engine.load_all_states(user_id)
+    mastery_bars = [
+        {
+            "skill_id": sid, "p_known": round(s.p_known, 2),
+            "mastery_level": bkt_engine.get_mastery_level(s),
+            "attempt_count": s.attempt_count, "correct_count": s.correct_count,
+        }
+        for sid, s in skill_states.items() if s.attempt_count > 0
+    ]
+    mastery_bars.sort(key=lambda x: x["p_known"])
+
+    total_sessions = len(current_sessions)
+    total_minutes = sum(s.duration_minutes for s in current_sessions)
+    study_days = len(set(s.started_at.strftime("%Y-%m-%d") for s in current_sessions))
+
+    # 行为分析
+    report = behavior_analyzer.analyze(
+        daily_trend=daily_trend,
+        hourly_heatmap=hourly_heatmap,
+        mastery_bars=mastery_bars,
+        total_sessions=total_sessions,
+        total_minutes=total_minutes,
+    )
+
+    # 习惯养成
+    goal = habit_formation.check_daily_goal(
+        today_questions=today_questions,
+        today_correct=today_correct,
+        today_accuracy=today_accuracy,
+        current_streak=report.current_streak,
+        total_questions=len(all_attempts),
+        study_days=study_days,
+    )
+    tiny_habits = habit_formation.get_tiny_habits(report.current_streak)
+    pomodoro = habit_formation.get_pomodoro_recommendation(report.fatigue_drop_minute)
+
+    return {
+        "user_id": user_id,
+        "behavior": report.to_dict(),
+        "daily_goal": goal.to_dict(),
+        "tiny_habits": [h.to_dict() for h in tiny_habits],
+        "pomodoro": pomodoro,
+    }
