@@ -172,6 +172,18 @@ async def send_message(req: SendMessageRequest):
     }
 
 
+class EmotionTrendRequest(BaseModel):
+    window_hours: int = Field(default=72, description="时间窗口（小时）")
+
+
+@router.get("/emotion/trend")
+async def get_emotion_trend(window_hours: int = 72):
+    """获取学生情绪趋势分析"""
+    from app.services.emotion_analyzer import emotion_analyzer
+    trend = await emotion_analyzer.analyze_trend(USER_ID, window_hours=window_hours)
+    return trend.to_dict()
+
+
 @router.websocket("/ws")
 async def websocket_conversation(websocket: WebSocket) -> None:
     """

@@ -83,18 +83,15 @@ SYSTEM_PROMPT = """你是「苹小果」，一个温暖的智能伴学助手。�
 - 不提供考试作弊、论文代写等违规帮助
 - 涉及医学、法律等专业领域时，声明建议仅供参考"""
 
-# ── Frustration detection keywords ──
+# ── 情绪分析（多维分类，替代旧关键词匹配）──
 
-FRUSTRATION_SIGNALS = [
-    "好难", "太难了", "不会", "不懂", "搞不定", "放弃了", "崩溃",
-    "学不会", "做不对", "又错了", "好烦", "不想学了", "累死了",
-    "我太笨了", "学不下去", "怎么办", "救救我", "完了", "挂了",
-    "😭", "😫", "😩", "😤", "💀", "我好菜", "废物",
-]
+from app.services.emotion_analyzer import emotion_analyzer
 
+# 向后兼容的快捷函数
 def detect_frustration(text: str) -> bool:
-    """检测用户消息是否包含挫败信号"""
-    return any(signal in text for signal in FRUSTRATION_SIGNALS)
+    """检测用户消息是否包含挫败信号（兼容旧接口）"""
+    result = emotion_analyzer.quick_detect(text)
+    return result == "frustration"
 
 
 # ── 引用溯源解析 ──
@@ -115,6 +112,7 @@ def _build_context_messages(
     branch: Branch,
     recent_messages: list[TreeNode],
     user_text: str,
+    user_id: str = "",
 ) -> list[dict[str, str]]:
     """
     构建发给 LLM 的消息列表。
@@ -125,14 +123,26 @@ def _build_context_messages(
     # 系统提示
     system_content = SYSTEM_PROMPT
 
-    # P0: 挫败检测 → 注入鼓励上下文
-    if detect_frustration(user_text):
-        frustration_ctx = (
-            "\n\n⚠️ 学生当前表现出挫败情绪。请优先共情和鼓励，"
-            "不要急于纠正或给建议。先肯定ta的努力，再温和地提供帮助。"
-            "语气要比平时更温暖、更有耐心。"
-        )
-        system_content += frustration_ctx
+    # P0: 多维情绪感知 → 注入情绪上下文
+    emotion_ctx = emotion_analyzer.build_emotion_context(user_id)
+    if emotion_ctx:
+        system_content += emotion_ctx
+
+    # P0: 当前消息情绪检测 → 注入即时策略
+    quick_emotion = emotion_analyzer.quick_detect(user_text)
+    if quick_emotion:
+        severity = "negative" if quick_emotion in ("frustration", "anxiety", "overwhelm", "boredom", "procrastination") else "neutral"
+        if severity == "negative":
+            strategy = (
+                "\n\n⚠️ 学生当前表现出负面情绪（{label}）。请优先共情和鼓励，"
+                "不要急于纠正或给建议。先肯定ta的努力，再温和地提供帮助。"
+                "语气要比平时更温暖、更有耐心。"
+            ).format(label={"frustration": "挫败", "anxiety": "焦虑", "overwhelm": "压力大", "boredom": "无聊", "procrastination": "拖延"}.get(quick_emotion, quick_emotion))
+            system_content += strategy
+        elif quick_emotion == "motivated":
+            system_content += "\n\n💪 学生充满动力，可以适当加难度，趁热打铁！"
+        elif quick_emotion == "achievement":
+            system_content += "\n\n🎉 学生取得了进展，请肯定ta的具体进步。"
 
     # P0: 最近对话挫败模式检测
 
@@ -263,7 +273,7 @@ async def generate_reply(
             recent_messages.append(node)
 
     # 构建上下文
-    llm_messages = _build_context_messages(partition, branch, recent_messages, user_text)
+    llm_messages = _build_context_messages(partition, branch, recent_messages, user_text, user_id)
 
     # 调用 LLM
     reply = await llm_service.generate(
@@ -306,7 +316,7 @@ async def generate_reply_with_tools(
     logger.info("Detected tools: %s for text: %s", detected_tools, user_text[:50])
 
     # 构建上下文
-    llm_messages = _build_context_messages(partition, branch, recent_messages, user_text)
+    llm_messages = _build_context_messages(partition, branch, recent_messages, user_text, user_id)
 
     response_blocks: list[ResponseBlock] = []
     order = 0
@@ -442,7 +452,7 @@ async def generate_reply_stream(
             recent_messages.append(node)
 
     # 构建上下文
-    llm_messages = _build_context_messages(partition, branch, recent_messages, user_text)
+    llm_messages = _build_context_messages(partition, branch, recent_messages, user_text, user_id)
 
     # 流式调用 LLM
     async for chunk in llm_service.generate_stream(
@@ -472,6 +482,15 @@ async def send_and_reply(
 
     # P0: 异步写入元历史 + 触发分支自动命名
     _p0_post_message_hooks(user_id, partition_id, user_node)
+
+    # P0: 异步情绪追踪（LLM 分类 + 缓存）
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(emotion_analyzer.classify(user_text, user_id))
+    except Exception:
+        pass
 
     # 2. 生成回复（含工具调用）
     response_blocks = await generate_reply_with_tools(user_id, partition_id, user_text)
@@ -518,6 +537,15 @@ async def send_and_reply_stream(
 
     # P0: async meta history
     _p0_post_message_hooks(user_id, partition_id, user_node)
+
+    # P0: 异步情绪追踪
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(emotion_analyzer.classify(user_text, user_id))
+    except Exception:
+        pass
 
     yield {"type": "user_message", "message": user_node}
 
