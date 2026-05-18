@@ -117,9 +117,16 @@ export default function MaterialsPage() {
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
 
-  // Upload ref + purpose state
+  // Upload ref
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadPurpose, setUploadPurpose] = useState("auto");
+
+  // Promote state
+  const [suggestions, setSuggestions] = useState<Array<{
+    material_id: string; file_name: string; file_type: string;
+    file_size: number; score: number; reasons: string[];
+  }>>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [promoting, setPromoting] = useState<string | null>(null);
 
   // ── Load materials ──
   const loadMaterials = useCallback(async () => {
@@ -162,7 +169,6 @@ export default function MaterialsPage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("purpose", uploadPurpose);
 
       const res = await fetch("/api/materials/upload", {
         method: "POST",
@@ -217,6 +223,33 @@ export default function MaterialsPage() {
     }
   }, [loadMaterials]);
 
+  // ── Promote ──
+  const loadSuggestions = useCallback(async () => {
+    setSuggestionsLoading(true);
+    try {
+      const data = await apiFetch<{ suggestions: typeof suggestions }>("/materials/promote-suggestions");
+      setSuggestions(data.suggestions || []);
+    } catch (e) {
+      console.error("Suggestions failed:", e);
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  }, []);
+
+  const handlePromote = useCallback(async (materialId: string) => {
+    setPromoting(materialId);
+    try {
+      await apiFetch(`/materials/${materialId}/promote`, { method: "POST" });
+      setUploadStatus("✅ 已转为知识库资料");
+      loadMaterials();
+      loadSuggestions();
+    } catch (e) {
+      setUploadStatus(`❌ 转换失败: ${e instanceof Error ? e.message : "未知错误"}`);
+    } finally {
+      setPromoting(null);
+    }
+  }, [loadMaterials, loadSuggestions]);
+
   // ── Render ──
   return (
     <div className="flex-1 overflow-y-auto">
@@ -265,32 +298,52 @@ export default function MaterialsPage() {
             )}
           </button>
 
-          {/* Purpose selector */}
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-[10px] text-[var(--color-text-muted)]">用途:</span>
-            {[
-              { value: "auto", label: "🤖 自动" },
-              { value: "permanent", label: "📚 永久资料" },
-              { value: "session", label: "📸 临时(7天)" },
-              { value: "reference", label: "📝 参考" },
-            ].map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => setUploadPurpose(opt.value)}
-                className={`text-[10px] px-2 py-1 border transition-colors ${
-                  uploadPurpose === opt.value
-                    ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                    : "border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-text-muted)]"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-
           {uploadStatus && !uploading && (
             <div className="mt-2 text-xs text-[var(--color-text-secondary)] px-2">
               {uploadStatus}
+            </div>
+          )}
+        </div>
+
+        {/* Smart promotion suggestions */}
+        <div className="mb-6">
+          <button
+            onClick={loadSuggestions}
+            disabled={suggestionsLoading}
+            className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors flex items-center gap-1 mb-2"
+          >
+            {suggestionsLoading ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              "💡"
+            )}
+            智能推荐可转为知识库的资料
+          </button>
+          {suggestions.length > 0 && (
+            <div className="space-y-1.5">
+              {suggestions.map((s) => (
+                <div
+                  key={s.material_id}
+                  className="flex items-center gap-2 px-3 py-2 border border-[var(--color-border)] bg-[var(--color-surface)]"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-[var(--color-text)] truncate">{s.file_name}</div>
+                    <div className="flex items-center gap-2 text-[9px] text-[var(--color-text-muted)]">
+                      <span>{formatSize(s.file_size)}</span>
+                      <span>{s.file_type}</span>
+                      <span className="text-[var(--color-accent)]">评分:{s.score}</span>
+                      {s.reasons.map((r, i) => <span key={i} className="px-1 bg-[var(--color-bg)]">{r}</span>))}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handlePromote(s.material_id)}
+                    disabled={promoting === s.material_id}
+                    className="flex-shrink-0 px-2 py-1 text-[10px] bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors disabled:opacity-30"
+                  >
+                    {promoting === s.material_id ? <Loader2 size={12} className="animate-spin" /> : "转为知识库"}
+                  </button>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -443,13 +496,29 @@ export default function MaterialsPage() {
                   </div>
 
                   {/* Actions */}
-                  <button
-                    onClick={() => handleDelete(m.material_id)}
-                    className="flex-shrink-0 p-1.5 text-[var(--color-text-muted)] hover:text-red-400 transition-colors"
-                    title="删除"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    {m.purpose === "session" && (
+                      <button
+                        onClick={() => handlePromote(m.material_id)}
+                        disabled={promoting === m.material_id}
+                        className="flex-shrink-0 px-2 py-1 text-[10px] border border-[var(--color-accent)] text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors disabled:opacity-30"
+                        title="转为知识库资料"
+                      >
+                        {promoting === m.material_id ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          "转为知识库"
+                        )}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDelete(m.material_id)}
+                      className="flex-shrink-0 p-1.5 text-[var(--color-text-muted)] hover:text-red-400 transition-colors"
+                      title="删除"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
