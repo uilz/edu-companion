@@ -237,6 +237,10 @@ export default function ChatPage() {
   const [showPartitionSidebar, setShowPartitionSidebar] = useState(false);
   const [showBranchSidebar, setShowBranchSidebar] = useState(false);
 
+  // Desktop sidebar collapse state
+  const [collapsedPartition, setCollapsedPartition] = useState(false);
+  const [collapsedBranch, setCollapsedBranch] = useState(false);
+
   // New partition dialog
   const [showNewPartition, setShowNewPartition] = useState(false);
 
@@ -248,6 +252,12 @@ export default function ChatPage() {
   // WS streaming buffer ref
   const streamBufferRef = useRef("");
   const streamingMsgIdRef = useRef<string | null>(null);
+
+  // ── Lock body scroll ──
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
 
   // ── Load partitions ──
   const loadPartitions = useCallback(async () => {
@@ -632,7 +642,13 @@ export default function ChatPage() {
   return (
     <div className="flex h-screen bg-[var(--color-bg)]">
       {/* Partition sidebar */}
-      <div className="flex-shrink-0" style={{ width: "200px" }}>
+      {!collapsedPartition && (
+      <div className="flex-shrink-0 relative" style={{ width: "200px" }}>
+        <button
+          onClick={() => setCollapsedPartition(true)}
+          className="absolute -right-3 top-2 z-10 w-5 h-5 rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] flex items-center justify-center text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+          title="收起分区"
+        >◀</button>
         <PartitionSidebar
           partitions={partitions}
           selectedPartitionId={selectedPartitionId}
@@ -641,10 +657,25 @@ export default function ChatPage() {
           loading={loadingPartitions}
         />
       </div>
+      )}
+
+      {/* Collapsed partition toggle */}
+      {collapsedPartition && (
+        <button
+          onClick={() => setCollapsedPartition(false)}
+          className="flex-shrink-0 w-6 border-r border-[var(--color-border)] flex items-center justify-center text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+          title="展开分区"
+        >▶</button>
+      )}
 
       {/* Branch sidebar (shown when partition selected) */}
-      {selectedPartitionId && (
-        <div className="flex-shrink-0" style={{ width: "220px" }}>
+      {selectedPartitionId && !collapsedBranch && (
+        <div className="flex-shrink-0 relative" style={{ width: "220px" }}>
+          <button
+            onClick={() => setCollapsedBranch(true)}
+            className="absolute -right-3 top-2 z-10 w-5 h-5 rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] flex items-center justify-center text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            title="收起分支"
+          >◀</button>
           <BranchList
             branches={branches}
             activeBranchId={activeBranchId}
@@ -653,6 +684,15 @@ export default function ChatPage() {
             loading={loadingBranches}
           />
         </div>
+      )}
+
+      {/* Collapsed branch toggle */}
+      {selectedPartitionId && collapsedBranch && (
+        <button
+          onClick={() => setCollapsedBranch(false)}
+          className="flex-shrink-0 w-6 border-r border-[var(--color-border)] flex items-center justify-center text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+          title="展开分支"
+        >▶</button>
       )}
 
       {/* Main chat area */}
