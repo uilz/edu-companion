@@ -129,57 +129,19 @@ Phase 1 MVP:  █████████████████████  ~
 
 ---
 
-## 🔴 Phase 1 未打通的缺口
+## 🔴 Phase 1 缺口状态
 
-### 缺口 1: 学习规划 — 后端完整/前端完全缺失
-| 端点 | 说明 |
-|------|------|
-| `POST /api/study/plan/generate` | 生成学习计划 |
-| `GET /api/study/plan/{user_id}` | 查看当前计划 |
-| `PUT /api/study/plan/{user_id}/{task_id}/complete` | 完成任务 |
-| `GET /api/study/plan/{user_id}/progress` | 查看进度 |
-| `GET /api/study/plan/{user_id}/history` | 计划变更历史 |
-| `POST /api/study/plan/refresh` | 强制刷新计划 |
-| `GET /api/study/suggestions` | 学习建议 |
-
-**影响**: 自适应计划引擎、前置卡控过滤、难度自适应、时间预算全部做好了但前端看不到
-
-### 缺口 2: 题目质量监控 — 后端完整/前端完全缺失
-| 端点 | 说明 |
-|------|------|
-| `GET /api/practice/quality` | 题库质量总览 |
-| `GET /api/practice/quality/worst` | 最差题目列表 |
-| `POST /api/practice/quality/apply` | 执行自动淘汰 |
-| `GET /api/practice/quality/{question_id}` | 单题详细分析 |
-| `GET /api/practice/quality/{question_id}/distractors` | 干扰项分析 |
-
-**影响**: IRT 6维分析做好了但看不到、无法手动审核题目
-
-### 缺口 3: SharedKnowledgeState — 4个API无前端
-| 端点 | 说明 |
-|------|------|
-| `GET /api/practice/knowledge/state` | 当前知识状态 |
-| `GET /api/practice/knowledge/skill/{id}` | 单技能状态 |
-| `GET /api/practice/knowledge/weak` | 薄弱知识点 |
-| `POST /api/practice/knowledge/evidence` | 添加证据 |
-
-**影响**: 对话+练习双向融合数据有了，但用户看不到统一知识画像
-
-### 缺口 4: 内容/媒体浏览 — API无前端
-| 端点 | 说明 |
-|------|------|
-| `GET /api/content/{content_id}` | 单内容详情 |
-| `GET /api/content/search` | 全局搜索 |
-| `GET /api/subjects/list` | 学科列表 |
-
-### 缺口 5: 对话树浏览API — 未充分使用
-| 端点 | 说明 |
-|------|------|
-| `GET /api/conversations/partitions/{id}/messages` | 分区消息列表 |
+| # | 缺口 | 状态 | 提交 |
+|---|------|:--:|:--:|
+| 1 | 学习规划前端 | ✅ | `96bb474` — /study 页 |
+| 2 | 题目质量监控 | ✅ | `6d5486e` — /quality 页 |
+| 3 | SharedKnowledgeState | ✅ | 集成到 /stats 页 |
+| 4 | 内容搜索浏览 | 🟢 | 低优先级（API已有） |
+| 5 | 分区消息列表 | 🟢 | 低优先级（API已有） |
 
 ---
 
-## PROGRESS.md 修正记录 (vs 旧版)
+## 修正记录 (vs 旧版)
 
 | 旧版 | 修正 |
 |------|------|
