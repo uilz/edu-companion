@@ -65,6 +65,7 @@ export default function ErrorBookPage() {
     reading: "审题错误",
     transfer: "迁移错误",
     meta: "元认知错误",
+    careless: "粗心大意",
   };
 
   return (
@@ -112,7 +113,7 @@ export default function ErrorBookPage() {
         ) : (
           <div className="space-y-4">
             {entries.map((entry) => (
-              <Card key={entry.entry_id}>
+              <Card key={entry.entry_id || Math.random().toString(36)}>
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <span
@@ -122,7 +123,7 @@ export default function ErrorBookPage() {
                           : "bg-[var(--color-error)]/10 text-[var(--color-error)]"
                       }`}
                     >
-                      {errorLabel[entry.error_type] || entry.error_type}
+                      {errorLabel[entry.error_type] || entry.error_type || "未知错误"}
                     </span>
                     {entry.misconception && (
                       <span className="text-xs text-[var(--color-text-muted)]">
@@ -131,14 +132,18 @@ export default function ErrorBookPage() {
                     )}
                   </div>
                   <span className="text-xs text-[var(--color-text-muted)]">
-                    {new Date(entry.created_at).toLocaleDateString()}
+                    {entry.created_at ? new Date(entry.created_at).toLocaleDateString() : ""}
                   </span>
                 </div>
 
-                {entry.question_text && (
+                {entry.question_text ? (
                   <p className="text-sm text-[var(--color-text)] mb-3 message-content">
                     {entry.question_text.slice(0, 120)}
                     {entry.question_text.length > 120 && "..."}
+                  </p>
+                ) : (
+                  <p className="text-sm text-[var(--color-text-muted)] mb-3 italic">
+                    题目数据丢失 — skill_id: {entry.skill_id || "未知"}
                   </p>
                 )}
 

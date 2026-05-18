@@ -24,7 +24,8 @@ export default function StatsPage() {
     fetch(`${API_BASE}/api/practice/stats`)
       .then((r) => r.json())
       .then((data) => {
-        setStats(data);
+        // API wraps stats in overview field
+        setStats(data.overview || data);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -40,7 +41,7 @@ export default function StatsPage() {
     );
   }
 
-  if (!stats || stats.total_questions === 0) {
+  if (!stats || stats.total_questions == null || stats.total_questions === 0) {
     return (
       <main className="min-h-screen bg-[var(--color-bg)]">
         <div className="max-w-3xl mx-auto px-6 py-16 text-center">
@@ -52,9 +53,11 @@ export default function StatsPage() {
     );
   }
 
-  const accuracyPercent = (stats.accuracy * 100).toFixed(0);
-  const hours = Math.floor(stats.study_minutes / 60);
-  const minutes = Math.round(stats.study_minutes % 60);
+  const accuracyPercent = ((stats.accuracy ?? 0) * 100).toFixed(0);
+  const hours = Math.floor((stats.study_minutes ?? 0) / 60);
+  const minutes = Math.round((stats.study_minutes ?? 0) % 60);
+  const totalQuestions = stats.total_questions ?? 0;
+  const totalCorrect = stats.total_correct ?? 0;
 
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
@@ -71,8 +74,8 @@ export default function StatsPage() {
             {
               icon: <Target size={20} />,
               label: "总题数",
-              value: stats.total_questions.toString(),
-              sub: `正确 ${stats.total_correct}`,
+              value: totalQuestions.toString(),
+              sub: `正确 ${totalCorrect}`,
             },
             {
               icon: <TrendingUp size={20} />,
