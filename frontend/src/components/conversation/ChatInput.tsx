@@ -1,12 +1,19 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Paperclip, Image } from "lucide-react";
+import { Send, Paperclip, Image, Loader2, X } from "lucide-react";
 import VoiceRecorder from "./VoiceRecorder";
 
 interface ConversationChatInputProps {
-  onSend: (text: string) => void;
+  onSend: (text: string, files?: UploadedFile[]) => void;
   disabled?: boolean;
+}
+
+export interface UploadedFile {
+  name: string;
+  type: "image" | "file";
+  url?: string;
+  materialId?: string;
 }
 
 export default function ConversationChatInput({
@@ -14,7 +21,12 @@ export default function ConversationChatInput({
   disabled = false,
 }: ConversationChatInputProps) {
   const [text, setText] = useState("");
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const autoResize = useCallback(() => {
     const el = textareaRef.current;
@@ -27,11 +39,54 @@ export default function ConversationChatInput({
     autoResize();
   }, [text, autoResize]);
 
+  // ── Upload handler ──
+  const handleFileUpload = useCallback(async (file: File, type: "image" | "file") => {
+    setUploading(true);
+    setUploadError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/materials/upload", { method: "POST", body: formData });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "上传失败");
+      }
+      const data = await res.json();
+      setUploadedFiles(prev => [...prev, {
+        name: file.name,
+        type,
+        materialId: data.material_id,
+      }]);
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : "上传失败");
+    } finally {
+      setUploading(false);
+    }
+  }, []);
+
+  const handleImageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFileUpload(file, "image");
+    if (imageInputRef.current) imageInputRef.current.value = "";
+  }, [handleFileUpload]);
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFileUpload(file, "file");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, [handleFileUpload]);
+
+  const removeFile = useCallback((index: number) => {
+    setUploadedFiles(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  // ── Send ──
   const handleSend = () => {
     const trimmed = text.trim();
     if (!trimmed || disabled) return;
-    onSend(trimmed);
+    onSend(trimmed, uploadedFiles.length > 0 ? uploadedFiles : undefined);
     setText("");
+    setUploadedFiles([]);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -44,17 +99,37 @@ export default function ConversationChatInput({
   return (
     <div className="border-t border-[var(--color-border)] bg-[var(--color-bg)]">
       <div className="max-w-3xl mx-auto px-4 py-3">
+        {/* Uploaded files preview */}
+        {uploadedFiles.length > 0 && (
+          <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+            {uploadedFiles.map((f, i) => (
+              <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] border border-[var(--color-border)] text-[var(--color-text-secondary)]">
+                {f.type === "image" ? "🖼️" : "📎"} {f.name}
+                <button onClick={() => removeFile(i)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
+                  <X size={10} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Hidden file inputs */}
+        <input ref={imageInputRef} type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+        <input ref={fileInputRef} type="file" accept=".pdf,.docx,.pptx,.md,.txt" onChange={handleFileChange} className="hidden" />
+
         {/* Attachment buttons */}
         <div className="flex items-center gap-1 mb-2">
           <button
-            disabled={disabled}
+            onClick={() => imageInputRef.current?.click()}
+            disabled={disabled || uploading}
             className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface)] transition-colors disabled:opacity-30"
             title="上传图片"
           >
-            <Image size={16} />
+            {uploading ? <Loader2 size={16} className="animate-spin" /> : <Image size={16} />}
           </button>
           <button
-            disabled={disabled}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={disabled || uploading}
             className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface)] transition-colors disabled:opacity-30"
             title="上传文件"
           >
@@ -65,6 +140,11 @@ export default function ConversationChatInput({
             disabled={disabled}
           />
         </div>
+
+        {/* Error message */}
+        {uploadError && (
+          <div className="text-[10px] text-[#ef4444] mb-1">{uploadError}</div>
+        )}
 
         {/* Input area */}
         <div className="flex items-end gap-3">
@@ -80,7 +160,7 @@ export default function ConversationChatInput({
           />
           <button
             onClick={handleSend}
-            disabled={disabled || !text.trim()}
+            disabled={disabled || (!text.trim() && uploadedFiles.length === 0)}
             className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-[var(--color-accent)] text-white disabled:opacity-30 hover:bg-[var(--color-accent-hover)] transition-colors"
           >
             <Send size={16} />

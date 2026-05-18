@@ -428,18 +428,27 @@ export default function ChatPage() {
 
   // ── Handle send ──
   const handleSend = useCallback(
-    (text: string) => {
+    (text: string, files?: { name: string; type: string; materialId?: string }[]) => {
       if (!text.trim() || isLoading) return;
 
       // Create optimistic user message
       const userMsgId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+      const blocks: { type: string; text?: string; url?: string; name?: string }[] = [
+        { type: "text", text },
+      ];
+      // Attach uploaded file references
+      if (files) {
+        for (const f of files) {
+          blocks.push({ type: f.type === "image" ? "image" : "file", name: f.name });
+        }
+      }
       const userMsg: TreeNode = {
         id: userMsgId,
         parent_id: selectedPartitionId || "virtual_root",
         children_ids: [],
         partition_id: selectedPartitionId || "",
         branch_id: activeBranchId || "",
-        content_blocks: [{ type: "text", text }],
+        content_blocks: blocks as TreeNode["content_blocks"],
         text_summary: text,
         role: "user",
         timestamp: Date.now(),
