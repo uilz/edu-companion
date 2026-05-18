@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useMemo } from "react";
-import { User, Bot, Trash2 } from "lucide-react";
+import { useEffect, useRef, useMemo, useState } from "react";
+import { User, Bot, Trash2, Pencil, Check, X } from "lucide-react";
 import MathContent from "@/components/ui/MathContent";
 import ResponseBlockRenderer from "./ResponseBlockRenderer";
 import SpeakButton from "./SpeakButton";
@@ -14,6 +14,7 @@ interface MessageListProps {
   isLoading?: boolean;
   statusMessage?: string;
   onDeleteMessage?: (messageId: string) => void;
+  onEditMessage?: (messageId: string, newText: string) => void;
 }
 
 export default function MessageList({
@@ -22,12 +23,34 @@ export default function MessageList({
   isLoading = false,
   statusMessage,
   onDeleteMessage,
+  onEditMessage,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
+
   const handleDeleteMessage = (messageId: string) => {
     if (onDeleteMessage) onDeleteMessage(messageId);
+  };
+
+  const handleStartEdit = (msgId: string, currentText: string) => {
+    setEditingId(msgId);
+    setEditingText(currentText);
+  };
+
+  const handleSaveEdit = () => {
+    if (editingId && editingText.trim() && onEditMessage) {
+      onEditMessage(editingId, editingText.trim());
+    }
+    setEditingId(null);
+    setEditingText("");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditingText("");
   };
 
   // Auto-scroll to bottom on new messages
@@ -78,6 +101,7 @@ export default function MessageList({
           const blocks = blocksByMessage.get(msg.id) || [];
           const textBlock = msg.content_blocks?.find((b) => b.type === "text");
           const text = textBlock?.text || msg.text_summary || "";
+          const isEditing = editingId === msg.id;
 
           return (
             <div
@@ -94,21 +118,58 @@ export default function MessageList({
               <div
                 className={`max-w-[85%] ${isUser ? "items-end" : "items-start"} flex flex-col`}
               >
-                {/* Message bubble */}
-                {text && (
-                  <div
-                    className={`px-4 py-3 ${
-                      isUser
-                        ? "bg-[var(--color-accent)] text-white"
-                        : "bg-[var(--color-surface)] text-[var(--color-text)]"
-                    }`}
-                  >
-                    {isUser ? (
-                      <div className="text-sm leading-relaxed">{text}</div>
-                    ) : (
-                      <MessageContent text={text} />
-                    )}
+                {/* Message bubble — or inline editor */}
+                {isEditing ? (
+                  <div className="w-full bg-[var(--color-accent)] px-4 py-3">
+                    <textarea
+                      value={editingText}
+                      onChange={(e) => setEditingText(e.target.value)}
+                      className="w-full bg-transparent text-white text-sm leading-relaxed resize-none focus:outline-none"
+                      rows={Math.max(2, editingText.split("\n").length)}
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                          handleSaveEdit();
+                        }
+                        if (e.key === "Escape") {
+                          handleCancelEdit();
+                        }
+                      }}
+                    />
+                    <div className="flex items-center justify-end gap-2 mt-2 text-xs text-white/70">
+                      <span>⌘+Enter 保存 · Esc 取消</span>
+                      <button
+                        onClick={handleCancelEdit}
+                        className="p-1 hover:text-white transition-colors"
+                        title="取消"
+                      >
+                        <X size={14} />
+                      </button>
+                      <button
+                        onClick={handleSaveEdit}
+                        className="p-1 hover:text-white transition-colors"
+                        title="保存"
+                      >
+                        <Check size={14} />
+                      </button>
+                    </div>
                   </div>
+                ) : (
+                  text && (
+                    <div
+                      className={`px-4 py-3 ${
+                        isUser
+                          ? "bg-[var(--color-accent)] text-white"
+                          : "bg-[var(--color-surface)] text-[var(--color-text)]"
+                      }`}
+                    >
+                      {isUser ? (
+                        <div className="text-sm leading-relaxed">{text}</div>
+                      ) : (
+                        <MessageContent text={text} />
+                      )}
+                    </div>
+                  )
                 )}
 
                 {/* Non-text content blocks from user */}
@@ -136,7 +197,7 @@ export default function MessageList({
                   </div>
                 )}
 
-                {/* Timestamp + Speak + Delete */}
+                {/* Timestamp + Speak + Edit + Delete */}
                 <div className="flex items-center gap-2 text-[10px] text-[var(--color-text-muted)] mt-1 px-1">
                   <span>
                     {new Date(msg.timestamp).toLocaleTimeString("zh-CN", {
@@ -145,13 +206,24 @@ export default function MessageList({
                     })}
                   </span>
                   {!isUser && <SpeakButton text={text} />}
-                  <button
-                    onClick={() => handleDeleteMessage(msg.id)}
-                    className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all"
-                    title="删除消息"
-                  >
-                    <Trash2 size={11} />
-                  </button>
+                  {!isEditing && onEditMessage && (
+                    <button
+                      onClick={() => handleStartEdit(msg.id, text)}
+                      className="opacity-0 group-hover:opacity-100 hover:text-yellow-400 transition-all"
+                      title="编辑消息"
+                    >
+                      <Pencil size={11} />
+                    </button>
+                  )}
+                  {!isEditing && (
+                    <button
+                      onClick={() => handleDeleteMessage(msg.id)}
+                      className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all"
+                      title="删除消息"
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  )}
                 </div>
               </div>
 

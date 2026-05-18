@@ -515,6 +515,35 @@ export default function ChatPage() {
     }
   }, []);
 
+  // ── Handle edit message (creates new branch) ──
+  const handleEditMessage = useCallback(async (messageId: string, newText: string) => {
+    try {
+      const res = await fetch("/api/conversations/messages/" + messageId, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content_blocks: [{ type: "text", text: newText }],
+          text_summary: newText,
+        }),
+      });
+      if (!res.ok) throw new Error("Edit failed");
+      const data = await res.json();
+      const newBranchId = data.node?.branch_id;
+
+      // Reload partitions (branch counts update) then branches
+      await loadPartitions();
+      if (selectedPartitionId) {
+        await loadBranches(selectedPartitionId);
+        // Navigate to the new branch
+        if (newBranchId) {
+          setActiveBranchId(newBranchId);
+        }
+      }
+    } catch (e) {
+      console.error("Edit failed:", e);
+    }
+  }, [loadPartitions, selectedPartitionId, loadBranches]);
+
   // ── Handle branch selection ──
   const handleSelectBranch = useCallback(
     (id: string) => {
@@ -608,6 +637,8 @@ export default function ChatPage() {
             responseBlocks={responseBlocks}
             isLoading={isLoading}
             statusMessage={statusMessage}
+            onDeleteMessage={handleDeleteMessage}
+            onEditMessage={handleEditMessage}
           />
           <ConversationChatInput
             onSend={handleSend}
@@ -740,6 +771,7 @@ export default function ChatPage() {
           isLoading={isLoading}
           statusMessage={statusMessage}
           onDeleteMessage={handleDeleteMessage}
+          onEditMessage={handleEditMessage}
         />
 
         {/* Input */}
