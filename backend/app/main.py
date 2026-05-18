@@ -25,6 +25,7 @@ from app.api.content import router as content_router
 from app.api.conversation import router as conversation_router
 from app.api.material import router as material_router
 from app.api.knowledge import router as knowledge_router
+from app.api.multimodal import router as multimodal_router
 from app.config import settings
 from app.core.learner_model import learner_engine
 
@@ -107,6 +108,8 @@ app.include_router(conversation_router, prefix="/api/conversations", tags=["conv
 app.include_router(material_router)
 # 知识图谱 + 前置卡控
 app.include_router(knowledge_router)
+# 多模态（STT 转写）
+app.include_router(multimodal_router)
 
 
 # ── 健康检查 ──

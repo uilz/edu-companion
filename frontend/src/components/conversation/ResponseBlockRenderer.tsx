@@ -5,6 +5,7 @@ import { Loader2, FileText, Image, GitBranch as MindMap, BookOpen } from "lucide
 import MathContent from "@/components/ui/MathContent";
 import InlinePracticeBlock from "./InlinePracticeBlock";
 import MediaSearchBlock from "./MediaSearchBlock";
+import VideoEmbed from "./VideoEmbed";
 import { renderMath, renderMarkdown } from "@/lib/math";
 import type { ResponseBlock } from "@/types";
 
@@ -36,7 +37,7 @@ export default function ResponseBlockRenderer({ block }: ResponseBlockRendererPr
     case "text":
       return <TextBlock content={content} />;
     case "video":
-      return <MediaSearchBlock content={content} />;
+      return <VideoBlockRouter content={content} />;
     case "practice":
       return <PracticeBlockRouter content={content} />;
     case "image":
@@ -94,6 +95,26 @@ function TextBlock({ content }: { content: Record<string, unknown> }) {
       dangerouslySetInnerHTML={{ __html: renderedHtml }}
     />
   );
+}
+
+function VideoBlockRouter({ content }: { content: Record<string, unknown> }) {
+  const url = (content.url as string) || "";
+  const title = (content.title as string) || "";
+  const thumbnail = (content.thumbnail as string) || "";
+  const platforms = content.platforms as Array<unknown> | undefined;
+
+  // If this has platforms array → it's a MediaSearch result → show MediaSearchBlock
+  if (platforms && platforms.length > 0) {
+    return <MediaSearchBlock content={content} />;
+  }
+
+  // If URL looks like a video platform → embed it
+  if (url && /bilibili\.com|youtu\.be|youtube\.com|\.mp4|\.webm/i.test(url)) {
+    return <VideoEmbed url={url} title={title} thumbnail={thumbnail} />;
+  }
+
+  // Fallback: show MediaSearchBlock (handles legacy format)
+  return <MediaSearchBlock content={content} />;
 }
 
 function PracticeBlockRouter({ content }: { content: Record<string, unknown> }) {

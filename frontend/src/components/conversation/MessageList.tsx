@@ -4,6 +4,7 @@ import { useEffect, useRef, useMemo } from "react";
 import { User, Bot } from "lucide-react";
 import MathContent from "@/components/ui/MathContent";
 import ResponseBlockRenderer from "./ResponseBlockRenderer";
+import SpeakButton from "./SpeakButton";
 import { renderMath, renderMarkdown } from "@/lib/math";
 import type { TreeNode, ResponseBlock } from "@/types";
 
@@ -129,12 +130,15 @@ export default function MessageList({
                   </div>
                 )}
 
-                {/* Timestamp */}
-                <div className="text-[10px] text-[var(--color-text-muted)] mt-1 px-1">
-                  {new Date(msg.timestamp).toLocaleTimeString("zh-CN", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+                {/* Timestamp + Speak */}
+                <div className="flex items-center gap-2 text-[10px] text-[var(--color-text-muted)] mt-1 px-1">
+                  <span>
+                    {new Date(msg.timestamp).toLocaleTimeString("zh-CN", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                  {!isUser && <SpeakButton text={text} />}
                 </div>
               </div>
 

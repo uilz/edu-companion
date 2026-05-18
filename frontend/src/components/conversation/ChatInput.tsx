@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Paperclip, Image, Mic, Video } from "lucide-react";
+import { Send, Paperclip, Image } from "lucide-react";
+import VoiceRecorder from "./VoiceRecorder";
 
 interface ConversationChatInputProps {
   onSend: (text: string) => void;
@@ -59,20 +60,10 @@ export default function ConversationChatInput({
           >
             <Paperclip size={16} />
           </button>
-          <button
+          <VoiceRecorder
+            onTranscription={(t) => setText((prev) => prev + t)}
             disabled={disabled}
-            className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface)] transition-colors disabled:opacity-30"
-            title="录制语音"
-          >
-            <Mic size={16} />
-          </button>
-          <button
-            disabled={disabled}
-            className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface)] transition-colors disabled:opacity-30"
-            title="上传视频"
-          >
-            <Video size={16} />
-          </button>
+          />
         </div>
 
         {/* Input area */}
