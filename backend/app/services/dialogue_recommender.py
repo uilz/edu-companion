@@ -49,6 +49,10 @@ class PracticeToDialogueRecommendation:
             "做了 {count} 道都错了，是不是思路卡住了？"
             "停下来聊聊也许能豁然开朗 💬"
         ),
+        "media_search": (
+            "在 {skill} 上遇到困难？🔍 我帮你搜了几个平台的讲解，"
+            "点链接在新窗口打开看看～"
+        ),
     }
 
     def should_recommend(
@@ -96,6 +100,41 @@ class PracticeToDialogueRecommendation:
         if consecutive_wrong >= 4:
             return self.TEMPLATES["frustration"].format(count=consecutive_wrong)
 
+        return None
+
+    def should_recommend_media(
+        self,
+        session: PracticeSession,
+    ) -> Optional[tuple[str, str]]:
+        """
+        判断是否应该推荐媒体搜索
+        
+        返回:
+            (推荐文案, 知识点ID) 或 None
+        """
+        attempts = session.attempts or []
+        if len(attempts) < 1:
+            return None
+
+        # 任何错误都推荐媒体搜索，但不重复推荐（一个session一次）
+        last = attempts[-1]
+        if not last.is_correct:
+            skill_id = "知识点"
+            if last.error_analysis and last.error_analysis.related_skills:
+                skill_id = last.error_analysis.related_skills[0]
+
+            return (
+                self.TEMPLATES["media_search"].format(skill=skill_id),
+                skill_id,
+            )
+
+        return None
+
+    def get_error_skill(self, session: PracticeSession) -> Optional[str]:
+        """提取最近错误的知识点ID"""
+        for a in reversed(session.attempts or []):
+            if not a.is_correct and a.error_analysis and a.error_analysis.related_skills:
+                return a.error_analysis.related_skills[0]
         return None
 
     def _count_same_skill_consecutive_errors(

@@ -65,6 +65,27 @@ PLATFORMS = {
         "description": "短视频知识科普",
         "tags": ["科普", "速成"],
     },
+    "xiaohongshu": {
+        "name": "小红书",
+        "icon": "📕",
+        "search_url": "https://www.xiaohongshu.com/search_result?keyword={query}",
+        "description": "学习笔记、经验分享",
+        "tags": ["笔记", "经验", "攻略"],
+    },
+    "bing": {
+        "name": "Bing",
+        "icon": "🔍",
+        "search_url": "https://www.bing.com/search?q={query}",
+        "description": "全球搜索引擎，中英文通用",
+        "tags": ["综合", "中英文"],
+    },
+    "baidu": {
+        "name": "百度",
+        "icon": "🌐",
+        "search_url": "https://www.baidu.com/s?wd={query}",
+        "description": "国内通用搜索",
+        "tags": ["综合", "中文"],
+    },
 }
 
 # AI搜索词生成的系统提示

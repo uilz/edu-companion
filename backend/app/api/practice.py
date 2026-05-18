@@ -235,11 +235,34 @@ async def complete_session(session_id: str, partition_id: str | None = None, bra
         except Exception as e:
             logger.warning(f"练习结果写入branch失败: {e}")
 
+    # P2: 练习错误→自动推荐媒体搜索
+    media_recommend = None
+    try:
+        from app.services.dialogue_recommender import practice_to_dialogue
+        rec = practice_to_dialogue.should_recommend_media(session)
+        if rec:
+            from app.services.media_search import media_search
+            platforms_result = await media_search.recommend_for_error(
+                error_skill=rec[1],
+                error_type=(
+                    session.attempts[-1].error_analysis.error_type.value
+                    if session.attempts and session.attempts[-1].error_analysis
+                    else ""
+                ),
+            )
+            media_recommend = {
+                "message": rec[0],
+                "platforms": platforms_result,
+            }
+    except Exception as e:
+        logger.warning(f"媒体推荐生成失败: {e}")
+
     result.update({
         "accuracy": session.accuracy,
         "total_questions": session.total_questions,
         "correct_count": session.correct_count,
         "struggling_skills": session.struggling_skills,
+        "media_recommend": media_recommend,
     })
     return result
 

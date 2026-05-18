@@ -12,6 +12,9 @@ const PLATFORM_ICONS: Record<string, string> = {
   xuexi_qiangguo: "🇨🇳",
   cnki: "📖",
   douyin: "🎵",
+  xiaohongshu: "📕",
+  bing: "🔍",
+  baidu: "🌐",
 };
 
 // ──── Multi-platform media search block ────
