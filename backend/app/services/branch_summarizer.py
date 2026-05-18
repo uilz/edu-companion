@@ -7,21 +7,61 @@ from __future__ import annotations
 
 import logging
 from app.services.storage import storage
+from app.services.llm_service import llm_service
 
 logger = logging.getLogger(__name__)
 
 # 降级模式：LLM不可用时使用规则引擎
-FALLBACK_MODE = True
+FALLBACK_MODE = False  # 启用 LLM 命名
 
 
-def summarize_branch_name(user_id: str, branch_id: str) -> str:
+def _weighted_recent_messages(messages: list, last_n: int = 8) -> list:
+    """
+    从消息列表中提取最近N条，后几轮权重更大、中长消息权重更大。
+    返回按权重排序的消息文本列表（用于 LLM 上下文）。
+    """
+    if not messages:
+        return []
+
+    msg_items = []
+    total = len(messages)
+    for i, msg in enumerate(messages):
+        text = (msg.text_summary or "").strip()
+        if not text:
+            continue
+        # 位置权重：越靠后越高 (1.0 ~ 2.0)
+        position_weight = 1.0 + (i / max(total, 1))
+        # 长度权重：15-60字的消息权重最高（信息量适中）
+        length = len(text)
+        if length < 5:
+            length_weight = 0.3
+        elif length < 15:
+            length_weight = 0.6
+        elif length <= 60:
+            length_weight = 1.0
+        elif length <= 120:
+            length_weight = 0.8
+        else:
+            length_weight = 0.5
+        # 角色权重：用户消息比 AI 回复更有命名价值
+        role_weight = 1.2 if msg.role == "user" else 0.6
+        # 综合权重
+        weight = position_weight * length_weight * role_weight
+        msg_items.append((weight, text[:80]))  # 截断到80字
+
+    # 按权重排序，取前 last_n
+    msg_items.sort(key=lambda x: -x[0])
+    return [text for _, text in msg_items[:last_n]]
+
+
+async def summarize_branch_name(user_id: str, branch_id: str) -> str:
     """
     根据对话内容自动重命名分支
-    
+
     规则：
     - ≤5条消息：取第一条消息的前20字
-    - 5-20条：尝试LLM重命名
-    - >20条：再次LLM重命名
+    - 5-20条：尝试 LLM 重命名（加权最近消息）
+    - >20条：再次 LLM 重命名（更多上下文）
     """
     data = storage.load(user_id)
     branch = data.branches.get(branch_id)
@@ -37,40 +77,55 @@ def summarize_branch_name(user_id: str, branch_id: str) -> str:
     if msg_count <= 5:
         # 初始命名：取第一条消息前20字
         first_msg = messages[0]
-        text = first_msg.text_summary or str(first_msg.content_blocks)
+        text = first_msg.text_summary or ""
         return text[:20] + ("..." if len(text) > 20 else "")
 
-    else:
-        # LLM重命名（降级用规则）
-        return _llm_rename_branch(messages[-10:], branch.name)
-
-    if msg_count > 20:
-        # 再次重命名（反映主题演变）
-        return _llm_rename_branch(messages[-15:], branch.name)
-
-    return branch.name or "对话"
+    # 使用加权消息进行命名
+    recent_texts = _weighted_recent_messages(messages, last_n=8)
+    return await _llm_rename_branch(recent_texts, branch.name)
 
 
-def _llm_rename_branch(recent_messages: list, current_name: str) -> str:
-    """LLM生成分支名称，降级用规则"""
-    if FALLBACK_MODE:
-        # 降级：取最近一条用户消息的关键词
-        for msg in reversed(recent_messages):
-            if msg.role == "user":
-                text = msg.text_summary or ""
-                return text[:20] + ("..." if len(text) > 20 else "")
+async def _llm_rename_branch(recent_texts: list[str], current_name: str) -> str:
+    """LLM 生成分支名称，降级用规则"""
+    if not recent_texts:
         return current_name
 
-    # TODO: 接入LLM
-    # prompt = f"根据以下对话摘要生成简短名称(≤15字):\\n{branch_summary}\\n当前名称:{current_name}"
-    # return llm.generate(prompt)
-    return current_name
+    if FALLBACK_MODE:
+        # 降级：取权重最高的消息前20字
+        best = recent_texts[0] if recent_texts else ""
+        return best[:20] + ("..." if len(best) > 20 else "")
+
+    try:
+        # 构建上下文：给最近最重要的几条消息
+        context = "\n".join(f"{i+1}. {t}" for i, t in enumerate(recent_texts))
+        prompt = (
+            f"根据以下对话片段，生成一个简短的对话标题（≤12字，不要超过）：\n\n"
+            f"{context}\n\n"
+            f"当前标题: {current_name or '无'}\n"
+            f"要求：概括对话的核心主题，具体而不空洞。只输出标题本身，不要引号。"
+        )
+        result = await llm_service.generate(
+            messages=[{"role": "user", "content": prompt}],
+            task_type="summary",
+            temperature=0.3,
+            max_tokens=30,
+        )
+        name = (result or "").strip().strip('"''"「」')
+        if name and len(name) <= 15:
+            logger.info(f"LLM 生成分支名称: {name}")
+            return name
+        # 过长则截断
+        return name[:15] if name else current_name
+    except Exception as e:
+        logger.warning(f"LLM 分支命名失败，降级用规则: {e}")
+        best = recent_texts[0] if recent_texts else ""
+        return best[:20] + ("..." if len(best) > 20 else "")
 
 
 def update_partition_context(user_id: str, partition_id: str) -> str:
     """
     更新分区上下文摘要
-    
+
     合并所有分支摘要，生成分区级别的上下文
     LLM对话时注入这个摘要以省token
     """
@@ -105,7 +160,7 @@ def update_partition_context(user_id: str, partition_id: str) -> str:
 def generate_branch_summary(user_id: str, branch_id: str) -> str:
     """
     为分支生成摘要
-    
+
     触发条件：消息数 > 10 且距上次摘要 > 1小时，或手动触发
     """
     data = storage.load(user_id)
@@ -136,19 +191,20 @@ def generate_branch_summary(user_id: str, branch_id: str) -> str:
     return summary
 
 
-def try_auto_rename_branch(user_id: str, branch_id: str, message_count: int) -> str | None:
+async def try_auto_rename_branch(user_id: str, branch_id: str, message_count: int) -> str | None:
     """
     根据消息数量自动重命名分支
-    
+
     - 第5条消息：触发首次重命名
     - 第20条消息：触发二次重命名
     """
+
     if message_count == 5:
-        new_name = summarize_branch_name(user_id, branch_id)
+        new_name = await summarize_branch_name(user_id, branch_id)
         logger.info(f"分支 {branch_id} 首次重命名: {new_name}")
         return new_name
     elif message_count == 20:
-        new_name = summarize_branch_name(user_id, branch_id)
+        new_name = await summarize_branch_name(user_id, branch_id)
         logger.info(f"分支 {branch_id} 二次重命名: {new_name}")
         return new_name
     return None

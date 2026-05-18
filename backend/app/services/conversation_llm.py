@@ -35,7 +35,7 @@ def _p0_post_message_hooks(user_id: str, partition_id: str, node: TreeNode) -> N
         if loop.is_running():
             from app.services.meta_history import write_to_meta_history
             loop.create_task(write_to_meta_history(user_id, node))
-            
+
             data = storage.load(user_id)
             branch = data.branches.get(node.branch_id) if node.branch_id else None
             if branch:
@@ -43,9 +43,18 @@ def _p0_post_message_hooks(user_id: str, partition_id: str, node: TreeNode) -> N
                 from app.services.branch_summarizer import (
                     try_auto_rename_branch, generate_branch_summary, update_partition_context,
                 )
-                new_name = try_auto_rename_branch(user_id, node.branch_id, msg_count)
-                if new_name:
-                    branch.name = new_name
+
+                async def _do_rename():
+                    new_name = await try_auto_rename_branch(user_id, node.branch_id, msg_count)
+                    if new_name:
+                        _data = storage.load(user_id)
+                        _branch = _data.branches.get(node.branch_id)
+                        if _branch:
+                            _branch.name = new_name
+                            storage.save(user_id, _data)
+
+                loop.create_task(_do_rename())
+
                 if msg_count >= 10 and msg_count % 10 == 0:
                     generate_branch_summary(user_id, node.branch_id)
                 if msg_count % 5 == 0:
@@ -66,8 +75,22 @@ SYSTEM_PROMPT = """你是「苹小果」，一个温暖的智能伴学助手。�
 
 ## 回答规范
 - 用通俗易懂的语言解释概念，避免堆砌术语
-- 涉及数学公式使用 LaTeX 格式（$...$ 行内，$$...$$ 块级）
-- 涉及代码使用代码块格式，标注语言
+- **数学公式**：使用 LaTeX 格式（$...$ 行内，$$...$$ 块级），所有数学符号都用 LaTeX，不用 Unicode 近似
+- **代码块**：涉及代码或算法时，必须使用 \`\`\`语言名 包裹。例如：
+  \`\`\`python
+  def binary_search(arr, target):
+      left, right = 0, len(arr) - 1
+      while left <= right:
+          mid = (left + right) // 2
+          if arr[mid] == target:
+              return mid
+          elif arr[mid] < target:
+              left = mid + 1
+          else:
+              right = mid - 1
+      return -1
+  \`\`\`
+  不要输出裸代码（不带 \`\`\` 包裹），不要用中文标点代替英文标点
 - 回复简洁但完整，每次控制在合理长度
 - **引用溯源**：如果回答涉及具体知识点，在末尾用 [来源: 知识点名称] 标注。如 [来源: 导数与微分] [来源: 牛顿第二定律]
 - 涉及多个知识点时，分别标注
@@ -82,11 +105,21 @@ SYSTEM_PROMPT = """你是「苹小果」，一个温暖的智能伴学助手。�
 - **概念讲解后**：自然地邀请学生做练习巩固。如"要不要来两道题试试？💪"
 - **学生表示理解时**：建议搜索相关视频加深印象。如"需要我帮你搜一下B站上这个知识点的讲解视频吗？"
 - **学生卡住时**：推荐换个学习方式。如"要不要先看个视频换个角度理解？"
+- **学生复习整理时**：可以生成思维导图或学习笔记。如"我帮你整理成思维导图吧？📋"
 - **不要每个回复都推荐**，只在合适时机自然提起
+
+## 可用功能（你可以主动提供）
+你能帮助学生做以下事情，请在合适的时机自然地提供：
+- **📝 生成练习题**：针对当前知识点出题，支持基础和进阶难度
+- **🔍 搜索视频讲解**：在B站、YouTube、知乎等平台搜索教程
+- **🧠 生成思维导图**：整理知识结构，可视化学习内容
+- **📄 生成学习笔记**：输出 Markdown、PDF 等格式的复习文档
+- **🖼️ 生成示意图**：函数图像、概念图、流程图等
+学生不需要知道这些功能的名字，你只需像朋友一样说"我帮你搜个视频？"或"要不要做两道题？"
 
 ## 数学公式
 - **行内公式**使用 $...$，如 $f(x) = x^2$
-- **块级公式**使用 $$...$$，单独成行，如 $$\int_0^1 x^2 dx = \frac{1}{3}$$
+- **块级公式**使用 $$...$$，单独成行，如 $$\\int_0^1 x^2 dx = \\frac{1}{3}$$
 - 所有数学符号都用 LaTeX 写，不用 Unicode 近似
 
 ## 安全边界
@@ -386,8 +419,13 @@ async def generate_reply_with_tools(
         if node and not node.is_deleted:
             recent_messages.append(node)
 
-    # 意图预判
-    detected_tools = predict_tools(user_text)
+    # 意图预判（含上下文感知：AI建议→用户同意）
+    last_ai_text = ""
+    for msg in reversed(recent_messages):
+        if msg.role == "assistant":
+            last_ai_text = msg.text_summary or ""
+            break
+    detected_tools = predict_tools(user_text, last_ai_text)
     logger.info("Detected tools: %s for text: %s", detected_tools, user_text[:50])
 
     # 构建上下文
@@ -674,8 +712,9 @@ async def send_and_reply_stream(
     # P0: async meta history for assistant
     _p0_post_message_hooks(user_id, partition_id, assistant_node)
 
-    # 4. 检测工具调用并生成响应块
-    detected_tools = predict_tools(user_text)
+    # 4. 检测工具调用并生成响应块（含上下文感知）
+    last_ai_text = full_reply  # 当前AI回复本身可能建议了工具
+    detected_tools = predict_tools(user_text, last_ai_text)
     response_blocks = []
 
     if detected_tools:

@@ -19,12 +19,36 @@ TOOL_RULES: dict[str, str] = {
     r"笔记|文档|PDF|讲义|总结.*笔记|笔记.*总结": "generate_document",
 }
 
-def predict_tools(text: str) -> list[str]:
-    """规则预判：返回需要调用的工具列表"""
+# 肯定回复 + AI 上次建议了某个工具 → 触发该工具
+AI_SUGGESTION_PATTERNS: dict[str, str] = {
+    r"(搜|找|看看?).*?(视频|教程|讲解)": "search_media",
+    r"(做|来|出|练|试试).*?(题|练习)": "generate_practice",
+    r"(画|生成).*?(图|图像|示意图)": "generate_image",
+    r"(整理|生成|做).*?(思维导图|脑图|知识.*结构)": "generate_mindmap",
+    r"(生成|整理|做|写).*?(笔记|文档|总结)": "generate_document",
+}
+
+AFFIRMATIVE_PATTERNS = re.compile(
+    r"^(好[的啊吧呀]?|可以|嗯嗯?|行|试试|ok|yes|要[的得]?|来[吧]?|整[吧]?)$",
+    re.IGNORECASE,
+)
+
+
+def predict_tools(text: str, previous_ai_text: str = "") -> list[str]:
+    """规则预判：返回需要调用的工具列表。支持上下文感知（AI建议→用户同意）"""
     matched: set[str] = set()
+
+    # 1. 直接匹配用户消息
     for pattern, tool in TOOL_RULES.items():
         if re.search(pattern, text):
             matched.add(tool)
+
+    # 2. 上下文感知：用户肯定回复 + AI 上次建议了某个工具
+    if AFFIRMATIVE_PATTERNS.match(text.strip()) and previous_ai_text:
+        for pattern, tool in AI_SUGGESTION_PATTERNS.items():
+            if re.search(pattern, previous_ai_text):
+                matched.add(tool)
+
     return list(matched)
 
 # ── 工具定义 (LLM tools格式) ──

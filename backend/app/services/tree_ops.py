@@ -188,9 +188,13 @@ class TreeOpsService:
             text_summary=new_text_summary,
         )
 
-        # 为修改版本创建新分支
+        # 为修改版本创建新分支（祖先路径从根到父节点）
         branch = self.create_branch(user_id, node.partition_id, fork_point_id=node.parent_id)
         new_node.branch_id = branch.id
+
+        # ⚠️ 关键修复：将新节点追加到分支路径
+        branch.path.append(new_node.id)
+        branch.last_message_at = time.time()
 
         # 添加到父节点的 children
         parent = data.nodes.get(node.parent_id)
