@@ -807,5 +807,69 @@ T9: 第二天，学生打开对话branch
 | `backend/app/services/zpd_scheduler.py` | ZPD调度（使用MDKS） | ✅ 已实现 |
 | `backend/app/services/question_generator.py` | LLM题目生成 | ✅ 已实现 |
 | `docs/practice-system-design-v2.md` (§7) | 对话×练习联动设计 | ✅ 已写 |
+| `docs/study-planning-design.md` | 学习规划系统设计 | ✅ 新文档 |
+| `docs/knowledge-graph-design.md` | 知识图谱系统设计 | ✅ 新文档 |
+
+---
+
+## 附录C：全系统模块互联矩阵
+
+> 更新: 2026-05-18 — 加入学习规划+知识图谱
+
+### C.1 互联总览
+
+```
+                          ┌──────────────┐
+                          │  知识图谱     │
+                          │  (Graph)     │
+                          └──┬───┬───┬──┘
+                 前置依赖    │   │   │  掌握度
+               ┌────────────┘   │   └────────────┐
+               ▼                │                ▼
+┌──────────┐  选题    ┌─────────┴────────┐  推荐  ┌──────────┐
+│  练习系统 │◀────────│    学习规划       │──────▶│  BKT引擎  │
+│ Practice │────────▶│   StudyPlan      │◀──────│ k_trace  │
+└────┬─────┘ 答题记录 └────────┬─────────┘ 知识推荐└──────────┘
+     │                        │
+     │ stats/behavior         │ plan items
+     ▼                        ▼
+┌──────────┐            ┌──────────┐
+│ 行为分析  │───────────▶│ 习惯养成  │
+│ Behavior │ 疲劳/规律   │ Habits   │
+└──────────┘            └──────────┘
+     │
+     │ daily_trend + heatmap
+     ▼
+┌──────────┐            ┌──────────┐
+│ 学情仪表  │◀──────────│ 对话系统  │
+│ Analytics│ 练习上下文  │Conversat │
+└──────────┘            └──────────┘
+```
+
+### C.2 全量连接矩阵
+
+| # | 从 | 到 | 数据 | 触发 | 状态 |
+|---|----|----|------|------|:--:|
+| 1 | BKT | StudyPlan | recommend_practice() → plan items | 生成计划 | ✅ |
+| 2 | BKT | Graph | p_known → node.mastery | 实时查询 | 🔴 |
+| 3 | BKT | Practice | 知识状态 → 选题难度 | 创建session | ✅ |
+| 4 | ZPD | Practice | 能力估计 → ZPD选题 | 创建session | ✅ |
+| 5 | ZPD | StudyPlan | 难度调整 → 计划时长 | 生成计划 | 🟡 |
+| 6 | Practice | StudyPlan | session完成 → task标记完成 | 手动触发 | ✅ |
+| 7 | Practice | Behavior | daily_trend + hourly_heatmap | 查询stats | ✅ |
+| 8 | Practice | ErrorBook | is_correct=F → error_book | 提交答案 | ✅ |
+| 9 | Practice | Conversation | session结果 → branch summary | session完成 | 🟡 |
+| 10 | Behavior | HabitFormation | streak/fatigue → goal/pomodoro | 查询behavior | ✅ |
+| 11 | Behavior | Analytics | 全部指标 → 6面板 | 页面加载 | ✅ |
+| 12 | HabitFormation | Analytics | daily_goal → 进度环 | 页面加载 | ✅ |
+| 13 | Graph | ZPD | 前置依赖 → can_practice() | 选题时 | 🔴 |
+| 14 | Graph | StudyPlan | 学习路径 → plan items | 生成计划 | 🔴 |
+| 15 | Graph | Conversation | 图谱引用 → 对话上下文 | 对话触发 | 🔴 |
+| 16 | Content | Graph | 知识点 → 推荐资料 | 搜索时 | 🔴 |
+| 17 | Content | StudyPlan | 资料匹配 → plan resources | 生成计划 | 🟡 |
+| 18 | Conversation | Practice | 对话上下文 → 选题 | 对话触发出题 | 🟡 |
+| 19 | Conversation | StudyPlan | 对话意图 → 计划调整 | coach agent | 🔴 |
+
+**图例**：✅=已实现 🟡=部分/有代码但未全链路 🔴=未实现
 | `docs/conversation-system-design.md` | 对话系统设计 | ✅ 已写 |
 | `docs/dialogue-practice-integration.md` | **本文档** | ✅ |

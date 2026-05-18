@@ -15,10 +15,10 @@
 ├─────────────────────────────────────────────────────────────┤
 │                    API 层 (FastAPI)                           │
 │  conversation / practice / material / chat / study / content │
-├──────────┬──────────┬──────────┬──────────┬────────────────┤
-│ 对话引擎  │ 练习引擎  │ 资料引擎  │ 行为引擎  │ 媒体搜索       │
-│ LLM+树   │ BKT+ZPD  │ RAG+向量 │ streak+  │ B站/Bing/     │
-│ +多模态   │ +错题本  │ +索引    │ 习惯养成  │ 百度/小红书    │
+├──────────┬──────────┬──────────┬──────────┬──────────┬────────────┤
+│ 对话引擎  │ 练习引擎  │ 学习规划  │ 知识图谱  │ 行为引擎  │ 媒体搜索    │
+│ LLM+树   │ BKT+ZPD  │ Plan+    │ 8节点    │ streak+  │ B站/Bing/  │
+│ +多模态   │ +错题本  │ Habits   │ 8边 SVG  │ 习惯养成  │ 百度/小红书  │
 ├──────────┴──────────┴──────────┴──────────┴────────────────┤
 │                   持久化 (JSON文件 + 内存)                    │
 │         UserData.json ← storage engine (线程安全)           │
@@ -45,9 +45,9 @@
 
 | # | 模块 | 完成度 | 已完成 | 待完成 |
 |---|------|--------|--------|--------|
-| 8 | **学习规划** | ⚠️ 30% | study API基础(plan生成/进度)、ZPD调度 | 自适应学习计划、前置知识卡控 |
-| 9 | **知识图谱** | ⚠️ 20% | /graph页面骨架、mastery_bars数据 | 力导向图可视化、前置关系图 |
-| 10 | **多模态交互** | ⚠️ 40% | ContentBlock(text/image/audio/video)、文件上传 | 语音输入(STT)、手写识别、视频内嵌播放 |
+| 8 | **学习规划** | 🟡 40% | study API(plan生成/进度)、BKT推荐、ZPD调度、每日目标分级、设计文档 ✅ | 自适应计划、前置知识卡控集成、DB持久化 |
+| 9 | **知识图谱** | 🟡 25% | 前端SVG图谱(8节点/8边)、缩放/平移/详情、掌握度环、设计文档 ✅ | 后端API、BKT掌握度注入、前置路径推荐、自动布局 |
+| 10 | **多模态交互** | 🟡 40% | ContentBlock(text/image/audio/video)、文件上传 | 语音输入(STT)、手写识别、视频内嵌播放 |
 
 ### 🔴 未开始（2/12）
 
@@ -155,15 +155,28 @@ GET /stats → overview(当期+环比) + mastery_bars(持久化KnowledgeState)
 GET /behavior → streak + best_hours + regularity + pomodoro + tiny_habits
 ```
 
+### 设计文档
+
+| 文档 | 说明 | 状态 |
+|------|------|:--:|
+| `docs/practice-system-design-v2.md` | 练习系统完整设计 (2658行) | ✅ |
+| `docs/conversation-system-design.md` | 对话系统设计 | ✅ |
+| `docs/dialogue-practice-integration.md` | 对话×练习互联 + 19点连接矩阵 | ✅ |
+| `docs/analytics-dashboard-design.md` | 学情仪表板设计 | ✅ |
+| `docs/material-system-design.md` | 资料系统设计 | ✅ |
+| `docs/media-search-design.md` | 媒体搜索设计 | ✅ |
+| `docs/study-planning-design.md` | **学习规划系统设计** 🆕 | ✅ |
+| `docs/knowledge-graph-design.md` | **知识图谱系统设计** 🆕 | ✅ |
+
 ---
 
-## 七、下一阶段建议
+## 九、下一阶段建议
 
 ### P0 — 让系统"能用"
 | # | 任务 | 预计工作量 |
 |---|------|-----------|
 | 1 | PostgreSQL 迁移（内存→持久DB） | ✅ 已完成 |
-| 2 | 前端错误修复 + 端到端测试 | 2-3天 |
+| 2 | 前端错误修复 + 端到端测试 | ✅ 已完成 |
 
 ### P1 — 让系统"好用"
 | # | 任务 | 预计工作量 |
