@@ -73,8 +73,29 @@ DEEPSEEK_API_KEY=sk-your-key
 OPENAI_API_KEY=sk-your-key
 OPENAI_API_BASE=https://api.deepseek.com
 DEFAULT_MODEL=deepseek/deepseek-v4-flash
+
+# 数据库
+DB_NAME=edu_companion
+DB_USER=companion
+DB_PASSWORD=companion123
+DB_HOST=localhost
+DB_PORT=5432
 ENVEOF
     echo "   ⚠️  请编辑 backend/.env 填入 API Key"
+fi
+
+# 检测 .env 中是否缺少 DB_PASSWORD，自动补上
+if ! grep -q "^DB_PASSWORD=" .env 2>/dev/null; then
+    echo "   ⚠️  .env 缺少 DB_PASSWORD，自动补充..."
+    cat >> .env << 'ENVEOF'
+
+# 数据库
+DB_NAME=edu_companion
+DB_USER=companion
+DB_PASSWORD=companion123
+DB_HOST=localhost
+DB_PORT=5432
+ENVEOF
 fi
 
 # 数据库连接检查
