@@ -239,7 +239,7 @@ CONFUSION_PATTERNS = [
 #   - 增加内联练习题而非独立session
 #   - AI先解释再出题，而非直接出题
 
-已实现状态：⚠️ 设计完成，代码未实现
+已实现状态：✅ API 端点已实现 (`POST /api/practice/context-trigger`)；服务端 `context_trigger.py` 存在
 ```
 
 ---
@@ -415,7 +415,7 @@ class InlinePracticeHandler:
 | 数据记录 | 挂载到branch | 独立session + 挂载到branch |
 
 ```
-已实现状态：⚠️ 设计完成，前端+后端均未实现
+已实现状态：✅ 后端 3 个端点已实现 (`POST /api/practice/inline/create|answer|hint`)；服务端 `inline_practice.py` 存在；前端组件 `InlinePracticeBlock.tsx` 存在
 ```
 
 ---
@@ -497,7 +497,7 @@ SharedKnowledgeState.update_from_conversation(
 ```
 
 ```
-已实现状态：⚠️ 设计完成，代码未实现
+已实现状态：✅ API 端点已实现 (`POST /api/practice/dialogue-recommend`)；服务端 `dialogue_recommender.py` 存在
 ```
 
 ---
@@ -546,7 +546,7 @@ class PracticeRecallInConversation:
 ```
 
 ```
-已实现状态：⚠️ 设计完成，代码未实现
+已实现状态：✅ API 端点已实现 (`GET /api/practice/recall`)；服务端 `practice_recall.py` 存在
 ```
 
 ---
@@ -651,31 +651,49 @@ def should_suggest_practice(branch: Branch, shared_ks: SharedKnowledgeState) -> 
 ```
 
 ```
-已实现状态：⚠️ 设计完成，代码未实现
+已实现状态：⚠️ 设计完成，代码未实现（需要在 conversation_llm 系统提示中加入主动建议逻辑）
 ```
 
 ---
 
 ## 十一、实现状态总览
 
+> **最后更新: 2026-05-18** — 学情仪表板设施阶段
+
 | # | 集成点 | 设计 | 后端 | 前端 | 优先级 |
 |---|--------|------|------|------|--------|
-| ③ | 共享知识状态 MDKS | ✅ | ✅ BKT.update() | N/A | P0 (已完成) |
-| ② | 练习→对话 结果写回 | ✅ | ✅ practice_integrator.py | ⬜ branch侧边栏显示 | P0 (已完成) |
-| ② | LLM上下文注入 | ✅ | ✅ conversation_llm.py L82-89 | N/A | P1 (已完成) |
-| ⑨ | Session-Branch绑定 | ✅ | ✅ (branch_id字段) | ⬜ 前端展示 | P1 (已完成) |
-| ① | 对话→练习 上下文选题 | ✅ | ⬜ ContextAwarePracticeTrigger | N/A | P2 |
-| ④ | 内联练习 | ✅ | ⬜ InlinePracticeHandler | ⬜ 前端练习组件 | P2 |
-| ⑤ | 错误→对话推荐 | ✅ | ⬜ PracticeToDialogueRec | N/A | P2 |
+| ③ | 共享知识状态 MDKS | ✅ | ✅ BKT.update() + **load_or_create/save_state 持久化** | N/A | P0 ✅ |
+| ② | 练习→对话 结果写回 | ✅ | ✅ practice_integrator.py | ⬜ branch侧边栏显示 | P0 ✅ |
+| ② | LLM上下文注入 | ✅ | ✅ conversation_llm.py L82-89 | N/A | P1 ✅ |
+| ⑨ | Session-Branch绑定 | ✅ | ✅ (branch_id字段) | ⬜ 前端展示 | P1 ✅ |
+| ① | 对话→练习 上下文选题 | ✅ | ✅ /context-trigger API | N/A | P2 ✅ |
+| ④ | 内联练习 | ✅ | ✅ /inline/* 3个端点 | ⬜ InlinePracticeBlock 前端组件 | P2 ⚠️ |
+| ⑤ | 错误→对话推荐 | ✅ | ✅ /dialogue-recommend API | N/A | P2 ✅ |
 | ③ | 对话→MDKS更新 | ✅ | ⬜ update_from_conversation | N/A | P2 |
-| ⑧ | 练习回顾 | ✅ | ⬜ PracticeRecallInConv | N/A | P3 |
+| ⑧ | 练习回顾 | ✅ | ✅ /recall API | N/A | P3 ✅ |
+| — | 知识状态持久化 | ✅ | ✅ bkt_engine.load_or_create/save_state | N/A | **新增** |
+| — | 错因分布聚合 | ✅ | ✅ /stats error_distribution | N/A | **新增** |
+| — | 历史环比对比 | ✅ | ✅ /stats prev_week | N/A | **新增** |
+| — | 时段热力图 | ✅ | ✅ /stats hourly_heatmap | N/A | **新增** |
+| — | 学情仪表板 API | ✅ | ✅ /stats 增强（mastery_bars） | ⬜ 仪表板前端页面 | **新增** |
 
-### 实现优先级说明
+### 关键变更说明
 
-- **P0 (已完成)**: 核心数据流——共享状态、结果回写、Session绑定
-- **P1 (已完成)**: LLM上下文注入——AI能感知练习结果
-- **P2 (下一阶段)**: 对话上下文选题 + 内联练习 + 错误驱动深度对话
-- **P3 (后续)**: 练习回顾、AI主动建议练习
+- **知识状态已持久化**: `UserData.knowledge_states` 字段 → `storage.load/save`，答题后自动写入磁盘
+- **BKT 引擎新增 3 个持久化方法**: `load_or_create()`, `save_state()`, `load_all_states()`
+- **/stats 端点大幅增强**: 新增 error_distribution、prev_week 环比、mastery_bars（读持久化 KnowledgeState）、hourly_heatmap、daily_trend
+- **文档标记修正**: 原本标记为 ⬜ 的 P2 接口实际已实现（context-trigger/inline/dialogue-recommend/recall）
+
+### 待完成
+
+| 项目 | 状态 |
+|------|------|
+| 内联练习前端组件 | ⬜ InlinePracticeBlock.tsx 需验证/完善 |
+| 前端 branch 侧边栏显示练习记录 | ⬜ |
+| `update_from_conversation` 对话→BKT | ⬜ 设计完成，后端未实现 |
+| 仪表板前端页面 (`analytics/page.tsx`) | ⬜ 需基于新 API 重写 |
+| 建议行动规则引擎 | ⬜ 设计有伪代码，未实现 |
+| 对话行为数据接入仪表板 | ⬜ 设计阶段 |
 
 ---
 
@@ -780,12 +798,12 @@ T9: 第二天，学生打开对话branch
 
 | 文件 | 内容 | 状态 |
 |------|------|------|
-| `backend/app/core/knowledge_trace.py` | BKT引擎，MDKS核心更新逻辑 | ✅ 已实现 |
+| `backend/app/core/knowledge_trace.py` | BKT引擎 + **load_or_create/save_state 持久化** | ✅ 已实现 |
 | `backend/app/services/practice_integrator.py` | 练习→对话结果写入 | ✅ 已实现 |
 | `backend/app/services/conversation_llm.py` | LLM上下文注入(L82-89) | ✅ 已实现 |
-| `backend/app/api/practice.py` | 练习API（含branch_id参数） | ✅ 已实现 |
+| `backend/app/api/practice.py` | 练习API + **/stats 增强（错因/环比/热力/掌握度）** | ✅ 已实现 |
 | `backend/app/schemas/practice.py` | 练习数据模型 | ✅ 已实现 |
-| `backend/app/schemas/conversation.py` | Branch.practice_sessions/practice_summary | ✅ 已实现 |
+| `backend/app/schemas/conversation.py` | Branch.practice_* + **UserData.knowledge_states/practice_sessions** | ✅ 已实现 |
 | `backend/app/services/zpd_scheduler.py` | ZPD调度（使用MDKS） | ✅ 已实现 |
 | `backend/app/services/question_generator.py` | LLM题目生成 | ✅ 已实现 |
 | `docs/practice-system-design-v2.md` (§7) | 对话×练习联动设计 | ✅ 已写 |

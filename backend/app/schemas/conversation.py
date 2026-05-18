@@ -167,6 +167,10 @@ class UserData(BaseModel):
     active_partition_id: str | None = None
     response_blocks: dict[str, 'ResponseBlock'] = Field(default_factory=dict)
     background_jobs: dict[str, 'BackgroundJob'] = Field(default_factory=dict)
+    # P2: 练习系统持久化（知识状态 + 练习会话）
+    knowledge_states: dict[str, dict] = Field(default_factory=dict)  # skill_id → KnowledgeState dict
+    practice_sessions: dict[str, dict] = Field(default_factory=dict)  # session_id → PracticeSession dict
+    error_book: dict[str, list[dict]] = Field(default_factory=dict)  # user_id → ErrorBookEntry dicts
 
 
 # ── Response Block（多模态响应块） ──

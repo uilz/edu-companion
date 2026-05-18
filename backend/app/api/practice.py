@@ -307,13 +307,13 @@ async def submit_answer(req: SubmitAnswerRequest):
     )
 
     # 更新知识状态
-    from app.schemas.practice import KnowledgeState
-    state = bkt_engine.create_knowledge_state(question.skill_id)
+    state = bkt_engine.load_or_create(session.user_id, question.skill_id)
     updated_state = bkt_engine.update(
         state, is_correct,
         hint_level=req.hints_used,
         explanation_score=None,  # 需要LLM评分，MVP先跳过
     )
+    bkt_engine.save_state(session.user_id, updated_state)  # 持久化
 
     attempt.knowledge_before = {question.skill_id: state.p_known}
     attempt.knowledge_after = {question.skill_id: updated_state.p_known}
@@ -469,69 +469,135 @@ async def get_due_errors():
 
 @router.get("/stats")
 async def get_stats(time_range: str = "week"):
-    """获取练习统计"""
-    user_id = "default_user"
-    all_attempts = []
-    for session in _sessions.values():
-        if session.user_id == user_id:
-            all_attempts.extend(session.attempts)
+    """获取练习统计（增强：含错因分布、环比、知识掌握度）"""
+    from datetime import datetime, timedelta
 
-    if not all_attempts:
-        return PracticeStats(user_id=user_id).model_dump()
+    user_id = "default_user"
+    now = datetime.now()
+
+    # 时间窗口
+    if time_range == "week":
+        days_back = 7
+        prev_days_back = 14
+    elif time_range == "month":
+        days_back = 30
+        prev_days_back = 60
+    else:  # all
+        days_back = 365
+        prev_days_back = 730
+
+    cutoff = now - timedelta(days=days_back)
+    prev_cutoff_start = now - timedelta(days=prev_days_back)
+    prev_cutoff_end = now - timedelta(days=days_back)
+
+    # ── 当期数据 ──
+    current_sessions = [
+        s for s in _sessions.values()
+        if s.user_id == user_id and s.started_at >= cutoff
+    ]
+    all_attempts = []
+    for s in current_sessions:
+        all_attempts.extend(s.attempts)
 
     total = len(all_attempts)
     correct = sum(1 for a in all_attempts if a.is_correct)
+    accuracy = correct / total if total > 0 else 0.0
+    study_minutes = sum(s.duration_minutes for s in current_sessions)
+    study_days = len(set(s.started_at.strftime("%Y-%m-%d") for s in current_sessions))
 
-    # 按知识点统计
-    skill_map: dict[str, SkillStat] = {}
-    for attempt in all_attempts:
-        # 从题目获取skill_id
-        skill = "unknown"
-        for pool in _question_bank.values():
-            for q in pool:
-                if q.question_id == attempt.question_id:
-                    skill = q.skill_id
-                    break
+    # ── 环比数据（上一周期） ──
+    prev_sessions = [
+        s for s in _sessions.values()
+        if s.user_id == user_id
+        and prev_cutoff_start <= s.started_at < prev_cutoff_end
+    ]
+    prev_attempts = []
+    for s in prev_sessions:
+        prev_attempts.extend(s.attempts)
+    prev_total = len(prev_attempts)
+    prev_correct = sum(1 for a in prev_attempts if a.is_correct)
+    prev_accuracy = prev_correct / prev_total if prev_total > 0 else 0.0
+    prev_minutes = sum(s.duration_minutes for s in prev_sessions)
+    prev_days = len(set(s.started_at.strftime("%Y-%m-%d") for s in prev_sessions))
 
-        if skill not in skill_map:
-            skill_map[skill] = SkillStat(skill_id=skill, subject=q.subject if q else "")
-        s = skill_map[skill]
-        s.total_attempts += 1
-        if attempt.is_correct:
-            s.correct_count += 1
+    # ── 错因分布 ──
+    error_dist: dict[str, int] = {}
+    for a in all_attempts:
+        if not a.is_correct and a.error_analysis:
+            etype = a.error_analysis.error_type.value
+            error_dist[etype] = error_dist.get(etype, 0) + 1
 
-    for s in skill_map.values():
-        if s.total_attempts > 0:
-            s.accuracy = s.correct_count / s.total_attempts
+    # ── 知识掌握度（从持久化状态读取） ──
+    skill_states = bkt_engine.load_all_states(user_id)
+    mastery_bars = []
+    for skill_id, state in skill_states.items():
+        if state.attempt_count > 0:
+            mastery_bars.append({
+                "skill_id": skill_id,
+                "p_known": round(state.p_known, 2),
+                "mastery_level": bkt_engine.get_mastery_level(state),
+                "attempt_count": state.attempt_count,
+                "correct_count": state.correct_count,
+            })
+    mastery_bars.sort(key=lambda x: x["p_known"])  # 低→高
 
-    weak = [(s.skill_id, s.accuracy) for s in skill_map.values() if s.accuracy < 0.6]
-    strong = [(s.skill_id, s.accuracy) for s in skill_map.values() if s.accuracy >= 0.8]
+    # ── 每日趋势 ──
+    daily_trend: list[dict] = []
+    for i in range(days_back - 1, -1, -1):
+        day = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+        day_attempts = [
+            a for a in all_attempts
+            if a.submitted_at.strftime("%Y-%m-%d") == day
+        ]
+        day_total = len(day_attempts)
+        day_correct = sum(1 for a in day_attempts if a.is_correct)
+        daily_trend.append({
+            "date": day[-5:],  # MM-DD
+            "questions": day_total,
+            "correct": day_correct,
+            "accuracy": round(day_correct / day_total, 2) if day_total > 0 else 0.0,
+        })
 
-    # 每日统计
-    daily: dict[str, DailyStat] = {}
-    for session in _sessions.values():
-        if session.user_id == user_id:
-            date_key = session.started_at.strftime("%Y-%m-%d")
-            if date_key not in daily:
-                daily[date_key] = DailyStat(date=date_key)
-            d = daily[date_key]
-            d.questions_done += len(session.attempts)
-            d.correct_count += sum(1 for a in session.attempts if a.is_correct)
-            d.study_minutes += session.duration_minutes
+    # ── 时段热力图 ──
+    hourly_heatmap: list[dict] = []
+    day_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+    for day_idx in range(7):
+        for hour in [8, 10, 14, 16, 20, 22]:
+            count = sum(
+                1 for a in all_attempts
+                if a.submitted_at.weekday() == day_idx
+                and a.submitted_at.hour == hour
+            )
+            hourly_heatmap.append({
+                "day": day_idx + 1,
+                "day_name": day_names[day_idx],
+                "hour": hour,
+                "questions": count,
+            })
 
-    for d in daily.values():
-        if d.questions_done > 0:
-            d.accuracy = d.correct_count / d.questions_done
-
-    return PracticeStats(
-        user_id=user_id,
-        total_questions=total,
-        total_correct=correct,
-        accuracy=correct / total if total > 0 else 0.0,
-        study_minutes=sum(s.duration_minutes for s in _sessions.values() if s.user_id == user_id),
-        weak_skills=sorted(weak, key=lambda x: x[1])[:5],
-        strong_skills=sorted(strong, key=lambda x: x[1], reverse=True)[:5],
-    ).model_dump()
+    return {
+        "user_id": user_id,
+        "time_range": time_range,
+        "overview": {
+            "total_questions": total,
+            "accuracy": round(accuracy, 2),
+            "study_days": study_days,
+            "study_minutes": round(study_minutes, 1),
+            "prev_week": {
+                "total_questions": prev_total,
+                "accuracy": round(prev_accuracy, 2),
+                "study_days": prev_days,
+                "study_minutes": round(prev_minutes, 1),
+            },
+        },
+        "daily_trend": daily_trend,
+        "mastery_bars": mastery_bars,
+        "error_distribution": [
+            {"type": etype, "count": cnt, "pct": round(cnt / sum(error_dist.values()), 2)}
+            for etype, cnt in sorted(error_dist.items(), key=lambda x: -x[1])
+        ],
+        "hourly_heatmap": hourly_heatmap,
+    }
 
 
 # ──────────────────────────────────────────────

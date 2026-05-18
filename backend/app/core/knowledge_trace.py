@@ -228,6 +228,50 @@ class BKTEngine:
         stability = state.explanation_state.stability if state.explanation_state else 1.0
         return math.exp(-days_since / max(stability, 0.1))
 
+    # ── 持久化 ──
+
+    def load_or_create(
+        self,
+        user_id: str,
+        skill_id: str,
+        p_known: float | None = None,
+    ) -> KnowledgeState:
+        """
+        从 UserData 加载已有知识状态，不存在则创建。
+        状态持久化在 UserData.knowledge_states[skill_id] 中。
+        """
+        try:
+            from app.services.storage import storage
+            data = storage.load(user_id)
+            if skill_id in data.knowledge_states:
+                state_dict = data.knowledge_states[skill_id]
+                return KnowledgeState(**state_dict)
+        except Exception:
+            pass  # 降级：创建新状态
+        return self.create_knowledge_state(skill_id, p_known=p_known)
+
+    def save_state(self, user_id: str, state: KnowledgeState) -> None:
+        """将知识状态写入 UserData 并持久化到磁盘"""
+        try:
+            from app.services.storage import storage
+            data = storage.load(user_id)
+            data.knowledge_states[state.skill_id] = state.model_dump()
+            storage.save(user_id, data)
+        except Exception:
+            pass  # 写入失败静默降级，不影响答题流
+
+    def load_all_states(self, user_id: str) -> dict[str, KnowledgeState]:
+        """加载用户的所有知识状态"""
+        try:
+            from app.services.storage import storage
+            data = storage.load(user_id)
+            return {
+                skill_id: KnowledgeState(**state_dict)
+                for skill_id, state_dict in data.knowledge_states.items()
+            }
+        except Exception:
+            return {}
+
 
 # 全局实例
 bkt_engine = BKTEngine()

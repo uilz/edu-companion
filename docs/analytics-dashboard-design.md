@@ -270,10 +270,41 @@ def generate_suggestions(stats: AnalyticsData) -> list[Suggestion]:
 
 ## 七、实施计划
 
-| 步骤 | 内容 | 文件 |
-|------|------|------|
-| 1 | 增强统计 API | `api/practice.py` → `/analytics` 端点 |
-| 2 | 重写仪表板页面 | `frontend/src/app/analytics/page.tsx` |
-| 3 | 首页/练习页跳转 | 练习结果→仪表板链接 |
+| 步骤 | 内容 | 文件 | 状态 |
+|------|------|------|------|
+| 1 | 知识状态持久化 | `knowledge_trace.py` + `conversation.py` | ✅ 已完成 |
+| 2 | BKT 引擎 load_or_create / save_state | `knowledge_trace.py` | ✅ 已完成 |
+| 3 | submit_answer 使用持久化状态 | `api/practice.py` L310-316 | ✅ 已完成 |
+| 4 | /stats 端点增强（错因+环比+知识掌握+热力） | `api/practice.py` L470-603 | ✅ 已完成 |
+| 5 | /analytics 独立端点（含建议行动） | `api/practice.py` | ⬜ 待实施 |
+| 6 | 重写仪表板页面 | `frontend/src/app/analytics/page.tsx` | ⬜ 待实施 |
+| 7 | 首页/练习页跳转 | 练习结果→仪表板链接 | ⬜ 待实施 |
 
-无新服务，不新增文件，改两个文件即可。
+### 步骤 1-4 已完成的改动
+
+1. **UserData 扩展** (`schemas/conversation.py`): 新增 `knowledge_states`、`practice_sessions`、`error_book` 持久化字段
+2. **BKT 引擎持久化** (`core/knowledge_trace.py`): 新增 `load_or_create(user_id, skill_id)`, `save_state(user_id, state)`, `load_all_states(user_id)` 三个方法
+3. **答题流程改造** (`api/practice.py submit_answer`): `create_knowledge_state` → `load_or_create` + 答题后 `save_state`
+4. **统计端点增强** (`api/practice.py /stats`):
+   - `error_distribution`: 从 AttemptRecord.error_analysis.error_type 聚合
+   - `overview.prev_week`: 上一周期的环比对比数据
+   - `mastery_bars`: 从持久化 KnowledgeState 读取 p_known
+   - `hourly_heatmap`: 周×小时 7×6 网格聚合
+   - `daily_trend`: 7日每日题量+正确率
+
+### 数据流确认
+
+```
+答题 submit_answer
+  → bkt_engine.load_or_create(user_id, skill_id)  # 加载持久化状态
+  → bkt_engine.update(state, is_correct, ...)       # BKT 更新
+  → bkt_engine.save_state(user_id, updated_state)   # 写回 UserData
+  → storage.save(user_id, data)                      # 持久化到磁盘
+
+仪表板 GET /stats
+  → overview: 当期 session 聚合 + 上一周期环比
+  → mastery_bars: bkt_engine.load_all_states(user_id) → p_known
+  → error_distribution: 遍历 attempts → error_type 聚合
+  → hourly_heatmap: 遍历 attempts → day×hour 聚合
+  → daily_trend: 按日期分桶
+```

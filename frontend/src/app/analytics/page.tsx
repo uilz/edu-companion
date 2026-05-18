@@ -1,34 +1,317 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { BarChart3, Target, Clock, TrendingUp, Loader2, BookOpen } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import {
+  BarChart3, Target, Clock, TrendingUp, Loader2, BookOpen,
+  CalendarDays, Zap, AlertTriangle,
+} from "lucide-react";
 import Link from "next/link";
 import Card from "@/components/ui/Card";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-interface PracticeStats {
+// ── 类型 ──
+
+interface Overview {
   total_questions: number;
-  total_correct: number;
   accuracy: number;
+  study_days: number;
   study_minutes: number;
-  weak_skills: [string, number][];
-  strong_skills: [string, number][];
+  prev_week: {
+    total_questions: number;
+    accuracy: number;
+    study_days: number;
+    study_minutes: number;
+  };
 }
 
+interface DailyPoint {
+  date: string;
+  questions: number;
+  correct: number;
+  accuracy: number;
+}
+
+interface MasteryBar {
+  skill_id: string;
+  p_known: number;
+  mastery_level: string;
+  attempt_count: number;
+  correct_count: number;
+}
+
+interface ErrorDist {
+  type: string;
+  count: number;
+  pct: number;
+}
+
+interface HeatmapCell {
+  day: number;
+  day_name: string;
+  hour: number;
+  questions: number;
+}
+
+interface AnalyticsData {
+  user_id: string;
+  time_range: string;
+  overview: Overview;
+  daily_trend: DailyPoint[];
+  mastery_bars: MasteryBar[];
+  error_distribution: ErrorDist[];
+  hourly_heatmap: HeatmapCell[];
+}
+
+// ── 辅助 ──
+
+const ERROR_LABELS: Record<string, string> = {
+  conceptual: "概念错误",
+  procedural: "程序错误",
+  computation: "计算错误",
+  reading: "审题错误",
+  transfer: "迁移错误",
+  meta: "元认知",
+};
+
+const MASTERY_COLORS: Record<string, string> = {
+  "已掌握": "var(--color-success)",
+  "接近掌握": "#60a5fa",
+  "发展中": "var(--color-warning)",
+  "初学": "var(--color-error)",
+  "未接触": "var(--color-text-muted)",
+};
+
+const MASTERY_EMOJI: Record<string, string> = {
+  "已掌握": "✅",
+  "接近掌握": "🔷",
+  "发展中": "🔶",
+  "初学": "🔴",
+  "未接触": "⬜",
+};
+
+function deltaStr(curr: number, prev: number, fmt: (n: number) => string): string {
+  const d = curr - prev;
+  if (d > 0) return `↑${fmt(d)}`;
+  if (d < 0) return `↓${fmt(Math.abs(d))}`;
+  return "→ 0";
+}
+
+function deltaColor(curr: number, prev: number): string {
+  if (curr > prev) return "var(--color-success)";
+  if (curr < prev) return "var(--color-error)";
+  return "var(--color-text-muted)";
+}
+
+// ── 趋势图（纯 SVG） ──
+
+function TrendChart({ data }: { data: DailyPoint[] }) {
+  const w = 600, h = 160, pad = { t: 20, r: 20, b: 30, l: 40 };
+  const pw = w - pad.l - pad.r;
+  const ph = h - pad.t - pad.b;
+
+  const maxQ = Math.max(...data.map((d) => d.questions), 1);
+  const xs = data.map((_, i) => pad.l + (i / Math.max(data.length - 1, 1)) * pw);
+  const ys = data.map((d) => pad.t + ph - (d.questions / maxQ) * ph);
+
+  const pointsQ = xs.map((x, i) => `${x},${ys[i].toFixed(1)}`).join(" ");
+  const maxY = pad.t + ph;
+
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-auto" style={{ fontFamily: "inherit" }}>
+      {/* Grid lines */}
+      {[0, 0.25, 0.5, 0.75, 1].map((frac) => {
+        const y = pad.t + ph * (1 - frac);
+        return (
+          <g key={frac}>
+            <line x1={pad.l} y1={y} x2={w - pad.r} y2={y} stroke="var(--color-border)" strokeWidth="0.5" />
+            <text x={pad.l - 8} y={y + 4} textAnchor="end" fill="var(--color-text-muted)" fontSize="10">
+              {Math.round(maxQ * frac)}
+            </text>
+          </g>
+        );
+      })}
+      {/* Date labels */}
+      {data.map((d, i) => (
+        <text
+          key={d.date}
+          x={xs[i]}
+          y={maxY + 18}
+          textAnchor="middle"
+          fill="var(--color-text-muted)"
+          fontSize="9"
+        >
+          {d.date}
+        </text>
+      ))}
+      {/* Area fill */}
+      <polygon
+        points={`${xs[0]},${maxY} ${pointsQ} ${xs[xs.length - 1]},${maxY}`}
+        fill="var(--color-accent)"
+        opacity="0.08"
+      />
+      {/* Line */}
+      <polyline
+        points={pointsQ}
+        fill="none"
+        stroke="var(--color-accent)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* Dots */}
+      {xs.map((x, i) => (
+        <circle key={i} cx={x} cy={ys[i]} r="3" fill="var(--color-accent)" />
+      ))}
+    </svg>
+  );
+}
+
+// ── 热力图 ──
+
+function HeatmapGrid({ data }: { data: HeatmapCell[] }) {
+  const dayNames = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+  const hours = [8, 10, 14, 16, 20, 22];
+  const maxQ = Math.max(...data.map((d) => d.questions), 1);
+
+  const getCell = (day: number, hour: number) =>
+    data.find((d) => d.day === day && d.hour === hour)?.questions ?? 0;
+
+  const bg = (q: number) => {
+    if (q === 0) return "var(--color-surface)";
+    const alpha = 0.2 + (q / maxQ) * 0.8;
+    return `rgba(0,102,255,${alpha.toFixed(2)})`;
+  };
+
+  return (
+    <div className="overflow-x-auto">
+      <div className="grid gap-px" style={{ gridTemplateColumns: `60px repeat(7, 1fr)` }}>
+        {/* Header */}
+        <div />
+        {dayNames.map((d) => (
+          <div key={d} className="text-center text-[10px] text-[var(--color-text-muted)] py-1">{d}</div>
+        ))}
+        {/* Rows */}
+        {hours.map((h) => (
+          <div key={h} className="contents">
+            <div className="text-[10px] text-[var(--color-text-muted)] flex items-center justify-end pr-2">
+              {h}:00
+            </div>
+            {[1, 2, 3, 4, 5, 6, 7].map((day) => {
+              const q = getCell(day, h);
+              return (
+                <div
+                  key={day}
+                  className="aspect-square flex items-center justify-center text-[9px] font-mono text-[var(--color-text-secondary)]"
+                  style={{ backgroundColor: bg(q) }}
+                  title={`${dayNames[day - 1]} ${h}:00 — ${q}题`}
+                >
+                  {q > 0 ? q : ""}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center gap-2 mt-3 justify-end text-[10px] text-[var(--color-text-muted)]">
+        <span>少</span>
+        <div className="w-3 h-3" style={{ backgroundColor: "var(--color-surface)" }} />
+        <div className="w-3 h-3" style={{ backgroundColor: "rgba(0,102,255,0.3)" }} />
+        <div className="w-3 h-3" style={{ backgroundColor: "rgba(0,102,255,0.6)" }} />
+        <div className="w-3 h-3" style={{ backgroundColor: "rgba(0,102,255,0.9)" }} />
+        <span>多</span>
+      </div>
+    </div>
+  );
+}
+
+// ── 建议行动生成 ──
+
+function generateSuggestions(
+  overview: Overview,
+  masteryBars: MasteryBar[],
+  errorDist: ErrorDist[],
+): { text: string; action: string; link: string }[] {
+  const suggestions: { text: string; action: string; link: string }[] = [];
+
+  // 规则1: 最弱知识点
+  if (masteryBars.length > 0) {
+    const weakest = masteryBars[0]; // 已按 p_known 升序排列
+    if (weakest.p_known < 0.5) {
+      suggestions.push({
+        text: `${weakest.skill_id || "未命名"}(${(weakest.p_known * 100).toFixed(0)}%)是你当前最大短板，建议今天重点练习`,
+        action: "针对性练习",
+        link: `/practice?skill=${weakest.skill_id}`,
+      });
+    }
+  }
+
+  // 规则2: 最常见错误类型
+  if (errorDist.length > 0) {
+    const top = errorDist[0];
+    if (top.pct > 0.25) {
+      const label = ERROR_LABELS[top.type] || top.type;
+      suggestions.push({
+        text: `${label}占${(top.pct * 100).toFixed(0)}%（偏高），去错题本专项突破`,
+        action: "错题本",
+        link: `/errors?filter=${top.type}`,
+      });
+    }
+  }
+
+  // 规则3: 连续3天未练习
+  if (overview.study_days < 3) {
+    suggestions.push({
+      text: `最近练习偏少（${overview.study_days}天），来一组保持手感？💪`,
+      action: "开始练习",
+      link: "/practice",
+    });
+  }
+
+  // 规则4: 正确率上升
+  const accDelta = overview.accuracy - overview.prev_week.accuracy;
+  if (accDelta > 0.05) {
+    suggestions.push({
+      text: `正确率上升${(accDelta * 100).toFixed(0)}%！继续保持势头 🔥`,
+      action: "",
+      link: "",
+    });
+  }
+
+  // 规则5: 效率最高时段
+  if (overview.study_minutes > 0) {
+    suggestions.push({
+      text: "坚持练习就是最好的进步，熟能生巧 ✨",
+      action: "",
+      link: "",
+    });
+  }
+
+  return suggestions.slice(0, 5);
+}
+
+// ── 主页面 ──
+
 export default function AnalyticsPage() {
-  const [stats, setStats] = useState<PracticeStats | null>(null);
+  const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [timeRange, setTimeRange] = useState<"week" | "month" | "all">("week");
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/practice/stats`)
+    setLoading(true);
+    fetch(`${API_BASE}/api/practice/stats?time_range=${timeRange}`)
       .then((r) => r.json())
-      .then((data) => {
-        setStats(data);
+      .then((d) => {
+        setData(d);
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, []);
+  }, [timeRange]);
+
+  const suggestions = useMemo(() => {
+    if (!data) return [];
+    return generateSuggestions(data.overview, data.mastery_bars, data.error_distribution);
+  }, [data]);
 
   if (loading) {
     return (
@@ -40,7 +323,7 @@ export default function AnalyticsPage() {
     );
   }
 
-  if (!stats || stats.total_questions === 0) {
+  if (!data || data.overview.total_questions === 0) {
     return (
       <main className="min-h-screen bg-[var(--color-bg)]">
         <div className="max-w-3xl mx-auto px-6 py-16 text-center">
@@ -49,7 +332,7 @@ export default function AnalyticsPage() {
           <p className="text-[var(--color-text-muted)] mb-6">还没有练习数据</p>
           <Link
             href="/practice"
-            className="px-6 py-2.5 bg-[var(--color-accent)] text-[var(--color-text)] text-sm hover:bg-[var(--color-accent-hover)] transition-colors"
+            className="inline-block px-6 py-2.5 bg-[var(--color-accent)] text-white text-sm hover:bg-[var(--color-accent-hover)] transition-colors"
           >
             去练习
           </Link>
@@ -58,81 +341,211 @@ export default function AnalyticsPage() {
     );
   }
 
-  const acc = (stats.accuracy * 100).toFixed(0);
-  const h = Math.floor(stats.study_minutes / 60);
-  const m = Math.round(stats.study_minutes % 60);
+  const { overview, daily_trend, mastery_bars, error_distribution, hourly_heatmap } = data;
+  const acc = (overview.accuracy * 100).toFixed(0);
+  const h = Math.floor(overview.study_minutes / 60);
+  const min = Math.round(overview.study_minutes % 60);
 
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
-      <div className="max-w-3xl mx-auto px-6 py-16">
-        <div className="flex items-center justify-between mb-12">
-          <h1 className="text-4xl font-bold tracking-tight text-[var(--color-text)]">
-            <BarChart3 size={28} className="inline mr-3 text-[var(--color-accent)]" />
+      <div className="max-w-4xl mx-auto px-4 md:px-6 py-8 md:py-12">
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-[var(--color-text)]">
+            <BarChart3 size={24} className="inline mr-2 text-[var(--color-accent)]" />
             学情分析
           </h1>
-          <Link
-            href="/errors"
-            className="flex items-center gap-1.5 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-          >
-            <BookOpen size={14} />
-            错题本
-          </Link>
+          <div className="flex items-center gap-2">
+            {(["week", "month", "all"] as const).map((r) => (
+              <button
+                key={r}
+                onClick={() => setTimeRange(r)}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  timeRange === r
+                    ? "bg-[var(--color-accent)] text-white"
+                    : "bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                }`}
+              >
+                {r === "week" ? "本周" : r === "month" ? "本月" : "全部"}
+              </button>
+            ))}
+            <Link
+              href="/errors"
+              className="ml-2 flex items-center gap-1 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            >
+              <BookOpen size={13} /> 错题本
+            </Link>
+          </div>
         </div>
 
-        {/* Overview */}
-        <div className="grid grid-cols-3 gap-4 mb-12">
+        {/* ── ① Overview Cards ── */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
           {[
-            { icon: <Target size={20} />, label: "总题数", val: stats.total_questions, sub: `正确 ${stats.total_correct}` },
-            { icon: <TrendingUp size={20} />, label: "正确率", val: `${acc}%`, sub: +acc >= 80 ? "优秀" : +acc >= 60 ? "良好" : "需努力" },
-            { icon: <Clock size={20} />, label: "学习时长", val: h > 0 ? `${h}h${m}m` : `${m}m`, sub: "累计时间" },
+            {
+              icon: <Target size={16} />,
+              label: "总题数",
+              val: overview.total_questions,
+              prev: overview.prev_week.total_questions,
+              fmt: (n: number) => `${n}`,
+            },
+            {
+              icon: <TrendingUp size={16} />,
+              label: "正确率",
+              val: overview.accuracy,
+              prev: overview.prev_week.accuracy,
+              fmt: (n: number) => `${(n * 100).toFixed(0)}%`,
+            },
+            {
+              icon: <CalendarDays size={16} />,
+              label: "学习天数",
+              val: overview.study_days,
+              prev: overview.prev_week.study_days,
+              fmt: (n: number) => `${n}天`,
+            },
+            {
+              icon: <Clock size={16} />,
+              label: "学习时长",
+              val: overview.study_minutes,
+              prev: overview.prev_week.study_minutes,
+              fmt: (n: number) => {
+                const hh = Math.floor(n / 60);
+                const mm = Math.round(n % 60);
+                return hh > 0 ? `${hh}h${mm}m` : `${mm}m`;
+              },
+            },
           ].map((c, i) => (
-            <Card key={i}>
-              <div className="text-[var(--color-accent)] mb-2">{c.icon}</div>
-              <div className="text-2xl font-bold text-[var(--color-text)]">{c.val}</div>
-              <div className="text-xs text-[var(--color-text-muted)]">{c.label} · {c.sub}</div>
+            <Card key={i} className="!p-4">
+              <div className="text-[var(--color-accent)] mb-1.5">{c.icon}</div>
+              <div className="text-xl md:text-2xl font-bold text-[var(--color-text)]">
+                {c.fmt(c.val)}
+              </div>
+              <div className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+                {c.label}
+              </div>
+              <div
+                className="text-[10px] mt-1"
+                style={{ color: deltaColor(c.val, c.prev) }}
+              >
+                {deltaStr(c.val, c.prev, c.fmt)} vs 上期
+              </div>
             </Card>
           ))}
         </div>
 
-        {/* Weak */}
-        <div className="mb-8">
-          <h2 className="text-lg font-semibold text-[var(--color-text)] mb-4">🔴 薄弱知识点</h2>
-          {stats.weak_skills?.length ? (
-            <div className="space-y-2">
-              {stats.weak_skills.map(([skill, ac]) => (
-                <div key={skill} className="flex items-center justify-between p-3 bg-[var(--color-surface)]">
-                  <span className="text-sm text-[var(--color-text)]">{skill}</span>
-                  <div className="flex items-center gap-3">
-                    <div className="w-24 h-1.5 bg-[var(--color-border)]">
-                      <div className="h-full bg-[var(--color-error)]" style={{ width: `${(ac * 100).toFixed(0)}%` }} />
+        {/* ── ② Trend Chart ── */}
+        <Card title={`📈 每日练习趋势 · ${timeRange === "week" ? "7天" : timeRange === "month" ? "30天" : "全部"}`} className="mb-8 !p-5">
+          <TrendChart data={daily_trend} />
+        </Card>
+
+        {/* ── ③ + ④ Mastery + Errors ── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          {/* Mastery Bars */}
+          <Card title="🔥 知识掌握度" className="!p-5">
+            {mastery_bars.length === 0 ? (
+              <p className="text-xs text-[var(--color-text-muted)]">暂无数据，答几道题就出来了</p>
+            ) : (
+              <div className="space-y-3">
+                {mastery_bars.map((mb) => {
+                  const pct = Math.round(mb.p_known * 100);
+                  const color =
+                    mb.p_known >= 0.8
+                      ? "var(--color-success)"
+                      : mb.p_known >= 0.5
+                      ? "var(--color-warning)"
+                      : "var(--color-error)";
+                  return (
+                    <div key={mb.skill_id}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-[var(--color-text-secondary)] truncate max-w-[140px]">
+                          {MASTERY_EMOJI[mb.mastery_level] || ""} {mb.skill_id}
+                        </span>
+                        <span className="text-xs text-[var(--color-text-muted)]">{pct}%</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-[var(--color-surface)]">
+                        <div
+                          className="h-full transition-all"
+                          style={{ width: `${pct}%`, backgroundColor: color }}
+                        />
+                      </div>
+                      <div className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+                        {mb.correct_count}/{mb.attempt_count}正确 · {mb.mastery_level}
+                      </div>
                     </div>
-                    <span className="text-xs text-[var(--color-text-muted)]">{(ac * 100).toFixed(0)}%</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : <p className="text-sm text-[var(--color-text-muted)]">暂无数据</p>}
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+
+          {/* Error Distribution */}
+          <Card title="📊 错因分布" className="!p-5">
+            {error_distribution.length === 0 ? (
+              <p className="text-xs text-[var(--color-text-muted)]">暂无错题，继续保持！</p>
+            ) : (
+              <div className="space-y-3">
+                {error_distribution.map((e) => {
+                  const label = ERROR_LABELS[e.type] || e.type;
+                  return (
+                    <div key={e.type}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-[var(--color-text-secondary)]">{label}</span>
+                        <span className="text-xs text-[var(--color-text-muted)]">
+                          {e.count}次 · {(e.pct * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-[var(--color-surface)]">
+                        <div
+                          className="h-full bg-[var(--color-error)] transition-all"
+                          style={{ width: `${(e.pct * 100).toFixed(0)}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {error_distribution.length > 0 && (
+              <Link
+                href="/errors"
+                className="inline-block mt-4 text-[11px] text-[var(--color-accent)] hover:underline"
+              >
+                查看全部错题 →
+              </Link>
+            )}
+          </Card>
         </div>
 
-        {/* Strong */}
-        <div>
-          <h2 className="text-lg font-semibold text-[var(--color-text)] mb-4">🟢 掌握好的知识点</h2>
-          {stats.strong_skills?.length ? (
+        {/* ── ⑤ Hourly Heatmap ── */}
+        <Card title="⏰ 学习时段" className="mb-8 !p-5">
+          <HeatmapGrid data={hourly_heatmap} />
+        </Card>
+
+        {/* ── ⑥ Suggestions ── */}
+        {suggestions.length > 0 && (
+          <Card title="🎯 建议行动" className="!p-5">
             <div className="space-y-2">
-              {stats.strong_skills.map(([skill, ac]) => (
-                <div key={skill} className="flex items-center justify-between p-3 bg-[var(--color-surface)]">
-                  <span className="text-sm text-[var(--color-text)]">{skill}</span>
-                  <div className="flex items-center gap-3">
-                    <div className="w-24 h-1.5 bg-[var(--color-border)]">
-                      <div className="h-full bg-[var(--color-success)]" style={{ width: `${(ac * 100).toFixed(0)}%` }} />
-                    </div>
-                    <span className="text-xs text-[var(--color-text-muted)]">{(ac * 100).toFixed(0)}%</span>
-                  </div>
+              {suggestions.map((s, i) => (
+                <div
+                  key={i}
+                  className="flex items-start gap-2 text-sm text-[var(--color-text-secondary)] leading-relaxed"
+                >
+                  <span className="text-[var(--color-accent)] mt-0.5">•</span>
+                  <span>
+                    {s.text}
+                    {s.link && (
+                      <Link
+                        href={s.link}
+                        className="ml-1 text-[var(--color-accent)] hover:underline text-xs"
+                      >
+                        {s.action || "去看看"} →
+                      </Link>
+                    )}
+                  </span>
                 </div>
               ))}
             </div>
-          ) : <p className="text-sm text-[var(--color-text-muted)]">多练几次就有了！</p>}
-        </div>
+          </Card>
+        )}
       </div>
     </main>
   );
