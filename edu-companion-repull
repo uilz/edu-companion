@@ -49,15 +49,56 @@ echo "🔨 构建前端..."
 npm run build 2>&1 | tail -3
 echo "   ✅ 前端构建完成"
 
-# 4. 数据库迁移检查
+# 4. 环境变量检查 + 数据库设置
 echo ""
-echo "🗄️  检查数据库..."
+echo "🔧 检查环境配置..."
 cd "$PROJECT_DIR/backend"
 source venv/bin/activate
-if python -c "from app.infrastructure.database import get_db; import asyncio; asyncio.run(get_db())" 2>/dev/null; then
+
+# 确保 .env 存在
+if [ ! -f ".env" ]; then
+    echo "   ⚠️  .env 不存在，从模板创建..."
+    cat > .env << 'ENVEOF'
+# DeepSeek API
+DEEPSEEK_API_KEY=sk-your-key
+OPENAI_API_KEY=sk-your-key
+OPENAI_API_BASE=https://api.deepseek.com
+DEFAULT_MODEL=deepseek/deepseek-v4-flash
+ENVEOF
+    echo "   ⚠️  请编辑 backend/.env 填入 API Key"
+fi
+
+# 数据库连接检查
+echo ""
+echo "🗄️  检查数据库..."
+if python -c "
+from app.db.database import DB_CONFIG
+print(f'  DB: {DB_CONFIG[\"dbname\"]}@{DB_CONFIG[\"host\"]}:{DB_CONFIG[\"port\"]} as {DB_CONFIG[\"user\"]}')
+" 2>/dev/null; then
+    true
+fi
+
+if python -c "
+from app.db.database import Database
+db = Database.get()
+print('connected ok')
+" 2>/dev/null; then
     echo "   ✅ 数据库连接正常"
 else
-    echo "   ⚠️  数据库连接失败（可能是首次部署），跳过迁移"
+    echo "   ❌ 数据库连接失败"
+    echo ""
+    echo "   📋 请在 edu-server 上执行以下命令初始化数据库:"
+    echo ""  
+    echo "   sudo -u postgres psql << SQL"
+    echo "   CREATE USER companion WITH PASSWORD '你的密码';"
+    echo "   CREATE DATABASE edu_companion OWNER companion;"
+    echo "   GRANT ALL PRIVILEGES ON DATABASE edu_companion TO companion;"
+    echo "   SQL"
+    echo ""
+    echo "   然后在 backend/.env 中添加:"
+    echo "   DB_PASSWORD=你的密码"
+    echo ""
+    exit 1
 fi
 
 # 5. 重启后端
@@ -76,8 +117,15 @@ echo "   🆔 PID: $BACKEND_PID"
 # 6. 重启前端（生产模式）
 echo ""
 echo "🔄 重启前端..."
-pkill -f "next start" 2>/dev/null || true
-sleep 1
+pkill -f "next" 2>/dev/null || true
+sleep 2
+
+# 验证端口已释放
+if lsof -i :3000 > /dev/null 2>&1; then
+    echo "   ⚠️  3000 端口仍被占用，强制释放..."
+    fuser -k 3000/tcp 2>/dev/null || true
+    sleep 1
+fi
 
 cd "$PROJECT_DIR/frontend"
 nohup npx next start -p 3000 > /tmp/edu-frontend.log 2>&1 &
