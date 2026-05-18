@@ -194,6 +194,25 @@ export default function PracticePage() {
     createSession();
   };
 
+  // 完成练习（通知后端写入对话branch）
+  const [completed, setCompleted] = useState(false);
+  const handleComplete = async () => {
+    if (!session || completed) return;
+    setCompleted(true);
+    const sp = new URLSearchParams(window.location.search);
+    const pid = sp.get("partition_id");
+    const bid = sp.get("branch_id");
+    if (!pid || !bid) return;  // 不是从对话来的，无需写入
+    try {
+      await fetch(
+        `${API_BASE}/api/practice/sessions/${session.session_id}/complete?partition_id=${pid}&branch_id=${bid}`,
+        { method: "POST" }
+      );
+    } catch (e) {
+      console.error("Complete failed:", e);
+    }
+  };
+
   // 加载中
   if (loading && !q) {
     return (
@@ -420,6 +439,18 @@ export default function PracticePage() {
             </div>
           )}
         </Card>
+
+        {/* Complete button (last question) */}
+        {submitted && currentIndex >= questions.length - 1 && !completed && (
+          <div className="flex justify-center mb-4">
+            <button
+              onClick={handleComplete}
+              className="px-8 py-3 bg-[var(--color-accent)] text-[var(--color-text)] text-sm font-medium hover:bg-[var(--color-accent-hover)] transition-colors"
+            >
+              完成练习 ✓
+            </button>
+          </div>
+        )}
 
         {/* Navigation */}
         <div className="flex items-center justify-between mt-6">

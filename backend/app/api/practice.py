@@ -312,8 +312,13 @@ async def get_session(session_id: str):
 
 
 @router.post("/sessions/{session_id}/complete")
-async def complete_session(session_id: str, partition_id: str | None = None, branch_id: str | None = None):
-    """结束会话（可选：写入对话branch）"""
+async def complete_session(
+    session_id: str,
+    user_id: str = "default_user",
+    partition_id: str | None = None,
+    branch_id: str | None = None,
+):
+    """结束会话（如果有对话上下文，写入branch）"""
     db = get_db()
     session = db.fetchone("SELECT * FROM practice_sessions WHERE session_id = %s", (session_id,))
     if not session:
@@ -322,9 +327,42 @@ async def complete_session(session_id: str, partition_id: str | None = None, bra
     db.execute("UPDATE practice_sessions SET status = 'completed', completed_at = NOW() WHERE session_id = %s", (session_id,))
     session["status"] = "completed"
 
-    result = {"session": session}
-    # P1: 练习结果写入对话记忆（略，session dict 已不完整）
-    return result
+    # 计算准确率
+    total = session.get("question_count", len(session.get("question_ids", [])))
+    correct = session.get("correct_count", 0)
+    accuracy = correct / total if total > 0 else 0
+
+    # 获取薄弱知识点
+    attempts = db.fetchall(
+        "SELECT skill_id, is_correct FROM practice_attempts WHERE session_id = %s AND is_correct = false",
+        (session_id,)
+    )
+    struggling = list(set(a["skill_id"] for a in attempts)) if attempts else []
+
+    # 写入对话branch
+    if partition_id and branch_id:
+        try:
+            from app.services.practice_integrator import integrate_practice_to_branch
+            from app.schemas.practice import PracticeSession
+            from datetime import datetime as dt
+
+            ps = PracticeSession(
+                user_id=user_id,
+                question_ids=session.get("question_ids", []),
+                planned_skills=session.get("planned_skills", []),
+                correct_count=correct,
+                started_at=session.get("created_at", dt.now()),
+                completed_at=dt.now(),
+            )
+            await integrate_practice_to_branch(user_id, ps, partition_id, branch_id)
+        except Exception as e:
+            logger.warning(f"练习结果写入branch失败: {e}")
+
+    return {
+        "session": session,
+        "accuracy": accuracy,
+        "struggling_skills": struggling,
+    }
 
 
 # ──────────────────────────────────────────────
