@@ -505,6 +505,16 @@ export default function ChatPage() {
     []
   );
 
+  // ── Handle delete message ──
+  const handleDeleteMessage = useCallback(async (messageId: string) => {
+    try {
+      await fetch('/api/conversations/messages/' + messageId, { method: 'DELETE' });
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+    } catch (e) {
+      console.error('Delete failed:', e);
+    }
+  }, []);
+
   // ── Handle branch selection ──
   const handleSelectBranch = useCallback(
     (id: string) => {
@@ -729,6 +739,7 @@ export default function ChatPage() {
           responseBlocks={responseBlocks}
           isLoading={isLoading}
           statusMessage={statusMessage}
+          onDeleteMessage={handleDeleteMessage}
         />
 
         {/* Input */}

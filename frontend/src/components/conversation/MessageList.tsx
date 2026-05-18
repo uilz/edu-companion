@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useMemo } from "react";
-import { User, Bot } from "lucide-react";
+import { User, Bot, Trash2 } from "lucide-react";
 import MathContent from "@/components/ui/MathContent";
 import ResponseBlockRenderer from "./ResponseBlockRenderer";
 import SpeakButton from "./SpeakButton";
@@ -13,6 +13,7 @@ interface MessageListProps {
   responseBlocks: ResponseBlock[];
   isLoading?: boolean;
   statusMessage?: string;
+  onDeleteMessage?: (messageId: string) => void;
 }
 
 export default function MessageList({
@@ -20,9 +21,14 @@ export default function MessageList({
   responseBlocks,
   isLoading = false,
   statusMessage,
+  onDeleteMessage,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  const handleDeleteMessage = (messageId: string) => {
+    if (onDeleteMessage) onDeleteMessage(messageId);
+  };
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -76,7 +82,7 @@ export default function MessageList({
           return (
             <div
               key={msg.id}
-              className={`flex mb-4 ${isUser ? "justify-end" : "justify-start"}`}
+              className={`flex mb-4 group ${isUser ? "justify-end" : "justify-start"}`}
             >
               {/* Avatar */}
               {!isUser && (
@@ -130,7 +136,7 @@ export default function MessageList({
                   </div>
                 )}
 
-                {/* Timestamp + Speak */}
+                {/* Timestamp + Speak + Delete */}
                 <div className="flex items-center gap-2 text-[10px] text-[var(--color-text-muted)] mt-1 px-1">
                   <span>
                     {new Date(msg.timestamp).toLocaleTimeString("zh-CN", {
@@ -139,6 +145,13 @@ export default function MessageList({
                     })}
                   </span>
                   {!isUser && <SpeakButton text={text} />}
+                  <button
+                    onClick={() => handleDeleteMessage(msg.id)}
+                    className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all"
+                    title="删除消息"
+                  >
+                    <Trash2 size={11} />
+                  </button>
                 </div>
               </div>
 
