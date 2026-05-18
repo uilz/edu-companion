@@ -87,75 +87,43 @@ class HintRequest(BaseModel):
 # 题目管理
 # ──────────────────────────────────────────────
 
-def _generate_sample_questions(skill_id: str, subject: str, count: int) -> list[Question]:
-    """LLM题目生成（MVP用模板生成）"""
-    # MVP: 生成示例题目
-    templates = {
-        "calculus_limit": [
-            Question(
-                skill_id=skill_id, subject=subject, bloom_level=BloomLevel.UNDERSTAND,
-                text="求极限：lim(x→0) sin(x)/x",
-                options=[
-                    QuestionOption(letter="A", text="0", is_correct=False),
-                    QuestionOption(letter="B", text="1", is_correct=True),
-                    QuestionOption(letter="C", text="∞", is_correct=False),
-                    QuestionOption(letter="D", text="不存在", is_correct=False),
-                ],
-                correct_answer="B",
-                explanation="这是第一个重要极限：lim(x→0) sin(x)/x = 1",
-                hints=["想想sin(x)在x=0附近的行为", "用洛必达法则试试"],
-                difficulty=0.4,
-            ),
-            Question(
-                skill_id=skill_id, subject=subject, bloom_level=BloomLevel.APPLY,
-                text="求极限：lim(x→∞) (1+1/x)^x",
-                options=[
-                    QuestionOption(letter="A", text="1", is_correct=False),
-                    QuestionOption(letter="B", text="e", is_correct=True),
-                    QuestionOption(letter="C", text="∞", is_correct=False),
-                    QuestionOption(letter="D", text="0", is_correct=False),
-                ],
-                correct_answer="B",
-                explanation="这是第二个重要极限：lim(x→∞) (1+1/x)^x = e",
-                difficulty=0.5,
-            ),
-        ],
-        "calculus_derivative": [
-            Question(
-                skill_id=skill_id, subject=subject, bloom_level=BloomLevel.APPLY,
-                text="求导数：f(x) = x³ - 3x² + 2，求 f'(x)",
-                options=[
-                    QuestionOption(letter="A", text="3x² - 6x", is_correct=True),
-                    QuestionOption(letter="B", text="3x² - 3x", is_correct=False),
-                    QuestionOption(letter="C", text="x³ - 6x", is_correct=False),
-                    QuestionOption(letter="D", text="3x - 6", is_correct=False),
-                ],
-                correct_answer="A",
-                explanation="f'(x) = 3x² - 6x",
-                difficulty=0.4,
-            ),
-        ],
-    }
+from app.services.question_generator import get_question_generator, QuestionGenerator
 
-    if skill_id in templates:
-        return templates[skill_id][:count]
 
-    # 默认：生成通用题目
-    return [
-        Question(
-            skill_id=skill_id, subject=subject,
-            text=f"关于{skill_id}的练习题 {i+1}",
-            correct_answer="A",
-            difficulty=0.5,
-        )
-        for i in range(count)
-    ]
+def _generate_questions(
+    generator: QuestionGenerator,
+    skill_id: str,
+    subject: str,
+    bloom_level: BloomLevel,
+    difficulty: float,
+    count: int,
+) -> list[Question]:
+    """使用LLM生成题目"""
+    return generator.generate(
+        subject=subject,
+        skill_id=skill_id,
+        bloom_level=bloom_level,
+        difficulty=difficulty,
+        count=count,
+        content_type="choice",
+    )
 
 
 @router.post("/questions/generate")
 async def generate_questions(req: GenerateQuestionRequest):
-    """生成练习题"""
-    questions = _generate_sample_questions(req.skill_id, req.subject, req.count)
+    """生成练习题（使用LLM）"""
+    from app.services.llm_service import LLMService
+    llm_service = LLMService()
+    generator = get_question_generator(llm_service)
+    
+    questions = _generate_questions(
+        generator,
+        skill_id=req.skill_id,
+        subject=req.subject,
+        bloom_level=req.bloom_level,
+        difficulty=req.difficulty,
+        count=req.count,
+    )
 
     # 存入题库
     if req.skill_id not in _question_bank:
