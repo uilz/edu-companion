@@ -7,6 +7,7 @@ import {
   Dumbbell,
   MessageSquare,
   BarChart3,
+  BookOpen,
   Network,
   Settings,
   Sun,
@@ -26,6 +27,7 @@ const navItems: NavItem[] = [
   { href: '/practice', label: '练习', icon: Dumbbell },
   { href: '/chat', label: '对话', icon: MessageSquare },
   { href: '/analytics', label: '学情', icon: BarChart3 },
+  { href: '/study', label: '规划', icon: BookOpen },
   { href: '/graph', label: '图谱', icon: Network },
 ];
 
