@@ -318,3 +318,184 @@ async def delete_message(message_id: str):
     """软删除消息"""
     tree_ops.delete_message(USER_ID, message_id)
     return {"ok": True}
+
+
+# ── Branch Workspace（分支工作空间）──
+
+import os
+import shutil
+import mimetypes
+from pathlib import Path
+from fastapi import UploadFile, File, Form, Query
+from fastapi.responses import FileResponse
+
+WORKSPACE_BASE = Path.home() / ".companion" / "uploads"
+
+
+def _workspace_dir(user_id: str, branch_id: str) -> Path:
+    """获取分支工作空间目录"""
+    return WORKSPACE_BASE / user_id / branch_id
+
+
+def _file_type_dir(base: Path, file_type: str) -> Path:
+    """获取文件类型子目录"""
+    mapping = {
+        "image": "images",
+        "audio": "audio",
+        "video": "video",
+        "document": "documents",
+    }
+    sub = mapping.get(file_type, "others")
+    d = base / sub
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _guess_file_type(mime: str) -> str:
+    """根据 MIME 猜测文件类型"""
+    if mime.startswith("image/"):
+        return "image"
+    if mime.startswith("audio/"):
+        return "audio"
+    if mime.startswith("video/"):
+        return "video"
+    return "document"
+
+
+@router.post("/workspace/upload")
+async def upload_workspace_file(
+    file: UploadFile = File(...),
+    branch_id: str = Form(...),
+):
+    """上传文件到分支工作空间"""
+    if not file.filename:
+        raise HTTPException(400, "No file selected")
+
+    data = storage.load(USER_ID)
+    branch = data.branches.get(branch_id)
+    if not branch:
+        raise HTTPException(404, "Branch not found")
+
+    # 确定文件类型和存储路径
+    mime = file.content_type or mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
+    file_type = _guess_file_type(mime)
+    ws_dir = _workspace_dir(USER_ID, branch_id)
+    type_dir = _file_type_dir(ws_dir, file_type)
+
+    # 保存文件
+    file_id = str(uuid.uuid4())
+    ext = Path(file.filename).suffix
+    storage_name = f"{file_id}{ext}"
+    storage_path = type_dir / storage_name
+
+    content = await file.read()
+    storage_path.write_bytes(content)
+
+    # 创建 FileRecord
+    from app.schemas.conversation import FileRecord
+    record = FileRecord(
+        id=file_id,
+        user_id=USER_ID,
+        original_name=file.filename,
+        storage_path=str(storage_path),
+        mime_type=mime,
+        file_size=len(content),
+        file_type=file_type,
+        processing_status="done",
+    )
+    data.files[file_id] = record
+
+    # 关联到分支工作空间（如果 Branch 有 workspace_files 字段）
+    # MVP: 用 files_root 下的简单 JSON 文件追踪
+    ws_meta_path = ws_dir / "workspace.json"
+    ws_meta = {}
+    if ws_meta_path.exists():
+        import json as _json
+        ws_meta = _json.loads(ws_meta_path.read_text())
+    ws_files = ws_meta.get("files", [])
+    if file_id not in ws_files:
+        ws_files.append(file_id)
+    ws_meta["files"] = ws_files
+    ws_meta["updated_at"] = __import__("time").time()
+    ws_meta_path.write_text(__import__("json").dumps(ws_meta, indent=2))
+
+    storage.save(USER_ID, data)
+    logger.info("文件已上传到工作空间: %s -> %s", file.filename, storage_path)
+
+    return {"file": record.model_dump()}
+
+
+@router.get("/workspace/files")
+async def list_workspace_files(
+    branch_id: str = Query(...),
+):
+    """列出分支工作空间中的文件"""
+    data = storage.load(USER_ID)
+    branch = data.branches.get(branch_id)
+    if not branch:
+        raise HTTPException(404, "Branch not found")
+
+    ws_dir = _workspace_dir(USER_ID, branch_id)
+    ws_meta_path = ws_dir / "workspace.json"
+    
+    workspace_files = []
+    if ws_meta_path.exists():
+        import json as _json
+        ws_meta = _json.loads(ws_meta_path.read_text())
+        for fid in ws_meta.get("files", []):
+            if fid in data.files:
+                workspace_files.append(data.files[fid])
+
+    return {"files": workspace_files}
+
+
+@router.get("/workspace/files/{file_id}")
+async def get_workspace_file(file_id: str):
+    """获取/下载工作空间文件"""
+    data = storage.load(USER_ID)
+    record = data.files.get(file_id)
+    if not record:
+        raise HTTPException(404, "File not found")
+
+    file_path = Path(record.storage_path)
+    if not file_path.exists():
+        raise HTTPException(404, "File not found on disk")
+
+    return FileResponse(
+        path=str(file_path),
+        media_type=record.mime_type,
+        filename=record.original_name,
+    )
+
+
+@router.delete("/workspace/files/{file_id}")
+async def delete_workspace_file(file_id: str, branch_id: str = Query(...)):
+    """从工作空间删除文件"""
+    data = storage.load(USER_ID)
+    record = data.files.get(file_id)
+    if not record:
+        raise HTTPException(404, "File not found")
+
+    # 删除磁盘文件
+    file_path = Path(record.storage_path)
+    if file_path.exists():
+        file_path.unlink()
+
+    # 从工作空间索引移除
+    ws_dir = _workspace_dir(USER_ID, branch_id)
+    ws_meta_path = ws_dir / "workspace.json"
+    if ws_meta_path.exists():
+        import json as _json
+        ws_meta = _json.loads(ws_meta_path.read_text())
+        ws_files = ws_meta.get("files", [])
+        if file_id in ws_files:
+            ws_files.remove(file_id)
+        ws_meta["files"] = ws_files
+        ws_meta_path.write_text(_json.dumps(ws_meta, indent=2))
+
+    # 从 UserData 移除
+    del data.files[file_id]
+    storage.save(USER_ID, data)
+
+    logger.info("工作空间文件已删除: %s", record.original_name)
+    return {"ok": True}

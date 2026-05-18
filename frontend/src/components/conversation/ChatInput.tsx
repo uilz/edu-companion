@@ -7,18 +7,21 @@ import VoiceRecorder from "./VoiceRecorder";
 interface ConversationChatInputProps {
   onSend: (text: string, files?: UploadedFile[]) => void;
   disabled?: boolean;
+  branchId?: string | null;
 }
 
 export interface UploadedFile {
   name: string;
   type: "image" | "file";
   url?: string;
+  fileId?: string;  // workspace file_id
   materialId?: string;
 }
 
 export default function ConversationChatInput({
   onSend,
   disabled = false,
+  branchId,
 }: ConversationChatInputProps) {
   const [text, setText] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
@@ -46,7 +49,8 @@ export default function ConversationChatInput({
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch("/api/materials/upload", { method: "POST", body: formData });
+      if (branchId) formData.append("branch_id", branchId);
+      const res = await fetch("/api/conversations/workspace/upload", { method: "POST", body: formData });
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.detail || "上传失败");
@@ -55,14 +59,14 @@ export default function ConversationChatInput({
       setUploadedFiles(prev => [...prev, {
         name: file.name,
         type,
-        materialId: data.material_id,
+        fileId: data.file?.id,
       }]);
     } catch (e) {
       setUploadError(e instanceof Error ? e.message : "上传失败");
     } finally {
       setUploading(false);
     }
-  }, []);
+  }, [branchId]);
 
   const handleImageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

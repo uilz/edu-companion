@@ -19,6 +19,7 @@ import PartitionSidebar from "@/components/conversation/PartitionSidebar";
 import BranchList from "@/components/conversation/BranchList";
 import MessageList from "@/components/conversation/MessageList";
 import ConversationChatInput from "@/components/conversation/ChatInput";
+import WorkspacePanel from "@/components/conversation/WorkspacePanel";
 
 // ── Media query hook ──
 function useMediaQuery(query: string): boolean {
@@ -643,6 +644,7 @@ export default function ChatPage() {
           <ConversationChatInput
             onSend={handleSend}
             disabled={isLoading}
+            branchId={activeBranchId}
           />
         </div>
 
@@ -736,6 +738,7 @@ export default function ChatPage() {
             onCreateBranch={handleCreateBranch}
             loading={loadingBranches}
           />
+          <WorkspacePanel branchId={activeBranchId} />
         </div>
       )}
 
@@ -781,6 +784,7 @@ export default function ChatPage() {
         <ConversationChatInput
           onSend={handleSend}
           disabled={isLoading}
+          branchId={activeBranchId}
         />
       </div>
 
