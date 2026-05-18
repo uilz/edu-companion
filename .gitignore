@@ -80,3 +80,4 @@ tmp/
 
 # Jupyter
 .ipynb_checkpoints/
+tsconfig.tsbuildinfo

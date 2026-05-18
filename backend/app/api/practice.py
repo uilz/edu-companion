@@ -244,6 +244,17 @@ async def create_session(req: CreateSessionRequest):
                           "difficulty": q.get("difficulty",0.5)} for q in questions]}
 
 
+@router.get("/sessions")
+async def list_sessions(user_id: str = "default_user", limit: int = 20):
+    """列出用户的所有会话"""
+    db = get_db()
+    rows = db.fetchall(
+        "SELECT * FROM practice_sessions WHERE user_id = %s ORDER BY started_at DESC LIMIT %s",
+        (user_id, limit),
+    )
+    return {"sessions": [dict(r) for r in rows], "total": len(rows)}
+
+
 @router.get("/sessions/{session_id}")
 async def get_session(session_id: str):
     """获取会话详情"""
@@ -355,6 +366,29 @@ async def submit_answer(req: SubmitAnswerRequest):
             "UPDATE practice_sessions SET correct_count = correct_count + 1 WHERE session_id = %s",
             (req.session_id,),
         )
+    else:
+        # 记录到错题本（如果还没有）
+        existing = db.fetchone(
+            "SELECT entry_id FROM error_book WHERE user_id = %s AND question_id = %s AND is_resolved = FALSE",
+            (session["user_id"], req.question_id),
+        )
+        if not existing:
+            import uuid as _uuid
+            db.upsert("error_book", {
+                "entry_id": str(_uuid.uuid4()),
+                "user_id": session["user_id"],
+                "question_id": req.question_id,
+                "skill_id": question["skill_id"],
+                "error_type": feedback.get("error_analysis", {}).get("type", "careless"),
+                "misconception": feedback.get("error_analysis", {}).get("distractor_type", ""),
+                "user_answer": req.answer,
+                "correct_answer": question["correct_answer"],
+                "question_text": question["text"][:500],
+                "review_count": 0,
+                "is_resolved": False,
+                "created_at": now,
+            }, "entry_id")
+            feedback["error_entry"] = "created"
 
     return feedback
 

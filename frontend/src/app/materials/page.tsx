@@ -332,7 +332,7 @@ export default function MaterialsPage() {
                       <span>{formatSize(s.file_size)}</span>
                       <span>{s.file_type}</span>
                       <span className="text-[var(--color-accent)]">评分:{s.score}</span>
-                      {s.reasons.map((r, i) => <span key={i} className="px-1 bg-[var(--color-bg)]">{r}</span>))}
+                      {s.reasons.map((r, i) => <span key={i} className="px-1 bg-[var(--color-bg)]">{r}</span>)}
                     </div>
                   </div>
                   <button
