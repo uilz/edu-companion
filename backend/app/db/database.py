@@ -232,6 +232,14 @@ class Database:
             conn = self.get_conn()
             cur = conn.cursor()
             cur.execute(SCHEMA_SQL)
+
+            # 对话系统表 (独立SQL文件)
+            from pathlib import Path
+            conv_sql_path = Path(__file__).parent / "conversation_schema.sql"
+            if conv_sql_path.exists():
+                with open(conv_sql_path) as f:
+                    cur.execute(f.read())
+
             conn.commit()
             cur.close()
             self.put_conn(conn)

@@ -1,6 +1,11 @@
 """
-JSON 文件存储引擎
-线程安全的用户数据持久化，使用文件锁 + 内存缓存
+对话数据存储引擎
+
+支持两种后端:
+- JSON 文件 (默认)
+- PostgreSQL (设置 USE_PG_STORAGE=true)
+
+通过统一接口 (load/save) 对外暴露。
 """
 
 from __future__ import annotations
@@ -12,8 +17,8 @@ from threading import Lock
 from app.schemas.conversation import UserData
 
 
-class StorageEngine:
-    """JSON 文件存储引擎，支持线程安全的读写操作"""
+class JsonStorageEngine:
+    """JSON 文件存储引擎，线程安全的用户数据持久化"""
 
     def __init__(self, base_dir: str = "~/.companion/data") -> None:
         self.base_dir = Path(os.path.expanduser(base_dir))
@@ -29,7 +34,6 @@ class StorageEngine:
         return self.base_dir / user_id / "userData.json"
 
     def load(self, user_id: str) -> UserData:
-        """从磁盘加载用户数据，优先返回缓存"""
         lock = self._get_lock(user_id)
         with lock:
             if user_id in self._cache:
@@ -44,23 +48,25 @@ class StorageEngine:
             return data
 
     def save(self, user_id: str, data: UserData) -> None:
-        """保存用户数据到磁盘并更新缓存"""
         lock = self._get_lock(user_id)
         with lock:
             path = self._get_path(user_id)
             path.parent.mkdir(parents=True, exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(data.model_dump_json(indent=2))
+            tmp_path = path.with_suffix(".tmp")
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                f.write(data.model_dump_json(indent=2, exclude_none=True))
+            tmp_path.replace(path)
             self._cache[user_id] = data
 
-    def get_or_create(self, user_id: str) -> UserData:
-        """加载或创建新的用户数据"""
-        return self.load(user_id)
 
-    def invalidate(self, user_id: str) -> None:
-        """使缓存失效"""
-        self._cache.pop(user_id, None)
+def _get_storage():
+    """根据环境变量选择存储后端"""
+    use_pg = os.environ.get("USE_PG_STORAGE", "").lower() in ("1", "true", "yes")
+    if use_pg:
+        from app.services.pg_storage import pg_storage
+        return pg_storage
+    return JsonStorageEngine()
 
 
-# 全局单例
-storage = StorageEngine()
+# 全局单例 (所有 import 方透明使用)
+storage = _get_storage()
