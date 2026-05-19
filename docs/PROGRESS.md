@@ -189,3 +189,35 @@ GET /behavior → streak + best_hours + regularity + pomodoro + tiny_habits
 |---|------|:--:|
 | 6 | 自适应学习计划生成 | ✅ |
 | 7 | 完整多模态（STT / TTS） | ✅ |
+
+---
+
+## 十、Phase 2 · 全面补齐计划
+
+> 详细设计文档: [docs/phase2/README.md](./phase2/README.md)
+
+### 目标
+
+把已建好的模块从「能用」升级为「好用」——让数据真正被看见、让学习真正被激励、让 AI 真正会追问。
+
+### 7 个子系统
+
+| # | 子系统 | 工作量 | 新增 API | 文档 |
+|---|--------|:--:|:--:|------|
+| S1 | 知识点雷达图 | 2h | 0 | [radar-chart.md](./phase2/radar-chart.md) |
+| S2 | 成就激励系统 | 3h | 2 | [achievement-system.md](./phase2/achievement-system.md) |
+| S3 | 遗忘曲线可视化 | 1.5h | 0 | [forgetting-curve.md](./phase2/forgetting-curve.md) |
+| S4 | 学习日历 | 2.5h | 1 | [learning-calendar.md](./phase2/learning-calendar.md) |
+| S5 | 对话启发式追问 | 1.5h | 0 | [socratic-dialogue.md](./phase2/socratic-dialogue.md) |
+| S6 | 错题智能归因 | 2.5h | 2 | [error-attribution.md](./phase2/error-attribution.md) |
+| S7 | 智能每日摘要 | 2h | 0 | [daily-summary.md](./phase2/daily-summary.md) |
+
+**总计**：~15h · 3 个里程碑 · 5 个新/增强 API · 2 个新页面 · 3 个面板
+
+### 里程碑
+
+| M | 时间 | 交付 | 效果 |
+|---|------|------|------|
+| M1 | 第 1-2 天 | S1+S3+S4 | `/analytics` 从 6 面板升级为 9 面板 |
+| M2 | 第 3-4 天 | S5+S6 | 对话会追问 + 错题能诊断 |
+| M3 | 第 5 天 | S2+S7 | 成就系统 + 每日推送 |
