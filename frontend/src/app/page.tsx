@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
-import { BookOpen, Brain, Target, TrendingUp, MessageCircle, Search, Loader2, ExternalLink, FileText, Video, Dumbbell } from "lucide-react";
+import { BookOpen, Brain, Target, TrendingUp, MessageCircle, Loader2, ExternalLink, FileText, Video, Dumbbell } from "lucide-react";
 import Card from "@/components/ui/Card";
+import UnifiedSearch from "@/components/search/UnifiedSearch";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -57,37 +58,7 @@ export default function HomePage() {
   const maxHours = Math.max(...weeklyData.map((d) => d.hours));
   const streak = 12;
 
-  // ── Content search ──
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<ContentItem[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [searched, setSearched] = useState(false);
-  const [showResults, setShowResults] = useState(false);
 
-  const handleSearch = useCallback(async () => {
-    const q = searchQuery.trim();
-    if (!q) return;
-    setSearching(true);
-    setSearched(true);
-    setShowResults(true);
-    try {
-      const res = await fetch(
-        `${API_BASE}/api/content/search?query=${encodeURIComponent(q)}&limit=8`
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setSearchResults(data || []);
-      }
-    } catch {
-      setSearchResults([]);
-    } finally {
-      setSearching(false);
-    }
-  }, [searchQuery]);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleSearch();
-  };
 
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
@@ -102,78 +73,9 @@ export default function HomePage() {
           </p>
         </header>
 
-        {/* ── Global Search ── */}
+        {/* ── P1: Unified Search ── */}
         <div className="mb-12">
-          <div className="flex gap-2 max-w-xl">
-            <div className="relative flex-1">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="搜索学习内容 (文章/视频/练习)..."
-                className="w-full pl-10 pr-4 py-3 text-sm bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-border-hover)]"
-              />
-            </div>
-            <button
-              onClick={handleSearch}
-              disabled={searching || !searchQuery.trim()}
-              className="px-5 py-3 text-sm font-medium bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-30 transition-opacity"
-            >
-              {searching ? <Loader2 size={15} className="animate-spin" /> : "搜索"}
-            </button>
-          </div>
-
-          {/* Search results dropdown */}
-          {showResults && searched && (
-            <div className="mt-2 max-w-xl border border-[var(--color-border)] bg-[var(--color-bg)] shadow-lg">
-              {searchResults.length > 0 ? (
-                <div className="divide-y divide-[var(--color-border)]">
-                  {searchResults.map((item) => {
-                    const typeInfo = TYPE_ICONS[item.content_type] || TYPE_ICONS.article;
-                    return (
-                      <Link
-                        key={item.content_id}
-                        href={
-                          item.content_type === "exercise" || item.content_type === "quiz"
-                            ? "/practice"
-                            : item.url || "#"
-                        }
-                        className="flex items-start gap-3 px-4 py-3 hover:bg-[var(--color-surface)] transition-colors group"
-                      >
-                        <span className={`flex-shrink-0 mt-0.5 ${typeInfo.color}`}>
-                          {typeInfo.icon}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-[var(--color-text)] group-hover:text-[var(--color-accent)] transition-colors truncate">
-                              {item.title || item.content_id}
-                            </span>
-                            <ExternalLink size={10} className="flex-shrink-0 text-[var(--color-text-muted)] opacity-0 group-hover:opacity-100" />
-                          </div>
-                          {item.description && (
-                            <p className="text-xs text-[var(--color-text-muted)] mt-0.5 line-clamp-1">
-                              {item.description}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-2 mt-1 text-[10px] text-[var(--color-text-muted)]">
-                            <span>{item.subject}</span>
-                            <span>·</span>
-                            <span>{item.content_type}</span>
-                          </div>
-                        </div>
-                      </Link>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="px-4 py-6 text-center text-sm text-[var(--color-text-muted)]">
-                  {searching ? "搜索中..." : "没有找到相关内容"}
-                </div>
-              )}
-            </div>
-          )}
+          <UnifiedSearch />
         </div>
 
         {/* Quick Actions */}
