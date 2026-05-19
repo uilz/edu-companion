@@ -517,6 +517,21 @@ async def submit_answer(req: SubmitAnswerRequest):
         except Exception:
             pass  # 静默降级，不影响答题流
 
+    # ── 成就检测 ──
+    try:
+        from app.api.achievements import _collect_stats, _load_existing, _save_achievements
+        from app.services.achievement_engine import achievement_engine
+        stats = _collect_stats(session["user_id"])
+        existing = _load_existing(session["user_id"])
+        new_achievements = achievement_engine.check_all(session["user_id"], stats, existing)
+        if new_achievements:
+            for a in new_achievements:
+                existing[a["id"]] = {"level": a["level"], "unlocked_at": a["unlocked_at"]}
+            _save_achievements(session["user_id"], existing)
+            feedback["newly_unlocked"] = new_achievements
+    except Exception:
+        pass  # 静默降级
+
     return feedback
 
 

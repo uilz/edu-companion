@@ -26,6 +26,7 @@ from app.api.conversation import router as conversation_router
 from app.api.material import router as material_router
 from app.api.knowledge import router as knowledge_router
 from app.api.multimodal import router as multimodal_router
+from app.api.achievements import router as achievements_router
 from app.config import settings
 from app.core.learner_model import learner_engine
 
@@ -110,6 +111,8 @@ app.include_router(material_router)
 app.include_router(knowledge_router)
 # 多模态（STT 转写）
 app.include_router(multimodal_router)
+# 成就系统
+app.include_router(achievements_router)
 
 
 # ── 健康检查 ──
