@@ -12,9 +12,19 @@ from typing import Any, AsyncGenerator, Optional
 from app.agents.base import BaseAgent
 from app.agents.tutor import TutorAgent
 from app.agents.coach import CoachAgent
-from app.core.learner_model import learner_engine
 from app.schemas.learner import IntentType, EmotionType
-from app.services.llm_service import LLMService, llm_service
+
+logger = logging.getLogger(__name__)
+
+
+def _get_default_llm():
+    from app.services.llm_service import llm_service
+    return llm_service
+
+
+def _get_default_learner():
+    from app.core.learner_model import learner_engine
+    return learner_engine
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +42,13 @@ class Orchestrator:
     6. 返回结果
     """
 
-    def __init__(self, llm: Optional[LLMService] = None) -> None:
-        self.llm = llm or llm_service
+    def __init__(
+        self,
+        llm: Optional[LLMService] = None,
+        learner_engine=None,
+    ) -> None:
+        self.llm = llm or _get_default_llm()
+        self._learner = learner_engine or _get_default_learner()
 
         # 初始化所有Agent
         self.agents: dict[str, BaseAgent] = {
@@ -116,7 +131,7 @@ class Orchestrator:
         """
         context = None
         if session_id:
-            session = learner_engine.get_session(session_id)
+            session = self._learner.get_session(session_id)
             if session and session.get("messages"):
                 # 取最近几条消息作为上下文
                 recent = session["messages"][-3:]
@@ -166,7 +181,7 @@ class Orchestrator:
         detected_subject = analysis.get("subject") or subject
 
         # 2. 获取学习者上下文
-        profile = learner_engine.get_or_create_profile(user_id)
+        profile = self._learner.get_or_create_profile(user_id)
         metadata: dict[str, Any] = {
             "emotion": emotion_str,
             "subject": detected_subject,
@@ -202,8 +217,8 @@ class Orchestrator:
 
         # 6. 更新会话
         if session_id:
-            learner_engine.add_message_to_session(session_id, "user", user_message)
-            learner_engine.add_message_to_session(session_id, "assistant", reply)
+            self._learner.add_message_to_session(session_id, "user", user_message)
+            self._learner.add_message_to_session(session_id, "assistant", reply)
 
         return {
             "reply": reply,
@@ -250,7 +265,7 @@ class Orchestrator:
         detected_subject = analysis.get("subject") or subject
 
         # 2. 获取上下文
-        profile = learner_engine.get_or_create_profile(user_id)
+        profile = self._learner.get_or_create_profile(user_id)
         metadata: dict[str, Any] = {
             "emotion": emotion_str,
             "subject": detected_subject,
@@ -285,8 +300,8 @@ class Orchestrator:
 
         # 6. 更新会话
         if session_id:
-            learner_engine.add_message_to_session(session_id, "user", user_message)
-            learner_engine.add_message_to_session(session_id, "assistant", full_reply)
+            self._learner.add_message_to_session(session_id, "user", user_message)
+            self._learner.add_message_to_session(session_id, "assistant", full_reply)
 
     def get_available_agents(self) -> list[dict[str, str]]:
         """获取所有可用Agent的信息"""

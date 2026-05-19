@@ -282,6 +282,13 @@ async def create_session(req: CreateSessionRequest):
                       "difficulty": q.get("difficulty",0.5)} for q in questions],
     }
 
+    # Phase 4: 写共享状态（供 conversation_llm 等模块跨层读取）
+    try:
+        from app.shared.state import active_practice_sessions
+        active_practice_sessions[session_id] = response_data["session"]
+    except Exception:
+        pass
+
     # 附上卡控信息
     if blocked_skills:
         response_data["prerequisites_info"] = prerequisites_info

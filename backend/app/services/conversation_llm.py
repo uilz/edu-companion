@@ -237,9 +237,8 @@ def _build_context_messages(
     try:
         from app.services.practice_recall import practice_recall
         if practice_recall.is_recall_query(user_text):
-            from app.services.storage import storage as _storage
-            from app.api.practice import _sessions as _p_sessions
-            recall_sessions = list(_p_sessions.values())
+            from app.shared.state import active_practice_sessions
+            recall_sessions = list(active_practice_sessions.values())
             if recall_sessions:
                 recall_text = practice_recall.generate_recall(
                     sessions=recall_sessions,

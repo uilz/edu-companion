@@ -16,7 +16,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-from app.core.knowledge_trace import bkt_engine
+from app.core.knowledge_trace import bkt_engine  # 向后兼容的默认值
 from domain.knowledge.checker import PrerequisiteChecker
 from domain.knowledge.prerequisites import (
     ALL_PREREQUISITES,
@@ -29,12 +29,17 @@ logger = logging.getLogger("adaptive_planner")
 
 class AdaptivePlanGenerator:
 
-    def __init__(self):
+    def __init__(self, bkt_engine=None):
+        if bkt_engine is None:
+            from app.core.knowledge_trace import bkt_engine as _default_bkt
+            bkt_engine = _default_bkt
         self._bkt = bkt_engine
+
+        _bkt = bkt_engine  # capture for _Adapter closure
 
         class _Adapter:
             async def get_knowledge_state(self, uid, sid):
-                state = bkt_engine.load_or_create(uid, sid)
+                state = _bkt.load_or_create(uid, sid)
                 return state.model_dump()
 
         self._checker = PrerequisiteChecker(_Adapter())
@@ -195,4 +200,16 @@ class AdaptivePlanGenerator:
             logger.warning("保存快照失败: %s", e)
 
 
-adaptive_planner = AdaptivePlanGenerator()
+# Phase 4: 延迟构造（DI 容器未就绪时回退到默认构造）
+_adaptive_planner = None
+
+
+def _get_adaptive_planner():
+    global _adaptive_planner
+    if _adaptive_planner is None:
+        _adaptive_planner = AdaptivePlanGenerator()
+    return _adaptive_planner
+
+
+# 模块级属性，import 时触发延迟构造
+adaptive_planner = _get_adaptive_planner()

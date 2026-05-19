@@ -34,12 +34,25 @@ class BKTEngine:
     # 提示等级 → 更新折扣因子
     HINT_DISCOUNT = {0: 1.0, 1: 0.7, 2: 0.4, 3: 0.2, 4: 0.05}
 
-    def __init__(self) -> None:
+    def __init__(self, storage=None) -> None:
+        """
+        Args:
+            storage: 持久化后端，需实现 load(user_id) → UserData 和 save(user_id, data)。
+                     若为 None，延迟从 app.services.storage 获取（向后兼容）。
+        """
+        self._storage = storage
         self.default_p_learn = settings.bkt_default_p_learn
         self.default_p_guess = settings.bkt_default_p_guess
         self.default_p_slip = settings.bkt_default_p_slip
         self.default_p_know = settings.bkt_default_p_know
         self.mastery_threshold = settings.bkt_mastery_threshold
+
+    def _get_storage(self):
+        """延迟获取存储后端（向后兼容 + DI 双路径）"""
+        if self._storage is not None:
+            return self._storage
+        from app.services.storage import storage
+        return storage
 
     def create_knowledge_state(
         self,
@@ -241,7 +254,7 @@ class BKTEngine:
         状态持久化在 UserData.knowledge_states[skill_id] 中。
         """
         try:
-            from app.services.storage import storage
+            storage = self._get_storage()
             data = storage.load(user_id)
             if skill_id in data.knowledge_states:
                 state_dict = data.knowledge_states[skill_id]
@@ -253,7 +266,7 @@ class BKTEngine:
     def save_state(self, user_id: str, state: KnowledgeState) -> None:
         """将知识状态写入 UserData 并持久化到磁盘"""
         try:
-            from app.services.storage import storage
+            storage = self._get_storage()
             data = storage.load(user_id)
             data.knowledge_states[state.skill_id] = state.model_dump()
             storage.save(user_id, data)
@@ -263,7 +276,7 @@ class BKTEngine:
     def load_all_states(self, user_id: str) -> dict[str, KnowledgeState]:
         """加载用户的所有知识状态"""
         try:
-            from app.services.storage import storage
+            storage = self._get_storage()
             data = storage.load(user_id)
             return {
                 skill_id: KnowledgeState(**state_dict)
