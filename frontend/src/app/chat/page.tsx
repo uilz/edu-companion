@@ -240,9 +240,9 @@ export default function ChatPage() {
   const [showPartitionSidebar, setShowPartitionSidebar] = useState(false);
   const [showBranchSidebar, setShowBranchSidebar] = useState(false);
 
-  // Desktop sidebar collapse state
-  const [collapsedPartition, setCollapsedPartition] = useState(false);
-  const [collapsedBranch, setCollapsedBranch] = useState(false);
+  // Desktop sidebar collapse state — both collapsed by default for clean chat
+  const [collapsedPartition, setCollapsedPartition] = useState(true);
+  const [collapsedBranch, setCollapsedBranch] = useState(true);
 
   // New partition dialog
   const [showNewPartition, setShowNewPartition] = useState(false);
@@ -440,6 +440,7 @@ export default function ChatPage() {
           const { partitionId, branchId } = JSON.parse(saved);
           if (partitionId && parts.some((p) => p.id === partitionId)) {
             setSelectedPartitionId(partitionId);
+            setCollapsedPartition(false); // Auto-expand when restoring session
             // Defer branch restore until branches load
             if (branchId) {
               localStorage.setItem(LS_KEY + ":pending-branch", branchId);

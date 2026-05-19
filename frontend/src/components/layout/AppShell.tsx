@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import BottomNav from './BottomNav';
 import Sidebar from './Sidebar';
 
@@ -24,8 +25,13 @@ function useMediaQuery(query: string): boolean {
   return matches;
 }
 
+// Routes that handle their own layout (no swiss-container wrapper)
+const FULLSCREEN_ROUTES = ['/chat'];
+
 export default function AppShell({ children }: AppShellProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
+  const pathname = usePathname();
+  const isFullscreen = FULLSCREEN_ROUTES.some((r) => pathname?.startsWith(r));
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)]">
@@ -43,9 +49,11 @@ export default function AppShell({ children }: AppShellProps) {
           paddingBottom: !isDesktop ? 'var(--bottom-nav-height)' : '0',
         }}
       >
-        <div className="swiss-container">
-          {children}
-        </div>
+        {isFullscreen ? (
+          children
+        ) : (
+          <div className="swiss-container">{children}</div>
+        )}
       </main>
     </div>
   );
