@@ -20,6 +20,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.chat import router as chat_router
 from app.api.study import router as study_router
 from app.api.practice import router as practice_router
+from app.api.practice_errors import router as practice_errors_router
+from app.api.practice_analytics import router as practice_analytics_router
+from app.api.practice_quality import router as practice_quality_router
 from app.api.progress import router as progress_router
 from app.api.content import router as content_router
 from app.api.conversation import router as conversation_router
@@ -134,6 +137,10 @@ app.include_router(chat_router)
 app.include_router(study_router)
 # 练习题
 app.include_router(practice_router)
+# 练习子模块 (Phase 4D 拆分)
+app.include_router(practice_errors_router)
+app.include_router(practice_analytics_router)
+app.include_router(practice_quality_router)
 # 学习进度
 app.include_router(progress_router)
 # 内容搜索
