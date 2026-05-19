@@ -384,6 +384,24 @@ async def complete_session(
     except Exception as e:
         logger.warning(f"同步统一知识状态失败: {e}")
 
+    # Phase 4C: 发布 SessionCompleted 事件
+    # 异步消费: achievement check, conversation update
+    try:
+        from app.shared.events import SessionCompleted
+        from app.application.di import container
+        import asyncio
+        event = SessionCompleted(
+            user_id=user_id,
+            session_id=session_id,
+            total_questions=total,
+            correct_count=correct,
+            accuracy=accuracy,
+            duration_minutes=session.get("estimated_minutes", 0),
+        )
+        asyncio.create_task(container.event_bus.publish(event))
+    except Exception:
+        pass
+
     return {
         "session": session,
         "accuracy": accuracy,
@@ -500,44 +518,56 @@ async def submit_answer(req: SubmitAnswerRequest):
             }, "entry_id")
             feedback["error_entry"] = "created"
 
-    # ── 自适应计划触发 ──
-    # 检测掌握度是否跨级别变化
+    # Phase 4C: 事件驱动 — 发布 AnswerSubmitted 事件
+    # 异步消费: achievement check, adaptive planner, behavior analytics
+    # 这些副作用不再阻塞用户响应
     old_mastery = bkt_engine.get_mastery_level(state)
     new_mastery = bkt_engine.get_mastery_level(updated_state)
-    SIGNIFICANT = {("初学","发展中"),("发展中","接近掌握"),("接近掌握","已掌握"),
-                   ("未接触","初学"),("初学","接近掌握")}
-    if (old_mastery, new_mastery) in SIGNIFICANT:
-        try:
-            from app.services.adaptive_planner import adaptive_planner
-            await adaptive_planner.on_knowledge_updated(
-                type('Event', (), {
-                    'user_id': session["user_id"],
-                    'skill_id': question["skill_id"],
-                    'old_mastery': old_mastery,
-                    'new_mastery': new_mastery,
-                    'p_known_before': state.p_known,
-                    'p_known_after': updated_state.p_known,
-                    'attempt_count': updated_state.attempt_count,
-                })()
-            )
-            feedback["plan_updated"] = True
-        except Exception:
-            pass  # 静默降级，不影响答题流
 
-    # ── 成就检测 ──
     try:
-        from app.api.achievements import _collect_stats, _load_existing, _save_achievements
-        from app.services.achievement_engine import achievement_engine
-        stats = _collect_stats(session["user_id"])
-        existing = _load_existing(session["user_id"])
-        new_achievements = achievement_engine.check_all(session["user_id"], stats, existing)
-        if new_achievements:
-            for a in new_achievements:
-                existing[a["id"]] = {"level": a["level"], "unlocked_at": a["unlocked_at"]}
-            _save_achievements(session["user_id"], existing)
-            feedback["newly_unlocked"] = new_achievements
+        from app.shared.events import AnswerSubmitted as AnswerSubmittedEvent
+        from app.infra.event_bus import EventBus
+        # 使用 DI 容器的事件总线（如果可用），否则用临时实例
+        try:
+            from app.application.di import container
+            bus = container.event_bus
+        except Exception:
+            bus = EventBus()
+
+        event = AnswerSubmittedEvent(
+            user_id=session["user_id"],
+            session_id=req.session_id,
+            question_id=req.question_id,
+            skill_id=question["skill_id"],
+            is_correct=is_correct,
+            answer=req.answer,
+            correct_answer=question["correct_answer"],
+            time_spent=req.time_spent_seconds,
+            hints_used=req.hints_used,
+            p_known_before=state.p_known,
+            p_known_after=updated_state.p_known,
+        )
+        # fire-and-forget: 不等待消费者完成
+        import asyncio
+        asyncio.create_task(bus.publish(event))
+
+        # 如果 mastery 跨级别变化，额外发布 KnowledgeStateUpdated 事件
+        SIGNIFICANT = {("初学","发展中"),("发展中","接近掌握"),("接近掌握","已掌握"),
+                       ("未接触","初学"),("初学","接近掌握")}
+        if (old_mastery, new_mastery) in SIGNIFICANT:
+            from app.shared.events import KnowledgeStateUpdated
+            ks_event = KnowledgeStateUpdated(
+                user_id=session["user_id"],
+                skill_id=question["skill_id"],
+                old_mastery=old_mastery,
+                new_mastery=new_mastery,
+                p_known_before=state.p_known,
+                p_known_after=updated_state.p_known,
+                attempt_count=updated_state.attempt_count,
+            )
+            asyncio.create_task(bus.publish(ks_event))
     except Exception:
-        pass  # 静默降级
+        pass  # 事件发布失败不影响答题流
 
     return feedback
 

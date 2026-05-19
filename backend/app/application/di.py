@@ -99,6 +99,10 @@ class AppContainer:
         bus.subscribe("AnswerSubmitted", safe_async("achievements")(self._on_answer_achievements))
         # 知识升级 → 学习计划重调
         bus.subscribe("KnowledgeStateUpdated", safe_async("planning")(self._on_knowledge_updated))
+        # 会话完成 → 成就检测 + 对话通知
+        bus.subscribe("SessionCompleted", safe_async("session_done")(self._on_session_completed))
+        # 资料上传 → 异步索引
+        bus.subscribe("MaterialUploaded", safe_async("material_index")(self._on_material_uploaded))
 
     async def _on_answer_submitted(self, event) -> None:
         """答题 → 更新行为分析 + 习惯养成"""
@@ -132,7 +136,34 @@ class AppContainer:
     async def _on_knowledge_updated(self, event) -> None:
         """知识升级 → 重调学习计划"""
         try:
-            self.adaptive_planner.on_knowledge_updated(event)
+            await self.adaptive_planner.on_knowledge_updated(event)
+        except Exception:
+            pass
+
+    async def _on_session_completed(self, event) -> None:
+        """会话完成 → 成就检测 + 统计更新"""
+        try:
+            from app.api.achievements import _collect_stats, _load_existing, _save_achievements
+            stats = _collect_stats(event.user_id)
+            existing = _load_existing(event.user_id)
+            new_ach = self.achievement_engine.check_all(event.user_id, stats, existing)
+            if new_ach:
+                for a in new_ach:
+                    existing[a["id"]] = {"level": a["level"], "unlocked_at": a["unlocked_at"]}
+                _save_achievements(event.user_id, existing)
+        except Exception:
+            pass
+
+    async def _on_material_uploaded(self, event) -> None:
+        """资料上传 → 异步解析+索引"""
+        try:
+            from app.services.material_parser import MaterialParser
+            from app.services.material_indexer import MaterialIndexer
+            parser = MaterialParser()
+            indexer = MaterialIndexer()
+            # 解析资料内容（可耗时 10-60s，不阻塞上传响应）
+            parser.parse(event.material_id)
+            indexer.index(event.material_id)
         except Exception:
             pass
 
