@@ -1,133 +1,98 @@
-# P6 · 工作空间文件索引
+# P6 · 工作空间升级
 
-> 打破孤岛: 工作空间↔搜索↔知识图谱（当前只有上传/下载，无内容识别）
+> 打破孤岛: 工作空间 ↔ 资料引用 ↔ 分支上下文
 
----
-
-## 一、目标
-
-分支工作空间当前功能：上传文件 → 存盘 → 列表/下载/删除。
-
-Phase 3 升级：上传文件 → **自动提取文本内容 → 建立索引 → 全文搜索 → 关联知识图谱**。
+**设计决策**：工作空间不再单独建索引。会话需要资料时，引用分区资料即可（P5 已实现）。工作空间保留本地上传，但上传后自动 promote 到分区资料库。
 
 ---
 
-## 二、完整链路
+## 一、架构变更
 
+### Before
 ```
-用户上传「lecture5-导数.pdf」到 branch workspace
-  → 1. 存储文件 (已有)
-  → 2. 内容提取: PDF → text (新增)
-  → 3. 建立全文索引: text → inverted index (新增)
-  → 4. LLM 知识点识别: text → [导数, 微分, 极限] (新增)
-  → 5. 关联知识图谱: 对应节点 +📎 (新增, 见 P5)
-  → 6. 接入全站搜索 (新增, 见 P1)
+工作空间 = 分支级文件垃圾桶（上传→存盘→仅列表）
+与资料系统完全隔离
 ```
+
+### After
+```
+工作空间 Panel
+├── 📤 上传文件（本地上传 → 自动归入当前分区资料库）
+├── 📎 引用资料（从分区资料库中勾选，建立 branch↔material 引用）
+├── 分支文件（上传的原始文件，临时草稿）
+└── 已引用资料标签（点击展开卡片）
+```
+
+**核心原则**：工作空间不再是孤立文件系统。它是"当前分支上下文中的资料视图"。
 
 ---
 
-## 三、技术方案
+## 二、WorkspacePanel 重新设计
 
-### 3.1 内容提取
-
-```python
-# 新增: backend/app/services/workspace_indexer.py
-
-def extract_text(file_path: str, file_type: str) -> str:
-    """提取文件文本内容"""
-    if file_type == "pdf":
-        import pymupdf
-        doc = pymupdf.open(file_path)
-        return "\n".join(page.get_text() for page in doc)
-    elif file_type in ("docx", "doc"):
-        # python-docx
-        ...
-    elif file_type in ("txt", "md"):
-        return open(file_path).read()
-    elif file_type in ("py", "js", "ts", "tsx", "json", "yaml"):
-        return open(file_path).read()  # 代码文件也索引
 ```
-
-### 3.2 全文索引
-
-```python
-# 简单的内存倒排索引（MVP）
-index: dict[str, set[str]] = {}  # word → {file_id, ...}
-
-def index_file(file_id: str, text: str):
-    words = tokenize(text)
-    for word in words:
-        if word not in index:
-            index[word] = set()
-        index[word].add(file_id)
-
-def search(query: str) -> list[str]:
-    words = tokenize(query)
-    results = set()
-    for word in words:
-        results |= index.get(word, set())
-    return list(results)
-```
-
-### 3.3 LLM 知识点识别
-
-```python
-async def identify_knowledge_points(text: str) -> list[str]:
-    """从文本中识别涉及的知识点"""
-    prompt = f"""
-    这段文本涉及以下哪些知识点？
-    可选: {list(ALL_PREREQUISITES.keys())}
-    
-    文本: {text[:2000]}
-    
-    返回 JSON: {{"skills": ["calculus_derivative", ...]}}
-    """
-    result = await llm_call(prompt)
-    return result["skills"]
+┌─ 工作空间 ─────────────────────┐
+│                                │
+│  📤 上传    📎 引用资料        │  ← 两个操作按钮
+│                                │
+│  ── 本分支文件 ──              │
+│  📄 screenshot1.png  (2.3MB)  │
+│  📄 notes.txt  (45KB)         │
+│                                │
+│  ── 已引用资料 ──              │
+│  🏷️ 导数讲义.pdf        [✕]  │  ← 点击展开预览
+│  🏷️ 极限习题集.docx     [✕]  │
+│                                │
+└────────────────────────────────┘
 ```
 
 ---
 
-## 四、新增 API
+## 三、上传→自动归入分区
 
-| 端点 | 用途 |
-|------|------|
-| `POST /api/conversation/workspace/index/{file_id}` | 触发文件索引 |
-| `GET /api/conversation/workspace/search?q=&branch_id=` | 搜索工作空间文件 |
+上传文件到工作空间时：
+1. 文件存盘（现有逻辑）
+2. **自动**创建 Material 记录，`partition_id = 当前分支所属分区`
+3. 异步触发索引（复用 material_indexer）
+4. 自动建立 branch↔material 引用
 
-### 修改现有 API
-
-- `POST /api/conversation/workspace/upload` → 上传后自动触发索引（异步后台任务）
+这样上传到工作空间的资料立即可被同一分区的其他分支引用。
 
 ---
 
-## 五、前端增强
-
-### WorkspacePanel 升级
+## 四、MaterialPicker 弹窗
 
 ```
-当前:
-  WorkspacePanel
-  └── 文件列表 (名称·大小·时间·删除按钮)
-
-升级后:
-  WorkspacePanel
-  ├── 🔍 搜索框
-  ├── 文件列表
-  │   ├── lecture5.pdf  [已索引✅]
-  │   ├── notes.txt      [已索引✅]
-  │   └── photo.jpg      [未索引 — 图片不支持]
-  └── 文件详情
-      ├── 关联知识点: [导数] [极限]
-      └── 内容预览 (前200字)
+┌─ 引用资料 ────────────────────────┐
+│  🔍 搜索资料...                    │
+│                                   │
+│  分区: [🧮 高等数学]              │  ← 当前分支的分区，可切换
+│                                   │
+│  ☑ 导数讲义.pdf      索引✅       │
+│  ☐ 极限习题集.docx    索引✅       │
+│  ☐ 微分方程笔记.md    索引中⏳     │
+│  ☐ 课本扫描.pdf       未索引      │
+│                                   │
+│  已选: 1        [确认引用]  [取消] │
+└───────────────────────────────────┘
 ```
 
 ---
 
-## 六、验收
+## 五、实现要点
 
-- [ ] 上传 PDF → 自动索引 → 显示「已索引✅」
-- [ ] 搜索工作空间 → 找到包含关键词的文件
-- [ ] LLM 识别出文件涉及的知识点 → 关联到图谱
-- [ ] 图片/二进制文件 → 「不支持索引」
-- [ ] 索引失败 → 显示错误但不阻塞上传
+| 组件 | 来源 | 说明 |
+|------|------|------|
+| 上传按钮 | 已有 | 增强：上传后自动 create material + ref |
+| 引用按钮 | **新增** | 触发 MaterialPicker |
+| 本分支文件 | 已有 | `/api/conversation/workspace/files` |
+| 已引用资料 | **新增** | `/api/branches/{id}/materials` |
+| MaterialPicker | **新增** | 弹窗组件，复用 MaterialPanel |
+| 资料标签 | **新增** | 对话中 inline 展示 |
+
+---
+
+## 六、不影响现有功能
+
+- 工作空间上传/下载/删除 API 不变
+- `workspace.json` 元数据文件保留
+- 对话中已有的文件引用逻辑不变

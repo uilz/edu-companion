@@ -39,6 +39,33 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _init_uncategorized_partition():
+    """P5: 确保「未分类」默认分区存在"""
+    from app.services.storage import storage
+    from app.schemas.conversation import Partition
+
+    data = storage.load("default_user")
+    uncat_id = "__uncategorized__"
+    if uncat_id not in data.partitions:
+        import time
+        root_id = f"root_{uncat_id}"
+        partition = Partition(
+            id=uncat_id,
+            name="未分类",
+            subject="未分类",
+            direction="subject",
+            emoji="📦",
+            color="#9CA3AF",
+            root_id=root_id,
+            created_at=time.time(),
+            updated_at=time.time(),
+            last_active_at=time.time(),
+        )
+        data.partitions[uncat_id] = partition
+        storage.save("default_user", data)
+        logger.info("📦 已创建「未分类」默认分区")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
@@ -60,6 +87,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.db.database import get_db
     db = get_db()
     logger.info("💾 PostgreSQL 已连接")
+
+    # P5: 初始化「未分类」分区 + 资料元数据索引
+    _init_uncategorized_partition()
+    from app.services.materials_meta import materials_meta
+    indexed = materials_meta.ensure_indexed()
+    logger.info("📁 资料元数据初始化完成 (新注册 %d 个)", indexed)
 
     # 清理过期会话（定期执行）
     # MVP 版本在启动时清理一次

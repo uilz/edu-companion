@@ -1,12 +1,14 @@
 """
-资料管理 API v1.2
+资料管理 API v2.0
+P5: 资料→分区归属→分支引用
 
 设计原则：
-- 所有上传默认临时(session)，不自动索引，节省资源
-- 用户手动"转为知识库"时才建立索引(embedding+pgvector)
-- 系统智能推荐哪些临时资料值得转知识库
-- 临时资料7天自动清理(可配置)
+- 所有上传默认临时(session)，不自动索引
+- 用户手动"转为知识库"时才建立索引
+- 资料按分区组织，默认归入「未分类」
+- 分支可引用资料（不复制，存引用关系）
 """
+
 from __future__ import annotations
 
 import logging
@@ -15,8 +17,10 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query
 from pydantic import BaseModel
+
+from app.services.materials_meta import materials_meta, UNCATEGORIZED_PARTITION_ID
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/materials", tags=["materials"])
@@ -40,7 +44,6 @@ class SearchRequest(BaseModel):
     skill_id: Optional[str] = None
     top_k: int = 10
 
-
 class GenerateFromMaterialRequest(BaseModel):
     material_ids: list[str]
     skill_id: Optional[str] = None
@@ -48,6 +51,9 @@ class GenerateFromMaterialRequest(BaseModel):
     difficulty: float = 0.5
     count: int = 3
     content_type: str = "choice"
+
+class UpdateMaterialRequest(BaseModel):
+    partition_id: Optional[str] = None
 
 
 # ── Helpers ──
@@ -63,13 +69,9 @@ def _file_type(ext: str) -> str:
     }
     return type_map.get(ext, "unknown")
 
-
-async def _get_db_conn():
-    import asyncpg
-    db_url = os.getenv("DATABASE_URL", "")
-    if db_url:
-        return await asyncpg.connect(db_url)
-    return None
+def _ensure_indexed():
+    """确保所有磁盘文件都有元数据"""
+    materials_meta.ensure_indexed()
 
 
 # ── API ──
@@ -77,17 +79,13 @@ async def _get_db_conn():
 @router.post("/upload")
 async def upload_material(
     file: UploadFile = File(...),
-    purpose: str = Form("session"),  # 默认临时！
+    purpose: str = Form("session"),
+    partition_id: str = Form(UNCATEGORIZED_PARTITION_ID),
 ):
     """
     上传资料文件。
     默认 purpose=session（临时，不索引）。
-    用户可通过 /promote 转为 permanent 触发索引。
-
-    purpose:
-      - session: 临时资料 — 仅保存文件，7天自动清理
-      - permanent: 知识库资料 — 需要 /promote 转换后才会索引
-      - reference: 参考资料 — 保存但不索引
+    partition_id 默认「未分类」。
     """
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -98,8 +96,6 @@ async def upload_material(
             f"音频: {', '.join(AUDIO_EXTENSIONS)} | "
             f"图片: {', '.join(IMAGE_EXTENSIONS)}",
         )
-    if purpose not in ("session", "permanent", "reference"):
-        purpose = "session"
 
     file_type = _file_type(ext)
 
@@ -119,7 +115,23 @@ async def upload_material(
         os.remove(storage_path)
         raise HTTPException(400, f"文件过大，最大 {max_size // (1024*1024)}MB")
 
-    logger.info("上传完成: %s (%s, %s, %d bytes)", file.filename, file_type, purpose, file_size)
+    # 写入元数据
+    created_at = datetime.now().isoformat()
+    materials_meta.set(material_id, {
+        "file_name": file.filename,
+        "file_type": file_type,
+        "file_size": file_size,
+        "partition_id": partition_id,
+        "purpose": purpose,
+        "status": "stored",
+        "chunk_count": 0,
+        "skills_covered": [],
+        "created_at": created_at,
+        "indexed_at": None,
+        "expires_at": (datetime.now() + timedelta(days=7)).isoformat() if purpose == "session" else None,
+    })
+
+    logger.info("上传完成: %s (%s, %s, %d bytes) → partition=%s", file.filename, file_type, purpose, file_size, partition_id)
 
     return {
         "material_id": material_id,
@@ -127,49 +139,82 @@ async def upload_material(
         "file_type": file_type,
         "file_size": file_size,
         "purpose": purpose,
+        "partition_id": partition_id,
         "status": "stored",
         "chunk_count": 0,
         "expires_at": (datetime.now() + timedelta(days=7)).isoformat() if purpose == "session" else None,
     }
 
 
+@router.get("")
+async def list_materials(
+    partition_id: str = "",
+    purpose: str = "",
+    search: str = "",
+):
+    """
+    获取资料列表。
+    支持 partition_id 过滤、purpose 过滤、文件名搜索。
+    """
+    _ensure_indexed()
+
+    if search:
+        materials = materials_meta.search(search, partition_id or None)
+    elif partition_id:
+        materials = materials_meta.list_by_partition(partition_id)
+    else:
+        # 全部（按分区统计返回）
+        all_meta = materials_meta.get_all()
+        materials = [
+            {"material_id": mid, **meta}
+            for mid, meta in all_meta.items()
+        ]
+        materials.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+
+    # purpose 过滤
+    if purpose:
+        materials = [m for m in materials if m.get("purpose") == purpose]
+
+    return {
+        "materials": materials,
+        "total": len(materials),
+        "stats_by_partition": materials_meta.get_stats_by_partition(),
+    }
+
+
+@router.patch("/{material_id}")
+async def update_material(material_id: str, req: UpdateMaterialRequest):
+    """更新资料元数据（如移动分区）"""
+    meta = materials_meta.get(material_id)
+    if not meta:
+        raise HTTPException(404, "资料不存在")
+
+    if req.partition_id is not None:
+        materials_meta.migrate_to_partition(material_id, req.partition_id)
+        logger.info("资料 %s → 分区 %s", material_id, req.partition_id)
+
+    return {"ok": True, "material_id": material_id}
+
+
 @router.post("/{material_id}/promote")
 async def promote_to_permanent(material_id: str):
     """
-    将临时资料转为知识库资料，触发全文索引。
-    这是从 session → permanent 的唯一通道。
+    将临时资料转为知识库资料，触发索引。
     """
-    conn = await _get_db_conn()
-    storage_path = None
+    meta = materials_meta.get(material_id)
+    if not meta:
+        raise HTTPException(404, "资料不存在")
 
-    if conn:
-        try:
-            # 查当前状态
-            row = await conn.fetchrow(
-                "SELECT storage_path, file_type, file_name, file_size FROM materials WHERE material_id=$1 AND user_id=$2",
-                material_id, USER_ID,
-            )
-            if row:
-                storage_path = row["storage_path"]
-                file_type = row["file_type"]
-                file_name = row["file_name"]
-                file_size = row["file_size"]
-            else:
-                # DB中还没有记录（session未入库），先插入
-                for f in os.listdir(UPLOAD_DIR):
-                    if f.startswith(material_id):
-                        storage_path = os.path.join(UPLOAD_DIR, f)
-                        file_type = _file_type(os.path.splitext(f)[1])
-                        file_name = f[37:] if len(f) > 37 else f
-                        file_size = os.path.getsize(storage_path)
-                        break
-        finally:
-            await conn.close()
+    # 检查文件存在
+    storage_path = None
+    for f in os.listdir(UPLOAD_DIR):
+        if f.startswith(material_id):
+            storage_path = os.path.join(UPLOAD_DIR, f)
+            break
 
     if not storage_path or not os.path.isfile(storage_path):
         raise HTTPException(404, "文件不存在，可能已被清理")
 
-    # 检查是否可索引
     ext = os.path.splitext(storage_path)[1].lower()
     if ext not in INDEXABLE_EXTENSIONS:
         raise HTTPException(
@@ -178,180 +223,76 @@ async def promote_to_permanent(material_id: str):
         )
 
     # 触发索引
-    from app.services.material_indexer import material_indexer
-    result = await material_indexer.index_file(
-        user_id=USER_ID,
-        file_path=storage_path,
-        file_name=file_name,
-        file_type=file_type,
-        file_size=file_size,
-    )
+    try:
+        from app.services.material_indexer import material_indexer
+        result = await material_indexer.index_file(
+            user_id=USER_ID,
+            file_path=storage_path,
+            file_name=meta.get("file_name", ""),
+            file_type=meta.get("file_type", ""),
+            file_size=meta.get("file_size", 0),
+        )
+        materials_meta.update(material_id, status="ready", chunk_count=result.get("chunk_count", 0), indexed_at=datetime.now().isoformat())
+    except Exception as e:
+        logger.error(f"索引失败: {e}")
+        raise HTTPException(500, f"索引失败: {e}")
 
-    # 更新 purpose + storage_path
-    conn = await _get_db_conn()
-    if conn:
-        try:
-            await conn.execute(
-                "UPDATE materials SET purpose='permanent', storage_path=$1, status=$2, chunk_count=$3 WHERE material_id=$4",
-                storage_path, "ready", result["chunk_count"], result["material_id"],
-            )
-        finally:
-            await conn.close()
+    materials_meta.update(material_id, purpose="permanent")
+    logger.info("已转为知识库: %s → %d chunks", meta.get("file_name"), result.get("chunk_count", 0))
 
-    logger.info("已转为知识库: %s → %d chunks", file_name, result["chunk_count"])
     return {
-        "material_id": result["material_id"],
-        "file_name": file_name,
+        "material_id": material_id,
+        "file_name": meta.get("file_name"),
         "status": "ready",
-        "chunk_count": result["chunk_count"],
+        "chunk_count": result.get("chunk_count", 0),
     }
 
 
 @router.get("/promote-suggestions")
 async def suggest_promotions(limit: int = 5):
-    """
-    智能推荐：哪些临时资料值得转为知识库。
-
-    规则：
-    - 同一天上传 ≥3 个文件 → 可能是在批量上传讲义 → 推荐全部
-    - PDF 文件 → 可能是讲义 → 推荐
-    - 文件名含"讲义/笔记/教材/习题" → 推荐
-    - 大文件(>500KB) → 可能是完整文档 → 推荐
-    """
+    """智能推荐：哪些临时资料值得转为知识库。"""
+    _ensure_indexed()
     suggestions = []
     scored = []
 
-    for f in os.listdir(UPLOAD_DIR):
-        fpath = os.path.join(UPLOAD_DIR, f)
-        if not os.path.isfile(fpath):
-            continue
+    for mid, meta in materials_meta.get_all().items():
+        name_lower = meta.get("file_name", "").lower()
+        file_type = meta.get("file_type", "")
+        file_size = meta.get("file_size", 0)
 
         score = 0
         reasons = []
-        name_lower = f.lower()
-        ext = os.path.splitext(f)[1].lower()
-        size = os.path.getsize(fpath)
-        material_id = f[:36] if len(f) > 36 else f
 
-        # 规则1: PDF → +3
-        if ext == ".pdf":
+        if file_type == "pdf":
             score += 3
             reasons.append("PDF文档")
 
-        # 规则2: 文件名关键词 → +2
         for kw in ["讲义", "笔记", "教材", "习题", "课本", "复习", "期末", "期中", "chapter", "lecture"]:
             if kw in name_lower:
                 score += 2
                 reasons.append(f"含'{kw}'")
                 break
 
-        # 规则3: 大文件(>500KB) → +2
-        if size > 500 * 1024:
+        if file_size > 500 * 1024:
             score += 2
-            reasons.append(f"文档较大({size // 1024}KB)")
+            reasons.append(f"文档较大({file_size // 1024}KB)")
 
-        # 规则4: Word/PPT → +1
-        if ext in (".docx", ".pptx"):
+        if file_type in ("docx", "pptx"):
             score += 1
             reasons.append("文档格式")
 
-        # 规则5: 同一天有多个文件 → batch bonus
-        mtime = datetime.fromtimestamp(os.path.getmtime(fpath))
-        same_day = sum(
-            1 for f2 in os.listdir(UPLOAD_DIR)
-            if os.path.isfile(os.path.join(UPLOAD_DIR, f2))
-            and abs(datetime.fromtimestamp(os.path.getmtime(os.path.join(UPLOAD_DIR, f2))) - mtime).days < 1
-        )
-        if same_day >= 3:
-            score += 3
-            reasons.append(f"同日上传{same_day}个文件")
-
         if score >= 2:
             scored.append({
-                "material_id": material_id,
-                "file_name": f[37:] if len(f) > 37 else f,
-                "file_type": _file_type(ext),
-                "file_size": size,
+                "material_id": mid,
+                "file_name": meta.get("file_name"),
+                "file_type": file_type,
+                "file_size": file_size,
                 "score": score,
                 "reasons": reasons,
             })
 
-    # 按评分排序
     scored.sort(key=lambda x: x["score"], reverse=True)
     return {"suggestions": scored[:limit]}
-
-
-@router.get("")
-async def list_materials(purpose: str = ""):
-    """获取用户资料列表"""
-    try:
-        conn = await _get_db_conn()
-        if conn:
-            query = """SELECT material_id, file_name, file_type, file_size, 
-                       status, purpose, chunk_count, skills_covered,
-                       storage_path, created_at, indexed_at, expires_at
-                       FROM materials WHERE user_id = $1"""
-            params = [USER_ID]
-            if purpose:
-                query += " AND purpose = $2"
-                params.append(purpose)
-            query += " ORDER BY created_at DESC"
-            rows = await conn.fetch(query, *params)
-            await conn.close()
-
-            db_materials = {row["material_id"]: row for row in rows}
-        else:
-            db_materials = {}
-
-        # 合并文件系统中的资料（session未入库的）
-        materials = []
-        seen = set()
-
-        for f in sorted(os.listdir(UPLOAD_DIR), reverse=True):
-            fpath = os.path.join(UPLOAD_DIR, f)
-            if not os.path.isfile(fpath):
-                continue
-            material_id = f[:36] if len(f) > 36 else f
-            if material_id in seen:
-                continue
-            seen.add(material_id)
-
-            row = db_materials.get(material_id)
-            if row:
-                materials.append({
-                    "material_id": row["material_id"],
-                    "file_name": row["file_name"],
-                    "file_type": row["file_type"],
-                    "file_size": row["file_size"],
-                    "purpose": row["purpose"] or "session",
-                    "status": row["status"],
-                    "chunk_count": row["chunk_count"],
-                    "skills_covered": row["skills_covered"],
-                    "created_at": row["created_at"].isoformat() if row["created_at"] else None,
-                    "indexed_at": row["indexed_at"].isoformat() if row["indexed_at"] else None,
-                    "expires_at": row["expires_at"].isoformat() if row.get("expires_at") else None,
-                })
-            else:
-                # 文件系统资料（session，未入库）
-                ext = os.path.splitext(f)[1].lower()
-                materials.append({
-                    "material_id": material_id,
-                    "file_name": f[37:] if len(f) > 37 else f,
-                    "file_type": _file_type(ext),
-                    "file_size": os.path.getsize(fpath),
-                    "purpose": "session",
-                    "status": "stored",
-                    "chunk_count": 0,
-                    "skills_covered": [],
-                    "created_at": datetime.fromtimestamp(os.path.getmtime(fpath)).isoformat(),
-                    "indexed_at": None,
-                    "expires_at": (datetime.fromtimestamp(os.path.getmtime(fpath)) + timedelta(days=7)).isoformat(),
-                })
-
-        return {"materials": materials, "total": len(materials)}
-    except Exception as e:
-        logger.error(f"获取资料列表失败: {e}")
-        return {"materials": [], "total": 0}
 
 
 @router.post("/search")
@@ -406,63 +347,60 @@ async def generate_from_materials(req: GenerateFromMaterialRequest):
 
 @router.delete("/{material_id}")
 async def delete_material(material_id: str):
-    """删除资料。DB级联删除chunks + 磁盘文件。"""
-    storage_path = None
+    """删除资料。元数据 + 磁盘文件。"""
+    # 删除元数据
+    materials_meta.delete(material_id)
+
+    # 删除磁盘文件
+    deleted = 0
+    for f in os.listdir(UPLOAD_DIR):
+        if f.startswith(material_id):
+            os.remove(os.path.join(UPLOAD_DIR, f))
+            deleted += 1
+
+    # 同时删除数据库记录（如果有）
     try:
         conn = await _get_db_conn()
         if conn:
-            row = await conn.fetchrow(
-                "SELECT storage_path FROM materials WHERE material_id=$1 AND user_id=$2",
-                material_id, USER_ID,
-            )
-            if row:
-                storage_path = row["storage_path"]
             await conn.execute(
                 "DELETE FROM materials WHERE material_id=$1 AND user_id=$2",
                 material_id, USER_ID,
             )
             await conn.close()
-    except Exception as e:
-        logger.error(f"DB删除失败: {e}")
+    except Exception:
+        pass
 
-    if storage_path and os.path.isfile(storage_path):
-        os.remove(storage_path)
-    else:
-        for f in os.listdir(UPLOAD_DIR):
-            if f.startswith(material_id):
-                os.remove(os.path.join(UPLOAD_DIR, f))
-
-    return {"ok": True, "material_id": material_id}
+    return {"ok": True, "material_id": material_id, "files_deleted": deleted}
 
 
 @router.post("/cleanup-sessions")
 async def cleanup_session_materials():
-    """清理过期session资料（7天）。可cron定时调用。"""
+    """清理过期session资料（7天）。"""
     deleted = 0
-    try:
-        conn = await _get_db_conn()
-        if conn:
-            rows = await conn.fetch(
-                """SELECT material_id, storage_path FROM materials
-                   WHERE user_id=$1 AND purpose='session'
-                   AND (expires_at IS NULL OR expires_at < $2)""",
-                USER_ID, datetime.now(),
-            )
-            for row in rows:
-                await conn.execute("DELETE FROM materials WHERE material_id=$1", row["material_id"])
-                if row["storage_path"] and os.path.isfile(row["storage_path"]):
-                    os.remove(row["storage_path"])
-                deleted += 1
-            await conn.close()
+    cutoff = datetime.now() - timedelta(days=7)
 
-        # 文件系统过期清理
-        cutoff = datetime.now() - timedelta(days=7)
-        for f in os.listdir(UPLOAD_DIR):
-            fpath = os.path.join(UPLOAD_DIR, f)
-            if os.path.isfile(fpath) and datetime.fromtimestamp(os.path.getmtime(fpath)) < cutoff:
-                os.remove(fpath)
-                deleted += 1
+    for mid, meta in list(materials_meta.get_all().items()):
+        try:
+            expires_str = meta.get("expires_at")
+            if expires_str:
+                expires = datetime.fromisoformat(expires_str)
+                if expires < cutoff:
+                    materials_meta.delete(mid)
+                    for f in os.listdir(UPLOAD_DIR):
+                        if f.startswith(mid):
+                            os.remove(os.path.join(UPLOAD_DIR, f))
+                            deleted += 1
+        except Exception:
+            pass
 
-        return {"ok": True, "deleted": deleted}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+    return {"ok": True, "deleted": deleted}
+
+
+# ── 数据库连接 helper ──
+
+async def _get_db_conn():
+    import asyncpg
+    db_url = os.getenv("DATABASE_URL", "")
+    if db_url:
+        return await asyncpg.connect(db_url)
+    return None

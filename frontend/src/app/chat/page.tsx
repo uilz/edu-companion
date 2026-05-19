@@ -20,6 +20,7 @@ import BranchList from "@/components/conversation/BranchList";
 import MessageList from "@/components/conversation/MessageList";
 import ConversationChatInput from "@/components/conversation/ChatInput";
 import WorkspacePanel from "@/components/conversation/WorkspacePanel";
+import MaterialPanel from "@/components/materials/MaterialPanel";
 
 // ── Media query hook ──
 function useMediaQuery(query: string): boolean {
@@ -244,6 +245,9 @@ export default function ChatPage() {
 
   // New partition dialog
   const [showNewPartition, setShowNewPartition] = useState(false);
+
+  // P5: Branch sidebar view mode
+  const [branchViewMode, setBranchViewMode] = useState<"branches" | "materials">("branches");
 
   // Loading states
   const [loadingPartitions, setLoadingPartitions] = useState(true);
@@ -731,14 +735,45 @@ export default function ChatPage() {
             className="absolute -right-3 top-2 z-10 w-5 h-5 rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] flex items-center justify-center text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
             title="收起分支"
           >◀</button>
-          <BranchList
-            branches={branches}
-            activeBranchId={activeBranchId}
-            onSelectBranch={handleSelectBranch}
-            onCreateBranch={handleCreateBranch}
-            loading={loadingBranches}
-          />
-          <WorkspacePanel branchId={activeBranchId} />
+
+          {/* P5: Tab bar */}
+          <div className="flex border-b border-[var(--color-border)]">
+            <button
+              onClick={() => setBranchViewMode("branches")}
+              className={`flex-1 py-2 text-xs font-medium transition-colors ${
+                branchViewMode === "branches"
+                  ? "text-[var(--color-accent)] border-b-2 border-[var(--color-accent)]"
+                  : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+              }`}
+            >
+              🌿 分支
+            </button>
+            <button
+              onClick={() => setBranchViewMode("materials")}
+              className={`flex-1 py-2 text-xs font-medium transition-colors ${
+                branchViewMode === "materials"
+                  ? "text-[var(--color-accent)] border-b-2 border-[var(--color-accent)]"
+                  : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+              }`}
+            >
+              📁 资料
+            </button>
+          </div>
+
+          {branchViewMode === "branches" ? (
+            <>
+              <BranchList
+                branches={branches}
+                activeBranchId={activeBranchId}
+                onSelectBranch={handleSelectBranch}
+                onCreateBranch={handleCreateBranch}
+                loading={loadingBranches}
+              />
+              <WorkspacePanel branchId={activeBranchId} partitionId={selectedPartitionId} />
+            </>
+          ) : (
+            <MaterialPanel partitionId={selectedPartitionId} />
+          )}
         </div>
       )}
 

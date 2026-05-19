@@ -67,6 +67,34 @@ export interface Branch {
   created_at: number;
   last_message_at: number;
   message_count?: number;
+  material_refs?: string[];
+}
+
+// ── P5: 资料类型 ──
+
+export interface MaterialMeta {
+  material_id: string;
+  file_name: string;
+  file_type: string;
+  file_size: number;
+  partition_id: string;
+  purpose: string;
+  status: string;
+  chunk_count: number;
+  skills_covered: string[];
+  created_at: string;
+  indexed_at: string | null;
+  expires_at: string | null;
+}
+
+export interface MaterialRef {
+  material_id: string;
+  file_name: string;
+  file_type: string;
+  file_size: number;
+  status: string;
+  skills_covered: string[];
+  partition_id: string;
 }
 
 export interface ContentBlock {

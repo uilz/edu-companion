@@ -499,3 +499,111 @@ async def delete_workspace_file(file_id: str, branch_id: str = Query(...)):
 
     logger.info("工作空间文件已删除: %s", record.original_name)
     return {"ok": True}
+
+
+# ── P5: 分支资料引用 ──
+
+class AddMaterialRefRequest(BaseModel):
+    material_id: str
+
+class MaterialRefInfo(BaseModel):
+    material_id: str
+    file_name: str = ""
+    file_type: str = ""
+    file_size: int = 0
+    status: str = ""
+    skills_covered: list[str] = Field(default_factory=list)
+
+
+@router.get("/branches/{branch_id}/materials")
+async def list_branch_material_refs(branch_id: str):
+    """列出分支已引用的资料"""
+    from app.services.materials_meta import materials_meta as mm
+
+    data = storage.load(USER_ID)
+    branch = data.branches.get(branch_id)
+    if not branch:
+        raise HTTPException(404, "Branch not found")
+
+    refs = getattr(branch, "material_refs", [])
+    result = []
+    for mid in refs:
+        meta = mm.get(mid)
+        if meta:
+            result.append({
+                "material_id": mid,
+                "file_name": meta.get("file_name", ""),
+                "file_type": meta.get("file_type", ""),
+                "file_size": meta.get("file_size", 0),
+                "status": meta.get("status", ""),
+                "skills_covered": meta.get("skills_covered", []),
+                "partition_id": meta.get("partition_id", ""),
+            })
+
+    return {"refs": result, "count": len(result)}
+
+
+@router.post("/branches/{branch_id}/materials")
+async def add_branch_material_ref(branch_id: str, req: AddMaterialRefRequest):
+    """分支引用资料"""
+    from app.services.materials_meta import materials_meta as mm
+
+    data = storage.load(USER_ID)
+    branch = data.branches.get(branch_id)
+    if not branch:
+        raise HTTPException(404, "Branch not found")
+
+    # 验证资料存在
+    meta = mm.get(req.material_id)
+    if not meta:
+        raise HTTPException(404, "Material not found")
+
+    refs = list(getattr(branch, "material_refs", []))
+    if req.material_id not in refs:
+        refs.append(req.material_id)
+    branch.material_refs = refs
+    storage.save(USER_ID, data)
+
+    logger.info("分支 %s 引用了资料 %s", branch_id, req.material_id)
+    return {"ok": True, "material_refs": refs}
+
+
+@router.delete("/branches/{branch_id}/materials/{material_id}")
+async def remove_branch_material_ref(branch_id: str, material_id: str):
+    """取消分支对资料的引用"""
+    data = storage.load(USER_ID)
+    branch = data.branches.get(branch_id)
+    if not branch:
+        raise HTTPException(404, "Branch not found")
+
+    refs = list(getattr(branch, "material_refs", []))
+    if material_id in refs:
+        refs.remove(material_id)
+    branch.material_refs = refs
+    storage.save(USER_ID, data)
+
+    logger.info("分支 %s 取消引用资料 %s", branch_id, material_id)
+    return {"ok": True, "material_refs": refs}
+
+
+@router.post("/branches/{branch_id}/materials/batch")
+async def set_branch_material_refs(branch_id: str, req: list[AddMaterialRefRequest]):
+    """批量设置分支引用（覆盖模式）"""
+    from app.services.materials_meta import materials_meta as mm
+
+    data = storage.load(USER_ID)
+    branch = data.branches.get(branch_id)
+    if not branch:
+        raise HTTPException(404, "Branch not found")
+
+    # 验证所有资料存在
+    mids = [r.material_id for r in req]
+    for mid in mids:
+        if not mm.get(mid):
+            raise HTTPException(404, f"Material not found: {mid}")
+
+    branch.material_refs = mids
+    storage.save(USER_ID, data)
+
+    logger.info("分支 %s 批量设置引用: %s", branch_id, mids)
+    return {"ok": True, "material_refs": mids}

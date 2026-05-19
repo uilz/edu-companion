@@ -129,6 +129,8 @@ class Branch(BaseModel):
     # P0: 练习系统联动
     practice_sessions: list[str] = Field(default_factory=list)  # 关联的练习session_id
     practice_summary: str = ""  # "已练12题,正确率70%,薄弱:导数"
+    # P5: 资料引用
+    material_refs: list[str] = Field(default_factory=list)  # 引用的 material_id 列表
 
 
 # ── Partition ──
