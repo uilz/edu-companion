@@ -331,6 +331,12 @@ export default function ChatPage() {
   }, []);
 
   // ── WebSocket callbacks ──
+  // Ref to track current partition for onDone (avoid stale closure)
+  const selectedPartitionIdRef = useRef(selectedPartitionId);
+  useEffect(() => {
+    selectedPartitionIdRef.current = selectedPartitionId;
+  }, [selectedPartitionId]);
+
   useEffect(() => {
     connectConversationWS({
       onStatus: (msg) => {
@@ -381,6 +387,19 @@ export default function ChatPage() {
         } else {
           streamingMsgIdRef.current = null;
           streamBufferRef.current = "";
+        }
+
+        // 🔧 Fix 1: 同步自动创建的分区
+        const isNewPartition = _partitionId && _partitionId !== selectedPartitionIdRef.current;
+        if (isNewPartition) {
+          setSelectedPartitionId(_partitionId);
+          // 切换到新分区的活跃分支
+          if (assistantMessage?.branch_id) {
+            setActiveBranchId(assistantMessage.branch_id);
+          }
+        } else if (selectedPartitionIdRef.current) {
+          // 🔧 Fix 2: 刷新分支列表（捕获自动重命名）
+          loadBranches(selectedPartitionIdRef.current);
         }
 
         // 轻轻刷新分区列表（不刷新消息，避免覆盖流式结果造成闪烁）
