@@ -304,3 +304,91 @@ async def get_calendar(
         "month_streak": streak,
         "best_day": {"date": best_day["date"], "total": best_total} if best_day else None,
     }
+
+
+@router.get("/{user_id}/summary")
+async def get_daily_summary(user_id: str) -> dict[str, Any]:
+    """
+    每日摘要 — 昨日总结 + 今日推荐，用于前端卡片展示。
+
+    返回空对象 {} 表示昨天无学习记录。
+    """
+    from datetime import datetime, timedelta, date
+
+    now = datetime.now()
+    yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+    day_before = (now - timedelta(days=2)).strftime("%Y-%m-%d")
+
+    # 查昨日 attempts
+    try:
+        attempts = await AttemptRepo.list_all(user_id, since=yesterday)
+    except Exception:
+        return {}
+
+    yesterday_total = 0
+    yesterday_correct = 0
+    for a in attempts:
+        ts = a.get("submitted_at", "")
+        if ts and ts[:10] == yesterday:
+            yesterday_total += 1
+            if a.get("is_correct"):
+                yesterday_correct += 1
+
+    if yesterday_total == 0:
+        return {}
+
+    accuracy = yesterday_correct / yesterday_total
+
+    # 前日对比
+    prev_total = 0
+    try:
+        prev_attempts = await AttemptRepo.list_all(user_id, since=day_before)
+        for a in prev_attempts:
+            ts = a.get("submitted_at", "")
+            if ts and ts[:10] == day_before:
+                prev_total += 1
+    except Exception:
+        pass
+
+    delta = yesterday_total - prev_total
+
+    # streak
+    profile = learner_engine.get_or_create_profile(user_id)
+    streak = profile.streak_days if hasattr(profile, "streak_days") else 0
+
+    # 今日推荐：最弱的 3 个可练习技能
+    recommendations = []
+    try:
+        from domain.knowledge.prerequisites import ALL_PREREQUISITES
+        from app.core.knowledge_trace import bkt_engine as _bkt
+        skills = []
+        for sid in ALL_PREREQUISITES:
+            state = _bkt.load_or_create(user_id, sid)
+            skills.append((sid, state.p_known))
+        skills.sort(key=lambda x: x[1])  # mastery 低优先
+        for sid, pk in skills[:3]:
+            recommendations.append({"skill_id": sid, "mastery": round(pk * 100)})
+    except Exception:
+        pass
+
+    # 随机鼓励语
+    import random
+    encourages = [
+        "坚持下去，复利效应正在发生 📈",
+        "每一个知识点都是未来的砖瓦 🧱",
+        "今天比昨天多会一点，就是胜利 ✨",
+        "学习是一场马拉松，不是冲刺 🏃",
+    ]
+
+    return {
+        "yesterday": {
+            "date": yesterday,
+            "total": yesterday_total,
+            "correct": yesterday_correct,
+            "accuracy": round(accuracy, 3),
+        },
+        "vs_previous": {"total": prev_total, "delta": delta},
+        "streak": streak,
+        "recommendations": recommendations,
+        "encourage": random.choice(encourages),
+    }
