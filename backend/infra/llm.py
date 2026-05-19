@@ -7,7 +7,7 @@ import os
 
 logger = logging.getLogger("infra.llm")
 
-# 模型名从环境变量读取（OpenAI 兼容格式，如 openai/gpt-4o 或 deepseek/deepseek-chat）
+# 模型名从环境变量读取（OpenAI 兼容格式）
 _TEXT_MODEL = os.getenv("TEXT_MODEL", "openai/gpt-4o-mini")
 
 

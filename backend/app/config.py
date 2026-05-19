@@ -72,7 +72,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(default=None, description="OpenAI API Key（env: OPENAI_API_KEY）")
     openai_api_base: str | None = Field(
         default=None,
-        description="OpenAI 兼容 API 端点（env: OPENAI_API_BASE），如 https://api.deepseek.com",
+        description="OpenAI 兼容 API 端点（env: OPENAI_API_BASE）",
     )
 
     # ── LiteLLM 代理配置 ──

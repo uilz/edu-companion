@@ -85,7 +85,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     logger.info("🚀 %s v%s 启动中...", settings.app_name, settings.app_version)
     logger.info("📡 服务地址: %s:%s", settings.host, settings.port)
-    logger.info("🤖 默认模型: %s", settings.default_model)
+    logger.info("🤖 文本模型: %s", settings.text_model)
+    logger.info("🧠 推理模型: %s", settings.text_reasoning_model)
 
     # 初始化数据库
     from app.db.database import get_db
