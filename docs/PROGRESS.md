@@ -1,8 +1,8 @@
 # 智能伴学系统 · 开发进度总览
 
-> **最后更新**: 2026-05-19 20:10 — Phase 3 P1-P4 全部完成  
-> **总代码量**: 后端 ~18,000 行 · 前端 ~10,500 行 · 文档 ~15,000 行  
-> **API 端点**: 88 个 · **前端页面**: 14 个 · **设计文档**: 23 份 · **服务文件**: 33 个
+> **最后更新**: 2026-05-19 21:30 — Phase 4 设计完成，待实施  
+> **总代码量**: 后端 ~18,000 行 · 前端 ~10,500 行 · 文档 ~17,000 行  
+> **API 端点**: 88 个 · **前端页面**: 13 个 · **设计文档**: 24 份 · **服务文件**: 33 个
 
 ---
 
@@ -254,3 +254,60 @@ GET /errors/stats → ErrorAttributionBar                     🆕
 
 - 首页全量改为真实 API 数据驱动
 - 薄弱知识点+学习建议+成就展示卡片
+
+---
+
+## 九、Phase 4 · 模块联动升级 🔴 待实施
+
+> 详细设计: [docs/phase4/README.md](./phase4/README.md)
+> 旧版设计(过时): docs/module-linkage-upgrade.md
+
+### 审计结论（13 项缺陷）
+
+| # | 缺陷 | 严重度 |
+|---|------|:--:|
+| 1 | **api ⇄ services 循环依赖** | 🔴 |
+| 2 | **core ⇄ services 循环依赖** | 🔴 |
+| 3 | API 层直连 DB (3 个文件) | 🟡 |
+| 4 | 35 个全局单例，零依赖注入 | 🟡 |
+| 5 | submit_answer 同步串行 7 步 | 🟡 |
+| 6 | api/practice.py 上帝文件 (1025行 8职责) | 🟡 |
+| 7 | 前端 13 页，侧栏只露出 7 个 | 🟡 |
+| 8 | 跨模块零上下文传递 | 🟡 |
+| 9 | 无契约治理 (传 dict) | 🟡 |
+| 10 | 无超时/重试/熔断 | 🟡 |
+| 11 | 无全链路追踪 | 🟡 |
+| 12 | analytics/stats/progress 三页重叠 | 🟡 |
+| 13 | 新模块接入需改现有代码 | 🟡 |
+
+### 目标架构
+
+```
+presentation (api/)        → 纯路由, 不碰 DB
+application (use_cases/)   → 编排用例, 发布事件
+domain (8 模块)            → 纯业务, 只依赖 shared
+infrastructure (infra/)    → DB/LLM/FS, 实现 domain 接口
+shared (protocols+events)  → 零外部依赖
+```
+
+### 实施路线（7 天）
+
+| 子阶段 | 天 | 内容 |
+|--------|:--:|------|
+| 4A 基础设施 | 1 | shared/protocols(8) + events(10) + event_bus + resilience + tracing |
+| 4B 消除循环 | 2 | BKT→Repository · conversation→DI · application/di.py |
+| 4C 事件驱动 | 2 | submit_answer 拆分 · AnswerSubmitted 串 5 消费者 · 资料索引异步化 |
+| 4D API 精简 | 1 | 拆分 api/practice.py 上帝文件 · API 层移除 DB 直连 |
+| 4E 前端整并 | 1 | 13→4 面板 · /dashboard 统一驾驶舱 · 跨页上下文传递 |
+| 4F 契约测试 | 1 | Protocol 契约测试 · 事件 Schema 验证 · 熔断器集成测试 |
+
+### 预期效果
+
+| 指标 | 改造前 | 改造后 |
+|------|--------|--------|
+| 循环依赖 | 2 对 | 0 |
+| 全局单例 | 35 (零 DI) | 1 (AppContainer) |
+| api/practice.py | 1025 行 | ~80 行 |
+| submit_answer 延迟 | ~130ms | ~71ms |
+| 前端页面 | 13 (侧栏 7) | 4 (全可见) |
+| 新模块接入 | 改现有代码 | 订阅事件, 零侵入 |
