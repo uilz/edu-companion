@@ -11,20 +11,21 @@
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                       前端 (Next.js 14)                       │
-│  /chat /practice /analytics /errors /materials /graph        │
-│  /calendar /achievements /progress /stats /study /quality    │
-│  /settings /                                                 │
+│  /chat /practice /analytics /errors /graph                    │
+│  /calendar /achievements /progress /stats /study /quality     │
+│  /settings /                                                  │
 ├─────────────────────────────────────────────────────────────┤
 │                    API 层 (FastAPI)                           │
 │  conversation / practice / material / chat / study / content │
-│  progress / knowledge / multimodal / achievements            │
+│  progress / knowledge / multimodal / achievements / search   │
 ├──────────┬──────────┬──────────┬──────────┬──────────┬────────────┤
 │ 对话引擎  │ 练习引擎  │ 学习规划  │ 知识图谱  │ 成就系统  │ 媒体搜索    │
 │ LLM+树   │ BKT+ZPD  │ Plan+    │ 38节点    │ 12成就    │ B站/Bing/  │
-│ +多模态   │ +错题本  │ Habits   │ 45边 SVG  │ 3级解锁   │ 百度/小红书  │
+│ +context │ +错题本  │ Habits   │ 45边 SVG  │ 3级解锁   │ 百度/小红书  │
+│ 推荐练题  │          │          │ +学习路径  │           │            │
 ├──────────┴──────────┴──────────┴──────────┴──────────┴────────────┤
-│            持久化 (PostgreSQL 14 + asyncpg)                        │
-│        edu_companion DB · companion 用户 · 线程安全               │
+│            持久化 (JSON 文件存储)                                   │
+│        ~/.companion/data + ~/.companion/uploads                   │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
@@ -39,7 +40,7 @@
 | 1 | **对话系统** | 🟢 90% | 树结构会话、多模态ContentBlock、LLM回复、智能分区、分支管理、消息修改/删除、跨分区链接、ResponseBlock渲染、**温暖陪伴人格+挫败检测+启发追问+引用溯源** |
 | 2 | **练习系统** | 🟢 85% | LLM出题、BKT认知诊断(4维MDKS)、ZPD自适应调度、SM-2间隔重复、错题本、苏格拉底提示、情感反馈 |
 | 3 | **对话×练习互通** | 🟢 80% | 上下文感知选题、内联练习、练习→对话结果写回、练习回顾、错误→对话推荐、LLM上下文注入 |
-| 4 | **资料系统** | 🟢 80% | PDF/Word/PPT/MD/TXT解析、Granite Embedding索引、向量搜索、**资料出题**、session/knowledge生命周期 |
+| 4 | **资料系统** | 🟢 100% | PDF/Word/PPT/MD/TXT解析、Granite Embedding索引、向量搜索、资料出题、**分区归属+分支引用+MaterialPanel** |
 | 5 | **学情仪表板** | 🟢 100% | 9面板仪表板(概览/趋势/掌握/错因/热力/雷达/遗忘/建议) + 习惯养成Tab + **每日摘要卡片** |
 | 6 | **行为分析+习惯养成** | 🟢 100% | streak追踪、最佳时段分析、规律性评分、疲劳曲线、番茄钟建议、TinyHabits微习惯 |
 | 7 | **媒体搜索** | 🟢 90% | B站/百度/Bing/小红书多平台搜索URL生成、练习错误自动推荐 |
@@ -213,7 +214,7 @@ GET /errors/stats → ErrorAttributionBar                     🆕
 
 ---
 
-## 八、Phase 3 · 能力升级
+## 八、Phase 3 · 能力升级 ✅ 完成
 
 > 详细设计文档: [docs/phase3/README.md](./phase3/README.md)
 
