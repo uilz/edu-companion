@@ -522,8 +522,131 @@ export default function GraphPage() {
               </Card>
             )}
           </div>
+
+          {/* ── P2: Learning Roadmap ── */}
+          <div className="lg:col-span-2">
+            <Card title="📋 推荐学习路径">
+              {loading ? (
+                <div className="py-8 text-center">
+                  <Loader2 size={16} className="animate-spin mx-auto" />
+                </div>
+              ) : (
+                <LearningRoadmap nodes={nodes} edges={data?.edges || []} />
+              )}
+            </Card>
+          </div>
         </div>
       </div>
     </main>
+  );
+}
+
+// ── P2: Learning Roadmap Component ──
+
+function LearningRoadmap({
+  nodes,
+  edges,
+}: {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}) {
+  // Topological sort by dependency depth
+  const depDepth = new Map<string, number>();
+
+  function getDepth(skillId: string, visited = new Set<string>()): number {
+    if (depDepth.has(skillId)) return depDepth.get(skillId)!;
+    if (visited.has(skillId)) return 0;
+    visited.add(skillId);
+
+    const prereqs = edges.filter((e) => e.to === skillId).map((e) => e.from);
+    if (prereqs.length === 0) {
+      depDepth.set(skillId, 0);
+      return 0;
+    }
+
+    const maxDepth = Math.max(...prereqs.map((p) => getDepth(p, visited)));
+    const depth = maxDepth + 1;
+    depDepth.set(skillId, depth);
+    return depth;
+  }
+
+  nodes.forEach((n) => getDepth(n.id));
+
+  // Sort by depth, then by mastery (low mastery first within same depth)
+  const sorted = [...nodes].sort((a, b) => {
+    const da = depDepth.get(a.id) || 0;
+    const db = depDepth.get(b.id) || 0;
+    if (da !== db) return da - db;
+    return a.mastery - b.mastery;
+  });
+
+  // Group by depth level
+  const levels: Map<number, GraphNode[]> = new Map();
+  sorted.forEach((n) => {
+    const d = depDepth.get(n.id) || 0;
+    if (!levels.has(d)) levels.set(d, []);
+    levels.get(d)!.push(n);
+  });
+
+  const masteryColor = (level: string) => {
+    switch (level) {
+      case "已掌握": return "bg-green-500";
+      case "接近掌握": return "bg-emerald-400";
+      case "发展中": return "bg-yellow-400";
+      case "初学": return "bg-orange-400";
+      default: return "bg-gray-400";
+    }
+  };
+
+  const masteryBg = (level: string) => {
+    switch (level) {
+      case "已掌握": return "bg-green-500/10 border-green-500/30";
+      case "接近掌握": return "bg-emerald-400/10 border-emerald-400/30";
+      case "发展中": return "bg-yellow-400/10 border-yellow-400/30";
+      case "初学": return "bg-orange-400/10 border-orange-400/30";
+      default: return "bg-gray-400/10 border-gray-400/30";
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {Array.from(levels.entries()).map(([depth, skills]) => (
+        <div key={depth}>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[10px] font-semibold text-[var(--color-text-muted)] uppercase">
+              阶段 {depth + 1}
+            </span>
+            <div className="flex-1 h-px bg-[var(--color-border)]" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {skills.map((skill) => (
+              <div
+                key={skill.id}
+                className={`flex items-center gap-2 px-3 py-2 border text-xs transition-all ${masteryBg(skill.mastery_level)}`}
+              >
+                <div
+                  className={`w-2 h-2 flex-shrink-0 ${masteryColor(skill.mastery_level)}`}
+                  style={{ borderRadius: "50%" }}
+                />
+                <span className="text-[var(--color-text-secondary)]">
+                  {skill.label}
+                </span>
+                <span className="text-[10px] text-[var(--color-text-muted)]">
+                  {skill.mastery}%
+                </span>
+                {!skill.can_practice && skill.blocked_by.length > 0 && (
+                  <span className="text-[10px] text-orange-400" title={`前置未完成: ${skill.blocked_by.join(", ")}`}>
+                    🔒
+                  </span>
+                )}
+                {skill.can_practice && skill.mastery < 80 && (
+                  <span className="text-[10px] text-green-400">✓</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }

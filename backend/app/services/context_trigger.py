@@ -14,7 +14,7 @@ import re
 from typing import Optional
 
 from app.schemas.conversation import Branch, TreeNode
-from app.schemas.practice import BloomLevel, PracticeSession, CreateSessionRequest
+from app.schemas.practice import BloomLevel
 from app.services.shared_ks import shared_ks
 from app.services.question_generator import get_question_generator
 

@@ -21,6 +21,7 @@ import MessageList from "@/components/conversation/MessageList";
 import ConversationChatInput from "@/components/conversation/ChatInput";
 import WorkspacePanel from "@/components/conversation/WorkspacePanel";
 import MaterialPanel from "@/components/materials/MaterialPanel";
+import PracticeSuggestions from "@/components/conversation/PracticeSuggestions";
 
 // ── Media query hook ──
 function useMediaQuery(query: string): boolean {
@@ -770,6 +771,7 @@ export default function ChatPage() {
                 loading={loadingBranches}
               />
               <WorkspacePanel branchId={activeBranchId} partitionId={selectedPartitionId} />
+              <PracticeSuggestions branchId={activeBranchId} />
             </>
           ) : (
             <MaterialPanel partitionId={selectedPartitionId} />

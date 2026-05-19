@@ -607,3 +607,55 @@ async def set_branch_material_refs(branch_id: str, req: list[AddMaterialRefReque
 
     logger.info("分支 %s 批量设置引用: %s", branch_id, mids)
     return {"ok": True, "material_refs": mids}
+
+
+# ── P3: 对话→练习推荐 ──
+
+@router.get("/branches/{branch_id}/practice-suggestions")
+async def get_practice_suggestions(branch_id: str):
+    """基于对话上下文推荐练习"""
+    from app.services.context_trigger import context_trigger
+    from app.schemas.practice import BloomLevel
+
+    data = storage.load(USER_ID)
+    branch = data.branches.get(branch_id)
+    if not branch:
+        raise HTTPException(404, "Branch not found")
+
+    # 收集最近的消息
+    recent_messages = []
+    for node_id in reversed(branch.path[-10:]):
+        node = data.nodes.get(node_id)
+        if node and not node.is_deleted:
+            recent_messages.append(node)
+
+    if not recent_messages:
+        return {"suggestions": [], "hint": "暂无对话上下文"}
+
+    # 触发context分析
+    trigger_result = context_trigger.trigger(
+        user_id=USER_ID,
+        branch=branch,
+        recent_messages=recent_messages,
+    )
+
+    # 为每个建议的skill_id获取显示名
+    skill_names = {}
+    bloom_str = str(trigger_result.get("bloom_level", "understand"))
+    # 清除 BloomLevel. 前缀
+    if "." in bloom_str:
+        bloom_str = bloom_str.split(".")[-1].lower()
+
+    return {
+        "suggestions": [
+            {
+                "skill_id": sid,
+                "skill_name": sid.replace("_", " ").title(),
+                "bloom_level": bloom_str,
+                "difficulty": trigger_result.get("difficulty", 0.5),
+            }
+            for sid in trigger_result.get("skill_ids", [])[:5]
+        ],
+        "confused": trigger_result.get("confused", False),
+        "hint": "对话分析完成" if trigger_result.get("skill_ids") else "未检测到练习主题",
+    }
