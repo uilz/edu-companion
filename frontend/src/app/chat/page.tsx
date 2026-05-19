@@ -266,15 +266,18 @@ export default function ChatPage() {
   }, []);
 
   // ── Load partitions ──
-  const loadPartitions = useCallback(async () => {
+  const loadPartitions = useCallback(async (): Promise<Partition[]> => {
     try {
       setLoadingPartitions(true);
       const data = await apiFetch<{ partitions: Partition[] }>(
         "/conversations/partitions"
       );
-      setPartitions(data.partitions || []);
+      const parts = data.partitions || [];
+      setPartitions(parts);
+      return parts;
     } catch (e) {
       console.error("Failed to load partitions:", e);
+      return [];
     } finally {
       setLoadingPartitions(false);
     }
@@ -404,9 +407,32 @@ export default function ChatPage() {
     return () => disconnectWS();
   }, [activeBranchId, loadMessages, loadPartitions]);
 
-  // ── Initial load ──
+  // ── Initial load with session restore ──
+  const LS_KEY = "edu-companion:chat:session";
+  const initializedRef = useRef(false);
+
   useEffect(() => {
-    loadPartitions();
+    const init = async () => {
+      const parts = await loadPartitions();
+      // Restore last session from localStorage
+      try {
+        const saved = localStorage.getItem(LS_KEY);
+        if (saved) {
+          const { partitionId, branchId } = JSON.parse(saved);
+          if (partitionId && parts.some((p) => p.id === partitionId)) {
+            setSelectedPartitionId(partitionId);
+            // Defer branch restore until branches load
+            if (branchId) {
+              localStorage.setItem(LS_KEY + ":pending-branch", branchId);
+            }
+          } else {
+            localStorage.removeItem(LS_KEY);
+          }
+        }
+      } catch { /* ignore parse errors */ }
+      initializedRef.current = true;
+    };
+    init();
   }, [loadPartitions]);
 
   // ── Load branches when partition selected ──
@@ -419,6 +445,22 @@ export default function ChatPage() {
     }
   }, [selectedPartitionId, loadBranches]);
 
+  // ── Restore branch after branches load ──
+  useEffect(() => {
+    const pendingId = localStorage.getItem(LS_KEY + ":pending-branch");
+    if (pendingId && branches.length > 0) {
+      const exists = branches.some((b) => b.id === pendingId);
+      if (exists) {
+        setActiveBranchId(pendingId);
+      } else {
+        // Fallback to active branch
+        const active = branches.find((b) => b.is_active);
+        setActiveBranchId(active?.id || branches[0]?.id || null);
+      }
+      localStorage.removeItem(LS_KEY + ":pending-branch");
+    }
+  }, [branches]);
+
   // ── Load messages when branch selected ──
   useEffect(() => {
     if (activeBranchId) {
@@ -428,6 +470,16 @@ export default function ChatPage() {
       setResponseBlocks([]);
     }
   }, [activeBranchId, loadMessages]);
+
+  // ── Persist session to localStorage ──
+  useEffect(() => {
+    if (initializedRef.current && selectedPartitionId) {
+      localStorage.setItem(LS_KEY, JSON.stringify({
+        partitionId: selectedPartitionId,
+        branchId: activeBranchId,
+      }));
+    }
+  }, [selectedPartitionId, activeBranchId]);
 
   // ── Handle send ──
   const handleSend = useCallback(
