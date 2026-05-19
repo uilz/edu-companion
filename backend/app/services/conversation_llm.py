@@ -719,7 +719,7 @@ async def send_and_reply_stream(
     except Exception:
         pass
 
-    yield {"type": "user_message", "message": user_node}
+    yield {"type": "user_message", "message": user_node.model_dump(mode="json")}
 
     # 2. 流式生成回复
     full_reply = ""
@@ -774,6 +774,6 @@ async def send_and_reply_stream(
 
     yield {
         "type": "done",
-        "assistant_message": assistant_node,
-        "response_blocks": [b.model_dump() for b in response_blocks],
+        "assistant_message": assistant_node.model_dump(mode="json"),
+        "response_blocks": [b.model_dump(mode="json") for b in response_blocks],
     }
