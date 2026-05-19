@@ -58,6 +58,21 @@ class AnswerSubmitted(DomainEvent):
 
 
 @dataclass(frozen=True)
+class ErrorRecorded(DomainEvent):
+    """错题记录事件 — 答错时发布，驱动错题本 + 多媒体讲解"""
+    user_id: str = ""
+    question_id: str = ""
+    skill_id: str = ""
+    error_type: str = "careless"
+    user_answer: str = ""
+    correct_answer: str = ""
+
+    @property
+    def event_type(self) -> str:
+        return "ErrorRecorded"
+
+
+@dataclass(frozen=True)
 class SessionCompleted(DomainEvent):
     """练习会话完成事件"""
     user_id: str = ""
