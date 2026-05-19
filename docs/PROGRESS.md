@@ -212,12 +212,39 @@ GET /behavior → streak + best_hours + regularity + pomodoro + tiny_habits
 | S6 | 错题智能归因 | 2.5h | 2 | [error-attribution.md](./phase2/error-attribution.md) |
 | S7 | 智能每日摘要 | 2h | 0 | [daily-summary.md](./phase2/daily-summary.md) |
 
-**总计**：~15h · 3 个里程碑 · 5 个新/增强 API · 2 个新页面 · 3 个面板
+**总计**：~15h · 3 个里程碑 · 7 个新/增强 API · 3 个新页面 · 3 个面板 · **已完成 ✅**
 
 ### 里程碑
 
-| M | 时间 | 交付 | 效果 |
-|---|------|------|------|
-| M1 | 第 1-2 天 | S1+S3+S4 | `/analytics` 从 6 面板升级为 9 面板 |
-| M2 | 第 3-4 天 | S5+S6 | 对话会追问 + 错题能诊断 |
-| M3 | 第 5 天 | S2+S7 | 成就系统 + 每日推送 |
+| M | 时间 | 交付 | 状态 |
+|---|------|------|:--:|
+| M1 | 第 1-2 天 | S1+S3+S4 | ✅ |
+| M2 | 第 3-4 天 | S5+S6 | ✅ |
+| M3 | 第 5 天 | S2+S7 | ✅ |
+
+---
+
+## 十一、Phase 2 交付总览
+
+### 新增/增强 API（7 个）
+
+| 端点 | 子系统 |
+|------|--------|
+| `GET /api/progress/{uid}/calendar` | S4 学习日历 |
+| `GET /api/achievements/{uid}` | S2 成就墙 |
+| `POST /api/achievements/{uid}/check` | S2 成就检测 |
+| `POST /api/practice/errors/{id}/analyze` | S6 LLM 归因 |
+| `GET /api/practice/errors/stats` | S6 错因统计 |
+| *(S5 system prompt 增强)* | S5 追问策略 |
+| *(S7 cron no_agent 脚本)* | S7 每日推送 |
+
+### 新增前端（3 页面 + 3 面板）
+
+| 路由 | 类型 | 子系统 |
+|------|------|--------|
+| `/calendar` | 新页面 | S4 |
+| `/achievements` | 新页面 | S2 |
+| `/analytics` 雷达图 | 新面板 | S1 |
+| `/analytics` 遗忘曲线 | 已有面板 | S3 |
+| `/errors` 错因分析 | 增强面板 | S6 |
+| `/settings` 追问开关 | 增强面板 | S5 |
