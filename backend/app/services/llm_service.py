@@ -91,6 +91,7 @@ class LLMService:
         subject: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: int = 2048,
+        tools: list[dict] | None = None,
         **kwargs: Any,
     ) -> str:
         """
@@ -102,23 +103,40 @@ class LLMService:
             subject: 学科
             temperature: 温度
             max_tokens: 最大token数
+            tools: OpenAI function calling 工具定义列表 (Phase 5)
 
         返回:
-            生成的文本
+            生成的文本；如果 LLM 返回 tool_calls，返回特殊标记 JSON
         """
         model = self.select_model(task_type, subject)
+        extra = dict(kwargs)
+        if tools:
+            extra["tools"] = tools
+            extra["tool_choice"] = "auto"
         try:
             response = await acompletion(
                 model=model,
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                **kwargs,
+                **extra,
             )
-            content = response.choices[0].message.content or ""
-            # Reasoning models (deepseek-v4-flash) may put all tokens into reasoning_content
+            msg = response.choices[0].message
+            # 优先处理 tool_calls
+            if msg.tool_calls:
+                import json
+                tool_calls_json = [
+                    {
+                        "id": tc.id,
+                        "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                    }
+                    for tc in msg.tool_calls
+                ]
+                return json.dumps({"__tool_calls__": tool_calls_json}, ensure_ascii=False)
+
+            content = msg.content or ""
             if not content:
-                reasoning = getattr(response.choices[0].message, 'reasoning_content', None)
+                reasoning = getattr(msg, 'reasoning_content', None)
                 if reasoning:
                     content = reasoning.strip()
             logger.info("模型生成完成 [%s]，token数: %d", model, response.usage.total_tokens if response.usage else 0)
@@ -244,3 +262,15 @@ class LLMService:
 
 # ── 全局服务实例 ──
 llm_service = LLMService()
+
+
+async def _parse_tool_calls_response(result_text: str) -> list[dict] | None:
+    """解析 LLM 返回的 tool_calls JSON"""
+    import json
+    if not result_text.startswith("{"):
+        return None
+    try:
+        data = json.loads(result_text)
+        return data.get("__tool_calls__")
+    except (json.JSONDecodeError, KeyError):
+        return None

@@ -146,32 +146,162 @@ async def _handle_search_media(params: dict) -> dict:
     results = await media_search.search(query=query, platforms=platforms)
     return {"query": query, "platforms": results}
 
+
 async def _handle_generate_practice(params: dict) -> dict:
-    """生成练习题 (MVP: 返回模拟数据)"""
+    """生成练习题 — 对接真实练习系统"""
     subject = params.get("subject", "")
-    kp = params.get("knowledge_point", "")
-    difficulty = params.get("difficulty", "进阶")
-    return {
-        "subject": subject,
-        "knowledge_point": kp,
-        "difficulty": difficulty,
-        "question": f"关于{subject}中{kp}的练习题（MVP占位）",
-        "options": ["A. 选项1", "B. 选项2", "C. 选项3", "D. 选项4"],
-        "answer": "A",
-        "explanation": "这是一道关于" + kp + "的基础练习题。",
-    }
+    kp = params.get("knowledge_point", subject)
+    difficulty_str = params.get("difficulty", "进阶")
+    count = params.get("count", 1)
+
+    # 难度映射: 基础=0.3, 进阶=0.6, 挑战=0.9
+    difficulty_map = {"基础": 0.3, "进阶": 0.6, "挑战": 0.9}
+    difficulty = difficulty_map.get(difficulty_str, 0.6)
+
+    try:
+        from app.services.question_generator import question_generator
+        from app.core.learner_model import learner_engine
+
+        # 调用题目生成器（同步方法）
+        questions = question_generator.generate(
+            subject=subject,
+            skill_id=kp,
+            difficulty=difficulty,
+            count=min(count, 3),
+        )
+
+        if questions:
+            # 创建练习会话
+            session_id = learner_engine.create_session(
+                user_id="default_user",
+                subject=subject,
+            )
+            return {
+                "subject": subject,
+                "knowledge_point": kp,
+                "difficulty": difficulty_str,
+                "count": len(questions),
+                "session_id": session_id,
+                "questions": [q.model_dump() if hasattr(q, 'model_dump') else q for q in questions],
+            }
+
+        return {
+            "subject": subject,
+            "knowledge_point": kp,
+            "difficulty": difficulty_str,
+            "count": 0,
+            "message": f"当前题库中关于{kp}的题目不足，建议切换到搜索模式获取更多学习资源。",
+        }
+    except Exception as e:
+        logger.warning("generate_practice fallback: %s", e)
+        return {
+            "subject": subject,
+            "knowledge_point": kp,
+            "difficulty": difficulty_str,
+            "count": 0,
+            "message": f"让我来为你讲解{subject}中的{kp}。首先，你目前对这个概念了解多少？",
+            "fallback": True,
+        }
+
 
 async def _handle_generate_image(params: dict) -> dict:
-    """生成图片 (MVP: 返回占位)"""
-    return {"prompt": params.get("prompt", ""), "url": None, "status": "queued"}
+    """生成配图 — Phase 5: 对接 SVGRenderer"""
+    prompt = params.get("prompt", "")
+    style = params.get("style", "diagram")
+
+    try:
+        from infra.svg_renderer import SVGRenderer
+        renderer = SVGRenderer()
+
+        if style == "chart":
+            result = await renderer.render_diagram(prompt, "comparison")
+        elif style == "illustration":
+            result = await renderer.render_diagram(prompt, "concept")
+        else:
+            # 自动检测
+            if "$" in prompt:
+                result = await renderer.render_latex(prompt)
+            else:
+                result = await renderer.render_diagram(prompt, "concept")
+
+        return {
+            "prompt": prompt,
+            "style": style,
+            "url": result["url"],
+            "format": result["format"],
+            "cache_hit": result.get("cache_hit", False),
+        }
+    except Exception as e:
+        logger.warning("generate_image fallback: %s", e)
+        return {
+            "prompt": prompt,
+            "style": style,
+            "url": None,
+            "error": str(e),
+            "status": "queued",
+        }
+
 
 async def _handle_generate_mindmap(params: dict) -> dict:
-    """生成思维导图 (MVP: 返回占位)"""
-    return {"topic": params.get("topic", ""), "nodes": [], "edges": [], "status": "queued"}
+    """生成思维导图 — Phase 5 MVP: 返回脑图描述（前端渲染）"""
+    topic = params.get("topic", "")
+    depth = params.get("depth", 3)
+
+    # 简单生成脑图结构描述
+    nodes = [{"id": "root", "label": topic, "level": 0}]
+    edges = []
+
+    # 生成子节点（占位）
+    subtopics = ["定义", "核心概念", "应用", "练习"]
+    for i, st in enumerate(subtopics[:depth]):
+        node_id = f"node_{i}"
+        nodes.append({"id": node_id, "label": st, "level": 1})
+        edges.append({"from": "root", "to": node_id})
+
+    return {
+        "topic": topic,
+        "depth": depth,
+        "nodes": nodes,
+        "edges": edges,
+        "status": "ready",
+    }
+
 
 async def _handle_generate_document(params: dict) -> dict:
-    """生成文档 (MVP: 返回占位)"""
-    return {"topic": params.get("topic", ""), "format": params.get("format", "markdown"), "url": None, "status": "queued"}
+    """生成学习文档/笔记 — MVP: 返回 Markdown 文本"""
+    topic = params.get("topic", "")
+    fmt = params.get("format", "markdown")
+
+    # 调用 LLM 生成文档内容
+    try:
+        from app.services.llm_service import llm_service
+        doc_prompt = f"""请为主题「{topic}」生成一份学习笔记，格式为{fmt}。
+
+要求：
+- 结构清晰，包含标题、要点、总结
+- 使用中文
+- 适合学生复习使用
+- 长度适中（500-800字）"""
+
+        content = await llm_service.generate(
+            messages=[
+                {"role": "system", "content": "你是一个专业的笔记整理助手。"},
+                {"role": "user", "content": doc_prompt},
+            ],
+            task_type="explain",
+            temperature=0.3,
+            max_tokens=1024,
+        )
+    except Exception as e:
+        logger.warning("generate_document LLM fallback: %s", e)
+        content = f"# {topic}\n\n## 概述\n...\n\n> 文档生成中，请稍候..."
+
+    return {
+        "topic": topic,
+        "format": fmt,
+        "content": content,
+        "status": "ready",
+    }
 
 TOOL_HANDLERS = {
     "search_media": _handle_search_media,

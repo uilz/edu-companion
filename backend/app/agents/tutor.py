@@ -28,6 +28,9 @@ class TutorAgent(BaseAgent):
     def __init__(self, llm_service: Any) -> None:
         super().__init__(llm_service)
         self._system_prompt = self._build_system_prompt()
+        # Phase 5: 配置工具
+        from app.services.tool_executor import TOOL_DEFINITIONS, tool_executor
+        self.set_tools(TOOL_DEFINITIONS, tool_executor)
 
     def _build_system_prompt(self) -> str:
         return """你是一位经验丰富的学习导师，名叫"小智"。你的教学风格如下：
@@ -101,10 +104,10 @@ class TutorAgent(BaseAgent):
         context: Optional[list[dict[str, str]]] = None,
         metadata: Optional[dict[str, Any]] = None,
     ) -> AsyncGenerator[str, None]:
-        """流式处理"""
+        """流式处理 — Phase 5: 支持 tool calling"""
         messages = self.get_messages(user_message, context)
         full_reply = ""
-        async for chunk in self.llm.generate_stream(
+        async for chunk in self._stream_with_tools(
             messages=messages,
             task_type="explain",
             temperature=0.7,

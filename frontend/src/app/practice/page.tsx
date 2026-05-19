@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   CheckCircle,
   XCircle,
@@ -65,7 +66,13 @@ interface HintResult {
   type: string;
 }
 
-export default function PracticePage() {
+export const dynamic = 'force-dynamic';
+
+function PracticeContent() {
+  const searchParams = useSearchParams();
+  const skillParam = searchParams.get('skill');
+  const [initialSkill] = useState<string | null>(skillParam);
+
   const [session, setSession] = useState<Session | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -109,12 +116,13 @@ export default function PracticePage() {
     setLoading(false);
   }, []);
 
-  // 自动创建会话
+  // 自动创建会话（支持跨页 skill 参数）
   useEffect(() => {
     if (!session) {
-      createSession();
+      const skillIds = initialSkill ? [initialSkill] : [];
+      createSession(skillIds);
     }
-  }, [session, createSession]);
+  }, [session, createSession, initialSkill]);
 
   // 提交答案
   const handleSubmit = async () => {
@@ -473,5 +481,20 @@ export default function PracticePage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function PracticePage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 size={24} className="animate-spin text-[var(--color-accent)]" />
+          <span className="text-sm text-[var(--color-text-muted)]">加载中…</span>
+        </div>
+      </main>
+    }>
+      <PracticeContent />
+    </Suspense>
   );
 }

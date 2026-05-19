@@ -75,3 +75,22 @@ class ConversationService(Protocol):
     ) -> None:
         """向用户发送通知消息"""
         ...
+
+    # Phase 5: 多媒体事件处理
+    async def on_audio_synthesized(self, event) -> None:
+        """音频合成完成 → 通过 WebSocket 推送 AudioBlock"""
+        ...
+
+    async def on_image_rendered(self, event) -> None:
+        """配图渲染完成 → 通过 WebSocket 推送 ImageBlock"""
+        ...
+
+    async def push_response_block(
+        self,
+        user_id: str,
+        message_id: str,
+        block_type: str,
+        content: dict,
+    ) -> None:
+        """推送 ResponseBlock 到前端 (WebSocket)"""
+        ...

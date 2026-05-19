@@ -1,172 +1,187 @@
 """
-Phase 4: 依赖注入容器 — 唯一的全局组装点
+依赖注入容器 — 应用唯一装配点
 
-所有模块在此装配，通过 Protocol 接口互相注入。
-消除 35 个全局单例，集中为 1 个 AppContainer。
-
-用法:
-    from app.application.di import container
-    result = await container.practice.submit_answer(...)
-
-依赖规则:
-    - DI 容器是唯一知道具体实现的模块
-    - 所有 domain service 只通过 Protocol 引用彼此
+所有模块的创建和注入在此完成，不依赖全局 import。
+这是整个系统唯一的"胶水代码"。
 """
-
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
-from app.infra.event_bus import EventBus
-from app.infra.resilience import safe_async
+from infra.event_bus import EventBus
+from infra.resilience import CircuitBreaker
+
+if TYPE_CHECKING:
+    from shared.protocols import (
+        PracticeService,
+        ConversationService,
+        PlanningService,
+        AnalyticsService,
+        HabitService,
+        MaterialService,
+        KnowledgeGraphService,
+        MediaService,
+    )
+    from shared.protocols.multimedia import AudioSynthesizer, ImageRenderer
+    from domain.multimedia.service import MultimediaService
 
 logger = logging.getLogger("di")
 
 
 class AppContainer:
     """
-    应用容器 — 唯一知道所有具体实现的模块。
+    应用容器
 
-    组装顺序: 基础设施 → 领域服务 → 事件订阅
-    每个 domain service 只看到其他模块的 Protocol 接口。
+    职责:
+    1. 创建所有基础设施（DB, LLM, 事件总线）
+    2. 创建领域服务并注入依赖
+    3. 注册事件处理器（wire events）
     """
 
-    def __init__(self) -> None:
+    def __init__(self):
         # ── 基础设施 ──
-        self.event_bus = EventBus()
+        self.event_bus = EventBus(handler_timeout=5.0)
+        self.llm_circuit = CircuitBreaker("llm", failure_threshold=3)
 
-        # ── 存储后端 ──
-        from app.services.storage import storage
-        self.storage = storage
+        # ── 领域服务（先创建无依赖的） ──
+        self.practice_service: PracticeService = self._create_practice()
+        self.conversation_service: ConversationService = self._create_conversation()
+        self.planning_service: PlanningService = self._create_planning()
+        self.analytics_service: AnalyticsService = self._create_analytics()
+        self.habit_service: HabitService = self._create_habits()
+        self.material_service: MaterialService = self._create_materials()
+        self.knowledge_service: KnowledgeGraphService = self._create_knowledge()
+        self.media_service: MediaService = self._create_media()
+        self.multimedia_service: MultimediaService = self._create_multimedia()
 
-        # ── LLM 客户端 ──
-        from app.services.llm_service import llm_service
-        self.llm = llm_service
-
-        # ── 核心引擎（注入存储）─
-        from app.core.knowledge_trace import BKTEngine
-        self.bkt_engine = BKTEngine(storage=self.storage)
-
-        from app.core.learner_model import LearnerModelEngine
-        self.learner_engine = LearnerModelEngine()
-
-        from app.core.orchestrator import Orchestrator
-        self.orchestrator = Orchestrator(
-            llm=self.llm,
-            learner_engine=self.learner_engine,
-        )
-
-        # ── 领域服务 ──
-        # 注意：当前 domain 逻辑仍在 services/ 目录下
-        # Phase 4C-4D 中将迁移到 domain/ 目录
-        from app.services.zpd_scheduler import ZPDScheduler
-        self.zpd_scheduler = ZPDScheduler()
-
-        from app.services.question_generator import QuestionGenerator
-        self.question_generator = QuestionGenerator(llm_service=self.llm)
-
-        from app.services.behavior_analyzer import LearningBehaviorAnalyzer
-        self.behavior_analyzer = LearningBehaviorAnalyzer()
-
-        from app.services.habit_formation import HabitFormation
-        self.habit_formation = HabitFormation()
-
-        from app.services.achievement_engine import AchievementEngine
-        self.achievement_engine = AchievementEngine()
-
-        from app.services.adaptive_planner import AdaptivePlanGenerator
-        self.adaptive_planner = AdaptivePlanGenerator(bkt_engine=self.bkt_engine)
-
-        from app.services.quality_analyzer import QualityAnalyzer
-        self.quality_analyzer = QualityAnalyzer()
-
-        from app.services.media_search import MediaSearchService
-        self.media_search = MediaSearchService()
-
-        # ── 事件订阅（模块联动） ──
+        # ── 注册事件处理器 ──
         self._wire_events()
 
-        logger.info("AppContainer initialized: %d domain services, %d event subscriptions",
-                    9, len(self.event_bus.stats.get("subscriptions", {})))
+        logger.info("✅ AppContainer 初始化完成 (%d 个服务, %d 个事件订阅)",
+                    9, len(self.event_bus._handlers))
+
+    # ═══════════════════════════════════════════════════════
+    # 服务工厂方法（后续替换为真实实现）
+    # ═══════════════════════════════════════════════════════
+
+    def _create_practice(self) -> PracticeService:
+        from domain.practice.service import PracticeServiceImpl
+        from infra.database import (
+            PostgresQuestionRepo,
+            PostgresSessionRepo,
+            PostgresKnowledgeStateRepo,
+            PostgresErrorBookRepo,
+        )
+        return PracticeServiceImpl(
+            question_repo=PostgresQuestionRepo(),
+            session_repo=PostgresSessionRepo(),
+            ks_repo=PostgresKnowledgeStateRepo(),
+            error_repo=PostgresErrorBookRepo(),
+            event_bus=self.event_bus,
+        )
+
+    def _create_conversation(self) -> ConversationService:
+        from domain.conversation.service import ConversationServiceImpl
+        from infra.llm import DeepSeekLLMClient
+        return ConversationServiceImpl(
+            llm=DeepSeekLLMClient(),
+            event_bus=self.event_bus,
+            circuit=self.llm_circuit,
+        )
+
+    def _create_planning(self) -> PlanningService:
+        from domain.planning.service import PlanningServiceImpl
+        return PlanningServiceImpl(
+            practice=self.practice_service,
+            event_bus=self.event_bus,
+        )
+
+    def _create_analytics(self) -> AnalyticsService:
+        from domain.analytics.service import AnalyticsServiceImpl
+        return AnalyticsServiceImpl(
+            practice=self.practice_service,
+            event_bus=self.event_bus,
+        )
+
+    def _create_habits(self) -> HabitService:
+        from domain.habits.service import HabitServiceImpl
+        return HabitServiceImpl(
+            event_bus=self.event_bus,
+        )
+
+    def _create_materials(self) -> MaterialService:
+        from domain.materials.service import MaterialServiceImpl
+        return MaterialServiceImpl(
+            event_bus=self.event_bus,
+        )
+
+    def _create_knowledge(self) -> KnowledgeGraphService:
+        from domain.knowledge.service import KnowledgeGraphServiceImpl
+        return KnowledgeGraphServiceImpl(
+            practice=self.practice_service,
+            event_bus=self.event_bus,
+        )
+
+    def _create_media(self) -> MediaService:
+        from domain.media.service import MediaServiceImpl
+        return MediaServiceImpl()
+
+    def _create_multimedia(self) -> MultimediaService:
+        from domain.multimedia.service import MultimediaService
+        from infra.tts_client import EdgeTTSClient
+        from infra.svg_renderer import SVGRenderer
+
+        tts = EdgeTTSClient()
+        renderer = SVGRenderer()
+        return MultimediaService(
+            tts=tts,
+            renderer=renderer,
+            event_bus=self.event_bus,
+        )
+
+    # ═══════════════════════════════════════════════════════
+    # 事件订阅 — 模块联动的唯一配置点
+    # ═══════════════════════════════════════════════════════
 
     def _wire_events(self) -> None:
-        """注册领域事件处理器 — 所有跨模块联动在此定义"""
         bus = self.event_bus
 
-        # 答题 → 行为分析 + 习惯养成
-        bus.subscribe("AnswerSubmitted", safe_async("analytics")(self._on_answer_submitted))
-        # 答题 → 成就检测
-        bus.subscribe("AnswerSubmitted", safe_async("achievements")(self._on_answer_achievements))
-        # 知识升级 → 学习计划重调
-        bus.subscribe("KnowledgeStateUpdated", safe_async("planning")(self._on_knowledge_updated))
-        # 会话完成 → 成就检测 + 对话通知
-        bus.subscribe("SessionCompleted", safe_async("session_done")(self._on_session_completed))
-        # 资料上传 → 异步索引
-        bus.subscribe("MaterialUploaded", safe_async("material_index")(self._on_material_uploaded))
+        # 答题 → 行为分析 + 习惯养成 + 对话记忆 + 知识图谱
+        bus.subscribe("AnswerSubmitted", self.analytics_service.on_answer_submitted)
+        bus.subscribe("AnswerSubmitted", self.habit_service.on_answer_submitted)
+        bus.subscribe("AnswerSubmitted", self.knowledge_service.on_answer_submitted)
 
-    async def _on_answer_submitted(self, event) -> None:
-        """答题 → 更新行为分析 + 习惯养成"""
-        try:
-            self.behavior_analyzer.analyze(event.user_id)
-            self.habit_formation.check_daily_goal(event.user_id)
-        except Exception:
-            pass
+        # 错题 → 知识图谱 + 媒体推荐
+        bus.subscribe("ErrorRecorded", self.knowledge_service.on_error_recorded)
+        bus.subscribe("ErrorRecorded", self.media_service.on_error_recorded)
 
-    async def _on_answer_achievements(self, event) -> None:
-        """答题 → 检测成就解锁"""
-        try:
-            from app.api.achievements import _collect_stats, _load_existing, _save_achievements
-            stats = _collect_stats(event.user_id)
-            existing = _load_existing(event.user_id)
-            new_ach = self.achievement_engine.check_all(event.user_id, stats, existing)
-            if new_ach:
-                from app.shared.events import AchievementUnlocked
-                for a in new_ach:
-                    existing[a["id"]] = {"level": a["level"], "unlocked_at": a["unlocked_at"]}
-                    await self.event_bus.publish(AchievementUnlocked(
-                        user_id=event.user_id,
-                        achievement_id=a["id"],
-                        name=a.get("name", ""),
-                        level=a.get("level", 1),
-                    ))
-                _save_achievements(event.user_id, existing)
-        except Exception:
-            pass
+        # 会话完成 → 对话记忆写回 + 计划更新
+        bus.subscribe("SessionCompleted", self.conversation_service.on_session_completed)
+        bus.subscribe("SessionCompleted", self.planning_service.on_session_completed)
 
-    async def _on_knowledge_updated(self, event) -> None:
-        """知识升级 → 重调学习计划"""
-        try:
-            await self.adaptive_planner.on_knowledge_updated(event)
-        except Exception:
-            pass
+        # 知识升级 → 计划重调 + 对话通知
+        bus.subscribe("KnowledgeStateUpdated", self.planning_service.on_knowledge_updated)
+        bus.subscribe("KnowledgeStateUpdated", self.conversation_service.on_knowledge_updated)
 
-    async def _on_session_completed(self, event) -> None:
-        """会话完成 → 成就检测 + 统计更新"""
-        try:
-            from app.api.achievements import _collect_stats, _load_existing, _save_achievements
-            stats = _collect_stats(event.user_id)
-            existing = _load_existing(event.user_id)
-            new_ach = self.achievement_engine.check_all(event.user_id, stats, existing)
-            if new_ach:
-                for a in new_ach:
-                    existing[a["id"]] = {"level": a["level"], "unlocked_at": a["unlocked_at"]}
-                _save_achievements(event.user_id, existing)
-        except Exception:
-            pass
+        # 计划生成 → 对话推送
+        bus.subscribe("StudyPlanGenerated", self.conversation_service.on_plan_generated)
 
-    async def _on_material_uploaded(self, event) -> None:
-        """资料上传 → 异步解析+索引"""
-        try:
-            from app.services.material_parser import MaterialParser
-            from app.services.material_indexer import MaterialIndexer
-            parser = MaterialParser()
-            indexer = MaterialIndexer()
-            # 解析资料内容（可耗时 10-60s，不阻塞上传响应）
-            parser.parse(event.material_id)
-            indexer.index(event.material_id)
-        except Exception:
-            pass
+        # 每日目标达成 → 对话祝贺
+        bus.subscribe("DailyGoalAchieved", self.conversation_service.on_goal_achieved)
+
+        # 资料索引完成 → 后续出题
+        bus.subscribe("MaterialIndexed", self.material_service.on_indexed)
+
+        # Phase 5: AI 回复 → 多媒体生成
+        bus.subscribe("AssistantReplied", self.multimedia_service.on_assistant_replied)
+
+        # Phase 5: 音频/配图完成 → 对话推送
+        bus.subscribe("AudioSynthesized", self.conversation_service.on_audio_synthesized)
+        bus.subscribe("ImageRendered", self.conversation_service.on_image_rendered)
+
+        logger.info("🔗 注册 %d 个事件订阅", sum(len(v) for v in bus._handlers.values()))
 
 
-# ── 全局唯一实例 ──
+# ── 全局容器实例（应用唯一单例） ──
 container = AppContainer()

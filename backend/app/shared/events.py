@@ -195,6 +195,62 @@ class MaterialUploaded(DomainEvent):
 
 
 # ──────────────────────────────────────────────
+# 对话域事件 (Phase 5)
+# ──────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class AssistantReplied(DomainEvent):
+    """AI 助手回复完成事件 — 触发多媒体生成"""
+    user_id: str = ""
+    partition_id: str = ""
+    branch_id: str = ""
+    message_id: str = ""
+    content: str = ""
+    skill_ids: list[str] = field(default_factory=list)
+    contains_math: bool = False
+
+    @property
+    def event_type(self) -> str:
+        return "AssistantReplied"
+
+
+# ──────────────────────────────────────────────
+# 多媒体域事件 (Phase 5)
+# ──────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class AudioSynthesized(DomainEvent):
+    """TTS 音频合成完成事件"""
+    user_id: str = ""
+    skill_id: str = ""
+    message_id: str = ""
+    audio_url: str = ""
+    duration_ms: int = 0
+    format: str = "mp3"
+
+    @property
+    def event_type(self) -> str:
+        return "AudioSynthesized"
+
+
+@dataclass(frozen=True)
+class ImageRendered(DomainEvent):
+    """知识点配图渲染完成事件"""
+    user_id: str = ""
+    skill_id: str = ""
+    message_id: str = ""
+    image_url: str = ""
+    image_type: str = "svg"  # svg | png
+    prompt: str = ""
+
+    @property
+    def event_type(self) -> str:
+        return "ImageRendered"
+
+
+# ──────────────────────────────────────────────
 # 事件类型注册表（用于 event_bus 订阅路由）
 # ──────────────────────────────────────────────
 
@@ -211,5 +267,8 @@ EVENT_TYPES: dict[str, type[DomainEvent]] = {
         AchievementUnlocked,
         MaterialIndexed,
         MaterialUploaded,
+        AssistantReplied,
+        AudioSynthesized,
+        ImageRendered,
     ]
 }

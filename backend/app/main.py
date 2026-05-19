@@ -98,8 +98,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     indexed = materials_meta.ensure_indexed()
     logger.info("📁 资料元数据初始化完成 (新注册 %d 个)", indexed)
 
-    # 清理过期会话（定期执行）
-    # MVP 版本在启动时清理一次
+    # Phase 5: 注入领域事件总线到 Orchestrator（多媒体生成触发）
+    from application.di import container
+    from app.core.orchestrator import orchestrator
+    from app.api.chat import manager as ws_manager
+    orchestrator._bus = container.event_bus
+    logger.info("🎬 Orchestrator 已注入 EventBus (Phase 5)")
+
+    # Phase 5: 注入 WebSocket 管理器到 ConversationService（block_update 推送）
+    container.conversation_service.set_ws_manager(ws_manager)
+    logger.info("📡 ConversationService 已注入 WebSocket Manager (Phase 5)")
     cleaned = learner_engine.clean_expired_sessions()
     if cleaned > 0:
         logger.info("🧹 清理了 %d 个过期会话", cleaned)

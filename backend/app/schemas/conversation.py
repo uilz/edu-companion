@@ -183,7 +183,7 @@ class ResponseBlock(BaseModel):
     message_id: str = ""
     partition_id: str = ""
     branch_id: str = ""
-    type: str  # text | practice | video | image | mindmap | document
+    type: str  # text | practice | video | image | audio | mindmap | document
     status: str = "ready"  # streaming | ready | generating | failed
     content: dict = Field(default_factory=dict)
     order: int = 0

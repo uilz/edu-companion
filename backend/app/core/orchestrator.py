@@ -46,9 +46,11 @@ class Orchestrator:
         self,
         llm: Optional[LLMService] = None,
         learner_engine=None,
+        event_bus=None,  # Phase 5: 领域事件总线
     ) -> None:
         self.llm = llm or _get_default_llm()
         self._learner = learner_engine or _get_default_learner()
+        self._bus = event_bus  # Phase 5
 
         # 初始化所有Agent
         self.agents: dict[str, BaseAgent] = {
@@ -302,6 +304,30 @@ class Orchestrator:
         if session_id:
             self._learner.add_message_to_session(session_id, "user", user_message)
             self._learner.add_message_to_session(session_id, "assistant", full_reply)
+
+        # 7. Phase 5: 发布 AssistantReplied 事件 → 触发多媒体生成
+        if self._bus and full_reply:
+            import uuid
+            from shared.events import AssistantReplied
+            has_math = "$" in full_reply
+            # 尝试提取知识点
+            skill_ids = []
+            # 简单检测学科关键词
+            subjects = ["数学", "物理", "化学", "英语", "语文", "编程", "算法"]
+            for s in subjects:
+                if s in user_message or s in full_reply:
+                    skill_ids.append(f"skill:{s}")
+                    break
+            try:
+                await self._bus.publish(AssistantReplied(
+                    user_id=user_id,
+                    message_id=str(uuid.uuid4()),
+                    content=full_reply,
+                    contains_math=has_math,
+                    skill_ids=skill_ids,
+                ))
+            except Exception:
+                pass
 
     def get_available_agents(self) -> list[dict[str, str]]:
         """获取所有可用Agent的信息"""

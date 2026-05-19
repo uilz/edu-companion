@@ -28,6 +28,9 @@ class CoachAgent(BaseAgent):
     def __init__(self, llm_service: Any) -> None:
         super().__init__(llm_service)
         self._system_prompt = self._build_system_prompt()
+        # Phase 5: 配置工具
+        from app.services.tool_executor import TOOL_DEFINITIONS, tool_executor
+        self.set_tools(TOOL_DEFINITIONS, tool_executor)
 
     def _build_system_prompt(self) -> str:
         return """你是一位学习教练，名叫"小练"。你擅长帮助学生制定练习策略和分析学习问题。
@@ -119,7 +122,7 @@ class CoachAgent(BaseAgent):
         context: Optional[list[dict[str, str]]] = None,
         metadata: Optional[dict[str, Any]] = None,
     ) -> AsyncGenerator[str, None]:
-        """流式处理"""
+        """流式处理 — Phase 5: 支持 tool calling"""
         enhanced_context = list(context) if context else []
         if metadata:
             if "knowledge_state" in metadata:
@@ -135,7 +138,7 @@ class CoachAgent(BaseAgent):
 
         messages = self.get_messages(user_message, enhanced_context)
         full_reply = ""
-        async for chunk in self.llm.generate_stream(
+        async for chunk in self._stream_with_tools(
             messages=messages,
             task_type="chat",
             temperature=0.7,

@@ -228,10 +228,36 @@ async def websocket_conversation(websocket: WebSocket) -> None:
 
                 # 流式生成回复
                 from app.services.conversation_llm import send_and_reply_stream
+                assistant_content = ""
                 async for event in send_and_reply_stream(user_id, partition_id, text):
                     event["request_id"] = request_id
                     event["partition_id"] = partition_id
                     await websocket.send_text(json.dumps(event, ensure_ascii=False, default=str))
+                    if event.get("type") == "token":
+                        assistant_content += event.get("content", "")
+
+                # Phase 5: AI 回复完成 → 发布事件触发多媒体生成
+                if assistant_content.strip():
+                    import asyncio as _asyncio
+                    from app.application.di import container
+                    from app.shared.events import AssistantReplied
+                    import re as _re
+
+                    # 检测知识点和数学内容
+                    skill_ids = _re.findall(r'\[KNOWLEDGE:(\w+)\]', assistant_content)
+                    contains_math = bool(_re.search(r'\$', assistant_content))
+
+                    asyncio.ensure_future(
+                        container.event_bus.publish(AssistantReplied(
+                            user_id=user_id,
+                            partition_id=partition_id,
+                            branch_id=data.get("branch_id", ""),
+                            message_id=data.get("message_id", ""),
+                            content=assistant_content,
+                            skill_ids=skill_ids,
+                            contains_math=contains_math,
+                        ))
+                    )
 
             except Exception as e:
                 logger.error("消息处理失败: %s", str(e), exc_info=True)

@@ -3,6 +3,8 @@
 
 端点:
   POST /api/multimodal/transcribe  — 音频 → 文字（Whisper）
+  GET  /api/multimodal/audio/{file} — 获取生成的 TTS 音频
+  GET  /api/multimodal/images/{file} — 获取生成的配图
 """
 
 from __future__ import annotations
@@ -13,10 +15,34 @@ import os
 from pathlib import Path
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi.responses import FileResponse
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/multimodal", tags=["多模态"])
+
+# 多媒体文件根目录
+AUDIO_DIR = Path(os.path.expanduser("~/.companion/audio"))
+IMAGE_DIR = Path(os.path.expanduser("~/.companion/images"))
+
+
+@router.get("/audio/{filename}")
+async def get_audio(filename: str):
+    """获取生成的 TTS 音频文件"""
+    path = AUDIO_DIR / filename
+    if not path.exists():
+        raise HTTPException(404, f"音频文件不存在: {filename}")
+    return FileResponse(path, media_type="audio/mpeg")
+
+
+@router.get("/images/{filename}")
+async def get_image(filename: str):
+    """获取生成的配图文件"""
+    path = IMAGE_DIR / filename
+    if not path.exists():
+        raise HTTPException(404, f"配图文件不存在: {filename}")
+    media_type = "image/svg+xml" if filename.endswith(".svg") else "image/png"
+    return FileResponse(path, media_type=media_type)
 
 
 @router.post("/transcribe")

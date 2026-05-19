@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Loader2, FileText, Image, GitBranch as MindMap, BookOpen } from "lucide-react";
+import { Loader2, FileText, Image, GitBranch as MindMap, BookOpen, Volume2 } from "lucide-react";
 import MathContent from "@/components/ui/MathContent";
 import InlinePracticeBlock from "./InlinePracticeBlock";
 import MediaSearchBlock from "./MediaSearchBlock";
@@ -42,6 +42,8 @@ export default function ResponseBlockRenderer({ block }: ResponseBlockRendererPr
       return <PracticeBlockRouter content={content} />;
     case "image":
       return <ImageBlock content={content} />;
+    case "audio":
+      return <AudioBlock content={content} />;
     case "mindmap":
       return <MindMapBlock content={content} />;
     case "document":
@@ -54,12 +56,14 @@ export default function ResponseBlockRenderer({ block }: ResponseBlockRendererPr
 function GeneratingPlaceholder({ type }: { type: string }) {
   const labels: Record<string, string> = {
     image: "正在生成图像...",
+    audio: "正在合成语音...",
     mindmap: "正在生成思维导图...",
     document: "正在生成文档...",
   };
 
   const icons: Record<string, React.ReactNode> = {
     image: <Image size={16} />,
+    audio: <Volume2 size={16} />,
     mindmap: <MindMap size={16} />,
     document: <FileText size={16} />,
   };
@@ -313,6 +317,44 @@ function DocumentBlock({ content }: { content: Record<string, unknown> }) {
           >
             下载
           </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AudioBlock({ content }: { content: Record<string, unknown> }) {
+  const url = (content.url as string) || "";
+  const text = (content.text as string) || "";
+  const skillId = (content.skill_id as string) || "";
+
+  if (!url) {
+    return (
+      <div className="border border-[var(--color-border)] bg-[var(--color-surface)] mt-2 px-3 py-2">
+        <div className="flex items-center gap-2">
+          <Volume2 size={14} className="text-[var(--color-accent)]" />
+          <span className="text-xs text-[var(--color-text-muted)]">语音生成中…</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border border-[var(--color-border)] bg-[var(--color-surface)] mt-2">
+      <div className="px-3 py-2 border-b border-[var(--color-border)] flex items-center gap-2">
+        <Volume2 size={14} className="text-[var(--color-accent)]" />
+        <span className="text-xs font-medium text-[var(--color-text)]">
+          语音讲解 {skillId && `· ${skillId}`}
+        </span>
+      </div>
+      <div className="px-3 py-3">
+        <audio controls className="w-full" style={{ height: 36 }}>
+          <source src={url} type="audio/mpeg" />
+        </audio>
+        {text && (
+          <div className="text-[10px] text-[var(--color-text-muted)] mt-2 line-clamp-2">
+            {text}
+          </div>
         )}
       </div>
     </div>

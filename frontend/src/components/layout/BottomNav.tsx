@@ -3,12 +3,9 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  Home,
+  LayoutDashboard,
   Dumbbell,
   MessageSquare,
-  BarChart3,
-  BookOpen,
-  Network,
   Settings,
   LucideIcon,
 } from 'lucide-react';
@@ -20,12 +17,9 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { href: '/', label: '首页', icon: Home },
-  { href: '/practice', label: '练习', icon: Dumbbell },
-  { href: '/chat', label: '对话', icon: MessageSquare },
-  { href: '/analytics', label: '学情', icon: BarChart3 },
-  { href: '/study', label: '规划', icon: BookOpen },
-  { href: '/graph', label: '图谱', icon: Network },
+  { href: '/dashboard', label: '驾驶舱', icon: LayoutDashboard },
+  { href: '/learn', label: '学习空间', icon: MessageSquare },
+  { href: '/practice', label: '专注练习', icon: Dumbbell },
   { href: '/settings', label: '设置', icon: Settings },
 ];
 
@@ -33,7 +27,6 @@ export default function BottomNav() {
   const pathname = usePathname();
 
   const isActive = (href: string) => {
-    if (href === '/') return pathname === '/';
     return pathname.startsWith(href);
   };
 
@@ -68,7 +61,6 @@ export default function BottomNav() {
               `}
               aria-label={item.label}
             >
-              {/* Active indicator - 2px top border */}
               {active && (
                 <div
                   className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[2px] bg-[var(--color-accent)]"

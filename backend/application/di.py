@@ -23,6 +23,8 @@ if TYPE_CHECKING:
         KnowledgeGraphService,
         MediaService,
     )
+    from shared.protocols.multimedia import AudioSynthesizer, ImageRenderer
+    from domain.multimedia.service import MultimediaService
 
 logger = logging.getLogger("di")
 
@@ -51,12 +53,13 @@ class AppContainer:
         self.material_service: MaterialService = self._create_materials()
         self.knowledge_service: KnowledgeGraphService = self._create_knowledge()
         self.media_service: MediaService = self._create_media()
+        self.multimedia_service: MultimediaService = self._create_multimedia()
 
         # ── 注册事件处理器 ──
         self._wire_events()
 
         logger.info("✅ AppContainer 初始化完成 (%d 个服务, %d 个事件订阅)",
-                    8, len(self.event_bus._handlers))
+                    9, len(self.event_bus._handlers))
 
     # ═══════════════════════════════════════════════════════
     # 服务工厂方法（后续替换为真实实现）
@@ -124,6 +127,19 @@ class AppContainer:
         from domain.media.service import MediaServiceImpl
         return MediaServiceImpl()
 
+    def _create_multimedia(self) -> MultimediaService:
+        from domain.multimedia.service import MultimediaService
+        from infra.tts_client import EdgeTTSClient
+        from infra.svg_renderer import SVGRenderer
+
+        tts = EdgeTTSClient()
+        renderer = SVGRenderer()
+        return MultimediaService(
+            tts=tts,
+            renderer=renderer,
+            event_bus=self.event_bus,
+        )
+
     # ═══════════════════════════════════════════════════════
     # 事件订阅 — 模块联动的唯一配置点
     # ═══════════════════════════════════════════════════════
@@ -156,6 +172,13 @@ class AppContainer:
 
         # 资料索引完成 → 后续出题
         bus.subscribe("MaterialIndexed", self.material_service.on_indexed)
+
+        # Phase 5: AI 回复 → 多媒体生成
+        bus.subscribe("AssistantReplied", self.multimedia_service.on_assistant_replied)
+
+        # Phase 5: 音频/配图完成 → 对话推送
+        bus.subscribe("AudioSynthesized", self.conversation_service.on_audio_synthesized)
+        bus.subscribe("ImageRendered", self.conversation_service.on_image_rendered)
 
         logger.info("🔗 注册 %d 个事件订阅", sum(len(v) for v in bus._handlers.values()))
 

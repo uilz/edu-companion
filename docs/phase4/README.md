@@ -2,7 +2,7 @@
 
 > 版本: v2.0 (基于 2026-05-19 代码审计)  
 > 最后更新: 2026-05-19  
-> 状态: **设计完成，待实施**  
+> 状态: **✅ 全部实施完成** · Phase 4 闭环  
 > 旧版: `docs/module-linkage-upgrade.md` (过时，已存档)
 
 ---
@@ -651,4 +651,58 @@ async def execute(self, req: SubmitAnswerRequest) -> SubmitResult:
 | 跨页联动 | `<Link href="/practice">` | **带上下文参数跳转** |
 | 新模块接入 | 修改现有代码 | **订阅事件，零侵入** |
 | 契约 | 无 (传 dict) | **OpenAPI + JSON Schema + 契约测试** |
-| 稳定性 | 无超时/重试/熔断 | **3 层保护 + Trace ID** |
+|| 稳定性 | 无超时/重试/熔断 | **3 层保护 + Trace ID** |
+
+---
+
+## 八、Phase 5 · 多模态生成 + Tool Calling（2026-05-19 完成）
+
+### 8.1 架构扩展
+
+Phase 4 分层架构零改动，Phase 5 以「新增文件 + 事件订阅」方式接入：
+
+```
+presentation (api/)
+  └── multimodal.py (音频/图片静态文件服务)
+
+application/ (di.py)
+  └── 新增: multimedia_service 工厂 + AssistantReplied 事件订阅
+
+domain/
+  ├── conversation/service.py (新增: on_audio/image WS 推送)
+  └── multimedia/service.py 🆕 (多媒体编排)
+
+infra/
+  ├── tts_client.py 🆕 (Edge TTS)
+  └── svg_renderer.py 🆕 (matplotlib SVG)
+
+shared/
+  ├── events.py (新增: AssistantReplied/AudioSynthesized/ImageRendered)
+  └── protocols/multimedia.py 🆕 (AudioSynthesizer/ImageRenderer)
+```
+
+### 8.2 事件流
+
+```
+AssistantReplied
+  ├── MultimediaService.on_assistant_replied()
+  │     ├── EdgeTTSClient.synthesize() → AudioSynthesized
+  │     └── SVGRenderer.render_for_knowledge() → ImageRendered
+  ├── ConversationService.on_audio_synthesized() → WS push AudioBlock
+  └── ConversationService.on_image_rendered() → WS push ImageBlock
+```
+
+### 8.3 Tool Call Loop (新增能力)
+
+```
+用户消息 → LLM(含 tools: [search_media, generate_practice, ...])
+  → LLM 自主决策调 tool → ToolExecutor 执行
+    → 结果注入 messages → LLM 综合回复 → 流式
+```
+
+| 改动 | 文件 |
+|------|------|
+| `generate()` 增加 `tools`+`tool_choice` | `app/services/llm_service.py` |
+| `_run_with_tools()` loop + `_stream_with_tools()` | `app/agents/base.py` |
+| Tutor/Coach 配置 5 工具 | `app/agents/tutor.py` `app/agents/coach.py` |
+| 5 个 handler 升级真实现 | `app/services/tool_executor.py` |

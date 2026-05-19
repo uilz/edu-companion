@@ -3,13 +3,9 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  Home,
+  LayoutDashboard,
   Dumbbell,
   MessageSquare,
-  BarChart3,
-  BookOpen,
-  Network,
-  Shield,
   Settings,
   Sun,
   Moon,
@@ -24,13 +20,9 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { href: '/', label: '首页', icon: Home },
-  { href: '/practice', label: '练习', icon: Dumbbell },
-  { href: '/chat', label: '对话', icon: MessageSquare },
-  { href: '/analytics', label: '学情', icon: BarChart3 },
-  { href: '/study', label: '规划', icon: BookOpen },
-  { href: '/graph', label: '图谱', icon: Network },
-  { href: '/quality', label: '题库', icon: Shield },
+  { href: '/dashboard', label: '驾驶舱', icon: LayoutDashboard },
+  { href: '/learn', label: '学习空间', icon: MessageSquare },
+  { href: '/practice', label: '专注练习', icon: Dumbbell },
 ];
 
 export default function Sidebar() {
@@ -49,7 +41,7 @@ export default function Sidebar() {
     >
       {/* App Logo / Name */}
       <div className="px-6 py-6 border-b border-[var(--color-border)]">
-        <Link href="/" className="flex items-center gap-3">
+        <Link href="/dashboard" className="flex items-center gap-3">
           <div
             className="w-8 h-8 bg-[var(--color-accent)] flex items-center justify-center"
             style={{ borderRadius: '2px' }}
@@ -105,8 +97,23 @@ export default function Sidebar() {
         </div>
       </nav>
 
-      {/* Theme toggle & Settings */}
+      {/* Settings link */}
       <div className="px-3 py-3 border-t border-[var(--color-border)]">
+        <Link
+          href="/settings"
+          className={`nav-item w-full ${isActive('/settings') ? 'nav-item-active' : ''}`}
+          style={{
+            borderLeft: isActive('/settings') ? '3px solid var(--color-accent)' : '3px solid transparent',
+            paddingLeft: isActive('/settings') ? '0.9375rem' : '1rem',
+          }}
+        >
+          <Settings size={18} className={isActive('/settings') ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-secondary)]'} />
+          <span style={{ fontSize: '14px' }}>设置</span>
+        </Link>
+      </div>
+
+      {/* Theme toggle */}
+      <div className="px-3 py-2 border-t border-[var(--color-border)]">
         <button
           onClick={toggleTheme}
           className="nav-item w-full"

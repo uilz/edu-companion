@@ -134,7 +134,7 @@ export interface ResponseBlock {
   message_id: string;
   partition_id: string;
   branch_id: string;
-  type: "text" | "video" | "practice" | "image" | "mindmap" | "document";
+  type: "text" | "video" | "practice" | "image" | "audio" | "mindmap" | "document";
   status: "streaming" | "ready" | "generating" | "failed";
   content: Record<string, unknown>;
   order: number;

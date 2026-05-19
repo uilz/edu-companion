@@ -321,3 +321,10 @@ class ErrorBookRepository(Protocol):
         self, user_id: str, limit: int = 20
     ) -> list: ...
     async def mark_resolved(self, entry_id: str) -> None: ...
+
+
+# ═══════════════════════════════════════════════════════════
+# Multimedia — 多媒体服务 (Phase 5)
+# ═══════════════════════════════════════════════════════════
+
+from shared.protocols.multimedia import AudioSynthesizer, ImageRenderer  # noqa: E402, F401
