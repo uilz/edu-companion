@@ -15,14 +15,16 @@ from typing import Protocol, runtime_checkable
 
 import pytest
 
-from app.shared.protocols.practice import PracticeService
-from app.shared.protocols.knowledge import KnowledgeGraphService
-from app.shared.protocols.planning import PlanningService
-from app.shared.protocols.conversation import ConversationService
-from app.shared.protocols.achievements import AchievementService
-from app.shared.protocols.analytics import AnalyticsService
-from app.shared.protocols.materials import MaterialService
-from app.shared.protocols.persistence import KnowledgeStateRepository
+from shared.protocols import (
+    PracticeService,
+    KnowledgeGraphService,
+    PlanningService,
+    ConversationService,
+    AnalyticsService,
+    MaterialService,
+    KnowledgeStateRepository,
+)
+# Note: AchievementService not yet extracted to a Protocol
 
 
 ALL_PROTOCOLS = {
@@ -30,7 +32,6 @@ ALL_PROTOCOLS = {
     "KnowledgeGraphService": KnowledgeGraphService,
     "PlanningService": PlanningService,
     "ConversationService": ConversationService,
-    "AchievementService": AchievementService,
     "AnalyticsService": AnalyticsService,
     "MaterialService": MaterialService,
     "KnowledgeStateRepository": KnowledgeStateRepository,

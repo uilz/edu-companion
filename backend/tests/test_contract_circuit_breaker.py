@@ -12,10 +12,10 @@ import asyncio
 
 import pytest
 
-from app.infra.circuit_breaker import (
+from infra.resilience import (
     CircuitBreaker,
-    CircuitState,
     CircuitBreakerOpenError,
+    CircuitState,
 )
 
 

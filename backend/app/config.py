@@ -51,31 +51,28 @@ class Settings(BaseSettings):
         default=["*"], description="允许的跨域来源"
     )
 
-    # ── LLM 模型配置（通过 LiteLLM 路由） ──
-    # 默认模型（用于一般对话）
-    default_model: str = Field(
+    # ── LLM 模型配置（OpenAI 兼容格式） ──
+    # 文本模型 — 通用对话/讲解
+    text_model: str = Field(
         default="openai/gpt-4o-mini",
-        description="默认LLM模型（LiteLLM格式）",
+        description="文本模型 — 通用对话与讲解（env: TEXT_MODEL）",
     )
-    # 推理能力强的模型（用于复杂问题）
-    reasoning_model: str = Field(
+    # 文本推理模型 — 复杂题讲解/错题分析/学习规划
+    text_reasoning_model: str = Field(
         default="openai/gpt-4o",
-        description="推理模型",
+        description="推理模型 — 复杂问题分析（env: TEXT_REASONING_MODEL）",
     )
-    # 轻量模型（用于意图识别、情绪分析等）
-    fast_model: str = Field(
+    # 文本轻量模型 — 意图识别/情绪分析/分类
+    text_fast_model: str = Field(
         default="openai/gpt-4o-mini",
-        description="轻量模型",
+        description="轻量模型 — 意图分类/情绪识别（env: TEXT_FAST_MODEL）",
     )
 
-    # 模型 API Key（也可以通过环境变量单独配置）
-    openai_api_key: Optional[str] = Field(default=None, description="OpenAI API Key")
-    anthropic_api_key: Optional[str] = Field(default=None, description="Anthropic API Key")
-    deepseek_api_key: Optional[str] = Field(default=None, description="DeepSeek API Key")
-
-    # 自定义模型端点（LiteLLM 代理兼容）
-    custom_api_base: Optional[str] = Field(
-        default=None, description="自定义API端点地址"
+    # OpenAI 兼容 API 配置（唯一 API 格式）
+    openai_api_key: str | None = Field(default=None, description="OpenAI API Key（env: OPENAI_API_KEY）")
+    openai_api_base: str | None = Field(
+        default=None,
+        description="OpenAI 兼容 API 端点（env: OPENAI_API_BASE），如 https://api.deepseek.com",
     )
 
     # ── LiteLLM 代理配置 ──

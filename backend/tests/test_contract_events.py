@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.shared.events import (
+from shared.events import (
     DomainEvent,
     AnswerSubmitted,
     SessionCompleted,

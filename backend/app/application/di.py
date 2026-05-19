@@ -83,9 +83,9 @@ class AppContainer:
 
     def _create_conversation(self) -> ConversationService:
         from domain.conversation.service import ConversationServiceImpl
-        from infra.llm import DeepSeekLLMClient
+        from infra.llm import LLMClient
         return ConversationServiceImpl(
-            llm=DeepSeekLLMClient(),
+            llm=LLMClient(),
             event_bus=self.event_bus,
             circuit=self.llm_circuit,
         )

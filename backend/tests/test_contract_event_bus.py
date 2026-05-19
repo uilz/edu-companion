@@ -13,14 +13,14 @@ import asyncio
 
 import pytest
 
-from app.shared.events import (
+from shared.events import (
     DomainEvent,
     AnswerSubmitted,
     SessionCompleted,
     KnowledgeStateUpdated,
     DailyGoalAchieved,
 )
-from app.infra.event_bus import EventBus, HandlerTimeoutError
+from infra.event_bus import EventBus
 
 
 # ── 辅助 Handler ──

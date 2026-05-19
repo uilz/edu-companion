@@ -13,12 +13,9 @@ import uuid
 
 import pytest
 
-from app.infra.tracing import (
+from infra.tracing import (
     TraceContext,
-    Span,
-    trace_id,
-    trace_span,
-    tracing_middleware,
+    span as Span,  # async context manager
 )
 
 

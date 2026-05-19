@@ -29,32 +29,18 @@ class LLMService:
         self._setup_litellm()
 
     def _setup_litellm(self) -> None:
-        """初始化 LiteLLM 配置"""
-        # 设置调试模式
+        """初始化 LiteLLM 配置 — 仅使用 OpenAI 兼容格式"""
         litellm.set_verbose = settings.debug
 
-        # 如果有自定义API端点，设置全局默认
-        if settings.custom_api_base:
-            # 通过环境变量让 LiteLLM 使用自定义端点
+        # OpenAI 兼容 API 配置（唯一格式）
+        if settings.openai_api_base:
             import os
-            os.environ["OPENAI_API_BASE"] = settings.custom_api_base
-
-        # 设置 API Keys
+            os.environ["OPENAI_API_BASE"] = settings.openai_api_base
         if settings.openai_api_key:
             import os
             os.environ["OPENAI_API_KEY"] = settings.openai_api_key
-        if settings.anthropic_api_key:
-            import os
-            os.environ["ANTHROPIC_API_KEY"] = settings.anthropic_api_key
-        if settings.deepseek_api_key:
-            import os
-            os.environ["DEEPSEEK_API_KEY"] = settings.deepseek_api_key
 
-        # 加载 LiteLLM 模型列表配置（如果有的话）
-        if settings.litellm_model_list:
-            litellm.model_list = settings.litellm_model_list
-
-        logger.info("LiteLLM 服务初始化完成，当前默认模型: %s", settings.default_model)
+        logger.info("LiteLLM 初始化完成，文本模型: %s", settings.text_model)
 
     def select_model(
         self,
@@ -72,15 +58,15 @@ class LLMService:
             LiteLLM 格式的模型名称
         """
         model_map = {
-            "chat": settings.default_model,
-            "reasoning": settings.reasoning_model,
-            "fast": settings.fast_model,
-            "intent": settings.fast_model,       # 意图识别用轻量模型
-            "emotion": settings.fast_model,       # 情绪分析用轻量模型
-            "explain": settings.reasoning_model,  # 解释复杂概念用推理模型
-            "plan": settings.default_model,       # 学习计划用默认模型
+            "chat": settings.text_model,
+            "reasoning": settings.text_reasoning_model,
+            "fast": settings.text_fast_model,
+            "intent": settings.text_fast_model,       # 意图识别用轻量模型
+            "emotion": settings.text_fast_model,       # 情绪分析用轻量模型
+            "explain": settings.text_reasoning_model,  # 解释复杂概念用推理模型
+            "plan": settings.text_model,               # 学习计划用默认模型
         }
-        model = model_map.get(task_type, settings.default_model)
+        model = model_map.get(task_type, settings.text_model)
         logger.debug("任务类型 [%s] -> 选择模型 [%s]", task_type, model)
         return model
 

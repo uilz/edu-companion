@@ -12,13 +12,10 @@ import asyncio
 
 import pytest
 
-from app.infra.resilience import (
+from infra.resilience import (
     with_timeout,
     with_retry,
-    fallback,
-    safe_async,
     ServiceTimeoutError,
-    RetryExhaustedError,
 )
 
 
