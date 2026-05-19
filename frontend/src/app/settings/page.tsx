@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Sun, Moon, Globe, Key, Cpu, MessageSquare, Info } from "lucide-react";
+import { Sun, Moon, Globe, Key, Cpu, MessageSquare, Info, Brain } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import Card from "@/components/ui/Card";
 
@@ -10,6 +10,7 @@ interface Settings {
   apiKey: string;
   modelName: string;
   systemPrompt: string;
+  socraticMode: boolean;
 }
 
 const defaultSettings: Settings = {
@@ -17,6 +18,7 @@ const defaultSettings: Settings = {
   apiKey: "",
   modelName: "gpt-4o",
   systemPrompt: "你是一个专业的学习助手，擅长解答各学科问题。",
+  socraticMode: true,
 };
 
 export default function SettingsPage() {
@@ -137,6 +139,39 @@ export default function SettingsPage() {
                   rows={4}
                   className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 focus:outline-none focus:border-[var(--color-border-hover)] resize-none"
                 />
+              </div>
+            </div>
+          </Card>
+
+          {/* Learning Preferences */}
+          <Card title="学习偏好">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text)]">
+                    <Brain size={16} />
+                    启发式追问（苏格拉底教学法）
+                  </div>
+                  <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                    概念问题时 AI 会先反问引导思考，而不是直接给答案
+                  </p>
+                </div>
+                <button
+                  onClick={() =>
+                    setSettings((s) => ({ ...s, socraticMode: !s.socraticMode }))
+                  }
+                  className={`relative w-11 h-6 transition-colors ${
+                    settings.socraticMode ? "bg-[var(--color-accent)]" : "bg-[var(--color-surface)] border border-[var(--color-border)]"
+                  }`}
+                  style={{ borderRadius: "12px" }}
+                >
+                  <div
+                    className={`absolute top-0.5 w-5 h-5 bg-white transition-transform ${
+                      settings.socraticMode ? "translate-x-[22px]" : "translate-x-[2px]"
+                    }`}
+                    style={{ borderRadius: "50%" }}
+                  />
+                </button>
               </div>
             </div>
           </Card>

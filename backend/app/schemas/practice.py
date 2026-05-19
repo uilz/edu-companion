@@ -342,6 +342,9 @@ class ErrorBookEntry(BaseModel):
     is_resolved: bool = False
     created_at: datetime = Field(default_factory=datetime.now)
 
+    # 深度错因分析
+    attribution: Optional[dict[str, Any]] = None  # {primary, secondary, analysis, recommendation}
+
 
 # ──────────────────────────────────────────────
 # 用户资料
