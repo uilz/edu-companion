@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import Card from "@/components/ui/Card";
+import RadarChart from "@/components/analytics/RadarChart";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -891,6 +892,11 @@ export default function AnalyticsPage() {
         <Card title="⏰ 学习时段" className="mb-8 !p-5">
           <HeatmapGrid data={hourly_heatmap} />
         </Card>
+
+        {/* ── ⑤.5 Radar Chart ── */}
+        <div className="mb-8">
+          <RadarChart />
+        </div>
 
         {/* ── ⑥ 遗忘曲线 ── */}
         <RetentionPanel />

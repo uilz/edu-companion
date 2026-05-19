@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from app.core.learner_model import learner_engine
+from app.db.repository import AttemptRepo
 from app.schemas.learner import ProgressSummary
 
 logger = logging.getLogger(__name__)
@@ -205,4 +206,101 @@ async def get_profile(user_id: str) -> dict[str, Any]:
         "total_study_minutes": profile.total_study_minutes,
         "streak_days": profile.streak_days,
         "created_at": profile.created_at.isoformat(),
+    }
+
+
+@router.get("/{user_id}/calendar")
+async def get_calendar(
+    user_id: str,
+    year: int = 0,
+    month: int = 0,
+) -> dict[str, Any]:
+    """
+    获取指定月份的学习日历数据
+
+    返回当月每天的总答题数、正确数、正确率。
+    基于 attempts 表的时间戳聚合。
+    """
+    import calendar as cal_mod
+    from datetime import datetime, date
+
+    now = datetime.now()
+    y = year if year > 0 else now.year
+    m = month if 1 <= month <= 12 else now.month
+
+    # 当月范围
+    first_day = date(y, m, 1)
+    last_day_num = cal_mod.monthrange(y, m)[1]
+    last_day = date(y, m, last_day_num)
+
+    since = first_day.isoformat()
+    until = last_day.isoformat()
+
+    # 查询当月所有 attempts
+    try:
+        attempts = await AttemptRepo.list_all(user_id, since=since)
+    except Exception:
+        attempts = []
+
+    # 按日期聚合
+    from collections import defaultdict
+    daily: dict[str, dict[str, int]] = defaultdict(lambda: {"total": 0, "correct": 0})
+
+    for a in attempts:
+        ts = a.get("submitted_at", "")
+        if not ts:
+            continue
+        date_key = ts[:10]  # "2026-05-19"
+        if date_key > until:
+            continue
+        daily[date_key]["total"] += 1
+        if a.get("is_correct"):
+            daily[date_key]["correct"] += 1
+
+    # 生成当月所有日期（包括过去、今天、未来）
+    days = []
+    month_total = 0
+    month_correct = 0
+    for d in range(1, last_day_num + 1):
+        date_str = f"{y:04d}-{m:02d}-{d:02d}"
+        entry = daily.get(date_str, {"total": 0, "correct": 0})
+        total = entry["total"]
+        correct = entry["correct"]
+        accuracy = round(correct / total, 3) if total > 0 else None
+        days.append({
+            "date": date_str,
+            "day": d,
+            "total": total,
+            "correct": correct,
+            "accuracy": accuracy,
+        })
+        month_total += total
+        month_correct += correct
+
+    month_accuracy = round(month_correct / month_total, 3) if month_total > 0 else None
+
+    # 计算当月 streak（连续学习天数，从昨天往前数）
+    streak = 0
+    check = now.date() - __import__("datetime").timedelta(days=1)  # 从昨天开始
+    for _ in range(32):
+        date_str = check.isoformat()
+        if date_str in daily and daily[date_str]["total"] > 0:
+            streak += 1
+            check = check - __import__("datetime").timedelta(days=1)
+        else:
+            break
+
+    # Best day
+    best_total = max((d["total"] for d in days), default=0)
+    best_day = next((d for d in days if d["total"] == best_total and best_total > 0), None)
+
+    return {
+        "year": y,
+        "month": m,
+        "days": days,
+        "month_total": month_total,
+        "month_correct": month_correct,
+        "month_accuracy": month_accuracy,
+        "month_streak": streak,
+        "best_day": {"date": best_day["date"], "total": best_total} if best_day else None,
     }
