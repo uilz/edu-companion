@@ -3,7 +3,7 @@
 import { ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-type TabId = 'overview' | 'analytics' | 'errors' | 'calendar' | 'achievements' | 'plan' | 'quality';
+type TabId = 'overview' | 'analytics' | 'errors' | 'calendar' | 'achievements' | 'plan' | 'quality' | 'graph' | 'progress' | 'stats' | 'study';
 
 interface Tab {
   id: TabId;
@@ -15,10 +15,14 @@ const TABS: Tab[] = [
   { id: 'overview', label: '概览', icon: '📊' },
   { id: 'analytics', label: '学情', icon: '📈' },
   { id: 'errors', label: '错题', icon: '📝' },
+  { id: 'graph', label: '图谱', icon: '🧠' },
   { id: 'calendar', label: '日历', icon: '📅' },
   { id: 'achievements', label: '成就', icon: '🏆' },
   { id: 'plan', label: '计划', icon: '🎯' },
+  { id: 'progress', label: '进度', icon: '📋' },
   { id: 'quality', label: '质量', icon: '🛡️' },
+  { id: 'stats', label: '统计', icon: '📉' },
+  { id: 'study', label: '自习', icon: '📖' },
 ];
 
 interface DashboardShellProps {

@@ -6,7 +6,15 @@ import dynamic from 'next/dynamic';
 import { Loader2 } from 'lucide-react';
 import DashboardShell, { type TabId } from '@/components/dashboard/DashboardShell';
 
-// Lazy-load tab components (named exports)
+function TabLoader() {
+  return (
+    <div className="flex items-center justify-center py-20">
+      <Loader2 size={24} className="animate-spin text-[var(--color-accent)]" />
+    </div>
+  );
+}
+
+// Lazy-load tab components
 const OverviewTab = dynamic(() => import('@/components/dashboard/OverviewTab'), {
   loading: () => <TabLoader />,
 });
@@ -28,23 +36,31 @@ const PlanTab = dynamic(() => import('@/components/dashboard/PlanTab').then(m =>
 const QualityTab = dynamic(() => import('@/components/dashboard/QualityTab').then(m => m.QualityTab), {
   loading: () => <TabLoader />,
 });
-
-function TabLoader() {
-  return (
-    <div className="flex items-center justify-center py-20">
-      <Loader2 size={24} className="animate-spin text-[var(--color-accent)]" />
-    </div>
-  );
-}
+const GraphTab = dynamic(() => import('@/components/dashboard/GraphTab').then(m => m.GraphTab), {
+  loading: () => <TabLoader />,
+});
+const ProgressTab = dynamic(() => import('@/components/dashboard/ProgressTab').then(m => m.ProgressTab), {
+  loading: () => <TabLoader />,
+});
+const StatsTab = dynamic(() => import('@/components/dashboard/StatsTab').then(m => m.StatsTab), {
+  loading: () => <TabLoader />,
+});
+const StudyTab = dynamic(() => import('@/components/dashboard/StudyTab').then(m => m.StudyTab), {
+  loading: () => <TabLoader />,
+});
 
 const TAB_COMPONENTS: Record<TabId, React.ComponentType> = {
   overview: OverviewTab,
   analytics: AnalyticsTab,
   errors: ErrorsTab,
+  graph: GraphTab,
   calendar: CalendarTab,
   achievements: AchievementsTab,
   plan: PlanTab,
+  progress: ProgressTab,
   quality: QualityTab,
+  stats: StatsTab,
+  study: StudyTab,
 };
 
 function DashboardContent() {
