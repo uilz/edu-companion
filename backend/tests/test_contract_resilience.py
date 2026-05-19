@@ -15,7 +15,10 @@ import pytest
 from infra.resilience import (
     with_timeout,
     with_retry,
+    fallback,
+    safe_async,
     ServiceTimeoutError,
+    RetryExhaustedError,
 )
 
 
@@ -61,7 +64,7 @@ async def test_with_timeout_preserves_function_name():
 async def test_with_retry_passes_on_first_attempt():
     call_count = 0
 
-    @with_retry(max_attempts=3, backoff=0.01)
+    @with_retry(max_attempts=3, base_delay=0.01)
     async def work():
         nonlocal call_count
         call_count += 1
@@ -76,7 +79,7 @@ async def test_with_retry_passes_on_first_attempt():
 async def test_with_retry_retries_on_timeout():
     call_count = 0
 
-    @with_retry(max_attempts=3, backoff=0.01)
+    @with_retry(max_attempts=3, base_delay=0.01)
     async def flaky():
         nonlocal call_count
         call_count += 1
@@ -93,7 +96,7 @@ async def test_with_retry_retries_on_timeout():
 async def test_with_retry_exhausted():
     call_count = 0
 
-    @with_retry(max_attempts=2, backoff=0.01)
+    @with_retry(max_attempts=2, base_delay=0.01)
     async def always_fails():
         nonlocal call_count
         call_count += 1
@@ -109,7 +112,7 @@ async def test_with_retry_non_retryable_exception_passes_through():
     """非可重试异常直接传播，不重试"""
     call_count = 0
 
-    @with_retry(max_attempts=3, backoff=0.01)
+    @with_retry(max_attempts=3, base_delay=0.01)
     async def value_error():
         nonlocal call_count
         call_count += 1
@@ -125,7 +128,7 @@ async def test_with_retry_exponential_backoff():
     """验证指数退避: 0.5, 1.0, 2.0"""
     delays = []
 
-    @with_retry(max_attempts=4, backoff=0.1)
+    @with_retry(max_attempts=4, base_delay=0.1)
     async def flaky():
         delays.append(asyncio.get_event_loop().time())
         raise ServiceTimeoutError("retry")

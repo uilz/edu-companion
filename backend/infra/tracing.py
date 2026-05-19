@@ -34,6 +34,10 @@ class TraceContext:
     """全链路追踪上下文 — 基于 ContextVar 的协程安全传播"""
 
     @staticmethod
+    def set(tid: str) -> None:
+        trace_id.set(tid)
+
+    @staticmethod
     def new() -> str:
         tid = str(uuid.uuid4())[:8]
         trace_id.set(tid)

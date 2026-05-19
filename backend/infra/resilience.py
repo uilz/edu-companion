@@ -27,6 +27,9 @@ T = TypeVar("T")
 class ServiceTimeoutError(Exception):
     """跨模块调用超时"""
 
+class RetryExhaustedError(Exception):
+    """重试耗尽 — 所有尝试均失败后抛出"""
+
 class CircuitBreakerOpenError(Exception):
     """熔断器开启 — 拒绝请求"""
 
@@ -82,7 +85,9 @@ def with_retry(
                         func.__qualname__, attempt, max_attempts, delay
                     )
                     await asyncio.sleep(delay)
-            raise last_error  # type: ignore
+            raise RetryExhaustedError(
+                f"{func.__qualname__} exhausted after {max_attempts} attempts"
+            ) from last_error
         return wrapper
     return decorator
 
@@ -120,13 +125,31 @@ class CircuitBreaker:
         self.recovery_timeout = recovery_timeout
         self.half_open_max_requests = half_open_max_requests
         self._failure_count = 0
+        self._success_count = 0
         self._last_failure_time: datetime | None = None
         self._half_open_count = 0
         self._state = CircuitState.CLOSED
+        self._last_state_change = datetime.now()
 
     @property
     def state(self) -> CircuitState:
         return self._state
+
+    @property
+    def failure_count(self) -> int:
+        return self._failure_count
+
+    @property
+    def success_count(self) -> int:
+        return self._success_count
+
+    @property
+    def last_failure_time(self) -> datetime | None:
+        return self._last_failure_time
+
+    @property
+    def last_state_change(self) -> datetime:
+        return self._last_state_change
 
     async def call(
         self,
@@ -160,6 +183,7 @@ class CircuitBreaker:
             raise e
 
     def _on_success(self) -> None:
+        self._success_count += 1
         if self._state == CircuitState.HALF_OPEN:
             logger.info("🔌 Circuit '%s' → CLOSED (recovered)", self.name)
         self._transition_to(CircuitState.CLOSED)
@@ -187,5 +211,38 @@ class CircuitBreaker:
     def _transition_to(self, new_state: CircuitState) -> None:
         old = self._state
         self._state = new_state
+        self._last_state_change = datetime.now()
         if old != new_state:
             logger.info("🔌 Circuit '%s': %s → %s", self.name, old.value, new_state.value)
+
+
+# ═══════════════════════════════════════════════════════════
+# 降级与容错
+# ═══════════════════════════════════════════════════════════
+
+def fallback(default_value: T):
+    """装饰器：函数失败时返回默认值"""
+    def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
+        @functools.wraps(func)
+        async def wrapper(*args: Any, **kwargs: Any) -> T:
+            try:
+                return await func(*args, **kwargs)
+            except Exception:
+                logger.warning("⚠️ %s failed, returning fallback", func.__qualname__)
+                return default_value
+        return wrapper
+    return decorator
+
+
+def safe_async(name: str = ""):
+    """装饰器：异步函数静默吞异常，返回 None"""
+    def decorator(func: Callable[..., Awaitable[T | None]]) -> Callable[..., Awaitable[T | None]]:
+        @functools.wraps(func)
+        async def wrapper(*args: Any, **kwargs: Any) -> T | None:
+            try:
+                return await func(*args, **kwargs)
+            except Exception:
+                logger.warning("🔇 %s suppressed error", name or func.__qualname__)
+                return None
+        return wrapper
+    return decorator
