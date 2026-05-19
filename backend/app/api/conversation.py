@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, Request, Response
 from pydantic import BaseModel, Field
 
 from app.schemas.conversation import TextBlock
@@ -49,13 +49,28 @@ class ModifyMessageRequest(BaseModel):
 USER_ID = "default_user"
 
 
+# ── ETag helper ──
+def _check_etag(request: Request) -> str | None:
+    """If client sent matching ETag, raise 304. Returns the current ETag."""
+    etag = storage.get_etag(USER_ID)
+    if_none_match = request.headers.get("if-none-match", "")
+    if if_none_match == etag:
+        raise HTTPException(304)
+    return etag
+
+
 # ── 分区 ──
 
 @router.get("/partitions")
-async def list_partitions():
+async def list_partitions(request: Request):
     """列出所有分区"""
+    etag = _check_etag(request)
     data = storage.load(USER_ID)
-    return {"partitions": list(data.partitions.values())}
+    return Response(
+        content=json.dumps({"partitions": [p.model_dump(mode="json") for p in data.partitions.values()]}),
+        media_type="application/json",
+        headers={"ETag": etag, "Cache-Control": "private, max-age=5"},
+    )
 
 
 @router.post("/partitions")
@@ -70,11 +85,16 @@ async def create_partition(req: CreatePartitionRequest):
 # ── 分支 ──
 
 @router.get("/partitions/{partition_id}/branches")
-async def list_branches(partition_id: str):
+async def list_branches(partition_id: str, request: Request):
     """列出分区的所有分支"""
+    etag = _check_etag(request)
     data = storage.load(USER_ID)
-    branches = [b for b in data.branches.values() if b.partition_id == partition_id]
-    return {"branches": branches}
+    branches = [b.model_dump(mode="json") for b in data.branches.values() if b.partition_id == partition_id]
+    return Response(
+        content=json.dumps({"branches": branches}),
+        media_type="application/json",
+        headers={"ETag": etag, "Cache-Control": "private, max-age=5"},
+    )
 
 
 @router.post("/branches")
@@ -96,25 +116,27 @@ async def switch_branch(branch_id: str, partition_id: str):
 # ── 消息 ──
 
 @router.get("/branches/{branch_id}/messages")
-async def list_messages(branch_id: str, limit: int = 50, offset: int = 0):
+async def list_messages(branch_id: str, request: Request, limit: int = 50, offset: int = 0):
     """列出分支中的消息"""
+    etag = _check_etag(request)
     data = storage.load(USER_ID)
     branch = data.branches.get(branch_id)
     if not branch:
         raise HTTPException(404, "Branch not found")
 
-    messages = []
-    for nid in branch.path[offset : offset + limit]:
-        node = data.nodes.get(nid)
-        if node and not node.is_deleted:
-            messages.append(node)
+    messages = [data.nodes.get(nid).model_dump(mode="json") for nid in branch.path[offset : offset + limit] if data.nodes.get(nid) and not data.nodes.get(nid).is_deleted]
 
-    return {"messages": messages, "total": len(branch.path)}
+    return Response(
+        content=json.dumps({"messages": messages, "total": len(branch.path)}),
+        media_type="application/json",
+        headers={"ETag": etag, "Cache-Control": "private, max-age=3"},
+    )
 
 
 @router.get("/partitions/{partition_id}/messages")
-async def list_partition_messages(partition_id: str, limit: int = 50, offset: int = 0):
+async def list_partition_messages(partition_id: str, request: Request, limit: int = 50, offset: int = 0):
     """列出分区所有分支的消息，包含 response_blocks"""
+    etag = _check_etag(request)
     data = storage.load(USER_ID)
     partition = data.partitions.get(partition_id)
     if not partition:
@@ -122,25 +144,21 @@ async def list_partition_messages(partition_id: str, limit: int = 50, offset: in
 
     branch = data.branches.get(partition.active_branch_id)
     if not branch:
-        return {"messages": [], "total": 0, "response_blocks": []}
+        return Response(
+            content=json.dumps({"messages": [], "total": 0, "response_blocks": []}),
+            media_type="application/json",
+            headers={"ETag": etag, "Cache-Control": "private, max-age=3"},
+        )
 
-    messages = []
-    for nid in branch.path[offset : offset + limit]:
-        node = data.nodes.get(nid)
-        if node and not node.is_deleted:
-            messages.append(node)
+    messages = [data.nodes.get(nid).model_dump(mode="json") for nid in branch.path[offset : offset + limit] if data.nodes.get(nid) and not data.nodes.get(nid).is_deleted]
 
-    # 获取关联的 response_blocks
-    response_blocks = []
-    for block in data.response_blocks.values():
-        if block.partition_id == partition_id:
-            response_blocks.append(block)
+    response_blocks = [b.model_dump(mode="json") for b in data.response_blocks.values() if b.partition_id == partition_id]
 
-    return {
-        "messages": messages,
-        "total": len(branch.path),
-        "response_blocks": response_blocks,
-    }
+    return Response(
+        content=json.dumps({"messages": messages, "total": len(branch.path), "response_blocks": response_blocks}),
+        media_type="application/json",
+        headers={"ETag": etag, "Cache-Control": "private, max-age=3"},
+    )
 
 
 @router.post("/message")

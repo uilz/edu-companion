@@ -6,6 +6,7 @@ import MathContent from "@/components/ui/MathContent";
 import ResponseBlockRenderer from "./ResponseBlockRenderer";
 import SpeakButton from "./SpeakButton";
 import { renderContent } from "@/lib/math";
+import { useRenderedContent } from "@/lib/useRenderedContent";
 import type { TreeNode, ResponseBlock } from "@/types";
 
 interface MessageListProps {
@@ -269,7 +270,7 @@ export default function MessageList({
 }
 
 function MessageContent({ text }: { text: string }) {
-  const html = useMemo(() => renderContent(text), [text]);
+  const html = useRenderedContent(text);
 
   return (
     <div

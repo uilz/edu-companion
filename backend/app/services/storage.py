@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
 from threading import Lock
@@ -24,6 +25,8 @@ class JsonStorageEngine:
         self.base_dir = Path(os.path.expanduser(base_dir))
         self._locks: dict[str, Lock] = {}
         self._cache: dict[str, UserData] = {}
+        self._versions: dict[str, int] = {}  # ETag version counters
+        self._etags: dict[str, str] = {}      # computed ETag hashes
 
     def _get_lock(self, user_id: str) -> Lock:
         if user_id not in self._locks:
@@ -52,11 +55,22 @@ class JsonStorageEngine:
         with lock:
             path = self._get_path(user_id)
             path.parent.mkdir(parents=True, exist_ok=True)
+            json_str = data.model_dump_json(indent=2, exclude_none=True)
             tmp_path = path.with_suffix(".tmp")
             with open(tmp_path, "w", encoding="utf-8") as f:
-                f.write(data.model_dump_json(indent=2, exclude_none=True))
+                f.write(json_str)
             tmp_path.replace(path)
             self._cache[user_id] = data
+            # Bump version → invalidates ETag
+            self._versions[user_id] = self._versions.get(user_id, 0) + 1
+            self._etags.pop(user_id, None)
+
+    def get_etag(self, user_id: str) -> str:
+        """Return a stable ETag for the current user data state."""
+        lock = self._get_lock(user_id)
+        with lock:
+            version = self._versions.get(user_id, 0)
+            return f'W/"{user_id}:{version}"'
 
 
 def _get_storage():

@@ -7,6 +7,7 @@ import InlinePracticeBlock from "./InlinePracticeBlock";
 import MediaSearchBlock from "./MediaSearchBlock";
 import VideoEmbed from "./VideoEmbed";
 import { renderContent } from "@/lib/math";
+import { useRenderedContent } from "@/lib/useRenderedContent";
 import type { ResponseBlock } from "@/types";
 
 interface ResponseBlockRendererProps {
@@ -88,7 +89,7 @@ function GeneratingPlaceholder({ type }: { type: string }) {
 
 function TextBlock({ content, sources }: { content: Record<string, unknown>; sources?: string[] }) {
   const text = (content.text as string) || "";
-  const renderedHtml = useMemo(() => renderContent(text), [text]);
+  const renderedHtml = useRenderedContent(text);
 
   return (
     <div>
@@ -176,9 +177,9 @@ function PracticeBlock({ content }: { content: Record<string, unknown> }) {
   const answer = (content.answer as string) || "";
   const explanation = (content.explanation as string) || "";
 
-  const questionHtml = useMemo(() => renderContent(question), [question]);
+  const questionHtml = useRenderedContent(question);
 
-  const explanationHtml = useMemo(() => renderContent(explanation), [explanation]);
+  const explanationHtml = useRenderedContent(explanation);
 
   return (
     <div className="border border-[var(--color-border)] bg-[var(--color-surface)] mt-2">

@@ -1,7 +1,23 @@
 import type { Metadata, Viewport } from 'next';
+import { Inter, Noto_Sans_SC } from 'next/font/google';
 import './globals.css';
 import AppShell from '@/components/layout/AppShell';
 import ClientProviders from '@/components/layout/ClientProviders';
+
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: 'swap',
+  preload: true,
+});
+
+const notoSansSC = Noto_Sans_SC({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '900'],
+  variable: '--font-noto',
+  display: 'swap',
+  preload: true,
+});
 
 export const metadata: Metadata = {
   title: '智学伴 - 智能学习伴侣',
@@ -16,7 +32,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
-  themeColor: '#0a0a0a',
+  themeColor: '#09090b',
 };
 
 export default function RootLayout({
@@ -26,19 +42,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN" suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+SC:wght@400;500;600;700;900&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className="antialiased">
+      <body className={`${inter.variable} ${notoSansSC.variable} antialiased`}>
         <ClientProviders>
           <AppShell>{children}</AppShell>
         </ClientProviders>
