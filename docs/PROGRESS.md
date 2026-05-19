@@ -1,8 +1,8 @@
 # 智能伴学系统 · 开发进度总览
 
-> **最后更新**: 2026-05-19 18:00 — Phase 2 全面补齐完成  
-> **总代码量**: 后端 ~17,000 行 · 前端 ~9,000 行 · 文档 ~14,000 行  
-> **API 端点**: 81 个 · **前端页面**: 15 个 · **设计文档**: 23 份 · **服务文件**: 32 个
+> **最后更新**: 2026-05-19 19:30 — Phase 3 P5 完成（资料分区归属+分支引用）  
+> **总代码量**: 后端 ~17,500 行 · 前端 ~9,500 行 · 文档 ~15,000 行  
+> **API 端点**: 86 个 · **前端页面**: 14 个 · **设计文档**: 23 份 · **服务文件**: 33 个
 
 ---
 
@@ -213,6 +213,31 @@ GET /errors/stats → ErrorAttributionBar                     🆕
 
 ---
 
-## 八、Phase 3 · 能力升级（规划中）
+## 八、Phase 3 · 能力升级
 
 > 详细设计文档: [docs/phase3/README.md](./phase3/README.md)
+
+### ✅ P5 资料→分区归属→分支引用 (完成)
+
+| 交付项 | 文件 |
+|--------|------|
+| 资料元数据管理 | `backend/app/services/materials_meta.py` (JSON存储) |
+| 资料API升级 | `backend/app/api/material.py` (分区过滤/移动/搜索) |
+| 分支引用API | `backend/app/api/conversation.py` (add/list/remove/batch) |
+| 默认分区 | `backend/app/main.py` (启动创建「未分类」) |
+| 分区侧栏双标签 | `frontend/src/app/chat/page.tsx` (🌿分支/📁资料) |
+| MaterialPanel | `frontend/src/components/materials/MaterialPanel.tsx` |
+| MaterialPicker | `frontend/src/components/materials/MaterialPicker.tsx` |
+| WorkspacePanel升级 | `frontend/src/components/conversation/WorkspacePanel.tsx` (📎引用+展示) |
+| 独立页删除 | `/materials` 页面合并到分区侧栏 |
+
+**效果**: 资料按分区组织，分支引用不复制，上传到工作空间自动归入分区资料库。现有资料自动归入「未分类」分区。
+
+### ⏳ P1-P4 待实施
+
+| # | 子系统 | 预估 |
+|---|--------|:--:|
+| P1 | 全站统一搜索 | 3h |
+| P2 | 学习路径可视化 | 2h |
+| P3 | 对话→练习侧栏 | 2h |
+| P4 | 首页智能仪表板 | 2.5h |
