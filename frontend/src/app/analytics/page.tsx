@@ -719,12 +719,21 @@ export default function AnalyticsPage() {
   useEffect(() => {
     setLoading(true);
     fetch(`${API_BASE}/api/practice/stats?time_range=${timeRange}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then((d) => {
-        setData(d);
+        // 安全校验：API 返回必须含 overview 字段
+        if (d && d.overview) {
+          setData(d);
+        }
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {
+        setData(null);
+        setLoading(false);
+      });
   }, [timeRange]);
 
   useEffect(() => {

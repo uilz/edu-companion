@@ -8,7 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from app.db.database import get_db
 
-router = APIRouter(prefix="/practice", tags=["practice-quality"])
+router = APIRouter(prefix="/api/practice", tags=["practice-quality"])
 
 
 @router.get("/quality")

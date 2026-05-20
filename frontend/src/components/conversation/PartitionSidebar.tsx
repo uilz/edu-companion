@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, FolderOpen, Hash } from "lucide-react";
+import { Plus, FolderOpen, Hash, Network } from "lucide-react";
+import Link from "next/link";
 import type { Partition } from "@/types";
 
 interface PartitionSidebarProps {
@@ -64,55 +65,71 @@ export default function PartitionSidebar({
             const isHovered = partition.id === hoveredId;
 
             return (
-              <button
+              <div
                 key={partition.id}
-                onClick={() => onSelectPartition(partition.id)}
+                className="relative"
                 onMouseEnter={() => setHoveredId(partition.id)}
                 onMouseLeave={() => setHoveredId(null)}
-                className="w-full text-left px-4 py-3 transition-colors border-l-3"
-                style={{
-                  borderLeftWidth: "3px",
-                  borderLeftStyle: "solid",
-                  borderLeftColor: isSelected
-                    ? "var(--color-accent)"
-                    : "transparent",
-                  backgroundColor: isSelected
-                    ? "var(--color-surface)"
-                    : isHovered
-                      ? "var(--color-bg-elevated)"
-                      : "transparent",
-                }}
               >
-                <div className="flex items-center gap-2.5">
-                  <span className="text-base flex-shrink-0">
-                    {partition.emoji || "📁"}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div
-                      className="text-sm truncate"
-                      style={{
-                        color: isSelected
-                          ? "var(--color-text)"
-                          : "var(--color-text-secondary)",
-                        fontWeight: isSelected ? 600 : 400,
-                      }}
-                    >
-                      {partition.name}
-                    </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[10px] text-[var(--color-text-muted)]">
-                        {partition.message_count || 0} 条消息
-                      </span>
-                      {partition.branch_count !== undefined &&
-                        partition.branch_count > 1 && (
-                          <span className="text-[10px] text-[var(--color-text-muted)]">
-                            · {partition.branch_count} 分支
-                          </span>
-                        )}
+                <button
+                  onClick={() => onSelectPartition(partition.id)}
+                  className="w-full text-left px-4 py-3 transition-colors border-l-3"
+                  style={{
+                    borderLeftWidth: "3px",
+                    borderLeftStyle: "solid",
+                    borderLeftColor: isSelected
+                      ? "var(--color-accent)"
+                      : "transparent",
+                    backgroundColor: isSelected
+                      ? "var(--color-surface)"
+                      : isHovered
+                        ? "var(--color-bg-elevated)"
+                        : "transparent",
+                  }}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-base flex-shrink-0">
+                      {partition.emoji || "📁"}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div
+                        className="text-sm truncate"
+                        style={{
+                          color: isSelected
+                            ? "var(--color-text)"
+                            : "var(--color-text-secondary)",
+                          fontWeight: isSelected ? 600 : 400,
+                        }}
+                      >
+                        {partition.name}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] text-[var(--color-text-muted)]">
+                          {partition.message_count || 0} 条消息
+                        </span>
+                        {partition.branch_count !== undefined &&
+                          partition.branch_count > 1 && (
+                            <span className="text-[10px] text-[var(--color-text-muted)]">
+                              · {partition.branch_count} 分支
+                            </span>
+                          )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </button>
+                </button>
+
+                {/* 📊 知识图谱入口 */}
+                {isHovered && (
+                  <Link
+                    href={`/graph?partition_id=${partition.id}`}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface)] rounded transition-colors"
+                    title="查看知识图谱"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Network size={14} />
+                  </Link>
+                )}
+              </div>
             );
           })
         )}

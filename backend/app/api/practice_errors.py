@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException
 from app.db.database import get_db
 from app.core.knowledge_trace import bkt_engine
 
-router = APIRouter(prefix="/practice", tags=["practice-errors"])
+router = APIRouter(prefix="/api/practice", tags=["practice-errors"])
 
 
 @router.get("/errors")

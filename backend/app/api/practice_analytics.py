@@ -14,7 +14,7 @@ from app.core.knowledge_trace import bkt_engine
 from app.services.behavior_analyzer import behavior_analyzer
 from app.services.habit_formation import habit_formation
 
-router = APIRouter(prefix="/practice", tags=["practice-analytics"])
+router = APIRouter(prefix="/api/practice", tags=["practice-analytics"])
 
 
 def _dt(v, now=None):
