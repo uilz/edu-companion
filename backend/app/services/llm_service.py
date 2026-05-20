@@ -30,15 +30,17 @@ class LLMService:
 
     def _setup_litellm(self) -> None:
         """初始化 LiteLLM 配置 — 仅使用 OpenAI 兼容格式"""
+        import os
+
         litellm.set_verbose = settings.debug
 
         # OpenAI 兼容 API 配置（唯一格式）
         if settings.openai_api_base:
-            import os
             os.environ["OPENAI_API_BASE"] = settings.openai_api_base
         if settings.openai_api_key:
-            import os
             os.environ["OPENAI_API_KEY"] = settings.openai_api_key
+            # LiteLLM 的 deepseek/ provider 查的是 DEEPSEEK_API_KEY，不是 OPENAI_API_KEY
+            os.environ["DEEPSEEK_API_KEY"] = settings.openai_api_key
 
         logger.info("LiteLLM 初始化完成，文本模型: %s", settings.text_model)
 
