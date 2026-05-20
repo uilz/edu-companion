@@ -75,7 +75,17 @@ function connectConversationWS(callbacks: WSCallbacks) {
   try {
     ws = new WebSocket(wsUrl);
 
+    // 连接超时：5 秒内未建立连接 → 强制关闭并报错
+    const connectTimeout = setTimeout(() => {
+      if (ws && ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+        ws = null;
+        wsCallbacks?.onError("无法连接到服务器，请检查后端是否已启动");
+      }
+    }, 5000);
+
     ws.onopen = () => {
+      clearTimeout(connectTimeout);
       console.log("[ConvWS] connected:", wsUrl);
     };
 

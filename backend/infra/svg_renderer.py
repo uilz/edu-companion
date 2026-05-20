@@ -13,6 +13,7 @@ import hashlib
 import logging
 import os
 import re
+import asyncio
 from pathlib import Path
 
 logger = logging.getLogger("infra.svg")
@@ -22,10 +23,28 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 STATIC_PREFIX = "/api/multimodal/images"
 
-# Matplotlib 后端（无 GUI）
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+# Matplotlib 懒加载 — 未安装时降级，不阻塞整个应用启动
+_matplotlib_available: bool | None = None
+_plt: object = None  # matplotlib.pyplot，成功导入后设置
+
+
+def _get_plt():
+    """获取 matplotlib.pyplot，未安装时抛明确错误"""
+    global _matplotlib_available, _plt
+    if _matplotlib_available is None:
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as __plt
+            _plt = __plt
+            _matplotlib_available = True
+        except ImportError:
+            logger.warning("matplotlib 未安装 — SVG 公式/概念图渲染不可用")
+            _matplotlib_available = False
+            _plt = None
+    if not _matplotlib_available:
+        raise RuntimeError("matplotlib 未安装，无法渲染 SVG 图像")
+    return _plt
 
 
 class SVGRenderer:
@@ -147,6 +166,7 @@ class SVGRenderer:
 
 def _render_latex_sync(formula: str, output_path: str) -> None:
     """matplotlib mathtext → SVG"""
+    plt = _get_plt()
     fig, ax = plt.subplots(figsize=(6, 2))
     ax.axis("off")
     ax.text(0.5, 0.5, f"${formula}$", fontsize=18,
@@ -159,6 +179,7 @@ def _render_latex_sync(formula: str, output_path: str) -> None:
 def _render_concept_sync(description: str, output_path: str) -> None:
     """概念关系图 — 中心节点 + 子节点环绕（简单放射布局）"""
     import math
+    plt = _get_plt()
 
     # 从描述中提取关键词（简单逗号/换行分割）
     parts = re.split(r"[，,\n]+", description)
@@ -203,6 +224,7 @@ def _render_concept_sync(description: str, output_path: str) -> None:
 
 def _render_flow_sync(description: str, diagram_type: str, output_path: str) -> None:
     """流程图/对比图"""
+    plt = _get_plt()
     parts = re.split(r"[，,\n]+", description)
     parts = [p.strip() for p in parts if p.strip()][:6]
     if not parts:
@@ -266,6 +288,7 @@ def _render_flow_sync(description: str, diagram_type: str, output_path: str) -> 
 
 def _render_text_sync(text: str, output_path: str) -> None:
     """纯文本降级渲染"""
+    plt = _get_plt()
     fig, ax = plt.subplots(figsize=(6, 4))
     ax.axis("off")
     # 分行

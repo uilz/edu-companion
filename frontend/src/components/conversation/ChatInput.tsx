@@ -164,10 +164,10 @@ export default function ConversationChatInput({
           />
           <button
             onClick={handleSend}
-            disabled={disabled || (!text.trim() && uploadedFiles.length === 0)}
+            disabled={(!text.trim() && uploadedFiles.length === 0)}
             className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-[var(--color-accent)] text-white disabled:opacity-30 hover:bg-[var(--color-accent-hover)] transition-colors"
           >
-            <Send size={16} />
+            {disabled ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
           </button>
         </div>
       </div>
