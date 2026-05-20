@@ -93,8 +93,18 @@ class LLMService:
 
         返回:
             生成的文本；如果 LLM 返回 tool_calls，返回特殊标记 JSON
+
+        异常:
+            ValueError: 模型或 API Key 未配置
         """
         model = self.select_model(task_type, subject)
+
+        # 统一配置校验 — 所有调用者共用
+        if not model:
+            raise ValueError("LLM 模型未配置，请在 .env 中设置 TEXT_MODEL")
+        if not settings.openai_api_key and not os.environ.get("OPENAI_API_KEY"):
+            raise ValueError("API Key 未配置，请在 .env 中设置 OPENAI_API_KEY")
+
         extra = dict(kwargs)
         if tools:
             extra["tools"] = tools

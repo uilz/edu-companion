@@ -68,6 +68,12 @@ class Settings(BaseSettings):
         description="轻量模型 — 意图分类/情绪识别（env: TEXT_FAST_MODEL）",
     )
 
+    # ── 语音识别模型 ──
+    whisper_model: str = Field(
+        default="whisper-1",
+        description="Whisper 语音识别模型（env: WHISPER_MODEL）",
+    )
+
     # OpenAI 兼容 API 配置（唯一 API 格式）
     openai_api_key: str | None = Field(default=None, description="OpenAI API Key（env: OPENAI_API_KEY）")
     openai_api_base: str | None = Field(

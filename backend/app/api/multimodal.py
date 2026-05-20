@@ -77,10 +77,11 @@ async def transcribe_audio(audio_file: UploadFile = File(...)):
     try:
         # 调用 Whisper via LiteLLM
         from litellm import atranscription
+        from app.config import settings
 
         with open(tmp_path, "rb") as f:
             response = await atranscription(
-                model="whisper-1",
+                model=settings.whisper_model,
                 file=f,
             )
 
