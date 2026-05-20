@@ -271,8 +271,19 @@ const [showNewPartition, setShowNewPartition] = useState(false);
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
-      const pId = params.get("p");
+      const pId = params.get("p") || params.get("partition_id");
       const bId = params.get("b");
+      const panel = params.get("panel");
+
+      // panel=graph → 重定向到图谱页（带分区参数）
+      if (panel === "graph") {
+        const graphUrl = pId
+          ? `/graph?partition_id=${pId}`
+          : "/graph";
+        window.location.replace(graphUrl);
+        return;
+      }
+
       if (pId) {
         setSelectedPartitionId(pId);
         if (bId) setActiveBranchId(bId);

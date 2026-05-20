@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus, FolderOpen, Hash, GitGraph } from "lucide-react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Partition } from "@/types";
 
 interface PartitionSidebarProps {
@@ -21,6 +21,7 @@ export default function PartitionSidebar({
   loading = false,
 }: PartitionSidebarProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const router = useRouter();
 
   return (
     <div className="flex flex-col h-full bg-[var(--color-bg)] border-r border-[var(--color-border)]">
@@ -119,9 +120,9 @@ export default function PartitionSidebar({
                   </div>
                 </button>
 
-                {/* 📊 知识图谱 — 独立 Link，不在 button 内 */}
-                <Link
-                  href={`/graph?partition_id=${partition.id}`}
+                {/* 📊 知识图谱 — 独立按钮，不在分区按钮内 */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); router.push(`/graph?partition_id=${partition.id}`); }}
                   className={`flex items-center px-3 border-l border-[var(--color-border)] transition-colors ${
                     isHovered || isSelected
                       ? "text-[var(--color-accent)] bg-[var(--color-accent)]/10"
@@ -130,7 +131,7 @@ export default function PartitionSidebar({
                   title={`查看「${partition.name}」知识图谱`}
                 >
                   <GitGraph size={15} />
-                </Link>
+                </button>
               </div>
             );
           })
