@@ -96,6 +96,8 @@ class TreeNode(BaseModel):
     has_modified_version: bool = False
     links_to: list[str] = Field(default_factory=list)
     linked_from: list[str] = Field(default_factory=list)
+    # v3.0: AI 自动标注讨论的知识点 skill_id
+    discussed_skill_ids: list[str] = Field(default_factory=list)
 
 
 # ── Link Node ──
@@ -217,6 +219,8 @@ class UserData(BaseModel):
     error_book: dict[str, list[dict]] = Field(default_factory=dict)  # user_id → ErrorBookEntry dicts
     # 知识图谱（按分区）
     knowledge_graphs: dict[str, KnowledgeGraph] = Field(default_factory=dict)  # partition_id → KnowledgeGraph
+    # v3.0: 学习事件日志
+    event_log: list[dict] = Field(default_factory=list)  # LearningEvent dicts
 
 
 # ── Response Block（多模态响应块） ──

@@ -203,15 +203,44 @@ def detect_frustration(text: str) -> bool:
 
 # ── 引用溯源解析 ──
 
-SOURCE_PATTERN = re.compile(r'\[来源:\s*([^\]]+)\]')
+SOURCE_PATTERN = re.compile(r'\\[来源:\\s*([^\\]]+)\\]')
 
 def parse_sources(text: str) -> tuple[str, list[str]]:
     """从回复文本中提取 [来源: xxx] 标记，返回 (清理后文本, 来源列表)"""
     sources = SOURCE_PATTERN.findall(text)
     cleaned = SOURCE_PATTERN.sub('', text).strip()
     # 清理多余空行
-    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+    cleaned = re.sub(r'\\n{3,}', '\\n\\n', cleaned)
     return cleaned, sources
+
+
+def _resolve_skill_ids(labels: list[str], partition_id: str, user_id: str) -> list[str]:
+    """将 [来源: xxx] 中的知识点标签映射为 skill_id"""
+    from app.services.storage import storage
+    data = storage.load(user_id)
+    graph = data.knowledge_graphs.get(partition_id)
+    if not graph or not graph.nodes:
+        return []
+    # 构建 label → id 映射（精确匹配 + 模糊匹配）
+    label_map: dict[str, str] = {}
+    for node_id, node in graph.nodes.items():
+        label_map[node.label] = node_id
+        # 也存短名
+        if len(node.label) > 4:
+            label_map[node.label[:4]] = node_id
+
+    skill_ids = []
+    for label in labels:
+        sid = label_map.get(label)
+        if not sid:
+            # 模糊匹配：查找包含该标签的节点
+            for nl, nid in label_map.items():
+                if label in nl or nl in label:
+                    sid = nid
+                    break
+        if sid and sid not in skill_ids:
+            skill_ids.append(sid)
+    return skill_ids
 
 
 def _build_context_messages(
@@ -722,6 +751,29 @@ async def send_and_reply(
     assistant_node = tree_ops.add_message(
         user_id, partition_id, "assistant", reply_blocks, reply_text
     )
+
+    # v3.0: 从回复中提取 [来源: xxx] 标注 → 映射为 skill_id → 写入节点
+    if reply_text:
+        _, source_labels = parse_sources(reply_text)
+        if source_labels:
+            skill_ids = _resolve_skill_ids(source_labels, partition_id, user_id)
+            if skill_ids:
+                data = storage.load(user_id)
+                if assistant_node.id in data.nodes:
+                    data.nodes[assistant_node.id].discussed_skill_ids = skill_ids
+                    storage.save(user_id, data)
+                logger.info(f"消息 {assistant_node.id[:8]} 标注知识点: {skill_ids}")
+                # v3.0: 记录事件
+                from app.api.learning_events import record_event
+                from app.schemas.learning_event import EventType
+                for sid in skill_ids:
+                    record_event(
+                        EventType.SKILL_DISCUSSED,
+                        user_id=user_id,
+                        partition_id=partition_id,
+                        branch_id=branch.id if branch else None,
+                        skill_ids=[sid],
+                    )
 
     # P0: 异步写入助手消息的元历史
     _p0_post_message_hooks(user_id, partition_id, assistant_node)

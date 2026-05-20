@@ -441,6 +441,31 @@ async def submit_answer(req: SubmitAnswerRequest):
     updated_state = bkt_engine.update(state, is_correct, hint_level=req.hints_used)
     bkt_engine.save_state(session["user_id"], updated_state)
 
+    # v3.0: 记录练习事件
+    try:
+        from app.api.learning_events import record_event
+        from app.schemas.learning_event import EventType
+        sid = question["skill_id"]
+        record_event(
+            EventType.PRACTICE_SUBMIT,
+            user_id=session["user_id"],
+            partition_id=session.get("partition_id"),
+            skill_ids=[sid],
+            data={"correct": is_correct, "time_spent": req.time_spent_seconds},
+        )
+        old_p = state.p_known
+        new_p = updated_state.p_known
+        if old_p and abs(new_p - old_p) > 0.05:
+            record_event(
+                EventType.SKILL_MASTERY_CHANGED,
+                user_id=session["user_id"],
+                partition_id=session.get("partition_id"),
+                skill_ids=[sid],
+                data={"before": old_p, "after": new_p},
+            )
+    except Exception:
+        pass
+
     # 生成反馈
     import json
     options_list = question.get("options_json")

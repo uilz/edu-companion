@@ -165,12 +165,11 @@ def _compute_partition_progress(partition_id: str) -> PartitionProgress:
 
     pp.anomalies = anomalies
 
-    # ── 6. 时序指标 ──
-    pp.temporal = TemporalMetrics(
-        learning_velocity=0.0,   # v2: 从事件日志计算
-        estimated_completion_days=_estimate_completion(total, mastered, 0),
-        review_backlog=len(review_queue),
-    )
+    # ── 6. 时序指标（从事件日志计算）──
+    temporal = _compute_temporal(data, partition_id)
+    temporal.estimated_completion_days = _estimate_completion(total, mastered, temporal.learning_velocity)
+    temporal.review_backlog = len(review_queue)
+    pp.temporal = temporal
 
     pp.skills = skills
     pp.dependencies = dependencies
@@ -225,8 +224,62 @@ def _estimate_completion(total: int, mastered: int, velocity: float) -> int:
     remaining = total - mastered
     if remaining <= 0:
         return 0
-    v = velocity if velocity > 0 else 1.0   # 保守估计每天1个
+    v = velocity if velocity > 0 else 1.0
     return max(1, int(remaining / v))
+
+
+def _compute_temporal(data, partition_id: str) -> TemporalMetrics:
+    """从事件日志计算时序指标"""
+    events: list[dict] = data.event_log
+    now = datetime.now(timezone.utc)
+
+    # 筛选该分区最近 7 天事件
+    cutoff_7d = now.timestamp() - 7 * 86400
+    recent = [
+        e for e in events
+        if e.get("partition_id") == partition_id
+        and _ts(e) > cutoff_7d
+    ]
+
+    # 每日练习分钟
+    day_minutes: dict[str, float] = {}
+    for e in recent:
+        if e.get("type") == "practice_submit":
+            day = e.get("event_date", "")
+            day_minutes[day] = day_minutes.get(day, 0) + e.get("data", {}).get("time_spent", 0) / 60
+
+    daily_minutes = list(day_minutes.values())
+    avg_daily = sum(daily_minutes) / 7 if daily_minutes else 0.0
+
+    # 学习速度：最近7天掌握度变化
+    mastery_events = [
+        e for e in recent
+        if e.get("type") == "skill_mastery_changed"
+    ]
+    velocity = len(mastery_events) / 7.0 if mastery_events else 0.0  # 平均每天 mastery 变化次数
+
+    # 复习积压：forgetting_curve < 0.5 的技能数
+    backlog = 0
+    graph = data.knowledge_graphs.get(partition_id)
+    if graph:
+        for node in graph.nodes.values():
+            if hasattr(node, "review_urgency") and node.review_urgency > 0.5:
+                backlog += 1
+
+    return TemporalMetrics(
+        learning_velocity=round(velocity, 2),
+        daily_practice_minutes=round(avg_daily, 1),
+        review_backlog=backlog,
+    )
+
+
+def _ts(event: dict) -> float:
+    ts = event.get("timestamp")
+    if isinstance(ts, str):
+        return datetime.fromisoformat(ts).timestamp()
+    if isinstance(ts, datetime):
+        return ts.timestamp()
+    return 0.0
 
 
 # ═══════════════════════════════════════════════════

@@ -30,6 +30,7 @@ from app.api.material import router as material_router
 from app.api.knowledge import router as knowledge_router
 from app.api.knowledge_graph import router as knowledge_graph_router
 from app.api.partition_progress import router as partition_progress_router
+from app.api.learning_events import router as learning_events_router
 from app.api.multimodal import router as multimodal_router
 from app.api.achievements import router as achievements_router
 from app.api.search import router as search_router
@@ -164,6 +165,8 @@ app.include_router(knowledge_router)
 app.include_router(knowledge_graph_router)
 # 学习画像 (v3.0 PartitionProgress)
 app.include_router(partition_progress_router)
+# 学习事件记录 (v3.0)
+app.include_router(learning_events_router)
 # 多模态（STT 转写）
 app.include_router(multimodal_router)
 # 成就系统
