@@ -7,6 +7,7 @@ import {
   Plus,
   Bot,
   ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import type {
   Partition,
@@ -491,6 +492,37 @@ const [showNewPartition, setShowNewPartition] = useState(false);
     }
   }, [activeBranchId, loadMessages]);
 
+  // ── 校验 URL 参数：非法分区/分支重定向回默认页 ──
+  const validatedRef = useRef(false);
+  useEffect(() => {
+    if (!urlInitialized || loadingPartitions || loadingBranches) return;
+    if (validatedRef.current) return;
+
+    // 分区不存在 → 清空 URL 并重置
+    if (selectedPartitionId && partitions.length > 0 &&
+        !partitions.some((p) => p.id === selectedPartitionId)) {
+      validatedRef.current = true;
+      setSelectedPartitionId(null);
+      setActiveBranchId(null);
+      window.history.replaceState(null, "", "/learn");
+      return;
+    }
+
+    // 分支不存在 → 仅清空分支
+    if (activeBranchId && branches.length > 0 &&
+        !branches.some((b) => b.id === activeBranchId)) {
+      validatedRef.current = true;
+      setActiveBranchId(null);
+      // 更新 URL 去掉 b 参数
+      const params = new URLSearchParams();
+      if (selectedPartitionId) params.set("p", selectedPartitionId);
+      window.history.replaceState(null, "", params.toString() ? `?${params.toString()}` : window.location.pathname);
+      return;
+    }
+
+    validatedRef.current = true;
+  }, [urlInitialized, loadingPartitions, loadingBranches, partitions, branches, selectedPartitionId, activeBranchId]);
+
   // ── Handle send ──
   const handleSend = useCallback(
     (text: string, files?: { name: string; type: string; materialId?: string }[]) => {
@@ -768,9 +800,9 @@ const [showNewPartition, setShowNewPartition] = useState(false);
       <div className="flex-shrink-0 relative" style={{ width: "200px" }}>
         <button
           onClick={() => setCollapsedPartition(true)}
-          className="absolute -right-3 top-2 z-10 w-5 h-5 rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] flex items-center justify-center text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+          className="absolute -right-0.5 top-1/2 -translate-y-1/2 z-10 w-4 h-12 border border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[var(--color-surface)] flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
           title="收起分区"
-        >◀</button>
+        ><ChevronLeft size={12} /></button>
         <PartitionSidebar
           partitions={partitions}
           selectedPartitionId={selectedPartitionId}
@@ -785,9 +817,9 @@ const [showNewPartition, setShowNewPartition] = useState(false);
       {collapsedPartition && (
         <button
           onClick={() => setCollapsedPartition(false)}
-          className="flex-shrink-0 w-6 border-r border-[var(--color-border)] flex items-center justify-center text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+          className="flex-shrink-0 w-5 border-r border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
           title="展开分区"
-        >▶</button>
+        ><ChevronRight size={12} /></button>
       )}
 
       {/* Branch sidebar (shown when partition selected) */}
@@ -795,9 +827,9 @@ const [showNewPartition, setShowNewPartition] = useState(false);
         <div className="flex-shrink-0 relative" style={{ width: "220px" }}>
           <button
             onClick={() => setCollapsedBranch(true)}
-            className="absolute -right-3 top-2 z-10 w-5 h-5 rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] flex items-center justify-center text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            className="absolute -right-0.5 top-1/2 -translate-y-1/2 z-10 w-4 h-12 border border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[var(--color-surface)] flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
             title="收起分支"
-          >◀</button>
+          ><ChevronLeft size={12} /></button>
 
           {/* P5: Tab bar */}
           <div className="flex border-b border-[var(--color-border)]">
@@ -845,9 +877,9 @@ const [showNewPartition, setShowNewPartition] = useState(false);
       {selectedPartitionId && collapsedBranch && (
         <button
           onClick={() => setCollapsedBranch(false)}
-          className="flex-shrink-0 w-6 border-r border-[var(--color-border)] flex items-center justify-center text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+          className="flex-shrink-0 w-5 border-r border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
           title="展开分支"
-        >▶</button>
+        ><ChevronRight size={12} /></button>
       )}
 
       {/* Main chat area */}

@@ -67,13 +67,14 @@ export default function PartitionSidebar({
             return (
               <div
                 key={partition.id}
-                className="relative group"
+                className="relative flex items-stretch group"
                 onMouseEnter={() => setHoveredId(partition.id)}
                 onMouseLeave={() => setHoveredId(null)}
               >
+                {/* 主按钮：选择分区 */}
                 <button
                   onClick={() => onSelectPartition(partition.id)}
-                  className="w-full text-left px-3 py-3 transition-colors border-l-3"
+                  className="flex-1 text-left px-3 py-3 transition-colors border-l-3 min-w-0"
                   style={{
                     borderLeftWidth: "3px",
                     borderLeftStyle: "solid",
@@ -115,22 +116,21 @@ export default function PartitionSidebar({
                           )}
                       </div>
                     </div>
-
-                    {/* 📊 知识图谱 — 持久可见，hover 时高亮 */}
-                    <Link
-                      href={`/graph?partition_id=${partition.id}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className={`flex-shrink-0 p-1.5 rounded transition-colors ${
-                        isHovered || isSelected
-                          ? "text-[var(--color-accent)] bg-[var(--color-accent)]/10"
-                          : "text-[var(--color-text-muted)] opacity-40 hover:opacity-100"
-                      }`}
-                      title={`查看「${partition.name}」知识图谱`}
-                    >
-                      <GitGraph size={15} />
-                    </Link>
                   </div>
                 </button>
+
+                {/* 📊 知识图谱 — 独立 Link，不在 button 内 */}
+                <Link
+                  href={`/graph?partition_id=${partition.id}`}
+                  className={`flex items-center px-3 border-l border-[var(--color-border)] transition-colors ${
+                    isHovered || isSelected
+                      ? "text-[var(--color-accent)] bg-[var(--color-accent)]/10"
+                      : "text-[var(--color-text-muted)]"
+                  }`}
+                  title={`查看「${partition.name}」知识图谱`}
+                >
+                  <GitGraph size={15} />
+                </Link>
               </div>
             );
           })
