@@ -2,7 +2,20 @@
 
 > 版本: v3.0  
 > 最后更新: 2026-05-19  
-> 状态: **重构进行中 — 统一学习画像架构**
+> 状态: **✅ 核心已交付 — 画像层 + 事件层 + 前端图谱已完成**
+
+---
+
+## 交付现状
+
+| 层级 | 模块 | 状态 |
+|------|------|:--:|
+| ① 事件层 | LearningEvent 记录 + 会话标注 + 练习挂钩 | ✅ |
+| ② 画像层 | PartitionProgress API（覆盖率/技能/异常/时序） | ✅ |
+| ② 画像层 | SkillAtom / StudentProfile schema | ✅ |
+| ③ 决策层 | LearningTutor（情境感知决策） | 🔴 待实现 |
+| 数据层 | PG `skill_atoms` 独立表 | 🔴 待实现 |
+| 前端 | GraphTab 切换到 PartitionProgress | ✅ |
 
 ---
 
@@ -224,7 +237,70 @@ class TemporalMetrics:
 
 ---
 
+---
+
+## 三-B、事件层 Schema（实现中）
+
+```python
+from enum import StrEnum
+
+class EventType(StrEnum):
+    PRACTICE_SUBMIT = "practice_submit"
+    PRACTICE_SESSION_START = "practice_session_start"
+    PRACTICE_SESSION_COMPLETE = "practice_session_complete"
+    CONVERSATION_MESSAGE = "conversation_message"
+    SKILL_DISCUSSED = "skill_discussed"
+    SKILL_MASTERY_CHANGED = "skill_mastery_changed"
+    BRANCH_CREATED = "branch_created"
+    PARTITION_SWITCHED = "partition_switched"
+    EMOTION_DETECTED = "emotion_detected"
+    FRUSTRATION_PEAK = "frustration_peak"
+    GRAPH_GENERATED = "graph_generated"
+    REVIEW_RECOMMENDED = "review_recommended"
+
+class LearningEvent(BaseModel):
+    id: str
+    user_id: str
+    type: EventType
+    timestamp: datetime
+    partition_id: Optional[str] = None
+    skill_ids: list[str] = []
+    data: dict = {}       # 载荷（{correct, time_spent, before, after, ...}）
+    event_date: str        # "2026-05-19" 方便按天聚合
+    event_hour: int        # 0-23 方便统计高峰时段
+
+class DailyMetrics(BaseModel):
+    date: str
+    practice_minutes: float
+    practice_count: int
+    correct_count: int
+    conversations: int
+    skills_covered: list[str]
+```
+
 ## 四、数据流
+
+### 4.0 事件采集（新）
+
+```
+所有学习行为 → record_event() → UserData.event_log
+
+对话完成 → send_and_reply
+  └─ [来源: xxx] → _resolve_skill_ids() → TreeNode.discussed_skill_ids
+     └─ record_event(SKILL_DISCUSSED, skill_ids=[...])
+
+练习提交 → submit_answer
+  ├─ record_event(PRACTICE_SUBMIT, {correct, time_spent})
+  └─ 掌握度变化 >5% → record_event(SKILL_MASTERY_CHANGED, {before, after})
+
+事件存储：
+  - 位置: UserData.event_log（JSON 数组，最多 500 条自动裁剪）
+  - 查询: GET /api/learning-events/stats/{pid}?days=7
+  - 按天: GET /api/learning-events/daily/{pid}?days=7
+  - 13 种事件类型: practice_submit/session_start/complete | conversation_message
+    | skill_discussed | skill_mastery_changed | branch_created | partition_switched
+    | emotion_detected | frustration_peak | graph_generated | review_recommended
+```
 
 ### 4.1 练习 → 反馈图谱
 
@@ -277,15 +353,16 @@ class TreeNode:
 
 ## 五、API 端点
 
-| 方法 | 路径 | 功能 |
-|------|------|------|
-| GET | `/api/partition-progress/{partition_id}` | **分区完整进度画像**（图谱+练习+趋势+异常） |
-| GET | `/api/student-profile` | 全科学习画像摘要（不含细节） |
-| GET | `/api/skill-atoms?partition_id=xxx` | 某分区所有 SkillAtom（旧图谱API兼容） |
-| POST | `/api/skill-atoms/{pid}/generate` | AI 生成/更新知识点（带 BKT 上下文） |
-| PUT | `/api/skill-atoms/{pid}/nodes` | 节点 CRUD |
-| PUT | `/api/skill-atoms/{pid}/edges` | 依赖边 CRUD |
-| POST | `/api/skill-atoms/{pid}/suggestions` | 获取调整建议（priority/依赖/聚类） |
+| 方法 | 路径 | 功能 | 状态 |
+|------|------|------|:--:|
+| GET | `/api/partition-progress/{partition_id}` | **分区完整进度画像** | ✅ |
+| GET | `/api/learning-events/stats/{pid}?days=7` | 分区事件统计 | ✅ |
+| GET | `/api/learning-events/daily/{pid}?days=7` | 按天指标 | ✅ |
+| GET | `/api/student-profile` | 全科学习画像 | 🔴 |
+| GET | `/api/skill-atoms?partition_id=xxx` | 旧图谱兼容 | 🔴 |
+| POST | `/api/skill-atoms/{pid}/generate` | AI 生成知识点 | 🔴 |
+| PUT | `/api/skill-atoms/{pid}/nodes` | 节点 CRUD | 🔴 |
+| PUT | `/api/skill-atoms/{pid}/edges` | 依赖边 CRUD | 🔴 |
 
 ---
 
@@ -363,15 +440,15 @@ ALTER TABLE conversation_nodes ADD COLUMN discussed_skill_ids JSONB DEFAULT '[]'
 
 ## 八、迁移路径
 
-| 步骤 | 内容 | 风险 |
-|------|------|------|
-| 1 | 创建 `SkillAtom` / `PartitionProgress` Schema | 低，纯新增 |
-| 2 | 创建 PG 表 `skill_atoms` + `skill_dependencies` | 低 |
-| 3 | 迁移脚本：旧 `knowledge_graphs` 节点 + `knowledge_states` BKT + `practice_sessions` → `skill_atoms` | 中，ID 映射需审核 |
-| 4 | 实现 `GET /api/partition-progress/{pid}` | 低 |
-| 5 | 旧图谱 API 保留兼容层（内部转发到新实现） | 低 |
-| 6 | 前端驾驶舱切换到新数据源 | 中 |
-| 7 | 加 `discussed_skill_ids` 列 + AI prompt 调整 | 低 |
-| 8 | 删旧存储：`knowledge_graphs` / `knowledge_states` / `SharedKnowledgeState` | 低（可延后） |
+| 步骤 | 内容 | 风险 | 状态 |
+|------|------|------|:--:|
+| 1 | 创建 `SkillAtom` / `PartitionProgress` Schema | 低 | ✅ |
+| 2 | 创建 PG 表 `skill_atoms` + `skill_dependencies` | 低 | 🔴 |
+| 3 | 迁移脚本：旧 `knowledge_graphs` + `knowledge_states` → `skill_atoms` | 中 | 🔴 |
+| 4 | 实现 `GET /api/partition-progress/{pid}`（兼容旧数据） | 低 | ✅ |
+| 5 | 旧图谱 API 保留兼容层 | 低 | ✅（内部转发） |
+| 6 | 前端 GraphTab 切换到新数据源 | 中 | ✅ |
+| 7 | `TreeNode.discussed_skill_ids` + 事件记录 + AI prompt | 低 | ✅ |
+| 8 | 删旧存储：`knowledge_graphs` / `knowledge_states` / `SharedKnowledgeState` | 低 | 🔴 |
 
-每步可独立回滚。API 接口保持向后兼容。
+已完成 5/8。API 接口保持向后兼容。剩余 3 项（PG 表 / 正式迁移 / 清理旧存储）可在数据积累后执行。
