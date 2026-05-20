@@ -86,10 +86,11 @@ function computeLayout(nodes: GraphNode[], edges: GraphEdge[]): GraphNode[] {
   if (remaining.length > 0) layers.push(remaining.map((n) => n.id));
 
   // Assign coordinates
-  const layerHeight = 160;
-  const nodeSpacing = 180;
-  const marginX = 100;
-  const marginY = 80;
+  const n_nodes = nodes.length;
+  const layerHeight = Math.max(160, 800 / Math.max(layers.length, 1));
+  const nodeSpacing = Math.max(200, 1000 / Math.max(Math.max(...layers.map(l => l.length)), 1));
+  const marginX = 120;
+  const marginY = 100;
 
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
   const result = nodes.map((n) => ({ ...n }));
@@ -133,10 +134,13 @@ export default function GraphPage() {
   const svgRef = useRef<SVGSVGElement>(null);
 
   // ── Parse partition_id from URL ──
+  const [ready, setReady] = useState(false);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const pid = params.get("partition_id") || "";
     setPartitionId(pid);
+    setReady(true);
+    if (!pid) setLoading(false);
   }, []);
 
   // ── Fetch graph data ──

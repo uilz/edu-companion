@@ -263,6 +263,34 @@ const [showNewPartition, setShowNewPartition] = useState(false);
   const [loadingBranches, setLoadingBranches] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
 
+  // ── 刷新后恢复分区/分支状态 ──
+  const persistedStateKey = "learn-page-state";
+  const [stateRestored, setStateRestored] = useState(false);
+
+  // 保存当前选择到 localStorage
+  useEffect(() => {
+    if (!stateRestored) return;
+    try {
+      localStorage.setItem(persistedStateKey, JSON.stringify({
+        partitionId: selectedPartitionId,
+        branchId: activeBranchId,
+      }));
+    } catch {}
+  }, [selectedPartitionId, activeBranchId, stateRestored]);
+
+  // 从 localStorage 恢复选择
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(persistedStateKey);
+      if (saved) {
+        const { partitionId, branchId } = JSON.parse(saved);
+        if (partitionId) setSelectedPartitionId(partitionId);
+        if (branchId) setActiveBranchId(branchId);
+      }
+    } catch {}
+    setStateRestored(true);
+  }, []);
+
   // WS streaming buffer ref
   const streamBufferRef = useRef("");
   const streamingMsgIdRef = useRef<string | null>(null);

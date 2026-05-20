@@ -295,14 +295,15 @@ function HeatmapGrid({ data }: { data: HeatmapCell[] }) {
 // ── 建议行动生成 ──
 
 function generateSuggestions(
-  overview: Overview,
-  masteryBars: MasteryBar[],
-  errorDist: ErrorDist[],
+  overview: Overview | undefined,
+  masteryBars: MasteryBar[] | undefined,
+  errorDist: ErrorDist[] | undefined,
 ): { text: string; action: string; link: string }[] {
   const suggestions: { text: string; action: string; link: string }[] = [];
+  if (!overview) return suggestions;
 
   // 规则1: 最弱知识点
-  if (masteryBars.length > 0) {
+  if (masteryBars && masteryBars.length > 0) {
     const weakest = masteryBars[0]; // 已按 p_known 升序排列
     if (weakest.p_known < 0.5) {
       suggestions.push({
@@ -314,7 +315,7 @@ function generateSuggestions(
   }
 
   // 规则2: 最常见错误类型
-  if (errorDist.length > 0) {
+  if (errorDist && errorDist.length > 0) {
     const top = errorDist[0];
     if (top.pct > 0.25) {
       const label = ERROR_LABELS[top.type] || top.type;
@@ -768,10 +769,14 @@ export default function AnalyticsPage() {
     );
   }
 
-  const { overview, daily_trend, mastery_bars, error_distribution, hourly_heatmap } = data;
-  const acc = (overview.accuracy * 100).toFixed(0);
-  const h = Math.floor(overview.study_minutes / 60);
-  const min = Math.round(overview.study_minutes % 60);
+  const overview = data?.overview;
+  const daily_trend = data?.daily_trend || [];
+  const mastery_bars = data?.mastery_bars || [];
+  const error_distribution = data?.error_distribution || [];
+  const hourly_heatmap = data?.hourly_heatmap || [];
+  const acc = overview ? (overview.accuracy * 100).toFixed(0) : "0";
+  const h = overview ? Math.floor(overview.study_minutes / 60) : 0;
+  const min = overview ? Math.round(overview.study_minutes % 60) : 0;
 
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
