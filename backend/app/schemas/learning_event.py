@@ -7,13 +7,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from enum import StrEnum
+from enum import Enum
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
 
-class EventType(StrEnum):
+class EventType(str, Enum):
     PRACTICE_SUBMIT = "practice_submit"            # 提交练习题答案
     PRACTICE_SESSION_START = "practice_session_start"
     PRACTICE_SESSION_COMPLETE = "practice_session_complete"

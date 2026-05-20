@@ -242,9 +242,9 @@ class TemporalMetrics:
 ## 三-B、事件层 Schema（实现中）
 
 ```python
-from enum import StrEnum
+from enum import Enum
 
-class EventType(StrEnum):
+class EventType(str, Enum):
     PRACTICE_SUBMIT = "practice_submit"
     PRACTICE_SESSION_START = "practice_session_start"
     PRACTICE_SESSION_COMPLETE = "practice_session_complete"
