@@ -216,19 +216,25 @@ export default function GraphPage() {
   }, [partitionId, fetchGraph]);
 
   // ── AI 生成图谱 ──
+  const [generateError, setGenerateError] = useState("");
   const handleGenerate = async () => {
     setGenerating(true);
+    setGenerateError("");
     try {
       const res = await fetch(`/api/knowledge/graph/${partitionId}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ depth: 3 }),
       });
-      if (res.ok) {
+      const json = await res.json();
+      if (res.ok && json.ok) {
         await fetchGraph();
+      } else {
+        const msg = json?.detail || json?.error || `生成失败 (HTTP ${res.status})`;
+        setGenerateError(msg);
       }
     } catch (e) {
-      console.error(e);
+      setGenerateError(e instanceof Error ? e.message : "网络异常，请检查后端是否运行");
     } finally {
       setGenerating(false);
     }
@@ -406,6 +412,7 @@ export default function GraphPage() {
             </div>
 
             {partitionId && (
+              <div className="flex flex-col items-end gap-1">
               <button
                 onClick={handleGenerate}
                 disabled={generating}
@@ -418,6 +425,10 @@ export default function GraphPage() {
                 )}
                 AI 生成图谱
               </button>
+              {generateError && (
+                <p className="text-[11px] text-[#f97316] max-w-[240px] text-right">{generateError}</p>
+              )}
+              </div>
             )}
           </div>
         </div>
@@ -460,8 +471,20 @@ export default function GraphPage() {
               </div>
 
               {nodes.length === 0 ? (
-                <div className="flex items-center justify-center h-96 text-sm text-[var(--color-text-muted)]">
-                  暂无图谱数据
+                <div className="flex flex-col items-center justify-center h-96 gap-3">
+                  <GitGraph size={28} className="text-[var(--color-text-muted)] opacity-40" />
+                  <span className="text-sm text-[var(--color-text-muted)]">暂无图谱数据</span>
+                  <button
+                    onClick={handleGenerate}
+                    disabled={generating}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50 transition-opacity mt-2"
+                  >
+                    {generating ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                    AI 生成图谱
+                  </button>
+                  {generateError && (
+                    <p className="text-[11px] text-[#f97316] mt-1">{generateError}</p>
+                  )}
                 </div>
               ) : (
                 <svg
