@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -126,6 +127,13 @@ async def generate_graph_logic(
 
     try:
         from app.services.llm_service import llm_service
+        from app.config import settings
+
+        # 防御：检查 LLM 配置
+        if not settings.text_model:
+            return {"ok": False, "error": "LLM 模型未配置，请在 .env 中设置 TEXT_MODEL"}
+        if not settings.openai_api_key and not os.environ.get("OPENAI_API_KEY"):
+            return {"ok": False, "error": "API Key 未配置，请在 .env 中设置 OPENAI_API_KEY"}
 
         system_prompt = f"""你是知识图谱生成专家。根据用户的学习领域生成结构化的知识图谱。
 
