@@ -386,11 +386,10 @@ export default function GraphPage() {
                       </div>
                     ) : (
                       partitions.map((p) => (
-                        <a
+                        <button
                           key={p.id}
-                          href={`/graph?partition_id=${p.id}`}
-                          onClick={() => setShowPartitionPicker(false)}
-                          className={`block px-4 py-2.5 text-sm hover:bg-[var(--color-surface)] transition-colors ${
+                          onClick={() => { window.location.href = `/graph?partition_id=${p.id}`; }}
+                          className={`block w-full text-left px-4 py-2.5 text-sm hover:bg-[var(--color-surface)] transition-colors ${
                             p.id === partitionId
                               ? "text-[var(--color-accent)] bg-[var(--color-accent)]/5 font-medium"
                               : "text-[var(--color-text-secondary)]"
@@ -398,7 +397,7 @@ export default function GraphPage() {
                         >
                           <span className="mr-2">{p.emoji || "📁"}</span>
                           {p.name}
-                        </a>
+                        </button>
                       ))
                     )}
                   </div>
