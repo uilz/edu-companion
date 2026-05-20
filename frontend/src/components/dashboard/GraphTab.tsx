@@ -8,11 +8,14 @@ import Card from "@/components/ui/Card";
 // ── Types ──
 interface GraphNode {
   id: string; label: string; subject: string;
-  mastery: number; mastery_level: string;
-  can_practice: boolean; blocked_by: string[]; attempt_count: number;
+  mastery: number; mastery_level: string; confidence: number;
+  blocked: boolean; blocked_by: string[]; attempt_count: number;
+  error_clusters: string[]; trend: string; review_urgency: number;
+  anomaly_type: string | null; anomaly_detail: string | null;
   x?: number; y?: number;
 }
-interface GraphEdge { from: string; to: string; label: string; }
+interface GraphEdge { from: string; to: string; label: string; satisfied: boolean; }
+interface Coverage { total: number; mastered: number; learning: number; weak: number; untouched: number; }
 
 // ── Colors ──
 const subjectColors: Record<string, string> = {
@@ -81,6 +84,8 @@ export function GraphTab() {
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [totalNodes, setTotalNodes] = useState(0);
   const [totalEdges, setTotalEdges] = useState(0);
+  const [coverage, setCoverage] = useState<Coverage>({ total: 0, mastered: 0, learning: 0, weak: 0, untouched: 0 });
+  const [anomalyCount, setAnomalyCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -118,24 +123,50 @@ export function GraphTab() {
     if (!partitionId) { setNodes([]); setEdges([]); return; }
     setLoading(true); setError("");
     try {
-      const res = await fetch(`/api/knowledge/graph/${partitionId}`);
-      const json = await res.json();
-      if (!json.generated) {
-        setNodes([]); setEdges([]);
-        setLoading(false); return;
-      }
-      const rawNodes: GraphNode[] = (json.nodes || []).map((n: any) => ({
-        id: n.id, label: n.label, subject: partitionId,
-        mastery: n.mastery || 0, mastery_level: n.mastery_level || "未接触",
-        can_practice: true, blocked_by: [] as string[], attempt_count: 0,
+      const res = await fetch(`/api/partition-progress/${partitionId}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const pp = await res.json();
+
+      // Map skills → GraphNode
+      const skills = pp.skills || {};
+      const anomalies = pp.anomalies || [];
+      const anomalyMap = new Map<string, typeof anomalies[0]>();
+      anomalies.forEach((a: any) => {
+        (a.skills || []).forEach((sid: string) => anomalyMap.set(sid, a));
+      });
+
+      const rawNodes: GraphNode[] = Object.values(skills).map((s: any) => ({
+        id: s.skill_id,
+        label: s.label,
+        subject: partitionId,
+        mastery: s.mastery || 0,
+        mastery_level: s.mastery_level || "未接触",
+        confidence: s.confidence || 0,
+        blocked: s.blocked ?? false,
+        blocked_by: s.prerequisites_met ? [] : (s.prerequisites || []),
+        attempt_count: s.attempt_count || 0,
+        error_clusters: s.error_clusters || [],
+        trend: s.trend || "stable",
+        review_urgency: s.review_urgency || 0,
+        anomaly_type: anomalyMap.has(s.skill_id) ? anomalyMap.get(s.skill_id).type : null,
+        anomaly_detail: anomalyMap.has(s.skill_id) ? anomalyMap.get(s.skill_id).detail : null,
       }));
-      const rawEdges: GraphEdge[] = (json.edges || []).map((e: any) => ({
-        from: e.from_id, to: e.to_id, label: e.relation || e.label || "",
+
+      // Map dependencies → GraphEdge
+      const deps: any[] = pp.dependencies || [];
+      const rawEdges: GraphEdge[] = deps.map((d: any) => ({
+        from: d.from_skill,
+        to: d.to_skill,
+        label: d.relation === "prerequisite" ? "前置" : (d.relation || ""),
+        satisfied: d.satisfied ?? false,
       }));
+
       setNodes(computeLayout(rawNodes, rawEdges));
       setEdges(rawEdges);
-      setTotalNodes(json.total_nodes);
-      setTotalEdges(json.total_edges);
+      setTotalNodes(rawNodes.length);
+      setTotalEdges(rawEdges.length);
+      setCoverage(pp.coverage || { total: 0, mastered: 0, learning: 0, weak: 0, untouched: 0 });
+      setAnomalyCount(anomalies.length);
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载失败");
     } finally { setLoading(false); }
@@ -203,9 +234,8 @@ export function GraphTab() {
 
   // ── Stats ──
   const avgMastery = nodes.length > 0 ? Math.round(nodes.reduce((s, n) => s + n.mastery, 0) / nodes.length) : 0;
-  const readyCount = nodes.filter((n) => n.can_practice).length;
-  const blockedCount = nodes.filter((n) => !n.can_practice).length;
-  const actualSubjects = Array.from(new Set(nodes.map((n) => n.subject)));
+  const unlockedCount = nodes.filter((n) => !n.blocked).length;
+  const blockedCount = nodes.filter((n) => n.blocked).length;
 
   // ── ViewBox ──
   const maxX = Math.max(700, ...nodes.map((n) => (n.x || 0) + 100));
@@ -305,7 +335,12 @@ export function GraphTab() {
           </div>
           {/* Stats inline */}
           <span className="text-xs text-[var(--color-text-muted)]">
-            {totalNodes} 知识点 · {totalEdges} 条关联 · 掌握度 {avgMastery}%
+            {totalNodes} 知识点 · {totalEdges} 关联 · 
+            掌握 {coverage.mastered} · 学习 {coverage.learning} · 
+            薄弱 {coverage.weak} · 未接触 {coverage.untouched}
+            {anomalyCount > 0 && (
+              <span className="text-[#f97316] ml-1">⚠️{anomalyCount}</span>
+            )}
           </span>
         </div>
 
@@ -368,17 +403,21 @@ export function GraphTab() {
                     const dx = toNode.x - fromNode.x, dy = (toNode.y || 0) - (fromNode.y || 0);
                     const cx = fromNode.x + dx * 0.6, cy = (fromNode.y || 0) + dy * 0.3;
                     const midX = fromNode.x + dx * 0.45, midY = (fromNode.y || 0) + dy * 0.35;
+                    const edgeColor = edge.satisfied ? "#22c55e" : "#f97316";
+                    const dashArray = edge.satisfied ? undefined : "6,3";
                     return (
                       <g key={`${edge.from}-${edge.to}`}>
                         <defs>
                           <marker id={`arr-${edge.from}-${edge.to}`} viewBox="0 0 10 10"
                             refX={dx > 0 ? 10 : 0} refY={5} markerWidth={5} markerHeight={5}
                             orient={dx > 0 ? "auto" : "auto-start-reverse"}>
-                            <path d="M 0 2 L 6 5 L 0 8 z" fill="#404040" opacity="0.6" />
+                            <path d="M 0 2 L 6 5 L 0 8 z" fill={edgeColor} opacity="0.7" />
                           </marker>
                         </defs>
                         <path d={`M ${fromNode.x} ${fromNode.y} Q ${cx} ${cy} ${toNode.x} ${toNode.y}`}
-                          fill="none" stroke="#333" strokeWidth={1} opacity={0.35}
+                          fill="none" stroke={edgeColor} strokeWidth={edge.satisfied ? 1.2 : 1}
+                          strokeDasharray={dashArray}
+                          opacity={edge.satisfied ? 0.5 : 0.35}
                           markerEnd={`url(#arr-${edge.from}-${edge.to})`} />
                         {edge.label && (
                           <text x={midX} y={midY - 6} textAnchor="middle" fill="#525252" fontSize={9} opacity={0.6}>{edge.label}</text>
@@ -393,6 +432,7 @@ export function GraphTab() {
                     const color = subjectColors[node.subject] || fallbackColor;
                     const mColor = masteryColor(node.mastery);
                     const radius = isSelected ? 28 : 23;
+                    const hasAnomaly = !!node.anomaly_type;
                     return (
                       <g key={node.id}
                         onClick={(e) => { e.stopPropagation(); setSelectedNode(isSelected ? null : node); }}
@@ -402,18 +442,21 @@ export function GraphTab() {
                           strokeDasharray={`${(node.mastery / 100) * Math.PI * 2 * (radius + 4)} ${Math.PI * 2 * (radius + 4)}`}
                           opacity={node.mastery > 0 ? 0.6 : 0.15} />
                         <circle cx={node.x} cy={node.y} r={radius}
-                          fill={isSelected ? color : node.can_practice ? "#0d0d0d" : "#1a1a1a"}
-                          stroke={node.can_practice ? color : "#404040"}
-                          strokeWidth={isSelected ? 2.5 : 1.5} opacity={node.can_practice ? 1 : 0.5} />
-                        {!node.can_practice && (
+                          fill={isSelected ? color : node.blocked ? "#1a1a1a" : "#0d0d0d"}
+                          stroke={node.blocked ? "#404040" : color}
+                          strokeWidth={isSelected ? 2.5 : 1.5} opacity={node.blocked ? 0.5 : 1} />
+                        {node.blocked && (
                           <text x={node.x} y={node.y - radius - 8} textAnchor="middle" fill="#525252" fontSize={8}>🔒</text>
                         )}
+                        {hasAnomaly && !node.blocked && (
+                          <text x={node.x + radius - 4} y={node.y - radius + 2} textAnchor="middle" fontSize={10}>⚠️</text>
+                        )}
                         <text x={node.x} y={node.y + 1} textAnchor="middle" dominantBaseline="middle"
-                          fill={isSelected ? "#ffffff" : node.can_practice ? color : "#525252"}
+                          fill={isSelected ? "#ffffff" : node.blocked ? "#525252" : color}
                           fontSize={9} fontWeight={600}>
                           {node.label.length > 5 ? node.label.slice(0, 4) + "…" : node.label}
                         </text>
-                        <title>{node.label} — {node.mastery_level} ({node.mastery}%){node.can_practice ? "" : " 🔒前置未满足"}</title>
+                        <title>{node.label} — {node.mastery_level} ({node.mastery}%){node.blocked ? " 🔒前置未满足" : ""}{hasAnomaly ? " ⚠️" + node.anomaly_detail : ""}</title>
                       </g>
                     );
                   })}
@@ -428,32 +471,69 @@ export function GraphTab() {
           {/* Legend */}
           <Card title="图例">
             <div className="space-y-2">
-              {actualSubjects.map((subject) => (
-                <div key={subject} className="flex items-center gap-2.5 text-sm">
-                  <div className="w-3 h-3 flex-shrink-0" style={{ backgroundColor: subjectColors[subject] || fallbackColor }} />
-                  <span className="text-[var(--color-text-secondary)]">{subject}</span>
-                </div>
-              ))}
-              {actualSubjects.length === 0 && (
-                <div className="text-xs text-[var(--color-text-muted)]">点击节点查看详情</div>
-              )}
+              <div className="flex items-center gap-2.5 text-sm">
+                <div className="w-3 h-3 flex-shrink-0 rounded-full" style={{ backgroundColor: "#22c55e" }} />
+                <span className="text-[var(--color-text-secondary)]">已掌握 ≥80%</span>
+              </div>
+              <div className="flex items-center gap-2.5 text-sm">
+                <div className="w-3 h-3 flex-shrink-0 rounded-full" style={{ backgroundColor: "#84cc16" }} />
+                <span className="text-[var(--color-text-secondary)]">发展中 40-80%</span>
+              </div>
+              <div className="flex items-center gap-2.5 text-sm">
+                <div className="w-3 h-3 flex-shrink-0 rounded-full" style={{ backgroundColor: "#f97316" }} />
+                <span className="text-[var(--color-text-secondary)]">薄弱 &lt;40%</span>
+              </div>
             </div>
             <div className="mt-3 pt-3 border-t border-[var(--color-surface)] space-y-1 text-[10px] text-[var(--color-text-muted)]">
               <div>🔒 = 前置知识未满足</div>
+              <div>⚠️ = 异常（停滞/跳跃/遗忘）</div>
               <div>圆环 = 掌握进度 (0-100%)</div>
+              <div><span style={{display:"inline-block",width:12,height:2,background:"#22c55e",marginRight:4}}/>实线 = 前置已满足</div>
+              <div><span style={{display:"inline-block",borderTop:"1px dashed #f97316",width:12,height:0,marginRight:4}}/>虚线 = 前置未满足</div>
             </div>
           </Card>
 
           {/* Stats */}
           <Card title="统计">
             <div className="space-y-2 text-sm">
-              {[["知识点", totalNodes], ["可练习", readyCount, "#22c55e"], ["被卡控", blockedCount, "#f97316"],
-                ["关联边", totalEdges], ["平均掌握", `${avgMastery}%`]].map(([label, val, color]) => (
-                <div key={label as string} className="flex justify-between">
-                  <span className="text-[var(--color-text-muted)]">{label}</span>
-                  <span className="font-medium" style={{ color: (color as string) || "var(--color-text)" }}>{val}</span>
+              <div className="flex justify-between">
+                <span className="text-[var(--color-text-muted)]">知识点</span>
+                <span className="font-medium">{totalNodes}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--color-text-muted)]">已掌握</span>
+                <span className="font-medium text-[#22c55e]">{coverage.mastered}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--color-text-muted)]">学习中</span>
+                <span className="font-medium text-[#84cc16]">{coverage.learning}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--color-text-muted)]">薄弱</span>
+                <span className="font-medium text-[#f97316]">{coverage.weak}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--color-text-muted)]">未接触</span>
+                <span className="font-medium text-[#525252]">{coverage.untouched}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--color-text-muted)]">已解锁</span>
+                <span className="font-medium text-[#22c55e]">{unlockedCount}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--color-text-muted)]">被卡控</span>
+                <span className="font-medium text-[#f97316]">{blockedCount}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--color-text-muted)]">平均掌握</span>
+                <span className="font-medium">{avgMastery}%</span>
+              </div>
+              {anomalyCount > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-[var(--color-text-muted)]">⚠️异常</span>
+                  <span className="font-medium text-[#f59e0b]">{anomalyCount}</span>
                 </div>
-              ))}
+              )}
             </div>
           </Card>
 
@@ -466,7 +546,12 @@ export function GraphTab() {
                   <div className="text-xs text-[var(--color-text-muted)] mt-0.5">{selectedNode.subject}</div>
                 </div>
                 <div>
-                  <div className="text-xs text-[var(--color-text-muted)] mb-1">掌握度 · {selectedNode.mastery_level}</div>
+                  <div className="text-xs text-[var(--color-text-muted)] mb-1">
+                    掌握度 · {selectedNode.mastery_level}
+                    <span className="ml-2">
+                      {selectedNode.trend === "improving" ? "📈" : selectedNode.trend === "declining" ? "📉" : selectedNode.trend === "plateau" ? "→" : ""}
+                    </span>
+                  </div>
                   <div className="flex items-center gap-2">
                     <div className="flex-1 bg-[var(--color-surface)] h-2">
                       <div className="h-full transition-all duration-500"
@@ -474,15 +559,38 @@ export function GraphTab() {
                     </div>
                     <span className="text-sm text-[var(--color-text)] font-medium">{selectedNode.mastery}%</span>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-[var(--color-text-muted)]">状态:</span>
-                  {selectedNode.can_practice ? (
-                    <span className="text-xs px-2 py-0.5 border border-[#22c55e] text-[#22c55e]">可练习</span>
-                  ) : (
-                    <span className="text-xs px-2 py-0.5 border border-[#f97316] text-[#f97316]">前置未满足</span>
+                  {selectedNode.confidence > 0 && (
+                    <div className="text-[10px] text-[var(--color-text-muted)] mt-1">
+                      信度 {Math.round(selectedNode.confidence * 100)}%
+                    </div>
                   )}
                 </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-[var(--color-text-muted)]">状态:</span>
+                  {selectedNode.blocked ? (
+                    <span className="text-xs px-2 py-0.5 border border-[#f97316] text-[#f97316]">前置未满足</span>
+                  ) : selectedNode.mastery >= 80 ? (
+                    <span className="text-xs px-2 py-0.5 border border-[#22c55e] text-[#22c55e]">已掌握</span>
+                  ) : selectedNode.mastery > 0 ? (
+                    <span className="text-xs px-2 py-0.5 border border-[#84cc16] text-[#84cc16]">学习中</span>
+                  ) : (
+                    <span className="text-xs px-2 py-0.5 border border-[var(--color-border)] text-[var(--color-text-muted)]">未接触</span>
+                  )}
+                  {selectedNode.attempt_count > 0 && (
+                    <span className="text-[10px] text-[var(--color-text-muted)]">
+                      练 {selectedNode.attempt_count} 次
+                    </span>
+                  )}
+                </div>
+                {/* Anomaly warning */}
+                {selectedNode.anomaly_type && (
+                  <div className="p-2 border border-[#f59e0b] bg-[#f59e0b]/10 text-xs">
+                    <span className="text-[#f59e0b] font-medium">⚠️ {selectedNode.anomaly_type}</span>
+                    {selectedNode.anomaly_detail && (
+                      <div className="text-[var(--color-text-muted)] mt-0.5">{selectedNode.anomaly_detail}</div>
+                    )}
+                  </div>
+                )}
                 {/* Prerequisites */}
                 <div>
                   <div className="text-xs text-[var(--color-text-muted)] mb-1">前置知识</div>
@@ -492,7 +600,11 @@ export function GraphTab() {
                       return (
                         <button key={e.from}
                           onClick={() => { const n = nodes.find(nn => nn.id === e.from); if (n) setSelectedNode(n); }}
-                          className="text-xs px-2 py-1 border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)] hover:text-[var(--color-text)] cursor-pointer transition-colors"
+                          className={`text-xs px-2 py-1 border transition-colors cursor-pointer ${
+                            e.satisfied
+                              ? "border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)]"
+                              : "border-[#f97316]/30 text-[#f97316]"
+                          }`}
                         >{fromNode?.label || e.from}</button>
                       );
                     })}
@@ -501,6 +613,17 @@ export function GraphTab() {
                     )}
                   </div>
                 </div>
+                {/* Error clusters */}
+                {selectedNode.error_clusters.length > 0 && (
+                  <div>
+                    <div className="text-xs text-[var(--color-text-muted)] mb-1">常见错误</div>
+                    <div className="flex flex-wrap gap-1">
+                      {selectedNode.error_clusters.map((e, i) => (
+                        <span key={i} className="text-[10px] px-1.5 py-0.5 bg-[var(--color-surface)] text-[var(--color-text-muted)]">{e}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </Card>
           ) : (
