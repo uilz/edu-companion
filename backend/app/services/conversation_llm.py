@@ -274,7 +274,10 @@ def _build_context_messages(
         pass
 
     # P0: 当前消息情绪检测 → 注入即时策略
-    quick_emotion = emotion_analyzer.quick_detect(user_text)
+    try:
+        quick_emotion = emotion_analyzer.quick_detect(user_text)
+    except Exception:
+        quick_emotion = None
     if quick_emotion:
         severity = "negative" if quick_emotion in ("frustration", "anxiety", "overwhelm", "boredom", "procrastination") else "neutral"
         if severity == "negative":
@@ -829,9 +832,20 @@ async def send_and_reply_stream(
 
     # 2. 流式生成回复
     full_reply = ""
-    async for chunk in generate_reply_stream(user_id, partition_id, user_text):
-        full_reply += chunk
-        yield {"type": "token", "content": chunk}
+    try:
+        async for chunk in generate_reply_stream(user_id, partition_id, user_text):
+            full_reply += chunk
+            yield {"type": "token", "content": chunk}
+    except Exception as e:
+        logger.error("generate_reply_stream 失败: %s", str(e))
+        # 降级：至少让用户看到发生了什么
+        fallback = f"抱歉，生成回复时遇到了问题 😣\n\n错误信息：{str(e)[:200]}\n\n请稍后重试或检查系统配置。"
+        full_reply = fallback
+        yield {"type": "token", "content": fallback}
+
+    # 如果 LLM 没有返回任何内容，给用户一个可见提示
+    if not full_reply.strip():
+        full_reply = "抱歉，我暂时无法回复 😣\n\n请检查：\n1. API Key 是否正确配置\n2. 模型是否可用\n3. 稍后重试"
 
     # 3. 存助手消息
     reply_blocks = [TextBlock(text=full_reply)]

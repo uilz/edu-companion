@@ -139,12 +139,15 @@ class LLMService:
                     # 推理模型的 thinking 不是最终输出，不能用
                     logger.warning(
                         "模型返回了 reasoning_content 但 content 为空 "
-                        "（thinking 消耗了全部 max_tokens？），raw: %s...",
-                        str(reasoning)[:100],
+                        "（thinking 消耗了全部 max_tokens=%d？），raw: %s...",
+                        max_tokens, str(reasoning)[:100],
                     )
-                    content = f"[模型推理溢出] 请增大 max_tokens 或使用非推理模型。\nreasoning: {str(reasoning)[:500]}"
-                elif reasoning is None:
-                    pass  # content 确实为空的极端情况
+                    content = f"[模型推理溢出] 请增大 max_tokens 或使用非推理模型。\nmodel={model}, max_tokens={max_tokens}"
+                else:
+                    # content 为空且无 reasoning → 模型静默返回空
+                    logger.warning("模型返回空 content（无 reasoning），model=%s, usage=%s",
+                                   model, response.usage)
+                    content = f"[模型无输出] 模型 '{model}' 返回了空内容。请检查 API 配额或模型可用性。"
             logger.info("模型生成完成 [%s]，token数: %d", model, response.usage.total_tokens if response.usage else 0)
             return content
         except Exception as e:
@@ -174,6 +177,15 @@ class LLMService:
             逐个token的文本片段
         """
         model = self.select_model(task_type, subject)
+
+        # 统一配置校验
+        if not model:
+            raise ValueError("LLM 模型未配置，请在 .env 中设置 TEXT_MODEL")
+        if not settings.openai_api_key and not os.environ.get("OPENAI_API_KEY"):
+            raise ValueError("API Key 未配置，请在 .env 中设置 OPENAI_API_KEY")
+
+        yielded_any = False
+        last_reasoning = ""
         try:
             response = await acompletion(
                 model=model,
@@ -184,12 +196,35 @@ class LLMService:
                 **kwargs,
             )
             async for chunk in response:
-                if (
-                    chunk.choices
-                    and chunk.choices[0].delta
-                    and chunk.choices[0].delta.content
-                ):
-                    yield chunk.choices[0].delta.content
+                if not (chunk.choices and chunk.choices[0].delta):
+                    continue
+
+                delta = chunk.choices[0].delta
+                # 追踪 reasoning_content（推理模型）
+                rc = getattr(delta, 'reasoning_content', None)
+                if rc:
+                    last_reasoning = rc
+
+                if delta.content:
+                    yielded_any = True
+                    yield delta.content
+
+            # 流结束但未产出任何 content → 推理模型溢出或模型静默
+            if not yielded_any:
+                if last_reasoning:
+                    msg = (
+                        f"[模型推理溢出] 推理模型 '{model}' 的 thinking 消耗了全部 {max_tokens} tokens，"
+                        f"请增大 max_tokens 或换用非推理模型。\n"
+                        f"reasoning 片段: {str(last_reasoning)[:300]}"
+                    )
+                else:
+                    msg = (
+                        f"[模型无输出] 模型 '{model}' 未返回任何内容。"
+                        "请检查 API 配额、模型可用性或增大 max_tokens。"
+                    )
+                logger.warning("generate_stream 无输出: model=%s, reasoning=%s",
+                               model, "有" if last_reasoning else "无")
+                yield msg
         except Exception as e:
             logger.error("LLM 流式生成失败 [%s]: %s", model, str(e))
             raise
