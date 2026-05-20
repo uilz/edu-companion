@@ -86,10 +86,10 @@ function computeLayout(nodes: GraphNode[], edges: GraphEdge[]): GraphNode[] {
   if (remaining.length > 0) layers.push(remaining.map((n) => n.id));
 
   // Assign coordinates
-  const layerHeight = 120;
-  const nodeSpacing = 140;
-  const marginX = 80;
-  const marginY = 60;
+  const layerHeight = 160;
+  const nodeSpacing = 180;
+  const marginX = 100;
+  const marginY = 80;
 
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
   const result = nodes.map((n) => ({ ...n }));
@@ -297,32 +297,42 @@ export default function GraphPage() {
                   onMouseUp={handleMouseUp}
                   onMouseLeave={handleMouseUp}
                   onWheel={handleWheel}
-                  style={{ cursor: isPanning ? "grabbing" : "grab" }}
+                  style={{ cursor: isPanning ? "grabbing" : "grab", userSelect: "none", WebkitUserSelect: "none" as any }}
                 >
                   <g transform={`translate(${pan.x / 2},${pan.y / 2}) scale(${zoom})`}>
-                    {/* Edges */}
+                    {/* Edges — quadratic bezier curves */}
                     {(data?.edges || []).map((edge) => {
                       const fromNode = nodes.find((n) => n.id === edge.from);
                       const toNode = nodes.find((n) => n.id === edge.to);
                       if (!fromNode?.x || !toNode?.x) return null;
-                      const midX = (fromNode.x + toNode.x) / 2;
-                      const midY = (fromNode.y! + toNode.y!) / 2;
+                      const dx = toNode.x - fromNode.x;
+                      const dy = (toNode.y || 0) - (fromNode.y || 0);
+                      const cx = fromNode.x + dx * 0.6;
+                      const cy = (fromNode.y || 0) + dy * 0.3;
+                      const midX = fromNode.x + dx * 0.45;
+                      const midY = (fromNode.y || 0) + dy * 0.35;
                       return (
                         <g key={`${edge.from}-${edge.to}`}>
-                          {/* Arrow line */}
                           <defs>
                             <marker id={`arrow-${edge.from}-${edge.to}`} viewBox="0 0 10 10"
-                              refX={toNode.x > fromNode.x ? 28 : -28}
-                              refY={5} markerWidth={6} markerHeight={6}
-                              orient={toNode.x > fromNode.x ? "auto" : "auto-start-reverse"}>
-                              <path d="M 0 0 L 10 5 L 0 10 z" fill="#404040" />
+                              refX={dx > 0 ? 10 : 0} refY={5}
+                              markerWidth={5} markerHeight={5}
+                              orient={dx > 0 ? "auto" : "auto-start-reverse"}>
+                              <path d="M 0 2 L 6 5 L 0 8 z" fill="#404040" opacity="0.6" />
                             </marker>
                           </defs>
-                          <line x1={fromNode.x} y1={fromNode.y} x2={toNode.x} y2={toNode.y}
-                            stroke="#262626" strokeWidth={1.5}
-                            markerEnd={`url(#arrow-${edge.from}-${edge.to})`} />
-                          <text x={midX} y={midY - 6} textAnchor="middle"
-                            fill="#525252" fontSize={10}>{edge.label}</text>
+                          <path
+                            d={`M ${fromNode.x} ${fromNode.y} Q ${cx} ${cy} ${toNode.x} ${toNode.y}`}
+                            fill="none"
+                            stroke="#333"
+                            strokeWidth={1}
+                            opacity={0.35}
+                            markerEnd={`url(#arrow-${edge.from}-${edge.to})`}
+                          />
+                          {edge.label && (
+                            <text x={midX} y={midY - 6} textAnchor="middle"
+                              fill="#525252" fontSize={9} opacity={0.6}>{edge.label}</text>
+                          )}
                         </g>
                       );
                     })}

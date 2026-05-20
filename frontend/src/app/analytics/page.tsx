@@ -74,7 +74,7 @@ interface ErrorDist {
   pct: number;
 }
 
-interface BehaviorData {
+interface BehaviorPoint {
   day: number;
   day_name: string;
   hour: number;
