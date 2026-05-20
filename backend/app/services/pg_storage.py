@@ -28,6 +28,23 @@ from pydantic import TypeAdapter
 
 logger = logging.getLogger(__name__)
 
+# ── 知识图谱序列化辅助 ──
+
+def _deserialize_knowledge_graphs(raw) -> dict:
+    """将 JSONB 数据反序列化为 KnowledgeGraph 字典"""
+    from app.schemas.conversation import KnowledgeGraph
+    if not raw or raw == {}:
+        return {}
+    if isinstance(raw, str):
+        raw = json.loads(raw)
+    result = {}
+    for pid, data in raw.items():
+        try:
+            result[pid] = KnowledgeGraph.model_validate(data)
+        except Exception as e:
+            logger.warning(f"跳过损坏的知识图谱 {pid}: {e}")
+    return result
+
 # SQL  schema 路径
 SCHEMA_PATH = Path(__file__).parent.parent / "db" / "conversation_schema.sql"
 
@@ -135,6 +152,7 @@ class PgStorageEngine:
             link_nodes=link_nodes,
             active_partition_id=meta.get("active_partition_id"),
             response_blocks=response_blocks,
+            knowledge_graphs=_deserialize_knowledge_graphs(meta.get("knowledge_graphs", {})),
         )
 
     # ── 保存 ──
@@ -145,16 +163,21 @@ class PgStorageEngine:
         db = Database.get()
 
         # 保存/更新用户元数据
+        kg_json = json.dumps(
+            {k: v.model_dump() for k, v in data.knowledge_graphs.items()},
+            ensure_ascii=False,
+        ) if data.knowledge_graphs else "{}"
         db.execute(
             """
-            INSERT INTO conversation_user_meta (user_id, role, org_id, active_partition_id, created_at)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO conversation_user_meta (user_id, role, org_id, active_partition_id, knowledge_graphs, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT (user_id) DO UPDATE SET
                 role = EXCLUDED.role,
                 org_id = EXCLUDED.org_id,
-                active_partition_id = EXCLUDED.active_partition_id
+                active_partition_id = EXCLUDED.active_partition_id,
+                knowledge_graphs = EXCLUDED.knowledge_graphs
             """,
-            (user_id, data.role, data.org_id, data.active_partition_id, time.time()),
+            (user_id, data.role, data.org_id, data.active_partition_id, kg_json, time.time()),
         )
 
         # 保存分区

@@ -98,5 +98,9 @@ CREATE TABLE IF NOT EXISTS conversation_user_meta (
     role TEXT DEFAULT 'student',
     org_id TEXT,
     active_partition_id TEXT,
+    knowledge_graphs JSONB DEFAULT '{}',
     created_at DOUBLE PRECISION DEFAULT 0
 );
+
+-- 为已有表补加 knowledge_graphs 列（幂等）
+ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS knowledge_graphs JSONB DEFAULT '{}';
