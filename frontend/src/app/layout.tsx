@@ -6,7 +6,6 @@ import ClientProviders from '@/components/layout/ClientProviders';
 export const metadata: Metadata = {
   title: '智学伴 - 智能学习伴侣',
   description: 'AI驱动的个性化学习助手，助力高效学习',
-  manifest: '/manifest.json',
   icons: {
     icon: '/favicon.ico',
   },

@@ -58,6 +58,12 @@ fi
 echo ""
 echo "   ✅ 前端构建完成"
 
+# Next.js standalone 模式下需手动复制 static 资源
+if [ -d ".next/static" ] && [ ! -d ".next/standalone/.next/static" ]; then
+    cp -r .next/static .next/standalone/.next/static
+    echo "   📋 静态资源已复制到 standalone"
+fi
+
 # 4. 环境变量检查 + 数据库设置
 echo ""
 echo "🔧 检查环境配置..."
