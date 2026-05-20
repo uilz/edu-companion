@@ -16,9 +16,8 @@ const nextConfig = {
       { source: '/achievements', destination: '/dashboard?tab=achievements', permanent: true },
       { source: '/study', destination: '/dashboard?tab=plan', permanent: true },
       { source: '/quality', destination: '/dashboard?tab=quality', permanent: true },
-      // 旧对话/图谱 → 学习空间
+      // 旧对话 → 学习空间
       { source: '/chat', destination: '/learn', permanent: true },
-      { source: '/graph', destination: '/learn?panel=graph', permanent: true },
     ];
   },
   async rewrites() {
