@@ -199,7 +199,7 @@ else
 fi
 
 # 前端
-FRONTEND_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/ 2>/dev/null || echo "000")
+FRONTEND_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/dashboard 2>/dev/null || echo "000")
 if [ "$FRONTEND_CODE" = "200" ]; then
     echo "   ✅ 前端       http://$IP:3000 (HTTP $FRONTEND_CODE)"
 else
