@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ZoomIn, ZoomOut, Maximize2, Info, Filter, Loader2, AlertTriangle, RefreshCw } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2, Info, Filter, Loader2, AlertTriangle, RefreshCw, ChevronDown, GitGraph } from "lucide-react";
 import Card from "@/components/ui/Card";
 
 // ── Types (from API) ──
@@ -133,6 +133,21 @@ export default function GraphPage() {
   const panStart = useRef({ x: 0, y: 0 });
   const svgRef = useRef<SVGSVGElement>(null);
 
+  // ── 分区选择器 ──
+  const [partitions, setPartitions] = useState<{ id: string; name: string; emoji: string }[]>([]);
+  const [showPartitionPicker, setShowPartitionPicker] = useState(false);
+  const [loadingPartitions, setLoadingPartitions] = useState(false);
+
+  const loadPartitions = useCallback(async () => {
+    setLoadingPartitions(true);
+    try {
+      const res = await fetch("/api/conversations/partitions");
+      const data = await res.json();
+      setPartitions(data.partitions || []);
+    } catch { /* ignore */ }
+    finally { setLoadingPartitions(false); }
+  }, []);
+
   // ── Parse partition_id from URL ──
   const [ready, setReady] = useState(false);
   useEffect(() => {
@@ -141,7 +156,8 @@ export default function GraphPage() {
     setPartitionId(pid);
     setReady(true);
     if (!pid) setLoading(false);
-  }, []);
+    loadPartitions();
+  }, [loadPartitions]);
 
   // ── Fetch graph data ──
   const fetchGraph = useCallback(async () => {
@@ -325,13 +341,72 @@ export default function GraphPage() {
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-[var(--color-text)]">
               知识图谱
             </h1>
-            <p className="text-xs text-[var(--color-text-muted)] mt-1">
-              {partitionId ? `${data?.total_nodes || 0} 个知识点 · ${data?.total_edges || 0} 条前置依赖` : "请从会话进入分区"}
-            </p>
+            {partitionId && (
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                {data?.total_nodes || 0} 个知识点 · {data?.total_edges || 0} 条前置依赖
+              </p>
+            )}
           </div>
 
-          {partitionId && (
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {/* ── 分区选择器 ── */}
+            <div className="relative">
+              <button
+                onClick={() => { setShowPartitionPicker(!showPartitionPicker); if (!showPartitionPicker && partitions.length === 0) loadPartitions(); }}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm border border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
+              >
+                {partitionId ? (
+                  <>
+                    <GitGraph size={14} className="text-[var(--color-accent)]" />
+                    <span>
+                      {partitions.find(p => p.id === partitionId)?.emoji || "📁"}{" "}
+                      {partitions.find(p => p.id === partitionId)?.name || partitionId.slice(0, 8) + "…"}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <GitGraph size={14} className="text-[var(--color-text-muted)]" />
+                    <span className="text-[var(--color-text-muted)]">选择分区</span>
+                  </>
+                )}
+                <ChevronDown size={12} className={`transition-transform ${showPartitionPicker ? "rotate-180" : ""}`} />
+              </button>
+
+              {showPartitionPicker && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setShowPartitionPicker(false)} />
+                  <div className="absolute top-full mt-1 right-0 z-20 w-64 max-h-64 overflow-y-auto border border-[var(--color-border)] bg-[var(--color-bg)] shadow-lg">
+                    {loadingPartitions ? (
+                      <div className="px-4 py-6 text-center">
+                        <Loader2 size={14} className="animate-spin mx-auto text-[var(--color-text-muted)]" />
+                      </div>
+                    ) : partitions.length === 0 ? (
+                      <div className="px-4 py-6 text-center text-xs text-[var(--color-text-muted)]">
+                        暂无分区，请先在「学习空间」创建
+                      </div>
+                    ) : (
+                      partitions.map((p) => (
+                        <a
+                          key={p.id}
+                          href={`/graph?partition_id=${p.id}`}
+                          onClick={() => setShowPartitionPicker(false)}
+                          className={`block px-4 py-2.5 text-sm hover:bg-[var(--color-surface)] transition-colors ${
+                            p.id === partitionId
+                              ? "text-[var(--color-accent)] bg-[var(--color-accent)]/5 font-medium"
+                              : "text-[var(--color-text-secondary)]"
+                          }`}
+                        >
+                          <span className="mr-2">{p.emoji || "📁"}</span>
+                          {p.name}
+                        </a>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {partitionId && (
               <button
                 onClick={handleGenerate}
                 disabled={generating}
@@ -344,21 +419,24 @@ export default function GraphPage() {
                 )}
                 AI 生成图谱
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {!partitionId && !loading && (
           <div className="text-center py-20">
-            <Info size={36} className="mx-auto mb-4 text-[var(--color-text-muted)] opacity-50" />
-            <h2 className="text-lg font-bold text-[var(--color-text)] mb-2">知识图谱</h2>
+            <GitGraph size={36} className="mx-auto mb-4 text-[var(--color-text-muted)] opacity-50" />
+            <h2 className="text-lg font-bold text-[var(--color-text)] mb-2">选择分区查看知识图谱</h2>
             <p className="text-sm text-[var(--color-text-muted)] mb-6 leading-relaxed max-w-sm mx-auto">
-              请从侧栏会话分区的「📊 知识图谱」入口进入，查看对应领域的知识结构
+              点击上方「选择分区」按钮，或从学习空间侧栏进入
             </p>
-            <div className="inline-flex items-center gap-2 px-4 py-2 border border-[var(--color-border)] text-xs text-[var(--color-text-muted)]">
-              <Info size={12} />
-              从学习空间选择一个分区后，点击 📊 图标即可
-            </div>
+            <button
+              onClick={() => { setShowPartitionPicker(true); loadPartitions(); }}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-[var(--color-accent)] text-white text-sm hover:opacity-90 transition-opacity"
+            >
+              <GitGraph size={14} />
+              选择分区
+            </button>
           </div>
         )}
 

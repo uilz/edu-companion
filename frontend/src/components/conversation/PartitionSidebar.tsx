@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, FolderOpen, Hash, Network } from "lucide-react";
+import { Plus, FolderOpen, Hash, GitGraph } from "lucide-react";
 import Link from "next/link";
 import type { Partition } from "@/types";
 
@@ -67,13 +67,13 @@ export default function PartitionSidebar({
             return (
               <div
                 key={partition.id}
-                className="relative"
+                className="relative group"
                 onMouseEnter={() => setHoveredId(partition.id)}
                 onMouseLeave={() => setHoveredId(null)}
               >
                 <button
                   onClick={() => onSelectPartition(partition.id)}
-                  className="w-full text-left px-4 py-3 transition-colors border-l-3"
+                  className="w-full text-left px-3 py-3 transition-colors border-l-3"
                   style={{
                     borderLeftWidth: "3px",
                     borderLeftStyle: "solid",
@@ -115,20 +115,22 @@ export default function PartitionSidebar({
                           )}
                       </div>
                     </div>
+
+                    {/* 📊 知识图谱 — 持久可见，hover 时高亮 */}
+                    <Link
+                      href={`/graph?partition_id=${partition.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className={`flex-shrink-0 p-1.5 rounded transition-colors ${
+                        isHovered || isSelected
+                          ? "text-[var(--color-accent)] bg-[var(--color-accent)]/10"
+                          : "text-[var(--color-text-muted)] opacity-40 hover:opacity-100"
+                      }`}
+                      title={`查看「${partition.name}」知识图谱`}
+                    >
+                      <GitGraph size={15} />
+                    </Link>
                   </div>
                 </button>
-
-                {/* 📊 知识图谱入口 */}
-                {isHovered && (
-                  <Link
-                    href={`/graph?partition_id=${partition.id}`}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface)] rounded transition-colors"
-                    title="查看知识图谱"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Network size={14} />
-                  </Link>
-                )}
               </div>
             );
           })

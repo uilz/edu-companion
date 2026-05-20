@@ -461,7 +461,13 @@ const [showNewPartition, setShowNewPartition] = useState(false);
   }, [loadPartitions]);
 
   // ── Load branches when partition selected ──
+  // 用 ref 跳过首次渲染，避免与 URL 恢复竞态清空 activeBranchId
+  const branchInitialRender = useRef(true);
   useEffect(() => {
+    if (branchInitialRender.current) {
+      branchInitialRender.current = false;
+      return;
+    }
     if (selectedPartitionId) {
       loadBranches(selectedPartitionId);
     } else {
@@ -471,7 +477,12 @@ const [showNewPartition, setShowNewPartition] = useState(false);
   }, [selectedPartitionId, loadBranches]);
 
   // ── Load messages when branch selected ──
+  const msgInitialRender = useRef(true);
   useEffect(() => {
+    if (msgInitialRender.current) {
+      msgInitialRender.current = false;
+      return;
+    }
     if (activeBranchId) {
       loadMessages(activeBranchId);
     } else {
