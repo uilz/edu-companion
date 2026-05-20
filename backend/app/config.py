@@ -104,10 +104,10 @@ class Settings(BaseSettings):
     )
 
     def load_from_yaml(self) -> "Settings":
-        """从 config.yaml 加载并覆盖默认值"""
+        """从 config.yaml 加载并覆盖默认值（跳过 null 值，不覆盖 env 配置）"""
         yaml_data = _load_yaml_config()
         for key, value in yaml_data.items():
-            if hasattr(self, key):
+            if hasattr(self, key) and value is not None:
                 setattr(self, key, value)
         return self
 
