@@ -24,13 +24,13 @@ router = APIRouter(prefix="/api/knowledge/graph", tags=["知识图谱"])
 # ── Helper: 获取 UserData ──
 
 def _get_user_data():
-    from app.services.pg_storage import pg_storage
-    data = pg_storage.load("default_user")
+    from app.services.storage import storage
+    data = storage.load("default_user")
     return data
 
 def _save_user_data(data):
-    from app.services.pg_storage import pg_storage
-    pg_storage.save("default_user", data)
+    from app.services.storage import storage
+    storage.save("default_user", data)
 
 
 # ═══════════════════════════════════════════════════════════
