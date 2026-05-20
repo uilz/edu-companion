@@ -148,7 +148,8 @@ echo "   🆔 PID: $BACKEND_PID"
 # 6. 重启前端（生产模式）
 echo ""
 echo "🔄 重启前端..."
-pkill -f "node .next/standalone/server.js" 2>/dev/null || true
+# 杀掉任何监听 3000 端口的进程（兼容旧版 next start 残留）
+fuser -k 3000/tcp 2>/dev/null || true
 sleep 2
 
 # 验证端口已释放
