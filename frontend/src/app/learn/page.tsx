@@ -128,10 +128,12 @@ function connectConversationWS(callbacks: WSCallbacks) {
   }
 }
 
-function sendWSMessage(data: Record<string, unknown>) {
+function sendWSMessage(data: Record<string, unknown>): boolean {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(data));
+    return true;
   }
+  return false;
 }
 
 function disconnectWS() {
@@ -573,7 +575,7 @@ export default function LearnPage() {
 
   // ── Handle send ──
   const handleSend = useCallback(
-    (text: string, files?: { name: string; type: string; materialId?: string }[]) => {
+    async (text: string, files?: { name: string; type: string; materialId?: string }[]) => {
       if (!text.trim() || isLoading) return;
 
       // Create optimistic user message
@@ -630,12 +632,68 @@ export default function LearnPage() {
 
       setMessages((prev) => [...prev, assistantPlaceholder]);
 
-      // Send via WebSocket
-      sendWSMessage({
+      // Send via WebSocket — with fallback if connection is down
+      const sent = sendWSMessage({
         text,
         partition_id: selectedPartitionId || undefined,
         branch_id: activeBranchId || undefined,
       });
+      if (!sent) {
+        // WebSocket 未连接 → 回退到 HTTP POST
+        setStatusMessage("WebSocket 未连接，尝试 HTTP...");
+        try {
+          const res = await fetch("/api/conversations/message", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          // 模拟流式完成：直接展示回复
+          const replyText = data.assistant_message?.text_summary ||
+            data.assistant_message?.content_blocks?.find((b: {type: string}) => b.type === "text")?.text ||
+            "（回复获取成功但没有显示内容）";
+          streamingMsgIdRef.current = null;
+          streamBufferRef.current = "";
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMsgId
+                ? {
+                    ...m,
+                    content_blocks: [{ type: "text", text: replyText }],
+                    text_summary: replyText,
+                  }
+                : m
+            )
+          );
+          setIsLoading(false);
+          setStatusMessage("");
+        } catch (httpErr) {
+          const errMsg = `无法连接服务器：${httpErr instanceof Error ? httpErr.message : "未知错误"}`;
+          const errNode: TreeNode = {
+            id: "err-" + Date.now(),
+            parent_id: selectedPartitionId || "",
+            children_ids: [],
+            partition_id: selectedPartitionId || "",
+            branch_id: activeBranchId || "",
+            content_blocks: [{ type: "text", text: `❌ ${errMsg}` }] as TreeNode["content_blocks"],
+            text_summary: errMsg,
+            role: "assistant",
+            timestamp: Date.now(),
+            token_count: 0,
+            is_deleted: false,
+            is_archived: false,
+            has_modified_version: false,
+          };
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantMsgId ? errNode : m))
+          );
+          streamingMsgIdRef.current = null;
+          streamBufferRef.current = "";
+          setIsLoading(false);
+          setStatusMessage("");
+        }
+      }
     },
     [isLoading, selectedPartitionId, activeBranchId]
   );
