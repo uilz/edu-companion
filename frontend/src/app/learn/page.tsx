@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import type {
   Partition,
   Branch,
@@ -23,7 +24,6 @@ import ConversationChatInput from "@/components/conversation/ChatInput";
 import WorkspacePanel from "@/components/conversation/WorkspacePanel";
 import MaterialPanel from "@/components/materials/MaterialPanel";
 import PracticeSuggestions from "@/components/conversation/PracticeSuggestions";
-import GraphSidePanel from "@/components/learn/GraphSidePanel";
 
 // ── Media query hook ──
 function useMediaQuery(query: string): boolean {
@@ -247,14 +247,7 @@ export default function LearnPage() {
   const [collapsedBranch, setCollapsedBranch] = useState(false);
 
   // New partition dialog
-  
-  // Learn: knowledge graph panel
-  const [showGraphPanel, setShowGraphPanel] = useState(false);
-  const [graphLoading, setGraphLoading] = useState(false);
-
-  const toggleGraphPanel = () => setShowGraphPanel(p => !p);
-
-const [showNewPartition, setShowNewPartition] = useState(false);
+  const [showNewPartition, setShowNewPartition] = useState(false);
 
   // P5: Branch sidebar view mode
   const [branchViewMode, setBranchViewMode] = useState<"branches" | "materials">("branches");
@@ -263,6 +256,19 @@ const [showNewPartition, setShowNewPartition] = useState(false);
   const [loadingPartitions, setLoadingPartitions] = useState(true);
   const [loadingBranches, setLoadingBranches] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
+
+  const router = useRouter();
+
+  // ── panel=graph → 重定向到图谱页（独立 effect，最先执行） ──
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("panel") === "graph") {
+        const pId = params.get("p") || params.get("partition_id");
+        router.replace(pId ? `/graph?partition_id=${pId}` : "/graph");
+      }
+    } catch {}
+  }, [router]);
 
   // ── 刷新后恢复分区/分支状态：URL 参数为主，localStorage 为备份 ──
   const [urlInitialized, setUrlInitialized] = useState(false);
@@ -273,16 +279,6 @@ const [showNewPartition, setShowNewPartition] = useState(false);
       const params = new URLSearchParams(window.location.search);
       const pId = params.get("p") || params.get("partition_id");
       const bId = params.get("b");
-      const panel = params.get("panel");
-
-      // panel=graph → 重定向到图谱页（带分区参数）
-      if (panel === "graph") {
-        const graphUrl = pId
-          ? `/graph?partition_id=${pId}`
-          : "/graph";
-        window.location.replace(graphUrl);
-        return;
-      }
 
       if (pId) {
         setSelectedPartitionId(pId);
