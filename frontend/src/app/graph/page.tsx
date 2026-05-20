@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ZoomIn, ZoomOut, Maximize2, Info, Filter, Loader2, AlertTriangle } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2, Info, Filter, Loader2, AlertTriangle, RefreshCw } from "lucide-react";
 import Card from "@/components/ui/Card";
 
 // ── Types (from API) ──
@@ -123,42 +123,96 @@ export default function GraphPage() {
   const [data, setData] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedSubject, setSelectedSubject] = useState("");
+  const [partitionId, setPartitionId] = useState<string>("");
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const panStart = useRef({ x: 0, y: 0 });
   const svgRef = useRef<SVGSVGElement>(null);
 
+  // ── Parse partition_id from URL ──
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const pid = params.get("partition_id") || "";
+    setPartitionId(pid);
+  }, []);
+
   // ── Fetch graph data ──
-  const fetchGraph = useCallback(async (subject?: string) => {
+  const fetchGraph = useCallback(async () => {
+    if (!partitionId) {
+      setLoading(false);
+      setData(null);
+      return;
+    }
     setLoading(true);
     setError("");
     try {
-      const params = new URLSearchParams({ user_id: "default_user" });
-      if (subject) params.set("subject", subject);
-      const res = await fetch(`/api/knowledge/graph?${params}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json: GraphData = await res.json();
+      const res = await fetch(`/api/knowledge/graph/${partitionId}`);
+      const json = await res.json();
 
-      // Apply layout: prefer API force-directed coords, fallback to topological
-      if (json.layout) {
-        json.nodes = json.nodes.map((n) => ({ ...n, x: json.layout![n.id]?.[0], y: json.layout![n.id]?.[1] }));
-      } else {
-        json.nodes = computeLayout(json.nodes, json.edges);
+      if (!json.generated) {
+        setData({ nodes: [], edges: [], total_nodes: 0, total_edges: 0, subjects: [] } as any);
+        setLoading(false);
+        return;
       }
-      setData(json);
+
+      // Convert to existing format
+      const nodes: GraphNode[] = (json.nodes || []).map((n: any) => ({
+        id: n.id,
+        label: n.label,
+        subject: partitionId,
+        mastery: n.mastery || 0,
+        mastery_level: n.mastery_level || "未接触",
+        can_practice: true,
+        blocked_by: [] as string[],
+        attempt_count: 0,
+      }));
+
+      const edges: GraphEdge[] = (json.edges || []).map((e: any) => ({
+        from: e.from_id,
+        to: e.to_id,
+        label: e.relation || e.label || "",
+      }));
+
+      const graphData: GraphData = {
+        nodes: computeLayout(nodes, edges),
+        edges,
+        total_nodes: json.total_nodes,
+        total_edges: json.total_edges,
+        subjects: [],
+      };
+      setData(graphData);
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载失败");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [partitionId]);
 
   useEffect(() => {
-    fetchGraph(selectedSubject || undefined);
-  }, [fetchGraph, selectedSubject]);
+    if (partitionId) fetchGraph();
+  }, [partitionId, fetchGraph]);
+
+  // ── AI 生成图谱 ──
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      const res = await fetch(`/api/knowledge/graph/${partitionId}/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ depth: 3 }),
+      });
+      if (res.ok) {
+        await fetchGraph();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   // ── Interaction handlers ──
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -218,7 +272,7 @@ export default function GraphPage() {
           <AlertTriangle size={32} className="text-[#f59e0b]" />
           <span className="text-sm text-[var(--color-text-muted)]">{error}</span>
           <button
-            onClick={() => fetchGraph(selectedSubject || undefined)}
+            onClick={() => fetchGraph()}
             className="px-4 py-2 text-xs border border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
           >
             重试
@@ -238,30 +292,35 @@ export default function GraphPage() {
               知识图谱
             </h1>
             <p className="text-xs text-[var(--color-text-muted)] mt-1">
-              {data?.total_nodes} 个知识点 · {data?.total_edges} 条前置依赖
+              {partitionId ? `${data?.total_nodes || 0} 个知识点 · ${data?.total_edges || 0} 条前置依赖` : "请从会话进入分区"}
             </p>
           </div>
 
-          {/* Subject filter */}
-          {data?.subjects && data.subjects.length > 0 && (
+          {partitionId && (
             <div className="flex items-center gap-2">
-              <Filter size={14} className="text-[var(--color-text-muted)]" />
-              <select
-                value={selectedSubject}
-                onChange={(e) => {
-                  setSelectedSubject(e.target.value);
-                  setSelectedNode(null);
-                }}
-                className="text-xs px-3 py-1.5 border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] outline-none"
+              <button
+                onClick={handleGenerate}
+                disabled={generating}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
               >
-                <option value="">全部学科</option>
-                {data.subjects.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
+                {generating ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <RefreshCw size={14} />
+                )}
+                AI 生成图谱
+              </button>
             </div>
           )}
         </div>
+
+        {!partitionId && !loading && (
+          <div className="text-center py-16">
+            <p className="text-sm text-[var(--color-text-muted)]">
+              请从侧栏会话分区的「📊 知识图谱」入口进入
+            </p>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Graph area */}

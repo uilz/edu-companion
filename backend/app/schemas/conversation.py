@@ -152,6 +152,48 @@ class Partition(BaseModel):
     last_active_at: float = Field(default_factory=time.time)
     message_count: int = 0
     total_tokens: int = 0
+    # 知识图谱联动
+    domain_tags: list[str] = Field(default_factory=list)
+    domain_confidence: float = 0.0
+
+
+# ── Knowledge Graph ──
+
+
+class KGNode(BaseModel):
+    """知识图谱节点 — 一个知识点/概念"""
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    label: str
+    description: str = ""
+    mastery: float = 0.0          # 0-100 掌握度
+    mastery_level: str = "未接触"   # 未接触/初学/发展中/接近掌握/已掌握
+    priority: int = 0              # 学习优先级 0-10
+    tags: list[str] = Field(default_factory=list)
+    created_by: str = "ai"         # ai | user
+    created_at: float = Field(default_factory=time.time)
+
+
+class KGEdge(BaseModel):
+    """知识图谱边 — 节点间关系"""
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    from_id: str
+    to_id: str
+    relation: str = "prerequisite"  # prerequisite | related | part_of | refines
+    label: str = ""
+    weight: float = 1.0
+
+
+class KnowledgeGraph(BaseModel):
+    """分区级动态知识图谱"""
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    partition_id: str
+    name: str = ""
+    nodes: dict[str, KGNode] = Field(default_factory=dict)
+    edges: list[KGEdge] = Field(default_factory=list)
+    generated_by: str = "ai"
+    version: int = 1
+    created_at: float = Field(default_factory=time.time)
+    updated_at: float = Field(default_factory=time.time)
 
 
 # ── User Data Root ──
@@ -173,6 +215,8 @@ class UserData(BaseModel):
     knowledge_states: dict[str, dict] = Field(default_factory=dict)  # skill_id → KnowledgeState dict
     practice_sessions: dict[str, dict] = Field(default_factory=dict)  # session_id → PracticeSession dict
     error_book: dict[str, list[dict]] = Field(default_factory=dict)  # user_id → ErrorBookEntry dicts
+    # 知识图谱（按分区）
+    knowledge_graphs: dict[str, KnowledgeGraph] = Field(default_factory=dict)  # partition_id → KnowledgeGraph
 
 
 # ── Response Block（多模态响应块） ──

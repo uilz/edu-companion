@@ -52,6 +52,8 @@ def _p0_post_message_hooks(user_id: str, partition_id: str, node: TreeNode) -> N
                         if _branch:
                             _branch.name = new_name
                             storage.save(user_id, _data)
+                            # 分支命名后 → 异步更新知识图谱
+                            _trigger_graph_update(user_id, node.branch_id, new_name)
 
                 loop.create_task(_do_rename())
 
@@ -61,6 +63,42 @@ def _p0_post_message_hooks(user_id: str, partition_id: str, node: TreeNode) -> N
                     update_partition_context(user_id, partition_id)
     except Exception:
         logger.debug("P0 hooks skipped")
+
+
+def _trigger_graph_update(user_id: str, branch_id: str, new_branch_name: str) -> None:
+    """分支命名后异步触发知识图谱更新（fire and forget）"""
+    async def _update():
+        try:
+            data = storage.load(user_id)
+            branch = data.branches.get(branch_id)
+            if not branch:
+                return
+            partition_id = branch.partition_id
+            partition = data.partitions.get(partition_id)
+            if not partition:
+                return
+
+            # 已存在的图谱 → 增量合并；不存在 → 新建
+            graph = data.knowledge_graphs.get(partition_id)
+
+            from app.api.knowledge_graph import generate_graph_logic
+            await generate_graph_logic(
+                user_id=user_id,
+                partition_id=partition_id,
+                data=data,
+                branch_name=new_branch_name,
+            )
+        except Exception as e:
+            logger.debug(f"异步图谱更新跳过: {e}")
+
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(_update())
+    except Exception:
+        pass
+
 
 # ── System Prompt ──
 
@@ -279,17 +317,33 @@ def _build_context_messages(
         system_content += f"\n\n当前分区：{partition.name}"
         system_content += f"\n分区摘要：{partition.context_summary}"
 
-    # 注入可用知识点（供引用溯源）
+    # 注入当前分区的知识图谱（替代静态知识点列表）
     try:
-        from domain.knowledge.prerequisites import ALL_PREREQUISITES, SKILL_TO_SUBJECT
-        subject = partition.subject or ""
-        relevant_skills = []
-        if subject and subject in SKILL_TO_SUBJECT:
-            relevant_skills = SKILL_TO_SUBJECT[subject][:15]
-        else:
-            relevant_skills = list(ALL_PREREQUISITES.keys())[:15]
-        if relevant_skills:
-            system_content += f"\n\n可引用的知识点: {', '.join(relevant_skills)}\n回答涉及这些知识点时，在末尾标注 [来源: 知识点名称]。"
+        graph = data.knowledge_graphs.get(partition_id)
+        if graph and graph.nodes:
+            nodes_list = list(graph.nodes.values())
+            mastered = [n.label for n in nodes_list if n.mastery >= 80]
+            weak = [n.label for n in nodes_list if 10 <= n.mastery < 50]
+            untouched = [n.label for n in nodes_list if n.mastery == 0]
+
+            system_content += f"\n\n📊 知识图谱 ({len(nodes_list)}个知识点):"
+            if mastered:
+                system_content += f"\n   ✅ 已掌握: {', '.join(mastered[:5])}"
+            if weak:
+                system_content += f"\n   🔶 薄弱: {', '.join(weak[:5])}"
+            if untouched:
+                system_content += f"\n   ⬜ 未接触: {', '.join(untouched[:3])}"
+
+            # 推荐下一步
+            ready_to_learn = [n for n in nodes_list if n.mastery == 0 and n.priority >= 5]
+            if ready_to_learn:
+                next_up = sorted(ready_to_learn, key=lambda n: -n.priority)[:3]
+                system_content += f"\n   🎯 建议下一步: {', '.join(n.label for n in next_up)}"
+
+            # 可用知识点供引用溯源
+            all_labels = [n.label for n in nodes_list[:15]]
+            system_content += f"\n\n可引用的知识点: {', '.join(all_labels)}"
+            system_content += "\n回答涉及这些知识点时，在末尾标注 [来源: 知识点名称]。"
     except Exception:
         pass
 
