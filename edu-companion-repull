@@ -68,11 +68,12 @@ source venv/bin/activate
 if [ ! -f ".env" ]; then
     echo "   ⚠️  .env 不存在，从模板创建..."
     cat > .env << 'ENVEOF'
-# DeepSeek API
-DEEPSEEK_API_KEY=sk-your-key
+# 模型配置 (LiteLLM 网关，OpenAI 兼容)
 OPENAI_API_KEY=sk-your-key
-OPENAI_API_BASE=https://api.deepseek.com
-DEFAULT_MODEL=deepseek/deepseek-v4-flash
+OPENAI_API_BASE=http://localhost:4000
+TEXT_MODEL=openai/gpt-4o-mini
+TEXT_REASONING_MODEL=openai/gpt-4o
+TEXT_FAST_MODEL=openai/gpt-4o-mini
 
 # 数据库
 DB_NAME=edu_companion
@@ -147,7 +148,7 @@ echo "   🆔 PID: $BACKEND_PID"
 # 6. 重启前端（生产模式）
 echo ""
 echo "🔄 重启前端..."
-pkill -f "next" 2>/dev/null || true
+pkill -f "node .next/standalone/server.js" 2>/dev/null || true
 sleep 2
 
 # 验证端口已释放
@@ -158,7 +159,7 @@ if lsof -i :3000 > /dev/null 2>&1; then
 fi
 
 cd "$PROJECT_DIR/frontend"
-nohup npx next start -p 3000 > /tmp/edu-frontend.log 2>&1 &
+nohup node .next/standalone/server.js > /tmp/edu-frontend.log 2>&1 &
 FRONTEND_PID=$!
 echo "   📝 日志: /tmp/edu-frontend.log"
 echo "   🆔 PID: $FRONTEND_PID"
