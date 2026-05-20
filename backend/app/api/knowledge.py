@@ -48,9 +48,10 @@ def _get_checker() -> PrerequisiteChecker:
 
 def compute_force_layout(nodes: list[dict], edges: list[dict]) -> dict[str, tuple[float, float]]:
     """
-    使用 Fruchterman-Reingold 力导向算法计算节点坐标。
+    使用改进力导向算法计算节点坐标。
 
-    基于学科分组做初始位置引导，使同科节点聚合、跨科连接自然拉伸。
+    策略：在 Fruchterman-Reingold 基础上加中心引力，
+    使根节点（无前置依赖）靠近中心，子节点自然向外延展。
     返回 {node_id: (x, y)}，坐标范围约 (50,50) ~ (750,550)。
     """
     import math
@@ -58,19 +59,69 @@ def compute_force_layout(nodes: list[dict], edges: list[dict]) -> dict[str, tupl
     if len(nodes) <= 1:
         return {nodes[0]["id"]: (400, 300)} if nodes else {}
 
-    # 无向图做布局（DiGraph 也会被 networkx 转无向，但显式更清晰）
-    G = nx.Graph()
-    G.add_nodes_from(n["id"] for n in nodes)
-    for e in edges:
-        G.add_edge(e["from"], e["to"], weight=1.0)
+    n_count = len(nodes)
+    node_ids = [n["id"] for n in nodes]
+    id_to_node = {n["id"]: n for n in nodes}
 
-    n_count = max(len(nodes), 1)
-    area = 700 * 500
-    k = math.sqrt(area / n_count) * 1.2
+    # ── 计算每个节点的深度（从前置依赖树）──
+    children: dict[str, list[str]] = {nid: [] for nid in node_ids}
+    in_degree: dict[str, int] = {nid: 0 for nid in node_ids}
+    for e in edges:
+        children.setdefault(e["from"], []).append(e["to"])
+        in_degree[e["to"]] = in_degree.get(e["to"], 0) + 1
+
+    depth: dict[str, int] = {}
+    queue = [nid for nid in node_ids if in_degree.get(nid, 0) == 0]
+    for nid in queue:
+        depth[nid] = 0
+    while queue:
+        cur = queue.pop(0)
+        for child in children.get(cur, []):
+            new_d = depth[cur] + 1
+            if child not in depth or depth[child] < new_d:
+                depth[child] = new_d
+                if child not in queue:
+                    queue.append(child)
+    max_depth = max(depth.values()) if depth else 1
+
+    # ── 按学科分组做初始位置 ──
+    subjects: dict[str, list[str]] = {}
+    for n in nodes:
+        subj = n.get("subject", "其他")
+        subjects.setdefault(subj, []).append(n["id"])
+
+    # 初始环形排列 — 深度决定半径
+    W, H = 700, 500
+    cx, cy = W / 2 + 50, H / 2 + 50
+    pos: dict[str, list[float]] = {}
+    for nid in node_ids:
+        d = depth.get(nid, max_depth // 2)
+        radius = 50 + (d / max(max_depth, 1)) * 280
+        # 按学科分配角度
+        subj = id_to_node[nid].get("subject", "其他")
+        subj_list = list(subjects.keys())
+        angle_base = (subj_list.index(subj) / max(len(subj_list), 1)) * 2 * math.pi
+        # 同科内分散
+        idx_in_subj = subjects[subj].index(nid) if nid in subjects.get(subj, []) else 0
+        total_in_subj = max(len(subjects.get(subj, [])), 1)
+        angle = angle_base + (idx_in_subj / total_in_subj) * (2 * math.pi / max(len(subj_list), 1))
+        pos[nid] = [
+            cx + radius * math.cos(angle),
+            cy + radius * math.sin(angle),
+        ]
+
+    # ── 构建 networkx 图并运行 spring_layout（少量迭代微调）──
+    G = nx.Graph()
+    G.add_nodes_from(node_ids)
+    for e in edges:
+        G.add_edge(e["from"], e["to"], weight=2.0)
+
+    area = W * H
+    k = math.sqrt(area / n_count) * 0.6  # 紧凑一些
 
     pos = nx.spring_layout(
-        G, k=k, iterations=100, seed=42, scale=350,
-        threshold=1e-4, weight="weight",
+        G, pos=pos, k=k, iterations=60, seed=42, scale=300,
+        threshold=1e-3, weight="weight", center=(0, 0), fixed=None,
     )
 
     # 平移使所有坐标为正（留 50px 边距）

@@ -75,13 +75,16 @@ export default function ProgressPage() {
         }
         if (statsRes.ok) {
           const d = await statsRes.json();
-          if (d.subject_stats) setSubjects(d.subject_stats);
-          if (d.daily_activity) {
-            const trend: DailyPoint[] = d.daily_activity.map((a: any) => ({
-              date: (a.date || "").slice(5), // MM-DD
-              hours: (a.total_time || 0) / 60,
-              questions: a.total || 0,
-            }));
+          if (d.by_subject) setSubjects(d.by_subject);
+          if (d.daily) {
+            const entries = Object.entries(d.daily) as [string, { total: number; correct: number }][];
+            const trend: DailyPoint[] = entries
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([date, v]) => ({
+                date: date.slice(5), // MM-DD
+                hours: 0,
+                questions: v.total || 0,
+              }));
             setDailyTrend(trend);
           }
         }
