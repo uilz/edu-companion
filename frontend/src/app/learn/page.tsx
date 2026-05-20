@@ -418,10 +418,14 @@ export default function LearnPage() {
         setStatusMessage("");
 
         // Replace streaming message with final version
+        const currentStreamingId = streamingMsgIdRef.current;
+        streamingMsgIdRef.current = null;
+        streamBufferRef.current = "";
+
         if (assistantMessage) {
-          const currentStreamingId = streamingMsgIdRef.current;  // 先保存
-          streamingMsgIdRef.current = null;
-          streamBufferRef.current = "";
+          // 检查 assistantMessage 是否有实际内容
+          const textBlock = assistantMessage.content_blocks?.find((b: {type: string}) => b.type === "text");
+          const hasContent = textBlock?.text?.trim();
 
           setMessages((prev) => {
             const idx = prev.findIndex(
@@ -429,14 +433,24 @@ export default function LearnPage() {
             );
             if (idx >= 0) {
               const updated = [...prev];
-              updated[idx] = assistantMessage;
+              updated[idx] = hasContent ? assistantMessage : {
+                ...assistantMessage,
+                content_blocks: [{ type: "text", text: "（助手返回了空回复）" }],
+                text_summary: "（助手返回了空回复）",
+              };
               return updated;
             }
-            return [...prev, assistantMessage];
+            return [...prev, hasContent ? assistantMessage : {
+              ...assistantMessage,
+              content_blocks: [{ type: "text", text: "（助手返回了空回复）" }],
+              text_summary: "（助手返回了空回复）",
+            }];
           });
         } else {
-          streamingMsgIdRef.current = null;
-          streamBufferRef.current = "";
+          // assistantMessage 为 null/undefined → 移除占位消息
+          if (currentStreamingId) {
+            setMessages((prev) => prev.filter((m) => m.id !== currentStreamingId));
+          }
         }
 
         // 轻轻刷新分区列表（不刷新消息，避免覆盖流式结果造成闪烁）
@@ -445,6 +459,33 @@ export default function LearnPage() {
       onError: (msg) => {
         setIsLoading(false);
         setStatusMessage("");
+        // 向 messages 插入一个可见的错误消息
+        const errorNode: TreeNode = {
+          id: "err-" + Date.now(),
+          parent_id: selectedPartitionId || "",
+          children_ids: [],
+          partition_id: selectedPartitionId || "",
+          branch_id: activeBranchId || "",
+          content_blocks: [{ type: "text", text: `❌ ${msg}` }] as TreeNode["content_blocks"],
+          text_summary: msg,
+          role: "assistant",
+          timestamp: Date.now(),
+          token_count: 0,
+          is_deleted: false,
+          is_archived: false,
+          has_modified_version: false,
+        };
+        if (streamingMsgIdRef.current) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === streamingMsgIdRef.current ? errorNode : m
+            )
+          );
+        } else {
+          setMessages((prev) => [...prev, errorNode]);
+        }
+        streamingMsgIdRef.current = null;
+        streamBufferRef.current = "";
         console.error("[ConvWS] error:", msg);
       },
       onBlockUpdate: (block) => {
