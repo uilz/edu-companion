@@ -136,7 +136,15 @@ class LLMService:
             if not content:
                 reasoning = getattr(msg, 'reasoning_content', None)
                 if reasoning:
-                    content = reasoning.strip()
+                    # 推理模型的 thinking 不是最终输出，不能用
+                    logger.warning(
+                        "模型返回了 reasoning_content 但 content 为空 "
+                        "（thinking 消耗了全部 max_tokens？），raw: %s...",
+                        str(reasoning)[:100],
+                    )
+                    content = f"[模型推理溢出] 请增大 max_tokens 或使用非推理模型。\nreasoning: {str(reasoning)[:500]}"
+                elif reasoning is None:
+                    pass  # content 确实为空的极端情况
             logger.info("模型生成完成 [%s]，token数: %d", model, response.usage.total_tokens if response.usage else 0)
             return content
         except Exception as e:

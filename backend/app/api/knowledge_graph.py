@@ -157,14 +157,21 @@ async def generate_graph_logic(
                 {"role": "user", "content": f"为'{partition.name}'生成{depth}层知识图谱"},
             ],
             temperature=0.3,
-            max_tokens=4096,
+            max_tokens=16384,  # 推理模型需要更多（thinking 消耗部分）
         )
 
         # 清理可能的前后缀
         raw = raw.strip()
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0]
-        result = _json.loads(raw)
+        try:
+            result = _json.loads(raw)
+        except _json.JSONDecodeError as je:
+            logger.error(f"LLM 返回非JSON: {raw[:200]}")
+            return {
+                "ok": False,
+                "error": f"AI 返回了无效JSON（模型可能推理溢出）。请重试。\n原始输出: {raw[:300]}",
+            }
 
         nodes_dict = {}
         for n in result.get("nodes", []):
