@@ -755,6 +755,13 @@ async def send_and_reply(
         user_id, partition_id, "assistant", reply_blocks, reply_text
     )
 
+    # 回填 message_id 到 ResponseBlock（之前存储时 message_id 尚未知）
+    data = storage.load(user_id)
+    for block in response_blocks:
+        if block.id in data.response_blocks:
+            data.response_blocks[block.id].message_id = assistant_node.id
+    storage.save(user_id, data)
+
     # v3.0: 从回复中提取 [来源: xxx] 标注 → 映射为 skill_id → 写入节点
     if reply_text:
         _, source_labels = parse_sources(reply_text)

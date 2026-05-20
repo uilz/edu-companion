@@ -24,7 +24,12 @@ const nextConfig = {
   },
   async rewrites() {
     return [
-      // WebSocket 代理到后端
+      // WebSocket 对话代理（显式静态路径，比动态 rewrite 更可靠处理 WS upgrade）
+      {
+        source: "/api/conversations/ws",
+        destination: "http://127.0.0.1:8000/api/conversations/ws",
+      },
+      // WebSocket 其他代理
       {
         source: "/ws/:path*",
         destination: "http://127.0.0.1:8000/ws/:path*",

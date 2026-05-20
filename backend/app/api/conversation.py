@@ -335,6 +335,13 @@ async def get_job_response_block(job_id: str):
 
 # ── Response Blocks ──
 
+@router.get("/messages/{message_id}/blocks")
+async def get_message_blocks(message_id: str):
+    """获取某条消息关联的所有 ResponseBlock"""
+    data = storage.load(USER_ID)
+    blocks = [b.model_dump(mode="json") for b in data.response_blocks.values() if b.message_id == message_id]
+    return {"blocks": blocks}
+
 @router.get("/response-blocks/{block_id}")
 async def get_response_block(block_id: str):
     """获取单个 ResponseBlock"""
