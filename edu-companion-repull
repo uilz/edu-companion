@@ -165,10 +165,17 @@ FRONTEND_PID=$!
 echo "   📝 日志: /tmp/edu-frontend.log"
 echo "   🆔 PID: $FRONTEND_PID"
 
-# 7. 等待服务就绪
+# 7. 等待服务就绪（带重试）
 echo ""
-echo "⏳ 等待服务启动..."
-sleep 5
+echo "⏳ 等待后端就绪..."
+for i in $(seq 1 15); do
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/ 2>/dev/null || echo "000")
+    if [ "$CODE" = "200" ] || [ "$CODE" = "404" ]; then
+        echo "   ✅ 后端就绪 (${i}s)"
+        break
+    fi
+    sleep 1
+done
 
 # 8. 健康检查
 echo ""
