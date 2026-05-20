@@ -43,7 +43,7 @@ POST /api/practice/context-trigger
 
 ### 3.1 嵌入位置
 
-`/chat` 页面右侧（桌面端）或底部（移动端）。
+`/learn` 页面右侧（桌面端）或底部（移动端）。
 
 ### 3.2 组件
 

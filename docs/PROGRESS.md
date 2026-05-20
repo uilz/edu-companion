@@ -130,7 +130,7 @@ core/
 | 路由 | 功能 | 来源 |
 |------|------|:--:|
 | `/` | 首页 | Phase 1 |
-| `/chat` | 对话(分区侧栏·消息列表·ResponseBlock·WorkspacePanel) | Phase 1 |
+| `/learn` | 对话(分区侧栏·消息列表·ResponseBlock·WorkspacePanel) | Phase 1 |
 | `/practice` | 练习(创建→答题→提示→反馈) | Phase 1 |
 | `/analytics` | 学情(9面板 + 习惯养成Tab + 每日摘要卡片) | Phase 1+2 |
 | `/errors` | 错题本(筛选·标记·AI错因分析展开) | Phase 1+2 |
@@ -226,7 +226,7 @@ GET /errors/stats → ErrorAttributionBar                     🆕
 | 资料API升级 | `backend/app/api/material.py` (分区过滤/移动/搜索) |
 | 分支引用API | `backend/app/api/conversation.py` (add/list/remove/batch) |
 | 默认分区 | `backend/app/main.py` (启动创建「未分类」) |
-| 分区侧栏双标签 | `frontend/src/app/chat/page.tsx` (🌿分支/📁资料) |
+| 分区侧栏双标签 | `frontend/src/app/learn/page.tsx` (🌿分支/📁资料) |
 | MaterialPanel | `frontend/src/components/materials/MaterialPanel.tsx` |
 | MaterialPicker | `frontend/src/components/materials/MaterialPicker.tsx` |
 | WorkspacePanel升级 | `frontend/src/components/conversation/WorkspacePanel.tsx` (📎引用+展示) |

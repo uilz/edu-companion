@@ -26,7 +26,7 @@ function useMediaQuery(query: string): boolean {
 }
 
 // Routes that handle their own layout (no swiss-container wrapper)
-const FULLSCREEN_ROUTES = ['/chat'];
+const FULLSCREEN_ROUTES = ['/learn'];
 
 export default function AppShell({ children }: AppShellProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');

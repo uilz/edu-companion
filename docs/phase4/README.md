@@ -509,7 +509,7 @@ async def execute(self, req: SubmitAnswerRequest) -> SubmitResult:
 /study           │
 /quality         ┘
 
-/chat            ┐
+/learn           ┐
 /graph           └→  💬 学习空间 /learn
                     主面板: 对话 (已有分区/分支/资料)
                     侧栏: 知识图谱 (可收起)

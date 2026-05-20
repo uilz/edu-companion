@@ -30,7 +30,7 @@
 | 资料 API v2（分区过滤/移动/搜索） | `backend/app/api/material.py` |
 | 分支引用 CRUD API | `backend/app/api/conversation.py` |
 | 默认「未分类」分区 | `backend/app/main.py`（启动时自动创建） |
-| 分区侧栏双标签 | `frontend/src/app/chat/page.tsx`（🌿分支/📁资料） |
+| 分区侧栏双标签 | `frontend/src/app/learn/page.tsx`（🌿分支/📁资料） |
 | 分区资料管理面板 | `frontend/src/components/materials/MaterialPanel.tsx` |
 | 资料选择器弹窗 | `frontend/src/components/materials/MaterialPicker.tsx` |
 | 工作空间升级 | `frontend/src/components/conversation/WorkspacePanel.tsx`（📎引用+展示） |
