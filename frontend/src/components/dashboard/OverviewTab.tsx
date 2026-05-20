@@ -33,7 +33,7 @@ const QUICK_ACTIONS = [
   { emoji: '💬', title: '智能对话', desc: '随时提问', href: '/learn' },
   { emoji: '✏️', title: '开始练习', desc: '刷题检测', href: '/practice' },
   { emoji: '📈', title: '学情分析', desc: '深度追踪', href: '/dashboard?tab=analytics' },
-  { emoji: '🧠', title: '知识图谱', desc: '补充薄弱', href: '/graph' },
+  { emoji: '🧠', title: '知识图谱', desc: '补充薄弱', href: '/dashboard?tab=graph' },
 ];
 
 export default function OverviewTab() {

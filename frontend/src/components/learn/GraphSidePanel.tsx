@@ -182,7 +182,7 @@ export default function GraphSidePanel({ onClose }: GraphSidePanelProps) {
             </select>
           </>
         )}
-        <Link href="/graph" className="ml-auto text-[var(--color-accent)] hover:underline flex items-center gap-1">
+        <Link href="/dashboard?tab=graph" className="ml-auto text-[var(--color-accent)] hover:underline flex items-center gap-1">
           <ExternalLink size={12} /> 全屏
         </Link>
       </div>

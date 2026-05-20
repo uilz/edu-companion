@@ -265,7 +265,7 @@ export default function LearnPage() {
       const params = new URLSearchParams(window.location.search);
       if (params.get("panel") === "graph") {
         const pId = params.get("p") || params.get("partition_id");
-        router.replace(pId ? `/graph?partition_id=${pId}` : "/graph");
+        router.replace(pId ? `/dashboard?tab=graph&partition_id=${pId}` : "/dashboard?tab=graph");
       }
     } catch {}
   }, [router]);

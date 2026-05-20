@@ -122,7 +122,7 @@ export default function PartitionSidebar({
 
                 {/* 📊 知识图谱 — 用 window.location.href 确保跳转 */}
                 <button
-                  onClick={(e) => { e.stopPropagation(); window.location.href = `/graph?partition_id=${partition.id}`; }}
+                  onClick={(e) => { e.stopPropagation(); window.location.href = `/dashboard?tab=graph&partition_id=${partition.id}`; }}
                   className={`flex items-center px-3 border-l border-[var(--color-border)] transition-colors ${
                     isHovered || isSelected
                       ? "text-[var(--color-accent)] bg-[var(--color-accent)]/10"

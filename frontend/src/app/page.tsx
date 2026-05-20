@@ -45,7 +45,7 @@ const QUICK_ACTIONS = [
   { emoji: "💬", title: "智能对话", desc: "随时提问，启发式学习", href: "/chat", color: "from-blue-500/20 to-cyan-500/10" },
   { emoji: "✏️", title: "开始练习", desc: "定制化刷题检测", href: "/practice", color: "from-emerald-500/20 to-teal-500/10" },
   { emoji: "📊", title: "学情分析", desc: "全方位进度追踪", href: "/analytics", color: "from-violet-500/20 to-purple-500/10" },
-  { emoji: "🧠", title: "知识图谱", desc: "查漏补缺", href: "/graph", color: "from-amber-500/20 to-orange-500/10" },
+  { emoji: "🧠", title: "知识图谱", desc: "查漏补缺", href: "/dashboard?tab=graph", color: "from-amber-500/20 to-orange-500/10" },
 ];
 
 export default function HomePage() {

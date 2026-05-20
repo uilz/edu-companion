@@ -18,6 +18,8 @@ const nextConfig = {
       { source: '/quality', destination: '/dashboard?tab=quality', permanent: true },
       // 旧对话 → 学习空间
       { source: '/chat', destination: '/learn', permanent: true },
+      // 图形图谱页 → 驾驶舱图谱 Tab
+      { source: '/graph', destination: '/dashboard?tab=graph', permanent: true },
     ];
   },
   async rewrites() {
