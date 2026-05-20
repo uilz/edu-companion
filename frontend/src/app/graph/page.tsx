@@ -236,11 +236,39 @@ export default function GraphPage() {
 
   const handleMouseUp = () => setIsPanning(false);
 
-  const handleWheel = (e: React.WheelEvent) => {
+  // Zoom centered on mouse position in SVG coords
+  const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    const rect = svg.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    setZoom((z) => Math.min(2, Math.max(0.3, z + delta)));
-  };
+    const oldZoom = zoom;
+    const newZoom = Math.min(2, Math.max(0.3, oldZoom + delta));
+
+    // Convert mouse to SVG coords before zoom
+    const svgX = (mouseX - pan.x) / oldZoom;
+    const svgY = (mouseY - pan.y) / oldZoom;
+
+    // Adjust pan to keep the SVG point under cursor stable
+    const newPanX = mouseX - svgX * newZoom;
+    const newPanY = mouseY - svgY * newZoom;
+
+    setZoom(newZoom);
+    setPan({ x: newPanX, y: newPanY });
+  }, [zoom, pan]);
+
+  // Attach non-passive wheel listener to prevent page scroll
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    svg.addEventListener("wheel", handleWheel, { passive: false });
+    return () => svg.removeEventListener("wheel", handleWheel);
+  }, [handleWheel]);
 
   const resetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
 
@@ -255,6 +283,8 @@ export default function GraphPage() {
     : 0;
   const readyCount = nodes.filter((n) => n.can_practice).length;
   const blockedCount = nodes.filter((n) => !n.can_practice).length;
+  // 图例：从实际节点数据提取学科，而非硬编码
+  const actualSubjects = Array.from(new Set(nodes.map((n) => n.subject)));
 
   // ── Loading state ──
   if (loading) {
@@ -319,10 +349,16 @@ export default function GraphPage() {
         </div>
 
         {!partitionId && !loading && (
-          <div className="text-center py-16">
-            <p className="text-sm text-[var(--color-text-muted)]">
-              请从侧栏会话分区的「📊 知识图谱」入口进入
+          <div className="text-center py-20">
+            <Info size={36} className="mx-auto mb-4 text-[var(--color-text-muted)] opacity-50" />
+            <h2 className="text-lg font-bold text-[var(--color-text)] mb-2">知识图谱</h2>
+            <p className="text-sm text-[var(--color-text-muted)] mb-6 leading-relaxed max-w-sm mx-auto">
+              请从侧栏会话分区的「📊 知识图谱」入口进入，查看对应领域的知识结构
             </p>
+            <div className="inline-flex items-center gap-2 px-4 py-2 border border-[var(--color-border)] text-xs text-[var(--color-text-muted)]">
+              <Info size={12} />
+              从学习空间选择一个分区后，点击 📊 图标即可
+            </div>
           </div>
         )}
 
@@ -359,7 +395,6 @@ export default function GraphPage() {
                   onMouseMove={handleMouseMove}
                   onMouseUp={handleMouseUp}
                   onMouseLeave={handleMouseUp}
-                  onWheel={handleWheel}
                   style={{ cursor: isPanning ? "grabbing" : "grab", userSelect: "none", WebkitUserSelect: "none" as any }}
                 >
                   <g transform={`translate(${pan.x / 2},${pan.y / 2}) scale(${zoom})`}>
@@ -461,7 +496,7 @@ export default function GraphPage() {
             {/* Legend */}
             <Card title="图例">
               <div className="space-y-2">
-                {(data?.subjects || Object.keys(subjectColors)).map((subject) => (
+                {actualSubjects.map((subject) => (
                   <div key={subject} className="flex items-center gap-2.5 text-sm">
                     <div className="w-3 h-3 flex-shrink-0" style={{ backgroundColor: subjectColors[subject] || fallbackColor }} />
                     <span className="text-[var(--color-text-secondary)]">{subject}</span>

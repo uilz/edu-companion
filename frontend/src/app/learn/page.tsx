@@ -263,33 +263,48 @@ const [showNewPartition, setShowNewPartition] = useState(false);
   const [loadingBranches, setLoadingBranches] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
 
-  // ── 刷新后恢复分区/分支状态 ──
-  const persistedStateKey = "learn-page-state";
-  const [stateRestored, setStateRestored] = useState(false);
+  // ── 刷新后恢复分区/分支状态：URL 参数为主，localStorage 为备份 ──
+  const [urlInitialized, setUrlInitialized] = useState(false);
 
-  // 保存当前选择到 localStorage
+  // 从 URL 读取（刷新后 URL 参数保持不变）
   useEffect(() => {
-    if (!stateRestored) return;
     try {
-      localStorage.setItem(persistedStateKey, JSON.stringify({
+      const params = new URLSearchParams(window.location.search);
+      const pId = params.get("p");
+      const bId = params.get("b");
+      if (pId) {
+        setSelectedPartitionId(pId);
+        if (bId) setActiveBranchId(bId);
+      } else {
+        // 回退到 localStorage
+        const saved = localStorage.getItem("learn-page-state");
+        if (saved) {
+          const { partitionId, branchId } = JSON.parse(saved);
+          if (partitionId) setSelectedPartitionId(partitionId);
+          if (branchId) setActiveBranchId(branchId);
+        }
+      }
+    } catch {}
+    setUrlInitialized(true);
+  }, []);
+
+  // 状态变化时同步到 URL + localStorage
+  useEffect(() => {
+    if (!urlInitialized) return;
+    try {
+      const params = new URLSearchParams();
+      if (selectedPartitionId) params.set("p", selectedPartitionId);
+      if (activeBranchId) params.set("b", activeBranchId);
+      const qs = params.toString();
+      const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+      window.history.replaceState(null, "", newUrl);
+
+      localStorage.setItem("learn-page-state", JSON.stringify({
         partitionId: selectedPartitionId,
         branchId: activeBranchId,
       }));
     } catch {}
-  }, [selectedPartitionId, activeBranchId, stateRestored]);
-
-  // 从 localStorage 恢复选择
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(persistedStateKey);
-      if (saved) {
-        const { partitionId, branchId } = JSON.parse(saved);
-        if (partitionId) setSelectedPartitionId(partitionId);
-        if (branchId) setActiveBranchId(branchId);
-      }
-    } catch {}
-    setStateRestored(true);
-  }, []);
+  }, [selectedPartitionId, activeBranchId, urlInitialized]);
 
   // WS streaming buffer ref
   const streamBufferRef = useRef("");

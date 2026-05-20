@@ -751,7 +751,7 @@ export default function AnalyticsPage() {
     );
   }
 
-  if (!data || data.overview.total_questions === 0) {
+  if (!data || !data.overview || data.overview.total_questions === 0) {
     return (
       <main className="min-h-screen bg-[var(--color-bg)]">
         <div className="max-w-3xl mx-auto px-6 py-16 text-center">
