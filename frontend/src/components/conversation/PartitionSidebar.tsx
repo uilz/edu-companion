@@ -174,6 +174,7 @@ interface PartitionSidebarProps {
   onDeletePartition?: (id: string) => void;
   loading?: boolean;
   compact?: boolean; // hide header for merged sidebar
+  onNewConversation?: (level: string, parentId: string) => void; // create conversation at partition/domain/topic level
 }
 
 export default function PartitionSidebar({
@@ -186,6 +187,7 @@ export default function PartitionSidebar({
   onDeletePartition,
   loading = false,
   compact = false,
+  onNewConversation,
 }: PartitionSidebarProps) {
   const [tree, setTree] = useState<PartitionItem[]>([]);
 
@@ -497,6 +499,19 @@ export default function PartitionSidebar({
               {/* Actions (hover) */}
               {isHovered && (
                 <div className="flex items-center gap-0.5 ml-1">
+                  {/* Quick new conversation (partition/domain/topic) */}
+                  {(item.level === "partition" || item.level === "domain" || item.level === "topic") && onNewConversation && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onNewConversation(item.level, item.id);
+                      }}
+                      className="p-1 text-[var(--color-text-muted)] hover:text-green-400 rounded"
+                      title="新建会话"
+                    >
+                      <MessageSquare size={12} />
+                    </button>
+                  )}
                   <button
                     onClick={(e) => { e.stopPropagation(); startEdit(item); }}
                     className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"

@@ -25,7 +25,7 @@ function useMediaQuery(query: string): boolean {
   return matches;
 }
 
-// Routes that handle their own layout (no swiss-container wrapper)
+// Routes that handle their own layout (no main wrapper, no sidebar)
 const FULLSCREEN_ROUTES = ['/learn'];
 
 export default function AppShell({ children }: AppShellProps) {
@@ -33,10 +33,20 @@ export default function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const isFullscreen = FULLSCREEN_ROUTES.some((r) => pathname?.startsWith(r));
 
+  // Fullscreen routes render directly — they manage their own layout
+  if (isFullscreen) {
+    return (
+      <>
+        {!isDesktop && <BottomNav />}
+        {children}
+      </>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[var(--color-bg)]">
-      {/* Desktop Sidebar — hidden on fullscreen routes (learn page has its own) */}
-      {isDesktop && !isFullscreen && <Sidebar />}
+      {/* Desktop Sidebar */}
+      {isDesktop && <Sidebar />}
 
       {/* Mobile Bottom Nav */}
       {!isDesktop && <BottomNav />}
@@ -45,15 +55,11 @@ export default function AppShell({ children }: AppShellProps) {
       <main
         className="min-h-screen transition-all duration-200"
         style={{
-          paddingLeft: (isDesktop && !isFullscreen) ? 'var(--sidebar-width)' : '0',
+          paddingLeft: isDesktop ? 'var(--sidebar-width)' : '0',
           paddingBottom: !isDesktop ? 'var(--bottom-nav-height)' : '0',
         }}
       >
-        {isFullscreen ? (
-          children
-        ) : (
-          <div className="swiss-container">{children}</div>
-        )}
+        <div className="swiss-container">{children}</div>
       </main>
     </div>
   );

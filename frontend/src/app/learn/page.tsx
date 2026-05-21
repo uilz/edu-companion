@@ -828,6 +828,106 @@ export default function LearnPage() {
   // ── Active partition for header ──
   const activePartition = partitions.find((p) => p.id === selectedPartitionId);
 
+  // ── Handle new conversation (partition / domain / topic level) ──
+  const handleNewConversation = useCallback(
+    async (level: string, parentId: string) => {
+      try {
+        let topicId = "";
+
+        if (level === "default") {
+          // No partition selected — use or create default partition
+          let pId = selectedPartitionId;
+          if (!pId) {
+            if (partitions.length > 0) {
+              pId = partitions[0].id;
+            } else {
+              const pData = await apiFetch<{ partition: Partition }>("/conversations/partitions", {
+                method: "POST",
+                body: JSON.stringify({ name: "默认分区", subject: "默认", emoji: "💬" }),
+              });
+              pId = pData.partition.id;
+              await loadPartitions();
+            }
+            setSelectedPartitionId(pId);
+          }
+          // Now proceed as partition level
+          return handleNewConversation("partition", pId);
+        }
+
+        if (level === "topic") {
+          // Direct: create conversation under this topic
+          topicId = parentId;
+        } else {
+          // Need to find or create a topic under this partition/domain
+          const endpoint = level === "domain"
+            ? `/conversations/domains/${parentId}/topics`
+            : `/conversations/partitions/${parentId}/domains`;
+
+          const data = await apiFetch<any>(endpoint);
+          const items = data?.domains || data?.topics || [];
+
+          if (items.length > 0) {
+            // Use first item
+            if (level === "partition") {
+              // Got domains, need first domain's first topic
+              const domainId = items[0].id;
+              const topicData = await apiFetch<{ topics: any[] }>(`/conversations/domains/${domainId}/topics`);
+              if (topicData.topics?.length > 0) {
+                topicId = topicData.topics[0].id;
+              } else {
+                // Create default topic under first domain
+                const newTopic = await apiFetch<{ topic: { id: string } }>("/conversations/topics", {
+                  method: "POST",
+                  body: JSON.stringify({ domain_id: domainId, name: "默认专题", emoji: "📝" }),
+                });
+                topicId = newTopic.topic.id;
+              }
+            } else {
+              // domain level: got topics directly
+              topicId = items[0].id;
+            }
+          } else {
+            // No items — create default chain
+            if (level === "partition") {
+              const newDomain = await apiFetch<{ domain: { id: string } }>("/conversations/domains", {
+                method: "POST",
+                body: JSON.stringify({ partition_id: parentId, name: "默认领域", emoji: "📚" }),
+              });
+              const newTopic = await apiFetch<{ topic: { id: string } }>("/conversations/topics", {
+                method: "POST",
+                body: JSON.stringify({ domain_id: newDomain.domain.id, name: "默认专题", emoji: "📝" }),
+              });
+              topicId = newTopic.topic.id;
+            } else {
+              const newTopic = await apiFetch<{ topic: { id: string } }>("/conversations/topics", {
+                method: "POST",
+                body: JSON.stringify({ domain_id: parentId, name: "默认专题", emoji: "📝" }),
+              });
+              topicId = newTopic.topic.id;
+            }
+          }
+        }
+
+        // Set partition_id for context
+        if (level === "partition") setSelectedPartitionId(parentId);
+
+        // Create conversation
+        const convData = await apiFetch<{ conversation: { id: string } }>("/conversations/conversations", {
+          method: "POST",
+          body: JSON.stringify({ topic_id: topicId, name: "" }),
+        });
+        setActiveConversationId(convData.conversation.id);
+        await loadPartitions();
+
+        // On mobile, close sidebar
+        setShowPartitionSidebar(false);
+      } catch (e) {
+        console.error("New conversation failed:", e);
+      }
+    },
+    [loadPartitions]
+  );
+
   // ── Mobile layout ──
   if (!isDesktop) {
     return (
@@ -890,6 +990,7 @@ export default function LearnPage() {
               onRenamePartition={handleRenamePartition}
               onDeletePartition={handleDeletePartition}
               loading={loadingPartitions}
+              onNewConversation={handleNewConversation}
             />
           </MobileBottomSheet>
         )}
@@ -907,7 +1008,7 @@ export default function LearnPage() {
   const SIDEBAR_WIDTH = 260;
 
   return (
-    <div className="fixed top-0 right-0 bottom-0 bg-[var(--color-bg)] z-30 flex">
+    <div className="fixed inset-0 bg-[var(--color-bg)] z-30 flex">
       {/* Merged sidebar: nav links + partition tree */}
       <div
         className="flex-shrink-0 flex flex-col border-r border-[var(--color-border)] transition-all duration-200"
@@ -925,6 +1026,20 @@ export default function LearnPage() {
                 <span>驾驶舱</span>
               </a>
               <div className="flex items-center gap-1">
+                <button
+                  onClick={() => {
+                    if (selectedPartitionId) {
+                      handleNewConversation("partition", selectedPartitionId);
+                    } else {
+                      // No partition selected — create default first
+                      handleNewConversation("default", "");
+                    }
+                  }}
+                  className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"
+                  title="新建会话"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </button>
                 <button
                   onClick={() => setShowNewPartition(true)}
                   className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"
@@ -954,6 +1069,7 @@ export default function LearnPage() {
                 onDeletePartition={handleDeletePartition}
                 loading={loadingPartitions}
                 compact
+                onNewConversation={handleNewConversation}
               />
             </div>
           </div>
