@@ -342,13 +342,13 @@ def _build_context_messages(
         data = _storage2.load(user_id)
         if conversation:
             recent_msgs = []
-            for nid in branch.path[-5:]:
+            for nid in conversation.path[-5:]:
                 node = data.nodes.get(nid)
                 if node and not node.is_deleted:
                     recent_msgs.append(node)
             ctx = context_trigger.trigger(
                 user_id=user_id,
-                branch=branch,
+                conversation=conversation,
                 recent_messages=recent_msgs,
             )
             system_content += f"\n\n[选题建议] 当前对话主题涉及: {ctx['skill_ids']}, Bloom: {ctx['bloom_level']}, 推荐难度: {ctx['difficulty']:.2f}"
@@ -534,13 +534,13 @@ async def generate_reply_with_tools(
     if not partition:
         raise ValueError(f"Partition {partition_id} not found")
 
-    conversation = data.conversations.get(partition.active_conversation_id)
+    conversation = _find_active_conversation(data, partition_id)
     if not conversation:
-        raise ValueError(f"Active branch not found")
+        raise ValueError(f"Active conversation not found")
 
     # 获取最近消息
     recent_messages = []
-    for nid in branch.path[-8:]:
+    for nid in conversation.path[-8:]:
         node = data.nodes.get(nid)
         if node and not node.is_deleted:
             recent_messages.append(node)
@@ -555,7 +555,7 @@ async def generate_reply_with_tools(
     logger.info("Detected tools: %s for text: %s", detected_tools, user_text[:50])
 
     # 构建上下文
-    llm_messages = _build_context_messages(partition, branch, recent_messages, user_text, user_id)
+    llm_messages = _build_context_messages(partition, conversation, recent_messages, user_text, user_id)
 
     response_blocks: list[ResponseBlock] = []
     order = 0
@@ -587,7 +587,7 @@ async def generate_reply_with_tools(
                         params=params,
                         block_id=tool_block.id,
                         partition_id=partition_id,
-                        conversation_id=branch.id if branch else "",
+                        conversation_id=conversation.id if conversation else "",
                     )
                     data.response_blocks[tool_block.id] = tool_block
                     storage.save(user_id, data)
@@ -803,7 +803,7 @@ async def send_and_reply(
                         EventType.SKILL_DISCUSSED,
                         user_id=user_id,
                         partition_id=partition_id,
-                        conversation_id=branch.id if branch else None,
+                        conversation_id=conversation.id if conversation else None,
                         skill_ids=[sid],
                     )
 
@@ -915,7 +915,7 @@ async def send_and_reply_stream(
                         params=params,
                         block_id=tool_block.id,
                         partition_id=partition_id,
-                        conversation_id=branch.id if branch else "",
+                        conversation_id=conversation.id if conversation else "",
                     )
                     data.response_blocks[tool_block.id] = tool_block
             except Exception as e:

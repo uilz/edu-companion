@@ -33,7 +33,7 @@ async def integrate_practice_to_branch(
     记录练习结果和薄弱点。
     """
     data = storage.load(user_id)
-    branch = data.branches.get(branch_id)
+    branch = data.conversations.get(branch_id)
     if not branch:
         logger.warning(f"Branch {branch_id} not found for practice integration")
         return None
@@ -122,7 +122,7 @@ def inject_practice_context(user_id: str, partition_id: str) -> str:
         return ""
 
     branches = [
-        b for b in data.branches.values()
+        b for b in data.conversations.values()
         if b.partition_id == partition_id and b.practice_summary
     ]
 

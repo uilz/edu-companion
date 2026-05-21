@@ -63,7 +63,7 @@ def _node_to_record(node: TreeNode) -> dict:
     return {
         "id": node.id,
         "partition_id": node.partition_id,
-        "branch_id": node.branch_id,
+        "conversation_id": node.conversation_id,
         "role": node.role,
         "content_blocks": [b.model_dump() for b in node.content_blocks],
         "text_summary": node.text_summary,

@@ -109,7 +109,7 @@ async def generate_graph_logic(
         context_parts.append(f"标签: {', '.join(partition.domain_tags)}")
 
     # 从分支名收集细化方向
-    branches = [b for b in data.branches.values() if b.partition_id == partition_id and b.name]
+    branches = [b for b in data.conversations.values() if b.partition_id == partition_id and b.name]
     if branches:
         branch_names = [b.name for b in branches[:5]]
         context_parts.append(f"细化方向: {', '.join(branch_names)}")

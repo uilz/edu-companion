@@ -64,7 +64,7 @@ async def summarize_branch_name(user_id: str, branch_id: str) -> str:
     - >20条：再次 LLM 重命名（更多上下文）
     """
     data = storage.load(user_id)
-    branch = data.branches.get(branch_id)
+    branch = data.conversations.get(branch_id)
     if not branch:
         return ""
 
@@ -134,8 +134,8 @@ def update_partition_context(user_id: str, partition_id: str) -> str:
     if not partition:
         return ""
 
-    branches = [b for b in data.branches.values() if b.partition_id == partition_id]
-    active_branch = data.branches.get(partition.active_branch_id)
+    branches = [b for b in data.conversations.values() if b.partition_id == partition_id]
+    active_branch = data.conversations.get(partition.active_conversation_id)
 
     # 构建分区摘要
     parts = [f"分区: {partition.name} ({partition.subject or '通用'})"]
@@ -164,7 +164,7 @@ def generate_branch_summary(user_id: str, branch_id: str) -> str:
     触发条件：消息数 > 10 且距上次摘要 > 1小时，或手动触发
     """
     data = storage.load(user_id)
-    branch = data.branches.get(branch_id)
+    branch = data.conversations.get(branch_id)
     if not branch:
         return ""
 

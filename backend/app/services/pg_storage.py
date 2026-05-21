@@ -210,7 +210,7 @@ class PgStorageEngine:
             )
 
         # 保存分支
-        for b in data.branches.values():
+        for b in data.conversations.values():
             db.execute(
                 """
                 INSERT INTO conversation_branches
@@ -258,7 +258,7 @@ class PgStorageEngine:
                 """,
                 (
                     n.id, n.parent_id, n.children_ids, n.partition_id,
-                    n.branch_id, cb_json, n.text_summary, n.summary, n.role,
+                    n.conversation_id, cb_json, n.text_summary, n.summary, n.role,
                     n.timestamp, n.token_count, n.is_deleted, n.is_archived,
                     n.has_modified_version, n.links_to, n.linked_from,
                     json.dumps(getattr(n, 'metadata', {}), ensure_ascii=False),
@@ -280,7 +280,7 @@ class PgStorageEngine:
                     updated_at=EXCLUDED.updated_at
                 """,
                 (
-                    rb.id, rb.message_id, rb.partition_id, rb.branch_id,
+                    rb.id, rb.message_id, rb.partition_id, rb.conversation_id,
                     rb.type, rb.status, json.dumps(rb.content, ensure_ascii=False),
                     rb.order, rb.sources or [], rb.created_at, rb.updated_at,
                 ),
