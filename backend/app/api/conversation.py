@@ -40,6 +40,12 @@ class CreateBranchRequest(BaseModel):
     fork_point_id: str | None = None
     name: str = ""
 
+class RenamePartitionRequest(BaseModel):
+    name: str
+
+class RenameBranchRequest(BaseModel):
+    name: str
+
 class ModifyMessageRequest(BaseModel):
     content_blocks: list[dict]
     text_summary: str = ""
@@ -111,6 +117,48 @@ async def switch_branch(branch_id: str, partition_id: str):
     """切换活跃分支"""
     branch = tree_ops.switch_branch(USER_ID, partition_id, branch_id)
     return {"branch": branch}
+
+
+# ── 分区编辑/删除 ──
+
+@router.patch("/partitions/{partition_id}")
+async def rename_partition(partition_id: str, req: RenamePartitionRequest):
+    """重命名分区"""
+    try:
+        partition = tree_ops.rename_partition(USER_ID, partition_id, req.name)
+        return {"partition": partition.model_dump(mode="json")}
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+@router.delete("/partitions/{partition_id}")
+async def delete_partition(partition_id: str):
+    """删除分区（软删除，可恢复）"""
+    try:
+        tree_ops.delete_partition(USER_ID, partition_id)
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+# ── 分支编辑/删除 ──
+
+@router.patch("/branches/{branch_id}")
+async def rename_branch(branch_id: str, req: RenameBranchRequest):
+    """重命名分支"""
+    try:
+        branch = tree_ops.rename_branch(USER_ID, branch_id, req.name)
+        return {"branch": branch.model_dump(mode="json")}
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+@router.delete("/branches/{branch_id}")
+async def delete_branch(branch_id: str):
+    """删除分支（软删除，可恢复）"""
+    try:
+        tree_ops.delete_branch(USER_ID, branch_id)
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 # ── 消息 ──

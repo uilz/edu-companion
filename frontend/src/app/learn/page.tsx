@@ -835,6 +835,81 @@ export default function LearnPage() {
     }
   }, [selectedPartitionId, loadBranches]);
 
+  // ── Handle rename partition ──
+  const handleRenamePartition = useCallback(
+    async (id: string, name: string) => {
+      try {
+        await apiFetch(`/conversations/partitions/${id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ name }),
+        });
+        await loadPartitions();
+      } catch (e) {
+        console.error("Failed to rename partition:", e);
+      }
+    },
+    [loadPartitions]
+  );
+
+  // ── Handle delete partition ──
+  const handleDeletePartition = useCallback(
+    async (id: string) => {
+      try {
+        await apiFetch(`/conversations/partitions/${id}`, {
+          method: "DELETE",
+        });
+        // 如果删除的是当前选中分区，清除选择
+        if (id === selectedPartitionId) {
+          setSelectedPartitionId(null);
+          setActiveBranchId(null);
+          setMessages([]);
+          setResponseBlocks([]);
+        }
+        await loadPartitions();
+      } catch (e) {
+        console.error("Failed to delete partition:", e);
+      }
+    },
+    [selectedPartitionId, loadPartitions]
+  );
+
+  // ── Handle rename branch ──
+  const handleRenameBranch = useCallback(
+    async (id: string, name: string) => {
+      try {
+        await apiFetch(`/conversations/branches/${id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ name }),
+        });
+        if (selectedPartitionId) await loadBranches(selectedPartitionId);
+      } catch (e) {
+        console.error("Failed to rename branch:", e);
+      }
+    },
+    [selectedPartitionId, loadBranches]
+  );
+
+  // ── Handle delete branch ──
+  const handleDeleteBranch = useCallback(
+    async (id: string) => {
+      try {
+        await apiFetch(`/conversations/branches/${id}`, {
+          method: "DELETE",
+        });
+        if (id === activeBranchId) {
+          setActiveBranchId(null);
+          setMessages([]);
+          setResponseBlocks([]);
+        }
+        if (selectedPartitionId) await loadBranches(selectedPartitionId);
+      } catch (e) {
+        console.error("Failed to delete branch:", e);
+        alert("删除分支失败。可能是活跃分支，请先切换到其他分支。");
+      }
+    },
+    [activeBranchId, selectedPartitionId, loadBranches]
+  );
+
   // ── Active partition name for header ──
   const activePartition = partitions.find((p) => p.id === selectedPartitionId);
   const activeBranch = branches.find((b) => b.id === activeBranchId);
@@ -906,6 +981,8 @@ export default function LearnPage() {
                 setShowPartitionSidebar(false);
                 setShowNewPartition(true);
               }}
+              onRenamePartition={handleRenamePartition}
+              onDeletePartition={handleDeletePartition}
               loading={loadingPartitions}
             />
           </MobileBottomSheet>
@@ -921,6 +998,8 @@ export default function LearnPage() {
               activeBranchId={activeBranchId}
               onSelectBranch={handleSelectBranch}
               onCreateBranch={handleCreateBranch}
+              onRenameBranch={handleRenameBranch}
+              onDeleteBranch={handleDeleteBranch}
               loading={loadingBranches}
             />
           </MobileBottomSheet>
@@ -954,6 +1033,8 @@ export default function LearnPage() {
           selectedPartitionId={selectedPartitionId}
           onSelectPartition={handleSelectPartition}
           onCreatePartition={() => setShowNewPartition(true)}
+          onRenamePartition={handleRenamePartition}
+          onDeletePartition={handleDeletePartition}
           loading={loadingPartitions}
         />
       </div>
@@ -1008,6 +1089,8 @@ export default function LearnPage() {
                 activeBranchId={activeBranchId}
                 onSelectBranch={handleSelectBranch}
                 onCreateBranch={handleCreateBranch}
+                onRenameBranch={handleRenameBranch}
+                onDeleteBranch={handleDeleteBranch}
                 loading={loadingBranches}
               />
               <WorkspacePanel branchId={activeBranchId} partitionId={selectedPartitionId} />

@@ -281,6 +281,68 @@ class TreeOpsService:
         storage.save(user_id, data)
         return branch
 
+    # ── 分区/分支 编辑与删除 ──
+
+    def rename_partition(
+        self, user_id: str, partition_id: str, name: str,
+    ) -> Partition:
+        """重命名分区"""
+        data = storage.load(user_id)
+        partition = data.partitions.get(partition_id)
+        if not partition:
+            raise ValueError(f"Partition {partition_id} not found")
+        partition.name = name
+        partition.updated_at = time.time()
+        storage.save(user_id, data)
+        return partition
+
+    def delete_partition(self, user_id: str, partition_id: str) -> None:
+        """删除分区：软删所有节点、分支和分区"""
+        data = storage.load(user_id)
+        partition = data.partitions.get(partition_id)
+        if not partition:
+            raise ValueError(f"Partition {partition_id} not found")
+
+        # 软删所有分支及其节点
+        for bid, branch in list(data.branches.items()):
+            if branch.partition_id != partition_id:
+                continue
+            for nid in branch.path:
+                node = data.nodes.get(nid)
+                if node:
+                    node.is_deleted = True
+            branch.is_archived = True  # 分支归档
+        partition.is_archived = True  # 分区归档
+        storage.save(user_id, data)
+
+    def rename_branch(
+        self, user_id: str, branch_id: str, name: str,
+    ) -> Branch:
+        """重命名分支"""
+        data = storage.load(user_id)
+        branch = data.branches.get(branch_id)
+        if not branch:
+            raise ValueError(f"Branch {branch_id} not found")
+        branch.name = name
+        storage.save(user_id, data)
+        return branch
+
+    def delete_branch(self, user_id: str, branch_id: str) -> None:
+        """删除分支：软删所有节点，归档分支。不允许删除活跃分支"""
+        data = storage.load(user_id)
+        branch = data.branches.get(branch_id)
+        if not branch:
+            raise ValueError(f"Branch {branch_id} not found")
+        if branch.is_active:
+            raise ValueError("Cannot delete active branch")
+
+        for nid in branch.path:
+            node = data.nodes.get(nid)
+            if node:
+                node.is_deleted = True
+        branch.is_archived = True
+        storage.save(user_id, data)
+
     def get_partition_context(self, user_id: str, partition_id: str) -> dict:
         """获取分区完整上下文（用于 LLM 调用）"""
         data = storage.load(user_id)
