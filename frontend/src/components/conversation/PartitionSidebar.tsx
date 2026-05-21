@@ -428,10 +428,10 @@ export default function PartitionSidebar({
     setEditLevel(item.level);
   };
 
-  const confirmEdit = async () => {
+  const confirmEdit = async (newName?: string) => {
     if (!editingId || !editLevel) return;
-    const name = editValue.trim();
-    if (!name) { setEditingId(null); return; }
+    const name = (newName || editValue).trim();
+    if (!name) { setEditingId(null); setEditLevel(null); return; }
 
     try {
       const paths: Record<TreeNodeLevel, string> = {

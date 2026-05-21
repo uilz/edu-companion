@@ -763,6 +763,15 @@ export default function LearnPage() {
 
   // ── Handle edit message (v4: inline version, no new branch) ──
   const handleEditMessage = useCallback(async (messageId: string, newText: string) => {
+    // Optimistic local update — show edited text immediately
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId
+          ? { ...m, has_modified_version: true, content_blocks: [{ type: "text", text: newText }], text_summary: newText }
+          : m
+      )
+    );
+
     try {
       const res = await fetch("/api/conversations/messages/" + messageId, {
         method: "PUT",
@@ -773,12 +782,12 @@ export default function LearnPage() {
         }),
       });
       if (!res.ok) throw new Error("Edit failed");
-      if (activeConversationId) loadMessages(activeConversationId);
     } catch (e) {
       console.error("Edit failed:", e);
+      // Rollback on failure — reload messages
+      if (activeConversationId) loadMessages(activeConversationId);
     }
   }, [activeConversationId, loadMessages]);
-
   // ── Handle version switch ──
   // Tracks { messageId -> current version index in parent's children_ids }
   const versionIndexRef = useRef<Record<string, number>>({});
