@@ -9,7 +9,7 @@ import type { Partition, Domain, Topic, Conversation } from "@/types";
 
 // ── API helpers ──
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`/api/conversations${path}`, {
     headers: { "Content-Type": "application/json", ...options?.headers },
     ...options,
   });
