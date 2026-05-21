@@ -265,7 +265,7 @@ async def websocket_conversation(websocket: WebSocket) -> None:
                     skill_ids = _re.findall(r'\[KNOWLEDGE:(\w+)\]', assistant_content)
                     contains_math = bool(_re.search(r'\$', assistant_content))
 
-                    asyncio.ensure_future(
+                    _asyncio.ensure_future(
                         container.event_bus.publish(AssistantReplied(
                             user_id=user_id,
                             partition_id=partition_id,

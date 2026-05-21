@@ -329,6 +329,7 @@ export default function LearnPage() {
   // WS streaming buffer ref
   const streamBufferRef = useRef("");
   const streamingMsgIdRef = useRef<string | null>(null);
+  const streamingContextRef = useRef<{ partitionId: string; branchId: string } | null>(null);
 
   // ── Lock body scroll ──
   useEffect(() => {
@@ -368,6 +369,10 @@ export default function LearnPage() {
 
   // ── Load messages for a branch ──
   const loadMessages = useCallback(async (branchId: string) => {
+    // 切换分支时清除旧流式状态，防止旧回复污染新分支
+    streamingMsgIdRef.current = null;
+    streamBufferRef.current = "";
+    streamingContextRef.current = null;
     try {
       setLoadingMessages(true);
       const data = await apiFetch<{ messages: TreeNode[] }>(
@@ -405,6 +410,10 @@ export default function LearnPage() {
         setStatusMessage(msg);
       },
       onToken: (content, _blockId) => {
+        // 分支已切换 → 丢弃旧流式 token
+        const ctx = streamingContextRef.current;
+        if (!ctx || ctx.partitionId !== selectedPartitionId || ctx.branchId !== activeBranchId) return;
+
         streamBufferRef.current += content;
         const currentBuffer = streamBufferRef.current;
         const msgId = streamingMsgIdRef.current;
@@ -429,6 +438,17 @@ export default function LearnPage() {
         setIsLoading(false);
         setStatusMessage("");
 
+        // 分支已切换 → 丢弃旧流式完成的回复
+        const ctx = streamingContextRef.current;
+        streamingContextRef.current = null;
+        if (ctx && (ctx.partitionId !== selectedPartitionId || ctx.branchId !== activeBranchId)) {
+          // 移除旧分支的占位消息
+          setMessages((prev) => prev.filter((m) => m.id !== streamingMsgIdRef.current));
+          streamingMsgIdRef.current = null;
+          streamBufferRef.current = "";
+          return;
+        }
+
         // Replace streaming message with final version
         const currentStreamingId = streamingMsgIdRef.current;
         streamingMsgIdRef.current = null;
@@ -440,6 +460,7 @@ export default function LearnPage() {
           const hasContent = textBlock?.text?.trim();
 
           setMessages((prev) => {
+            // 先检查是否已存在（防重复），优先用 streaming placeholder ID
             const idx = prev.findIndex(
               (m) => m.id === currentStreamingId || m.id === assistantMessage.id
             );
@@ -452,11 +473,8 @@ export default function LearnPage() {
               };
               return updated;
             }
-            return [...prev, hasContent ? assistantMessage : {
-              ...assistantMessage,
-              content_blocks: [{ type: "text", text: "（助手返回了空回复）" }],
-              text_summary: "（助手返回了空回复）",
-            }];
+            // 没找到占位消息 → 不再追加，避免跨分支污染
+            return prev;
           });
         } else {
           // assistantMessage 为 null/undefined → 移除占位消息
@@ -623,7 +641,10 @@ export default function LearnPage() {
       const assistantMsgId = Date.now().toString(36) + "a" + Math.random().toString(36).substr(2, 9);
       streamingMsgIdRef.current = assistantMsgId;
       streamBufferRef.current = "";
-
+      streamingContextRef.current = {
+        partitionId: selectedPartitionId || "",
+        branchId: activeBranchId || "",
+      };
       const assistantPlaceholder: TreeNode = {
         id: assistantMsgId,
         parent_id: userMsgId,
