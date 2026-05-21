@@ -148,15 +148,18 @@ interface PartitionItem extends TreeItemCommon, Partition {
 interface DomainItem extends TreeItemCommon, Domain {
   level: "domain";
   children: TopicItem[];
+  partition_id: string;  // 从父分区继承
 }
 
 interface TopicItem extends TreeItemCommon, Topic {
   level: "topic";
   children: ConversationItem[];
+  partition_id: string;  // 从父分区继承
 }
 
 interface ConversationItem extends TreeItemCommon, Conversation {
   level: "conversation";
+  partition_id?: string;  // 携带所属分区ID用于导航
 }
 
 type TreeItem = PartitionItem | DomainItem | TopicItem | ConversationItem;
@@ -225,6 +228,7 @@ export default function PartitionSidebar({
         const { domains } = await apiFetch<{ domains: Domain[] }>(`/partitions/${item.id}/domains`);
         const domainItems: DomainItem[] = domains.map((d: Domain) => ({
           ...d, level: "domain" as const, expanded: false, loading: false, children: [],
+          partition_id: item.id,  // 继承分区ID
         }));
         setTree(prev => prev.map(p => p.id === item.id
           ? { ...p, children: domainItems, loading: false, expanded: true } as PartitionItem
@@ -235,6 +239,7 @@ export default function PartitionSidebar({
         const { topics } = await apiFetch<{ topics: Topic[] }>(`/domains/${item.id}/topics`);
         const topicItems: TopicItem[] = topics.map((t: Topic) => ({
           ...t, level: "topic" as const, expanded: false, loading: false, children: [],
+          partition_id: item.partition_id,  // 继承分区ID
         }));
         setTree(prev => prev.map(p => ({
           ...p, children: updateTreeChildren(p.children, item.id, topicItems),
@@ -244,6 +249,7 @@ export default function PartitionSidebar({
         const { conversations } = await apiFetch<{ conversations: Conversation[] }>(`/topics/${item.id}/conversations`);
         const convItems: ConversationItem[] = conversations.map((c: Conversation) => ({
           ...c, level: "conversation" as const, expanded: false, loading: false,
+          partition_id: item.partition_id,  // 继承分区ID
         }));
         setTree(prev => prev.map(p => ({
           ...p, children: updateTreeChildren(p.children, item.id, convItems),
@@ -278,7 +284,7 @@ export default function PartitionSidebar({
   const toggleExpand = useCallback((item: TreeItem) => {
     if (item.level === "conversation") {
       const c = item as ConversationItem;
-      onSelectConversation(String((item as any).partition_id || selectedPartitionId || ""), c.id);
+      onSelectConversation(c.partition_id || selectedPartitionId || "", c.id);
       return;
     }
 
