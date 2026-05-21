@@ -20,13 +20,13 @@ class BackgroundJobManager:
     def register_handler(self, tool_name: str, handler):
         self._handlers[tool_name] = handler
 
-    async def submit(self, user_id: str, tool_name: str, params: dict, block_id: str, partition_id: str, branch_id: str) -> BackgroundJob:
+    async def submit(self, user_id: str, tool_name: str, params: dict, block_id: str, partition_id: str, conversation_id: str) -> BackgroundJob:
         job = BackgroundJob(
             tool_name=tool_name,
             params=params,
             block_id=block_id,
             partition_id=partition_id,
-            branch_id=branch_id,
+            conversation_id=conversation_id,
         )
         self._jobs[job.id] = job
 

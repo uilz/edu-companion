@@ -204,7 +204,7 @@ class AssistantReplied(DomainEvent):
     """AI 助手回复完成事件 — 触发多媒体生成"""
     user_id: str = ""
     partition_id: str = ""
-    branch_id: str = ""
+    conversation_id: str = ""
     message_id: str = ""
     content: str = ""
     skill_ids: list[str] = field(default_factory=list)

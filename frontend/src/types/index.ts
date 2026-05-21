@@ -1,39 +1,4 @@
-export interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: number;
-}
-
-export interface Conversation {
-  id: string;
-  title: string;
-  messages: Message[];
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface Settings {
-  apiEndpoint: string;
-  apiKey: string;
-  modelName: string;
-  systemPrompt: string;
-}
-
-export interface ChatRequest {
-  conversationId: string;
-  message: string;
-  settings: Settings;
-}
-
-export interface StreamEvent {
-  type: "token" | "done" | "error";
-  content?: string;
-  conversationId?: string;
-  messageId?: string;
-}
-
-// ── Conversation Tree System Types ──
+// ── v4.0: 分区 → 领域 → 专题 → 对话 ──
 
 export interface Partition {
   id: string;
@@ -43,23 +8,41 @@ export interface Partition {
   emoji: string;
   color: string;
   root_id: string;
-  active_branch_id: string;
   context_summary: string;
-  summary_branches: Record<string, string>;
   tags: string[];
   created_at: number;
   updated_at: number;
   last_active_at: number;
   message_count: number;
   total_tokens: number;
-  branch_count?: number;
+  domain_count?: number;
 }
 
-export interface Branch {
+export interface Domain {
   id: string;
   partition_id: string;
   name: string;
-  fork_point_id?: string;
+  emoji: string;
+  created_at: number;
+  updated_at: number;
+  topic_count?: number;
+}
+
+export interface Topic {
+  id: string;
+  domain_id: string;
+  name: string;
+  emoji: string;
+  active_conversation_id: string;
+  created_at: number;
+  updated_at: number;
+  conversation_count?: number;
+}
+
+export interface Conversation {
+  id: string;
+  topic_id: string;
+  name: string;
   path: string[];
   is_active: boolean;
   is_archived: boolean;
@@ -70,7 +53,64 @@ export interface Branch {
   material_refs?: string[];
 }
 
-// ── P5: 资料类型 ──
+export interface ContentBlock {
+  type: "text" | "image" | "audio" | "video" | "document";
+  text?: string;
+  file_id?: string;
+  duration_ms?: number;
+  transcription?: string;
+  thumbnail_file_id?: string;
+  document_kind?: string;
+  page_count?: number;
+  text_content?: string;
+  preview_text?: string;
+}
+
+export interface TreeNode {
+  id: string;
+  parent_id: string;
+  children_ids: string[];  // alternative versions (for inline < > navigation)
+  partition_id: string;
+  conversation_id: string;
+  content_blocks: ContentBlock[];
+  text_summary: string;
+  summary?: string;
+  role: "user" | "assistant";
+  timestamp: number;
+  token_count: number;
+  is_deleted: boolean;
+  is_archived: boolean;
+  has_modified_version: boolean;
+  links_to?: string[];
+  linked_from?: string[];
+  discussed_skill_ids?: string[];
+}
+
+export interface ResponseBlock {
+  id: string;
+  message_id: string;
+  partition_id: string;
+  conversation_id: string;
+  type: "text" | "video" | "practice" | "image" | "audio" | "mindmap" | "document";
+  status: "streaming" | "ready" | "generating" | "failed";
+  content: Record<string, unknown>;
+  order: number;
+  sources?: string[];
+  created_at: number;
+  updated_at: number;
+}
+
+export interface BackgroundJob {
+  id: string;
+  tool_name: string;
+  status: "queued" | "processing" | "done" | "failed";
+  params: Record<string, unknown>;
+  result: Record<string, unknown> | null;
+  progress: number;
+  created_at: number;
+  completed_at: number | null;
+  error: string | null;
+}
 
 export interface MaterialMeta {
   material_id: string;
@@ -97,64 +137,6 @@ export interface MaterialRef {
   partition_id: string;
 }
 
-export interface ContentBlock {
-  type: "text" | "image" | "audio" | "video" | "document";
-  text?: string;
-  file_id?: string;
-  duration_ms?: number;
-  transcription?: string;
-  thumbnail_file_id?: string;
-  document_kind?: string;
-  page_count?: number;
-  text_content?: string;
-  preview_text?: string;
-}
-
-export interface TreeNode {
-  id: string;
-  parent_id: string;
-  children_ids: string[];
-  partition_id: string;
-  branch_id: string;
-  content_blocks: ContentBlock[];
-  text_summary: string;
-  summary?: string;
-  role: "user" | "assistant";
-  timestamp: number;
-  token_count: number;
-  is_deleted: boolean;
-  is_archived: boolean;
-  has_modified_version: boolean;
-  links_to?: string[];
-  linked_from?: string[];
-}
-
-export interface ResponseBlock {
-  id: string;
-  message_id: string;
-  partition_id: string;
-  branch_id: string;
-  type: "text" | "video" | "practice" | "image" | "audio" | "mindmap" | "document";
-  status: "streaming" | "ready" | "generating" | "failed";
-  content: Record<string, unknown>;
-  order: number;
-  sources?: string[];
-  created_at: number;
-  updated_at: number;
-}
-
-export interface BackgroundJob {
-  id: string;
-  tool_name: string;
-  status: "queued" | "processing" | "done" | "failed";
-  params: Record<string, unknown>;
-  result: Record<string, unknown> | null;
-  progress: number;
-  created_at: number;
-  completed_at: number | null;
-  error: string | null;
-}
-
 // ── WebSocket Message Types ──
 
 export type WSIncomingMessage =
@@ -167,3 +149,7 @@ export type WSIncomingMessage =
   | { type: "block_update"; block: ResponseBlock }
   | { type: "job_update"; job: BackgroundJob }
   | { type: "pong" };
+
+// ── Legacy aliases (backward compat) ──
+/** @deprecated Use Conversation instead */
+export type Branch = Conversation;

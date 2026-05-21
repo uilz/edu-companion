@@ -15,7 +15,7 @@ from app.schemas.conversation import (
     TextBlock,
     TreeNode,
     Partition,
-    Branch,
+    Conversation,
     ResponseBlock,
 )
 from app.services.llm_service import llm_service
@@ -24,6 +24,17 @@ from app.services.tree_ops import tree_ops
 from app.services.tool_executor import tool_executor, predict_tools, SLOW_TOOLS
 
 logger = logging.getLogger(__name__)
+
+
+def _find_active_conversation(data, partition_id: str):
+    """v4: 通过 topic → domain 找到分区下的活跃对话"""
+    for topic in data.topics.values():
+        domain = data.domains.get(topic.domain_id)
+        if domain and domain.partition_id == partition_id:
+            cid = topic.active_conversation_id
+            if cid and cid in data.conversations:
+                return data.conversations[cid]
+    return None
 
 
 # P0: Post-message hooks (meta history + branch auto-rename)
@@ -37,43 +48,48 @@ def _p0_post_message_hooks(user_id: str, partition_id: str, node: TreeNode) -> N
             loop.create_task(write_to_meta_history(user_id, node))
 
             data = storage.load(user_id)
-            branch = data.branches.get(node.branch_id) if node.branch_id else None
-            if branch:
-                msg_count = len(branch.path)
+            conversation = data.conversations.get(node.conversation_id) if node.conversation_id else None
+            if conversation:
+                msg_count = len(conversation.path)
                 from app.services.branch_summarizer import (
                     try_auto_rename_branch, generate_branch_summary, update_partition_context,
                 )
 
                 async def _do_rename():
-                    new_name = await try_auto_rename_branch(user_id, node.branch_id, msg_count)
+                    new_name = await try_auto_rename_branch(user_id, node.conversation_id, msg_count)
                     if new_name:
                         _data = storage.load(user_id)
-                        _branch = _data.branches.get(node.branch_id)
-                        if _branch:
-                            _branch.name = new_name
+                        _conv = _data.conversations.get(node.conversation_id)
+                        if _conv:
+                            _conv.name = new_name
                             storage.save(user_id, _data)
                             # 分支命名后 → 异步更新知识图谱
-                            _trigger_graph_update(user_id, node.branch_id, new_name)
+                            _trigger_graph_update(user_id, node.conversation_id, new_name)
 
                 loop.create_task(_do_rename())
 
                 if msg_count >= 10 and msg_count % 10 == 0:
-                    generate_branch_summary(user_id, node.branch_id)
+                    generate_branch_summary(user_id, node.conversation_id)
                 if msg_count % 5 == 0:
                     update_partition_context(user_id, partition_id)
     except Exception:
         logger.debug("P0 hooks skipped")
 
 
-def _trigger_graph_update(user_id: str, branch_id: str, new_branch_name: str) -> None:
+def _trigger_graph_update(user_id: str, conversation_id: str, new_branch_name: str) -> None:
     """分支命名后异步触发知识图谱更新（fire and forget）"""
     async def _update():
         try:
             data = storage.load(user_id)
-            branch = data.branches.get(branch_id)
-            if not branch:
+            conversation = data.conversations.get(conversation_id)
+            if not conversation:
                 return
-            partition_id = branch.partition_id
+            # v4: find partition via topic → domain
+            topic = data.topics.get(conversation.topic_id) if hasattr(conversation, 'topic_id') else None
+            domain = data.domains.get(topic.domain_id) if topic else None
+            if not domain:
+                return
+            partition_id = domain.partition_id
             partition = data.partitions.get(partition_id)
             if not partition:
                 return
@@ -245,13 +261,13 @@ def _resolve_skill_ids(labels: list[str], partition_id: str, user_id: str) -> li
 
 def _build_context_messages(
     partition: Partition,
-    branch: Branch,
+    conversation: Conversation,
     recent_messages: list[TreeNode],
     user_text: str,
     user_id: str = "",
 ) -> list[dict[str, str]]:
     """
-    构建发给 LLM 的消息列表。
+    v4: 构建发给 LLM 的消息列表（conversation 替代 branch）。
     使用紧凑格式节省 token。
     """
     messages: list[dict[str, str]] = []
@@ -324,7 +340,7 @@ def _build_context_messages(
         from app.services.context_trigger import context_trigger
         from app.services.storage import storage as _storage2
         data = _storage2.load(user_id)
-        if branch:
+        if conversation:
             recent_msgs = []
             for nid in branch.path[-5:]:
                 node = data.nodes.get(nid)
@@ -424,19 +440,19 @@ async def generate_reply(
     if not partition:
         raise ValueError(f"Partition {partition_id} not found")
 
-    branch = data.branches.get(partition.active_branch_id)
-    if not branch:
-        raise ValueError(f"Active branch not found")
+    conversation = _find_active_conversation(data, partition_id)
+    if not conversation:
+        raise ValueError(f"Active conversation not found")
 
     # 获取最近消息
     recent_messages = []
-    for nid in branch.path[-8:]:
+    for nid in conversation.path[-8:]:
         node = data.nodes.get(nid)
         if node and not node.is_deleted:
             recent_messages.append(node)
 
     # 构建上下文
-    llm_messages = _build_context_messages(partition, branch, recent_messages, user_text, user_id)
+    llm_messages = _build_context_messages(partition, conversation, recent_messages, user_text, user_id)
 
     # 调用 LLM
     reply = await llm_service.generate(
@@ -518,8 +534,8 @@ async def generate_reply_with_tools(
     if not partition:
         raise ValueError(f"Partition {partition_id} not found")
 
-    branch = data.branches.get(partition.active_branch_id)
-    if not branch:
+    conversation = data.conversations.get(partition.active_conversation_id)
+    if not conversation:
         raise ValueError(f"Active branch not found")
 
     # 获取最近消息
@@ -571,7 +587,7 @@ async def generate_reply_with_tools(
                         params=params,
                         block_id=tool_block.id,
                         partition_id=partition_id,
-                        branch_id=branch.id if branch else "",
+                        conversation_id=branch.id if branch else "",
                     )
                     data.response_blocks[tool_block.id] = tool_block
                     storage.save(user_id, data)
@@ -658,19 +674,19 @@ async def generate_reply_stream(
     if not partition:
         raise ValueError(f"Partition {partition_id} not found")
 
-    branch = data.branches.get(partition.active_branch_id)
-    if not branch:
-        raise ValueError(f"Active branch not found")
+    conversation = _find_active_conversation(data, partition_id)
+    if not conversation:
+        raise ValueError(f"Active conversation not found")
 
     # 获取最近消息
     recent_messages = []
-    for nid in branch.path[-8:]:
+    for nid in conversation.path[-8:]:
         node = data.nodes.get(nid)
         if node and not node.is_deleted:
             recent_messages.append(node)
 
     # 构建上下文
-    llm_messages = _build_context_messages(partition, branch, recent_messages, user_text, user_id)
+    llm_messages = _build_context_messages(partition, conversation, recent_messages, user_text, user_id)
 
     # 注入预执行的工具结果
     if extra_tool_context:
@@ -711,7 +727,7 @@ async def _analyze_conversation_evidence(
                 user_text=user_text,
                 assistant_reply=assistant_reply,
                 skill_ids=skill_ids,
-                branch_id=partition.active_branch_id if partition else "",
+                conversation_id=conversation.id if conversation else "",
             )
     except Exception as e:
         logger.debug(f"知识证据分析跳过: {e}")
@@ -787,7 +803,7 @@ async def send_and_reply(
                         EventType.SKILL_DISCUSSED,
                         user_id=user_id,
                         partition_id=partition_id,
-                        branch_id=branch.id if branch else None,
+                        conversation_id=branch.id if branch else None,
                         skill_ids=[sid],
                     )
 
@@ -847,12 +863,21 @@ async def send_and_reply_stream(
     # 2. 预检测工具 → 先执行工具 → 注入上下文 → 再让 LLM 流式回复
     data = storage.load(user_id)
     partition = data.partitions.get(partition_id)
-    branch = data.branches.get(partition.active_branch_id) if partition else None
+    # v4: find active conversation via topic
+    conversation = None
+    if partition:
+        for topic in data.topics.values():
+            domain = data.domains.get(topic.domain_id)
+            if domain and domain.partition_id == partition_id:
+                cid = topic.active_conversation_id
+                if cid and cid in data.conversations:
+                    conversation = data.conversations[cid]
+                    break
 
     # 获取上一轮 AI 回复文本（上下文感知）
     last_ai_text = ""
-    if branch:
-        for nid in reversed(branch.path):
+    if conversation:
+        for nid in reversed(conversation.path):
             node = data.nodes.get(nid)
             if node and node.role == "assistant" and not node.is_deleted:
                 last_ai_text = node.text_summary or ""
@@ -890,7 +915,7 @@ async def send_and_reply_stream(
                         params=params,
                         block_id=tool_block.id,
                         partition_id=partition_id,
-                        branch_id=branch.id if branch else "",
+                        conversation_id=branch.id if branch else "",
                     )
                     data.response_blocks[tool_block.id] = tool_block
             except Exception as e:

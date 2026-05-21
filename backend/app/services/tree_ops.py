@@ -1,6 +1,7 @@
 """
-树形对话操作服务
-提供分区、分支、消息节点的创建、修改、删除、切换等操作
+树形对话操作服务 v4.0
+层级：分区 → 领域 → 专题 → 对话 → 消息节点
+内联分支：编辑消息在当前对话内创建新版本，不另开对话线程
 """
 
 from __future__ import annotations
@@ -9,9 +10,11 @@ import time
 from uuid import uuid4
 
 from app.schemas.conversation import (
-    Branch,
     ContentBlock,
+    Conversation,
+    Domain,
     Partition,
+    Topic,
     TreeNode,
     UserData,
 )
@@ -19,7 +22,9 @@ from app.services.storage import storage
 
 
 class TreeOpsService:
-    """所有树形结构操作"""
+    """所有树形结构操作（v4: 领域/专题/对话 体系）"""
+
+    # ── 分区 ──
 
     def create_partition(
         self,
@@ -29,22 +34,20 @@ class TreeOpsService:
         direction: str = "subject",
         emoji: str = "💬",
     ) -> Partition:
-        """创建新分区，附带虚拟根节点"""
+        """创建新分区，附带虚拟根节点 + 默认领域"""
         data = storage.load(user_id)
 
-        # 创建虚拟根节点
         root_id = str(uuid4())
         root_node = TreeNode(
             id=root_id,
-            parent_id=root_id,  # 自引用，表示虚拟根
-            partition_id="",  # 会在创建 partition 后设置
-            branch_id="",
-            role="assistant",  # 虚拟节点，角色不重要
+            parent_id=root_id,
+            partition_id="",
+            conversation_id="",
+            role="assistant",
             content_blocks=[],
             text_summary="[virtual_root]",
         )
 
-        # 创建分区
         partition = Partition(
             name=name,
             subject=subject,
@@ -54,18 +57,176 @@ class TreeOpsService:
         )
         root_node.partition_id = partition.id
 
-        # 创建第一个分支
-        branch = Branch(partition_id=partition.id, name=name)
-        partition.active_branch_id = branch.id
+        # 创建默认领域
+        domain = Domain(
+            partition_id=partition.id,
+            name=name,
+            emoji=emoji,
+        )
 
-        # 存储
         data.nodes[root_id] = root_node
         data.partitions[partition.id] = partition
-        data.branches[branch.id] = branch
+        data.domains[domain.id] = domain
         data.active_partition_id = partition.id
 
         storage.save(user_id, data)
         return partition
+
+    # ── 领域 ──
+
+    def create_domain(
+        self, user_id: str, partition_id: str, name: str, emoji: str = "📚",
+    ) -> Domain:
+        data = storage.load(user_id)
+        if partition_id not in data.partitions:
+            raise ValueError(f"Partition {partition_id} not found")
+        domain = Domain(partition_id=partition_id, name=name, emoji=emoji)
+        data.domains[domain.id] = domain
+        storage.save(user_id, data)
+        return domain
+
+    def rename_domain(self, user_id: str, domain_id: str, name: str) -> Domain:
+        data = storage.load(user_id)
+        domain = data.domains.get(domain_id)
+        if not domain:
+            raise ValueError(f"Domain {domain_id} not found")
+        domain.name = name
+        domain.updated_at = time.time()
+        storage.save(user_id, data)
+        return domain
+
+    def delete_domain(self, user_id: str, domain_id: str) -> None:
+        data = storage.load(user_id)
+        domain = data.domains.get(domain_id)
+        if not domain:
+            raise ValueError(f"Domain {domain_id} not found")
+        # 归档所有下属 topic 和 conversation
+        for tid, topic in list(data.topics.items()):
+            if topic.domain_id != domain_id:
+                continue
+            self._archive_topic(data, tid)
+        data.domains.pop(domain_id, None)
+        storage.save(user_id, data)
+
+    # ── 专题 ──
+
+    def create_topic(
+        self, user_id: str, domain_id: str, name: str, emoji: str = "📝",
+    ) -> Topic:
+        data = storage.load(user_id)
+        if domain_id not in data.domains:
+            raise ValueError(f"Domain {domain_id} not found")
+        topic = Topic(domain_id=domain_id, name=name, emoji=emoji)
+
+        # 为专题创建首个默认对话
+        conv = Conversation(topic_id=topic.id, name=name)
+        topic.active_conversation_id = conv.id
+
+        data.topics[topic.id] = topic
+        data.conversations[conv.id] = conv
+        storage.save(user_id, data)
+        return topic
+
+    def rename_topic(self, user_id: str, topic_id: str, name: str) -> Topic:
+        data = storage.load(user_id)
+        topic = data.topics.get(topic_id)
+        if not topic:
+            raise ValueError(f"Topic {topic_id} not found")
+        topic.name = name
+        topic.updated_at = time.time()
+        storage.save(user_id, data)
+        return topic
+
+    def delete_topic(self, user_id: str, topic_id: str) -> None:
+        data = storage.load(user_id)
+        topic = data.topics.get(topic_id)
+        if not topic:
+            raise ValueError(f"Topic {topic_id} not found")
+        self._archive_topic(data, topic_id)
+        data.topics.pop(topic_id, None)
+        storage.save(user_id, data)
+
+    def _archive_topic(self, data: UserData, topic_id: str) -> None:
+        """软删专题下所有对话和消息"""
+        for cid, conv in list(data.conversations.items()):
+            if conv.topic_id != topic_id:
+                continue
+            for nid in conv.path:
+                node = data.nodes.get(nid)
+                if node:
+                    node.is_deleted = True
+            data.conversations.pop(cid, None)
+
+    # ── 对话 ──
+
+    def create_conversation(
+        self, user_id: str, topic_id: str, name: str = "",
+    ) -> Conversation:
+        """用户在专题下手动创建新对话"""
+        data = storage.load(user_id)
+        topic = data.topics.get(topic_id)
+        if not topic:
+            raise ValueError(f"Topic {topic_id} not found")
+
+        # 停用旧活跃对话
+        old_cid = topic.active_conversation_id
+        if old_cid and old_cid in data.conversations:
+            data.conversations[old_cid].is_active = False
+
+        conv = Conversation(topic_id=topic_id, name=name or "新对话")
+        topic.active_conversation_id = conv.id
+        data.conversations[conv.id] = conv
+        storage.save(user_id, data)
+        return conv
+
+    def switch_conversation(
+        self, user_id: str, topic_id: str, conversation_id: str,
+    ) -> Conversation:
+        """切换专题的活跃对话"""
+        data = storage.load(user_id)
+        topic = data.topics.get(topic_id)
+        if not topic:
+            raise ValueError(f"Topic {topic_id} not found")
+
+        for c in data.conversations.values():
+            if c.topic_id == topic_id:
+                c.is_active = False
+
+        conv = data.conversations.get(conversation_id)
+        if not conv or conv.topic_id != topic_id:
+            raise ValueError(f"Conversation {conversation_id} not found in topic {topic_id}")
+
+        conv.is_active = True
+        topic.active_conversation_id = conversation_id
+        storage.save(user_id, data)
+        return conv
+
+    def rename_conversation(self, user_id: str, conv_id: str, name: str) -> Conversation:
+        data = storage.load(user_id)
+        conv = data.conversations.get(conv_id)
+        if not conv:
+            raise ValueError(f"Conversation {conv_id} not found")
+        conv.name = name
+        storage.save(user_id, data)
+        return conv
+
+    def delete_conversation(self, user_id: str, conv_id: str) -> None:
+        """删除对话（软删消息，移除对话记录）"""
+        data = storage.load(user_id)
+        conv = data.conversations.get(conv_id)
+        if not conv:
+            raise ValueError(f"Conversation {conv_id} not found")
+        if conv.is_active:
+            raise ValueError("Cannot delete active conversation")
+
+        for nid in conv.path:
+            node = data.nodes.get(nid)
+            if node:
+                node.is_deleted = True
+        data.conversations.pop(conv_id, None)
+        storage.save(user_id, data)
+
+    # ── 消息 ──
 
     def add_message(
         self,
@@ -74,93 +235,54 @@ class TreeOpsService:
         role: str,
         content_blocks: list[ContentBlock],
         text_summary: str = "",
+        conversation_id: str = "",
     ) -> TreeNode:
-        """向当前活跃分支添加消息"""
+        """向活跃对话添加消息"""
         data = storage.load(user_id)
         partition = data.partitions.get(partition_id)
         if not partition:
             raise ValueError(f"Partition {partition_id} not found")
 
-        branch = data.branches.get(partition.active_branch_id)
-        if not branch:
-            raise ValueError(f"Active branch {partition.active_branch_id} not found")
+        # 找到活跃 topic → conversation
+        if not conversation_id:
+            # 从 partition 的 domains 中找到活跃的 topic 和 conversation
+            conv = None
+            for topic in data.topics.values():
+                domain = data.domains.get(topic.domain_id)
+                if domain and domain.partition_id == partition_id:
+                    cid = topic.active_conversation_id
+                    if cid and cid in data.conversations:
+                        conv = data.conversations[cid]
+                        break
+            if not conv:
+                raise ValueError("No active conversation in partition")
+        else:
+            conv = data.conversations.get(conversation_id)
+            if not conv:
+                raise ValueError(f"Conversation {conversation_id} not found")
 
-        # 创建节点
         node = TreeNode(
-            parent_id=branch.path[-1] if branch.path else partition.root_id,
+            parent_id=conv.path[-1] if conv.path else partition.root_id,
             partition_id=partition_id,
-            branch_id=branch.id,
+            conversation_id=conv.id,
             role=role,
             content_blocks=content_blocks,
             text_summary=text_summary,
         )
 
-        # 更新父节点的 children
         parent = data.nodes.get(node.parent_id)
         if parent:
             parent.children_ids.append(node.id)
 
-        # 更新分支路径
-        branch.path.append(node.id)
-        branch.last_message_at = time.time()
-
-        # 更新分区统计
+        conv.path.append(node.id)
+        conv.last_message_at = time.time()
         partition.message_count += 1
         partition.updated_at = time.time()
         partition.last_active_at = time.time()
 
-        # 存储
         data.nodes[node.id] = node
         storage.save(user_id, data)
         return node
-
-    def create_branch(
-        self,
-        user_id: str,
-        partition_id: str,
-        fork_point_id: str | None = None,
-        name: str = "",
-    ) -> Branch:
-        """创建新分支，可选从指定消息分叉"""
-        data = storage.load(user_id)
-        partition = data.partitions.get(partition_id)
-        if not partition:
-            raise ValueError(f"Partition {partition_id} not found")
-
-        # 停用当前活跃分支
-        for b in data.branches.values():
-            if b.partition_id == partition_id and b.is_active:
-                b.is_active = False
-
-        # 构建新分支的路径
-        path: list[str] = []
-        if fork_point_id:
-            # 从分叉点构建路径: [parent_path..., fork_point_id]
-            fork_node = data.nodes.get(fork_point_id)
-            if fork_node:
-                # 从根到分叉点重建路径
-                current = fork_point_id
-                while current and current != partition.root_id:
-                    path.append(current)
-                    node = data.nodes.get(current)
-                    if node:
-                        current = node.parent_id
-                    else:
-                        break
-                path.reverse()
-
-        branch = Branch(
-            partition_id=partition_id,
-            name=name or f"分支-{str(uuid4())[:6]}",
-            fork_point_id=fork_point_id,
-            path=path,
-            is_active=True,
-        )
-
-        partition.active_branch_id = branch.id
-        data.branches[branch.id] = branch
-        storage.save(user_id, data)
-        return branch
 
     def modify_message(
         self,
@@ -169,7 +291,11 @@ class TreeOpsService:
         new_content_blocks: list[ContentBlock],
         new_text_summary: str = "",
     ) -> TreeNode:
-        """修改消息（创建新节点并分叉新分支）"""
+        """
+        编辑消息 — v4: 不创建新对话，在当前对话内创建新版本。
+        新版本加入父节点的 children_ids，原消息标记 has_modified_version。
+        前端用 < > 按钮在同级版本间切换。
+        """
         data = storage.load(user_id)
         node = data.nodes.get(message_id)
         if not node:
@@ -178,30 +304,21 @@ class TreeOpsService:
         # 标记原消息有修改版本
         node.has_modified_version = True
 
-        # 创建新节点（同父节点）
+        # 在同父节点下创建新版本
         new_node = TreeNode(
             parent_id=node.parent_id,
             partition_id=node.partition_id,
-            branch_id="",  # 会被 create_branch 设置
+            conversation_id=node.conversation_id,
             role=node.role,
             content_blocks=new_content_blocks,
             text_summary=new_text_summary,
         )
 
-        # 为修改版本创建新分支（祖先路径从根到父节点）
-        branch = self.create_branch(user_id, node.partition_id, fork_point_id=node.parent_id)
-        new_node.branch_id = branch.id
-
-        # ⚠️ 关键修复：将新节点追加到分支路径
-        branch.path.append(new_node.id)
-        branch.last_message_at = time.time()
-
-        # 添加到父节点的 children
+        # 添加到父节点的 children_ids（同级版本列表）
         parent = data.nodes.get(node.parent_id)
-        if parent:
+        if parent and new_node.id not in parent.children_ids:
             parent.children_ids.append(new_node.id)
 
-        # 存储
         data.nodes[new_node.id] = new_node
         storage.save(user_id, data)
         return new_node
@@ -215,7 +332,6 @@ class TreeOpsService:
             if not node:
                 return
             node.is_deleted = True
-            # 将子节点重新挂到被删除节点的父节点
             parent = data.nodes.get(node.parent_id)
             if parent and nid in parent.children_ids:
                 parent.children_ids.remove(nid)
@@ -225,68 +341,29 @@ class TreeOpsService:
                     child = data.nodes.get(child_id)
                     if child:
                         child.parent_id = parent.id
-            # 递归删除
             for child_id in node.children_ids[:]:
                 delete_subtree(child_id)
 
         delete_subtree(message_id)
 
-        # 标记分支摘要需更新
         node = data.nodes.get(message_id)
         if node:
-            branch = data.branches.get(node.branch_id)
-            if branch:
-                branch.summary_dirty = True
-                # 重建路径，排除已删除节点
-                branch.path = [
-                    nid
-                    for nid in branch.path
+            conv = data.conversations.get(node.conversation_id)
+            if conv:
+                conv.summary_dirty = True
+                conv.path = [
+                    nid for nid in conv.path
                     if not data.nodes.get(
                         nid,
-                        TreeNode(
-                            parent_id="",
-                            branch_id="",
-                            partition_id="",
-                            role="user",
-                        ),
+                        TreeNode(parent_id="", conversation_id="", partition_id="", role="user"),
                     ).is_deleted
                 ]
 
         storage.save(user_id, data)
 
-    def switch_branch(
-        self, user_id: str, partition_id: str, branch_id: str
-    ) -> Branch:
-        """切换分区的活跃分支"""
-        data = storage.load(user_id)
-        partition = data.partitions.get(partition_id)
-        if not partition:
-            raise ValueError(f"Partition {partition_id} not found")
+    # ── 分区/领域/专题编辑与删除 ──
 
-        # 停用该分区所有分支
-        for b in data.branches.values():
-            if b.partition_id == partition_id:
-                b.is_active = False
-
-        # 激活目标分支
-        branch = data.branches.get(branch_id)
-        if not branch or branch.partition_id != partition_id:
-            raise ValueError(
-                f"Branch {branch_id} not found in partition {partition_id}"
-            )
-
-        branch.is_active = True
-        partition.active_branch_id = branch_id
-
-        storage.save(user_id, data)
-        return branch
-
-    # ── 分区/分支 编辑与删除 ──
-
-    def rename_partition(
-        self, user_id: str, partition_id: str, name: str,
-    ) -> Partition:
-        """重命名分区"""
+    def rename_partition(self, user_id: str, partition_id: str, name: str) -> Partition:
         data = storage.load(user_id)
         partition = data.partitions.get(partition_id)
         if not partition:
@@ -297,71 +374,50 @@ class TreeOpsService:
         return partition
 
     def delete_partition(self, user_id: str, partition_id: str) -> None:
-        """删除分区：软删所有节点、分支和分区"""
         data = storage.load(user_id)
-        partition = data.partitions.get(partition_id)
-        if not partition:
+        if partition_id not in data.partitions:
             raise ValueError(f"Partition {partition_id} not found")
 
-        # 软删所有分支及其节点
-        for bid, branch in list(data.branches.items()):
-            if branch.partition_id != partition_id:
+        # 归档所有下属领域/专题/对话
+        for did, domain in list(data.domains.items()):
+            if domain.partition_id != partition_id:
                 continue
-            for nid in branch.path:
-                node = data.nodes.get(nid)
-                if node:
-                    node.is_deleted = True
-            branch.is_archived = True  # 分支归档
-        partition.is_archived = True  # 分区归档
-        storage.save(user_id, data)
-
-    def rename_branch(
-        self, user_id: str, branch_id: str, name: str,
-    ) -> Branch:
-        """重命名分支"""
-        data = storage.load(user_id)
-        branch = data.branches.get(branch_id)
-        if not branch:
-            raise ValueError(f"Branch {branch_id} not found")
-        branch.name = name
-        storage.save(user_id, data)
-        return branch
-
-    def delete_branch(self, user_id: str, branch_id: str) -> None:
-        """删除分支：软删所有节点，归档分支。不允许删除活跃分支"""
-        data = storage.load(user_id)
-        branch = data.branches.get(branch_id)
-        if not branch:
-            raise ValueError(f"Branch {branch_id} not found")
-        if branch.is_active:
-            raise ValueError("Cannot delete active branch")
-
-        for nid in branch.path:
-            node = data.nodes.get(nid)
-            if node:
-                node.is_deleted = True
-        branch.is_archived = True
+            for tid, topic in list(data.topics.items()):
+                if topic.domain_id != did:
+                    continue
+                self._archive_topic(data, tid)
+                data.topics.pop(tid, None)
+            data.domains.pop(did, None)
+        data.partitions.pop(partition_id, None)
         storage.save(user_id, data)
 
     def get_partition_context(self, user_id: str, partition_id: str) -> dict:
-        """获取分区完整上下文（用于 LLM 调用）"""
+        """获取分区完整上下文"""
         data = storage.load(user_id)
         partition = data.partitions.get(partition_id)
         if not partition:
             raise ValueError(f"Partition {partition_id} not found")
 
-        # 获取活跃分支的消息
-        branch = data.branches.get(partition.active_branch_id)
+        # 找到活跃对话的消息
         messages: list[TreeNode] = []
-        if branch:
-            for nid in branch.path:
+        conv = None
+        for topic in data.topics.values():
+            domain = data.domains.get(topic.domain_id)
+            if domain and domain.partition_id == partition_id:
+                cid = topic.active_conversation_id
+                if cid:
+                    conv = data.conversations.get(cid)
+                break
+
+        if conv:
+            for nid in conv.path:
                 node = data.nodes.get(nid)
                 if node and not node.is_deleted:
                     messages.append(node)
 
         return {
             "partition": partition,
-            "branch": branch,
+            "conversation": conv,
             "messages": messages,
             "context_summary": partition.context_summary,
         }
