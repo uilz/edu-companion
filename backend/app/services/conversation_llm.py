@@ -203,14 +203,14 @@ def detect_frustration(text: str) -> bool:
 
 # ── 引用溯源解析 ──
 
-SOURCE_PATTERN = re.compile(r'\\[来源:\\s*([^\\]]+)\\]')
+SOURCE_PATTERN = re.compile(r'\[来源:\s*([^\]]+)\]')
 
 def parse_sources(text: str) -> tuple[str, list[str]]:
     """从回复文本中提取 [来源: xxx] 标记，返回 (清理后文本, 来源列表)"""
     sources = SOURCE_PATTERN.findall(text)
     cleaned = SOURCE_PATTERN.sub('', text).strip()
     # 清理多余空行
-    cleaned = re.sub(r'\\n{3,}', '\\n\\n', cleaned)
+    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
     return cleaned, sources
 
 
