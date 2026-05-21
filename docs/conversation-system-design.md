@@ -1,7 +1,7 @@
 # 智能伴学系统 · 对话系统设计文档
 
 > 最后更新: 2026-05-18
-> 版本: v0.4 — **树结构会话已实现**，见 PROGRESS.md
+> 版本: v4.0 — **四级树结构（分区→领域→专题→对话）**，编辑消息内联版本切换
 
 ---
 
@@ -9,52 +9,100 @@
 
 ### 核心理念
 
-对话系统采用**树结构会话（Tree-Structured Conversation）**模型，取代传统的线性对话列表。每个对话分区（Partition）是一棵独立的树，所有分区共享一个根记忆树（Root Memory Tree）。系统支持多模态输入（文字、图片、语音、视频）。
+对话系统采用**四级树结构**模型：**分区 → 领域 → 专题 → 对话**，取代旧版分区-分支两级设计。消息在对话内形成树，编辑不另开对话，而是通过 `<` `>` 按钮在同级版本间切换。
+
+### 四级层级
+
+| 层级 | 含义 | 类比 | 示例 |
+|---|---|---|---|
+| **分区** Partition | 学科/大方向 | Git 仓库 | 数学、程序设计、英语 |
+| **领域** Domain | 学科子方向 | 仓库内的模块 | 分析、代数、算法 |
+| **专题** Topic | 具体知识点 | 模块内的功能 | 微积分、特征值、排序 |
+| **对话** Conversation | 用户手动开启的对话线程 | 功能分支 | "不定积分换元法" |
 
 ### 核心特性
 
-1. **树结构会话** — 消息是节点，支持分支、回溯、修改
-2. **多模态消息** — 单条消息可包含多段文字+图片+语音+视频+文档
-3. **多模态回复** — 助手回复支持文字+练习题+视频+图片+思维导图+文档混合
-4. **智能分区** — LLM + Embedding 自动分类对话到学科/方向分区
-5. **分支管理** — 分区内自动判断延续/新建分支
-6. **跨分区关联** — 支持跨学科讨论，标记关联分区
-7. **分层摘要** — 消息级摘要（索引）+ 分区级上下文摘要（给LLM）
-8. **元消息历史** — 所有消息异步写入历史文件夹，删除只从活跃树移除
-9. **手动编辑** — 用户可进入树的任意节点，从该点创建新分支
-10. **虚拟根节点** — 所有修改操作在父节点下挂新节点，不原地修改
-11. **多用户隔离** — 数据按用户隔离，为后续登录系统预留
+1. **四级树结构** — 分区→领域→专题→对话，层层细化
+2. **自动路由** — 发消息时自动分类+创建缺失层级（分区/领域/专题/对话）
+3. **切换推荐** — 检测到话题切换时，前端弹出推荐横幅"切换到 XX 领域 → XX 专题？"
+4. **内联版本** — 编辑消息不另开对话，通过 `children_ids` 存多版本，`<``>` 按钮切换
+5. **多模态消息** — 单条消息可包含多段文字+图片+语音+视频+文档
+6. **多模态回复** — 助手回复支持文字+练习题+视频+图片+思维导图+文档混合
+7. **虚拟根节点** — 所有修改操作在父节点下挂新节点，不原地修改
+8. **多用户隔离** — 数据按用户隔离，为后续登录系统预留
 
 ---
 
-## 二、核心概念：分区 vs 分支
+## 二、核心概念：四层体系
 
-### 分区（Partition）= 学科/话题领域
+### 分区（Partition）
 
-类比：**Git 仓库**。一个分区对应一个学科或扩展方向，包含多条对话分支。
+**顶层容器**，对应一个学科或大方向。一个分区包含多个领域。
 
 - 分区数量**不限制**
 - 每个分区有独立的虚拟根节点、上下文摘要、标签
-- 分区可自由扩展方向：学科、技能、项目、兴趣、生活等
+- 分区可自由扩展：学科、技能、项目、兴趣、生活等
+- 创建时自动生成默认领域
 
-### 分支（Branch）= 一条对话线程
+### 领域（Domain）
 
-类比：**Git 分支**。一个分区内可以有多条对话线程，每条是独立的探索路径。
+**第二层分类**，对应学科子方向。高级数学下可有「分析」「代数」「几何」等领域。
 
-- 每个分支是一条从虚拟根到叶节点的**线性路径**
-- 分支深度**不限制**
-- 同一时刻每个分区只有一个**活跃分支**
-- 用户可以切换活跃分支，或从任意节点创建新分支
+- 领域数量不限制，属于一个分区
+- 领域下可创建专题
+- 领域可被删除（级联归档下属专题和对话）
 
-### 关系
+### 专题（Topic）
+
+**第三层组织**，对应具体知识点模块。例如「微积分」「特征值」「排序算法」。
+
+- 专题属于一个领域
+- 创建时自动生成首个默认对话
+- 每个专题有一个活跃对话（`active_conversation_id`）
+- 专题下可手动创建多个对话线程
+
+### 对话（Conversation）
+
+**第四层——用户交互层**。用户手动在专题下开启对话线程，发消息。
+
+- 对话替代旧版「分支（Branch）」概念
+- 每条对话是一个从虚拟根到叶节点的**线性路径**
+- **编辑消息不再开新对话**：修改后原消息标记 `has_modified_version=true`，新版本加入 `children_ids`，前端用 `<` `>` 按钮切换
+- 同一时刻每个专题只有一个**活跃对话**
+- 用户可以 `switch` 切换活跃对话
+
+### 关系图
 
 ```
-Partition "高等数学"
-├── Virtual Root (不可删除)
-│   ├── Branch A (活跃) → msg1 → msg2 → msg3 → msg4
-│   ├── Branch B (归档) → msg1 → msg2' → msg5
-│   └── Branch C (归档) → msg1 → msg6
+Partition "数学"
+├── Domain "分析"
+│   ├── Topic "微积分"
+│   │   ├── Conversation "不定积分换元法" (活跃)
+│   │   │   └── msg1 → msg2 → msg3
+│   │   └── Conversation "定积分应用" (归档)
+│   │       └── msg1 → msg4
+│   └── Topic "级数"
+│       └── Conversation "泰勒展开" (活跃)
+│           └── msg1 → msg2
+├── Domain "代数"
+│   └── Topic "特征值"
+│       └── Conversation "对角化" (活跃)
+│           └── msg1 → msg2 → msg3
+│               ├── msg3 (原版, has_modified_version=true)
+│               └── msg3' (编辑版本, children_ids 同级)
 ```
+
+### 消息编辑 → 内联版本切换
+
+```
+msg3 (原版, has_modified_version=true)
+└── msg3' (新版本)     ← 点击 < > 在同级间切换
+```
+
+- 不创建新对话
+- 原消息标记 `has_modified_version`
+- 新版本挂在同父节点的 `children_ids`
+- 前端渲染时提供 `<` `>` 导航
 
 ---
 
@@ -65,12 +113,12 @@ Partition "高等数学"
 ```typescript
 interface TreeNode {
   id: string;                    // 唯一ID (UUID)
-  parent_id: string;             // 父节点ID (虚拟根节点的id = 分区id)
-  children_ids: string[];        // 子节点ID列表 (有序)
+  parent_id: string;             // 父节点ID
+  children_ids: string[];        // 编辑版本的子节点ID列表 (用于 < > 导航)
 
-  // 分区与分支
+  // 归属
   partition_id: string;          // 所属分区
-  branch_id: string;             // 所属分支ID (见3.6)
+  conversation_id: string;       // 所属对话ID (v4: 替代旧 branch_id)
 
   // 多模态内容 (引用 MessagePayload)
   content_blocks: ContentBlock[]; // 多模态内容块 (任意数量任意类型)
@@ -294,24 +342,48 @@ interface CrossPartitionMark {
 
 2. **归属规则**：每个 TreeNode 属于且仅属于一个 branch_id
 
-3. **分支路径**：Branch 维护 `path: string[]`，从虚拟根到叶节点的消息ID有序列表
+3. **对话路径**：Conversation 维护 `path: string[]`，从虚拟根到叶节点的消息ID有序列表
 
-4. **分支命名**：
-   - 自动命名：取分支第一条消息的前20字
-   - 用户可手动修改
+4. **编辑版本**：修改消息后，原消息标记 `has_modified_version`，新版本加入 `children_ids`，通过 `<` `>` 切换
+
+### 3.6 对话模型 (Conversation) + 层级模型
 
 ```typescript
-interface Branch {
-  id: string;                    // UUID
-  partition_id: string;
-  name: string;                  // "什么是极限？..." / 用户自定义名
-  fork_point_id?: string;        // 分叉点消息ID（可选）
-  path: string[];                // 从虚拟根到叶的消息ID有序列表
-  is_active: boolean;            // 是否为当前活跃分支
-  is_archived: boolean;          // 是否已归档
-  summary?: string;              // 分支摘要
-  created_at: number;
-  last_message_at: number;
+// ── 分区 ──
+interface Partition {
+  id: string; name: string; subject: string; direction: string;
+  emoji: string; color: string;
+  root_id: string;             // 虚拟根节点
+  context_summary: string;     // 分区级上下文摘要
+  tags: string[]; message_count: number;
+  created_at: number; updated_at: number; last_active_at: number;
+}
+
+// ── 领域 ──
+interface Domain {
+  id: string; partition_id: string;
+  name: string; emoji: string;
+  created_at: number; updated_at: number;
+}
+
+// ── 专题 ──
+interface Topic {
+  id: string; domain_id: string;
+  name: string; emoji: string;
+  active_conversation_id: string;  // 当前活跃对话
+  created_at: number; updated_at: number;
+}
+
+// ── 对话 ──
+interface Conversation {
+  id: string; topic_id: string;
+  name: string;
+  path: string[];              // 消息节点ID有序列表
+  is_active: boolean;
+  is_archived: boolean;
+  summary?: string;            // 对话摘要
+  material_refs?: string[];    // 关联资料
+  created_at: number; last_message_at: number;
 }
 ```
 
