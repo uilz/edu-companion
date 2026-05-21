@@ -161,7 +161,8 @@ export type WSIncomingMessage =
   | { type: "status"; message: string }
   | { type: "user_message"; message: TreeNode }
   | { type: "token"; content: string; block_id?: string }
-  | { type: "done"; partition_id: string; assistant_message: TreeNode }
+  | { type: "tool_block"; block: ResponseBlock }
+  | { type: "done"; partition_id: string; assistant_message: TreeNode; response_blocks?: ResponseBlock[] }
   | { type: "error"; message: string }
   | { type: "block_update"; block: ResponseBlock }
   | { type: "job_update"; job: BackgroundJob }

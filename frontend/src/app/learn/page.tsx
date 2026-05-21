@@ -99,8 +99,17 @@ function connectConversationWS(callbacks: WSCallbacks) {
           case "token":
             wsCallbacks?.onToken(data.content, data.block_id);
             break;
+          case "tool_block":
+            wsCallbacks?.onBlockUpdate(data.block);
+            break;
           case "done":
             wsCallbacks?.onDone(data.partition_id, data.assistant_message);
+            // Merge any response_blocks from the done event
+            if (data.response_blocks) {
+              for (const rb of data.response_blocks) {
+                wsCallbacks?.onBlockUpdate(rb);
+              }
+            }
             break;
           case "error":
             wsCallbacks?.onError(data.message);

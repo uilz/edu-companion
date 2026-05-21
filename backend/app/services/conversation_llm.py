@@ -646,10 +646,12 @@ async def generate_reply_stream(
     user_id: str,
     partition_id: str,
     user_text: str,
+    extra_tool_context: str = "",
 ) -> AsyncGenerator[str, None]:
     """
     生成助手回复（流式）。
     逐 token 产出回复文本。
+    extra_tool_context: 预先执行工具后注入的上下文（如练习题结果）
     """
     data = storage.load(user_id)
     partition = data.partitions.get(partition_id)
@@ -669,6 +671,10 @@ async def generate_reply_stream(
 
     # 构建上下文
     llm_messages = _build_context_messages(partition, branch, recent_messages, user_text, user_id)
+
+    # 注入预执行的工具结果
+    if extra_tool_context:
+        llm_messages.append({"role": "system", "content": extra_tool_context})
 
     # 流式调用 LLM
     async for chunk in llm_service.generate_stream(
@@ -814,9 +820,11 @@ async def send_and_reply_stream(
     content_blocks: list[ContentBlock] | None = None,
 ) -> AsyncGenerator[dict, None]:
     """
-    完整流程（流式）：存用户消息 → 流式生成回复 → 存助手消息。
-    产出事件：{"type": "token", "content": ...} / {"type": "done", "assistant_message": ...}
+    完整流程（流式）：存用户消息 → 预执行工具 → 流式生成回复（含工具结果） → 存助手消息。
+    产出事件：{"type": "tool_block", "block": ...} / {"type": "token", "content": ...} / {"type": "done", "assistant_message": ...}
     """
+    import asyncio
+
     # 1. 存用户消息
     blocks = content_blocks or [TextBlock(text=user_text)]
     user_node = tree_ops.add_message(
@@ -827,7 +835,6 @@ async def send_and_reply_stream(
     _p0_post_message_hooks(user_id, partition_id, user_node)
 
     # P0: 异步情绪追踪
-    import asyncio
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
@@ -837,15 +844,78 @@ async def send_and_reply_stream(
 
     yield {"type": "user_message", "message": user_node.model_dump(mode="json")}
 
-    # 2. 流式生成回复
+    # 2. 预检测工具 → 先执行工具 → 注入上下文 → 再让 LLM 流式回复
+    data = storage.load(user_id)
+    partition = data.partitions.get(partition_id)
+    branch = data.branches.get(partition.active_branch_id) if partition else None
+
+    # 获取上一轮 AI 回复文本（上下文感知）
+    last_ai_text = ""
+    if branch:
+        for nid in reversed(branch.path):
+            node = data.nodes.get(nid)
+            if node and node.role == "assistant" and not node.is_deleted:
+                last_ai_text = node.text_summary or ""
+                break
+
+    detected_tools = predict_tools(user_text, last_ai_text)
+    logger.info("Streaming detected tools: %s for text: %s", detected_tools, user_text[:50])
+
+    response_blocks: list[ResponseBlock] = []
+    extra_tool_context = ""
+    order = 0
+
+    if detected_tools:
+        tool_results: list[dict] = []
+        for tool_name in detected_tools:
+            try:
+                params = _build_tool_params(tool_name, user_text, partition)
+                tool_block = await tool_executor.execute(tool_name, params)
+                tool_block.order = order
+                response_blocks.append(tool_block)
+                order += 1
+
+                # 提取有用信息注入 LLM 上下文
+                tool_results.append({
+                    "tool": tool_name,
+                    "summary": _summarize_tool_result(tool_name, tool_block),
+                })
+
+                # 慢任务：提交后台作业
+                if tool_name in SLOW_TOOLS:
+                    from app.services.background_jobs import job_manager
+                    job = await job_manager.submit(
+                        user_id=user_id,
+                        tool_name=tool_name,
+                        params=params,
+                        block_id=tool_block.id,
+                        partition_id=partition_id,
+                        branch_id=branch.id if branch else "",
+                    )
+                    data.response_blocks[tool_block.id] = tool_block
+            except Exception as e:
+                logger.error(f"Pre-stream tool {tool_name} failed: {e}")
+                tool_results.append({"tool": tool_name, "error": str(e)})
+
+        # 构建注入 LLM 的工具上下文
+        if tool_results:
+            extra_tool_context = _build_tool_context(tool_results)
+
+        # 先 yield 工具块（前端立即渲染卡片）
+        for block in response_blocks:
+            yield {"type": "tool_block", "block": block.model_dump(mode="json")}
+
+    # 3. 流式生成回复（LLM 现在能看到工具执行结果）
     full_reply = ""
     try:
-        async for chunk in generate_reply_stream(user_id, partition_id, user_text):
+        async for chunk in generate_reply_stream(
+            user_id, partition_id, user_text,
+            extra_tool_context=extra_tool_context,
+        ):
             full_reply += chunk
             yield {"type": "token", "content": chunk}
     except Exception as e:
         logger.error("generate_reply_stream 失败: %s", str(e))
-        # 降级：至少让用户看到发生了什么
         fallback = f"抱歉，生成回复时遇到了问题 😣\n\n错误信息：{str(e)[:200]}\n\n请稍后重试或检查系统配置。"
         full_reply = fallback
         yield {"type": "token", "content": fallback}
@@ -854,7 +924,7 @@ async def send_and_reply_stream(
     if not full_reply.strip():
         full_reply = "抱歉，我暂时无法回复 😣\n\n请检查：\n1. API Key 是否正确配置\n2. 模型是否可用\n3. 稍后重试"
 
-    # 3. 存助手消息
+    # 4. 存助手消息
     reply_blocks = [TextBlock(text=full_reply)]
     assistant_node = tree_ops.add_message(
         user_id, partition_id, "assistant", reply_blocks, full_reply
@@ -863,41 +933,11 @@ async def send_and_reply_stream(
     # P0: async meta history for assistant
     _p0_post_message_hooks(user_id, partition_id, assistant_node)
 
-    # 4. 检测工具调用并生成响应块（含上下文感知）
-    last_ai_text = full_reply  # 当前AI回复本身可能建议了工具
-    detected_tools = predict_tools(user_text, last_ai_text)
-    response_blocks = []
-
-    if detected_tools:
-        order = 0
-        for tool_name in detected_tools:
-            tool_block = await tool_executor.execute(tool_name, {
-                "query": user_text,
-                "subject": user_text,
-                "topic": user_text,
-                "prompt": user_text,
-            })
-            tool_block.order = order
-            response_blocks.append(tool_block)
-            order += 1
-
-            # 慢任务：提交后台作业
-            if tool_name in SLOW_TOOLS:
-                from app.services.background_jobs import job_manager
-                job = await job_manager.submit(
-                    user_id=user_id,
-                    tool_name=tool_name,
-                    params=tool_block.content.get("params", {}),
-                    block_id=tool_block.id,
-                    partition_id=partition_id,
-                    branch_id="",
-                )
-
-        # 存储响应块
-        data = storage.load(user_id)
-        for block in response_blocks:
-            data.response_blocks[block.id] = block
-        storage.save(user_id, data)
+    # 5. 存储响应块
+    data = storage.load(user_id)
+    for block in response_blocks:
+        data.response_blocks[block.id] = block
+    storage.save(user_id, data)
 
     yield {
         "type": "done",

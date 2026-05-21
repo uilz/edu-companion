@@ -159,8 +159,11 @@ async def _handle_generate_practice(params: dict) -> dict:
     difficulty = difficulty_map.get(difficulty_str, 0.6)
 
     try:
-        from app.services.question_generator import question_generator
+        from app.services.question_generator import get_question_generator
+        from app.services.llm_service import llm_service
         from app.core.learner_model import learner_engine
+
+        question_generator = get_question_generator(llm_service)
 
         # 调用题目生成器（同步方法）
         questions = question_generator.generate(
