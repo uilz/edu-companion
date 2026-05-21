@@ -470,6 +470,18 @@ async def get_message_blocks(message_id: str):
     blocks = [b.model_dump(mode="json") for b in data.response_blocks.values() if b.message_id == message_id]
     return {"blocks": blocks}
 
+@router.get("/messages/{message_id}")
+async def get_message(message_id: str):
+    """获取单条消息（用于版本切换）"""
+    data = storage.load(USER_ID)
+    node = data.nodes.get(message_id)
+    if not node:
+        raise HTTPException(404, "Message not found")
+    # 同时返回父节点的 children_ids 作为版本列表
+    parent = data.nodes.get(node.parent_id) if node.parent_id else None
+    versions = parent.children_ids if parent else []
+    return {"message": node.model_dump(mode="json"), "versions": versions}
+
 @router.get("/response-blocks/{block_id}")
 async def get_response_block(block_id: str):
     data = storage.load(USER_ID)

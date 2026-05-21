@@ -749,34 +749,55 @@ export default function LearnPage() {
   }, [activeConversationId, loadMessages]);
 
   // ── Handle version switch ──
+  // Tracks { messageId -> current version index in parent's children_ids }
+  const versionIndexRef = useRef<Record<string, number>>({});
+
   const handleVersionSwitch = useCallback(async (messageId: string, direction: "prev" | "next") => {
     try {
-      // Fetch the message to get children_ids
+      // Fetch message + versions list from new endpoint
       const msgRes = await fetch(`/api/conversations/messages/${messageId}`);
       if (!msgRes.ok) return;
       const msgData = await msgRes.json();
-      const childrenIds: string[] = msgData.children_ids || [];
-      if (childrenIds.length === 0) return;
+      const versions: string[] = msgData.versions || [];
+      if (versions.length <= 1) return;
 
-      // In v4, children_ids contains version history
-      // For now, load the first child as the next version
-      const nextId = childrenIds[0];
-      const childRes = await fetch(`/api/conversations/messages/${nextId}/blocks`);
-      if (!childRes.ok) return;
-      const childData = await childRes.json();
+      // Find current position in versions list
+      const curIdx = versions.indexOf(messageId);
+      if (curIdx === -1) return;
 
-      // Update the message with the child version's text
-      const childBlocks = childData.blocks || [];
-      const textBlock = childBlocks.find((b: ResponseBlock) => b.type === "text");
-      if (textBlock?.content) {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === messageId
-              ? { ...m, content_blocks: [{ type: "text", text: textBlock.content }], text_summary: textBlock.content }
-              : m
-          )
-        );
-      }
+      const newIdx = direction === "prev"
+        ? (curIdx - 1 + versions.length) % versions.length
+        : (curIdx + 1) % versions.length;
+      const targetId = versions[newIdx];
+
+      // Load target version
+      const targetRes = await fetch(`/api/conversations/messages/${targetId}`);
+      if (!targetRes.ok) return;
+      const targetData = await targetRes.json();
+      const targetMsg = targetData.message;
+      if (!targetMsg) return;
+
+      // Extract text from target version's content_blocks
+      const targetText = (targetMsg.content_blocks || [])
+        .filter((b: any) => b.type === "text")
+        .map((b: any) => b.text || "")
+        .join("\n\n");
+
+      // Update the message in-place with the target version's content
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? {
+                ...targetMsg,
+                id: messageId, // keep same ID so React doesn't remount
+                content_blocks: [{ type: "text", text: targetText || "(空)" }],
+                text_summary: targetText,
+              }
+            : m
+        )
+      );
+
+      versionIndexRef.current[messageId] = newIdx;
     } catch (e) {
       console.error("Version switch failed:", e);
     }

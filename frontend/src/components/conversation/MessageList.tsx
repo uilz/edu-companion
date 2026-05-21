@@ -131,9 +131,8 @@ export default function MessageList({
             .map((b) => b.text || "")
             .join("\n\n");
 
-          // Version info
-          const hasVersions = message.has_modified_version && message.children_ids && message.children_ids.length > 0;
-          const totalVersions = (message.children_ids?.length || 0) + 1;
+          // Version info — show buttons when message has been edited
+          const hasVersions = message.has_modified_version;
 
           return (
             <div key={message.id} className={`flex gap-4 ${isUser ? "flex-row-reverse" : ""}`}>
@@ -245,7 +244,7 @@ export default function MessageList({
                       })}
                     </span>
 
-                    {/* Version switch (AI messages only, on the same row) */}
+                    {/* Version switch — shown on any message with edits */}
                     {!isUser && hasVersions && onVersionSwitch && (
                       <div className="flex items-center gap-0.5 ml-1">
                         <button
@@ -255,9 +254,7 @@ export default function MessageList({
                         >
                           <ChevronLeft size={11} />
                         </button>
-                        <span className="text-[9px] text-[var(--color-text-muted)] tabular-nums">
-                          {totalVersions}
-                        </span>
+                        <span className="text-[9px] text-[var(--color-text-muted)] select-none">改</span>
                         <button
                           onClick={() => onVersionSwitch(message.id, "next")}
                           className="p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"
