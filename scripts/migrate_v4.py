@@ -16,6 +16,38 @@ from pathlib import Path
 from uuid import uuid4
 
 
+def _find_or_create_fallback_conversation(data: dict, partition_id: str) -> str:
+    """为没有 conversation_id 的节点找一个归宿：按 partition → domain → topic → conversation 链查找"""
+    import time
+
+    topics = data.get("topics", {})
+    conversations = data.get("conversations", {})
+
+    # 先查找该分区下是否有活跃对话
+    for tid, topic in topics.items():
+        cid = topic.get("active_conversation_id", "")
+        if cid and cid in conversations:
+            return cid
+
+    # 没有则创建默认 domain→topic→conversation
+    cid = str(uuid4())
+    conv = {
+        "id": cid,
+        "topic_id": "",
+        "name": "默认对话",
+        "path": [],
+        "is_active": True,
+        "is_archived": False,
+        "summary": "",
+        "material_refs": [],
+        "created_at": time.time(),
+        "last_message_at": time.time(),
+    }
+    data.setdefault("conversations", {})[cid] = conv
+    _ensure_default_hierarchy(data, partition_id, cid)
+    return cid
+
+
 def migrate_file(filepath: Path) -> bool:
     """迁移单个 userData.json"""
     print(f"\n📂 {filepath}")
@@ -25,7 +57,7 @@ def migrate_file(filepath: Path) -> bool:
 
     changes = 0
 
-    # 1. 迁移 nodes: branch_id → conversation_id
+    # 1. 迁移 nodes: branch_id → conversation_id（以及缺失 conversation_id 的节点）
     nodes = data.get("nodes", {})
     for nid, node in nodes.items():
         if "conversation_id" not in node:
@@ -33,6 +65,13 @@ def migrate_file(filepath: Path) -> bool:
                 node["conversation_id"] = node.pop("branch_id")
                 changes += 1
                 print(f"  ✅ node {nid}: branch_id → conversation_id")
+            else:
+                # 节点完全没有 conversation_id → 查找所属分区的活跃对话
+                partition_id = node.get("partition_id", "")
+                conv_id = _find_or_create_fallback_conversation(data, partition_id)
+                node["conversation_id"] = conv_id
+                changes += 1
+                print(f"  🔧 node {nid}: 补充 conversation_id={conv_id[:8]}")
 
     # 2. 迁移 response_blocks: branch_id → conversation_id
     rbs = data.get("response_blocks", {})
