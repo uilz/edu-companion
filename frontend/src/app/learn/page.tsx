@@ -54,6 +54,8 @@ type WSCallbacks = {
 
 let ws: WebSocket | null = null;
 let wsCallbacks: WSCallbacks | null = null;
+let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let wsReconnectAttempts = 0;
 
 function connectConversationWS(callbacks: WSCallbacks) {
   wsCallbacks = callbacks;
@@ -66,17 +68,9 @@ function connectConversationWS(callbacks: WSCallbacks) {
   try {
     ws = new WebSocket(wsUrl);
 
-    const connectTimeout = setTimeout(() => {
-      if (ws && ws.readyState === WebSocket.CONNECTING) {
-        ws.close();
-        ws = null;
-        wsCallbacks?.onError("无法连接到服务器，请检查后端是否已启动");
-      }
-    }, 5000);
-
     ws.onopen = () => {
-      clearTimeout(connectTimeout);
-      console.log("[ConvWS] connected:", wsUrl);
+      wsReconnectAttempts = 0;
+      console.log("[ConvWS] connected");
     };
 
     ws.onmessage = (event: MessageEvent) => {
@@ -114,25 +108,26 @@ function connectConversationWS(callbacks: WSCallbacks) {
             break;
         }
       } catch (e) {
-        console.error("[ConvWS] parse error:", e);
+        // ignore parse errors
       }
     };
 
-    ws.onerror = (e) => {
-      console.error("[ConvWS] error:", e);
-      wsCallbacks?.onError("WebSocket 连接错误");
+    ws.onerror = () => {
+      // Don't show error to user unless persistent — onclose handles reconnection
     };
 
     ws.onclose = () => {
-      console.log("[ConvWS] closed");
       ws = null;
-      setTimeout(() => {
+      // Exponential backoff reconnect
+      const delay = Math.min(1000 * Math.pow(2, wsReconnectAttempts), 30000);
+      wsReconnectAttempts++;
+      wsReconnectTimer = setTimeout(() => {
         if (wsCallbacks) connectConversationWS(wsCallbacks);
-      }, 3000);
+      }, delay);
     };
   } catch (e) {
-    console.error("[ConvWS] connect failed:", e);
-    callbacks.onError("无法建立 WebSocket 连接");
+    // Connection failed, will retry via onclose path
+    ws = null;
   }
 }
 
@@ -145,11 +140,17 @@ function sendWSMessage(data: Record<string, unknown>): boolean {
 }
 
 function disconnectWS() {
+  if (wsReconnectTimer) {
+    clearTimeout(wsReconnectTimer);
+    wsReconnectTimer = null;
+  }
   if (ws) {
+    ws.onclose = null; // prevent reconnect
     ws.close();
     ws = null;
   }
   wsCallbacks = null;
+  wsReconnectAttempts = 0;
 }
 
 // ── New partition dialog ──
@@ -168,8 +169,8 @@ function NewPartitionDialog({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-[var(--color-bg)] border border-[var(--color-border)] w-full max-w-sm mx-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="bg-[var(--color-bg)] border border-[var(--color-border)] w-full max-w-sm mx-4 rounded-xl" onClick={(e) => e.stopPropagation()}>
         <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center justify-between">
           <h3 className="text-sm font-semibold text-[var(--color-text)]">
             新建分区
@@ -185,18 +186,18 @@ function NewPartitionDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="例如: 高等数学-极限"
-              className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 focus:outline-none focus:border-[var(--color-border-hover)]"
+              className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 rounded-lg focus:outline-none focus:border-[var(--color-border-hover)]"
               autoFocus
             />
           </div>
           <div>
             <label className="text-xs text-[var(--color-text-muted)] block mb-1">Emoji</label>
-            <input value={emoji} onChange={(e) => setEmoji(e.target.value)} className="w-16 bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 text-center" />
+            <input value={emoji} onChange={(e) => setEmoji(e.target.value)} className="w-16 bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 text-center rounded-lg" />
           </div>
         </div>
         <div className="px-4 py-3 border-t border-[var(--color-border)] flex justify-end gap-2">
           <button onClick={onClose} className="px-3 py-1.5 text-xs text-[var(--color-text-secondary)]">取消</button>
-          <button onClick={() => { if (name.trim()) { onCreate(name.trim(), emoji); setName(""); setEmoji("📐"); onClose(); } }} disabled={!name.trim()} className="px-3 py-1.5 text-xs bg-[var(--color-accent)] text-white disabled:opacity-30">
+          <button onClick={() => { if (name.trim()) { onCreate(name.trim(), emoji); setName(""); setEmoji("📐"); onClose(); } }} disabled={!name.trim()} className="px-3 py-1.5 text-xs bg-[var(--color-accent)] text-white rounded-lg disabled:opacity-30">
             创建
           </button>
         </div>
@@ -215,7 +216,7 @@ function SwitchBanner({
   onDismiss: () => void;
 }) {
   return (
-    <div className="mx-4 mt-2 px-4 py-3 bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30">
+    <div className="mx-4 mt-2 px-4 py-3 bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30 rounded-lg">
       <div className="flex items-start gap-3">
         <span className="text-lg">🔀</span>
         <div className="flex-1 min-w-0">
@@ -226,7 +227,7 @@ function SwitchBanner({
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={onSwitch}
-            className="px-3 py-1.5 text-xs bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors"
+            className="px-3 py-1.5 text-xs bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] rounded-lg transition-colors"
           >
             切换
           </button>
@@ -265,7 +266,7 @@ export default function LearnPage() {
 
   // Mobile sidebar state
   const [showPartitionSidebar, setShowPartitionSidebar] = useState(false);
-  const [collapsedPartition, setCollapsedPartition] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showNewPartition, setShowNewPartition] = useState(false);
   const [loadingPartitions, setLoadingPartitions] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
@@ -455,6 +456,7 @@ export default function LearnPage() {
       onError: (msg) => {
         setIsLoading(false);
         setStatusMessage("");
+        // Don't add error node for transient WS errors during reconnection
         const errorNode: TreeNode = {
           id: "err-" + Date.now(),
           parent_id: selectedPartitionId || "",
@@ -477,7 +479,6 @@ export default function LearnPage() {
         }
         streamingMsgIdRef.current = null;
         streamBufferRef.current = "";
-        console.error("[ConvWS] error:", msg);
       },
       onBlockUpdate: (block) => {
         setResponseBlocks((prev) => {
@@ -491,7 +492,6 @@ export default function LearnPage() {
         });
       },
       onContextSwitch: (data) => {
-        // Show switch banner (even if partition changes)
         setSwitchBanner({
           partitionId: data.partition_id,
           conversationId: data.conversation_id,
@@ -525,10 +525,65 @@ export default function LearnPage() {
     validatedRef.current = true;
   }, [urlInitialized, loadingPartitions, partitions, selectedPartitionId]);
 
+  // ── Auto-create conversation when sending without one ──
+  const ensureConversation = useCallback(async (): Promise<{ partitionId: string; conversationId: string } | null> => {
+    // If already have both, return them
+    if (selectedPartitionId && activeConversationId) {
+      return { partitionId: selectedPartitionId, conversationId: activeConversationId };
+    }
+
+    try {
+      let pId = selectedPartitionId;
+
+      // Auto-create partition if none selected
+      if (!pId) {
+        if (partitions.length > 0) {
+          pId = partitions[0].id;
+        } else {
+          const data = await apiFetch<{ partition: Partition }>("/conversations/partitions", {
+            method: "POST",
+            body: JSON.stringify({ name: "默认分区", subject: "默认", emoji: "💬" }),
+          });
+          pId = data.partition.id;
+          await loadPartitions();
+        }
+      }
+
+      // Auto-create conversation in the partition
+      const convData = await apiFetch<{ conversation: { id: string } }>("/conversations/conversations", {
+        method: "POST",
+        body: JSON.stringify({ topic_id: null, partition_id: pId, name: "新对话" }),
+      });
+
+      const cId = convData.conversation.id;
+      setSelectedPartitionId(pId);
+      setActiveConversationId(cId);
+      return { partitionId: pId, conversationId: cId };
+    } catch (e) {
+      console.error("Auto-create conversation failed:", e);
+      return null;
+    }
+  }, [selectedPartitionId, activeConversationId, partitions, loadPartitions]);
+
   // ── Handle send ──
   const handleSend = useCallback(
     async (text: string, files?: { name: string; type: string; materialId?: string }[]) => {
       if (!text.trim() || isLoading) return;
+
+      // Auto-create conversation if needed
+      const ctx = await ensureConversation();
+      if (!ctx) {
+        setMessages((prev) => [...prev, {
+          id: "err-" + Date.now(),
+          parent_id: "", children_ids: [], partition_id: "", conversation_id: "",
+          content_blocks: [{ type: "text", text: "❌ 无法创建对话，请检查后端连接" }] as TreeNode["content_blocks"],
+          text_summary: "", role: "assistant", timestamp: Date.now(),
+          token_count: 0, is_deleted: false, is_archived: false, has_modified_version: false,
+        }]);
+        return;
+      }
+
+      const { partitionId, conversationId } = ctx;
 
       const userMsgId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
       const blocks: { type: string; text?: string; url?: string; name?: string }[] = [{ type: "text", text }];
@@ -540,10 +595,10 @@ export default function LearnPage() {
 
       const userMsg: TreeNode = {
         id: userMsgId,
-        parent_id: selectedPartitionId || "virtual_root",
+        parent_id: partitionId || "virtual_root",
         children_ids: [],
-        partition_id: selectedPartitionId || "",
-        conversation_id: activeConversationId || "",
+        partition_id: partitionId || "",
+        conversation_id: conversationId || "",
         content_blocks: blocks as TreeNode["content_blocks"],
         text_summary: text,
         role: "user",
@@ -562,15 +617,15 @@ export default function LearnPage() {
       streamingMsgIdRef.current = assistantMsgId;
       streamBufferRef.current = "";
       streamingContextRef.current = {
-        partitionId: selectedPartitionId || "",
-        conversationId: activeConversationId || "",
+        partitionId: partitionId || "",
+        conversationId: conversationId || "",
       };
       const assistantPlaceholder: TreeNode = {
         id: assistantMsgId,
         parent_id: userMsgId,
         children_ids: [],
-        partition_id: selectedPartitionId || "",
-        conversation_id: activeConversationId || "",
+        partition_id: partitionId || "",
+        conversation_id: conversationId || "",
         content_blocks: [{ type: "text", text: "" }],
         text_summary: "",
         role: "assistant",
@@ -585,8 +640,8 @@ export default function LearnPage() {
 
       const sent = sendWSMessage({
         text,
-        partition_id: selectedPartitionId || undefined,
-        conversation_id: activeConversationId || undefined,
+        partition_id: partitionId || undefined,
+        conversation_id: conversationId || undefined,
       });
       if (!sent) {
         setStatusMessage("WebSocket 未连接，尝试 HTTP...");
@@ -594,7 +649,7 @@ export default function LearnPage() {
           const res = await fetch("/api/conversations/message", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text, partition_id: selectedPartitionId }),
+            body: JSON.stringify({ text, partition_id: partitionId, conversation_id: conversationId }),
           });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
@@ -617,10 +672,10 @@ export default function LearnPage() {
           const errMsg = `无法连接服务器：${httpErr instanceof Error ? httpErr.message : "未知错误"}`;
           const errNode: TreeNode = {
             id: "err-" + Date.now(),
-            parent_id: selectedPartitionId || "",
+            parent_id: partitionId || "",
             children_ids: [],
-            partition_id: selectedPartitionId || "",
-            conversation_id: activeConversationId || "",
+            partition_id: partitionId || "",
+            conversation_id: conversationId || "",
             content_blocks: [{ type: "text", text: `❌ ${errMsg}` }] as TreeNode["content_blocks"],
             text_summary: errMsg,
             role: "assistant",
@@ -638,7 +693,7 @@ export default function LearnPage() {
         }
       }
     },
-    [isLoading, selectedPartitionId, activeConversationId, loadPartitions]
+    [isLoading, loadPartitions, ensureConversation]
   );
 
   // ── Handle conversation selection ──
@@ -687,12 +742,45 @@ export default function LearnPage() {
         }),
       });
       if (!res.ok) throw new Error("Edit failed");
-      // Refresh messages
       if (activeConversationId) loadMessages(activeConversationId);
     } catch (e) {
       console.error("Edit failed:", e);
     }
   }, [activeConversationId, loadMessages]);
+
+  // ── Handle version switch ──
+  const handleVersionSwitch = useCallback(async (messageId: string, direction: "prev" | "next") => {
+    try {
+      // Fetch the message to get children_ids
+      const msgRes = await fetch(`/api/conversations/messages/${messageId}`);
+      if (!msgRes.ok) return;
+      const msgData = await msgRes.json();
+      const childrenIds: string[] = msgData.children_ids || [];
+      if (childrenIds.length === 0) return;
+
+      // In v4, children_ids contains version history
+      // For now, load the first child as the next version
+      const nextId = childrenIds[0];
+      const childRes = await fetch(`/api/conversations/messages/${nextId}/blocks`);
+      if (!childRes.ok) return;
+      const childData = await childRes.json();
+
+      // Update the message with the child version's text
+      const childBlocks = childData.blocks || [];
+      const textBlock = childBlocks.find((b: ResponseBlock) => b.type === "text");
+      if (textBlock?.content) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === messageId
+              ? { ...m, content_blocks: [{ type: "text", text: textBlock.content }], text_summary: textBlock.content }
+              : m
+          )
+        );
+      }
+    } catch (e) {
+      console.error("Version switch failed:", e);
+    }
+  }, []);
 
   // ── Handle new partition ──
   const handleCreatePartition = useCallback(
@@ -710,7 +798,7 @@ export default function LearnPage() {
     [loadPartitions]
   );
 
-  // ── Handle rename / delete partition (pass to PartitionSidebar) ──
+  // ── Handle rename / delete partition ──
   const handleRenamePartition = useCallback(
     async (id: string, name: string) => {
       try {
@@ -779,6 +867,7 @@ export default function LearnPage() {
             statusMessage={statusMessage}
             onDeleteMessage={handleDeleteMessage}
             onEditMessage={handleEditMessage}
+            onVersionSwitch={handleVersionSwitch}
           />
           <ConversationChatInput
             onSend={handleSend}
@@ -814,39 +903,72 @@ export default function LearnPage() {
     );
   }
 
-  // ── Desktop layout ──
-  return (
-    <div
-      className="fixed top-0 right-0 bottom-0 bg-[var(--color-bg)] z-30 flex"
-      style={{ left: "var(--sidebar-width)" }}
-    >
-      {/* Tree sidebar (Partition → Domain → Topic → Conversation) */}
-      {!collapsedPartition && (
-        <div className="flex-shrink-0 relative" style={{ width: "260px" }}>
-          <button
-            onClick={() => setCollapsedPartition(true)}
-            className="absolute -right-0.5 top-1/2 -translate-y-1/2 z-10 w-4 h-12 border border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[var(--color-surface)] flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
-            title="收起侧栏"
-          ><ChevronLeft size={12} /></button>
-          <PartitionSidebar
-            partitions={partitions}
-            selectedPartitionId={selectedPartitionId}
-            activeConversationId={activeConversationId}
-            onSelectConversation={handleSelectConversation}
-            onCreatePartition={() => setShowNewPartition(true)}
-            onRenamePartition={handleRenamePartition}
-            onDeletePartition={handleDeletePartition}
-            loading={loadingPartitions}
-          />
-        </div>
-      )}
+  // ── Desktop layout: merged sidebar ──
+  const SIDEBAR_WIDTH = 260;
 
-      {collapsedPartition && (
+  return (
+    <div className="fixed top-0 right-0 bottom-0 bg-[var(--color-bg)] z-30 flex">
+      {/* Merged sidebar: nav links + partition tree */}
+      <div
+        className="flex-shrink-0 flex flex-col border-r border-[var(--color-border)] transition-all duration-200"
+        style={{ width: sidebarCollapsed ? "0px" : `${SIDEBAR_WIDTH}px`, overflow: "hidden" }}
+      >
+        {!sidebarCollapsed && (
+          <div className="flex flex-col h-full">
+            {/* Mini header with back to dashboard link */}
+            <div className="flex items-center justify-between px-3 py-2.5 border-b border-[var(--color-border)]">
+              <a
+                href="/dashboard"
+                className="flex items-center gap-1.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+              >
+                <ChevronLeft size={14} />
+                <span>驾驶舱</span>
+              </a>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setShowNewPartition(true)}
+                  className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"
+                  title="新建分区"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                </button>
+                <button
+                  onClick={() => setSidebarCollapsed(true)}
+                  className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] rounded"
+                  title="收起侧栏"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* Partition tree */}
+            <div className="flex-1 overflow-hidden">
+              <PartitionSidebar
+                partitions={partitions}
+                selectedPartitionId={selectedPartitionId}
+                activeConversationId={activeConversationId}
+                onSelectConversation={handleSelectConversation}
+                onCreatePartition={() => setShowNewPartition(true)}
+                onRenamePartition={handleRenamePartition}
+                onDeletePartition={handleDeletePartition}
+                loading={loadingPartitions}
+                compact
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Collapse toggle when sidebar hidden */}
+      {sidebarCollapsed && (
         <button
-          onClick={() => setCollapsedPartition(false)}
-          className="flex-shrink-0 w-5 border-r border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
+          onClick={() => setSidebarCollapsed(false)}
+          className="flex-shrink-0 w-6 border-r border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
           title="展开侧栏"
-        ><ChevronRight size={12} /></button>
+        >
+          <ChevronRight size={14} />
+        </button>
       )}
 
       {/* Main chat area */}
@@ -878,6 +1000,7 @@ export default function LearnPage() {
           statusMessage={statusMessage}
           onDeleteMessage={handleDeleteMessage}
           onEditMessage={handleEditMessage}
+          onVersionSwitch={handleVersionSwitch}
         />
 
         <ConversationChatInput
@@ -907,7 +1030,7 @@ function MobileBottomSheet({
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-[var(--color-bg)] border-t border-[var(--color-border)] max-h-[70vh] flex flex-col">
+      <div className="relative bg-[var(--color-bg)] border-t border-[var(--color-border)] max-h-[70vh] flex flex-col rounded-t-xl">
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
           <span className="text-sm font-semibold text-[var(--color-text)]">导航</span>
           <button onClick={onClose} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]">

@@ -35,8 +35,8 @@ export default function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)]">
-      {/* Desktop Sidebar */}
-      {isDesktop && <Sidebar />}
+      {/* Desktop Sidebar — hidden on fullscreen routes (learn page has its own) */}
+      {isDesktop && !isFullscreen && <Sidebar />}
 
       {/* Mobile Bottom Nav */}
       {!isDesktop && <BottomNav />}
@@ -45,7 +45,7 @@ export default function AppShell({ children }: AppShellProps) {
       <main
         className="min-h-screen transition-all duration-200"
         style={{
-          paddingLeft: isDesktop ? 'var(--sidebar-width)' : '0',
+          paddingLeft: (isDesktop && !isFullscreen) ? 'var(--sidebar-width)' : '0',
           paddingBottom: !isDesktop ? 'var(--bottom-nav-height)' : '0',
         }}
       >

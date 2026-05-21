@@ -1,23 +1,21 @@
 /**
  * Math rendering helpers.
- * KaTeX is code-split: math formulas show as plain text until loaded (~200ms),
- * then re-render with proper typesetting.
+ * Uses marked for markdown + KaTeX for LaTeX math.
  */
+import { marked } from 'marked';
 
 // ── Lazy-load KaTeX ──
 type KatexDefault = typeof import('katex').default;
 let _katex: KatexDefault | null = null;
 let _katexReady = false;
 
-// Fire-and-forget: load katex in background
 import('katex').then((m) => {
   _katex = m.default;
   _katexReady = true;
 });
 
 // ── Placeholders ──
-const M_PLACEHOLDER = '%%MATH%%';
-const C_PLACEHOLDER = '%%CODE%%';
+const M_PLACEHOLDER = '\x00MATH\x00';
 
 /**
  * Render LaTeX formula. Falls back to plain text if KaTeX not loaded yet.
@@ -32,10 +30,9 @@ function renderFormula(formula: string, displayMode: boolean): string {
         trust: true,
       });
     } catch {
-      // Fall through to plain-text fallback
+      // Fall through
     }
   }
-  // Plain-text fallback (before KaTeX loads or on error)
   const escaped = formula
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -46,70 +43,75 @@ function renderFormula(formula: string, displayMode: boolean): string {
   return `<span class="katex-loading">$${escaped}$</span>`;
 }
 
+// ── Custom marked renderer ──
+const renderer = new marked.Renderer();
+
+// Override code block to add language class
+renderer.code = function({ text, lang }: { text: string; lang?: string }): string {
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  const langClass = lang ? ` class="language-${lang}"` : '';
+  return `<pre><code${langClass}>${escaped}</code></pre>`;
+};
+
+// inline code
+renderer.codespan = function({ text }: { text: string }): string {
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return `<code>${escaped}</code>`;
+};
+
+// Override link to open in new tab
+renderer.link = function({ href, title, text }: { href: string; title?: string | null; text: string }): string {
+  const titleAttr = title ? ` title="${title}"` : '';
+  return `<a href="${href}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
+};
+
+// Override image
+renderer.image = function({ href, title, text }: { href: string; title?: string | null; text: string }): string {
+  const titleAttr = title ? ` title="${title}"` : '';
+  return `<img src="${href}" alt="${text}"${titleAttr} loading="lazy" />`;
+};
+
+marked.setOptions({
+  renderer,
+  gfm: true,
+  breaks: true,
+});
+
 /**
  * Process markdown + LaTeX in text.
  *
  * Pipeline:
- * 1. Extract & protect code blocks
- * 2. Extract & protect LaTeX math
- * 3. HTML-escape remaining text
- * 4. Apply markdown formatting (bold, paragraphs)
- * 5. Restore & render math via KaTeX
- * 6. Restore code blocks
+ * 1. Extract & protect LaTeX math
+ * 2. Render markdown via marked
+ * 3. Restore & render math via KaTeX
  */
 export function renderMarkdown(text: string): string {
-  const codeBlocks: string[] = [];
   const mathBlocks: string[] = [];
 
   let html = text;
 
-  // ── Step 1: Protect code blocks ──
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
-    const escaped = code
-      .trim()
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-    codeBlocks.push(
-      `<pre><code class="language-${lang}">${escaped}</code></pre>`
-    );
-    return `${C_PLACEHOLDER}${codeBlocks.length - 1}%%`;
-  });
-  html = html.replace(/`([^`]+)`/g, (_, code) => {
-    const escaped = code
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-    codeBlocks.push(`<code>${escaped}</code>`);
-    return `${C_PLACEHOLDER}${codeBlocks.length - 1}%%`;
-  });
-
-  // ── Step 2: Protect math ──
+  // ── Step 1: Protect math ──
   html = html.replace(/\$\$([\s\S]*?)\$\$/g, (match) => {
     mathBlocks.push(match);
-    return `${M_PLACEHOLDER}${mathBlocks.length - 1}%%`;
+    return `${M_PLACEHOLDER}${mathBlocks.length - 1}`;
   });
   html = html.replace(/(?<!\$)\$(?!\$)([^$\n]+?)\$(?!\$)/g, (match) => {
     mathBlocks.push(match);
-    return `${M_PLACEHOLDER}${mathBlocks.length - 1}%%`;
+    return `${M_PLACEHOLDER}${mathBlocks.length - 1}`;
   });
 
-  // ── Step 3: HTML escape ──
-  html = html
-    .replace(/&(?!(?:amp|lt|gt|#\d+|#x[\da-f]+);)/gi, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  // ── Step 2: Render markdown ──
+  html = marked.parse(html) as string;
 
-  // ── Step 4: Markdown ──
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  html = html
-    .split('\n\n')
-    .map((p) => `<p>${p.replace(/\n/g, '<br/>')}</p>`)
-    .join('');
-
-  // ── Step 5: Restore math → KaTeX ──
+  // ── Step 3: Restore math → KaTeX ──
   html = html.replace(
-    new RegExp(`${M_PLACEHOLDER}(\\d+)%%`, 'g'),
+    new RegExp(`${M_PLACEHOLDER.replace(/\x00/g, '\\x00')}(\\d+)`, 'g'),
     (_, idx) => {
       const formula = mathBlocks[parseInt(idx)];
       if (!formula) return '';
@@ -119,12 +121,6 @@ export function renderMarkdown(text: string): string {
         isDisplay
       );
     }
-  );
-
-  // ── Step 6: Restore code blocks ──
-  html = html.replace(
-    new RegExp(`${C_PLACEHOLDER}(\\d+)%%`, 'g'),
-    (_, idx) => codeBlocks[parseInt(idx)] || ''
   );
 
   return html;
@@ -152,14 +148,14 @@ export function renderMath(text: string): string {
 }
 
 /**
- * Check if KaTeX has loaded. Callers can use this to trigger re-renders.
+ * Check if KaTeX has loaded.
  */
 export function isKatexReady(): boolean {
   return _katexReady;
 }
 
 /**
- * Subscribe to KaTeX load event. Returns unsubscribe function.
+ * Subscribe to KaTeX load event.
  */
 export function onKatexReady(cb: () => void): () => void {
   if (_katexReady) {
