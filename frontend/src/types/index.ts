@@ -148,6 +148,7 @@ export type WSIncomingMessage =
   | { type: "error"; message: string }
   | { type: "block_update"; block: ResponseBlock }
   | { type: "job_update"; job: BackgroundJob }
+  | { type: "context_switch"; partition_id: string; conversation_id: string; domain_name: string; topic_name: string; switch_detail: Record<string, string> }
   | { type: "pong" };
 
 // ── Legacy aliases (backward compat) ──

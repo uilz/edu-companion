@@ -8,6 +8,8 @@ interface ConversationChatInputProps {
   onSend: (text: string, files?: UploadedFile[]) => void;
   disabled?: boolean;
   branchId?: string | null;
+  /** @alias branchId — preferred name */
+  conversationId?: string | null;
 }
 
 export interface UploadedFile {
@@ -22,7 +24,9 @@ export default function ConversationChatInput({
   onSend,
   disabled = false,
   branchId,
+  conversationId,
 }: ConversationChatInputProps) {
+  const _convId = conversationId ?? branchId;
   const [text, setText] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -49,7 +53,7 @@ export default function ConversationChatInput({
     try {
       const formData = new FormData();
       formData.append("file", file);
-      if (branchId) formData.append("branch_id", branchId);
+      if (_convId) formData.append("branch_id", _convId as string);
       const res = await fetch("/api/conversations/workspace/upload", { method: "POST", body: formData });
       if (!res.ok) {
         const err = await res.json();
@@ -66,7 +70,7 @@ export default function ConversationChatInput({
     } finally {
       setUploading(false);
     }
-  }, [branchId]);
+  }, [_convId]);
 
   const handleImageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

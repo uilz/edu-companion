@@ -2,28 +2,18 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  Menu,
-  X,
-  Plus,
-  Bot,
-  ChevronLeft,
-  ChevronRight,
+  Menu, X, Bot, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type {
   Partition,
-  Branch,
   TreeNode,
   ResponseBlock,
   WSIncomingMessage,
 } from "@/types";
 import PartitionSidebar from "@/components/conversation/PartitionSidebar";
-import BranchList from "@/components/conversation/BranchList";
 import MessageList from "@/components/conversation/MessageList";
 import ConversationChatInput from "@/components/conversation/ChatInput";
-import WorkspacePanel from "@/components/conversation/WorkspacePanel";
-import MaterialPanel from "@/components/materials/MaterialPanel";
-import PracticeSuggestions from "@/components/conversation/PracticeSuggestions";
 
 // ── Media query hook ──
 function useMediaQuery(query: string): boolean {
@@ -59,6 +49,7 @@ type WSCallbacks = {
   onDone: (partitionId: string, assistantMessage: TreeNode) => void;
   onError: (msg: string) => void;
   onBlockUpdate: (block: ResponseBlock) => void;
+  onContextSwitch: (data: { partition_id: string; conversation_id: string; domain_name: string; topic_name: string; switch_detail: Record<string, string> }) => void;
 };
 
 let ws: WebSocket | null = null;
@@ -75,7 +66,6 @@ function connectConversationWS(callbacks: WSCallbacks) {
   try {
     ws = new WebSocket(wsUrl);
 
-    // 连接超时：5 秒内未建立连接 → 强制关闭并报错
     const connectTimeout = setTimeout(() => {
       if (ws && ws.readyState === WebSocket.CONNECTING) {
         ws.close();
@@ -104,7 +94,6 @@ function connectConversationWS(callbacks: WSCallbacks) {
             break;
           case "done":
             wsCallbacks?.onDone(data.partition_id, data.assistant_message);
-            // Merge any response_blocks from the done event
             if (data.response_blocks) {
               for (const rb of data.response_blocks) {
                 wsCallbacks?.onBlockUpdate(rb);
@@ -117,9 +106,10 @@ function connectConversationWS(callbacks: WSCallbacks) {
           case "block_update":
             wsCallbacks?.onBlockUpdate(data.block);
             break;
-          case "user_message":
-            // Already handled optimistically
+          case "context_switch":
+            wsCallbacks?.onContextSwitch(data);
             break;
+          case "user_message":
           case "pong":
             break;
         }
@@ -136,7 +126,6 @@ function connectConversationWS(callbacks: WSCallbacks) {
     ws.onclose = () => {
       console.log("[ConvWS] closed");
       ws = null;
-      // Auto-reconnect after 3s
       setTimeout(() => {
         if (wsCallbacks) connectConversationWS(wsCallbacks);
       }, 3000);
@@ -185,18 +174,13 @@ function NewPartitionDialog({
           <h3 className="text-sm font-semibold text-[var(--color-text)]">
             新建分区
           </h3>
-          <button
-            onClick={onClose}
-            className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-          >
+          <button onClick={onClose} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
             <X size={16} />
           </button>
         </div>
         <div className="px-4 py-4 space-y-3">
           <div>
-            <label className="text-xs text-[var(--color-text-muted)] block mb-1">
-              分区名称
-            </label>
+            <label className="text-xs text-[var(--color-text-muted)] block mb-1">分区名称</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -206,36 +190,51 @@ function NewPartitionDialog({
             />
           </div>
           <div>
-            <label className="text-xs text-[var(--color-text-muted)] block mb-1">
-              Emoji
-            </label>
-            <input
-              value={emoji}
-              onChange={(e) => setEmoji(e.target.value)}
-              className="w-16 bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 focus:outline-none focus:border-[var(--color-border-hover)] text-center"
-            />
+            <label className="text-xs text-[var(--color-text-muted)] block mb-1">Emoji</label>
+            <input value={emoji} onChange={(e) => setEmoji(e.target.value)} className="w-16 bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 text-center" />
           </div>
         </div>
         <div className="px-4 py-3 border-t border-[var(--color-border)] flex justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-1.5 text-xs text-[var(--color-text-secondary)]">取消</button>
+          <button onClick={() => { if (name.trim()) { onCreate(name.trim(), emoji); setName(""); setEmoji("📐"); onClose(); } }} disabled={!name.trim()} className="px-3 py-1.5 text-xs bg-[var(--color-accent)] text-white disabled:opacity-30">
+            创建
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Context switch banner ──
+function SwitchBanner({
+  domainName, topicName, onSwitch, onDismiss,
+}: {
+  domainName: string;
+  topicName: string;
+  onSwitch: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="mx-4 mt-2 px-4 py-3 bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30">
+      <div className="flex items-start gap-3">
+        <span className="text-lg">🔀</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-[var(--color-text)] leading-relaxed">
+            检测到你在聊 <strong>{domainName}{topicName ? ` → ${topicName}` : ""}</strong>，要切换到对应会话吗？
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
           <button
-            onClick={onClose}
-            className="px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+            onClick={onSwitch}
+            className="px-3 py-1.5 text-xs bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors"
           >
-            取消
+            切换
           </button>
           <button
-            onClick={() => {
-              if (name.trim()) {
-                onCreate(name.trim(), emoji);
-                setName("");
-                setEmoji("📐");
-                onClose();
-              }
-            }}
-            disabled={!name.trim()}
-            className="px-3 py-1.5 text-xs bg-[var(--color-accent)] text-white disabled:opacity-30 hover:bg-[var(--color-accent-hover)] transition-colors"
+            onClick={onDismiss}
+            className="px-2 py-1.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
           >
-            创建
+            留在此处
           </button>
         </div>
       </div>
@@ -247,40 +246,33 @@ function NewPartitionDialog({
 export default function LearnPage() {
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
-  // State
+  // ── State ──
   const [partitions, setPartitions] = useState<Partition[]>([]);
-  const [selectedPartitionId, setSelectedPartitionId] = useState<string | null>(
-    null
-  );
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [activeBranchId, setActiveBranchId] = useState<string | null>(null);
+  const [selectedPartitionId, setSelectedPartitionId] = useState<string | null>(null);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<TreeNode[]>([]);
   const [responseBlocks, setResponseBlocks] = useState<ResponseBlock[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
 
+  // Context switch banner
+  const [switchBanner, setSwitchBanner] = useState<{
+    partitionId: string;
+    conversationId: string;
+    domainName: string;
+    topicName: string;
+  } | null>(null);
+
   // Mobile sidebar state
   const [showPartitionSidebar, setShowPartitionSidebar] = useState(false);
-  const [showBranchSidebar, setShowBranchSidebar] = useState(false);
-
-  // Desktop sidebar collapse state
   const [collapsedPartition, setCollapsedPartition] = useState(false);
-  const [collapsedBranch, setCollapsedBranch] = useState(false);
-
-  // New partition dialog
   const [showNewPartition, setShowNewPartition] = useState(false);
-
-  // P5: Branch sidebar view mode
-  const [branchViewMode, setBranchViewMode] = useState<"branches" | "materials">("branches");
-
-  // Loading states
   const [loadingPartitions, setLoadingPartitions] = useState(true);
-  const [loadingBranches, setLoadingBranches] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
 
   const router = useRouter();
 
-  // ── panel=graph → 重定向到图谱页（独立 effect，最先执行） ──
+  // ── panel=graph → redirect ──
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -291,56 +283,53 @@ export default function LearnPage() {
     } catch {}
   }, [router]);
 
-  // ── 刷新后恢复分区/分支状态：URL 参数为主，localStorage 为备份 ──
-  const [urlInitialized, setUrlInitialized] = useState(false);
+  // Stream buffer refs
+  const streamBufferRef = useRef("");
+  const streamingMsgIdRef = useRef<string | null>(null);
+  const streamingContextRef = useRef<{ partitionId: string; conversationId: string } | null>(null);
 
-  // 从 URL 读取（刷新后 URL 参数保持不变）
+  // ── URL / localStorage restore ──
+  const [urlInitialized, setUrlInitialized] = useState(false);
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const pId = params.get("p") || params.get("partition_id");
-      const bId = params.get("b");
+      const cId = params.get("c") || params.get("conversation_id");
 
       if (pId) {
         setSelectedPartitionId(pId);
-        if (bId) setActiveBranchId(bId);
+        if (cId) setActiveConversationId(cId);
       } else {
-        // 回退到 localStorage
         const saved = localStorage.getItem("learn-page-state");
         if (saved) {
-          const { partitionId, branchId } = JSON.parse(saved);
+          const { partitionId, conversationId } = JSON.parse(saved);
           if (partitionId) setSelectedPartitionId(partitionId);
-          if (branchId) setActiveBranchId(branchId);
+          if (conversationId) setActiveConversationId(conversationId);
         }
       }
     } catch {}
     setUrlInitialized(true);
   }, []);
 
-  // 状态变化时同步到 URL + localStorage
+  // Sync state → URL + localStorage
   useEffect(() => {
     if (!urlInitialized) return;
     try {
       const params = new URLSearchParams();
       if (selectedPartitionId) params.set("p", selectedPartitionId);
-      if (activeBranchId) params.set("b", activeBranchId);
+      if (activeConversationId) params.set("c", activeConversationId);
       const qs = params.toString();
       const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
       window.history.replaceState(null, "", newUrl);
 
       localStorage.setItem("learn-page-state", JSON.stringify({
         partitionId: selectedPartitionId,
-        branchId: activeBranchId,
+        conversationId: activeConversationId,
       }));
     } catch {}
-  }, [selectedPartitionId, activeBranchId, urlInitialized]);
+  }, [selectedPartitionId, activeConversationId, urlInitialized]);
 
-  // WS streaming buffer ref
-  const streamBufferRef = useRef("");
-  const streamingMsgIdRef = useRef<string | null>(null);
-  const streamingContextRef = useRef<{ partitionId: string; branchId: string } | null>(null);
-
-  // ── Lock body scroll ──
+  // Lock body scroll
   useEffect(() => {
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = ""; };
@@ -350,9 +339,7 @@ export default function LearnPage() {
   const loadPartitions = useCallback(async () => {
     try {
       setLoadingPartitions(true);
-      const data = await apiFetch<{ partitions: Partition[] }>(
-        "/conversations/partitions"
-      );
+      const data = await apiFetch<{ partitions: Partition[] }>("/conversations/partitions");
       setPartitions(data.partitions || []);
     } catch (e) {
       console.error("Failed to load partitions:", e);
@@ -361,38 +348,19 @@ export default function LearnPage() {
     }
   }, []);
 
-  // ── Load branches for a partition ──
-  const loadBranches = useCallback(async (partitionId: string) => {
-    try {
-      setLoadingBranches(true);
-      const data = await apiFetch<{ branches: Branch[] }>(
-        `/conversations/partitions/${partitionId}/branches`
-      );
-      setBranches(data.branches || []);
-    } catch (e) {
-      console.error("Failed to load branches:", e);
-    } finally {
-      setLoadingBranches(false);
-    }
-  }, []);
-
-  // ── Load messages for a branch ──
-  const loadMessages = useCallback(async (branchId: string) => {
-    // 切换分支时清除旧流式状态，防止旧回复污染新分支
+  // ── Load messages for conversation ──
+  const loadMessages = useCallback(async (conversationId: string) => {
     streamingMsgIdRef.current = null;
     streamBufferRef.current = "";
     streamingContextRef.current = null;
     try {
       setLoadingMessages(true);
       const data = await apiFetch<{ messages: TreeNode[] }>(
-        `/conversations/branches/${branchId}/messages?limit=50&offset=0`
+        `/conversations/conversations/${conversationId}/messages?limit=50&offset=0`
       );
       setMessages(data.messages || []);
 
-      // Load response blocks for assistant messages
-      const assistantMsgs = (data.messages || []).filter(
-        (m) => m.role === "assistant"
-      );
+      const assistantMsgs = (data.messages || []).filter((m) => m.role === "assistant");
       const allBlocks: ResponseBlock[] = [];
       for (const msg of assistantMsgs) {
         try {
@@ -400,9 +368,7 @@ export default function LearnPage() {
             `/conversations/messages/${msg.id}/blocks`
           );
           allBlocks.push(...(blockData.blocks || []));
-        } catch {
-          // Some messages may not have blocks
-        }
+        } catch {}
       }
       setResponseBlocks(allBlocks);
     } catch (e) {
@@ -412,32 +378,35 @@ export default function LearnPage() {
     }
   }, []);
 
+  // ── Load messages when conversation selected ──
+  const msgInitialRender = useRef(true);
+  useEffect(() => {
+    if (msgInitialRender.current) { msgInitialRender.current = false; return; }
+    if (activeConversationId) {
+      loadMessages(activeConversationId);
+    } else {
+      setMessages([]);
+      setResponseBlocks([]);
+    }
+  }, [activeConversationId, loadMessages]);
+
   // ── WebSocket callbacks ──
   useEffect(() => {
     connectConversationWS({
-      onStatus: (msg) => {
-        setStatusMessage(msg);
-      },
+      onStatus: (msg) => setStatusMessage(msg),
       onToken: (content, _blockId) => {
-        // 分支已切换 → 丢弃旧流式 token
         const ctx = streamingContextRef.current;
-        if (!ctx || ctx.partitionId !== selectedPartitionId || ctx.branchId !== activeBranchId) return;
+        if (!ctx || ctx.partitionId !== selectedPartitionId || ctx.conversationId !== activeConversationId) return;
 
         streamBufferRef.current += content;
-        const currentBuffer = streamBufferRef.current;
+        const buffer = streamBufferRef.current;
         const msgId = streamingMsgIdRef.current;
 
         if (msgId) {
           setMessages((prev) =>
             prev.map((m) =>
               m.id === msgId
-                ? {
-                    ...m,
-                    content_blocks: [
-                      { type: "text", text: currentBuffer },
-                    ],
-                    text_summary: currentBuffer,
-                  }
+                ? { ...m, content_blocks: [{ type: "text", text: buffer }], text_summary: buffer }
                 : m
             )
           );
@@ -447,32 +416,25 @@ export default function LearnPage() {
         setIsLoading(false);
         setStatusMessage("");
 
-        // 分支已切换 → 丢弃旧流式完成的回复
         const ctx = streamingContextRef.current;
         streamingContextRef.current = null;
-        if (ctx && (ctx.partitionId !== selectedPartitionId || ctx.branchId !== activeBranchId)) {
-          // 移除旧分支的占位消息
+        if (ctx && (ctx.partitionId !== selectedPartitionId || ctx.conversationId !== activeConversationId)) {
           setMessages((prev) => prev.filter((m) => m.id !== streamingMsgIdRef.current));
           streamingMsgIdRef.current = null;
           streamBufferRef.current = "";
           return;
         }
 
-        // Replace streaming message with final version
         const currentStreamingId = streamingMsgIdRef.current;
         streamingMsgIdRef.current = null;
         streamBufferRef.current = "";
 
         if (assistantMessage) {
-          // 检查 assistantMessage 是否有实际内容
-          const textBlock = assistantMessage.content_blocks?.find((b: {type: string}) => b.type === "text");
+          const textBlock = assistantMessage.content_blocks?.find((b: { type: string }) => b.type === "text");
           const hasContent = textBlock?.text?.trim();
 
           setMessages((prev) => {
-            // 先检查是否已存在（防重复），优先用 streaming placeholder ID
-            const idx = prev.findIndex(
-              (m) => m.id === currentStreamingId || m.id === assistantMessage.id
-            );
+            const idx = prev.findIndex((m) => m.id === currentStreamingId || m.id === assistantMessage.id);
             if (idx >= 0) {
               const updated = [...prev];
               updated[idx] = hasContent ? assistantMessage : {
@@ -482,29 +444,23 @@ export default function LearnPage() {
               };
               return updated;
             }
-            // 没找到占位消息 → 不再追加，避免跨分支污染
             return prev;
           });
-        } else {
-          // assistantMessage 为 null/undefined → 移除占位消息
-          if (currentStreamingId) {
-            setMessages((prev) => prev.filter((m) => m.id !== currentStreamingId));
-          }
+        } else if (currentStreamingId) {
+          setMessages((prev) => prev.filter((m) => m.id !== currentStreamingId));
         }
 
-        // 轻轻刷新分区列表（不刷新消息，避免覆盖流式结果造成闪烁）
         setTimeout(() => loadPartitions(), 300);
       },
       onError: (msg) => {
         setIsLoading(false);
         setStatusMessage("");
-        // 向 messages 插入一个可见的错误消息
         const errorNode: TreeNode = {
           id: "err-" + Date.now(),
           parent_id: selectedPartitionId || "",
           children_ids: [],
           partition_id: selectedPartitionId || "",
-          branch_id: activeBranchId || "",
+          conversation_id: activeConversationId || "",
           content_blocks: [{ type: "text", text: `❌ ${msg}` }] as TreeNode["content_blocks"],
           text_summary: msg,
           role: "assistant",
@@ -515,11 +471,7 @@ export default function LearnPage() {
           has_modified_version: false,
         };
         if (streamingMsgIdRef.current) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === streamingMsgIdRef.current ? errorNode : m
-            )
-          );
+          setMessages((prev) => prev.map((m) => m.id === streamingMsgIdRef.current ? errorNode : m));
         } else {
           setMessages((prev) => [...prev, errorNode]);
         }
@@ -538,100 +490,60 @@ export default function LearnPage() {
           return [...prev, block];
         });
       },
+      onContextSwitch: (data) => {
+        // Show switch banner (even if partition changes)
+        setSwitchBanner({
+          partitionId: data.partition_id,
+          conversationId: data.conversation_id,
+          domainName: data.domain_name || "",
+          topicName: data.topic_name || "",
+        });
+      },
     });
 
     return () => disconnectWS();
-  }, [activeBranchId, loadMessages, loadPartitions]);
+  }, [activeConversationId, loadMessages, loadPartitions, selectedPartitionId]);
 
   // ── Initial load ──
-  useEffect(() => {
-    loadPartitions();
-  }, [loadPartitions]);
+  useEffect(() => { loadPartitions(); }, [loadPartitions]);
 
-  // ── Load branches when partition selected ──
-  // 用 ref 跳过首次渲染，避免与 URL 恢复竞态清空 activeBranchId
-  const branchInitialRender = useRef(true);
-  useEffect(() => {
-    if (branchInitialRender.current) {
-      branchInitialRender.current = false;
-      return;
-    }
-    if (selectedPartitionId) {
-      loadBranches(selectedPartitionId);
-    } else {
-      setBranches([]);
-      setActiveBranchId(null);
-    }
-  }, [selectedPartitionId, loadBranches]);
-
-  // ── Load messages when branch selected ──
-  const msgInitialRender = useRef(true);
-  useEffect(() => {
-    if (msgInitialRender.current) {
-      msgInitialRender.current = false;
-      return;
-    }
-    if (activeBranchId) {
-      loadMessages(activeBranchId);
-    } else {
-      setMessages([]);
-      setResponseBlocks([]);
-    }
-  }, [activeBranchId, loadMessages]);
-
-  // ── 校验 URL 参数：非法分区/分支重定向回默认页 ──
+  // ── Validate URL params ──
   const validatedRef = useRef(false);
   useEffect(() => {
-    if (!urlInitialized || loadingPartitions || loadingBranches) return;
+    if (!urlInitialized || loadingPartitions) return;
     if (validatedRef.current) return;
 
-    // 分区不存在 → 清空 URL 并重置
     if (selectedPartitionId && partitions.length > 0 &&
         !partitions.some((p) => p.id === selectedPartitionId)) {
       validatedRef.current = true;
       setSelectedPartitionId(null);
-      setActiveBranchId(null);
+      setActiveConversationId(null);
       window.history.replaceState(null, "", "/learn");
       return;
     }
 
-    // 分支不存在 → 仅清空分支
-    if (activeBranchId && branches.length > 0 &&
-        !branches.some((b) => b.id === activeBranchId)) {
-      validatedRef.current = true;
-      setActiveBranchId(null);
-      // 更新 URL 去掉 b 参数
-      const params = new URLSearchParams();
-      if (selectedPartitionId) params.set("p", selectedPartitionId);
-      window.history.replaceState(null, "", params.toString() ? `?${params.toString()}` : window.location.pathname);
-      return;
-    }
-
     validatedRef.current = true;
-  }, [urlInitialized, loadingPartitions, loadingBranches, partitions, branches, selectedPartitionId, activeBranchId]);
+  }, [urlInitialized, loadingPartitions, partitions, selectedPartitionId]);
 
   // ── Handle send ──
   const handleSend = useCallback(
     async (text: string, files?: { name: string; type: string; materialId?: string }[]) => {
       if (!text.trim() || isLoading) return;
 
-      // Create optimistic user message
       const userMsgId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
-      const blocks: { type: string; text?: string; url?: string; name?: string }[] = [
-        { type: "text", text },
-      ];
-      // Attach uploaded file references
+      const blocks: { type: string; text?: string; url?: string; name?: string }[] = [{ type: "text", text }];
       if (files) {
         for (const f of files) {
           blocks.push({ type: f.type === "image" ? "image" : "file", name: f.name });
         }
       }
+
       const userMsg: TreeNode = {
         id: userMsgId,
         parent_id: selectedPartitionId || "virtual_root",
         children_ids: [],
         partition_id: selectedPartitionId || "",
-        branch_id: activeBranchId || "",
+        conversation_id: activeConversationId || "",
         content_blocks: blocks as TreeNode["content_blocks"],
         text_summary: text,
         role: "user",
@@ -646,20 +558,19 @@ export default function LearnPage() {
       setIsLoading(true);
       setStatusMessage("正在思考...");
 
-      // Create placeholder for streaming assistant response
       const assistantMsgId = Date.now().toString(36) + "a" + Math.random().toString(36).substr(2, 9);
       streamingMsgIdRef.current = assistantMsgId;
       streamBufferRef.current = "";
       streamingContextRef.current = {
         partitionId: selectedPartitionId || "",
-        branchId: activeBranchId || "",
+        conversationId: activeConversationId || "",
       };
       const assistantPlaceholder: TreeNode = {
         id: assistantMsgId,
         parent_id: userMsgId,
         children_ids: [],
         partition_id: selectedPartitionId || "",
-        branch_id: activeBranchId || "",
+        conversation_id: activeConversationId || "",
         content_blocks: [{ type: "text", text: "" }],
         text_summary: "",
         role: "assistant",
@@ -672,42 +583,36 @@ export default function LearnPage() {
 
       setMessages((prev) => [...prev, assistantPlaceholder]);
 
-      // Send via WebSocket — with fallback if connection is down
       const sent = sendWSMessage({
         text,
         partition_id: selectedPartitionId || undefined,
-        branch_id: activeBranchId || undefined,
+        conversation_id: activeConversationId || undefined,
       });
       if (!sent) {
-        // WebSocket 未连接 → 回退到 HTTP POST
         setStatusMessage("WebSocket 未连接，尝试 HTTP...");
         try {
           const res = await fetch("/api/conversations/message", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text }),
+            body: JSON.stringify({ text, partition_id: selectedPartitionId }),
           });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
-          // 模拟流式完成：直接展示回复
           const replyText = data.assistant_message?.text_summary ||
-            data.assistant_message?.content_blocks?.find((b: {type: string}) => b.type === "text")?.text ||
+            data.assistant_message?.content_blocks?.find((b: { type: string }) => b.type === "text")?.text ||
             "（回复获取成功但没有显示内容）";
           streamingMsgIdRef.current = null;
           streamBufferRef.current = "";
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantMsgId
-                ? {
-                    ...m,
-                    content_blocks: [{ type: "text", text: replyText }],
-                    text_summary: replyText,
-                  }
+                ? { ...m, content_blocks: [{ type: "text", text: replyText }], text_summary: replyText }
                 : m
             )
           );
           setIsLoading(false);
           setStatusMessage("");
+          setTimeout(() => loadPartitions(), 300);
         } catch (httpErr) {
           const errMsg = `无法连接服务器：${httpErr instanceof Error ? httpErr.message : "未知错误"}`;
           const errNode: TreeNode = {
@@ -715,7 +620,7 @@ export default function LearnPage() {
             parent_id: selectedPartitionId || "",
             children_ids: [],
             partition_id: selectedPartitionId || "",
-            branch_id: activeBranchId || "",
+            conversation_id: activeConversationId || "",
             content_blocks: [{ type: "text", text: `❌ ${errMsg}` }] as TreeNode["content_blocks"],
             text_summary: errMsg,
             role: "assistant",
@@ -725,9 +630,7 @@ export default function LearnPage() {
             is_archived: false,
             has_modified_version: false,
           };
-          setMessages((prev) =>
-            prev.map((m) => (m.id === assistantMsgId ? errNode : m))
-          );
+          setMessages((prev) => prev.map((m) => (m.id === assistantMsgId ? errNode : m)));
           streamingMsgIdRef.current = null;
           streamBufferRef.current = "";
           setIsLoading(false);
@@ -735,30 +638,44 @@ export default function LearnPage() {
         }
       }
     },
-    [isLoading, selectedPartitionId, activeBranchId]
+    [isLoading, selectedPartitionId, activeConversationId, loadPartitions]
   );
 
-  // ── Handle partition selection ──
-  const handleSelectPartition = useCallback(
-    (id: string) => {
-      setSelectedPartitionId(id);
-      setActiveBranchId(null);
+  // ── Handle conversation selection ──
+  const handleSelectConversation = useCallback(
+    (partitionId: string, conversationId: string) => {
+      setSelectedPartitionId(partitionId);
+      setActiveConversationId(conversationId);
       setShowPartitionSidebar(false);
+      setSwitchBanner(null);
     },
     []
   );
 
+  // ── Handle switch banner ──
+  const handleSwitchConfirm = useCallback(() => {
+    if (switchBanner) {
+      setSelectedPartitionId(switchBanner.partitionId);
+      setActiveConversationId(switchBanner.conversationId);
+      setSwitchBanner(null);
+    }
+  }, [switchBanner]);
+
+  const handleSwitchDismiss = useCallback(() => {
+    setSwitchBanner(null);
+  }, []);
+
   // ── Handle delete message ──
   const handleDeleteMessage = useCallback(async (messageId: string) => {
     try {
-      await fetch('/api/conversations/messages/' + messageId, { method: 'DELETE' });
-      setMessages(prev => prev.filter(m => m.id !== messageId));
+      await fetch("/api/conversations/messages/" + messageId, { method: "DELETE" });
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
     } catch (e) {
-      console.error('Delete failed:', e);
+      console.error("Delete failed:", e);
     }
   }, []);
 
-  // ── Handle edit message (creates new branch) ──
+  // ── Handle edit message (v4: inline version, no new branch) ──
   const handleEditMessage = useCallback(async (messageId: string, newText: string) => {
     try {
       const res = await fetch("/api/conversations/messages/" + messageId, {
@@ -770,31 +687,12 @@ export default function LearnPage() {
         }),
       });
       if (!res.ok) throw new Error("Edit failed");
-      const data = await res.json();
-      const newBranchId = data.node?.branch_id;
-
-      // Reload partitions (branch counts update) then branches
-      await loadPartitions();
-      if (selectedPartitionId) {
-        await loadBranches(selectedPartitionId);
-        // Navigate to the new branch
-        if (newBranchId) {
-          setActiveBranchId(newBranchId);
-        }
-      }
+      // Refresh messages
+      if (activeConversationId) loadMessages(activeConversationId);
     } catch (e) {
       console.error("Edit failed:", e);
     }
-  }, [loadPartitions, selectedPartitionId, loadBranches]);
-
-  // ── Handle branch selection ──
-  const handleSelectBranch = useCallback(
-    (id: string) => {
-      setActiveBranchId(id);
-      setShowBranchSidebar(false);
-    },
-    []
-  );
+  }, [activeConversationId, loadMessages]);
 
   // ── Handle new partition ──
   const handleCreatePartition = useCallback(
@@ -812,107 +710,35 @@ export default function LearnPage() {
     [loadPartitions]
   );
 
-  // ── Handle new branch ──
-  const handleCreateBranch = useCallback(async () => {
-    if (!selectedPartitionId) return;
-    try {
-      const data = await apiFetch<{ branch: Branch }>(
-        "/conversations/branches",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            partition_id: selectedPartitionId,
-            name: "新分支",
-          }),
-        }
-      );
-      if (data.branch) {
-        await loadBranches(selectedPartitionId);
-        setActiveBranchId(data.branch.id);
-      }
-    } catch (e) {
-      console.error("Failed to create branch:", e);
-    }
-  }, [selectedPartitionId, loadBranches]);
-
-  // ── Handle rename partition ──
+  // ── Handle rename / delete partition (pass to PartitionSidebar) ──
   const handleRenamePartition = useCallback(
     async (id: string, name: string) => {
       try {
-        await apiFetch(`/conversations/partitions/${id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ name }),
-        });
+        await apiFetch(`/conversations/partitions/${id}`, { method: "PATCH", body: JSON.stringify({ name }) });
         await loadPartitions();
-      } catch (e) {
-        console.error("Failed to rename partition:", e);
-      }
+      } catch (e) { console.error(e); }
     },
     [loadPartitions]
   );
 
-  // ── Handle delete partition ──
   const handleDeletePartition = useCallback(
     async (id: string) => {
       try {
-        await apiFetch(`/conversations/partitions/${id}`, {
-          method: "DELETE",
-        });
-        // 如果删除的是当前选中分区，清除选择
+        await apiFetch(`/conversations/partitions/${id}`, { method: "DELETE" });
         if (id === selectedPartitionId) {
           setSelectedPartitionId(null);
-          setActiveBranchId(null);
+          setActiveConversationId(null);
           setMessages([]);
           setResponseBlocks([]);
         }
         await loadPartitions();
-      } catch (e) {
-        console.error("Failed to delete partition:", e);
-      }
+      } catch (e) { console.error(e); }
     },
     [selectedPartitionId, loadPartitions]
   );
 
-  // ── Handle rename branch ──
-  const handleRenameBranch = useCallback(
-    async (id: string, name: string) => {
-      try {
-        await apiFetch(`/conversations/branches/${id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ name }),
-        });
-        if (selectedPartitionId) await loadBranches(selectedPartitionId);
-      } catch (e) {
-        console.error("Failed to rename branch:", e);
-      }
-    },
-    [selectedPartitionId, loadBranches]
-  );
-
-  // ── Handle delete branch ──
-  const handleDeleteBranch = useCallback(
-    async (id: string) => {
-      try {
-        await apiFetch(`/conversations/branches/${id}`, {
-          method: "DELETE",
-        });
-        if (id === activeBranchId) {
-          setActiveBranchId(null);
-          setMessages([]);
-          setResponseBlocks([]);
-        }
-        if (selectedPartitionId) await loadBranches(selectedPartitionId);
-      } catch (e) {
-        console.error("Failed to delete branch:", e);
-        alert("删除分支失败。可能是活跃分支，请先切换到其他分支。");
-      }
-    },
-    [activeBranchId, selectedPartitionId, loadBranches]
-  );
-
-  // ── Active partition name for header ──
+  // ── Active partition for header ──
   const activePartition = partitions.find((p) => p.id === selectedPartitionId);
-  const activeBranch = branches.find((b) => b.id === activeBranchId);
 
   // ── Mobile layout ──
   if (!isDesktop) {
@@ -921,7 +747,6 @@ export default function LearnPage() {
         className="fixed inset-0 bg-[var(--color-bg)] z-30 flex flex-col"
         style={{ bottom: "var(--bottom-nav-height)" }}
       >
-        {/* Mobile header */}
         <div className="flex-shrink-0 border-b border-[var(--color-border)] px-4 py-3 flex items-center gap-3">
           <button
             onClick={() => setShowPartitionSidebar(true)}
@@ -935,24 +760,18 @@ export default function LearnPage() {
                 ? `${activePartition.emoji} ${activePartition.name}`
                 : "对话"}
             </div>
-            {activeBranch && (
-              <div className="text-[10px] text-[var(--color-text-muted)]">
-                🌿 {activeBranch.name}
-              </div>
-            )}
           </div>
-          {activePartition && (
-            <button
-              onClick={() => setShowBranchSidebar(true)}
-              className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-            >
-              <ChevronLeft size={20} className="rotate-180" />
-            </button>
-          )}
         </div>
 
-        {/* Chat area */}
         <div className="flex-1 overflow-hidden flex flex-col">
+          {switchBanner && (
+            <SwitchBanner
+              domainName={switchBanner.domainName}
+              topicName={switchBanner.topicName}
+              onSwitch={handleSwitchConfirm}
+              onDismiss={handleSwitchDismiss}
+            />
+          )}
           <MessageList
             messages={messages}
             responseBlocks={responseBlocks}
@@ -964,19 +783,17 @@ export default function LearnPage() {
           <ConversationChatInput
             onSend={handleSend}
             disabled={isLoading}
-            branchId={activeBranchId}
+            conversationId={activeConversationId}
           />
         </div>
 
-        {/* Mobile partition bottom sheet */}
         {showPartitionSidebar && (
-          <MobileBottomSheet
-            onClose={() => setShowPartitionSidebar(false)}
-          >
+          <MobileBottomSheet onClose={() => setShowPartitionSidebar(false)}>
             <PartitionSidebar
               partitions={partitions}
               selectedPartitionId={selectedPartitionId}
-              onSelectPartition={handleSelectPartition}
+              activeConversationId={activeConversationId}
+              onSelectConversation={handleSelectConversation}
               onCreatePartition={() => {
                 setShowPartitionSidebar(false);
                 setShowNewPartition(true);
@@ -984,23 +801,6 @@ export default function LearnPage() {
               onRenamePartition={handleRenamePartition}
               onDeletePartition={handleDeletePartition}
               loading={loadingPartitions}
-            />
-          </MobileBottomSheet>
-        )}
-
-        {/* Mobile branch bottom sheet */}
-        {showBranchSidebar && (
-          <MobileBottomSheet
-            onClose={() => setShowBranchSidebar(false)}
-          >
-            <BranchList
-              branches={branches}
-              activeBranchId={activeBranchId}
-              onSelectBranch={handleSelectBranch}
-              onCreateBranch={handleCreateBranch}
-              onRenameBranch={handleRenameBranch}
-              onDeleteBranch={handleDeleteBranch}
-              loading={loadingBranches}
             />
           </MobileBottomSheet>
         )}
@@ -1020,100 +820,37 @@ export default function LearnPage() {
       className="fixed top-0 right-0 bottom-0 bg-[var(--color-bg)] z-30 flex"
       style={{ left: "var(--sidebar-width)" }}
     >
-      {/* Partition sidebar */}
+      {/* Tree sidebar (Partition → Domain → Topic → Conversation) */}
       {!collapsedPartition && (
-      <div className="flex-shrink-0 relative" style={{ width: "200px" }}>
-        <button
-          onClick={() => setCollapsedPartition(true)}
-          className="absolute -right-0.5 top-1/2 -translate-y-1/2 z-10 w-4 h-12 border border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[var(--color-surface)] flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
-          title="收起分区"
-        ><ChevronLeft size={12} /></button>
-        <PartitionSidebar
-          partitions={partitions}
-          selectedPartitionId={selectedPartitionId}
-          onSelectPartition={handleSelectPartition}
-          onCreatePartition={() => setShowNewPartition(true)}
-          onRenamePartition={handleRenamePartition}
-          onDeletePartition={handleDeletePartition}
-          loading={loadingPartitions}
-        />
-      </div>
+        <div className="flex-shrink-0 relative" style={{ width: "260px" }}>
+          <button
+            onClick={() => setCollapsedPartition(true)}
+            className="absolute -right-0.5 top-1/2 -translate-y-1/2 z-10 w-4 h-12 border border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[var(--color-surface)] flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+            title="收起侧栏"
+          ><ChevronLeft size={12} /></button>
+          <PartitionSidebar
+            partitions={partitions}
+            selectedPartitionId={selectedPartitionId}
+            activeConversationId={activeConversationId}
+            onSelectConversation={handleSelectConversation}
+            onCreatePartition={() => setShowNewPartition(true)}
+            onRenamePartition={handleRenamePartition}
+            onDeletePartition={handleDeletePartition}
+            loading={loadingPartitions}
+          />
+        </div>
       )}
 
-      {/* Collapsed partition toggle */}
       {collapsedPartition && (
         <button
           onClick={() => setCollapsedPartition(false)}
           className="flex-shrink-0 w-5 border-r border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
-          title="展开分区"
-        ><ChevronRight size={12} /></button>
-      )}
-
-      {/* Branch sidebar (shown when partition selected) */}
-      {selectedPartitionId && !collapsedBranch && (
-        <div className="flex-shrink-0 relative" style={{ width: "220px" }}>
-          <button
-            onClick={() => setCollapsedBranch(true)}
-            className="absolute -right-0.5 top-1/2 -translate-y-1/2 z-10 w-4 h-12 border border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[var(--color-surface)] flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
-            title="收起分支"
-          ><ChevronLeft size={12} /></button>
-
-          {/* P5: Tab bar */}
-          <div className="flex border-b border-[var(--color-border)]">
-            <button
-              onClick={() => setBranchViewMode("branches")}
-              className={`flex-1 py-2 text-xs font-medium transition-colors ${
-                branchViewMode === "branches"
-                  ? "text-[var(--color-accent)] border-b-2 border-[var(--color-accent)]"
-                  : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-              }`}
-            >
-              🌿 分支
-            </button>
-            <button
-              onClick={() => setBranchViewMode("materials")}
-              className={`flex-1 py-2 text-xs font-medium transition-colors ${
-                branchViewMode === "materials"
-                  ? "text-[var(--color-accent)] border-b-2 border-[var(--color-accent)]"
-                  : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-              }`}
-            >
-              📁 资料
-            </button>
-          </div>
-
-          {branchViewMode === "branches" ? (
-            <>
-              <BranchList
-                branches={branches}
-                activeBranchId={activeBranchId}
-                onSelectBranch={handleSelectBranch}
-                onCreateBranch={handleCreateBranch}
-                onRenameBranch={handleRenameBranch}
-                onDeleteBranch={handleDeleteBranch}
-                loading={loadingBranches}
-              />
-              <WorkspacePanel branchId={activeBranchId} partitionId={selectedPartitionId} />
-              <PracticeSuggestions branchId={activeBranchId} />
-            </>
-          ) : (
-            <MaterialPanel partitionId={selectedPartitionId} />
-          )}
-        </div>
-      )}
-
-      {/* Collapsed branch toggle */}
-      {selectedPartitionId && collapsedBranch && (
-        <button
-          onClick={() => setCollapsedBranch(false)}
-          className="flex-shrink-0 w-5 border-r border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
-          title="展开分支"
+          title="展开侧栏"
         ><ChevronRight size={12} /></button>
       )}
 
       {/* Main chat area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Chat header */}
         {selectedPartitionId && activePartition && (
           <div className="flex-shrink-0 border-b border-[var(--color-border)] px-6 py-3 flex items-center gap-3">
             <Bot size={18} className="text-[var(--color-accent)]" />
@@ -1121,16 +858,19 @@ export default function LearnPage() {
               <div className="text-sm font-semibold text-[var(--color-text)]">
                 {activePartition.emoji} {activePartition.name}
               </div>
-              {activeBranch && (
-                <div className="text-[10px] text-[var(--color-text-muted)]">
-                  🌿 {activeBranch.name}
-                </div>
-              )}
             </div>
           </div>
         )}
 
-        {/* Messages */}
+        {switchBanner && (
+          <SwitchBanner
+            domainName={switchBanner.domainName}
+            topicName={switchBanner.topicName}
+            onSwitch={handleSwitchConfirm}
+            onDismiss={handleSwitchDismiss}
+          />
+        )}
+
         <MessageList
           messages={messages}
           responseBlocks={responseBlocks}
@@ -1140,11 +880,10 @@ export default function LearnPage() {
           onEditMessage={handleEditMessage}
         />
 
-        {/* Input */}
         <ConversationChatInput
           onSend={handleSend}
           disabled={isLoading}
-          branchId={activeBranchId}
+          conversationId={activeConversationId}
         />
       </div>
 
@@ -1170,13 +909,8 @@ function MobileBottomSheet({
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative bg-[var(--color-bg)] border-t border-[var(--color-border)] max-h-[70vh] flex flex-col">
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
-          <span className="text-sm font-semibold text-[var(--color-text)]">
-            导航
-          </span>
-          <button
-            onClick={onClose}
-            className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-          >
+          <span className="text-sm font-semibold text-[var(--color-text)]">导航</span>
+          <button onClick={onClose} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
             <X size={18} />
           </button>
         </div>

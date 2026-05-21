@@ -327,20 +327,21 @@ async def list_partition_messages(partition_id: str, request: Request, limit: in
 async def send_message(req: SendMessageRequest):
     from app.services.conversation_llm import send_and_reply
 
-    partition_id = req.partition_id
-    if not partition_id:
-        result = classifier.classify_partition(USER_ID, req.text)
-        partition_id = result.get("partition_id")
-        if not partition_id:
-            partition = tree_ops.create_partition(USER_ID, req.text[:20], emoji="💬")
-            partition_id = partition.id
+    # v4: auto_resolve handles classification + routing
+    route = classifier.auto_resolve(
+        USER_ID, req.text,
+        current_partition_id=req.partition_id or "",
+    )
+    partition_id = route["partition_id"]
 
     outcome = await send_and_reply(USER_ID, partition_id, req.text)
     return {
         "user_message": outcome["user_message"],
         "assistant_message": outcome["assistant_message"],
         "partition_id": partition_id,
+        "conversation_id": route.get("conversation_id", ""),
         "response_blocks": outcome.get("response_blocks", []),
+        "switch_recommendation": route.get("switch_detail") if route.get("should_recommend_switch") else None,
     }
 
 
@@ -376,13 +377,6 @@ async def websocket_conversation(websocket: WebSocket) -> None:
             }))
 
             try:
-                if not partition_id:
-                    cls_result = classifier.classify_partition(user_id, text)
-                    partition_id = cls_result.get("partition_id")
-                    if not partition_id:
-                        partition = tree_ops.create_partition(user_id, text[:20], emoji="💬")
-                        partition_id = partition.id
-
                 from app.services.conversation_llm import send_and_reply_stream
                 assistant_content = ""
                 async for event in send_and_reply_stream(
@@ -390,7 +384,21 @@ async def websocket_conversation(websocket: WebSocket) -> None:
                     conversation_id=conversation_id,
                 ):
                     event["request_id"] = request_id
-                    event["partition_id"] = partition_id
+
+                    # context_switch 事件：更新 partition_id 为推荐值
+                    if event.get("type") == "context_switch":
+                        rec_pid = event.get("partition_id", "")
+                        rec_cid = event.get("conversation_id", "")
+                        if rec_pid:
+                            partition_id = rec_pid
+                        if rec_cid:
+                            conversation_id = rec_cid
+                        event["partition_id"] = partition_id
+
+                    # 确保事件带 partition_id
+                    if "partition_id" not in event or not event["partition_id"]:
+                        event["partition_id"] = partition_id
+
                     await websocket.send_text(json.dumps(event, ensure_ascii=False, default=str))
                     if event.get("type") == "token":
                         assistant_content += event.get("content", "")

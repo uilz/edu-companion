@@ -834,17 +834,44 @@ async def send_and_reply_stream(
     partition_id: str,
     user_text: str,
     content_blocks: list[ContentBlock] | None = None,
+    conversation_id: str = "",
 ) -> AsyncGenerator[dict, None]:
     """
-    完整流程（流式）：存用户消息 → 预执行工具 → 流式生成回复（含工具结果） → 存助手消息。
-    产出事件：{"type": "tool_block", "block": ...} / {"type": "token", "content": ...} / {"type": "done", "assistant_message": ...}
+    完整流程（流式）：自动路由 → 存用户消息 → 预执行工具 → 流式生成回复 → 存助手消息。
+    产出事件：context_switch / tool_block / token / done
+
+    v4: 集成 auto_resolve 自动定位分区/领域/专题/对话，检测到切换时发出 context_switch。
     """
     import asyncio
+
+    # 0. 自动路由：分类 + 创建缺失层级 + 检测切换
+    route = classifier.auto_resolve(
+        user_id, user_text,
+        current_partition_id=partition_id,
+        current_conversation_id=conversation_id,
+    )
+    resolved_partition_id = route["partition_id"]
+    resolved_conversation_id = route["conversation_id"]
+
+    # 检测到切换 → 发出推荐事件（前端展示切换提示）
+    if route["should_recommend_switch"]:
+        yield {
+            "type": "context_switch",
+            "switch_detail": route["switch_detail"],
+            "partition_id": resolved_partition_id,
+            "conversation_id": resolved_conversation_id,
+            "domain_name": route.get("domain_name", ""),
+            "topic_name": route.get("topic_name", ""),
+        }
+
+    # 更新为解析后的 partition_id
+    partition_id = resolved_partition_id
 
     # 1. 存用户消息
     blocks = content_blocks or [TextBlock(text=user_text)]
     user_node = tree_ops.add_message(
-        user_id, partition_id, "user", blocks, user_text
+        user_id, partition_id, "user", blocks, user_text,
+        conversation_id=resolved_conversation_id,
     )
 
     # P0: async meta history
