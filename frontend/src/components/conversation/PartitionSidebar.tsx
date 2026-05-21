@@ -173,8 +173,9 @@ interface PartitionSidebarProps {
   onRenamePartition?: (id: string, name: string) => void;
   onDeletePartition?: (id: string) => void;
   loading?: boolean;
-  compact?: boolean; // hide header for merged sidebar
-  onNewConversation?: (level: string, parentId: string) => void; // create conversation at partition/domain/topic level
+  compact?: boolean;
+  onNewConversation?: (level: string, parentId: string) => void;
+  onTreeChanged?: () => void; // notify parent to refresh after create/delete/rename
 }
 
 export default function PartitionSidebar({
@@ -188,6 +189,7 @@ export default function PartitionSidebar({
   loading = false,
   compact = false,
   onNewConversation,
+  onTreeChanged,
 }: PartitionSidebarProps) {
   const [tree, setTree] = useState<PartitionItem[]>([]);
 
@@ -314,17 +316,27 @@ export default function PartitionSidebar({
   const handleCreate = async (name: string, emoji: string) => {
     if (!createDialog) return;
     try {
+      let createdId = "";
       if (createDialog.level === "domain") {
         await apiFetch("/domains", { method: "POST", body: JSON.stringify({ partition_id: createDialog.parentId, name, emoji }) });
       } else if (createDialog.level === "topic") {
         await apiFetch("/topics", { method: "POST", body: JSON.stringify({ domain_id: createDialog.parentId, name, emoji }) });
       } else if (createDialog.level === "conversation") {
-        await apiFetch("/conversations", { method: "POST", body: JSON.stringify({ topic_id: createDialog.parentId, name }) });
+        const { conversation } = await apiFetch<{ conversation: { id: string } }>("/conversations", { method: "POST", body: JSON.stringify({ topic_id: createDialog.parentId, name }) });
+        createdId = conversation.id;
       }
       // Refresh parent
       const parentItem = findItem(tree, createDialog.parentId);
       if (parentItem && parentItem.expanded) {
         loadChildren(parentItem as PartitionItem | DomainItem | TopicItem);
+      }
+      // Notify parent to refresh
+      onTreeChanged?.();
+      // Auto-select newly created conversation
+      if (createdId && createDialog.level === "conversation") {
+        const convItem = findItem(tree, createDialog.parentId) as TopicItem | null;
+        const pId = convItem?.partition_id || selectedPartitionId || "";
+        onSelectConversation(pId, createdId);
       }
     } catch (e) {
       console.error("Create failed:", e);
@@ -373,6 +385,7 @@ export default function PartitionSidebar({
       if (editLevel === "partition" && onRenamePartition) {
         onRenamePartition(editingId, name);
       }
+      onTreeChanged?.();
     } catch (e) {
       console.error("Rename failed:", e);
     }
@@ -407,6 +420,11 @@ export default function PartitionSidebar({
       if (deleteTarget.level === "partition" && onDeletePartition) {
         onDeletePartition(deleteTarget.id);
       }
+      // If deleted the active conversation, deselect it
+      if (deleteTarget.id === activeConversationId) {
+        onSelectConversation(selectedPartitionId || "", "");
+      }
+      onTreeChanged?.();
     } catch (e) {
       console.error("Delete failed:", e);
     }

@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useMemo, useState, useCallback } from "react";
-import { User, Bot, Trash2, Pencil, Check, X, ChevronDown, ChevronLeft, ChevronRight, AlertCircle } from "lucide-react";
-import MathContent from "@/components/ui/MathContent";
+import { User, Bot, Trash2, Pencil, Check, X, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import ResponseBlockRenderer from "./ResponseBlockRenderer";
 import SpeakButton from "./SpeakButton";
-import { renderContent } from "@/lib/math";
 import { useRenderedContent } from "@/lib/useRenderedContent";
 import type { TreeNode, ResponseBlock } from "@/types";
 

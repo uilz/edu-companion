@@ -1012,6 +1012,7 @@ export default function LearnPage() {
               onDeletePartition={handleDeletePartition}
               loading={loadingPartitions}
               onNewConversation={handleNewConversation}
+              onTreeChanged={loadPartitions}
             />
           </MobileBottomSheet>
         )}
@@ -1091,6 +1092,7 @@ export default function LearnPage() {
                 loading={loadingPartitions}
                 compact
                 onNewConversation={handleNewConversation}
+                onTreeChanged={loadPartitions}
               />
             </div>
           </div>
