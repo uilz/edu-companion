@@ -13,7 +13,7 @@ from uuid import uuid4
 BASE = Path.home() / ".companion" / "data"
 
 
-def _ensure_chain(data: dict, partition_id: str, conv_id: str):
+def _ensure_chain(data: dict, partition_id: str, conv_id: str, now: float):
     """确保 partition → domain → topic → conversation 链条完整"""
     domains = data.setdefault("domains", {})
     topics = data.setdefault("topics", {})
@@ -62,7 +62,7 @@ def migrate(path: Path) -> int:
                                   "path": [], "is_active": True, "is_archived": False,
                                   "summary": "", "material_refs": [],
                                   "created_at": now, "last_message_at": now}
-                    _ensure_chain(data, pid, cid)
+                    _ensure_chain(data, pid, cid, now)
                 n["conversation_id"] = cid
                 print(f"  node {nid[:8]}  补 conversation_id={cid[:8]}")
             changes += 1
@@ -79,7 +79,7 @@ def migrate(path: Path) -> int:
                  "summary": b.get("summary", ""), "material_refs": b.get("material_refs", []),
                  "created_at": b.get("created_at", now), "last_message_at": b.get("last_message_at", now)}
             convs[c["id"]] = c
-            _ensure_chain(data, pid, c["id"])
+            _ensure_chain(data, pid, c["id"], now)
             print(f"  branch {bid[:8]} → conversation")
             changes += 1
 
