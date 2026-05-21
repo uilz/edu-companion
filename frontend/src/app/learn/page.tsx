@@ -549,10 +549,41 @@ export default function LearnPage() {
         }
       }
 
-      // Auto-create conversation in the partition
+      // Auto-create conversation — need a topic first, so create full chain if needed
+      // Try to find or create: domain → topic → conversation
+      let topicId = "";
+
+      // Check if partition has any domains
+      const domainsData = await apiFetch<{ domains: { id: string }[] }>(`/conversations/partitions/${pId}/domains`);
+      const domains = domainsData.domains || [];
+
+      if (domains.length > 0) {
+        // Check first domain for topics
+        const topicsData = await apiFetch<{ topics: { id: string }[] }>(`/conversations/domains/${domains[0].id}/topics`);
+        if (topicsData.topics?.length > 0) {
+          topicId = topicsData.topics[0].id;
+        } else {
+          const newTopic = await apiFetch<{ topic: { id: string } }>("/conversations/topics", {
+            method: "POST",
+            body: JSON.stringify({ domain_id: domains[0].id, name: "默认专题", emoji: "📝" }),
+          });
+          topicId = newTopic.topic.id;
+        }
+      } else {
+        const newDomain = await apiFetch<{ domain: { id: string } }>("/conversations/domains", {
+          method: "POST",
+          body: JSON.stringify({ partition_id: pId, name: "默认领域", emoji: "📚" }),
+        });
+        const newTopic = await apiFetch<{ topic: { id: string } }>("/conversations/topics", {
+          method: "POST",
+          body: JSON.stringify({ domain_id: newDomain.domain.id, name: "默认专题", emoji: "📝" }),
+        });
+        topicId = newTopic.topic.id;
+      }
+
       const convData = await apiFetch<{ conversation: { id: string } }>("/conversations/conversations", {
         method: "POST",
-        body: JSON.stringify({ topic_id: null, partition_id: pId, name: "新对话" }),
+        body: JSON.stringify({ topic_id: topicId, name: "" }),
       });
 
       const cId = convData.conversation.id;

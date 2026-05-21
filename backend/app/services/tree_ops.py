@@ -211,13 +211,20 @@ class TreeOpsService:
         return conv
 
     def delete_conversation(self, user_id: str, conv_id: str) -> None:
-        """删除对话（软删消息，移除对话记录）"""
+        """删除对话（软删消息，移除对话记录）。
+        若为活跃对话则先取消活跃状态。"""
         data = storage.load(user_id)
         conv = data.conversations.get(conv_id)
         if not conv:
             raise ValueError(f"Conversation {conv_id} not found")
+
+        # 如果删除的是活跃对话，先取消活跃状态
         if conv.is_active:
-            raise ValueError("Cannot delete active conversation")
+            conv.is_active = False
+            # 清除关联专题的 active_conversation_id
+            topic = data.topics.get(conv.topic_id)
+            if topic and topic.active_conversation_id == conv_id:
+                topic.active_conversation_id = ""
 
         for nid in conv.path:
             node = data.nodes.get(nid)

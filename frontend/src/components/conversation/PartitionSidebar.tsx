@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Plus, FolderOpen, Hash, GitGraph, Pencil, Trash2, Check, X,
   ChevronRight, ChevronDown, MessageSquare, BookOpen, Layers,
@@ -212,6 +212,68 @@ export default function PartitionSidebar({
       });
     });
   }, [partitions]);
+
+  // ── Auto-expand path to active conversation ──
+  const autoExpandRef = useRef<string>("");
+  const treeRef = useRef(tree);
+  treeRef.current = tree;
+
+  useEffect(() => {
+    if (!selectedPartitionId || !activeConversationId) return;
+    if (autoExpandRef.current === activeConversationId) return;
+    autoExpandRef.current = activeConversationId;
+
+    // Step 1: Expand partition to load domains
+    setTree(prev => prev.map(p => {
+      if (p.id !== selectedPartitionId) return p;
+      if (!p.expanded) {
+        setTimeout(() => {
+          const item = treeRef.current.find(p => p.id === selectedPartitionId);
+          if (item) (loadChildren as any)(item);
+        }, 100);
+      }
+      return { ...p, expanded: true };
+    }) as any);
+
+    // Step 2: After domains load, expand first domain
+    setTimeout(() => {
+      setTree(prev => {
+        const partition = prev.find(p => p.id === selectedPartitionId);
+        if (!partition?.children?.length) return prev;
+        const firstDomain = partition.children[0] as DomainItem;
+        if (firstDomain.expanded) return prev;
+        setTimeout(() => (loadChildren as any)(firstDomain), 100);
+        return prev.map(p => {
+          if (p.id !== selectedPartitionId) return p;
+          return { ...p, children: (p.children as DomainItem[]).map(d =>
+            d.id === firstDomain.id ? { ...d, expanded: true } : d
+          )};
+        }) as any;
+      });
+    }, 600);
+
+    // Step 3: After topics load, expand first topic
+    setTimeout(() => {
+      setTree(prev => {
+        const partition = prev.find(p => p.id === selectedPartitionId);
+        const firstDomain = partition?.children?.[0] as DomainItem | undefined;
+        if (!firstDomain?.children?.length) return prev;
+        const firstTopic = firstDomain.children[0] as TopicItem;
+        if (firstTopic.expanded) return prev;
+        setTimeout(() => (loadChildren as any)(firstTopic), 100);
+        return prev.map(p => {
+          if (p.id !== selectedPartitionId) return p;
+          return { ...p, children: (p.children as DomainItem[]).map(d =>
+            d.id === firstDomain.id
+              ? { ...d, children: (d.children as TopicItem[]).map(t =>
+                  t.id === firstTopic.id ? { ...t, expanded: true } : t
+                )}
+              : d
+          )};
+        }) as any;
+      });
+    }, 1200);
+  }, [selectedPartitionId, activeConversationId]);
 
   // ── Fetch children ──
   const loadChildren = useCallback(async (item: PartitionItem | DomainItem | TopicItem) => {
