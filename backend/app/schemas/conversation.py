@@ -7,10 +7,10 @@
 from __future__ import annotations
 
 import time
-from typing import Literal, Any
+from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 
 # ── Content Blocks（多模态内容块，不变） ──
@@ -84,7 +84,7 @@ class TreeNode(BaseModel):
     parent_id: str  # virtual root id if top-level
     children_ids: list[str] = Field(default_factory=list)  # alternative versions (for edit)
     partition_id: str
-    conversation_id: str = ""  # v4: 替换 branch_id，默认为空向后兼容
+    conversation_id: str  # v4: 替换 branch_id
     content_blocks: list[ContentBlock] = Field(default_factory=list)
     text_summary: str = ""
     summary: str | None = None
@@ -99,17 +99,6 @@ class TreeNode(BaseModel):
     linked_from: list[str] = Field(default_factory=list)
     discussed_skill_ids: list[str] = Field(default_factory=list)
 
-    @model_validator(mode="before")
-    @classmethod
-    def _migrate_branch_id(cls, data: Any) -> Any:
-        """向后兼容：branch_id → conversation_id"""
-        if isinstance(data, dict):
-            if "branch_id" in data and "conversation_id" not in data:
-                data["conversation_id"] = data.pop("branch_id")
-            elif "conversation_id" not in data:
-                data["conversation_id"] = ""
-        return data
-
 
 # ── Link Node（不变，branch_id → conversation_id） ──
 
@@ -118,21 +107,11 @@ class LinkNode(BaseModel):
     type: Literal["link"] = "link"
     target_message_id: str
     target_partition_id: str
-    target_conversation_id: str = ""
+    target_conversation_id: str
     source_partition_id: str
-    source_conversation_id: str = ""
+    source_conversation_id: str
     preview_summary: str | None = None
     timestamp: float = Field(default_factory=time.time)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _migrate_branch_id(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            for old, new in [("target_branch_id", "target_conversation_id"),
-                              ("source_branch_id", "source_conversation_id")]:
-                if old in data and new not in data:
-                    data[new] = data.pop(old)
-        return data
 
 
 # ── Conversation（v4: 替换旧 Branch） ──

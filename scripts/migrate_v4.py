@@ -1,251 +1,116 @@
 #!/usr/bin/env python3
 """
-v3 → v4 数据迁移脚本
-branch_id → conversation_id + Branch → Conversation 转换
+v3 → v4 数据迁移（精简版）
+处理三种遗留数据：branch_id → conversation_id / 缺省 conversation_id / branches 转 conversations
 
-运行方式:
-  python migrate_v4.py [data_dir]
-
-默认 data_dir: ~/.companion/data
+用法: python3 ~/edu-companion/scripts/migrate_v4.py
 """
-
 import json
-import os
-import sys
+import time
 from pathlib import Path
 from uuid import uuid4
 
-
-def _find_or_create_fallback_conversation(data: dict, partition_id: str) -> str:
-    """为没有 conversation_id 的节点找一个归宿：按 partition → domain → topic → conversation 链查找"""
-    import time
-
-    topics = data.get("topics", {})
-    conversations = data.get("conversations", {})
-
-    # 先查找该分区下是否有活跃对话
-    for tid, topic in topics.items():
-        cid = topic.get("active_conversation_id", "")
-        if cid and cid in conversations:
-            return cid
-
-    # 没有则创建默认 domain→topic→conversation
-    cid = str(uuid4())
-    conv = {
-        "id": cid,
-        "topic_id": "",
-        "name": "默认对话",
-        "path": [],
-        "is_active": True,
-        "is_archived": False,
-        "summary": "",
-        "material_refs": [],
-        "created_at": time.time(),
-        "last_message_at": time.time(),
-    }
-    data.setdefault("conversations", {})[cid] = conv
-    _ensure_default_hierarchy(data, partition_id, cid)
-    return cid
+BASE = Path.home() / ".companion" / "data"
 
 
-def migrate_file(filepath: Path) -> bool:
-    """迁移单个 userData.json"""
-    print(f"\n📂 {filepath}")
-
-    with open(filepath) as f:
-        data = json.load(f)
-
-    changes = 0
-
-    # 1. 迁移 nodes: branch_id → conversation_id（以及缺失 conversation_id 的节点）
-    nodes = data.get("nodes", {})
-    for nid, node in nodes.items():
-        if "conversation_id" not in node:
-            if "branch_id" in node:
-                node["conversation_id"] = node.pop("branch_id")
-                changes += 1
-                print(f"  ✅ node {nid}: branch_id → conversation_id")
-            else:
-                # 节点完全没有 conversation_id → 查找所属分区的活跃对话
-                partition_id = node.get("partition_id", "")
-                conv_id = _find_or_create_fallback_conversation(data, partition_id)
-                node["conversation_id"] = conv_id
-                changes += 1
-                print(f"  🔧 node {nid}: 补充 conversation_id={conv_id[:8]}")
-
-    # 2. 迁移 response_blocks: branch_id → conversation_id
-    rbs = data.get("response_blocks", {})
-    for bid, block in rbs.items():
-        if "conversation_id" not in block:
-            if "branch_id" in block:
-                block["conversation_id"] = block.pop("branch_id")
-                changes += 1
-                print(f"  ✅ response_block {bid}: branch_id → conversation_id")
-
-    # 3. 迁移 link_nodes
-    link_nodes = data.get("link_nodes", {})
-    for lid, link in link_nodes.items():
-        if "source_conversation_id" not in link:
-            if "source_branch_id" in link:
-                link["source_conversation_id"] = link.pop("source_branch_id")
-                changes += 1
-        if "target_conversation_id" not in link:
-            if "target_branch_id" in link:
-                link["target_conversation_id"] = link.pop("target_branch_id")
-                changes += 1
-
-    # 4. 迁移 branches → conversations
-    branches = data.get("branches", {})
-    conversations = data.get("conversations", {})
-    if branches:
-        for bid, branch in branches.items():
-            if bid not in conversations:
-                # Convert Branch → Conversation
-                # Branch has: id, partition_id, name, path, is_active, is_archived, summary, material_refs, created_at, last_message_at
-                # Conversation has: id, topic_id, name, path, is_active, is_archived, summary, created_at, last_message_at
-                # Old Branch doesn't have topic_id — we need to create a default topic for it
-                partition_id = branch.get("partition_id", "")
-                conv = {
-                    "id": branch.get("id", str(uuid4())),
-                    "topic_id": "",  # will be set by auto-resolve
-                    "name": branch.get("name", "迁移的对话"),
-                    "path": branch.get("path", []),
-                    "is_active": branch.get("is_active", False),
-                    "is_archived": branch.get("is_archived", False),
-                    "summary": branch.get("summary", ""),
-                    "material_refs": branch.get("material_refs", []),
-                    "created_at": branch.get("created_at", 0),
-                    "last_message_at": branch.get("last_message_at", 0),
-                }
-                # Create default domain+ topic for this branch's partition
-                _ensure_default_hierarchy(data, partition_id, conv["id"])
-                conversations[conv["id"]] = conv
-
-                changes += 1
-                print(f"  ✅ branch {bid} → conversation {conv['id']} (partition={partition_id})")
-
-        # Delete branches key
-        del data["branches"]
-
-    # 5. Ensure conversations key exists
-    if "conversations" not in data:
-        data["conversations"] = {}
-    elif not isinstance(data["conversations"], dict):
-        data["conversations"] = {}
-
-    # 6. Ensure domains and topics exist (may be missing in old data)
-    if "domains" not in data:
-        data["domains"] = {}
-    if "topics" not in data:
-        data["topics"] = {}
-
-    # 7. For any conversation with empty topic_id, create default domain+ topic
-    for cid, conv in list(conversations.items()):
-        if not conv.get("topic_id"):
-            pids = set()
-            for nid in conv.get("path", []):
-                node = nodes.get(nid)
-                if node and node.get("partition_id"):
-                    pids.add(node["partition_id"])
-            partition_id = next(iter(pids), "")
-            if partition_id:
-                _ensure_default_hierarchy(data, partition_id, cid)
-
-    if changes == 0:
-        print("  (无需迁移)")
-        return False
-
-    # Backup
-    backup = filepath.with_suffix(".json.bak")
-    with open(backup, "w") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    print(f"  💾 备份: {backup}")
-
-    # Write migrated
-    with open(filepath, "w") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    print(f"  ✅ 迁移完成 ({changes} 处更改)")
-    return True
-
-
-def _ensure_default_hierarchy(data: dict, partition_id: str, conversation_id: str):
-    """确保 partition → domain → topic → conversation 链完整"""
-    from uuid import uuid4
-    import time
-
+def _ensure_chain(data: dict, partition_id: str, conv_id: str):
+    """确保 partition → domain → topic → conversation 链条完整"""
     domains = data.setdefault("domains", {})
     topics = data.setdefault("topics", {})
-    partitions = data.get("partitions", {})
+    convs = data.setdefault("conversations", {})
 
-    # Find existing domain under this partition
-    existing_domain = None
-    for did, d in domains.items():
-        if d.get("partition_id") == partition_id:
-            existing_domain = d
-            break
-
-    if not existing_domain:
-        part_name = partitions.get(partition_id, {}).get("name", "默认分区")
-        did = str(uuid4())
-        existing_domain = {
-            "id": did,
-            "partition_id": partition_id,
-            "name": part_name,
-            "emoji": "📚",
-            "created_at": time.time(),
-            "updated_at": time.time(),
-        }
-        domains[did] = existing_domain
-        print(f"  🆕 创建领域: {existing_domain['name']} ({did[:8]})")
-
-    domain_id = existing_domain["id"]
-
-    # Find existing topic under this domain
-    existing_topic = None
-    for tid, t in topics.items():
-        if t.get("domain_id") == domain_id:
-            existing_topic = t
-            break
-
-    if not existing_topic:
-        tid = str(uuid4())
-        existing_topic = {
-            "id": tid,
-            "domain_id": domain_id,
-            "name": "默认专题",
-            "emoji": "📝",
-            "active_conversation_id": conversation_id,
-            "created_at": time.time(),
-            "updated_at": time.time(),
-        }
-        topics[tid] = existing_topic
-        print(f"  🆕 创建专题: {existing_topic['name']} ({tid[:8]})")
-
-    # Set topic_id on conversation
-    topic_id = existing_topic["id"]
-    data["conversations"][conversation_id]["topic_id"] = topic_id
-
-    # Set active_conversation_id on topic
-    existing_topic["active_conversation_id"] = conversation_id
+    # find/create domain
+    dom = next((d for d in domains.values() if d.get("partition_id") == partition_id), None)
+    if not dom:
+        pname = data.get("partitions", {}).get(partition_id, {}).get("name", "默认")
+        dom = {"id": str(uuid4()), "partition_id": partition_id, "name": pname,
+               "emoji": "📚", "created_at": now, "updated_at": now}
+        domains[dom["id"]] = dom
+    # find/create topic
+    top = next((t for t in topics.values() if t.get("domain_id") == dom["id"]), None)
+    if not top:
+        top = {"id": str(uuid4()), "domain_id": dom["id"], "name": "默认专题",
+               "emoji": "📝", "active_conversation_id": conv_id,
+               "created_at": now, "updated_at": now}
+        topics[top["id"]] = top
+    # link conversation
+    if conv_id in convs:
+        convs[conv_id]["topic_id"] = top["id"]
+    top["active_conversation_id"] = conv_id
 
 
-def main():
-    base_dir = Path(sys.argv[1] if len(sys.argv) > 1 else "~/.companion/data").expanduser()
-    print(f"🔍 扫描 {base_dir}")
+def migrate(path: Path) -> int:
+    with open(path) as f:
+        data = json.load(f)
+    changes = 0
+    now = time.time()
 
-    migrated = 0
-    for user_dir in sorted(base_dir.iterdir()):
-        if not user_dir.is_dir():
-            continue
-        data_file = user_dir / "userData.json"
-        if data_file.exists():
-            if migrate_file(data_file):
-                migrated += 1
+    # 1. nodes: branch_id → conversation_id / 补缺
+    for nid, n in data.get("nodes", {}).items():
+        if "conversation_id" not in n:
+            if "branch_id" in n:
+                n["conversation_id"] = n.pop("branch_id")
+                print(f"  node {nid[:8]}  branch_id → conversation_id")
+            else:
+                pid = n.get("partition_id", "")
+                # 找同分区已有对话，没有则建默认
+                convs = data.get("conversations", {})
+                cid = next((c["id"] for c in convs.values() if c.get("topic_id")), None)
+                if not cid:
+                    cid = str(uuid4())
+                    convs[cid] = {"id": cid, "topic_id": "", "name": "默认对话",
+                                  "path": [], "is_active": True, "is_archived": False,
+                                  "summary": "", "material_refs": [],
+                                  "created_at": now, "last_message_at": now}
+                    _ensure_chain(data, pid, cid)
+                n["conversation_id"] = cid
+                print(f"  node {nid[:8]}  补 conversation_id={cid[:8]}")
+            changes += 1
 
-    print(f"\n{'='*50}")
-    print(f"✅ 迁移完成: {migrated} 个用户数据文件已处理")
-    print(f"   请重启后端: edu-companion-restart")
+    # 2. branches → conversations
+    branches = data.pop("branches", {})
+    convs = data.setdefault("conversations", {})
+    for bid, b in branches.items():
+        if bid not in convs:
+            pid = b.get("partition_id", "")
+            c = {"id": b.get("id", str(uuid4())), "topic_id": "",
+                 "name": b.get("name", "迁移对话"), "path": b.get("path", []),
+                 "is_active": b.get("is_active", False), "is_archived": b.get("is_archived", False),
+                 "summary": b.get("summary", ""), "material_refs": b.get("material_refs", []),
+                 "created_at": b.get("created_at", now), "last_message_at": b.get("last_message_at", now)}
+            convs[c["id"]] = c
+            _ensure_chain(data, pid, c["id"])
+            print(f"  branch {bid[:8]} → conversation")
+            changes += 1
+
+    # 3. response_blocks: branch_id → conversation_id
+    for bid, b in data.get("response_blocks", {}).items():
+        if "branch_id" in b and "conversation_id" not in b:
+            b["conversation_id"] = b.pop("branch_id")
+            changes += 1
+
+    # 4. link_nodes
+    for lid, ln in data.get("link_nodes", {}).items():
+        for o, n in [("source_branch_id", "source_conversation_id"),
+                      ("target_branch_id", "target_conversation_id")]:
+            if o in ln and n not in ln:
+                ln[n] = ln.pop(o)
+                changes += 1
+
+    if changes:
+        bak = path.with_suffix(".json.v3.bak")
+        bak.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+        print(f"  ✅ {changes} 处修改，备份 → {bak.name}")
+    else:
+        print("  ✅ 数据已是最新")
+    return changes
 
 
 if __name__ == "__main__":
-    main()
+    print(f"🔍 {BASE}")
+    total = 0
+    for d in sorted(BASE.glob("*/userData.json")):
+        print(f"\n📂 {d.parent.name}")
+        total += migrate(d)
+    print(f"\n{'='*40}\n{'✅ 无需操作' if total == 0 else f'✅ 迁移 {total} 处，重启后端: edu-companion-restart'}")
