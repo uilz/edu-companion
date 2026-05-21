@@ -763,14 +763,17 @@ export default function LearnPage() {
 
   // ── Handle edit message (v4: inline version, no new branch) ──
   const handleEditMessage = useCallback(async (messageId: string, newText: string) => {
+    console.log("[PageEdit] called with:", messageId, newText.slice(0, 50));
     // Optimistic local update — show edited text immediately
-    setMessages((prev) =>
-      prev.map((m) =>
+    setMessages((prev) => {
+      const found = prev.find(m => m.id === messageId);
+      console.log("[PageEdit] message found in array:", !!found, "prev length:", prev.length);
+      return prev.map((m) =>
         m.id === messageId
           ? { ...m, has_modified_version: true, content_blocks: [{ type: "text", text: newText }], text_summary: newText }
           : m
-      )
-    );
+      );
+    });
 
     try {
       const res = await fetch("/api/conversations/messages/" + messageId, {
@@ -781,9 +784,14 @@ export default function LearnPage() {
           text_summary: newText,
         }),
       });
-      if (!res.ok) throw new Error("Edit failed");
+      console.log("[PageEdit] PUT response:", res.status);
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        console.error("[PageEdit] PUT failed:", res.status, errText);
+        throw new Error(`Edit failed: ${res.status}`);
+      }
     } catch (e) {
-      console.error("Edit failed:", e);
+      console.error("[PageEdit] Edit failed:", e);
       // Rollback on failure — reload messages
       if (activeConversationId) loadMessages(activeConversationId);
     }

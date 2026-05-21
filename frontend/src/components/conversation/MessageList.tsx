@@ -44,7 +44,10 @@ export default function MessageList({
 
   const handleSaveEdit = () => {
     if (editingId && editingText.trim() && onEditMessage) {
+      console.log("[MsgEdit] saving:", editingId, editingText.trim().slice(0, 50));
       onEditMessage(editingId, editingText.trim());
+    } else {
+      console.warn("[MsgEdit] skip — editingId:", editingId, "text:", editingText?.trim()?.slice(0,20), "onEditMessage:", !!onEditMessage);
     }
     setEditingId(null);
     setEditingText("");
