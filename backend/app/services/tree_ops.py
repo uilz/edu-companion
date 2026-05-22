@@ -327,6 +327,13 @@ class TreeOpsService:
             parent.children_ids.append(new_node.id)
 
         data.nodes[new_node.id] = new_node
+
+        # 更新对话路径——用新版本替换原消息ID，确保加载时显示最新版本
+        conv = data.conversations.get(node.conversation_id)
+        if conv and message_id in conv.path:
+            idx = conv.path.index(message_id)
+            conv.path[idx] = new_node.id
+
         storage.save(user_id, data)
         return new_node
 

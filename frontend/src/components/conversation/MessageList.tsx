@@ -272,8 +272,8 @@ export default function MessageList({
                       })}
                     </span>
 
-                    {/* Version switch — shown on any message with edits */}
-                    {!isUser && hasVersions && onVersionSwitch && (
+                    {/* Version switch — shown on any edited message */}
+                    {hasVersions && onVersionSwitch && (
                       <div className="flex items-center gap-0.5 ml-1">
                         <button
                           onClick={() => onVersionSwitch(message.id, "prev")}
