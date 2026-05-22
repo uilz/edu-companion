@@ -133,7 +133,7 @@ export default function MessageList({
   const blocksByMessage = useMemo(() => {
     const map = new Map<string, ResponseBlock[]>();
     for (const block of responseBlocks || []) {
-      const id = block.parent_message_id || "";
+      const id = block.message_id || "";
       if (!map.has(id)) map.set(id, []);
       map.get(id)!.push(block);
     }
