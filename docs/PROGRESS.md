@@ -1,6 +1,6 @@
 # 智能伴学系统 · 开发进度总览
 
-> **最后更新**: 2026-05-19 — v4 对话系统重构完成 ✅  
+> **最后更新**: 2026-05-22 — v4 对话系统打磨完成，进入 Phase 6 准备 ✅  
 > **总代码量**: 后端 ~20,000 行 · 前端 ~13,000 行 · 文档 ~20,000 行  
 > **API 端点**: 90+ 个 · **前端面板**: 4个 · **设计文档**: 25 份 · **服务文件**: 36 个
 
@@ -40,7 +40,7 @@
 
 | # | 模块 | 完成度 | 关键交付 |
 |---|------|--------|---------|
-| 1 | **对话系统** | 🟢 95% | v4.0 四级树(分区→领域→专题→对话)、自动路由分类、切换推荐、内联版本切换、多模态ContentBlock、LLM回复、温暖陪伴人格+挫败检测+启发追问+引用溯源 |
+| 1 | **对话系统** | 🟢 98% | v4.0 四级树(分区→领域→专题→对话)、自动路由分类、切换推荐、**消息编辑+多版本切换(同role过滤+页码)**、复制/修改/删除、多模态ContentBlock、LLM回复、温暖陪伴人格+挫败检测+启发追问+引用溯源 |
 | 2 | **练习系统** | 🟢 85% | LLM出题、BKT认知诊断(4维MDKS)、ZPD自适应调度、SM-2间隔重复、错题本、苏格拉底提示、情感反馈 |
 | 3 | **对话×练习互通** | 🟢 80% | 上下文感知选题、内联练习、练习→对话结果写回、练习回顾、错误→对话推荐、LLM上下文注入 |
 | 4 | **资料系统** | 🟢 100% | PDF/Word/PPT/MD/TXT解析、Granite Embedding索引、向量搜索、资料出题、**分区归属+分支引用+MaterialPanel** |
@@ -348,3 +348,64 @@ GET /errors/stats → ErrorAttributionBar                     🆕
 | 练习题生成 | 手动出题 | LLM 一键触发出题+创建会话 | ✅ |
 | 子文件数 | 36 | 41 (+5 Phase 5) | ✅ |
 | 测试 | 112 | 112 (全保持) | ✅ |
+
+---
+
+## 十一、Phase 5.5 · v4 对话系统打磨 ✅
+
+> 时间: 2026-05-19 ~ 2026-05-22
+
+### 消息编辑全链路修复
+
+| 问题 | 根因 | 修复 |
+|------|------|------|
+| 编辑后树结构断裂 | 新版本未继承原消息子节点(AI应答) | `modify_message` 迁移 `current_version.children_ids` → 新版本 |
+| 第二次编辑不生效 | `conv.path.index(old_id)` 找不到(已被第一次替换) | 查同父+同role兄弟节点定位路径位置 |
+| 版本列表混入AI应答 | `parent.children_ids` 含异角色节点 | `GET /messages/{id}` 按 role 过滤 |
+| 编辑后 conv.summary 滞后 | `summary_dirty` 未在编辑时标记 | `modify_message` 末尾 `conv.summary_dirty = True` |
+| 单版本也显示 `< 1/1 >` | `has_modified_version` 触发但实际只有2版本(原始+新版) | 懒加载版本数, `total ≤ 1` 时隐藏 |
+| 编辑后无版本切换入口 | 最新版 `has_modified_version=false` | PUT 返回 `version_count`, MessageList 立即更新 |
+
+### UI 改造
+
+| 旧 | 新 |
+|----|----|
+| `时间 | < 改 > | ✏️ 🗑️` | `📋 复制 | ✏️ 修改 | 🗑️ 删除 | \| | < 页码/总页码 > | 🔊` |
+
+### 涉及文件
+
+| 文件 | 改动 |
+|------|------|
+| `backend/app/services/tree_ops.py` | conv.path多次编辑替换 + current_version子节点迁移 + summary_dirty |
+| `backend/app/api/conversation.py` | PUT返回version_count + GET按role过滤版本 |
+| `frontend/src/app/learn/page.tsx` | handleVersionSwitch → {index,total}, handleEditMessage → version_count |
+| `frontend/src/components/conversation/MessageList.tsx` | 懒加载版本数、复制按钮、total≤1隐藏、新footer布局 |
+
+### 端到端验证
+
+```
+首次编辑 → version_count=2 ✅
+二次编辑 → version_count=3 ✅ (之前失败)
+三次编辑 → version_count=4 ✅
+conv.path → [latest, ai_response] ✅
+AI parent → latest ✅ 树结构一致 ✅
+版本列表 → [v1, v2, v3, v4] ✅
+```
+
+---
+
+## 十二、Phase 6 · 中枢数据建模 🔜
+
+> 基于 v3 架构 `SkillAtom` 统一实体，完成跨模块数据模型落地
+
+| 步骤 | 内容 | 状态 |
+|------|------|:--:|
+| S1 | PG `skill_atoms` + `skill_dependencies` 表 | 🔴 |
+| S2 | 旧 `knowledge_graphs` → `skill_atoms` 迁移脚本 | 🔴 |
+| S3 | 对话→SkillAtom 下文摘要结构化（替代自由文本 `conv.summary`） | 🔴 |
+| S4 | `GET /api/student-profile` 全科画像 API | 🔴 |
+| S5 | ③ 决策层 LearningTutor | 🔴 |
+| S6 | 清理旧存储 (`knowledge_graphs` / `knowledge_states` / `SharedKnowledgeState`) | 🔴 |
+| S7 | JSON → PostgreSQL 存储切换 (`USE_PG_STORAGE=true`) | 🔴 |
+
+> 设计依据: [docs/architecture-v3.md](./architecture-v3.md)

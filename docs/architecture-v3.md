@@ -14,8 +14,9 @@
 | ② 画像层 | PartitionProgress API（覆盖率/技能/异常/时序） | ✅ |
 | ② 画像层 | SkillAtom / StudentProfile schema | ✅ |
 | ③ 决策层 | LearningTutor（情境感知决策） | 🔴 待实现 |
-| 数据层 | PG `skill_atoms` 独立表 | 🔴 待实现 |
+| 数据层 | PG `skill_atoms` 独立表 | 🔴 Phase 6 |
 | 前端 | GraphTab 切换到 PartitionProgress | ✅ |
+| 对话 | 消息编辑+多版本切换 ✅ (Phase 5.5) | ✅ |
 
 ---
 
@@ -451,4 +452,12 @@ ALTER TABLE conversation_nodes ADD COLUMN discussed_skill_ids JSONB DEFAULT '[]'
 | 7 | `TreeNode.discussed_skill_ids` + 事件记录 + AI prompt | 低 | ✅ |
 | 8 | 删旧存储：`knowledge_graphs` / `knowledge_states` / `SharedKnowledgeState` | 低 | 🔴 |
 
-已完成 5/8。API 接口保持向后兼容。剩余 3 项（PG 表 / 正式迁移 / 清理旧存储）可在数据积累后执行。
+已完成 5/8。API 接口保持向后兼容。剩余 3 项（PG 表 / 正式迁移 / 清理旧存储）为 Phase 6 任务。
+
+---
+
+## 九、Phase 6 衔接
+
+v3 架构中未完成的 3 项 + 对话结构化下文摘要 + StudentProfile API + LearningTutor 决策层，统一归入 **Phase 6 · 中枢数据建模**。
+
+详见: [PROGRESS.md](./PROGRESS.md) 第十二节
