@@ -325,8 +325,21 @@ export default function PartitionSidebar({
           ...p, children: updateTreeChildren(p.children, item.id, convItems),
         } as PartitionItem)));
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("loadChildren failed:", e);
+      // If topic returns 404, it means the topic was deleted — remove it from tree
+      const errMsg = e?.message || "";
+      if (item.level === "topic" && errMsg.includes("404")) {
+        setTree(prev => prev.map(p => ({
+          ...p,
+          children: (p.children as TreeItem[] || []).filter((d: TreeItem) => {
+            if (d.id === (item as TopicItem).domain_id) {
+              (d as any).children = ((d as any).children || []).filter((t: any) => t.id !== item.id);
+            }
+            return true;
+          }),
+        } as any)));
+      }
       setTree(prev => prev.map(p => {
         if (p.id === item.id) return { ...p, loading: false } as PartitionItem;
         return { ...p, children: markNotLoading(p.children as TreeItem[], item.id) } as PartitionItem;
