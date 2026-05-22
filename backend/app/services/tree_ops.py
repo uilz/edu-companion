@@ -328,6 +328,16 @@ class TreeOpsService:
 
         data.nodes[new_node.id] = new_node
 
+        # 迁移原消息的子节点到新版本，保持树结构完整
+        # 新版本继承原消息的 children_ids，原消息变为纯历史叶子
+        if node.children_ids:
+            new_node.children_ids = list(node.children_ids)
+            for child_id in node.children_ids:
+                child = data.nodes.get(child_id)
+                if child:
+                    child.parent_id = new_node.id
+            node.children_ids = []
+
         # 更新对话路径——用新版本替换原消息ID，确保加载时显示最新版本
         conv = data.conversations.get(node.conversation_id)
         if conv and message_id in conv.path:

@@ -477,10 +477,18 @@ async def get_message(message_id: str):
     node = data.nodes.get(message_id)
     if not node:
         raise HTTPException(404, "Message not found")
-    # 同时返回父节点的 children_ids 作为版本列表
+    # 从父节点的 children_ids 中筛选同角色的版本（排除AI应答等异角色节点）
     parent = data.nodes.get(node.parent_id) if node.parent_id else None
-    versions = parent.children_ids if parent else []
-    return {"message": node.model_dump(mode="json"), "versions": versions}
+    all_siblings = parent.children_ids if parent else []
+    versions = [
+        vid for vid in all_siblings
+        if data.nodes.get(vid) and data.nodes[vid].role == node.role
+    ]
+    return {
+        "message": node.model_dump(mode="json"),
+        "versions": versions,
+        "version_count": len(versions),
+    }
 
 @router.get("/response-blocks/{block_id}")
 async def get_response_block(block_id: str):

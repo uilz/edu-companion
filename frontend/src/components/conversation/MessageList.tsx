@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useMemo, useState, useCallback } from "react";
-import { User, Bot, Trash2, Pencil, Check, X, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { User, Bot, Trash2, Pencil, Check, X, ChevronDown, ChevronLeft, ChevronRight, Copy } from "lucide-react";
 import ResponseBlockRenderer from "./ResponseBlockRenderer";
 import SpeakButton from "./SpeakButton";
 import { useRenderedContent } from "@/lib/useRenderedContent";
@@ -14,7 +14,7 @@ interface MessageListProps {
   statusMessage?: string;
   onDeleteMessage?: (messageId: string) => void;
   onEditMessage?: (messageId: string, newText: string) => Promise<void>;
-  onVersionSwitch?: (messageId: string, direction: "prev" | "next") => void;
+  onVersionSwitch?: (messageId: string, direction: "prev" | "next") => Promise<{ index: number; total: number } | null>;
 }
 
 // Local map of edited message text, keyed by message ID.
@@ -37,6 +37,32 @@ export default function MessageList({
   const [editingText, setEditingText] = useState("");
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [editedTexts, setEditedTexts] = useState<EditedMap>({});
+
+  // Version display state: { messageId -> { current index, total count } }
+  const [versionMap, setVersionMap] = useState<Record<string, { index: number; total: number }>>({});
+
+  const handleCopyMessage = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // fallback for non-HTTPS: create temporary textarea
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+  };
+
+  const handleVersionNav = async (messageId: string, direction: "prev" | "next") => {
+    if (!onVersionSwitch) return;
+    const result = await onVersionSwitch(messageId, direction);
+    if (result) {
+      setVersionMap(prev => ({ ...prev, [messageId]: result }));
+    }
+  };
 
   const handleDeleteMessage = (messageId: string) => {
     if (onDeleteMessage) onDeleteMessage(messageId);
@@ -159,8 +185,10 @@ export default function MessageList({
                 .map((b) => b.text || "")
                 .join("\n\n");
 
-          // Version info
+          // Version info: has versions if flagged or locally edited
           const hasVersions = message.has_modified_version || !!editedTexts[message.id];
+          // Try to use versionMap for display, fallback to 1-index default
+          const vInfo = versionMap[message.id] || { index: 1, total: hasVersions ? 1 : 0 };
 
           return (
             <div key={message.id} className={`flex gap-4 ${isUser ? "flex-row-reverse" : ""}`}>
@@ -256,35 +284,63 @@ export default function MessageList({
                     </div>
                   )}
 
-                  {/* Message footer: time + version switch + actions */}
+                  {/* Message footer: actions row */}
                   <div
-                    className={`flex items-center gap-2 mt-1.5 px-1 ${
+                    className={`flex items-center gap-1.5 mt-1.5 px-1 ${
                       isUser ? "justify-end" : "justify-start"
                     }`}
                   >
-                    <span
-                      className="text-[10px] text-[var(--color-text-muted)] select-none"
-                      title={new Date(message.timestamp * 1000).toLocaleString("zh-CN")}
+                    {/* Copy button — always show */}
+                    <button
+                      onClick={() => handleCopyMessage(displayText)}
+                      className="p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"
+                      title="复制"
                     >
-                      {new Date(message.timestamp * 1000).toLocaleTimeString("zh-CN", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
+                      <Copy size={11} />
+                    </button>
 
-                    {/* Version switch — shown on any edited message */}
+                    {/* Edit button — user messages only */}
+                    {isUser && onEditMessage && (
+                      <button
+                        onClick={() => handleStartEdit(message.id, displayText)}
+                        className="p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"
+                        title="修改"
+                      >
+                        <Pencil size={11} />
+                      </button>
+                    )}
+
+                    {/* Delete button — user messages only */}
+                    {isUser && onDeleteMessage && (
+                      <button
+                        onClick={() => handleDeleteMessage(message.id)}
+                        className="p-0.5 text-[var(--color-text-muted)] hover:text-red-400 rounded"
+                        title="删除"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    )}
+
+                    {/* Divider before version switch */}
                     {hasVersions && onVersionSwitch && (
-                      <div className="flex items-center gap-0.5 ml-1">
+                      <span className="text-[var(--color-border)] mx-0.5 select-none">|</span>
+                    )}
+
+                    {/* Version switch: < 当前/总数 > */}
+                    {hasVersions && onVersionSwitch && (
+                      <div className="flex items-center gap-0.5">
                         <button
-                          onClick={() => onVersionSwitch(message.id, "prev")}
+                          onClick={() => handleVersionNav(message.id, "prev")}
                           className="p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"
                           title="上一版本"
                         >
                           <ChevronLeft size={11} />
                         </button>
-                        <span className="text-[9px] text-[var(--color-text-muted)] select-none">改</span>
+                        <span className="text-[10px] text-[var(--color-text-muted)] select-none tabular-nums">
+                          {vInfo.index}/{vInfo.total}
+                        </span>
                         <button
-                          onClick={() => onVersionSwitch(message.id, "next")}
+                          onClick={() => handleVersionNav(message.id, "next")}
                           className="p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"
                           title="下一版本"
                         >
@@ -293,26 +349,8 @@ export default function MessageList({
                       </div>
                     )}
 
-                    {/* Actions */}
+                    {/* Speak button — AI messages only */}
                     {!isUser && <SpeakButton text={displayText} />}
-                    {isUser && onEditMessage && (
-                      <button
-                        onClick={() => handleStartEdit(message.id, displayText)}
-                        className="p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"
-                        title="编辑"
-                      >
-                        <Pencil size={12} />
-                      </button>
-                    )}
-                    {isUser && onDeleteMessage && (
-                      <button
-                        onClick={() => handleDeleteMessage(message.id)}
-                        className="p-0.5 text-[var(--color-text-muted)] hover:text-red-400 rounded"
-                        title="删除"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    )}
                   </div>
 
                   {/* Response blocks (tool cards, practices, etc.) */}

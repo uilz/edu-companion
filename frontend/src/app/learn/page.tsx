@@ -779,21 +779,19 @@ export default function LearnPage() {
     }
   }, []);
   // ── Handle version switch ──
-  // Tracks { messageId -> current version index in parent's children_ids }
-  const versionIndexRef = useRef<Record<string, number>>({});
-
+  // Returns { index, total } for the MessageList to display version counter
   const handleVersionSwitch = useCallback(async (messageId: string, direction: "prev" | "next") => {
     try {
-      // Fetch message + versions list from new endpoint
+      // Fetch message + versions list (backend now filters by same role)
       const msgRes = await fetch(`/api/conversations/messages/${messageId}`);
-      if (!msgRes.ok) return;
+      if (!msgRes.ok) return null;
       const msgData = await msgRes.json();
       const versions: string[] = msgData.versions || [];
-      if (versions.length <= 1) return;
+      if (versions.length <= 1) return { index: 1, total: 1 };
 
       // Find current position in versions list
       const curIdx = versions.indexOf(messageId);
-      if (curIdx === -1) return;
+      if (curIdx === -1) return null;
 
       const newIdx = direction === "prev"
         ? (curIdx - 1 + versions.length) % versions.length
@@ -802,10 +800,10 @@ export default function LearnPage() {
 
       // Load target version
       const targetRes = await fetch(`/api/conversations/messages/${targetId}`);
-      if (!targetRes.ok) return;
+      if (!targetRes.ok) return null;
       const targetData = await targetRes.json();
       const targetMsg = targetData.message;
-      if (!targetMsg) return;
+      if (!targetMsg) return null;
 
       // Extract text from target version's content_blocks
       const targetText = (targetMsg.content_blocks || [])
@@ -827,9 +825,10 @@ export default function LearnPage() {
         )
       );
 
-      versionIndexRef.current[messageId] = newIdx;
+      return { index: newIdx + 1, total: versions.length };
     } catch (e) {
       console.error("Version switch failed:", e);
+      return null;
     }
   }, []);
 
