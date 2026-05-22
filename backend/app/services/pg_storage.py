@@ -339,6 +339,7 @@ class PgStorageEngine:
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT (id) DO UPDATE SET
                     name=EXCLUDED.name, is_active=EXCLUDED.is_active,
+                    path=EXCLUDED.path,
                     summary=EXCLUDED.summary,
                     practice_sessions=EXCLUDED.practice_sessions,
                     practice_summary=EXCLUDED.practice_summary,

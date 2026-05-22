@@ -210,6 +210,8 @@ async def delete_topic(topic_id: str):
 async def list_conversations(topic_id: str, request: Request):
     etag = _check_etag(request)
     data = storage.load(USER_ID)
+    if topic_id not in data.topics:
+        raise HTTPException(404, "Topic not found")
     convs = [
         c.model_dump(mode="json")
         for c in data.conversations.values()
