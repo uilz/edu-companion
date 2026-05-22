@@ -21,6 +21,7 @@ from app.schemas.conversation import (
 from app.services.llm_service import llm_service
 from app.services.storage import storage
 from app.services.tree_ops import tree_ops
+from app.services.classifier import classifier
 from app.services.tool_executor import tool_executor, predict_tools, SLOW_TOOLS
 
 logger = logging.getLogger(__name__)
