@@ -182,6 +182,21 @@ async def get_learning_suggestions(
 
     class _Adapter:
         async def get_knowledge_state(self, uid, sid):
+            # Phase 6: 优先 CognitiveNode
+            try:
+                from app.cognitive.storage import get_node
+                node = get_node(sid, uid)
+                if node and node.belief:
+                    return {
+                        "skill_id": sid,
+                        "p_known": node.belief.proficiency_mean,
+                        "attempt_count": node.practice_summary.total_attempts if node.practice_summary else 0,
+                        "correct_count": node.practice_summary.correct_attempts if node.practice_summary else 0,
+                        "source": "cognitive_node",
+                    }
+            except Exception:
+                pass
+            # 备降: BKT
             state = bkt_engine.load_or_create(uid, sid)
             return state.model_dump()
 

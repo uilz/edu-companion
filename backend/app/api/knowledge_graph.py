@@ -34,6 +34,90 @@ def _classify_mastery_cognitive(p: float) -> str:
     return "未接触"
 
 
+def _sync_graph_to_cognitive(partition_id: str, user_id: str = "default_user") -> None:
+    """图谱生成后自动创建/更新 CognitiveNode（Phase 6 联动）"""
+    try:
+        from app.services.storage import storage
+        from app.cognitive.storage import upsert_node
+        from app.cognitive.models import (
+            CognitiveNode, Belief, Activation, Scheduling,
+            PracticeSummary, Trend, MetaInfo,
+            Prerequisite, Unlock, Associate,
+        )
+        import math, time
+
+        data = storage.load(user_id)
+        graph = data.knowledge_graphs.get(partition_id)
+        if not graph or not graph.nodes:
+            return
+
+        # 创建 Partition 级节点
+        partition = data.partitions.get(partition_id)
+        if partition:
+            upsert_node(CognitiveNode(
+                id=partition_id,
+                label=partition.name,
+                level="partition",
+                meta=MetaInfo(created_by="graph_sync", version=1),
+            ))
+
+        for nid, kg_node in graph.nodes.items():
+            # 推断层级
+            level = "atom"
+            # Check if this node has children by being a from_id in edges
+            has_children = any(e.from_id == nid for e in graph.edges)
+            has_parent = any(e.to_id == nid for e in graph.edges)
+            if not has_parent:
+                level = "topic"
+            elif has_children:
+                level = "concept"
+            else:
+                level = "atom"
+
+            # 前置/后置
+            prereqs = []
+            unlocks = []
+            for e in graph.edges:
+                if e.to_id == nid and e.relation == "prerequisite":
+                    prereqs.append(Prerequisite(
+                        target_id=e.from_id,
+                        label=graph.nodes.get(e.from_id, KGNode(id=e.from_id, label="")).label if hasattr(graph.nodes.get(e.from_id, {}), 'label') else e.from_id,
+                        satisfied=False,
+                    ))
+                if e.from_id == nid:
+                    unlocks.append(Unlock(target_id=e.to_id, label=e.relation))
+
+            upsert_node(CognitiveNode(
+                id=nid,
+                label=kg_node.label,
+                level=level,
+                parent=partition_id if level in ("atom", "concept") else None,
+                is_core=getattr(kg_node, 'priority', 5) >= 8,
+                activation=Activation(
+                    base_level=0.1,
+                    recency=0.0,
+                    spread_targets=[],
+                ),
+                belief=Belief(
+                    alpha=2.0, beta=2.0,
+                    proficiency_mean=0.5,
+                    proficiency_precision=0.25,
+                    peak_proficiency=0.5,
+                    last_updated=time.time(),
+                ),
+                scheduling=Scheduling(
+                    next_review=time.time() + 86400,
+                    review_urgency=0.5,
+                    estimated_mastery_time=0,
+                ),
+                prerequisites=prereqs,
+                unlocks=unlocks,
+                meta=MetaInfo(created_by="graph_sync", version=1),
+            ))
+    except Exception as e:
+        logger.warning(f"[graph→cognitive] 同步失败: {e}")
+
+
 # ── Helper: 获取 UserData ──
 
 def _get_user_data():
@@ -244,6 +328,13 @@ async def generate_graph_logic(
             _save_user_data(data)
 
         logger.info(f"知识图谱生成完成: {len(nodes_dict)}节点, {len(edges)}边")
+
+        # Phase 6: 图谱 → CognitiveNode 联动
+        try:
+            _sync_graph_to_cognitive(partition_id)
+        except Exception:
+            pass
+
         return {"ok": True, "total_nodes": len(nodes_dict), "total_edges": len(edges), "version": graph.version}
 
     except Exception as e:
@@ -327,6 +418,12 @@ async def update_nodes(partition_id: str, payload: dict[str, Any]):
     graph.version += 1
     _save_user_data(data)
 
+    # Phase 6: 节点更新 → CognitiveNode 联动
+    try:
+        _sync_graph_to_cognitive(partition_id)
+    except Exception:
+        pass
+
     return {
         "ok": True,
         "total_nodes": len(graph.nodes),
@@ -371,6 +468,12 @@ async def update_edges(partition_id: str, payload: dict[str, Any]):
 
     graph.version += 1
     _save_user_data(data)
+
+    # Phase 6: 边更新 → CognitiveNode 联动
+    try:
+        _sync_graph_to_cognitive(partition_id)
+    except Exception:
+        pass
 
     return {
         "ok": True,

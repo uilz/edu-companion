@@ -34,10 +34,38 @@ router = APIRouter(prefix="/api/knowledge", tags=["知识图谱"])
 # ── Adapter: 将现有 BKT 引擎适配到 PrerequisiteChecker 接口 ──
 
 class _BKTKnowledgeAdapter:
-    """BKT 引擎 → PracticeService.get_knowledge_state 适配器"""
+    """BKT 引擎 → PracticeService.get_knowledge_state 适配器
+
+    Phase 6: 优先读 CognitiveNode，备降 BKT
+    """
     async def get_knowledge_state(self, user_id: str, skill_id: str):
+        # CognitiveNode 主源
+        try:
+            from app.cognitive.storage import get_node
+            node = get_node(skill_id, user_id)
+            if node and node.belief:
+                return {
+                    "skill_id": skill_id,
+                    "p_known": node.belief.proficiency_mean,
+                    "attempt_count": node.practice_summary.total_attempts if node.practice_summary else 0,
+                    "correct_count": node.practice_summary.correct_attempts if node.practice_summary else 0,
+                    "mastery_level": _cognitive_mastery_level(node.belief.proficiency_mean),
+                    "source": "cognitive_node",
+                }
+        except Exception:
+            pass
+
+        # 备降: 旧 BKT
         state = bkt_engine.load_or_create(user_id, skill_id)
         return state.model_dump()
+
+
+def _cognitive_mastery_level(p: float) -> str:
+    if p >= 0.9:  return "已掌握"
+    if p >= 0.7:  return "接近掌握"
+    if p >= 0.4:  return "发展中"
+    if p > 0.0:   return "初学"
+    return "未接触"
 
 
 def _get_checker() -> PrerequisiteChecker:

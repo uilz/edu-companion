@@ -15,6 +15,18 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.core.knowledge_trace import bkt_engine
+
+
+def _get_cognitive_proficiency(user_id: str, skill_id: str) -> float | None:
+    """从 CognitiveNode 读取掌握度（Phase 6 联动）"""
+    try:
+        from app.cognitive.storage import get_node
+        node = get_node(skill_id, user_id)
+        if node and node.belief:
+            return round(node.belief.proficiency_mean, 4)
+    except Exception:
+        pass
+    return None
 from app.schemas.practice import (
     AnswerType,
     AttemptRecord,
@@ -441,6 +453,19 @@ async def submit_answer(req: SubmitAnswerRequest):
     updated_state = bkt_engine.update(state, is_correct, hint_level=req.hints_used)
     bkt_engine.save_state(session["user_id"], updated_state)
 
+    # Phase 6: 同步写入 CognitiveNode
+    try:
+        from app.cognitive.events import submit_practice
+        submit_practice(
+            user_id=session["user_id"],
+            node_id=question["skill_id"],
+            success=is_correct,
+            latency_ms=req.time_spent_seconds * 1000,
+            consecutive=req.hints_used == 0,
+        )
+    except Exception:
+        pass
+
     # v3.0: 记录练习事件
     try:
         from app.api.learning_events import record_event
@@ -483,6 +508,7 @@ async def submit_answer(req: SubmitAnswerRequest):
             "p_known_before": state.p_known,
             "p_known_after": updated_state.p_known,
             "mastery_level": bkt_engine.get_mastery_level(updated_state),
+            "cognitive_proficiency": _get_cognitive_proficiency(session["user_id"], question["skill_id"]),
         },
     }
 

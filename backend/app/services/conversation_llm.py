@@ -1038,3 +1038,21 @@ async def send_and_reply_stream(
         "assistant_message": assistant_node.model_dump(mode="json"),
         "response_blocks": [b.model_dump(mode="json") for b in response_blocks],
     }
+
+    # Phase 6: 流式路径 — 对话 → CognitiveNode 联动
+    try:
+        import asyncio as _cognitive_asyncio2
+        loop = _cognitive_asyncio2.get_event_loop()
+        if loop.is_running():
+            # 从上下文中找 skill_ids
+            skill_ids = set()
+            for block in response_blocks:
+                for sid in getattr(assistant_node, 'discussed_skill_ids', []):
+                    skill_ids.add(sid)
+            if skill_ids:
+                loop.create_task(_cognify_dialogue_context(
+                    user_id, conversation, list(skill_ids),
+                    context_type="lower",
+                ))
+    except Exception:
+        pass

@@ -110,12 +110,24 @@ class ZPDScheduler:
         self,
         knowledge_states: dict[str, KnowledgeState],
         skill_id: str,
+        user_id: str = "default_user",
     ) -> float:
         """
         估计学生在某知识点的能力θ
         
-        θ = p_known * 0.6 + avg_dimension * 0.4
+        Phase 6: 优先读 CognitiveNode，备降旧 knowledge_states
         """
+        # Phase 6: CognitiveNode 主源
+        try:
+            from app.cognitive.storage import get_node
+            node = get_node(skill_id, user_id)
+            if node and node.belief:
+                mu = node.belief.proficiency_mean
+                return mu * 0.6 + mu * 0.4  # simplified: θ = proficiency_mean
+        except Exception:
+            pass
+
+        # 备降: 旧 knowledge_states
         state = knowledge_states.get(skill_id)
         if not state:
             return 0.3  # 默认：低能力
