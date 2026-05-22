@@ -372,8 +372,15 @@ export default function LearnPage() {
         } catch {}
       }
       setResponseBlocks(allBlocks);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Failed to load messages:", e);
+      // If conversation was deleted (404), clear state
+      const errMsg = e?.message || "";
+      if (errMsg.includes("404")) {
+        setActiveConversationId(null);
+        setMessages([]);
+        setResponseBlocks([]);
+      }
     } finally {
       setLoadingMessages(false);
     }
