@@ -318,8 +318,15 @@ class PgStorageEngine:
 
         # ── 对话 (v4 Conversation → conversation_branches 表) ──
         for b in data.conversations.values():
-            # v4 Conversation.topic_id → table partition_id column
-            partition_id_for_table = b.topic_id
+            # 从 Topic → Domain → Partition 追溯真实的 partition_id
+            partition_id_for_table = None
+            topic = data.topics.get(b.topic_id)
+            if topic:
+                domain = data.domains.get(topic.domain_id)
+                if domain:
+                    partition_id_for_table = domain.partition_id
+            if not partition_id_for_table:
+                partition_id_for_table = b.topic_id  # fallback 旧行为
             db.execute(
                 """
                 INSERT INTO conversation_branches
