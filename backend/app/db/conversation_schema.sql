@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS conversation_link_nodes (
     timestamp DOUBLE PRECISION DEFAULT 0
 );
 
--- 用户元数据表
+-- 用户元数据表 (v4.2 — Phase 6.5 全字段)
 CREATE TABLE IF NOT EXISTS conversation_user_meta (
     user_id TEXT PRIMARY KEY,
     role TEXT DEFAULT 'student',
@@ -102,5 +102,12 @@ CREATE TABLE IF NOT EXISTS conversation_user_meta (
     created_at DOUBLE PRECISION DEFAULT 0
 );
 
--- 为已有表补加 knowledge_graphs 列（幂等）
-ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS knowledge_graphs JSONB DEFAULT '{}';
+-- Phase 6.5: 追加全字段列（幂等）
+ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS knowledge_states JSONB DEFAULT '{}';
+ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS practice_sessions JSONB DEFAULT '{}';
+ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS error_book JSONB DEFAULT '{}';
+ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS event_log JSONB DEFAULT '[]';
+ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS domains JSONB DEFAULT '{}';
+ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS topics JSONB DEFAULT '{}';
+ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS files JSONB DEFAULT '{}';
+ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS background_jobs JSONB DEFAULT '{}';

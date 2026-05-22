@@ -74,12 +74,12 @@ class JsonStorageEngine:
 
 
 def _get_storage():
-    """根据环境变量选择存储后端"""
-    use_pg = os.environ.get("USE_PG_STORAGE", "").lower() in ("1", "true", "yes")
-    if use_pg:
-        from app.services.pg_storage import pg_storage
-        return pg_storage
-    return JsonStorageEngine()
+    """根据环境变量选择存储后端 (Phase 6.5: PG 默认)"""
+    use_json = os.environ.get("USE_JSON_STORAGE", "").lower() in ("1", "true", "yes")
+    if use_json:
+        return JsonStorageEngine()
+    from app.services.pg_storage import pg_storage
+    return pg_storage
 
 
 # 全局单例 (所有 import 方透明使用)
