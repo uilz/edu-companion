@@ -223,56 +223,58 @@ export default function PartitionSidebar({
     if (autoExpandRef.current === activeConversationId) return;
     autoExpandRef.current = activeConversationId;
 
-    // Step 1: Expand partition to load domains
-    setTree(prev => prev.map(p => {
-      if (p.id !== selectedPartitionId) return p;
-      if (!p.expanded) {
-        setTimeout(() => {
-          const item = treeRef.current.find(p => p.id === selectedPartitionId);
-          if (item) (loadChildren as any)(item);
-        }, 100);
-      }
-      return { ...p, expanded: true };
-    }) as any);
-
-    // Step 2: After domains load, expand first domain
-    setTimeout(() => {
+    // 遍历树，找到包含 activeConversationId 的分支，展开整条路径
+    const expandPath = () => {
       setTree(prev => {
-        const partition = prev.find(p => p.id === selectedPartitionId);
-        if (!partition?.children?.length) return prev;
-        const firstDomain = partition.children[0] as DomainItem;
-        if (firstDomain.expanded) return prev;
-        setTimeout(() => (loadChildren as any)(firstDomain), 100);
-        return prev.map(p => {
-          if (p.id !== selectedPartitionId) return p;
-          return { ...p, children: (p.children as DomainItem[]).map(d =>
-            d.id === firstDomain.id ? { ...d, expanded: true } : d
-          )};
-        }) as any;
-      });
-    }, 600);
+        // 递归查找：哪条链包含 activeConversationId
+        function findConvInTree(items: TreeItem[], level: string): boolean {
+          for (const item of items) {
+            if ((item as any).children?.some((c: any) => c.id === activeConversationId)) {
+              item.expanded = true;
+              setTimeout(() => (loadChildren as any)(item), 50);
+              return true;
+            }
+            if ((item as any).children?.length && findConvInTree((item as any).children, level)) {
+              item.expanded = true;
+              return true;
+            }
+          }
+          return false;
+        }
 
-    // Step 3: After topics load, expand first topic
-    setTimeout(() => {
-      setTree(prev => {
-        const partition = prev.find(p => p.id === selectedPartitionId);
-        const firstDomain = partition?.children?.[0] as DomainItem | undefined;
-        if (!firstDomain?.children?.length) return prev;
-        const firstTopic = firstDomain.children[0] as TopicItem;
-        if (firstTopic.expanded) return prev;
-        setTimeout(() => (loadChildren as any)(firstTopic), 100);
-        return prev.map(p => {
+        const newTree = prev.map(p => {
           if (p.id !== selectedPartitionId) return p;
-          return { ...p, children: (p.children as DomainItem[]).map(d =>
-            d.id === firstDomain.id
-              ? { ...d, children: (d.children as TopicItem[]).map(t =>
-                  t.id === firstTopic.id ? { ...t, expanded: true } : t
-                )}
-              : d
-          )};
-        }) as any;
+          // 先展开分区
+          if (!p.expanded) {
+            setTimeout(() => (loadChildren as any)(p), 50);
+          }
+          return { ...p, expanded: true, children: (p.children as any[])?.map(d => {
+            // 检查直接子对话
+            if ((d as any).id === activeConversationId) return { ...d, expanded: true };
+            // 检查更深层
+            if ((d as any).children?.length) {
+              const found = (d as any).children.some((t: any) => {
+                return t.id === activeConversationId ||
+                  (t as any).children?.some((c: any) => c.id === activeConversationId);
+              });
+              if (found) {
+                setTimeout(() => (loadChildren as any)(d), 100);
+                return { ...d, expanded: true, children: (d as any).children.map((t: any) =>
+                  t.id === activeConversationId || (t as any).children?.some((c: any) => c.id === activeConversationId)
+                    ? { ...t, expanded: true } : t
+                )};
+              }
+            }
+            return d;
+          })};
+        });
+        return newTree as any;
       });
-    }, 1200);
+    };
+
+    // 延迟执行，等 loadChildren 先获取数据
+    setTimeout(expandPath, 100);
+    setTimeout(expandPath, 800);
   }, [selectedPartitionId, activeConversationId]);
 
   // ── Fetch children ──

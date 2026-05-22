@@ -452,6 +452,10 @@ export default function LearnPage() {
         }
 
         setTimeout(() => loadPartitions(), 300);
+        // 流完成后从服务端刷新消息，确保数据一致
+        setTimeout(() => {
+          if (activeConversationId) loadMessages(activeConversationId);
+        }, 500);
       },
       onError: (msg) => {
         setIsLoading(false);
@@ -506,6 +510,15 @@ export default function LearnPage() {
 
   // ── Initial load ──
   useEffect(() => { loadPartitions(); }, [loadPartitions]);
+
+  // ── Periodic polling for real-time updates ──
+  useEffect(() => {
+    if (!activeConversationId) return;
+    const interval = setInterval(() => {
+      loadMessages(activeConversationId);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [activeConversationId, loadMessages]);
 
   // ── Validate URL params ──
   const validatedRef = useRef(false);
