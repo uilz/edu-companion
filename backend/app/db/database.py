@@ -240,6 +240,12 @@ class Database:
                 with open(conv_sql_path) as f:
                     cur.execute(f.read())
 
+            # CognitiveNode 表 (Phase 6)
+            cog_sql_path = Path(__file__).parent / "cognitive_schema.sql"
+            if cog_sql_path.exists():
+                with open(cog_sql_path) as f:
+                    cur.execute(f.read())
+
             conn.commit()
             cur.close()
             self.put_conn(conn)

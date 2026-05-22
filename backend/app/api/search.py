@@ -155,6 +155,37 @@ async def _search_knowledge(q: str, limit: int) -> list[SearchResultItem]:
     q_lower = q.lower()
 
     try:
+        # ── CognitiveNode 搜索 (Phase 6) ──
+        try:
+            from app.db.database import get_db
+            db = get_db()
+            cog_rows = db.fetchall(
+                "SELECT id, label, belief FROM cognitive_nodes "
+                "WHERE user_id = %s AND (LOWER(id) LIKE %s OR LOWER(label) LIKE %s) "
+                "LIMIT 10",
+                (USER_ID, f"%{q_lower}%", f"%{q_lower}%")
+            )
+            for r in cog_rows:
+                belief = r.get("belief", {})
+                if isinstance(belief, str):
+                    import json
+                    try:
+                        belief = json.loads(belief)
+                    except Exception:
+                        belief = {}
+                mu = belief.get("proficiency_mean", 0.5) if isinstance(belief, dict) else 0.5
+                label = r.get("label", r["id"])
+                results.append(SearchResultItem(
+                    type="knowledge",
+                    title=label,
+                    subtitle=f"掌握 {mu:.0%} (CognitiveNode)",
+                    link=f"/graph?skill={r['id']}",
+                    score=mu,
+                    meta={"skill_id": r["id"], "mastery": mu},
+                ))
+        except Exception:
+            pass
+
         from app.core.learner_model import learner_engine
         # 遍历知识点存储
         for skill_id, state in getattr(learner_engine, "_knowledge_states", {}).items():

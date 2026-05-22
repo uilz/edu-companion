@@ -1,8 +1,8 @@
 # 智能伴学系统架构设计 v3.0
 
-> 版本: v3.0  
-> 最后更新: 2026-05-19  
-> 状态: **✅ 核心已交付 — 画像层 + 事件层 + 前端图谱已完成**
+> 版本: v3.0
+> 最后更新: 2026-05-22
+> 状态: **✅ Phase 6 — CognitiveNode 认知数据模型已上线**
 
 ---
 
@@ -12,9 +12,12 @@
 |------|------|:--:|
 | ① 事件层 | LearningEvent 记录 + 会话标注 + 练习挂钩 | ✅ |
 | ② 画像层 | PartitionProgress API（覆盖率/技能/异常/时序） | ✅ |
-| ② 画像层 | SkillAtom / StudentProfile schema | ✅ |
+| ② 画像层 | CognitiveNode 统一认知数据模型 (Phase 6) | ✅ 15 子系统 + 22 方程 |
+| ② 画像层 | SkillAtom / StudentProfile schema | ✅ (旧 → CognitiveNode 备降) |
+| ③ 决策层 | CognitiveNode 事件驱动 Pipeline | ✅ (18 步 practice 处理) |
 | ③ 决策层 | LearningTutor（情境感知决策） | 🔴 待实现 |
-| 数据层 | PG `skill_atoms` 独立表 | 🔴 Phase 6 |
+| 数据层 | PG `cognitive_nodes` 表 (31 列 JSONB) | ✅ |
+| 数据层 | PG `knowledge_states` 旧表 | ✅ (deprecated, 备降源) |
 | 前端 | GraphTab 切换到 PartitionProgress | ✅ |
 | 对话 | 消息编辑+多版本切换 ✅ (Phase 5.5) | ✅ |
 

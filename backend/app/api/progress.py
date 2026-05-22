@@ -19,6 +19,20 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/progress", tags=["学习进度"])
 
 
+def _count_cognitive_nodes(user_id: str) -> int:
+    """统计 CognitiveNode 数量（Phase 6 迁移辅助）"""
+    try:
+        from app.db.database import get_db
+        db = get_db()
+        row = db.fetchone(
+            "SELECT COUNT(*) as cnt FROM cognitive_nodes WHERE user_id = %s",
+            (user_id,)
+        )
+        return row["cnt"] if row else 0
+    except Exception:
+        return 0
+
+
 @router.get("/{user_id}", response_model=ProgressSummary)
 async def get_progress(user_id: str) -> ProgressSummary:
     """
@@ -203,6 +217,7 @@ async def get_profile(user_id: str) -> dict[str, Any]:
         "grade_level": profile.grade_level,
         "learning_style": profile.learning_style,
         "knowledge_skills_count": len(profile.knowledge_states),
+        "cognitive_nodes_count": _count_cognitive_nodes(user_id),
         "total_study_minutes": profile.total_study_minutes,
         "streak_days": profile.streak_days,
         "created_at": profile.created_at.isoformat(),

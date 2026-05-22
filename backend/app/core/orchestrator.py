@@ -29,6 +29,36 @@ def _get_default_learner():
 logger = logging.getLogger(__name__)
 
 
+def _build_cognitive_context(user_id: str, profile=None) -> str | None:
+    """从 CognitiveNode 构建知识状态摘要（Phase 6 迁移后优先）"""
+    try:
+        from app.db.database import get_db
+        db = get_db()
+        rows = db.fetchall(
+            "SELECT id, belief FROM cognitive_nodes "
+            "WHERE user_id = %s AND level IN ('atom', 'concept') "
+            "AND belief != '{}'::jsonb "
+            "ORDER BY updated_at DESC LIMIT 5",
+            (user_id,)
+        )
+        if not rows:
+            return None
+        parts = []
+        for r in rows:
+            belief = r.get("belief", {})
+            if isinstance(belief, str):
+                import json
+                try:
+                    belief = json.loads(belief)
+                except Exception:
+                    belief = {}
+            mu = belief.get("proficiency_mean", 0.0) if isinstance(belief, dict) else 0.0
+            parts.append(f"{r['id']}: 掌握度 {mu:.2f}")
+        return ", ".join(parts)
+    except Exception:
+        return None
+
+
 class Orchestrator:
     """
     Agent 编排器
@@ -203,8 +233,14 @@ class Orchestrator:
                 "content": f"当前讨论的学科是: {detected_subject}",
             })
 
-        # 添加知识状态摘要到上下文（如果适用）
-        if profile.knowledge_states:
+        # 添加知识状态摘要到上下文（优先 CognitiveNode）
+        cog_summary = _build_cognitive_context(user_id, profile)
+        if cog_summary:
+            context_messages.append({
+                "role": "system",
+                "content": f"学生的知识状态概览: {cog_summary}",
+            })
+        elif profile.knowledge_states:
             state_summary = ", ".join(
                 f"{sid}: 掌握度 {s.p_known:.2f}"
                 for sid, s in list(profile.knowledge_states.items())[:5]
@@ -284,7 +320,13 @@ class Orchestrator:
                 "role": "system",
                 "content": f"当前讨论的学科是: {detected_subject}",
             })
-        if profile.knowledge_states:
+        cog_summary = _build_cognitive_context(user_id, profile)
+        if cog_summary:
+            context_messages.append({
+                "role": "system",
+                "content": f"学生的知识状态概览: {cog_summary}",
+            })
+        elif profile.knowledge_states:
             state_summary = ", ".join(
                 f"{sid}: 掌握度 {s.p_known:.2f}"
                 for sid, s in list(profile.knowledge_states.items())[:5]

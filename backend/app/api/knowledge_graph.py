@@ -21,6 +21,19 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/knowledge/graph", tags=["知识图谱"])
 
+
+def _classify_mastery_cognitive(p: float) -> str:
+    if p >= 0.9:
+        return "已掌握"
+    if p >= 0.7:
+        return "接近掌握"
+    if p >= 0.4:
+        return "发展中"
+    if p > 0.0:
+        return "初学"
+    return "未接触"
+
+
 # ── Helper: 获取 UserData ──
 
 def _get_user_data():
@@ -56,15 +69,29 @@ async def get_graph(partition_id: str):
             "generated": False,
         }
 
-    # 同步 BKT 掌握度
-    from app.core.knowledge_trace import bkt_engine
+    # 同步 CognitiveNode 掌握度 (优先) 或 BKT (备降)
+    from app.cognitive.storage import get_node as get_cog_node
+    cog_fallback = True
     for node_id, node in graph.nodes.items():
         try:
-            state = bkt_engine.load_or_create("default_user", node_id)
-            node.mastery = round(state.p_known * 100, 1)
-            node.mastery_level = bkt_engine.get_mastery_level(state)
+            cog = get_cog_node(node_id)
+            if cog and cog.belief:
+                node.mastery = round(cog.belief.proficiency_mean * 100, 1)
+                node.mastery_level = _classify_mastery_cognitive(cog.belief.proficiency_mean)
+                cog_fallback = False
         except Exception:
             pass
+
+    # 备降: BKT
+    if cog_fallback:
+        from app.core.knowledge_trace import bkt_engine
+        for node_id, node in graph.nodes.items():
+            try:
+                state = bkt_engine.load_or_create("default_user", node_id)
+                node.mastery = round(state.p_known * 100, 1)
+                node.mastery_level = bkt_engine.get_mastery_level(state)
+            except Exception:
+                pass
 
     return {
         "partition_id": partition_id,
