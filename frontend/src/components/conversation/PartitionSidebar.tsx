@@ -329,16 +329,29 @@ export default function PartitionSidebar({
       console.error("loadChildren failed:", e);
       // If topic returns 404, it means the topic was deleted — remove it from tree
       const errMsg = e?.message || "";
-      if (item.level === "topic" && errMsg.includes("404")) {
+      if (errMsg.includes("404")) {
+        // Recursively remove the deleted item from the tree
+        const removeFromTree = (items: TreeItem[]): TreeItem[] =>
+          items
+            .map(d => {
+              // If this is the deleted item, remove it
+              if (d.id === item.id) return null;
+              // If this is the parent domain, filter out the deleted topic
+              if (item.level === "topic" && d.id === (item as TopicItem).domain_id) {
+                return { ...d, children: ((d as any).children || []).filter((t: any) => t.id !== item.id) } as typeof d;
+              }
+              // Otherwise, recurse into children
+              if ("children" in d && d.children) {
+                return { ...d, children: removeFromTree(d.children as TreeItem[]) } as typeof d;
+              }
+              return d;
+            })
+            .filter(Boolean) as TreeItem[];
+
         setTree(prev => prev.map(p => ({
           ...p,
-          children: (p.children as TreeItem[] || []).filter((d: TreeItem) => {
-            if (d.id === (item as TopicItem).domain_id) {
-              (d as any).children = ((d as any).children || []).filter((t: any) => t.id !== item.id);
-            }
-            return true;
-          }),
-        } as any)));
+          children: removeFromTree(p.children as TreeItem[]),
+        } as PartitionItem)));
       }
       setTree(prev => prev.map(p => {
         if (p.id === item.id) return { ...p, loading: false } as PartitionItem;
