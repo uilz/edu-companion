@@ -2,7 +2,7 @@
 
 > 版本: v3.0
 > 最后更新: 2026-05-22
-> 状态: **✅ Phase 6 — CognitiveNode 认知数据模型已上线**
+> 状态: **✅ 全部 6 个 Phase 已交付 — 全模块 CognitiveNode 联动已修复**
 
 ---
 
@@ -10,348 +10,249 @@
 
 | 层级 | 模块 | 状态 |
 |------|------|:--:|
-| ① 事件层 | LearningEvent 记录 + 会话标注 + 练习挂钩 | ✅ |
-| ② 画像层 | PartitionProgress API（覆盖率/技能/异常/时序） | ✅ |
-| ② 画像层 | CognitiveNode 统一认知数据模型 (Phase 6) | ✅ 15 子系统 + 22 方程 |
-| ② 画像层 | SkillAtom / StudentProfile schema | ✅ (旧 → CognitiveNode 备降) |
-| ③ 决策层 | CognitiveNode 事件驱动 Pipeline | ✅ (18 步 practice 处理) |
-| ③ 决策层 | LearningTutor（情境感知决策） | 🔴 待实现 |
-| 数据层 | PG `cognitive_nodes` 表 (31 列 JSONB) | ✅ |
-| 数据层 | PG `knowledge_states` 旧表 | ✅ (deprecated, 备降源) |
-| 前端 | GraphTab 切换到 PartitionProgress | ✅ |
-| 对话 | 消息编辑+多版本切换 ✅ (Phase 5.5) | ✅ |
+| ① 事件层 | 对话消息 / 练习提交 / 情绪标记 / 学习时长 / 错题 | ✅ 13 种事件类型 |
+| ② 画像层 | CognitiveNode 统一认知模型 (Phase 6) | ✅ 15 子系统 + 22 方程 + 31 列 JSONB |
+| ② 画像层 | PartitionProgress 分区进度画像 API | ✅ CognitiveNode 主源 → 旧 JSON 备降 |
+| ③ 决策层 | CognitiveNode 18 步事件驱动 Pipeline | ✅ 信念/激活/趋势/疲劳/遗忘/激励/自评/目标/组合/深度/对话/异常 |
+| ③ 决策层 | LearningTutor 情境感知决策 | 🔴 待实现 (Phase 7) |
+| 数据层 | PG `cognitive_nodes` 表 | ✅ 默认存储开启 |
+| 数据层 | PG `knowledge_states` 旧表 | ✅ (备降源, 不删) |
+| 数据层 | JSON 存储 | ✅ (`USE_JSON_STORAGE=true` 回滚) |
+| 联动 | 练习→CognitiveNode 双写 | ✅ `submit_practice()` |
+| 联动 | 图谱→CognitiveNode 同步 | ✅ `_sync_graph_to_cognitive()` |
+| 联动 | ZPD 调度→CognitiveNode | ✅ 优先读 CognitiveNode |
+| 联动 | 对话→CognitiveNode | ✅ 非流式 + 流式双路径 |
+| 联动 | 知识 API→CognitiveNode | ✅ `_BKTKnowledgeAdapter` 主源 |
+| 联动 | 学习计划→CognitiveNode | ✅ 优先读 CognitiveNode |
 
 ---
 
-## 一、问题诊断（v2.0 架构缺陷）
+## 一、核心实体：CognitiveNode
 
-v2.0 的核心问题是**三个模块各自维护一份「同一个知识点」的表示，靠约定 ID 一致来连接**，没有任何强制外键或类型安全：
+**系统中所有「同一个知识点」的表征统一到一个实体**。图谱是它的投影，旧的 BKT 是它的备降，练习是它的更新事件，对话是它的上下文引用。
+
+```python
+class CognitiveNode(BaseModel):
+    """统一认知数据模型 — 一个知识点在学生身上的完整状态"""
+
+    # ── 身份 ──
+    id: str                    # "calc-derivatives"
+    label: str                 # "导数"
+    level: str                 # "partition" | "domain" | "topic" | "concept" | "atom"
+    parent: str | None         # 父节点 ID
+    is_core: bool = False      # 核心知识点
+    
+    # ── 15 个子系统 ──
+    activation: Activation              # ACT-R 激活 + 扩散
+    belief: Belief                      # Beta(α,β) 掌握度信念
+    prediction: Prediction | None       # 作答预测 (正确概率)
+    cognitive_load: CognitiveLoad       # 认知负荷
+    scheduling: Scheduling              # 复习调度
+    dialogue_contexts: list[DialogueContext]  # 对话上下文 (上限 5 条)
+    metacognition: Metacognition | None # 自评校准
+    engagement: Engagement | None       # 投入度
+    composition: Composition | None     # 组合结构
+    deep_processing: DeepProcessing | None  # 深度处理
+    deep_links: list[DeepLink]          # 深层链接
+    goal_alignment: GoalAlignment | None    # 目标对齐
+    diagnostic: Diagnostic | None       # 诊断结果
+    practice_summary: PracticeSummary   # 练习统计汇总
+    learning_trend: LearningTrend       # 趋势 (velocity/plateau/decline)
+    error_clusters: list[ErrorCluster]  # 错误簇
+
+    # ── 图谱关系 ──
+    prerequisites: list[Prerequisite]   # 前置依赖
+    unlocks: list[Unlock]               # 解锁知识
+    associates: list[Associate]         # 关联知识
+
+    # ── 元信息 ──
+    meta: MetaInfo
+```
+
+### 数据流：事件 → CognitiveNode
 
 ```
-图谱 KGNode(id="calculus")  ─┐
-BKT state("calculus")       ─┼─ 三个独立对象，约定同名
-练习题 skill_id="calculus"  ─┘
+练习提交 (practice.py)
+  └─ submit_practice() ──→ CognitiveNode
+       ├─ belief: Beta(α,β) 更新
+       ├─ activation: base_level + recency 更新
+       ├─ cognitive_load: 疲劳/负荷 更新
+       ├─ scheduling: review_urgency 重新计算
+       ├─ practice_summary: attempts + correct
+       ├─ learning_trend: velocity + plateau 检测
+       ├─ error_clusters: 错误模式聚类
+       ├─ diagnostic: 知识漏洞标记
+       ├─ goal_alignment: 目标进度偏差
+       ├─ composition: 组合掌握度传播
+       ├─ deep_processing: 深度处理触发
+       └─ metacognition: 自评偏差校准
+
+对话回复 (conversation_llm.py)
+  └─ submit_dialogue_context() ──→ CognitiveNode.dialogue_contexts[]
+       └─ 非流式 + 流式 双路径 ✅
+
+图谱生成/编辑 (knowledge_graph.py)
+  └─ _sync_graph_to_cognitive() ──→ CognitiveNode (partition/topic/concept/atom)
+       └─ 图谱生成 + 节点CRUD + 边CRUD 三入口 ✅
 ```
-
-导致 12 个具体缺陷：
-
-| # | 缺陷 | 后果 |
-|---|------|------|
-| 1 | 图谱节点 ID 与 BKT 技能 ID 靠约定对齐，不强制 | 掌握度可能完全错误 |
-| 2 | 三个「学习状态」源（BKT / SharedState / GraphNode）| 同一个问题三个答案 |
-| 3 | 图谱节点无练习历史 | 查练习数据需跨表联查，无外键 |
-| 4 | 会话消息不引用图谱节点 | 无法回答「我们聊过什么关于 X」 |
-| 5 | 分支练习总结是自由文本字符串 | 无法结构化查询 |
-| 6 | BKT 全局平面，图谱按分区隔离 | 同技能跨分区共享 BKT，不准确 |
-| 7 | SharedKnowledgeState 在内存中，重启丢失 | 融合掌握度不可靠 |
-| 8 | AI 上下文是文本拼接，不是结构化视图 | 10 个源各自独立拼 |
-| 9 | 无学习全景 API | 前端需调 5+ 端点拼画像 |
-| 10 | AI 生成图谱时不知道 BKT 数据 | 重复生成已掌握节点 |
-| 11 | 练习结果不反馈图谱 | 无 priority 调整、无依赖关系验证 |
-| 12 | 分区/分支承载太多语义 | 垃圾桶字段集合 |
 
 ---
 
-## 二、v3.0 架构：三层 + SkillAtom 统一实体
+## 二、三层架构
 
 ```
 ┌──────────────────────────────────────────────────────┐
 │ ③ 决策层：LearningTutor                              │
 │   "现在推什么？" — 情境感知决策                       │
-│   输入: StudentProfile + LearningContext              │
+│   输入: CognitiveNode + StudentProfile + Context     │
 │   输出: Action (推题/复习/换学科/鼓励/讲解)            │
+│                                                     │
+│   已就绪: CognitiveNode 18 步 Pipeline               │
+│   待实现: LearningTutor 规则引擎 + ZPD 调度增强       │
 └───────────────────────┬──────────────────────────────┘
                         │
 ┌───────────────────────┴──────────────────────────────┐
-│ ② 画像层：StudentProfile                             │
+│ ② 画像层：CognitiveNode + PartitionProgress          │
 │   "学得到底怎么样了？" — 多维学习画像                  │
-│   ├─ partition_progresses[pid] → PartitionProgress    │
-│   ├─ cognitive_state（精力/情绪/节奏）                │
-│   ├─ forgetting_curves（遗忘状态）                    │
-│   └─ temporal_metrics（时间维度）                     │
+│                                                     │
+│   ├─ CognitiveNode 统一实体 (PG 主存)                │
+│   ├─ PartitionProgress API (画像计算 + 缓存)          │
+│   ├─ 旧 BKT/knowledge_graphs (备降源)                │
+│   └─ 13 种学习事件统计                                │
 └───────────────────────┬──────────────────────────────┘
                         │
 ┌───────────────────────┴──────────────────────────────┐
-│ ① 事件层：LearningEvents (原始行为记录)               │
-│   对话消息 / 练习提交 / 心情标记 / 学习时长 /         │
+│ ① 事件层：LearningEvents                              │
+│   对话消息 / 练习提交 / 心情标记 / 学习时长 /          │
 │   页面停留 / 错题重做间隔 / 考试日程                   │
+│                                                     │
+│   record_event() → UserData.event_log               │
+│   practice_submit → submit_practice() → CognitiveNode│
 └──────────────────────────────────────────────────────┘
 ```
 
-### 核心实体：SkillAtom
+---
 
-**所有表示「同一个知识点」的模块只读/写这一个实体**。图谱是它的投影，BKT 是它的字段，练习是它的更新事件，会话是它的引用。
+## 三、模块联动全景
 
-```python
-class SkillAtom(BaseModel):
-    """原子学习单元 — 唯一的「知识点」实体"""
-    
-    # ── 身份 ──
-    id: str                              # "calc-derivatives"
-    label: str                           # "导数"
-    description: str                     # 一句话定义
-    partition_id: str                    # 所属分区
-    created_by: str                      # "ai" | "user"
-    
-    # ── 图谱属性 ──
-    priority: int = 5                    # 学习优先级 1-10
-    depth: int = 0                       # 拓扑层级（自动计算）
-    prerequisites: list[str]             # 前置 SkillAtom ID
-    unlocks: list[str]                   # 解锁的后继
-    
-    # ── BKT 掌握度（直接嵌入，不另存）──
-    bkt_p_know: float = 0.1
-    bkt_p_learn: float = 0.3
-    bkt_p_guess: float = 0.25
-    bkt_p_slip: float = 0.1
-    mastery: float = 0.0
-    mastery_level: str = "未接触"
-    confidence: float = 0.0              # BKT 观测信度（样本少 → 低）
-    
-    # ── 练习历史（汇总在实体上）──
-    attempt_count: int = 0
-    correct_count: int = 0
-    last_practiced: datetime | None = None
-    time_spent_minutes: float = 0.0
-    error_clusters: list[str] = []       # 高频错误模式
-    
-    # ── 趋势 ──
-    trend: str = "stable"                # improving | stable | declining | plateau
-    stagnation_days: int = 0
-    velocity: float = 0.0                # 掌握度变化/周
-    
-    # ── 遗忘 ──
-    forgetting_curve: float = 1.0        # 艾宾浩斯遗忘因子（1=刚学）
-    review_urgency: float = 0.0          # 复习紧迫度 0-1
-    
-    # ── 时间戳 ──
-    created_at: datetime
-    updated_at: datetime
+```
+                  ┌─────────────────────────┐
+                  │  练习提交 practice.py   │
+                  │  submit_answer()       │
+                  └──────┬──────────┬──────┘
+                         │          │
+                    CognitiveNode   BKT (备降)
+                  ┌─────┴─────┐
+                  │           │
+                  ▼           ▼
+    CognitiveNode.belief   old knowledge_states
+
+                  ┌─────────────────────────┐
+                  │  对话系统 conversati    │
+                  │  非流式 + 流式 双路径    │
+                  └──────────┬──────────────┘
+                             │
+                   submit_dialogue_context()
+                             │
+                             ▼
+              CognitiveNode.dialogue_contexts[]
+
+                  ┌─────────────────────────┐
+                  │  图谱生成/编辑/删除      │
+                  │  knowledge_graph.py     │
+                  └──────────┬──────────────┘
+                             │
+                   _sync_graph_to_cognitive()
+                             │
+                             ▼
+              CognitiveNode (partition→topic→...→atom)
+
+                  ┌─────────────────────────┐
+                  │  ZPD 调度器            │
+                  │  zpd_scheduler.py      │
+                  └──────────┬──────────────┘
+                             │
+                    estimate_student_ability()
+                             │
+                    CognitiveNode.belief 优先
+                        BKT 备降
+
+                  ┌─────────────────────────┐
+                  │  知识 API + 学习计划     │
+                  │  knowledge.py / study.py│
+                  └──────────┬──────────────┘
+                             │
+                     get_knowledge_state()
+                             │
+                    CognitiveNode 优先 → BKT 备降
+
+                  ┌─────────────────────────┐
+                  │  AI 上下文 (orchestrator)│
+                  └──────────┬──────────────┘
+                             │
+                     _build_cognitive_context()
+                             │
+                    CognitiveNode 优先 → old profile
 ```
 
 ---
 
-## 三、分区进度画像 (PartitionProgress)
+## 四、数据表设计 (PostgreSQL)
 
-对每个分区构建完整学习地图。**这是前端图谱页和驾驶舱的单一数据源。**
+**cognitive_nodes** 表 (31 列, Phase 6 核心)：
 
-```python
-class PartitionProgress(BaseModel):
-    """一个分区的完整学习进度画像"""
-    partition_id: str
-    generated_at: datetime
-    
-    # ── 覆盖率 ──
-    coverage: Coverage
-    
-    # ── 技能节点（带着学生真实数据）──
-    skills: dict[str, SkillNodeState]
-    
-    # ── 依赖关系 ──
-    dependencies: list[Dependency]
-    
-    # ── 学习路径 ──
-    learning_path: LearningPath
-    
-    # ── 技能聚类 ──
-    clusters: list[SkillCluster]
-    
-    # ── 异常 ──
-    anomalies: list[Anomaly]
-    
-    # ── 时间维度 ──
-    temporal: TemporalMetrics
+```sql
+CREATE TABLE cognitive_nodes (
+    id              TEXT NOT NULL,
+    user_id         TEXT NOT NULL,
+    label           TEXT,
+    level           TEXT DEFAULT 'atom',
+    parent          TEXT,
+    is_core         BOOLEAN DEFAULT FALSE,
+    prerequisites   JSONB DEFAULT '[]',
+    unlocks         JSONB DEFAULT '[]',
+    associates      JSONB DEFAULT '[]',
+    activation      JSONB,        -- {base_level, recency, spread_targets}
+    belief          JSONB,        -- {alpha, beta, proficiency_mean, ...}
+    prediction      JSONB,
+    cognitive_load  JSONB,        -- {fatigue, session_count, capacity_remaining}
+    scheduling      JSONB,        -- {next_review, review_urgency, ...}
+    dialogue_contexts JSONB DEFAULT '[]',
+    metacognition   JSONB,
+    engagement      JSONB,
+    composition     JSONB,
+    deep_processing JSONB,
+    deep_links      JSONB DEFAULT '[]',
+    goal_alignment  JSONB,
+    diagnostic      JSONB,
+    practice_summary JSONB,       -- {total_attempts, correct_attempts, ...}
+    learning_trend  JSONB,        -- {velocity, direction, plateau_days, ...}
+    error_clusters  JSONB DEFAULT '[]',
+    meta            JSONB,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (id, user_id)
+);
 
-
-class Coverage:
-    total: int = 0
-    touched: int = 0       # 接触过（有练习或对话）
-    assessed: int = 0      # 有足够 BKT 数据
-    mastered: int = 0
-    learning: int = 0
-    weak: int = 0
-    untouched: int = 0
-
-
-class SkillNodeState(BaseModel):
-    """知识点在该学生身上的完整状态"""
-    skill_id: str
-    label: str
-    description: str
-    
-    # 掌握度
-    mastery: float = 0.0
-    mastery_level: str = "未接触"
-    confidence: float = 0.0
-    trend: str = "stable"
-    
-    # DAG 位置
-    depth: int = 0
-    prerequisites: list[str] = []
-    prerequisites_met: bool = False
-    blocked: bool = True
-    
-    # 练习
-    attempt_count: int = 0
-    correct_count: int = 0
-    last_practiced: datetime | None = None
-    error_clusters: list[str] = []
-    
-    # 遗忘
-    forgetting_curve: float = 1.0
-    review_urgency: float = 0.0
-
-
-class Dependency:
-    from_skill: str
-    to_skill: str
-    relation: str        # prerequisite | builds_on | analogy | confusion_risk
-    satisfied: bool      # from_skill 是否已满足
-    student_deviation: str | None
-
-
-class LearningPath:
-    ideal_order: list[str]
-    actual_order: list[str]
-    deviations: list[PathDeviation]
-    frontier: list[str]         # 下一步该学
-    review_queue: list[str]     # 该复习
-
-
-class SkillCluster:
-    skills: list[str]
-    correlation: float
-    type: str                   # co-mastered | co-weak | co-confused
-    interpretation: str
-
-
-class Anomaly:
-    type: str     # mastered_without_prereq | long_stagnation | rapid_forgetting
-    skills: list[str]
-    detail: str
-    severity: str  # warning | info
-
-
-class TemporalMetrics:
-    learning_velocity: float           # 每周掌握技能数
-    estimated_completion_days: int
-    review_backlog: int
-    daily_practice_minutes: float
+-- 索引
+CREATE INDEX idx_cognitive_nodes_user ON cognitive_nodes(user_id);
+CREATE INDEX idx_cognitive_nodes_parent ON cognitive_nodes(parent);
+CREATE INDEX idx_cognitive_nodes_level ON cognitive_nodes(level);
+CREATE INDEX idx_cognitive_nodes_next_review 
+    ON cognitive_nodes(((scheduling->>'next_review')::double precision));
 ```
 
----
+**其他 PG 表** (存储层):
 
----
-
-## 三-B、事件层 Schema（实现中）
-
-```python
-from enum import Enum
-
-class EventType(str, Enum):
-    PRACTICE_SUBMIT = "practice_submit"
-    PRACTICE_SESSION_START = "practice_session_start"
-    PRACTICE_SESSION_COMPLETE = "practice_session_complete"
-    CONVERSATION_MESSAGE = "conversation_message"
-    SKILL_DISCUSSED = "skill_discussed"
-    SKILL_MASTERY_CHANGED = "skill_mastery_changed"
-    BRANCH_CREATED = "branch_created"
-    PARTITION_SWITCHED = "partition_switched"
-    EMOTION_DETECTED = "emotion_detected"
-    FRUSTRATION_PEAK = "frustration_peak"
-    GRAPH_GENERATED = "graph_generated"
-    REVIEW_RECOMMENDED = "review_recommended"
-
-class LearningEvent(BaseModel):
-    id: str
-    user_id: str
-    type: EventType
-    timestamp: datetime
-    partition_id: Optional[str] = None
-    skill_ids: list[str] = []
-    data: dict = {}       # 载荷（{correct, time_spent, before, after, ...}）
-    event_date: str        # "2026-05-19" 方便按天聚合
-    event_hour: int        # 0-23 方便统计高峰时段
-
-class DailyMetrics(BaseModel):
-    date: str
-    practice_minutes: float
-    practice_count: int
-    correct_count: int
-    conversations: int
-    skills_covered: list[str]
-```
-
-## 四、数据流
-
-### 4.0 事件采集（新）
-
-```
-所有学习行为 → record_event() → UserData.event_log
-
-对话完成 → send_and_reply
-  └─ [来源: xxx] → _resolve_skill_ids() → TreeNode.discussed_skill_ids
-     └─ record_event(SKILL_DISCUSSED, skill_ids=[...])
-
-练习提交 → submit_answer
-  ├─ record_event(PRACTICE_SUBMIT, {correct, time_spent})
-  └─ 掌握度变化 >5% → record_event(SKILL_MASTERY_CHANGED, {before, after})
-
-事件存储：
-  - 位置: UserData.event_log（JSON 数组，最多 500 条自动裁剪）
-  - 查询: GET /api/learning-events/stats/{pid}?days=7
-  - 按天: GET /api/learning-events/daily/{pid}?days=7
-  - 13 种事件类型: practice_submit/session_start/complete | conversation_message
-    | skill_discussed | skill_mastery_changed | branch_created | partition_switched
-    | emotion_detected | frustration_peak | graph_generated | review_recommended
-```
-
-### 4.1 练习 → 反馈图谱
-
-```
-POST /api/practice/submit {skill_id, answer}
-  │
-  ├─ SkillAtom[skill_id].attempt_count += 1
-  ├─ BKT.update() → SkillAtom[skill_id].mastery 更新
-  ├─ 检查趋势：连续N次 → velocity 更新
-  ├─ 检查遗忘：last_practiced → forgetting_curve 更新
-  ├─ 异常检测：
-  │   ├─ 5次连续错但前置mastery>80% → "依赖关系可能错误"
-  │   ├─ 7天stagnation → "学习平台期"
-  │   └─ 已掌握(>85%)但priority仍高 → "priority建议降低"
-  └─ 触发异步 → 生成建议列表（不自动改，需确认）
-```
-
-### 4.2 图谱 → 会话注入
-
-```
-AI 对话时注入（不再拼10个源）:
-  GET /api/partition-progress/{pid}
-  → PartitionProgress
-  → 格式化为结构化上下文:
-  
-  📊 [分区: 高等数学] 覆盖率: 7/12 已接触, 3 已掌握
-  ✅ 已掌握: limits(92%) · continuity(88%) · basic_functions(85%)
-  🔶 发展中: derivatives(54%, 趋势↑) · chain_rule(48%, 停滞4天⚠️)
-  ⬜ 未接触: integrals(前置未满足🔒) · series · multivariable
-  🎯 建议: 巩固 chain_rule → 解锁 integrals
-  ⏰ 复习压力: limits 遗忘因子0.7（建议3天内复习）
-```
-
-### 4.3 会话标注知识点
-
-```python
-class TreeNode:
-    # 新增字段
-    discussed_skill_ids: list[str] = []  # AI 回复自动标注
-```
-
-> System prompt 要求 AI 每次回答后标注涉及的知识点。这是自动行为，用户无感。
-
-结果：
-- 「关于导数我们聊过什么？」→ 查 `discussed_skill_ids` 含 `derivatives` 的消息
-- 「哪些聊得多但练得少？」→ 讨论频次 vs attempt_count
-- 学习热力图：partition 下每个 SkillAtom 被讨论次数
+| 表名 | 用途 | 状态 |
+|------|------|:--:|
+| `conversation_user_meta` | 用户元数据（全字段持久化） | ✅ |
+| `conversation_partitions` | 分区 | ✅ |
+| `conversation_branches` | 对话 | ✅ |
+| `conversation_nodes` | 消息节点 | ✅ |
+| `conversation_response_blocks` | 响应块 | ✅ |
+| `conversation_link_nodes` | 链接节点 | ✅ |
+| `cognitive_events` | CognitiveNode 事件日志 | ✅ |
 
 ---
 
@@ -359,108 +260,67 @@ class TreeNode:
 
 | 方法 | 路径 | 功能 | 状态 |
 |------|------|------|:--:|
-| GET | `/api/partition-progress/{partition_id}` | **分区完整进度画像** | ✅ |
-| GET | `/api/learning-events/stats/{pid}?days=7` | 分区事件统计 | ✅ |
-| GET | `/api/learning-events/daily/{pid}?days=7` | 按天指标 | ✅ |
-| GET | `/api/student-profile` | 全科学习画像 | 🔴 |
-| GET | `/api/skill-atoms?partition_id=xxx` | 旧图谱兼容 | 🔴 |
-| POST | `/api/skill-atoms/{pid}/generate` | AI 生成知识点 | 🔴 |
-| PUT | `/api/skill-atoms/{pid}/nodes` | 节点 CRUD | 🔴 |
-| PUT | `/api/skill-atoms/{pid}/edges` | 依赖边 CRUD | 🔴 |
+| GET | `/api/partition-progress/{pid}` | 分区进度画像 (CognitiveNode 主源) | ✅ |
+| POST | `/api/practice/submit` | 练习提交 (双写 CognitiveNode) | ✅ |
+| POST | `/api/practice/generate` | 练习生成 | ✅ |
+| GET/POST/PUT | `/api/knowledge/*` | 知识图谱/前置检查 (CognitiveNode 主源) | ✅ |
+| GET | `/api/learning-events/stats/{pid}` | 学习事件统计 | ✅ |
+| GET | `/api/learning-events/daily/{pid}` | 按天指标 | ✅ |
+| POST | `/api/knowledge-graph/{pid}/generate` | AI 生成图谱 (联动 CognitiveNode) | ✅ |
+| PUT | `/api/knowledge-graph/{pid}/nodes` | 节点 CRUD (联动 CognitiveNode) | ✅ |
+| PUT | `/api/knowledge-graph/{pid}/edges` | 边 CRUD (联动 CognitiveNode) | ✅ |
+| POST | `/api/conversation/send` | 对话发送 (联动 CognitiveNode) | ✅ |
+| GET | `/api/study/plan` | 学习计划 (CognitiveNode 主源) | ✅ |
+| GET | `/api/search` | 全局搜索 (CognitiveNode + PG) | ✅ |
+| GET | `/api/progress/{uid}` | 进度总览 | ✅ |
 
 ---
 
 ## 六、前端变化
 
-### 图谱页（Dashboard 🧠Tab）
-
-**数据源**：`GET /api/partition-progress/{pid}` → `PartitionProgress`
-
-```typescript
-// 从 SkillNodeState[] 计算图谱渲染数据
-const nodes = pp.skills.map(s => ({
-  id: s.skill_id,
-  label: s.label,
-  mastery: s.mastery,
-  masteryLevel: s.mastery_level,
-  blocked: s.blocked,
-  anomaly: pp.anomalies.find(a => a.skills.includes(s.skill_id)),
-}));
-const edges = pp.dependencies.map(d => ({
-  from: d.from_skill,
-  to: d.to_skill,
-  satisfied: d.satisfied,
-}));
-```
-
-其他 tab 的变化：
-- **概览** → 各分区 coverage 卡片
-- **学情** → PartitionProgress 的趋势图表
-- **错题** → SkillAtom.error_clusters 汇总
+| 页面 | 数据源 | 状态 |
+|------|--------|:--:|
+| 图谱页 (🧠) | `PartitionProgress` + CognitiveNode 掌握度 | ✅ |
+| 学情驾驶舱 | `cognitive_nodes` → 覆盖率/趋势/异常 | ✅ |
+| 错题本 | `CognitiveNode.error_clusters` | ✅ |
+| 学习计划 | `CognitiveNode.scheduling` | ✅ |
+| 对话 | cognitive contexts 标注 | ✅ |
 
 ---
 
-## 七、数据表设计（PostgreSQL）
+## 七、Phase 完成状态
 
 ```
-skill_atoms (
-  id            TEXT PRIMARY KEY,
-  partition_id  TEXT NOT NULL,
-  label         TEXT NOT NULL,
-  description   TEXT,
-  priority      INT DEFAULT 5,
-  depth         INT DEFAULT 0,
-  bkt_p_know    FLOAT DEFAULT 0.1,
-  bkt_p_learn   FLOAT DEFAULT 0.3,
-  bkt_p_guess   FLOAT DEFAULT 0.25,
-  bkt_p_slip    FLOAT DEFAULT 0.1,
-  mastery       FLOAT DEFAULT 0,
-  mastery_level TEXT DEFAULT '未接触',
-  confidence    FLOAT DEFAULT 0,
-  attempt_count INT DEFAULT 0,
-  correct_count INT DEFAULT 0,
-  last_practiced TIMESTAMPTZ,
-  error_clusters JSONB DEFAULT '[]',
-  trend         TEXT DEFAULT 'stable',
-  forgetting_curve FLOAT DEFAULT 1.0,
-  review_urgency FLOAT DEFAULT 0,
-  created_by    TEXT DEFAULT 'ai',
-  created_at    TIMESTAMPTZ DEFAULT NOW(),
-  updated_at    TIMESTAMPTZ DEFAULT NOW()
-);
-
-skill_dependencies (
-  from_skill  TEXT REFERENCES skill_atoms(id),
-  to_skill    TEXT REFERENCES skill_atoms(id),
-  relation    TEXT DEFAULT 'prerequisite',
-  PRIMARY KEY (from_skill, to_skill)
-);
-
--- TreeNode 加列
-ALTER TABLE conversation_nodes ADD COLUMN discussed_skill_ids JSONB DEFAULT '[]';
+Phase 1 MVP  ─── 工作空间/练习/对话基础   ✅
+Phase 2 学习画像 ─── 雷达图/日历/遗忘曲线  ✅
+Phase 3 智能路由 ─── 图谱/边栏/搜索/首页  ✅
+Phase 4 对话系统 ─── 对话系统重构          ✅
+Phase 5 认知事件 ─── 事件层/画像层         ✅
+Phase 6 认知模型 ─── CognitiveNode 全联动  ✅
+  ├─ 6.1 模型+方程+常量                   ✅
+  ├─ 6.2 PG 存储+CRUD                     ✅
+  ├─ 6.3 事件处理器+对话联动              ✅
+  ├─ 6.4 迁移+清理（双源备降架构）         ✅
+  ├─ 6.5 PG 默认存储                      ✅
+  └─ 全模块联动修复（7个断裂点）           ✅
+Phase 7 LearningTutor 决策层              🔴 待开始
 ```
 
 ---
 
-## 八、迁移路径
+## 八、旧文档归档
 
-| 步骤 | 内容 | 风险 | 状态 |
-|------|------|------|:--:|
-| 1 | 创建 `SkillAtom` / `PartitionProgress` Schema | 低 | ✅ |
-| 2 | 创建 PG 表 `skill_atoms` + `skill_dependencies` | 低 | 🔴 |
-| 3 | 迁移脚本：旧 `knowledge_graphs` + `knowledge_states` → `skill_atoms` | 中 | 🔴 |
-| 4 | 实现 `GET /api/partition-progress/{pid}`（兼容旧数据） | 低 | ✅ |
-| 5 | 旧图谱 API 保留兼容层 | 低 | ✅（内部转发） |
-| 6 | 前端 GraphTab 切换到新数据源 | 中 | ✅ |
-| 7 | `TreeNode.discussed_skill_ids` + 事件记录 + AI prompt | 低 | ✅ |
-| 8 | 删旧存储：`knowledge_graphs` / `knowledge_states` / `SharedKnowledgeState` | 低 | 🔴 |
+过时设计文档已按 Phase 归档到对应目录：
 
-已完成 5/8。API 接口保持向后兼容。剩余 3 项（PG 表 / 正式迁移 / 清理旧存储）为 Phase 6 任务。
-
----
-
-## 九、Phase 6 衔接
-
-v3 架构中未完成的 3 项 + 对话结构化下文摘要 + StudentProfile API + LearningTutor 决策层，统一归入 **Phase 6 · 中枢数据建模**。
-
-详见: [PROGRESS.md](./PROGRESS.md) 第十二节
+```
+docs/
+├── architecture-v3.md          ← 本文件（唯一最新设计）
+├── PROGRESS.md                  ← 进度跟踪
+├── phase1/                     ← MVP 设计
+├── phase2/                     ← 学习画像设计
+├── phase3/                     ← 智能路由设计
+├── phase4/                     ← 对话系统设计
+├── phase5/                     ← 认知事件设计
+├── phase6/                     ← CognitiveNode 设计
+└── phase7/ (待建)              ← LearningTutor 设计
+```

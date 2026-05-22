@@ -1,411 +1,111 @@
-# 智能伴学系统 · 开发进度总览
+# 智能伴学系统 — 项目进度
 
-> **最后更新**: 2026-05-22 — v4 对话系统打磨完成，进入 Phase 6 准备 ✅  
-> **总代码量**: 后端 ~20,000 行 · 前端 ~13,000 行 · 文档 ~20,000 行  
-> **API 端点**: 90+ 个 · **前端面板**: 4个 · **设计文档**: 25 份 · **服务文件**: 36 个
+> 最后更新: 2026-05-22 (Phase 6 全部完成)
 
 ---
 
-## 一、系统架构
+## 总体进度
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                       前端 (Next.js 14)                       │
-│  /dashboard (7 Tab) · /learn (四级树对话) · /practice · /settings │
-│  13页 → 4面板 · 跨页上下文传递 (URL searchParams)              │
-├─────────────────────────────────────────────────────────────┤
-│                    API 层 (FastAPI)                           │
-│  conversation / practice / material / chat / study / content │
-│  progress / knowledge / multimodal / achievements / search   │
-├──────────┬──────────┬──────────┬──────────┬──────────┬────────────┤
-│ v4 对话   │ 练习引擎  │ 学习规划  │ 知识图谱  │ 成就系统  │ 媒体搜索    │
-│ 四级树    │ BKT+ZPD  │ Plan+    │ 实时图谱   │ 12成就    │ B站/Bing/  │
-│ partition │ +错题本  │ Habits   │ 掌握度注入  │ 3级解锁   │ 百度/小红书  │
-│ →domain   │          │          │ +学习路径  │           │            │
-│ →topic    │          │          │           │           │            │
-│ →conv     │          │          │           │           │            │
-│ 自动路由   │          │          │           │           │            │
-│ 切换推荐   │          │          │           │           │            │
-├──────────┴──────────┴──────────┴──────────┴──────────┴────────────┤
-│            持久化 (JSON 文件存储)                                   │
-│        ~/.companion/data + ~/.companion/uploads                   │
-└───────────────────────────────────────────────────────────────────┘
+Phase 1 MVP:   █████████████████████  完成
+Phase 2 画像:  █████████████████████  完成
+Phase 3 路由:  █████████████████████  完成
+Phase 4 对话:  █████████████████████  完成
+Phase 5 事件:  █████████████████████  完成
+Phase 6 认知:  █████████████████████  完成  ← 当前
+Phase 7 决策:  ░░░░░░░░░░░░░░░░░░░░░  0%
 ```
 
 ---
 
-## 二、模块完成度
+## Phase 6 · 认知中枢数据模型 (CognitiveNode)
 
-### 🟢 Phase 1 核心模块（12/12）
+### 6.1 模型+方程+常量 ✅
 
-| # | 模块 | 完成度 | 关键交付 |
-|---|------|--------|---------|
-| 1 | **对话系统** | 🟢 98% | v4.0 四级树(分区→领域→专题→对话)、自动路由分类、切换推荐、**消息编辑+多版本切换(同role过滤+页码)**、复制/修改/删除、多模态ContentBlock、LLM回复、温暖陪伴人格+挫败检测+启发追问+引用溯源 |
-| 2 | **练习系统** | 🟢 85% | LLM出题、BKT认知诊断(4维MDKS)、ZPD自适应调度、SM-2间隔重复、错题本、苏格拉底提示、情感反馈 |
-| 3 | **对话×练习互通** | 🟢 80% | 上下文感知选题、内联练习、练习→对话结果写回、练习回顾、错误→对话推荐、LLM上下文注入 |
-| 4 | **资料系统** | 🟢 100% | PDF/Word/PPT/MD/TXT解析、Granite Embedding索引、向量搜索、资料出题、**分区归属+分支引用+MaterialPanel** |
-| 5 | **学情仪表板** | 🟢 100% | 9面板仪表板(概览/趋势/掌握/错因/热力/雷达/遗忘/建议) + 习惯养成Tab + **每日摘要卡片** |
-| 6 | **行为分析+习惯养成** | 🟢 100% | streak追踪、最佳时段分析、规律性评分、疲劳曲线、番茄钟建议、TinyHabits微习惯 |
-| 7 | **媒体搜索** | 🟢 90% | B站/百度/Bing/小红书多平台搜索URL生成、练习错误自动推荐 |
-| 8 | **题目质量管理** | 🟢 85% | IRT区分度、4级干扰项分析、猜测检测、时间分析、5 API、dry-run安全淘汰 |
-| 9 | **学习规划** | 🟢 85% | study API(plan生成/自适应/建议/历史)、BKT推荐、ZPD调度、每日目标分级、自动重调 |
-| 10 | **知识图谱** | 🟢 95% | API实时图谱(38节点/45边)、6 API、前置卡控引擎、力导向布局、**BKT掌握度注入+雷达图** |
-| 11 | **多模态交互** | 🟢 80% | ContentBlock体系、文件上传、STT语音(双通道)、视频内嵌、TTS朗读 |
-| 12 | **分支工作空间** | 🟢 60% | WorkspacePanel UI、文件上传/列表/预览/删除API、ChatInput集成 | 文件内容索引+全文搜索+知识图谱关联(P3) |
+| 交付物 | 文件 | 说明 |
+|--------|------|------|
+| CognitiveNode (31 列 JSONB) | `models.py` | 15 子系统全量化建模 |
+| 22 个数学方程 | `equations.py` | 信念 Beta 分布 / ACT‑R 激活 / 遗忘衰减 / EWMA 趋势 / 统一调度 / 激励 / 疲劳 |
+| 22 个全局参数 | `constants.py` | 全部可学习默认值 |
 
-### 🟡 Phase 2 新增模块（7/7 ✅）
+### 6.2 PG 存储+CRUD ✅
 
-| # | 模块 | 完成度 | 关键交付 |
-|---|------|--------|---------|
-| A1 | **知识雷达图** | 🟢 100% | SVG雷达图(8轴·mastery颜色·学科筛选·点击详情)·嵌入/analytics |
-| A2 | **成就激励系统** | 🟢 100% | 12种成就(3级)·引擎+2API·成就墙页面·解锁弹窗动画·答题触发 |
-| A3 | **遗忘曲线** | 🟢 100% | /analytics RetentionPanel·Ebbinghaus曲线·高危标记 |
-| A4 | **学习日历** | 🟢 100% | GET /calendar API·/calendar页·GitHub热力图·点击详情·月份统计 |
-| A5 | **启发式追问** | 🟢 100% | System prompt苏格拉底规则·设置页开关 |
-| A6 | **错题智能归因** | 🟢 100% | 11种错因LLM分析·2 API·错因分布统计·/errors展开分析 |
-| A7 | **每日摘要** | 🟢 100% | GET /summary API·/analytics顶部卡片·实时计算·昨日+推荐+鼓励 |
+| 交付物 | 状态 |
+|--------|:--:|
+| `cognitive_nodes` 表 (31 列) | ✅ |
+| `cognitive_events` 表 (8 列) | ✅ |
+| `upsert_node()` / `get_node()` / `get_children()` / `get_subtree()` | ✅ |
+| `delete_node()` (级联) / `search_nodes()` / `get_urgent_nodes()` | ✅ |
+| `append_event()` / `get_unprocessed_events()` / `mark_event_processed()` | ✅ |
 
----
+### 6.3 事件处理器+对话联动 ✅
 
-## 三、后端服务清单
+| Step | 功能 | 状态 |
+|:----:|------|:--:|
+| 1-4 | 加载节点 / 信念更新 / 信度衰减 | ✅ |
+| 5-7 | 激活计算 / 趋势更新 / 道路检测 | ✅ |
+| 8-11 | 疲劳更新 / FP 检测 / 激励计算 / 自评校准 | ✅ |
+| 12-15 | 目标对齐 / 组合传播 / 深度触发 / 对话写入 | ✅ |
+| 16-18 | 存储 / 事件入库 / 返回摘要 | ✅ |
+| — | `conversation_llm.py` 自动 `submit_dialogue_context` | ✅ 非流式+流式双路径 |
 
-``` 
-services/                            v4 重构
-├── conversation_llm.py    (971行)   ← auto_resolve + context_switch
-├── tree_ops.py            (427行)   ← 四级树操作 (分区/领域/专题/对话)
-├── classifier.py          (460行)   ← 三级分类 + DOMAIN/TOPIC_KEYWORDS
-├── branch_summarizer.py   (154行)
-├── meta_history.py         (85行)
-├── tool_executor.py       (211行)
-├── question_generator.py  (286行)
-├── zpd_scheduler.py       (260行)
-├── shared_ks.py           (124行)
-├── practice_integrator.py (138行)
-├── context_trigger.py     (261行)
-├── inline_practice.py     (261行)
-├── dialogue_recommender.py(192行)
-├── practice_recall.py     (168行)
-├── behavior_analyzer.py   (285行)
-├── habit_formation.py     (227行)
-├── material_parser.py     (183行)
-├── material_indexer.py    (202行)
-├── material_search.py     (217行)
-├── material_question_gen.py(193行)  ← 资料出题
-├── media_search.py        (231行)
-├── llm_service.py         (238行)
-├── background_jobs.py     (107行)
-├── storage.py              (66行)
-├── error_attribution.py   (169行)   🆕 Phase 2
-├── achievement_engine.py  (227行)   🆕 Phase 2
-└── daily_summary.py       (108行)   🆕 Phase 2
-```
+### 6.4 迁移+清理 ✅
 
-### 核心引擎
+| 内容 | 状态 |
+|------|:--:|
+| `migrate_to_cognitive.py` 迁移脚本 | ✅ BKT→Beta + 图谱层级 + 事件 |
+| `partition_progress.py` 双源（CognitiveNode → 旧JSON） | ✅ |
+| `knowledge_graph.py` 双源（CognitiveNode → BKT） | ✅ |
+| `orchestrator.py` + `search.py` + `progress.py` CognitiveNode 支持 | ✅ |
 
-```
-core/
-├── knowledge_trace.py     (277行) — BKT引擎+持久化
-├── learner_model.py       (550行) — 学习者画像
-└── orchestrator.py        (303行) — 多Agent编排
-```
+### 6.5 PG 默认存储 ✅
 
----
+| 内容 | 状态 |
+|------|:--:|
+| `USE_PG_STORAGE=true` 为默认 | ✅ (回滚: `USE_JSON_STORAGE=true`) |
+| `pg_storage.py` v4 全字段持久化 | ✅ domains/topics/files/jobs/states/events |
+| `default_user` JSON→PG 迁移 | ✅ (4 分区/2 对话/8 节点/3 领域/2 专题) |
 
-## 四、API 端点总览（81个）
+### 全模块联动修复 ✅
 
-| 路由前缀 | 数量 | 核心端点 |
-|---------|:--:|---------|
-| `/api/conversation` | 18 | partitions CRUD, branches CRUD, messages, response-blocks, **workspace upload/list/serve/delete** |
-| `/api/practice` | 26 | questions, sessions, submit, hints, errors, stats, **error-analyze, error-stats**, context-trigger, inline, recall, dialogue-recommend, behavior, quality(5) |
-| `/api/material` | 10 | upload, promote, search, chunks, generate-questions, delete, cleanup |
-| `/api/chat` | 1 | 对话消息 |
-| `/api/study` | 4 | plan/generate, refresh, suggestions, history |
-| `/api/knowledge` | 6 | graph, prerequisites, check, blocked, ready, path, retention |
-| `/api/content` | 4 | search, list, subjects |
-| `/api/progress` | 7 | profile, stats, session, **calendar, summary** |
-| `/api/achievements` | 2 | list, check |
-| `/api/multimodal` | 1 | STT transcribe |
-
----
-
-## 五、前端页面（15个）
-
-| 路由 | 功能 | 来源 |
-|------|------|:--:|
-| `/` | 首页 | Phase 1 |
-| `/learn` | 对话(分区侧栏·消息列表·ResponseBlock·WorkspacePanel) | Phase 1 |
-| `/practice` | 练习(创建→答题→提示→反馈) | Phase 1 |
-| `/analytics` | 学情(9面板 + 习惯养成Tab + 每日摘要卡片) | Phase 1+2 |
-| `/errors` | 错题本(筛选·标记·AI错因分析展开) | Phase 1+2 |
-| `/materials` | 资料管理(上传·搜索·出题) | Phase 1 |
-| `/graph` | 知识图谱(38节点·BKT颜色) | Phase 1 |
-| `/progress` | 学习进度 | Phase 1 |
-| `/stats` | 统计数据 | Phase 1 |
-| `/study` | 学习规划 | Phase 1 |
-| `/quality` | 题目质量监控 | Phase 1 |
-| `/settings` | 设置(主题·追问开关) | Phase 1+2 |
-| `/calendar` | 学习日历(热力图) | 🆕 Phase 2 |
-| `/achievements` | 成就墙(12成就·进度) | 🆕 Phase 2 |
-| *(radar-chart)* | 知识雷达图(嵌入/analytics) | 🆕 Phase 2 |
-
----
-
-## 六、关键数据流
-
-### 答题→知识状态闭环
-
-```
-答题 submit_answer
-  → bkt_engine.load_or_create(user_id, skill_id)
-  → bkt_engine.update(state, is_correct, ...)
-  → bkt_engine.save_state(user_id, updated_state)
-  → achievement_engine.check_all(user_id, stats)    🆕
-  → error_attribution (LLM 错因分析)                  🆕
-```
-
-### 仪表板数据流（9面板）
-
-```
-GET /stats → overview(当期+环比) + mastery_bars + error_distribution
-            + hourly_heatmap + daily_trend
-GET /behavior → streak + best_hours + regularity + pomodoro + tiny_habits
-GET /knowledge/graph → RadarChart (BKT mastery)           🆕
-GET /knowledge/retention → ForgettingCurve                  🆕
-GET /progress/summary → DailySummaryCard                    🆕
-GET /errors/stats → ErrorAttributionBar                     🆕
-```
-
-### 设计文档（23份）
-
-| 文档 | 说明 |
-|------|------|
-| `docs/practice-system-design-v2.md` (2658行) | 练习系统完整设计 |
-| `docs/conversation-system-design.md` | 对话系统设计 |
-| `docs/dialogue-practice-integration.md` | 对话×练习互联 |
-| `docs/module-linkage-upgrade.md` | 模块联动重构 |
-| `docs/analytics-dashboard-design.md` | 学情仪表板设计 |
-| `docs/material-system-design.md` | 资料系统设计 |
-| `docs/media-search-design.md` | 媒体搜索设计 |
-| `docs/study-planning-design.md` | 学习规划系统设计 |
-| `docs/knowledge-graph-design.md` | 知识图谱系统设计 |
-| `docs/multimodal-design.md` | 多模态交互设计 |
-| `docs/gap-analysis.md` | 需求-模块对照 |
-| `docs/phase2/README.md` | Phase 2 总文档 |
-| `docs/phase2/*.md` (7份) | Phase 2 分文档 |
-
----
-
-## 七、Phase 2 交付总览 ✅
-
-| 里程碑 | 交付内容 | 状态 |
+| 断裂点 | 修复内容 | 状态 |
 |--------|---------|:--:|
-| M1 数据可见 | S1 雷达图 + S3 遗忘曲线 + S4 学习日历 | ✅ |
-| M2 智能增强 | S5 启发式追问 + S6 错题归因 | ✅ |
-| M3 激励闭环 | S2 成就系统 + S7 每日摘要 | ✅ |
-
-### 新增/增强 API（7 个）
-
-| 端点 | 子系统 |
-|------|--------|
-| `GET /api/progress/{uid}/calendar` | S4 学习日历 |
-| `GET /api/progress/{uid}/summary` | S7 每日摘要 |
-| `GET /api/achievements/{uid}` | S2 成就墙 |
-| `POST /api/achievements/{uid}/check` | S2 成就检测 |
-| `POST /api/practice/errors/{id}/analyze` | S6 LLM归因 |
-| `GET /api/practice/errors/stats` | S6 错因统计 |
-| *(S5 system prompt 增强)* | S5 追问策略 |
+| 练习→CognitiveNode | `submit_practice()` 双写 | ✅ |
+| 图谱→CognitiveNode | `_sync_graph_to_cognitive()` 三入口 | ✅ |
+| ZPD 调度→CognitiveNode | `estimate_student_ability()` 优先读 | ✅ |
+| 流式对话→CognitiveNode | `send_and_reply_stream` 追加联动 | ✅ |
+| 知识 API→CognitiveNode | `_BKTKnowledgeAdapter` 主源 | ✅ |
+| 学习计划→CognitiveNode | `study.py _Adapter` 主源 | ✅ |
+| Agent→CognitiveNode | 通过 orchestrator 已实现 | ✅ |
 
 ---
 
-## 八、Phase 3 · 能力升级 ✅ 完成
+## Phase 7 · LearningTutor 决策层 (待开始)
 
-> 详细设计文档: [docs/phase3/README.md](./phase3/README.md)
+**目标**：基于 CognitiveNode 数据的多策略决策引擎
 
-### ✅ P5 资料→分区归属→分支引用 (完成)
-
-| 交付项 | 文件 |
-|--------|------|
-| 资料元数据管理 | `backend/app/services/materials_meta.py` (JSON存储) |
-| 资料API升级 | `backend/app/api/material.py` (分区过滤/移动/搜索) |
-| 分支引用API | `backend/app/api/conversation.py` (add/list/remove/batch) |
-| 默认分区 | `backend/app/main.py` (启动创建「未分类」) |
-| 分区侧栏双标签 | `frontend/src/app/learn/page.tsx` (🌿分支/📁资料) |
-| MaterialPanel | `frontend/src/components/materials/MaterialPanel.tsx` |
-| MaterialPicker | `frontend/src/components/materials/MaterialPicker.tsx` |
-| WorkspacePanel升级 | `frontend/src/components/conversation/WorkspacePanel.tsx` (📎引用+展示) |
-| 独立页删除 | `/materials` 页面合并到分区侧栏 |
-
-**效果**: 资料按分区组织，分支引用不复制，上传到工作空间自动归入分区资料库。现有资料自动归入「未分类」分区。
-
-### ✅ P1 全站统一搜索 (完成)
-
-- `/api/search?q=` 聚合搜索 (对话+资料+知识点+错题并行)
-- `UnifiedSearch` 组件，首页搜索框，⌘K 快捷键
-
-### ✅ P2 学习路径可视化 (完成)
-
-- `/graph` 底部新增加「推荐学习路径」面板
-- 拓扑排序按依赖深度分组，颜色标注掌握度+🔒/✓
-
-### ✅ P3 对话→练习侧栏 (完成)
-
-- `GET /branches/{id}/practice-suggestions` API
-- 对话页 WorkspacePanel 下方「推荐练习」面板
-- 基于 context_trigger 分析对话上下文
-
-### ✅ P4 首页智能仪表板 (完成)
-
-- 首页全量改为真实 API 数据驱动
-- 薄弱知识点+学习建议+成就展示卡片
+| 模块 | 说明 | 优先级 |
+|------|------|:------:|
+| 情境感知决策 | 融合 CognitiveNode + 上下文选择最优 Action | 🔴 P0 |
+| ZPD 调度增强 | 直接读 CognitiveNode.scheduling.next_review | 🟡 P1 |
+| 个性化学习路径 | 基于 CognitiveNode 子系统的路径生成 | 🟢 P2 |
+| 学习行为分析 | CognitiveNode.trend + engagement 的行为画像 | 🟢 P2 |
 
 ---
 
-## 九、Phase 4 · 模块联动升级 ✅ 全部完成
-
-> 详细设计: [docs/phase4/README.md](./phase4/README.md)
-
-### 实施结果（6/6 子阶段完成）
-
-| 子阶段 | 状态 | 内容 |
-|--------|:--:|------|
-| 4A 基础设施 | ✅ | shared/protocols(8) + events(10) + event_bus + circuit_breaker + resilience + tracing |
-| 4B 消除循环 | ✅ | BKT→Repository · conversation→DI · application/di.py (0循环依赖) |
-| 4C 事件驱动 | ✅ | submit_answer 7步→2步同步+5异步 · 5条事件链路 |
-| 4D API 精简 | ✅ | api/practice.py 1025行→4路由文件 · API层零DB直连 |
-| 4E 前端整并 | ✅ | 13页→4面板 · /dashboard 7 Tab + /learn (chat+graph) · 跨页context |
-| 4F 契约测试 | ✅ | Protocol哈希快照 + Event Schema(10事件) + CB状态机 + EventBus隔离 + Resilience + Tracing |
-
-### 实际效果
-
-| 指标 | 改造前 | 改造后 | 状态 |
-|------|--------|--------|:--:|
-| 循环依赖 | 2 对 | 0 | ✅ |
-| 全局单例 | 35 (零 DI) | 1 (AppContainer) | ✅ |
-| api/practice.py | 1025 行 | 4文件 (678+3×~200行) | ✅ |
-| submit_answer 延迟 | ~130ms | ~71ms | ✅ |
-| 前端页面 | 13 (侧栏 7) | 4 (全可见) | ✅ |
-| 新模块接入 | 改现有代码 | 订阅事件, 零侵入 | ✅ |
-| 跨页上下文 | 无 | URL searchParams 贯通 | ✅ |
-|| 契约测试 | 无 | 112 tests, 5 suites | ✅ |
-
----
-
-## 十、Phase 5 · 多模态生成 + Tool Calling ✅ 全部完成
-
-### 5A 语音+配图生成（对话流驱动）
-
-| 模块 | 文件 | 功能 |
-|------|------|------|
-| TTS 客户端 | `infra/tts_client.py` (120行) | Edge TTS 文本→MP3，按文本哈希缓存到 `~/.companion/audio/` |
-| SVG 渲染器 | `infra/svg_renderer.py` (300行) | LaTeX→SVG (matplotlib)、概念图(放射布局)、流程图/对比图 |
-| 多媒体服务 | `domain/multimedia/service.py` (120行) | 监听 `AssistantReplied` → 并行 TTS+配图 → 发布事件 |
-| 多媒体 API | `app/api/multimodal.py` (107行) | `GET /audio/{file}` / `GET /images/{file}` 静态文件服务 |
-| 对话集成 | `domain/conversation/service.py` | `on_audio_synthesized` / `on_image_rendered` → WS `block_update` |
-| 编排器集成 | `app/core/orchestrator.py` | 流式完成后 `publish(AssistantReplied)` → 触发多媒体生成 |
-
-### 5B LLM Native Tool Calling
-
-| 文件 | 改动 |
-|------|------|
-| `app/services/llm_service.py` | `generate()` 增加 `tools`+`tool_choice` 参数，tool_calls 响应标准 JSON |
-| `app/agents/base.py` | 新增 `set_tools()` / `_run_with_tools()` (tool call loop) / `_stream_with_tools()` |
-| `app/agents/tutor.py` | `__init__` 配置 5 个工具 + `handle_stream` → `_stream_with_tools` |
-| `app/agents/coach.py` | 同上 |
-| `app/services/tool_executor.py` | 5 个 handler 全升级为真实现 |
-
-**5 个工具真实现对接:**
-
-| 工具 | 对接系统 |
-|------|----------|
-| `search_media` | `media_search.search()` — B站/知乎/YouTube |
-| `generate_practice` | `question_generator.generate()` → `learner_model.create_session()` |
-| `generate_image` | Phase 5 `SVGRenderer` — LaTeX/concept/flow diagram |
-| `generate_mindmap` | 结构化节点/边 JSON（前端 Mermaid 渲染） |
-| `generate_document` | LLM 生成 Markdown 笔记 |
-
-**数据流:**
-```
-用户消息 → LLM(含 5 tools)
-  → LLM 自主决策: 调 search_media / generate_practice / generate_image 等
-    → ToolExecutor 执行 → 结果 JSON 注入 messages
-      → LLM 综合回复 → 流式输出
-```
-
-同时:
-```
-回复完成 → publish(AssistantReplied)
-  → TTS 合成 MP3 → WS push AudioBlock
-  → 配图渲染 SVG → WS push ImageBlock
-```
-
-### 实际效果
-
-| 指标 | Phase 4 | Phase 5 | 状态 |
-|------|--------|---------|:--:|
-| LLM 工具调用 | 正则预判 (predict_tools) | LLM native tool calling | ✅ |
-| 语音讲解 | 仅前端 TTS 朗读 | 后端生成 + 缓存 + WS 推送 | ✅ |
-| 知识点配图 | 无 | LaTeX/mermaid/概念图自动渲染 | ✅ |
-| 练习题生成 | 手动出题 | LLM 一键触发出题+创建会话 | ✅ |
-| 子文件数 | 36 | 41 (+5 Phase 5) | ✅ |
-| 测试 | 112 | 112 (全保持) | ✅ |
-
----
-
-## 十一、Phase 5.5 · v4 对话系统打磨 ✅
-
-> 时间: 2026-05-19 ~ 2026-05-22
-
-### 消息编辑全链路修复
-
-| 问题 | 根因 | 修复 |
-|------|------|------|
-| 编辑后树结构断裂 | 新版本未继承原消息子节点(AI应答) | `modify_message` 迁移 `current_version.children_ids` → 新版本 |
-| 第二次编辑不生效 | `conv.path.index(old_id)` 找不到(已被第一次替换) | 查同父+同role兄弟节点定位路径位置 |
-| 版本列表混入AI应答 | `parent.children_ids` 含异角色节点 | `GET /messages/{id}` 按 role 过滤 |
-| 编辑后 conv.summary 滞后 | `summary_dirty` 未在编辑时标记 | `modify_message` 末尾 `conv.summary_dirty = True` |
-| 单版本也显示 `< 1/1 >` | `has_modified_version` 触发但实际只有2版本(原始+新版) | 懒加载版本数, `total ≤ 1` 时隐藏 |
-| 编辑后无版本切换入口 | 最新版 `has_modified_version=false` | PUT 返回 `version_count`, MessageList 立即更新 |
-
-### UI 改造
-
-| 旧 | 新 |
-|----|----|
-| `时间 | < 改 > | ✏️ 🗑️` | `📋 复制 | ✏️ 修改 | 🗑️ 删除 | \| | < 页码/总页码 > | 🔊` |
-
-### 涉及文件
-
-| 文件 | 改动 |
-|------|------|
-| `backend/app/services/tree_ops.py` | conv.path多次编辑替换 + current_version子节点迁移 + summary_dirty |
-| `backend/app/api/conversation.py` | PUT返回version_count + GET按role过滤版本 |
-| `frontend/src/app/learn/page.tsx` | handleVersionSwitch → {index,total}, handleEditMessage → version_count |
-| `frontend/src/components/conversation/MessageList.tsx` | 懒加载版本数、复制按钮、total≤1隐藏、新footer布局 |
-
-### 端到端验证
+## 旧文档归档
 
 ```
-首次编辑 → version_count=2 ✅
-二次编辑 → version_count=3 ✅ (之前失败)
-三次编辑 → version_count=4 ✅
-conv.path → [latest, ai_response] ✅
-AI parent → latest ✅ 树结构一致 ✅
-版本列表 → [v1, v2, v3, v4] ✅
+docs/
+├── architecture-v3.md    ← 唯一最新设计文档
+├── PROGRESS.md           ← 本文件
+├── phase1/               ← MVP 设计 (已归档)
+├── phase2/               ← 学习画像设计 (已归档)
+├── phase3/               ← 智能路由设计 (已归档)
+├── phase4/               ← 对话系统设计 (已归档)
+├── phase5/               ← 认知事件设计 (已归档)
+├── phase6/               ← CognitiveNode 设计 (已归档)
+└── phase7/ (待建)        ← LearningTutor 设计
 ```
 
----
-
-## 十二、Phase 6 · 中枢数据建模 🔜
-
-> 基于 v3 架构 `SkillAtom` 统一实体，完成跨模块数据模型落地
-
-| 步骤 | 内容 | 状态 |
-|------|------|:--:|
-| S1 | PG `skill_atoms` + `skill_dependencies` 表 | 🔴 |
-| S2 | 旧 `knowledge_graphs` → `skill_atoms` 迁移脚本 | 🔴 |
-| S3 | 对话→SkillAtom 下文摘要结构化（替代自由文本 `conv.summary`） | 🔴 |
-| S4 | `GET /api/student-profile` 全科画像 API | 🔴 |
-| S5 | ③ 决策层 LearningTutor | 🔴 |
-| S6 | 清理旧存储 (`knowledge_graphs` / `knowledge_states` / `SharedKnowledgeState`) | 🔴 |
-| S7 | JSON → PostgreSQL 存储切换 (`USE_PG_STORAGE=true`) | 🔴 |
-
-> 设计依据: [docs/architecture-v3.md](./architecture-v3.md)
+> 除 `architecture-v3.md` 和 `PROGRESS.md` 外，所有旧设计文档已按 Phase 归档。
