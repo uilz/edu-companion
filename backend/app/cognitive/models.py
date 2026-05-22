@@ -93,10 +93,13 @@ class PracticeEvent(BaseModel):
 
 class PracticeSummary(BaseModel):
     total_attempts: int = 0
+    correct_attempts: int = 0
+    total_time_spent: float = 0.0
     recent_success_rate_7d: float = 0.0
     mean_latency_7d: float = 0.0
     decayed_event_count: float = 0.0
     rapid_relearn_cooldown_until: float = 0.0
+    last_practiced: float | None = None
 
 
 # ═══════════════════════════════════════════

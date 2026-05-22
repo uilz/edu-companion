@@ -195,9 +195,42 @@ def _build_practice_summary(events: list[dict]) -> dict:
     }
 
 
-# ──────────────────────────────────────────────
-# 核心迁移逻辑
-# ──────────────────────────────────────────────
+def _build_cognitive_node(
+    node_id: str, label: str, level: str, parent: str | None,
+    is_core: bool, p_known: float, n_obs: int, beta_data: dict,
+    practice_summary: dict, graph_edges: list[dict] | None = None,
+    graph_nodes: dict | None = None,
+):
+    """构造 CognitiveNode（KG 和题库技能共用）"""
+    from app.cognitive.models import (
+        CognitiveNode, Activation, Belief, Scheduling,
+        PracticeSummary, Trend, Prerequisite, Unlock, Associate, MetaInfo,
+    )
+
+    prerequisites, unlocks, associates = [], [], []
+    if graph_edges and graph_nodes:
+        for edge in graph_edges:
+            fid, tid, rel = edge.get("from_id",""), edge.get("to_id",""), edge.get("relation","prerequisite")
+            if fid == node_id and rel in ("prerequisite","builds_on"):
+                unlocks.append(Unlock(target_id=tid, label=rel))
+            if tid == node_id and rel == "prerequisite":
+                prerequisites.append(Prerequisite(target_id=fid, label=graph_nodes.get(fid,{}).get("label",fid), satisfied=p_known>=0.8))
+
+    return CognitiveNode(
+        id=node_id, label=label, level=level, parent=parent, is_core=is_core,
+        activation=Activation(base_level=math.log(max(n_obs,1)+1)/math.log(10), recency=0.0, spread_targets=[]),
+        belief=Belief(alpha=beta_data["alpha"], beta=beta_data["beta"], proficiency_mean=beta_data["proficiency_mean"],
+                      proficiency_precision=beta_data["proficiency_precision"], peak_proficiency=beta_data["peak_proficiency"],
+                      last_updated=beta_data["last_updated"]),
+        trend=Trend(velocity=0.0, direction="stable", stagnation_days=0),
+        scheduling=Scheduling(next_review=time.time()+86400*(7 if p_known>=0.8 else 1), review_urgency=max(0.0,1.0-p_known), estimated_mastery_time=0),
+        practice_summary=PracticeSummary(**practice_summary),
+        prerequisites=prerequisites, unlocks=unlocks, associates=associates,
+        meta=MetaInfo(created_by="migration_auto", version=1),
+    )
+
+
+# ── 核心迁移逻辑 ──
 
 
 def migrate_user(
@@ -217,8 +250,7 @@ def migrate_user(
         统计摘要 dict
     """
     from app.db.database import get_db
-    from app.cognitive.storage import (
-        CognitiveStorage,
+    from app.cognitive.storage import (  # type: ignore
         upsert_node,
         append_event,
     )
@@ -246,9 +278,35 @@ def migrate_user(
     pg_attempts = _load_pg_practice_attempts(user_id)
 
     knowledge_graphs = user_data.get("knowledge_graphs", {})
-    if not knowledge_graphs:
-        logger.warning("[migrate] 无知识图谱数据，跳过")
-        return {**stats, "warning": "no_knowledge_graphs"}
+    has_kg = bool(knowledge_graphs)
+
+    # 题库技能
+    from app.db.database import get_db as _get_db
+    _db = _get_db()
+    skill_rows = _db.fetchall("SELECT DISTINCT skill_id FROM questions WHERE skill_id != '' ORDER BY skill_id")
+    question_skills = [r["skill_id"] for r in skill_rows]
+
+    # attempts 按 skill 聚合
+    attempt_skills = _db.fetchall("""
+        SELECT COALESCE(q.skill_id, '') as skill_id,
+               COUNT(*) as cnt,
+               SUM(CASE WHEN a.is_correct THEN 1 ELSE 0 END) as correct,
+               ROUND(EXTRACT(EPOCH FROM MAX(a.submitted_at))) as last_practiced_ts
+        FROM attempts a
+        LEFT JOIN questions q ON a.question_id = q.question_id
+        WHERE a.user_id = %s
+        GROUP BY q.skill_id
+    """, (user_id,))
+
+    attempt_map = {r["skill_id"]: r for r in attempt_skills}
+
+    logger.info(
+        f"[migrate] 数据概览: KG分区={len(knowledge_graphs)}, "
+        f"题库技能={len(question_skills)}, "
+        f"attempts技能={len([r for r in attempt_skills if r['skill_id']])}, "
+        f"PG BKT={len(pg_knowledge)}, "
+        f"PG attempts总数={len(pg_attempts)}"
+    )
 
     # ── 2. 构建 BKT 索引 ──
 
@@ -273,7 +331,7 @@ def migrate_user(
     for tid in user_data.get("topics", {}):
         known_levels[tid] = "topic"
 
-    # ── 5. 遍历每个知识图谱，创建 CognitiveNodes ──
+    # ── 5. 遍历图谱/技能创建 CognitiveNodes ──
 
     if clean_first and not dry_run:
         logger.info("[migrate] 清除已有 CognitiveNode (user_id=%s)", user_id)
@@ -284,138 +342,110 @@ def migrate_user(
     db = get_db()
     processed_nodes: set[str] = set()
 
-    for pid, kg in knowledge_graphs.items():
-        partition_id = pid
-        graph_nodes = kg.get("nodes", {})
-        graph_edges = kg.get("edges", [])
+    if has_kg:
+        # 有知识图谱 → 从图谱创建
+        for pid, kg in knowledge_graphs.items():
+            partition_id = pid
+            graph_nodes = kg.get("nodes", {})
+            graph_edges = kg.get("edges", [])
 
-        stats["total_kgs_nodes"] += len(graph_nodes)
+            stats["total_kgs_nodes"] += len(graph_nodes)
 
-        # 5a. 创建 Partition 级 CognitiveNode
-        partition_label = user_data.get("partitions", {}).get(partition_id, {}).get("name", partition_id)
+            # Partition 级节点
+            partition_label = user_data.get("partitions", {}).get(partition_id, {}).get("name", partition_id)
+            if not dry_run:
+                try:
+                    upsert_node(CognitiveNode(
+                        id=partition_id, label=partition_label, level="partition",
+                        activation=Activation(base_level=0.1, recency=0.0, spread_targets=[]),
+                        meta=MetaInfo(created_by="migration", version=1),
+                    ))
+                    stats["nodes_created"] += 1
+                    processed_nodes.add(partition_id)
+                except Exception as e:
+                    logger.error(f"[migrate] partition 创建失败: {partition_id} — {e}")
+                    stats["errors"] += 1
+
+            # 遍历 KGNode
+            for node_id, kg_node in graph_nodes.items():
+                try:
+                    label = kg_node.get("label", node_id)
+                    level = _estimate_level_from_graph(node_id, kg, known_levels)
+                    parent = partition_id if level == "atom" else None
+
+                    ks = bkt_index.get(node_id, {})
+                    p_known = ks.get("p_known", kg_node.get("mastery", 0.0) / 100.0 if kg_node.get("mastery") else 0.1)
+                    n_obs = ks.get("attempt_count", 0)
+                    beta_data = _bkt_to_beta(p_known, n_obs)
+
+                    skill_events = events_by_skill.get(node_id, [])
+                    practice_summary = _build_practice_summary(skill_events)
+
+                    if dry_run:
+                        stats["nodes_skipped"] += 1
+                        continue
+
+                    cn = _build_cognitive_node(node_id, label, level, parent, kg_node.get("is_core", False),
+                                               p_known, n_obs, beta_data, practice_summary,
+                                               graph_edges, graph_nodes)
+                    upsert_node(cn)
+                    stats["nodes_created"] += 1
+                    processed_nodes.add(node_id)
+                except Exception as e:
+                    logger.error(f"[migrate] KG节点迁移失败: {node_id} — {e}")
+                    stats["errors"] += 1
+    else:
+        # 无知识图谱 → 从容备考题技能创建
+        partition_id = f"__auto_{user_id}__"
+
+        # 创建默认分区节点
         if not dry_run:
             try:
-                upsert_node(CognitiveNode(
-                    id=partition_id,
-                    label=partition_label,
-                    level="partition",
-                    activation=Activation(base_level=0.1, recency=0.0, spread_targets=[]),
-                    meta=MetaInfo(created_by="migration", version=1),
-                ))
-                stats["nodes_created"] += 1
-                processed_nodes.add(partition_id)
+                from app.cognitive.storage import list_all_nodes
+                existing = list_all_nodes(user_id)
+                if not existing:
+                    upsert_node(CognitiveNode(
+                        id=partition_id, label="题库技能", level="partition",
+                        activation=Activation(base_level=0.1, recency=0.0, spread_targets=[]),
+                        meta=MetaInfo(created_by="migration_auto", version=1),
+                    ))
+                    stats["nodes_created"] += 1
+                    processed_nodes.add(partition_id)
             except Exception as e:
-                logger.error(f"[migrate] partition 创建失败: {partition_id} — {e}")
+                logger.error(f"[migrate] 分区创建失败: {e}")
                 stats["errors"] += 1
 
-        # 5b. 遍历每个 KGNode
-        for node_id, kg_node in graph_nodes.items():
+        for skill_id in question_skills:
             try:
-                label = kg_node.get("label", node_id)
-                desc = kg_node.get("description", "")
+                label = skill_id.replace("_", " ").title()
+                am = attempt_map.get(skill_id, {})
+                n_obs = am.get("cnt", 0)
+                correct = am.get("correct", 0)
+                p_known = (correct / n_obs) if n_obs > 0 else 0.3
 
-                # 推断层级
-                level = _estimate_level_from_graph(node_id, kg, known_levels)
-
-                # 父节点：按层级推断
-                parent = None
-                if level == "atom":
-                    parent = partition_id  # 默认挂分区下
-
-                # BKT 掌握度 → Beta 分布
-                ks = bkt_index.get(node_id, {})
-                p_known = ks.get("p_known", kg_node.get("mastery", 0.0) / 100.0 if kg_node.get("mastery") else 0.1)
-                n_obs = ks.get("attempt_count", 0)
                 beta_data = _bkt_to_beta(p_known, n_obs)
-
-                # 练习事件
-                skill_events = events_by_skill.get(node_id, [])
-                practice_summary = _build_practice_summary(skill_events)
-
-                # 映射旧 p_known 为 Belief
-                belief = Belief(
-                    alpha=beta_data["alpha"],
-                    beta=beta_data["beta"],
-                    proficiency_mean=beta_data["proficiency_mean"],
-                    proficiency_precision=beta_data["proficiency_precision"],
-                    peak_proficiency=beta_data["peak_proficiency"],
-                    last_updated=beta_data["last_updated"],
-                )
-
-                # 旧趋势 (简单映射)
-                trend_val = ks.get("trend", "stable") if isinstance(ks, dict) else "stable"
-                trend = Trend(
-                    velocity=ks.get("velocity", 0.0) if isinstance(ks, dict) else 0.0,
-                    direction=trend_val,
-                    stagnation_days=ks.get("stagnation_days", 0) if isinstance(ks, dict) else 0,
-                )
-
-                # 前置关系
-                prerequisites = []
-                unlocks = []
-                associates = []
-                for edge in graph_edges:
-                    from_id = edge.get("from_id", "")
-                    to_id = edge.get("to_id", "")
-                    rel = edge.get("relation", "prerequisite")
-                    if from_id == node_id:
-                        if rel == "prerequisite":
-                            unlocks.append(Unlock(target_id=to_id, label=rel))
-                        elif rel == "builds_on":
-                            unlocks.append(Unlock(target_id=to_id, label=rel))
-                        elif rel == "analogy":
-                            associates.append(Associate(target_id=to_id, label=rel))
-                    if to_id == node_id and rel == "prerequisite":
-                        prerequisites.append(
-                            Prerequisite(target_id=from_id, label=graph_nodes.get(from_id, {}).get("label", from_id), satisfied=p_known >= 0.8)
-                        )
+                practice_summary = {
+                    "total_attempts": n_obs,
+                    "correct_attempts": correct,
+                    "total_time_spent": 0.0,
+                    "recent_success_rate_7d": p_known,
+                    "last_practiced": am.get("last_practiced_ts"),
+                    "decayed_event_count": n_obs,
+                }
 
                 if dry_run:
                     stats["nodes_skipped"] += 1
                     continue
 
-                # 创建 CognitiveNode
-                cn = CognitiveNode(
-                    id=node_id,
-                    label=label,
-                    level=level,
-                    parent=parent,
-                    is_core=kg_node.get("is_core", False),
-                    activation=Activation(
-                        base_level=math.log(max(n_obs, 1) + 1) / math.log(10),
-                        recency=0.0,
-                        spread_targets=[],
-                    ),
-                    belief=belief,
-                    trend=trend,
-                    scheduling=Scheduling(
-                        next_review=time.time() + 86400 * (7 if p_known >= 0.8 else 1),
-                        review_urgency=max(0.0, 1.0 - p_known),
-                        estimated_mastery_time=0,
-                    ),
-                    practice_summary=PracticeSummary(**practice_summary),
-                    prerequisites=prerequisites,
-                    unlocks=unlocks,
-                    associates=associates,
-                    cognitive_load=None,
-                    metacognition=None,
-                    engagement=None,
-                    composition=None,
-                    deep_links=[],
-                    deep_processing=None,
-                    goal_alignment=None,
-                    diagnostic=None,
-                    prediction=None,
-                    practice_events=[],
-                    meta=MetaInfo(created_by="migration", version=1),
-                )
-
+                cn = _build_cognitive_node(skill_id, label, "topic", partition_id, False,
+                                           p_known, n_obs, beta_data, practice_summary,
+                                           [], {})
                 upsert_node(cn)
                 stats["nodes_created"] += 1
-                processed_nodes.add(node_id)
+                processed_nodes.add(skill_id)
 
             except Exception as e:
-                logger.error(f"[migrate] 节点迁移失败: {node_id} — {e}")
+                logger.error(f"[migrate] 题库技能迁移失败: {skill_id} — {e}")
                 stats["errors"] += 1
 
     # ── 6. 迁移练习事件 → cognitive_events ──
