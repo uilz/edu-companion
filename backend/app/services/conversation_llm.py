@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
 from app.schemas.conversation import (
     ContentBlock,
@@ -733,6 +733,37 @@ async def _analyze_conversation_evidence(
         logger.debug(f"知识证据分析跳过: {e}")
 
 
+# ── Phase 6: 对话上下文联动 → CognitiveNode ──
+
+async def _cognify_dialogue_context(
+    user_id: str,
+    conversation: Any,
+    skill_ids: list[str],
+    context_type: str = "lower",
+):
+    """异步向 CognitiveNode 写入对话上下文。"""
+    try:
+        from app.cognitive.events import submit_dialogue_context
+        import asyncio
+
+        conversation_id = conversation.id if conversation else ""
+        for sid in skill_ids:
+            await asyncio.to_thread(
+                submit_dialogue_context,
+                user_id=user_id,
+                node_id=sid,
+                session_id=conversation_id,
+                context_type=context_type,
+                branch_id=conversation_id,
+                relevance_score=0.5,
+                summary_text=f"conversation {conversation_id[:8]}",
+            )
+    except ImportError:
+        pass
+    except Exception as e:
+        logger.debug(f"认知对话上下文联动跳过: {e}")
+
+
 async def send_and_reply(
     user_id: str,
     partition_id: str,
@@ -806,6 +837,17 @@ async def send_and_reply(
                         conversation_id=conversation.id if conversation else None,
                         skill_ids=[sid],
                     )
+                # Phase 6: 对话 → CognitiveNode 对话上下文联动
+                import asyncio as _cognitive_asyncio
+                try:
+                    loop = _cognitive_asyncio.get_event_loop()
+                    if loop.is_running():
+                        loop.create_task(_cognify_dialogue_context(
+                            user_id, conversation, skill_ids,
+                            context_type="lower",
+                        ))
+                except Exception:
+                    pass
 
     # P0: 异步写入助手消息的元历史
     _p0_post_message_hooks(user_id, partition_id, assistant_node)
