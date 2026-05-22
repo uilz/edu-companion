@@ -423,6 +423,23 @@ class PgStorageEngine:
                 ),
             )
 
+        # ── 清理已删除的记录（PG 只 upsert 不自动删除，需手动清理）──
+        existing_part_ids = {r["id"] for r in db.fetchall(
+            "SELECT id FROM conversation_partitions WHERE user_id = %s", (user_id,)
+        )}
+        current_part_ids = set(data.partitions.keys())
+        removed_pids = existing_part_ids - current_part_ids
+        if removed_pids:
+            pid_list = list(removed_pids)
+            logger.info(f"Cleaning up {len(pid_list)} deleted partitions: {pid_list}")
+            # 按 FK 顺序删除（先子后父）
+            for pid in pid_list:
+                db.execute("DELETE FROM conversation_link_nodes WHERE source_partition_id = %s OR target_partition_id = %s", (pid, pid))
+                db.execute("DELETE FROM conversation_response_blocks WHERE partition_id = %s", (pid,))
+                db.execute("DELETE FROM conversation_nodes WHERE partition_id = %s", (pid,))
+                db.execute("DELETE FROM conversation_branches WHERE partition_id = %s", (pid,))
+                db.execute("DELETE FROM conversation_partitions WHERE id = %s", (pid,))
+
         logger.info(f"Conversation data saved for user {user_id} ({len(data.nodes)} nodes)")
 
     # ── 迁移：JSON → PG ──
