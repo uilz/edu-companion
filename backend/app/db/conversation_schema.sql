@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS conversation_partitions (
 CREATE TABLE IF NOT EXISTS conversation_branches (
     id TEXT PRIMARY KEY,
     partition_id TEXT NOT NULL REFERENCES conversation_partitions(id) ON DELETE CASCADE,
+    topic_id TEXT DEFAULT '',
     name TEXT DEFAULT '',
     fork_point_id TEXT,
     path TEXT[] DEFAULT '{}',

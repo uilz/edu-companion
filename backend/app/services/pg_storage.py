@@ -155,7 +155,7 @@ class PgStorageEngine:
             r["tags"] = r.get("tags") or []
             partitions[r["id"]] = Partition(**r)
 
-        # ── 加载对话 (Conversation v4 — 通过 topic_id 关联) ──
+        # ── 加载对话 (v4 Conversation — 通过 topic_id 关联) ──
         conversations = {}
         all_part_ids = list(partitions.keys())
         all_topic_ids = list(topics.keys())
@@ -167,7 +167,8 @@ class PgStorageEngine:
             )
             for r in conv_rows:
                 r = dict(r)
-                r["topic_id"] = r.pop("partition_id", "")
+                # topic_id 列优先；无 topic_id 时 fallback 兼容旧数据
+                r["topic_id"] = r.pop("topic_id", "") or r.pop("partition_id", "")
                 r["path"] = r.get("path") or []
                 conversations[r["id"]] = Conversation(**r)
 
@@ -318,7 +319,7 @@ class PgStorageEngine:
 
         # ── 对话 (v4 Conversation → conversation_branches 表) ──
         for b in data.conversations.values():
-            # 从 Topic → Domain → Partition 追溯真实的 partition_id
+            # 从 Topic → Domain → Partition 追溯真实的 partition_id (FK 约束)
             partition_id_for_table = None
             topic = data.topics.get(b.topic_id)
             if topic:
@@ -326,14 +327,16 @@ class PgStorageEngine:
                 if domain:
                     partition_id_for_table = domain.partition_id
             if not partition_id_for_table:
-                partition_id_for_table = b.topic_id  # fallback 旧行为
+                # fallback: 如果找不到，尝试用 b.topic_id 本身作为 partition_id
+                # （兼容旧数据或孤儿分支场景）
+                partition_id_for_table = b.topic_id
             db.execute(
                 """
                 INSERT INTO conversation_branches
-                    (id, partition_id, name, fork_point_id, path, is_active,
-                     is_archived, summary, summary_dirty, practice_sessions,
-                     practice_summary, created_at, last_message_at)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    (id, partition_id, topic_id, name, fork_point_id, path,
+                     is_active, is_archived, summary, summary_dirty,
+                     practice_sessions, practice_summary, created_at, last_message_at)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT (id) DO UPDATE SET
                     name=EXCLUDED.name, is_active=EXCLUDED.is_active,
                     summary=EXCLUDED.summary,
@@ -342,7 +345,8 @@ class PgStorageEngine:
                     last_message_at=EXCLUDED.last_message_at
                 """,
                 (
-                    b.id, partition_id_for_table, b.name, "",  # fork_point_id (deprecated in v4)
+                    b.id, partition_id_for_table, b.topic_id, b.name,
+                    "",  # fork_point_id (deprecated in v4)
                     b.path or [], b.is_active, b.is_archived,
                     b.summary, b.summary_dirty, b.practice_sessions or [],
                     b.practice_summary or "",
