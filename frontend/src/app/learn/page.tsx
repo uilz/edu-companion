@@ -762,40 +762,22 @@ export default function LearnPage() {
   }, []);
 
   // ── Handle edit message (v4: inline version, no new branch) ──
+  // Display update is handled locally in MessageList via editedTexts state.
+  // This function only persists to backend.
   const handleEditMessage = useCallback(async (messageId: string, newText: string) => {
-    console.log("[PageEdit] called with:", messageId, newText.slice(0, 50));
-    // Optimistic local update — show edited text immediately
-    setMessages((prev) => {
-      const found = prev.find(m => m.id === messageId);
-      console.log("[PageEdit] message found in array:", !!found, "prev length:", prev.length);
-      return prev.map((m) =>
-        m.id === messageId
-          ? { ...m, has_modified_version: true, content_blocks: [{ type: "text", text: newText }], text_summary: newText }
-          : m
-      );
+    const res = await fetch("/api/conversations/messages/" + messageId, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content_blocks: [{ type: "text", text: newText }],
+        text_summary: newText,
+      }),
     });
-
-    try {
-      const res = await fetch("/api/conversations/messages/" + messageId, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content_blocks: [{ type: "text", text: newText }],
-          text_summary: newText,
-        }),
-      });
-      console.log("[PageEdit] PUT response:", res.status);
-      if (!res.ok) {
-        const errText = await res.text().catch(() => "");
-        console.error("[PageEdit] PUT failed:", res.status, errText);
-        throw new Error(`Edit failed: ${res.status}`);
-      }
-    } catch (e) {
-      console.error("[PageEdit] Edit failed:", e);
-      // Rollback on failure — reload messages
-      if (activeConversationId) loadMessages(activeConversationId);
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Edit failed ${res.status}: ${errText}`);
     }
-  }, [activeConversationId, loadMessages]);
+  }, []);
   // ── Handle version switch ──
   // Tracks { messageId -> current version index in parent's children_ids }
   const versionIndexRef = useRef<Record<string, number>>({});

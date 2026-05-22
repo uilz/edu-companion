@@ -13,9 +13,13 @@ interface MessageListProps {
   isLoading?: boolean;
   statusMessage?: string;
   onDeleteMessage?: (messageId: string) => void;
-  onEditMessage?: (messageId: string, newText: string) => void;
+  onEditMessage?: (messageId: string, newText: string) => Promise<void>;
   onVersionSwitch?: (messageId: string, direction: "prev" | "next") => void;
 }
+
+// Local map of edited message text, keyed by message ID.
+// This bypasses parent state propagation issues.
+type EditedMap = Record<string, string>;
 
 export default function MessageList({
   messages,
@@ -32,6 +36,7 @@ export default function MessageList({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const [editedTexts, setEditedTexts] = useState<EditedMap>({});
 
   const handleDeleteMessage = (messageId: string) => {
     if (onDeleteMessage) onDeleteMessage(messageId);
@@ -42,15 +47,36 @@ export default function MessageList({
     setEditingText(currentText);
   };
 
-  const handleSaveEdit = () => {
-    if (editingId && editingText.trim() && onEditMessage) {
-      console.log("[MsgEdit] saving:", editingId, editingText.trim().slice(0, 50));
-      onEditMessage(editingId, editingText.trim());
-    } else {
-      console.warn("[MsgEdit] skip — editingId:", editingId, "text:", editingText?.trim()?.slice(0,20), "onEditMessage:", !!onEditMessage);
+  const handleSaveEdit = async () => {
+    const msgId = editingId;
+    const newText = editingText.trim();
+    if (!msgId || !newText) {
+      setEditingId(null);
+      setEditingText("");
+      return;
     }
+
+    // Immediately show new text locally
+    setEditedTexts(prev => ({ ...prev, [msgId]: newText }));
     setEditingId(null);
     setEditingText("");
+
+    // Persist to backend
+    if (onEditMessage) {
+      console.log("[MsgEdit] saving:", msgId, newText.slice(0, 50));
+      try {
+        await onEditMessage(msgId, newText);
+        console.log("[MsgEdit] saved OK");
+      } catch (e) {
+        console.error("[MsgEdit] save failed:", e);
+        // Rollback local edit on failure
+        setEditedTexts(prev => {
+          const next = { ...prev };
+          delete next[msgId];
+          return next;
+        });
+      }
+    }
   };
 
   const handleCancelEdit = () => {
@@ -126,14 +152,15 @@ export default function MessageList({
           const isEditing = editingId === message.id;
           const messageBlocks = blocksByMessage.get(message.id) || [];
 
-          // Extract text from content blocks
-          const textBlocks = (message.content_blocks || [])
-            .filter((b) => b.type === "text")
-            .map((b) => b.text || "")
-            .join("\n\n");
+          // Use locally edited text if available, otherwise from content_blocks
+          const displayText = editedTexts[message.id]
+            || (message.content_blocks || [])
+                .filter((b) => b.type === "text")
+                .map((b) => b.text || "")
+                .join("\n\n");
 
-          // Version info — show buttons when message has been edited
-          const hasVersions = message.has_modified_version;
+          // Version info
+          const hasVersions = message.has_modified_version || !!editedTexts[message.id];
 
           return (
             <div key={message.id} className={`flex gap-4 ${isUser ? "flex-row-reverse" : ""}`}>
@@ -174,7 +201,7 @@ export default function MessageList({
                         </div>
                       ) : (
                         <div className="text-sm leading-relaxed text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words">
-                          {textBlocks}
+                          {displayText}
                         </div>
                       )}
                     </div>
@@ -223,7 +250,7 @@ export default function MessageList({
                           [&_del]:line-through [&_del]:opacity-60
                         "
                         >
-                          <MessageContent text={textBlocks} />
+                          <MessageContent text={displayText} />
                         </div>
                       )}
                     </div>
@@ -267,10 +294,10 @@ export default function MessageList({
                     )}
 
                     {/* Actions */}
-                    {!isUser && <SpeakButton text={textBlocks} />}
+                    {!isUser && <SpeakButton text={displayText} />}
                     {isUser && onEditMessage && (
                       <button
-                        onClick={() => handleStartEdit(message.id, textBlocks)}
+                        onClick={() => handleStartEdit(message.id, displayText)}
                         className="p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"
                         title="编辑"
                       >
@@ -341,10 +368,5 @@ export default function MessageList({
 
 function MessageContent({ text }: { text: string }) {
   const html = useRenderedContent(text);
-
-  return (
-    <div
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  );
+  return <div dangerouslySetInnerHTML={{ __html: html }} />;
 }
