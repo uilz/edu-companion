@@ -199,7 +199,7 @@ export default function MessageList({
                         </div>
                       ) : (
                         <div className="text-sm leading-relaxed text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words">
-                          <RenderedContent content={displayText} />
+                          <MessageContent text={displayText} />
                         </div>
                       )}
                     </div>
@@ -226,7 +226,7 @@ export default function MessageList({
                       ) : (
                         <>
                           <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                            <RenderedContent content={displayText} />
+                            <MessageContent text={displayText} />
                           </div>
                           {/* Version navigation */}
                           {vInfo.total > 0 && (
@@ -318,5 +318,8 @@ export default function MessageList({
   );
 }
 
-// Re-export for convenience
-const RenderedContent = useRenderedContent;
+// 直接从 displayText 渲染，useRenderedContent 用于 MathJax
+const MessageContent = ({ text }: { text: string }) => {
+  const html = useRenderedContent(text);
+  return <div dangerouslySetInnerHTML={{ __html: html }} />;
+};
