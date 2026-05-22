@@ -452,7 +452,15 @@ async def modify_message(message_id: str, req: ModifyMessageRequest):
         if block.get("type") == "text"
     ]
     node = tree_ops.modify_message(USER_ID, message_id, blocks, req.text_summary)
-    return {"node": node}
+    # Count same-parent+role versions for frontend version counter
+    data = storage.load(USER_ID)
+    parent = data.nodes.get(node.parent_id) if node.parent_id else None
+    all_siblings = parent.children_ids if parent else []
+    version_count = sum(
+        1 for vid in all_siblings
+        if data.nodes.get(vid) and data.nodes[vid].role == node.role
+    )
+    return {"node": node, "version_count": version_count}
 
 @router.delete("/messages/{message_id}")
 async def delete_message(message_id: str):

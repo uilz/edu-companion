@@ -762,8 +762,7 @@ export default function LearnPage() {
   }, []);
 
   // ── Handle edit message (v4: inline version, no new branch) ──
-  // Display update is handled locally in MessageList via editedTexts state.
-  // This function only persists to backend.
+  // Returns version_count for MessageList to update version counter
   const handleEditMessage = useCallback(async (messageId: string, newText: string) => {
     const res = await fetch("/api/conversations/messages/" + messageId, {
       method: "PUT",
@@ -777,6 +776,8 @@ export default function LearnPage() {
       const errText = await res.text().catch(() => "");
       throw new Error(`Edit failed ${res.status}: ${errText}`);
     }
+    const data = await res.json();
+    return data.version_count || 0;
   }, []);
   // ── Handle version switch ──
   // Returns { index, total } for the MessageList to display version counter

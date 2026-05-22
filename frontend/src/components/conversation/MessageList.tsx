@@ -13,7 +13,7 @@ interface MessageListProps {
   isLoading?: boolean;
   statusMessage?: string;
   onDeleteMessage?: (messageId: string) => void;
-  onEditMessage?: (messageId: string, newText: string) => Promise<void>;
+  onEditMessage?: (messageId: string, newText: string) => Promise<number>;
   onVersionSwitch?: (messageId: string, direction: "prev" | "next") => Promise<{ index: number; total: number } | null>;
 }
 
@@ -91,8 +91,15 @@ export default function MessageList({
     if (onEditMessage) {
       console.log("[MsgEdit] saving:", msgId, newText.slice(0, 50));
       try {
-        await onEditMessage(msgId, newText);
-        console.log("[MsgEdit] saved OK");
+        const versionCount = await onEditMessage(msgId, newText);
+        console.log("[MsgEdit] saved OK, versions:", versionCount);
+        // Update version counter if multiple versions exist
+        if (versionCount > 1) {
+          setVersionMap(prev => ({
+            ...prev,
+            [msgId]: { index: 1, total: versionCount },
+          }));
+        }
       } catch (e) {
         console.error("[MsgEdit] save failed:", e);
         // Rollback local edit on failure
@@ -130,6 +137,29 @@ export default function MessageList({
       bottomRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, responseBlocks]);
+
+  // Lazy-fetch version counts for messages with has_modified_version
+  // Only show version counter when total > 1
+  useEffect(() => {
+    let cancelled = false;
+    for (const msg of messages) {
+      if (!msg.has_modified_version) continue;
+      if (versionMap[msg.id] !== undefined) continue; // already fetched
+      // Fetch real version count
+      fetch(`/api/conversations/messages/${msg.id}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (cancelled || !data) return;
+          const count = data.version_count || data.versions?.length || 0;
+          setVersionMap(prev => ({
+            ...prev,
+            [msg.id]: { index: 1, total: count > 0 ? count : 0 },
+          }));
+        })
+        .catch(() => {});
+    }
+    return () => { cancelled = true; };
+  }, [messages, versionMap]);
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -321,32 +351,31 @@ export default function MessageList({
                       </button>
                     )}
 
-                    {/* Divider before version switch */}
-                    {hasVersions && onVersionSwitch && (
-                      <span className="text-[var(--color-border)] mx-0.5 select-none">|</span>
-                    )}
+                    {/* Divider + version switch — only when multiple versions exist */}
+                    {hasVersions && onVersionSwitch && vInfo.total > 1 && (
+                      <>
+                        <span className="text-[var(--color-border)] mx-0.5 select-none">|</span>
 
-                    {/* Version switch: < 当前/总数 > */}
-                    {hasVersions && onVersionSwitch && (
-                      <div className="flex items-center gap-0.5">
-                        <button
-                          onClick={() => handleVersionNav(message.id, "prev")}
-                          className="p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"
-                          title="上一版本"
-                        >
-                          <ChevronLeft size={11} />
-                        </button>
-                        <span className="text-[10px] text-[var(--color-text-muted)] select-none tabular-nums">
-                          {vInfo.index}/{vInfo.total}
-                        </span>
-                        <button
-                          onClick={() => handleVersionNav(message.id, "next")}
-                          className="p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"
-                          title="下一版本"
-                        >
-                          <ChevronRight size={11} />
-                        </button>
-                      </div>
+                        <div className="flex items-center gap-0.5">
+                          <button
+                            onClick={() => handleVersionNav(message.id, "prev")}
+                            className="p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"
+                            title="上一版本"
+                          >
+                            <ChevronLeft size={11} />
+                          </button>
+                          <span className="text-[10px] text-[var(--color-text-muted)] select-none tabular-nums">
+                            {vInfo.index}/{vInfo.total}
+                          </span>
+                          <button
+                            onClick={() => handleVersionNav(message.id, "next")}
+                            className="p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"
+                            title="下一版本"
+                          >
+                            <ChevronRight size={11} />
+                          </button>
+                        </div>
+                      </>
                     )}
 
                     {/* Speak button — AI messages only */}

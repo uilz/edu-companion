@@ -328,21 +328,39 @@ class TreeOpsService:
 
         data.nodes[new_node.id] = new_node
 
-        # 迁移原消息的子节点到新版本，保持树结构完整
-        # 新版本继承原消息的 children_ids，原消息变为纯历史叶子
-        if node.children_ids:
-            new_node.children_ids = list(node.children_ids)
-            for child_id in node.children_ids:
+        # 找到当前在 conv.path 中的版本（首编=原消息，多次编=上一版本）
+        conv = data.conversations.get(node.conversation_id)
+        current_version = node  # 默认：原消息
+        replace_idx = None
+        if conv:
+            if message_id in conv.path:
+                replace_idx = conv.path.index(message_id)
+            else:
+                # 多次编辑：找路径中同父+同角色的兄弟版本
+                for i, nid in enumerate(conv.path):
+                    sibling = data.nodes.get(nid)
+                    if sibling and sibling.parent_id == node.parent_id and sibling.role == node.role:
+                        current_version = sibling
+                        replace_idx = i
+                        break
+
+        # 迁移「当前路径中的版本」（可能是原消息也可能是上一版本）的子节点到新版本
+        if current_version and current_version.id != new_node.id and current_version.children_ids:
+            new_node.children_ids = list(current_version.children_ids)
+            for child_id in current_version.children_ids:
                 child = data.nodes.get(child_id)
                 if child:
                     child.parent_id = new_node.id
-            node.children_ids = []
+            current_version.children_ids = []
+            current_version.has_modified_version = True
 
-        # 更新对话路径——用新版本替换原消息ID，确保加载时显示最新版本
-        conv = data.conversations.get(node.conversation_id)
-        if conv and message_id in conv.path:
-            idx = conv.path.index(message_id)
-            conv.path[idx] = new_node.id
+        # 用新版本替换 conv.path 中的位置
+        if replace_idx is not None:
+            conv.path[replace_idx] = new_node.id
+
+        # 标记摘要需刷新（消息内容已变）
+        if conv:
+            conv.summary_dirty = True
 
         storage.save(user_id, data)
         return new_node
