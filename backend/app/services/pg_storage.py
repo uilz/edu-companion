@@ -65,6 +65,22 @@ class PgStorageEngine:
         except (json.JSONDecodeError, TypeError):
             return default if default is not None else {}
 
+    # ── ETag 支持 ──
+
+    _etag_cache: dict[str, str] = {}
+
+    def get_etag(self, user_id: str) -> str:
+        """返回当前用户数据的 ETag (基于最新时间戳)"""
+        db = Database.get()
+        row = db.fetchone(
+            "SELECT updated_at FROM conversation_user_meta WHERE user_id = %s",
+            (user_id,),
+        )
+        ts = row["updated_at"] if row else "0"
+        etag = f'W/"{user_id}:{ts}"'
+        self._etag_cache[user_id] = etag
+        return etag
+
     # ── 读取 ──
 
     def load(self, user_id: str) -> UserData:
