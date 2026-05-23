@@ -429,6 +429,9 @@ class PgStorageEngine:
         )}
         current_part_ids = set(data.partitions.keys())
         removed_pids = existing_part_ids - current_part_ids
+        # 排除系统分区（不可删除）
+        SYSTEM_PARTITIONS = {"__uncategorized__"}
+        removed_pids -= SYSTEM_PARTITIONS
         if removed_pids:
             pid_list = list(removed_pids)
             logger.info(f"Cleaning up {len(pid_list)} deleted partitions: {pid_list}")
