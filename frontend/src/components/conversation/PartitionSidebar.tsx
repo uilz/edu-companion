@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   Plus, FolderOpen, Hash, GitGraph, Pencil, Trash2, Check, X,
   ChevronRight, ChevronDown, MessageSquare, BookOpen, Layers,
@@ -30,9 +30,7 @@ function InlineEdit({
   placeholder?: string;
 }) {
   const [v, setV] = useState(value);
-  useEffect(() => {
-    setV(value);
-  }, [value]);
+  useEffect(() => { setV(value); }, [value]);
 
   return (
     <div className="flex items-center gap-1 px-2 py-1" onClick={(e) => e.stopPropagation()}>
@@ -40,7 +38,7 @@ function InlineEdit({
         value={v}
         onChange={(e) => setV(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") { onConfirm(v.trim() || value); }
+          if (e.key === "Enter") onConfirm(v.trim() || value);
           if (e.key === "Escape") onCancel();
         }}
         placeholder={placeholder}
@@ -59,13 +57,7 @@ function InlineEdit({
 }
 
 // ── Confirm dialog ──
-function ConfirmDialog({
-  message, onConfirm, onCancel,
-}: {
-  message: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
+function ConfirmDialog({ message, onConfirm, onCancel }: { message: string; onConfirm: () => void; onCancel: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onCancel}>
       <div className="bg-[var(--color-bg)] border border-[var(--color-border)] px-6 py-4 max-w-xs mx-4 shadow-lg" onClick={(e) => e.stopPropagation()}>
@@ -83,18 +75,12 @@ function ConfirmDialog({
 function NewItemDialog({
   open, title, placeholder, onClose, onCreate, emoji,
 }: {
-  open: boolean;
-  title: string;
-  placeholder: string;
-  emoji: string;
-  onClose: () => void;
-  onCreate: (name: string, emoji: string) => void;
+  open: boolean; title: string; placeholder: string; emoji: string;
+  onClose: () => void; onCreate: (name: string, emoji: string) => void;
 }) {
   const [name, setName] = useState("");
   const [em, setEm] = useState(emoji);
-
   useEffect(() => { if (open) { setName(""); setEm(emoji); } }, [open, emoji]);
-
   if (!open) return null;
 
   return (
@@ -107,63 +93,47 @@ function NewItemDialog({
         <div className="px-4 py-4 space-y-3">
           <div>
             <label className="text-xs text-[var(--color-text-muted)] block mb-1">名称</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={placeholder}
-              className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 focus:outline-none focus:border-[var(--color-border-hover)]"
-              autoFocus
-            />
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder={placeholder}
+              className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 focus:outline-none focus:border-[var(--color-border-hover)]" autoFocus />
           </div>
           <div>
             <label className="text-xs text-[var(--color-text-muted)] block mb-1">Emoji</label>
-            <input value={em} onChange={(e) => setEm(e.target.value)} className="w-16 bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 text-center" />
+            <input value={em} onChange={(e) => setEm(e.target.value)}
+              className="w-16 bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 text-center" />
           </div>
         </div>
         <div className="px-4 py-3 border-t border-[var(--color-border)] flex justify-end gap-2">
           <button onClick={onClose} className="px-3 py-1.5 text-xs text-[var(--color-text-secondary)]">取消</button>
-          <button onClick={() => { if (name.trim()) { onCreate(name.trim(), em); onClose(); } }} disabled={!name.trim()} className="px-3 py-1.5 text-xs bg-[var(--color-accent)] text-white disabled:opacity-30">
-            创建
-          </button>
+          <button onClick={() => { if (name.trim()) { onCreate(name.trim(), em); onClose(); } }} disabled={!name.trim()}
+            className="px-3 py-1.5 text-xs bg-[var(--color-accent)] text-white disabled:opacity-30">创建</button>
         </div>
       </div>
     </div>
   );
 }
 
-// ── Tree item types ──
-type TreeNodeLevel = "partition" | "domain" | "topic" | "conversation";
+// ── Flat tree types ──
+// Instead of a nested tree object, we use three flat state containers:
+//   childMap : parentId → children[]
+//   expandedSet : Set<nodeId> of expanded nodes
+//   loadingSet  : Set<nodeId> of loading nodes
 
-interface TreeItemCommon {
-  level: TreeNodeLevel;
-  expanded: boolean;
-  loading: boolean;
+type FlatLevel = "partition" | "domain" | "topic" | "conversation";
+
+interface FlatNode {
+  id: string;
+  name: string;
+  emoji?: string;
+  level: FlatLevel;
+  partition_id: string;
+  domain_id?: string;
+  // Original API data preserved for extra fields
+  [key: string]: unknown;
 }
 
-interface PartitionItem extends TreeItemCommon, Partition {
-  level: "partition";
-  children: DomainItem[];
-}
+const ROOT_KEY = "__sidebar_root__";
 
-interface DomainItem extends TreeItemCommon, Domain {
-  level: "domain";
-  children: TopicItem[];
-  partition_id: string;  // 从父分区继承
-}
-
-interface TopicItem extends TreeItemCommon, Topic {
-  level: "topic";
-  children: ConversationItem[];
-  partition_id: string;  // 从父分区继承
-}
-
-interface ConversationItem extends TreeItemCommon, Conversation {
-  level: "conversation";
-  partition_id?: string;  // 携带所属分区ID用于导航
-}
-
-type TreeItem = PartitionItem | DomainItem | TopicItem | ConversationItem;
-
+// ── Props ──
 interface PartitionSidebarProps {
   partitions: Partition[];
   selectedPartitionId: string | null;
@@ -176,7 +146,7 @@ interface PartitionSidebarProps {
   loading?: boolean;
   compact?: boolean;
   onNewConversation?: (level: string, parentId: string) => void;
-  onTreeChanged?: () => void; // notify parent to refresh after create/delete/rename
+  onTreeChanged?: () => void;
 }
 
 export default function PartitionSidebar({
@@ -193,233 +163,180 @@ export default function PartitionSidebar({
   onNewConversation,
   onTreeChanged,
 }: PartitionSidebarProps) {
-  const [tree, setTree] = useState<PartitionItem[]>([]);
+  // ── Flat state ──
+  const [childMap, setChildMap] = useState<Map<string, FlatNode[]>>(() => new Map());
+  const [expandedSet, setExpandedSet] = useState<Set<string>>(new Set());
+  const [loadingSet, setLoadingSet] = useState<Set<string>>(new Set());
 
-  // Build tree from partitions
+  // Refs for use in async callbacks
+  const childMapRef = useRef(childMap);
+  childMapRef.current = childMap;
+  const expandedSetRef = useRef(expandedSet);
+  expandedSetRef.current = expandedSet;
+  const loadingSetRef = useRef(loadingSet);
+  loadingSetRef.current = loadingSet;
+
+  // ── Sync partitions prop into childMap ──
+  // Only updates root-level items; preserves all deeper cached children
   useEffect(() => {
-    setTree(prev => {
-      const map: Record<string, PartitionItem> = {};
-      for (const old of prev) {
-        map[old.id] = old;
-      }
-      return partitions.map(p => {
-        const existing = map[p.id];
-        return {
-          ...p,
-          level: "partition" as const,
-          expanded: existing?.expanded ?? false,
-          loading: false,
-          children: existing?.children ?? [],
-        };
-      });
+    setChildMap(prev => {
+      const next = new Map(prev);
+      next.set(ROOT_KEY, partitions.map(p => ({
+        ...p,
+        level: "partition" as const,
+        partition_id: p.id,
+      })));
+      return next;
     });
   }, [partitions]);
 
-  // ── Auto-expand path to active conversation (defined after loadChildren) ──
-  const autoExpandRef = useRef<string>("");
-  const treeRef = useRef(tree);
-  treeRef.current = tree;
+  // ── Load children from API ──
+  const loadChildren = useCallback(async (node: FlatNode) => {
+    const { id } = node;
+    // Guard: already loading
+    if (loadingSetRef.current.has(id)) return;
 
-  // ── Helpers ──
-  function updateTreeChildren(children: TreeItem[], targetId: string, newChildren: TreeItem[]): TreeItem[] {
-    return children.map(n => {
-      if (n.id === targetId) return { ...n, children: newChildren, loading: false, expanded: true } as typeof n;
-      if ("children" in n && n.children) return { ...n, children: updateTreeChildren(n.children as TreeItem[], targetId, newChildren) } as typeof n;
-      return n;
-    });
-  }
-
-  function markNotLoading(children: TreeItem[], targetId: string): TreeItem[] {
-    return children.map(n => {
-      if (n.id === targetId) return { ...n, loading: false } as typeof n;
-      if ("children" in n && n.children) return { ...n, children: markNotLoading(n.children as TreeItem[], targetId) } as typeof n;
-      return n;
-    });
-  }
-
-  // Get the partition_id for an item (regardless of level)
-  function getParentPartitionId(item: PartitionItem | DomainItem | TopicItem): string {
-    if (item.level === "partition") return item.id;
-    return (item as DomainItem | TopicItem).partition_id;
-  }
-
-  // ── Load children (only affects the target partition) ──
-  const loadChildren = useCallback(async (item: PartitionItem | DomainItem | TopicItem) => {
-    if (item.loading) return;
-    const parentPid = getParentPartitionId(item);
-    if (!parentPid) return;
-
-    // Set loading: true — only on the target partition
-    setTree(prev => prev.map(p => {
-      if (p.id !== parentPid) return p; // ← KEY: other partitions unchanged (same reference)
-      if (item.level === "partition") {
-        return { ...p, loading: true } as PartitionItem;
-      }
-      // domain/topic: search in children
-      const search = (nodes: TreeItem[]): TreeItem[] =>
-        nodes.map(n => {
-          if (n.id === item.id) return { ...n, loading: true } as typeof n;
-          if ("children" in n && n.children) return { ...n, children: search(n.children) } as typeof n;
-          return n;
-        });
-      return { ...p, children: search(p.children as TreeItem[]) } as PartitionItem;
-    }));
+    // Mark loading
+    setLoadingSet(prev => { const next = new Set(prev); next.add(id); return next; });
+    // Expand the parent so its children become visible
+    setExpandedSet(prev => { const next = new Set(prev); next.add(id); return next; });
 
     try {
-      if (item.level === "partition") {
-        const { domains } = await apiFetch<{ domains: Domain[] }>(`/partitions/${item.id}/domains`);
-        setTree(prev => {
-          // Preserve existing expanded states for domains
-          const oldPartition = prev.find(p => p.id === item.id) as PartitionItem | undefined;
-          const oldExpanded = new Map<string, boolean>();
-          if (oldPartition?.children) {
-            for (const d of oldPartition.children as DomainItem[]) {
-              oldExpanded.set(d.id, d.expanded);
-            }
-          }
-          const domainItems: DomainItem[] = domains.map((d: Domain) => ({
-            ...d, level: "domain" as const,
-            expanded: oldExpanded.get(d.id) ?? false, // ← preserve previous expanded state
-            loading: false, children: [],
-            partition_id: item.id,
-          }));
-          return prev.map(p => p.id === item.id
-            ? { ...p, children: domainItems, loading: false, expanded: true } as PartitionItem
-            : p
-          );
-        });
-      } else if (item.level === "domain") {
-        const d = item as DomainItem;
-        const { topics } = await apiFetch<{ topics: Topic[] }>(`/domains/${item.id}/topics`);
-        const topicItems: TopicItem[] = topics.map((t: Topic) => ({
-          ...t, level: "topic" as const, expanded: false, loading: false, children: [],
-          partition_id: item.partition_id,
+      let children: FlatNode[];
+      if (node.level === "partition") {
+        const { domains } = await apiFetch<{ domains: Domain[] }>(`/partitions/${id}/domains`);
+        children = domains.map(d => ({
+          ...d, level: "domain" as const, partition_id: id,
         }));
-        setTree(prev => prev.map(p =>
-          p.id === parentPid
-            ? { ...p, children: updateTreeChildren(p.children, item.id, topicItems) } as PartitionItem
-            : p // ← other partitions unchanged
-        ));
-      } else if (item.level === "topic") {
-        const t = item as TopicItem;
-        const { conversations } = await apiFetch<{ conversations: Conversation[] }>(`/topics/${item.id}/conversations`);
-        const convItems: ConversationItem[] = conversations.map((c: Conversation) => ({
-          ...c, level: "conversation" as const, expanded: false, loading: false,
-          partition_id: item.partition_id,
+      } else if (node.level === "domain") {
+        const { topics } = await apiFetch<{ topics: Topic[] }>(`/domains/${id}/topics`);
+        children = topics.map(t => ({
+          ...t, level: "topic" as const, partition_id: node.partition_id, domain_id: id,
         }));
-        setTree(prev => prev.map(p =>
-          p.id === parentPid
-            ? { ...p, children: updateTreeChildren(p.children, item.id, convItems) } as PartitionItem
-            : p // ← other partitions unchanged
-        ));
+      } else {
+        const { conversations } = await apiFetch<{ conversations: Conversation[] }>(`/topics/${id}/conversations`);
+        children = conversations.map(c => ({
+          ...c, level: "conversation" as const, partition_id: node.partition_id,
+        }));
       }
+
+      setChildMap(prev => {
+        const next = new Map(prev);
+        next.set(id, children);
+        return next;
+      });
     } catch (e: any) {
       console.error("loadChildren failed:", e);
-      const errMsg = e?.message || "";
-      if (errMsg.includes("404")) {
-        // Recursively remove the deleted item from the tree (only in its partition)
-        setTree(prev => prev.map(p => {
-          if (p.id !== parentPid) return p;
-          return {
-            ...p,
-            children: removeFromTree(p.children as TreeItem[], item.id, item.level, (item as TopicItem).domain_id),
-          } as PartitionItem;
-        }));
+      // If 404, remove from childMap (item was deleted server-side)
+      if (e?.message?.includes("404")) {
+        setChildMap(prev => {
+          const next = new Map(prev);
+          // Remove from parent's children list
+          let foundParent = false;
+          next.forEach((children, parentKey) => {
+            if (foundParent) return;
+            const filtered = children.filter(c => c.id !== id);
+            if (filtered.length !== children.length) {
+              next.set(parentKey, filtered);
+              foundParent = true;
+            }
+          });
+          next.delete(id);
+          return next;
+        });
+        setExpandedSet(prev => { const next = new Set(prev); next.delete(id); return next; });
       }
-      // Mark loading=false — only on the target partition
-      setTree(prev => prev.map(p => {
-        if (p.id !== parentPid) return p;
-        if (p.id === item.id || item.level === "partition") {
-          return { ...p, loading: false } as PartitionItem;
-        }
-        return { ...p, children: markNotLoading(p.children as TreeItem[], item.id) } as PartitionItem;
-      }));
+    } finally {
+      setLoadingSet(prev => { const next = new Set(prev); next.delete(id); return next; });
     }
   }, []);
 
-  function removeFromTree(children: TreeItem[], targetId: string, level: TreeNodeLevel, domainId?: string): TreeItem[] {
-    return children
-      .filter(c => {
-        if (level === "topic" && (c as any).domain_id === domainId && c.id === targetId) return false;
-        return c.id !== targetId;
-      })
-      .map(c => {
-        if ("children" in c && c.children) {
-          return { ...c, children: removeFromTree(c.children as TreeItem[], targetId, level, domainId) } as typeof c;
-        }
-        return c;
+  // ── Toggle expand/collapse ──
+  const toggleExpand = useCallback((node: FlatNode) => {
+    if (node.level === "conversation") {
+      onSelectConversation(node.partition_id || selectedPartitionId || "", node.id);
+      return;
+    }
+
+    if (expandedSetRef.current.has(node.id)) {
+      // Collapse
+      setExpandedSet(prev => {
+        const next = new Set(prev);
+        next.delete(node.id);
+        // Also collapse all descendants recursively
+        const removeDescendants = (parentId: string) => {
+          const children = childMapRef.current.get(parentId);
+          if (!children) return;
+          for (const child of children) {
+            next.delete(child.id);
+            removeDescendants(child.id);
+          }
+        };
+        removeDescendants(node.id);
+        return next;
       });
-  }
+    } else {
+      // Expand — load if no cached children
+      if (!childMapRef.current.has(node.id)) {
+        loadChildren(node);
+      } else {
+        setExpandedSet(prev => { const next = new Set(prev); next.add(node.id); return next; });
+      }
+    }
+  }, [loadChildren, onSelectConversation, selectedPartitionId]);
 
   // ── Auto-expand path to active conversation ──
+  const prevAutoExpandRef = useRef("");
   useEffect(() => {
     const convId = activeConversationId || initialConversationId || "";
     if (!selectedPartitionId || !convId) return;
-    if (autoExpandRef.current === convId) return;
-    autoExpandRef.current = convId;
+    if (prevAutoExpandRef.current === convId) return;
+    prevAutoExpandRef.current = convId;
 
     let cancelled = false;
+    const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
     (async () => {
       try {
-        // Wait for partitions to be available in the tree
-        for (let attempt = 0; attempt < 50; attempt++) {
+        // 1. Wait for root items (partitions) to be populated
+        for (let i = 0; i < 50; i++) {
           if (cancelled) return;
-          const found = treeRef.current.find(p => p.id === selectedPartitionId);
-          if (found) break;
-          await new Promise(r => setTimeout(r, 100));
+          if (childMapRef.current.get(ROOT_KEY)?.some(p => p.id === selectedPartitionId)) break;
+          await sleep(100);
         }
         if (cancelled) return;
 
-        // 1. Load domains for the partition if empty
-        const partition = treeRef.current.find(p => p.id === selectedPartitionId);
+        // 2. Load + expand the partition
+        const partition = childMapRef.current.get(ROOT_KEY)?.find(p => p.id === selectedPartitionId);
         if (!partition) return;
-        if (partition.children.length === 0 && !partition.loading) {
+
+        if (!childMapRef.current.has(selectedPartitionId)) {
           await loadChildren(partition);
           if (cancelled) return;
         }
+        setExpandedSet(prev => { const next = new Set(prev); next.add(selectedPartitionId); return next; });
 
-        // 2. Load topics for each domain
-        const p = treeRef.current.find(p => p.id === selectedPartitionId);
-        if (!p) return;
-        for (const domain of (p.children || []) as DomainItem[]) {
+        // 3. For each domain, load + expand
+        const domains = childMapRef.current.get(selectedPartitionId) || [];
+        for (const domain of domains) {
           if (cancelled) return;
-          if (domain.children.length === 0 && !domain.loading) {
+          if (!childMapRef.current.has(domain.id)) {
             await loadChildren(domain);
             if (cancelled) return;
           }
-        }
+          setExpandedSet(prev => { const next = new Set(prev); next.add(domain.id); return next; });
 
-        // 3. Load conversations for each topic
-        const p2 = treeRef.current.find(p => p.id === selectedPartitionId);
-        if (!p2) return;
-        for (const domain of (p2.children || []) as DomainItem[]) {
-          if (cancelled) return;
-          for (const topic of (domain.children || []) as TopicItem[]) {
-            if (topic.children.length === 0 && !topic.loading) {
+          // 4. For each topic, load + expand
+          const topics = childMapRef.current.get(domain.id) || [];
+          for (const topic of topics) {
+            if (cancelled) return;
+            if (!childMapRef.current.has(topic.id)) {
               await loadChildren(topic);
               if (cancelled) return;
             }
+            setExpandedSet(prev => { const next = new Set(prev); next.add(topic.id); return next; });
           }
         }
-
-        if (cancelled) return;
-
-        // 4. Batch expand: find the path to convId and expand all ancestors
-        setTree(prev => {
-          const expandPathTo = (items: TreeItem[]): TreeItem[] =>
-            items.map(item => {
-              if (item.level === "conversation" && item.id === convId) return item;
-              if ("children" in item && item.children) {
-                const newChildren = expandPathTo(item.children as TreeItem[]);
-                const found = newChildren !== item.children ||
-                  (item.children as TreeItem[]).some(c => c.id === convId);
-                if (found) return { ...item, expanded: true, children: newChildren } as typeof item;
-              }
-              return item;
-            });
-          return expandPathTo(prev) as PartitionItem[];
-        });
       } catch (e) {
         console.error("Auto-expand failed:", e);
       }
@@ -428,32 +345,8 @@ export default function PartitionSidebar({
     return () => { cancelled = true; };
   }, [selectedPartitionId, activeConversationId, initialConversationId, loadChildren]);
 
-  // ── Toggle expand ──
-  const toggleExpand = useCallback((item: TreeItem) => {
-    if (item.level === "conversation") {
-      const c = item as ConversationItem;
-      onSelectConversation(c.partition_id || selectedPartitionId || "", c.id);
-      return;
-    }
-
-    if (!item.expanded) {
-      loadChildren(item as PartitionItem | DomainItem | TopicItem);
-    } else {
-      // Collapse
-      setTree(prev => prev.map(p => collapseItem(p, item.id)) as any);
-    }
-  }, [loadChildren, onSelectConversation, selectedPartitionId]);
-
-  function collapseItem(node: TreeItem, targetId: string): TreeItem {
-    if (node.id === targetId) return { ...node, expanded: false } as typeof node;
-    if ("children" in node && node.children) {
-      return { ...node, children: node.children.map(c => collapseItem(c, targetId)) as typeof tree[0]["children"] } as typeof node;
-    }
-    return node;
-  }
-
   // ── Create ──
-  const [createDialog, setCreateDialog] = useState<{ level: TreeNodeLevel; parentId: string; title: string; placeholder: string; emoji: string } | null>(null);
+  const [createDialog, setCreateDialog] = useState<{ level: FlatLevel; parentId: string; title: string; placeholder: string; emoji: string } | null>(null);
 
   const handleCreate = async (name: string, emoji: string) => {
     if (!createDialog) return;
@@ -467,18 +360,19 @@ export default function PartitionSidebar({
         const { conversation } = await apiFetch<{ conversation: { id: string } }>("/conversations", { method: "POST", body: JSON.stringify({ topic_id: createDialog.parentId, name }) });
         createdId = conversation.id;
       }
-      // Refresh parent
-      const parentItem = findItem(tree, createDialog.parentId);
-      if (parentItem && parentItem.expanded) {
-        loadChildren(parentItem as PartitionItem | DomainItem | TopicItem);
+      // Refresh parent — find the actual parent node in any level
+      let parentNode: FlatNode | null = null;
+      Array.from(childMapRef.current.values()).some(children => {
+        const found = children.find(c => c.id === createDialog.parentId);
+        if (found) { parentNode = found; return true; }
+        return false;
+      });
+      if (parentNode) {
+        loadChildren(parentNode);
       }
-      // Notify parent to refresh
       onTreeChanged?.();
-      // Auto-select newly created conversation
       if (createdId && createDialog.level === "conversation") {
-        const convItem = findItem(tree, createDialog.parentId) as TopicItem | null;
-        const pId = convItem?.partition_id || selectedPartitionId || "";
-        onSelectConversation(pId, createdId);
+        onSelectConversation(selectedPartitionId || "", createdId);
       }
     } catch (e) {
       console.error("Create failed:", e);
@@ -486,45 +380,56 @@ export default function PartitionSidebar({
     setCreateDialog(null);
   };
 
-  function findItem(nodes: TreeItem[], id: string): TreeItem | null {
-    for (const n of nodes) {
-      if (n.id === id) return n;
-      if ("children" in n && n.children) {
-        const found = findItem(n.children as TreeItem[], id);
-        if (found) return found;
-      }
-    }
-    return null;
-  }
-
   // ── Rename ──
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
-  const [editLevel, setEditLevel] = useState<TreeNodeLevel | null>(null);
 
-  const startEdit = (item: TreeItem) => {
-    setEditingId(item.id);
-    setEditValue("name" in item ? (item as any).name : "");
-    setEditLevel(item.level);
+  const startEdit = (node: FlatNode) => {
+    setEditingId(node.id);
+    setEditValue(node.name || "");
   };
 
   const confirmEdit = async (newName?: string) => {
-    if (!editingId || !editLevel) return;
+    if (!editingId) return;
     const name = (newName || editValue).trim();
-    if (!name) { setEditingId(null); setEditLevel(null); return; }
+    if (!name) { setEditingId(null); return; }
 
     try {
-      const paths: Record<TreeNodeLevel, string> = {
+      // Find the node's level by searching childMap
+      let level: FlatLevel | null = null;
+      Array.from(childMapRef.current.values()).some(children => {
+        const found = children.find(c => c.id === editingId);
+        if (found) { level = found.level; return true; }
+        return false;
+      });
+      if (!level) return;
+
+      const paths: Record<FlatLevel, string> = {
         partition: `/partitions/${editingId}`,
         domain: `/domains/${editingId}`,
         topic: `/topics/${editingId}`,
         conversation: `/conversations/${editingId}`,
       };
-      await apiFetch(paths[editLevel], { method: "PATCH", body: JSON.stringify({ name }) });
+      await apiFetch(paths[level], { method: "PATCH", body: JSON.stringify({ name }) });
 
-      // Update local tree
-      setTree(prev => prev.map(p => renameInTree(p, editingId, name)) as any);
-      if (editLevel === "partition" && onRenamePartition) {
+      // Update in childMap (immutable update)
+      setChildMap(prev => {
+        const next = new Map(prev);
+        let updated = false;
+        next.forEach((children, key) => {
+          if (updated) return;
+          const idx = children.findIndex(c => c.id === editingId);
+          if (idx !== -1) {
+            const updatedChildren = [...children];
+            updatedChildren[idx] = { ...updatedChildren[idx], name };
+            next.set(key, updatedChildren);
+            updated = true;
+          }
+        });
+        return next;
+      });
+
+      if (level === "partition" && onRenamePartition) {
         onRenamePartition(editingId, name);
       }
       onTreeChanged?.();
@@ -532,24 +437,15 @@ export default function PartitionSidebar({
       console.error("Rename failed:", e);
     }
     setEditingId(null);
-    setEditLevel(null);
   };
 
-  function renameInTree(node: TreeItem, targetId: string, name: string): TreeItem {
-    if (node.id === targetId) return { ...node, name } as typeof node;
-    if ("children" in node && node.children) {
-      return { ...node, children: node.children.map(c => renameInTree(c, targetId, name)) as typeof node["children"] } as typeof node;
-    }
-    return node;
-  }
-
   // ── Delete ──
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; level: TreeNodeLevel } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; level: FlatLevel } | null>(null);
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     try {
-      const paths: Record<TreeNodeLevel, string> = {
+      const paths: Record<FlatLevel, string> = {
         partition: `/partitions/${deleteTarget.id}`,
         domain: `/domains/${deleteTarget.id}`,
         topic: `/topics/${deleteTarget.id}`,
@@ -557,22 +453,24 @@ export default function PartitionSidebar({
       };
       await apiFetch(paths[deleteTarget.level], { method: "DELETE" });
 
-      // Remove from tree
-      setTree(prev => prev
-        .filter(p => p.id !== deleteTarget.id)
-        .map(p => {
-          if ("children" in p && p.children) {
-            const newChildren = removeFromTree(p.children as TreeItem[], deleteTarget.id, deleteTarget.level);
-            if (newChildren === p.children) return p;
-            return { ...p, children: newChildren } as PartitionItem;
+      // Remove from childMap
+      setChildMap(prev => {
+        const next = new Map(prev);
+        next.forEach((children, key) => {
+          const filtered = children.filter(c => c.id !== deleteTarget.id);
+          if (filtered.length !== children.length) {
+            next.set(key, filtered);
           }
-          return p;
-        })
-      );
+        });
+        // Also remove cached children of the deleted node
+        next.delete(deleteTarget.id);
+        return next;
+      });
+      setExpandedSet(prev => { const next = new Set(prev); next.delete(deleteTarget.id); return next; });
+
       if (deleteTarget.level === "partition" && onDeletePartition) {
         onDeletePartition(deleteTarget.id);
       }
-      // If deleted the active conversation, deselect it
       if (deleteTarget.id === activeConversationId) {
         onSelectConversation(selectedPartitionId || "", "");
       }
@@ -586,16 +484,19 @@ export default function PartitionSidebar({
   // ── Render ──
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
-  const renderIcon = (item: TreeItem) => {
-    if (item.loading) return <span className="w-3 h-3 border border-[var(--color-accent)] border-t-transparent rounded-full animate-spin" />;
-    // Always show chevron for expandable levels (partition/domain/topic)
-    if (item.level !== "conversation") {
-      return item.expanded ? <ChevronDown size={14} className="text-[var(--color-text-muted)] flex-shrink-0" /> : <ChevronRight size={14} className="text-[var(--color-text-muted)] flex-shrink-0" />;
+  const renderIcon = (node: FlatNode) => {
+    if (loadingSet.has(node.id)) {
+      return <span className="w-3 h-3 border border-[var(--color-accent)] border-t-transparent rounded-full animate-spin" />;
+    }
+    if (node.level !== "conversation") {
+      return expandedSet.has(node.id)
+        ? <ChevronDown size={14} className="text-[var(--color-text-muted)] flex-shrink-0" />
+        : <ChevronRight size={14} className="text-[var(--color-text-muted)] flex-shrink-0" />;
     }
     return <span className="w-3.5 flex-shrink-0" />;
   };
 
-  const levelIcon = (level: TreeNodeLevel) => {
+  const levelIcon = (level: FlatLevel) => {
     switch (level) {
       case "partition": return <FolderOpen size={14} />;
       case "domain": return <BookOpen size={14} />;
@@ -604,17 +505,18 @@ export default function PartitionSidebar({
     }
   };
 
-  const renderItem = (item: TreeItem, depth: number = 0) => {
-    const isHovered = hoveredId === item.id;
-    const isEditing = editingId === item.id;
-    const isActive = item.level === "conversation" && item.id === activeConversationId;
-    const name = "name" in item ? (item as any).name : "";
-    const emoji = "emoji" in item ? (item as any).emoji || "" : "";
+  const renderItem = (node: FlatNode, depth: number) => {
+    const isHovered = hoveredId === node.id;
+    const isEditing = editingId === node.id;
+    const isActive = node.level === "conversation" && node.id === activeConversationId;
+    const children = childMap.get(node.id);
+    const isExpanded = expandedSet.has(node.id);
+    const hasChildren = node.level !== "conversation";
 
     return (
-      <div key={item.id}>
+      <div key={node.id}>
         <div
-          className={`flex items-center group relative cursor-pointer transition-colors`}
+          className="flex items-center group relative cursor-pointer transition-colors"
           style={{
             paddingLeft: `${depth * 16 + 8}px`,
             paddingRight: "8px",
@@ -627,28 +529,23 @@ export default function PartitionSidebar({
                 : "transparent",
             borderLeft: isActive ? "3px solid var(--color-accent)" : "3px solid transparent",
           }}
-          onMouseEnter={() => setHoveredId(item.id)}
+          onMouseEnter={() => setHoveredId(node.id)}
           onMouseLeave={() => setHoveredId(null)}
-          onClick={() => toggleExpand(item)}
+          onClick={() => toggleExpand(node)}
         >
           {/* Expand/collapse icon */}
-          <span className="flex-shrink-0 mr-1">{renderIcon(item)}</span>
+          <span className="flex-shrink-0 mr-1">{renderIcon(node)}</span>
 
           {isEditing ? (
             <InlineEdit
               value={editValue}
               onConfirm={confirmEdit}
-              onCancel={() => { setEditingId(null); setEditLevel(null); }}
+              onCancel={() => setEditingId(null)}
             />
           ) : (
             <>
-              {/* Level icon */}
-              <span className="flex-shrink-0 mr-1.5 text-[var(--color-text-muted)]">
-                {levelIcon(item.level)}
-              </span>
-
-              {/* Emoji + Name */}
-              <span className="flex-shrink-0 text-xs mr-1">{emoji}</span>
+              <span className="flex-shrink-0 mr-1.5 text-[var(--color-text-muted)]">{levelIcon(node.level)}</span>
+              {node.emoji && <span className="flex-shrink-0 text-xs mr-1">{node.emoji as string}</span>}
               <span
                 className="text-xs truncate flex-1 min-w-0"
                 style={{
@@ -656,84 +553,46 @@ export default function PartitionSidebar({
                   fontWeight: isActive ? 600 : 400,
                 }}
               >
-                {name || "未命名"}
+                {node.name || "未命名"}
               </span>
 
-              {/* Actions (hover) */}
               {isHovered && (
                 <div className="flex items-center gap-0.5 ml-1">
-                  {/* Quick new conversation (partition/domain/topic) */}
-                  {(item.level === "partition" || item.level === "domain" || item.level === "topic") && onNewConversation && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onNewConversation(item.level, item.id);
-                      }}
-                      className="p-1 text-[var(--color-text-muted)] hover:text-green-400 rounded"
-                      title="新建会话"
-                    >
+                  {(node.level === "partition" || node.level === "domain" || node.level === "topic") && onNewConversation && (
+                    <button onClick={(e) => { e.stopPropagation(); onNewConversation(node.level, node.id); }}
+                      className="p-1 text-[var(--color-text-muted)] hover:text-green-400 rounded" title="新建会话">
                       <MessageSquare size={12} />
                     </button>
                   )}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); startEdit(item); }}
-                    className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"
-                    title="重命名"
-                  >
+                  <button onClick={(e) => { e.stopPropagation(); startEdit(node); }}
+                    className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded" title="重命名">
                     <Pencil size={12} />
                   </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteTarget({ id: item.id, name, level: item.level });
-                    }}
-                    className="p-1 text-[var(--color-text-muted)] hover:text-red-400 rounded"
-                    title="删除"
-                  >
+                  <button onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: node.id, name: node.name || "", level: node.level }); }}
+                    className="p-1 text-[var(--color-text-muted)] hover:text-red-400 rounded" title="删除">
                     <Trash2 size={12} />
                   </button>
-                  {item.level === "partition" && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setCreateDialog({ level: "domain", parentId: item.id, title: "新建领域", placeholder: "领域名称", emoji: "📚" });
-                      }}
-                      className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"
-                      title="新建领域"
-                    >
+                  {node.level === "partition" && (
+                    <button onClick={(e) => { e.stopPropagation(); setCreateDialog({ level: "domain", parentId: node.id, title: "新建领域", placeholder: "领域名称", emoji: "📚" }); }}
+                      className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded" title="新建领域">
                       <Plus size={12} />
                     </button>
                   )}
-                  {item.level === "domain" && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setCreateDialog({ level: "topic", parentId: item.id, title: "新建专题", placeholder: "专题名称", emoji: "📝" });
-                      }}
-                      className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"
-                      title="新建专题"
-                    >
+                  {node.level === "domain" && (
+                    <button onClick={(e) => { e.stopPropagation(); setCreateDialog({ level: "topic", parentId: node.id, title: "新建专题", placeholder: "专题名称", emoji: "📝" }); }}
+                      className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded" title="新建专题">
                       <Plus size={12} />
                     </button>
                   )}
-                  {item.level === "topic" && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setCreateDialog({ level: "conversation", parentId: item.id, title: "新建对话", placeholder: "对话名称（可选）", emoji: "💬" });
-                      }}
-                      className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"
-                      title="新建对话"
-                    >
+                  {node.level === "topic" && (
+                    <button onClick={(e) => { e.stopPropagation(); setCreateDialog({ level: "conversation", parentId: node.id, title: "新建对话", placeholder: "对话名称（可选）", emoji: "💬" }); }}
+                      className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded" title="新建对话">
                       <Plus size={12} />
                     </button>
                   )}
-                  {item.level === "partition" && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); window.location.href = `/dashboard?tab=graph&partition_id=${item.id}`; }}
-                      className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"
-                      title="知识图谱"
-                    >
+                  {node.level === "partition" && (
+                    <button onClick={(e) => { e.stopPropagation(); window.location.href = `/dashboard?tab=graph&partition_id=${node.id}`; }}
+                      className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded" title="知识图谱">
                       <GitGraph size={12} />
                     </button>
                   )}
@@ -743,67 +602,56 @@ export default function PartitionSidebar({
           )}
         </div>
 
-        {/* Children */}
-        {"children" in item && item.children && item.expanded && (
+        {/* Children — only rendered when expanded */}
+        {hasChildren && isExpanded && children && (
           <div>
-            {item.children.map(child => renderItem(child, depth + 1))}
+            {children.map(child => renderItem(child, depth + 1))}
           </div>
         )}
       </div>
     );
   };
 
+  // Memoize root rendering to avoid re-rendering all items on unrelated state changes
+  const rootItems = useMemo(() => childMap.get(ROOT_KEY) || [], [childMap]);
+
   return (
     <div className="flex flex-col h-full bg-[var(--color-bg)] border-r border-[var(--color-border)]">
-      {/* Header — hidden in compact mode */}
       {!compact && (
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-[var(--color-border)]">
-        <div className="flex items-center gap-1.5">
-          <FolderOpen size={15} className="text-[var(--color-accent)]" />
-          <span className="text-xs font-semibold text-[var(--color-text)]">学习空间</span>
+        <div className="flex items-center justify-between px-3 py-2.5 border-b border-[var(--color-border)]">
+          <div className="flex items-center gap-1.5">
+            <FolderOpen size={15} className="text-[var(--color-accent)]" />
+            <span className="text-xs font-semibold text-[var(--color-text)]">学习空间</span>
+          </div>
+          <button onClick={onCreatePartition}
+            className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface)] transition-colors rounded" title="新建分区">
+            <Plus size={15} />
+          </button>
         </div>
-        <button
-          onClick={onCreatePartition}
-          className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface)] transition-colors rounded"
-          title="新建分区"
-        >
-          <Plus size={15} />
-        </button>
-      </div>
       )}
 
-      {/* Tree */}
       <div className="flex-1 overflow-y-auto py-1">
         {loading ? (
           <div className="px-4 py-8 text-center text-xs text-[var(--color-text-muted)]">加载中...</div>
-        ) : tree.length === 0 ? (
+        ) : rootItems.length === 0 ? (
           <div className="px-4 py-8 text-center">
             <Hash size={18} className="text-[var(--color-text-muted)] mx-auto mb-2" />
             <div className="text-xs text-[var(--color-text-muted)]">暂无分区</div>
             <div className="text-[10px] text-[var(--color-text-muted)] mt-1 opacity-60">发送消息将自动创建</div>
           </div>
         ) : (
-          tree.map(item => renderItem(item, 0))
+          rootItems.map(item => renderItem(item, 0))
         )}
       </div>
 
-      {/* Dialogs */}
       {createDialog && (
-        <NewItemDialog
-          open={!!createDialog}
-          title={createDialog.title}
-          placeholder={createDialog.placeholder}
-          emoji={createDialog.emoji}
-          onClose={() => setCreateDialog(null)}
-          onCreate={handleCreate}
-        />
+        <NewItemDialog open={!!createDialog} title={createDialog.title} placeholder={createDialog.placeholder}
+          emoji={createDialog.emoji} onClose={() => setCreateDialog(null)} onCreate={handleCreate} />
       )}
       {deleteTarget && (
         <ConfirmDialog
           message={`确定删除${deleteTarget.level === "partition" ? "分区" : deleteTarget.level === "domain" ? "领域" : deleteTarget.level === "topic" ? "专题" : "对话"}「${deleteTarget.name}」？此操作不可撤销。`}
-          onConfirm={confirmDelete}
-          onCancel={() => setDeleteTarget(null)}
-        />
+          onConfirm={confirmDelete} onCancel={() => setDeleteTarget(null)} />
       )}
     </div>
   );
