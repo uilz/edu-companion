@@ -100,7 +100,8 @@ CREATE TABLE IF NOT EXISTS conversation_user_meta (
     org_id TEXT,
     active_partition_id TEXT,
     knowledge_graphs JSONB DEFAULT '{}',
-    created_at DOUBLE PRECISION DEFAULT 0
+    created_at DOUBLE PRECISION DEFAULT 0,
+    updated_at DOUBLE PRECISION DEFAULT 0
 );
 
 -- Phase 6.5: 追加全字段列（幂等）

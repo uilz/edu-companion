@@ -1,10 +1,10 @@
-"""
-练习系统API v2.0
+"""练习系统API v2.0
 端点：题目生成、会话管理、答题提交、统计查询
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from datetime import datetime
@@ -50,15 +50,12 @@ from app.schemas.practice import (
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/practice", tags=["practice"])
 
-# ── PostgreSQL 数据库（替代内存存储）──
-
+# PostgreSQL 数据库（替代内存存储）
 from app.db.database import get_db
 _db = get_db()  # 启动时初始化（main.py lifespan 已调用）
 
 
-# ──────────────────────────────────────────────
 # 请求/响应模型
-# ──────────────────────────────────────────────
 
 class GenerateQuestionRequest(BaseModel):
     subject: str = "数学"
@@ -91,9 +88,7 @@ class HintRequest(BaseModel):
     current_level: int = 0
 
 
-# ──────────────────────────────────────────────
 # 题目管理
-# ──────────────────────────────────────────────
 
 from app.services.question_generator import get_question_generator, QuestionGenerator
 
@@ -190,9 +185,9 @@ async def get_questions(
             "question_id": r["question_id"], "skill_id": r["skill_id"],
             "subject": r["subject"], "bloom_level": r["bloom_level"],
             "text": r["text"],
-            "options": r.get("options_json") if isinstance(r.get("options_json"), list) else (__import__("json").loads(r["options_json"]) if isinstance(r.get("options_json"), str) else []),
+            "options": r.get("options_json") if isinstance(r.get("options_json"), list) else (json.loads(r["options_json"]) if isinstance(r.get("options_json"), str) else []),
             "correct_answer": r["correct_answer"], "explanation": r["explanation"],
-            "hints": r.get("hints_json") if isinstance(r.get("hints_json"), list) else (__import__("json").loads(r["hints_json"]) if isinstance(r.get("hints_json"), str) else []),
+            "hints": r.get("hints_json") if isinstance(r.get("hints_json"), list) else (json.loads(r["hints_json"]) if isinstance(r.get("hints_json"), str) else []),
             "difficulty": r["difficulty"], "answer_type": r["answer_type"],
             "source": r["source"], "status": r["status"],
         }
@@ -201,9 +196,7 @@ async def get_questions(
     return {"questions": questions, "total": len(rows)}
 
 
-# ──────────────────────────────────────────────
 # 练习会话
-# ──────────────────────────────────────────────
 
 @router.post("/sessions")
 async def create_session(req: CreateSessionRequest):
@@ -217,7 +210,7 @@ async def create_session(req: CreateSessionRequest):
         rows = db.fetchall("SELECT DISTINCT skill_id FROM questions WHERE status = 'active' LIMIT 4")
         skill_ids = [r["skill_id"] for r in rows] if rows else []
 
-    # ── 前置知识卡控 ──
+    # 前置知识卡控
     from domain.knowledge.checker import PrerequisiteChecker
     from domain.knowledge.prerequisites import ALL_PREREQUISITES
     from app.core.knowledge_trace import bkt_engine
@@ -293,7 +286,7 @@ async def create_session(req: CreateSessionRequest):
                       "difficulty": q.get("difficulty",0.5)} for q in questions],
     }
 
-    # Phase 4: 写共享状态（供 conversation_llm 等模块跨层读取）
+    # Phase 4: 写共享状态
     try:
         from app.shared.state import active_practice_sessions
         active_practice_sessions[session_id] = response_data["session"]
@@ -396,7 +389,6 @@ async def complete_session(
         logger.warning(f"同步统一知识状态失败: {e}")
 
     # Phase 4C: 发布 SessionCompleted 事件
-    # 异步消费: achievement check, conversation update
     try:
         from app.shared.events import SessionCompleted
         from app.application.di import container
@@ -420,9 +412,7 @@ async def complete_session(
     }
 
 
-# ──────────────────────────────────────────────
 # 答题与反馈
-# ──────────────────────────────────────────────
 
 @router.post("/submit")
 async def submit_answer(req: SubmitAnswerRequest):
@@ -443,7 +433,6 @@ async def submit_answer(req: SubmitAnswerRequest):
     is_correct = req.answer.strip().upper() == question["correct_answer"].strip().upper()
 
     # 记录答题
-    import uuid
     attempt_id = str(uuid.uuid4())
     now = datetime.now().isoformat()
 
@@ -491,7 +480,6 @@ async def submit_answer(req: SubmitAnswerRequest):
         logger.debug("学习事件记录失败", exc_info=True)
 
     # 生成反馈
-    import json
     options_list = question.get("options_json")
     if isinstance(options_list, str):
         options_list = json.loads(options_list)
@@ -568,16 +556,13 @@ async def submit_answer(req: SubmitAnswerRequest):
             }, "entry_id")
             feedback["error_entry"] = "created"
 
-    # Phase 4C: 事件驱动 — 发布 AnswerSubmitted 事件
-    # 异步消费: achievement check, adaptive planner, behavior analytics
-    # 这些副作用不再阻塞用户响应
+    # Phase 4C: 事件驱动
     old_mastery = bkt_engine.get_mastery_level(state)
     new_mastery = bkt_engine.get_mastery_level(updated_state)
 
     try:
         from app.shared.events import AnswerSubmitted as AnswerSubmittedEvent
         from app.infra.event_bus import EventBus
-        # 使用 DI 容器的事件总线（如果可用），否则用临时实例
         try:
             from app.application.di import container
             bus = container.event_bus
@@ -597,11 +582,10 @@ async def submit_answer(req: SubmitAnswerRequest):
             p_known_before=state.p_known,
             p_known_after=updated_state.p_known,
         )
-        # fire-and-forget: 不等待消费者完成
+        # fire-and-forget
         import asyncio
         asyncio.create_task(bus.publish(event))
 
-        # 如果 mastery 跨级别变化，额外发布 KnowledgeStateUpdated 事件
         SIGNIFICANT = {("初学","发展中"),("发展中","接近掌握"),("接近掌握","已掌握"),
                        ("未接触","初学"),("初学","接近掌握")}
         if (old_mastery, new_mastery) in SIGNIFICANT:
@@ -653,6 +637,94 @@ async def get_hint(req: HintRequest):
     return {
         "hint": {"level": level, "text": text, "type": hint_type},
         "next_level_available": level < 4,
+    }
+
+
+# ──────────────────────────────────────────────
+# 对话内联练习（Inline Practice）
+# 从 response_block 内容直接校验答案
+# ──────────────────────────────────────────────
+
+
+class InlineAnswerRequest(BaseModel):
+    block_id: str
+    answer: str
+
+
+class InlineHintRequest(BaseModel):
+    block_id: str
+
+
+@router.post("/inline/answer")
+async def inline_answer(req: InlineAnswerRequest):
+    """对话内联练习 — 提交答案，读取 response_block 内容校验"""
+    from app.services.storage import storage
+
+    data = storage.load("default_user")
+    block = data.response_blocks.get(req.block_id)
+    if not block:
+        raise HTTPException(404, "Practice block not found")
+
+    content = block.content or {}
+    correct_answer = content.get("correct_answer", "").strip().upper()
+    explanation = content.get("explanation") or content.get("reply_expected", "") or ""
+    question_id = content.get("question_id", "")
+    skill_id = content.get("skill_id", "")
+
+    is_correct = req.answer.strip().upper() == correct_answer
+
+    # 更新知识状态
+    if skill_id:
+        state = bkt_engine.load_or_create("default_user", skill_id)
+        updated_state = bkt_engine.update(state, is_correct)
+        bkt_engine.save_state("default_user", updated_state)
+        # CognitiveNode
+        try:
+            from app.cognitive.events import submit_practice
+            submit_practice(user_id="default_user", node_id=skill_id, success=is_correct, latency_ms=0, consecutive=True)
+        except Exception:
+            pass
+        knowledge_update = {
+            "skill_id": skill_id,
+            "p_known_before": state.p_known,
+            "p_known_after": updated_state.p_known,
+            "mastery_level": bkt_engine.get_mastery_level(updated_state),
+            "cognitive_proficiency": _get_cognitive_proficiency("default_user", skill_id),
+        }
+    else:
+        knowledge_update = {}
+
+    # 回复文本
+    if is_correct:
+        reply_text = f"✅ 正确！{explanation}" if explanation else "✅ 正确！"
+    else:
+        correct_label = content.get("correct_answer", "")
+        reply_text = f"❌ 不对哦。正确答案是 **{correct_label}**。{explanation}" if explanation else f"❌ 不对哦。正确答案是 **{correct_label}**。"
+
+    return {
+        "is_correct": is_correct,
+        "reply_text": reply_text,
+        "knowledge_update": knowledge_update,
+    }
+
+
+@router.post("/inline/hint")
+async def inline_hint(req: InlineHintRequest):
+    """对话内联练习 — 获取提示"""
+    from app.services.storage import storage
+
+    data = storage.load("default_user")
+    block = data.response_blocks.get(req.block_id)
+    if not block:
+        raise HTTPException(404, "Practice block not found")
+
+    content = block.content or {}
+    hint_text = content.get("hint", "再仔细想想题意，分析每个选项的差异。")
+    hint_level = content.get("hint_level", 1)
+
+    return {
+        "hint_text": hint_text,
+        "level": hint_level + 1 if isinstance(hint_level, (int, float)) else 2,
     }
 
 
@@ -726,3 +798,8 @@ async def add_conversation_evidence(req: EvidenceRequest):
         branch_id=req.branch_id,
     )
     return {"ok": True, "skill_id": req.skill_id, "evidence_type": req.evidence_type}
+
+
+# ──────────────────────────────────────────────
+# 内联练习遗留端点兼容（旧前端 InlinePracticeBlock 用 block_id 调用的直接校验）
+# ──────────────────────────────────────────────

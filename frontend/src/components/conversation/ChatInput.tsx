@@ -53,7 +53,7 @@ export default function ConversationChatInput({
     try {
       const formData = new FormData();
       formData.append("file", file);
-      if (_convId) formData.append("branch_id", _convId as string);
+      if (_convId) formData.append("conversation_id", _convId as string);
       const res = await fetch("/api/conversations/workspace/upload", { method: "POST", body: formData });
       if (!res.ok) {
         const err = await res.json();
