@@ -285,7 +285,7 @@ export default function PartitionSidebar({
     }
   }, [loadChildren, onSelectConversation, selectedPartitionId]);
 
-  // ── Auto-expand path to active conversation ──
+  // ── Auto-expand partition only (not domains/topics) ──
   const prevAutoExpandRef = useRef("");
   useEffect(() => {
     const convId = activeConversationId || initialConversationId || "";
@@ -306,7 +306,7 @@ export default function PartitionSidebar({
         }
         if (cancelled) return;
 
-        // 2. Load + expand the partition
+        // 2. Load + expand the partition (domains become visible)
         const partition = childMapRef.current.get(ROOT_KEY)?.find(p => p.id === selectedPartitionId);
         if (!partition) return;
 
@@ -316,27 +316,9 @@ export default function PartitionSidebar({
         }
         setExpandedSet(prev => { const next = new Set(prev); next.add(selectedPartitionId); return next; });
 
-        // 3. For each domain, load + expand
-        const domains = childMapRef.current.get(selectedPartitionId) || [];
-        for (const domain of domains) {
-          if (cancelled) return;
-          if (!childMapRef.current.has(domain.id)) {
-            await loadChildren(domain);
-            if (cancelled) return;
-          }
-          setExpandedSet(prev => { const next = new Set(prev); next.add(domain.id); return next; });
-
-          // 4. For each topic, load + expand
-          const topics = childMapRef.current.get(domain.id) || [];
-          for (const topic of topics) {
-            if (cancelled) return;
-            if (!childMapRef.current.has(topic.id)) {
-              await loadChildren(topic);
-              if (cancelled) return;
-            }
-            setExpandedSet(prev => { const next = new Set(prev); next.add(topic.id); return next; });
-          }
-        }
+        // NOTE: Domains/topics are NOT auto-expanded here.
+        // User clicks domains/topics individually to expand them.
+        // This prevents "expanding one affects others" perception.
       } catch (e) {
         console.error("Auto-expand failed:", e);
       }

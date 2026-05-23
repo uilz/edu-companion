@@ -684,14 +684,16 @@ export function useConversation(): UseConversationReturn {
   );
 
   // ── Handle switch banner ──
-  const handleSwitchConfirm = useCallback(() => {
+  const handleSwitchConfirm = useCallback(async () => {
     if (switchBanner) {
+      // Refresh partitions first so the sidebar has the target partition
+      await loadPartitions();
       setSelectedPartitionId(switchBanner.partitionId);
       setActiveConversationId(switchBanner.conversationId);
       setConvError(null);
       setSwitchBanner(null);
     }
-  }, [switchBanner]);
+  }, [switchBanner, loadPartitions]);
 
   const handleSwitchDismiss = useCallback(() => {
     setSwitchBanner(null);
