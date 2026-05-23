@@ -78,6 +78,11 @@ tmp/
 *.sqlite3
 *.db
 
+# Models (keep dir, ignore contents)
+models/*
+!models/README.md
+backend/models/*
+
 # Jupyter
 .ipynb_checkpoints/
 tsconfig.tsbuildinfo
