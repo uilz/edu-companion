@@ -94,11 +94,13 @@ async def list_partitions(request: Request):
 
 @router.post("/partitions")
 async def create_partition(req: CreatePartitionRequest):
+    """创建新分区"""
     partition = tree_ops.create_partition(USER_ID, req.name, req.subject, req.direction, req.emoji)
     return {"partition": partition}
 
 @router.patch("/partitions/{partition_id}")
 async def rename_partition(partition_id: str, req: RenameRequest):
+    """重命名分区"""
     try:
         p = tree_ops.rename_partition(USER_ID, partition_id, req.name)
         return {"partition": p.model_dump(mode="json")}
@@ -107,6 +109,7 @@ async def rename_partition(partition_id: str, req: RenameRequest):
 
 @router.delete("/partitions/{partition_id}")
 async def delete_partition(partition_id: str):
+    """删除分区及其下属所有领域/专题/对话"""
     try:
         tree_ops.delete_partition(USER_ID, partition_id)
         return {"ok": True}
@@ -120,6 +123,7 @@ async def delete_partition(partition_id: str):
 
 @router.get("/partitions/{partition_id}/domains")
 async def list_domains(partition_id: str, request: Request):
+    """列出指定分区下的所有领域"""
     etag = _check_etag(request)
     data = storage.load(USER_ID)
     domains = [
@@ -135,6 +139,7 @@ async def list_domains(partition_id: str, request: Request):
 
 @router.post("/domains")
 async def create_domain(req: CreateDomainRequest):
+    """在指定分区下创建新领域"""
     try:
         d = tree_ops.create_domain(USER_ID, req.partition_id, req.name, req.emoji)
         return {"domain": d.model_dump(mode="json")}
@@ -143,6 +148,7 @@ async def create_domain(req: CreateDomainRequest):
 
 @router.patch("/domains/{domain_id}")
 async def rename_domain(domain_id: str, req: RenameRequest):
+    """重命名领域"""
     try:
         d = tree_ops.rename_domain(USER_ID, domain_id, req.name)
         return {"domain": d.model_dump(mode="json")}
@@ -151,6 +157,7 @@ async def rename_domain(domain_id: str, req: RenameRequest):
 
 @router.delete("/domains/{domain_id}")
 async def delete_domain(domain_id: str):
+    """删除领域及其下属所有专题/对话"""
     try:
         tree_ops.delete_domain(USER_ID, domain_id)
         return {"ok": True}
@@ -164,6 +171,7 @@ async def delete_domain(domain_id: str):
 
 @router.get("/domains/{domain_id}/topics")
 async def list_topics(domain_id: str, request: Request):
+    """列出指定领域下的所有专题"""
     etag = _check_etag(request)
     data = storage.load(USER_ID)
     topics = [
@@ -179,6 +187,7 @@ async def list_topics(domain_id: str, request: Request):
 
 @router.post("/topics")
 async def create_topic(req: CreateTopicRequest):
+    """在指定领域下创建新专题"""
     try:
         t = tree_ops.create_topic(USER_ID, req.domain_id, req.name, req.emoji)
         return {"topic": t.model_dump(mode="json")}
@@ -187,6 +196,7 @@ async def create_topic(req: CreateTopicRequest):
 
 @router.patch("/topics/{topic_id}")
 async def rename_topic(topic_id: str, req: RenameRequest):
+    """重命名专题"""
     try:
         t = tree_ops.rename_topic(USER_ID, topic_id, req.name)
         return {"topic": t.model_dump(mode="json")}
@@ -195,6 +205,7 @@ async def rename_topic(topic_id: str, req: RenameRequest):
 
 @router.delete("/topics/{topic_id}")
 async def delete_topic(topic_id: str):
+    """删除专题及其下属所有对话和消息"""
     try:
         tree_ops.delete_topic(USER_ID, topic_id)
         return {"ok": True}
@@ -208,6 +219,7 @@ async def delete_topic(topic_id: str):
 
 @router.get("/topics/{topic_id}/conversations")
 async def list_conversations(topic_id: str, request: Request):
+    """列出指定专题下的所有未归档对话"""
     etag = _check_etag(request)
     data = storage.load(USER_ID)
     if topic_id not in data.topics:
@@ -225,6 +237,7 @@ async def list_conversations(topic_id: str, request: Request):
 
 @router.post("/conversations")
 async def create_conversation(req: CreateConversationRequest):
+    """在专题下创建新对话"""
     try:
         c = tree_ops.create_conversation(USER_ID, req.topic_id, req.name)
         return {"conversation": c.model_dump(mode="json")}
@@ -233,6 +246,7 @@ async def create_conversation(req: CreateConversationRequest):
 
 @router.patch("/conversations/{conv_id}")
 async def rename_conversation(conv_id: str, req: RenameRequest):
+    """重命名对话"""
     try:
         c = tree_ops.rename_conversation(USER_ID, conv_id, req.name)
         return {"conversation": c.model_dump(mode="json")}
@@ -241,6 +255,7 @@ async def rename_conversation(conv_id: str, req: RenameRequest):
 
 @router.delete("/conversations/{conv_id}")
 async def delete_conversation(conv_id: str):
+    """删除对话（软删消息）"""
     try:
         tree_ops.delete_conversation(USER_ID, conv_id)
         return {"ok": True}
@@ -249,6 +264,7 @@ async def delete_conversation(conv_id: str):
 
 @router.post("/conversations/{conv_id}/switch")
 async def switch_conversation(conv_id: str, topic_id: str):
+    """切换专题的活跃对话"""
     try:
         c = tree_ops.switch_conversation(USER_ID, topic_id, conv_id)
         return {"conversation": c.model_dump(mode="json")}
@@ -262,6 +278,7 @@ async def switch_conversation(conv_id: str, topic_id: str):
 
 @router.get("/conversations/{conv_id}/messages")
 async def list_messages(conv_id: str, request: Request, limit: int = 50, offset: int = 0):
+    """列出对话中的消息列表（分页，不包含已删除消息）"""
     etag = _check_etag(request)
     data = storage.load(USER_ID)
     conv = data.conversations.get(conv_id)
@@ -327,6 +344,7 @@ async def list_partition_messages(partition_id: str, request: Request, limit: in
 
 @router.post("/message")
 async def send_message(req: SendMessageRequest):
+    """发送消息（自动分类路由 + LLM 回复）"""
     from app.services.conversation_llm import send_and_reply
 
     # v4: auto_resolve handles classification + routing
@@ -353,6 +371,7 @@ async def send_message(req: SendMessageRequest):
 
 @router.websocket("/ws")
 async def websocket_conversation(websocket: WebSocket) -> None:
+    """WebSocket 流式对话端点，支持逐 token 流式输出和上下文切换事件"""
     await websocket.accept()
     user_id = USER_ID
 
@@ -438,7 +457,7 @@ async def _publish_reply_event(user_id, partition_id, conversation_id, content, 
             contains_math=contains_math,
         ))
     except Exception:
-        pass
+        logger.debug("事件发布失败（fire-and-forget）", exc_info=True)
 
 
 # ═══════════════════════════════════════════
@@ -466,6 +485,7 @@ async def modify_message(message_id: str, req: ModifyMessageRequest):
 
 @router.delete("/messages/{message_id}")
 async def delete_message(message_id: str):
+    """软删除消息及其子树"""
     tree_ops.delete_message(USER_ID, message_id)
     return {"ok": True}
 
@@ -476,6 +496,7 @@ async def delete_message(message_id: str):
 
 @router.get("/messages/{message_id}/blocks")
 async def get_message_blocks(message_id: str):
+    """获取消息关联的所有响应块"""
     data = storage.load(USER_ID)
     blocks = [b.model_dump(mode="json") for b in data.response_blocks.values() if b.message_id == message_id]
     return {"blocks": blocks}
@@ -502,6 +523,7 @@ async def get_message(message_id: str):
 
 @router.get("/response-blocks/{block_id}")
 async def get_response_block(block_id: str):
+    """获取单个响应块"""
     data = storage.load(USER_ID)
     block = data.response_blocks.get(block_id)
     if not block:
@@ -515,6 +537,7 @@ async def get_response_block(block_id: str):
 
 @router.get("/emotion/trend")
 async def get_emotion_trend(window_hours: int = 72):
+    """获取用户情绪趋势分析"""
     from app.services.emotion_analyzer import emotion_analyzer
     trend = await emotion_analyzer.analyze_trend(USER_ID, window_hours=window_hours)
     return trend.to_dict()
@@ -526,6 +549,7 @@ async def get_emotion_trend(window_hours: int = 72):
 
 @router.get("/jobs/{job_id}")
 async def get_job_status(job_id: str):
+    """查询后台任务状态"""
     from app.services.background_jobs import job_manager
     job = job_manager.get_job(USER_ID, job_id)
     if not job:
@@ -534,6 +558,7 @@ async def get_job_status(job_id: str):
 
 @router.post("/jobs/{job_id}/cancel")
 async def cancel_job(job_id: str):
+    """取消后台任务"""
     from app.services.background_jobs import job_manager
     success = await job_manager.cancel(USER_ID, job_id)
     if not success:
@@ -542,6 +567,7 @@ async def cancel_job(job_id: str):
 
 @router.get("/jobs/{job_id}/block")
 async def get_job_response_block(job_id: str):
+    """获取任务关联的响应块"""
     from app.services.background_jobs import job_manager
     job = job_manager.get_job(USER_ID, job_id)
     if not job:
@@ -559,6 +585,7 @@ async def get_job_response_block(job_id: str):
 
 @router.get("/conversations/{conv_id}/materials")
 async def list_conversation_material_refs(conv_id: str):
+    """列出对话关联的学习资料"""
     data = storage.load(USER_ID)
     conv = data.conversations.get(conv_id)
     if not conv:
@@ -578,6 +605,7 @@ async def list_conversation_material_refs(conv_id: str):
 
 @router.get("/conversations/{conv_id}/practice-suggestions")
 async def get_practice_suggestions(conv_id: str):
+    """获取基于对话上下文的练习建议"""
     data = storage.load(USER_ID)
     conv = data.conversations.get(conv_id)
     if not conv:
@@ -620,6 +648,7 @@ async def upload_workspace_file(
     file: UploadFile = File(...),
     conversation_id: str = Form(...),
 ):
+    """上传文件到对话工作空间"""
     if not file.filename:
         raise HTTPException(400, "No file selected")
 
@@ -654,6 +683,7 @@ async def upload_workspace_file(
 
 @router.get("/workspace/files")
 async def list_workspace_files(conversation_id: str = Query(...)):
+    """列出工作空间中的文件"""
     data = storage.load(USER_ID)
     conv = data.conversations.get(conversation_id)
     if not conv:
@@ -675,6 +705,7 @@ async def list_workspace_files(conversation_id: str = Query(...)):
 
 @router.delete("/workspace/files/{file_id}")
 async def delete_workspace_file(file_id: str, conversation_id: str = Query(...)):
+    """删除工作空间中的文件"""
     data = storage.load(USER_ID)
     record = data.files.get(file_id)
     if not record:
@@ -688,6 +719,7 @@ async def delete_workspace_file(file_id: str, conversation_id: str = Query(...))
 
 @router.get("/workspace/download/{file_id}")
 async def download_workspace_file(file_id: str):
+    """下载工作空间中的文件"""
     data = storage.load(USER_ID)
     record = data.files.get(file_id)
     if not record:

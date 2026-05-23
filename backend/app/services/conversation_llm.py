@@ -24,11 +24,19 @@ from app.services.tree_ops import tree_ops
 from app.services.classifier import classifier
 from app.services.tool_executor import tool_executor, predict_tools, SLOW_TOOLS
 
+from app.services.prompts import SYSTEM_PROMPT
+from app.services.emotion_analyzer import emotion_analyzer
+from app.services.context_builder import _build_context_messages
+
 logger = logging.getLogger(__name__)
 
 
+# ═══════════════════════════════════════════════
+# 基础工具函数
+# ═══════════════════════════════════════════════
+
 def _find_active_conversation(data, partition_id: str):
-    """v4: 通过 topic → domain 找到分区下的活跃对话"""
+    """通过 topic → domain 找到分区下的活跃对话（v4 数据模型）"""
     for topic in data.topics.values():
         domain = data.domains.get(topic.domain_id)
         if domain and domain.partition_id == partition_id:
@@ -38,9 +46,12 @@ def _find_active_conversation(data, partition_id: str):
     return None
 
 
-# P0: Post-message hooks (meta history + branch auto-rename)
+# ═══════════════════════════════════════════════
+# P0 钩子：消息后处理（元历史 / 分支重命名 / 图谱更新）
+# ═══════════════════════════════════════════════
+
 def _p0_post_message_hooks(user_id: str, partition_id: str, node: TreeNode) -> None:
-    """消息存储后的P0钩子：异步写元历史 + 触发分支命名/摘要"""
+    """消息存储后的 P0 钩子：异步写元历史 + 触发分支命名/摘要"""
     import asyncio
     try:
         loop = asyncio.get_event_loop()
@@ -114,111 +125,16 @@ def _trigger_graph_update(user_id: str, conversation_id: str, new_branch_name: s
         if loop.is_running():
             loop.create_task(_update())
     except Exception:
-        pass
+        logger.debug("异步图谱更新事件循环获取失败", exc_info=True)
 
 
-# ── System Prompt ──
-
-SYSTEM_PROMPT = """你是「苹小果」，一个温暖的智能伴学助手。你像一位耐心的学长/学姐，陪伴学生度过学习中的每一个时刻。
-
-## 人格特质
-- **温暖陪伴**：用亲切自然的语气交流，像朋友一样。适当使用 emoji 传递温度 🌱
-- **情绪感知**：如果学生表现出挫败、焦虑或疲惫，先共情安慰，再给建议。不说"别紧张"这类否定情绪的话，而是"这确实不容易，你已经很努力了"
-- **真诚鼓励**：表扬具体行为（"这道题的思路很清晰"），不空洞夸赞
-- **耐心启发**：对于概念性问题，先反问引导学生自己思考，再给出答案。如"你觉得这个现象背后的原因可能是什么？"
-- **适度幽默**：在合适的时候可以轻松一下，但不过度
-
-## 回答规范
-- 用通俗易懂的语言解释概念，避免堆砌术语
-- **数学公式**：使用 LaTeX 格式（$...$ 行内，$$...$$ 块级），所有数学符号都用 LaTeX，不用 Unicode 近似
-- **代码块**：涉及代码或算法时，必须使用 \`\`\`语言名 包裹。例如：
-  \`\`\`python
-  def binary_search(arr, target):
-      left, right = 0, len(arr) - 1
-      while left <= right:
-          mid = (left + right) // 2
-          if arr[mid] == target:
-              return mid
-          elif arr[mid] < target:
-              left = mid + 1
-          else:
-              right = mid - 1
-      return -1
-  \`\`\`
-  不要输出裸代码（不带 \`\`\` 包裹），不要用中文标点代替英文标点
-- 回复简洁但完整，每次控制在合理长度
-- **引用溯源**：如果回答涉及具体知识点，在末尾用 [来源: 知识点名称] 标注。如 [来源: 导数与微分] [来源: 牛顿第二定律]
-- 涉及多个知识点时，分别标注
-
-## 场景策略
-- **学生提问概念**："为什么XXX？" → 先反问引导思考 → 再解释核心原理 → 举例说明
-- **学生做错题**：先理解错因 → 针对性解释 → 鼓励重试 → 标注相关知识点
-- **学生说累/难**：先共情 → 简短建议（休息/换个方式）→ 不强行推学习
-- **学生求鼓励**：回顾其进步 → 具体肯定 → 设定小目标
-
-## 启发式追问规则（苏格拉底教学法）
-当学生提问概念性、方法性或原理性问题时，不要直接给答案。按以下规则：
-
-### 触发条件
-1. 概念定义类：「什么是X？」「X的定义？」→ 反问相关前置概念
-2. 方法步骤类：「怎么做？」「如何推导？」→ 反问「你试过哪些思路？」
-3. 原理原因类：「为什么X成立？」「为什么这样算？」→ 反问「你猜测可能是什么原因？」
-
-### 追问示例
-- 学生：「什么是导数？」
-  → 你：「好问题！在回答之前，你能先说说'瞬时变化率'是什么意思吗？不用担心说错～」
-- 学生：「怎么求极限？」
-  → 你：「你先试试看？你目前想到的方法是什么？」
-
-### 追问后
-- 学生回答后：先肯定（「很好！你已经抓住了关键」），再基于其回答水平调整讲解深度
-- 学生说不知道：给提示（「可以从这个角度想……」），再逐步讲解
-- 追问不超过 1 轮——如果学生第二次仍说不知道，直接给出完整解释
-
-### 例外（不追问，直接回答）
-- 学生明确说「直接告诉我」「快说答案」「别反问」
-- 纯计算题（「求 f(x)=x^2 的导数」）
-- 学生连续问了 3+ 个独立问题（避免节奏过慢）
-- 学生情绪明显挫败或急躁（先安慰，再回答）
-
-## 主动引导
-- **概念讲解后**：自然地邀请学生做练习巩固。如"要不要来两道题试试？💪"
-- **学生表示理解时**：建议搜索相关视频加深印象。如"需要我帮你搜一下B站上这个知识点的讲解视频吗？"
-- **学生卡住时**：推荐换个学习方式。如"要不要先看个视频换个角度理解？"
-- **学生复习整理时**：可以生成思维导图或学习笔记。如"我帮你整理成思维导图吧？📋"
-- **不要每个回复都推荐**，只在合适时机自然提起
-
-## 可用功能（你可以主动提供）
-你能帮助学生做以下事情，请在合适的时机自然地提供：
-- **📝 生成练习题**：针对当前知识点出题，支持基础和进阶难度
-- **🔍 搜索视频讲解**：在B站、YouTube、知乎等平台搜索教程
-- **🧠 生成思维导图**：整理知识结构，可视化学习内容
-- **📄 生成学习笔记**：输出 Markdown、PDF 等格式的复习文档
-- **🖼️ 生成示意图**：函数图像、概念图、流程图等
-学生不需要知道这些功能的名字，你只需像朋友一样说"我帮你搜个视频？"或"要不要做两道题？"
-
-## 数学公式
-- **行内公式**使用 $...$，如 $f(x) = x^2$
-- **块级公式**使用 $$...$$，单独成行，如 $$\\int_0^1 x^2 dx = \\frac{1}{3}$$
-- 所有数学符号都用 LaTeX 写，不用 Unicode 近似
-
-## 安全边界
-- 不替代专业心理咨询，如果学生表现出严重心理问题，建议寻求专业帮助
-- 不提供考试作弊、论文代写等违规帮助
-- 涉及医学、法律等专业领域时，声明建议仅供参考
-
-## 输出格式注意
-- **不要以自我介绍开头**（如"我是苹小果"）——除非用户主动询问你是谁
-- **不要重复问候**——每次回复直奔主题，不重复说"你好""嗨"等开场白
-- 如果对话已经开始，直接回应上一条消息的内容，不要重新打招呼"""
-
-# ── 情绪分析（多维分类，替代旧关键词匹配）──
-
-from app.services.emotion_analyzer import emotion_analyzer
+# ═══════════════════════════════════════════════
+# 情绪分析与引用溯源
+# ═══════════════════════════════════════════════
 
 # 向后兼容的快捷函数
 def detect_frustration(text: str) -> bool:
-    """检测用户消息是否包含挫败信号（兼容旧接口）"""
+    """检测用户消息是否包含挫败信号（兼容旧接口，委托 emotion_analyzer）"""
     result = emotion_analyzer.quick_detect(text)
     return result == "frustration"
 
@@ -265,181 +181,23 @@ def _resolve_skill_ids(labels: list[str], partition_id: str, user_id: str) -> li
     return skill_ids
 
 
-def _build_context_messages(
-    partition: Partition,
-    conversation: Conversation,
-    recent_messages: list[TreeNode],
-    user_text: str,
-    user_id: str = "",
-) -> list[dict[str, str]]:
-    """
-    v4: 构建发给 LLM 的消息列表（conversation 替代 branch）。
-    使用紧凑格式节省 token。
-    """
-    messages: list[dict[str, str]] = []
-
-    # 系统提示
-    system_content = SYSTEM_PROMPT
-
-    # P0: 多维情绪感知 → 注入情绪上下文
-    emotion_ctx = emotion_analyzer.build_emotion_context(user_id)
-    if emotion_ctx:
-        system_content += emotion_ctx
-
-    # P0: 统一知识状态 → 注入 LLM 上下文
-    try:
-        from app.services.knowledge_bridge import knowledge_bridge
-        knowledge_ctx = knowledge_bridge.get_knowledge_context()
-        if knowledge_ctx:
-            system_content += f"\n\n{knowledge_ctx}"
-    except Exception:
-        pass
-
-    # P0: 当前消息情绪检测 → 注入即时策略
-    try:
-        quick_emotion = emotion_analyzer.quick_detect(user_text)
-    except Exception:
-        quick_emotion = None
-    if quick_emotion:
-        severity = "negative" if quick_emotion in ("frustration", "anxiety", "overwhelm", "boredom", "procrastination") else "neutral"
-        if severity == "negative":
-            strategy = (
-                "\n\n⚠️ 学生当前表现出负面情绪（{label}）。请优先共情和鼓励，"
-                "不要急于纠正或给建议。先肯定ta的努力，再温和地提供帮助。"
-                "语气要比平时更温暖、更有耐心。"
-            ).format(label={"frustration": "挫败", "anxiety": "焦虑", "overwhelm": "压力大", "boredom": "无聊", "procrastination": "拖延"}.get(quick_emotion, quick_emotion))
-            system_content += strategy
-        elif quick_emotion == "motivated":
-            system_content += "\n\n💪 学生充满动力，可以适当加难度，趁热打铁！"
-        elif quick_emotion == "achievement":
-            system_content += "\n\n🎉 学生取得了进展，请肯定ta的具体进步。"
-
-    # P0: 最近对话挫败模式检测
-
-    # P1: 注入练习上下文
-    try:
-        from app.services.practice_integrator import inject_practice_context
-        practice_ctx = inject_practice_context(user_id, partition.id)
-        if practice_ctx:
-            system_content += f"\n\n{practice_ctx}"
-    except Exception:
-        pass
-
-    # P2: 检测练习回顾查询，注入回顾数据
-    try:
-        from app.services.practice_recall import practice_recall
-        if practice_recall.is_recall_query(user_text):
-            from app.shared.state import active_practice_sessions
-            recall_sessions = list(active_practice_sessions.values())
-            if recall_sessions:
-                recall_text = practice_recall.generate_recall(
-                    sessions=recall_sessions,
-                    days=7,
-                    subject_filter=partition.subject or "",
-                )
-                system_content += f"\n\n[练习回顾]\n{recall_text}\n\n请在回复中自然地引用这些练习数据来回答用户。"
-    except Exception:
-        pass
-
-    # P2: 上下文感知练习选题建议
-    try:
-        from app.services.context_trigger import context_trigger
-        from app.services.storage import storage as _storage2
-        data = _storage2.load(user_id)
-        if conversation:
-            recent_msgs = []
-            for nid in conversation.path[-5:]:
-                node = data.nodes.get(nid)
-                if node and not node.is_deleted:
-                    recent_msgs.append(node)
-            ctx = context_trigger.trigger(
-                user_id=user_id,
-                conversation=conversation,
-                recent_messages=recent_msgs,
-            )
-            system_content += f"\n\n[选题建议] 当前对话主题涉及: {ctx['skill_ids']}, Bloom: {ctx['bloom_level']}, 推荐难度: {ctx['difficulty']:.2f}"
-            if ctx.get('confused'):
-                system_content += ", ⚠️ 检测到困惑信号"
-            # 推荐多平台视频搜索
-            if any(s for s in ctx.get('skill_ids', []) if s != 'general_practice'):
-                system_content += "\n[Media] 如果用户需要视频讲解，推荐生成多平台搜索链接(B站/YouTube/知乎)"
-    except Exception:
-        pass
-
-    # 添加分区上下文
-    if partition.context_summary:
-        system_content += f"\n\n当前分区：{partition.name}"
-        system_content += f"\n分区摘要：{partition.context_summary}"
-
-    # 注入当前分区的知识图谱（替代静态知识点列表）
-    try:
-        graph = data.knowledge_graphs.get(partition_id)
-        if graph and graph.nodes:
-            nodes_list = list(graph.nodes.values())
-            mastered = [n.label for n in nodes_list if n.mastery >= 80]
-            weak = [n.label for n in nodes_list if 10 <= n.mastery < 50]
-            untouched = [n.label for n in nodes_list if n.mastery == 0]
-
-            system_content += f"\n\n📊 知识图谱 ({len(nodes_list)}个知识点):"
-            if mastered:
-                system_content += f"\n   ✅ 已掌握: {', '.join(mastered[:5])}"
-            if weak:
-                system_content += f"\n   🔶 薄弱: {', '.join(weak[:5])}"
-            if untouched:
-                system_content += f"\n   ⬜ 未接触: {', '.join(untouched[:3])}"
-
-            # 推荐下一步
-            ready_to_learn = [n for n in nodes_list if n.mastery == 0 and n.priority >= 5]
-            if ready_to_learn:
-                next_up = sorted(ready_to_learn, key=lambda n: -n.priority)[:3]
-                system_content += f"\n   🎯 建议下一步: {', '.join(n.label for n in next_up)}"
-
-            # 可用知识点供引用溯源
-            all_labels = [n.label for n in nodes_list[:15]]
-            system_content += f"\n\n可引用的知识点: {', '.join(all_labels)}"
-            system_content += "\n回答涉及这些知识点时，在末尾标注 [来源: 知识点名称]。"
-    except Exception:
-        pass
-
-    messages.append({"role": "system", "content": system_content})
-
-    # 添加历史消息（最多最近8条）
-    for msg in recent_messages[-8:]:
-        if msg.is_deleted:
-            continue
-        # 提取文本内容
-        text_parts = []
-        for block in msg.content_blocks:
-            if isinstance(block, TextBlock):
-                text_parts.append(block.text)
-            elif hasattr(block, "text"):
-                text_parts.append(block.text)
-        text = " ".join(text_parts) if text_parts else "[媒体内容]"
-
-        # 截断过长的消息
-        if len(text) > 500:
-            text = text[:500] + "..."
-
-        role = msg.role if msg.role in ("user", "assistant") else "assistant"
-        messages.append({"role": role, "content": text})
-
-    # 添加当前用户消息
-    messages.append({"role": "user", "content": user_text})
-
-    return messages
-
+# ═══════════════════════════════════════════════
+# 回复生成（非流式 / 带工具 / 流式）
+# ═══════════════════════════════════════════════
 
 async def generate_reply(
     user_id: str,
     partition_id: str,
     user_text: str,
 ) -> str:
-    """
-    生成助手回复（非流式）。
-    1. 加载分区上下文
-    2. 构建消息列表
-    3. 调用 LLM
-    4. 返回完整回复
+    """生成助手回复（非流式）。
+
+    流程:
+        1. 加载分区 & 活跃对话
+        2. 获取最近 8 条消息
+        3. 构建完整 LLM 上下文（含情绪 / 知识图谱 / 练习上下文）
+        4. 调用 LLM 生成
+        5. 返回纯文本回复
     """
     data = storage.load(user_id)
     partition = data.partitions.get(partition_id)
@@ -471,7 +229,9 @@ async def generate_reply(
     return reply
 
 
-# ── 工具调用辅助函数 ──
+# ═══════════════════════════════════════════════
+# 工具调用辅助函数
+# ═══════════════════════════════════════════════
 
 def _build_tool_params(tool_name: str, user_text: str, partition) -> dict:
     """根据工具类型从用户输入构建参数"""
@@ -514,6 +274,8 @@ def _summarize_tool_result(tool_name: str, block: ResponseBlock) -> str:
     return f"工具{tool_name}执行完成"
 
 
+# ── 工具结果上下文注入 ──
+
 def _build_tool_context(tool_results: list[dict]) -> str:
     """构建注入 LLM 的工具结果上下文"""
     lines = ["[工具执行结果] 以下内容已展示给学生，请在回复中自然地引用："]
@@ -526,14 +288,17 @@ def _build_tool_context(tool_results: list[dict]) -> str:
     return "\n".join(lines)
 
 
+# ── 带工具调用的回复生成 ──
+
 async def generate_reply_with_tools(
     user_id: str,
     partition_id: str,
     user_text: str,
 ) -> list[ResponseBlock]:
-    """
-    生成助手回复，集成工具调用。
-    返回 ResponseBlock 列表：第一个是文本回复，后续是工具结果块。
+    """生成助手回复，集成工具调用（非流式）。
+
+    策略: 意图预判 → 先执行工具 → LLM 统一回复。
+    返回 ResponseBlock 列表：text block（首位） + tool result blocks。
     """
     data = storage.load(user_id)
     partition = data.partitions.get(partition_id)
@@ -664,16 +429,20 @@ async def generate_reply_with_tools(
     return response_blocks
 
 
+# ── 流式回复生成 ──
+
 async def generate_reply_stream(
     user_id: str,
     partition_id: str,
     user_text: str,
     extra_tool_context: str = "",
 ) -> AsyncGenerator[str, None]:
-    """
-    生成助手回复（流式）。
-    逐 token 产出回复文本。
-    extra_tool_context: 预先执行工具后注入的上下文（如练习题结果）
+    """生成助手回复（流式，逐 token 产出）。
+
+    extra_tool_context: 预先执行工具后注入的上下文（如练习题结果）。
+    
+    Yields:
+        文本 chunk（str），调用方逐片段拼接。
     """
     data = storage.load(user_id)
     partition = data.partitions.get(partition_id)
@@ -707,6 +476,10 @@ async def generate_reply_stream(
     ):
         yield chunk
 
+
+# ═══════════════════════════════════════════════
+# 对话后处理：知识证据分析 & CognitiveNode 联动
+# ═══════════════════════════════════════════════
 
 # ── 对话知识证据分析（异步，不阻塞回复） ──
 
@@ -770,6 +543,10 @@ async def _cognify_dialogue_context(
         logger.debug(f"认知对话上下文联动跳过: {e}")
 
 
+# ═══════════════════════════════════════════════
+# 公开 API：send_and_reply（非流式完整流程）
+# ═══════════════════════════════════════════════
+
 async def send_and_reply(
     user_id: str,
     partition_id: str,
@@ -796,7 +573,7 @@ async def send_and_reply(
         if loop.is_running():
             loop.create_task(emotion_analyzer.classify(user_text, user_id))
     except Exception:
-        pass
+        logger.debug("异步图谱更新事件循环获取失败", exc_info=True)
 
     # 2. 生成回复（含工具调用）
     response_blocks = await generate_reply_with_tools(user_id, partition_id, user_text)
@@ -853,7 +630,7 @@ async def send_and_reply(
                             context_type="lower",
                         ))
                 except Exception:
-                    pass
+                    logger.debug("认知对话上下文联动跳过（send_and_reply）", exc_info=True)
 
     # P0: 异步写入助手消息的元历史
     _p0_post_message_hooks(user_id, partition_id, assistant_node)
@@ -867,7 +644,7 @@ async def send_and_reply(
                 user_id, partition_id, user_text, reply_text
             ))
     except Exception:
-        pass
+        logger.debug("异步图谱更新事件循环获取失败", exc_info=True)
 
     return {
         "user_message": user_node,
@@ -876,6 +653,10 @@ async def send_and_reply(
         "response_blocks": [b.model_dump() for b in response_blocks],
     }
 
+
+# ═══════════════════════════════════════════════
+# 公开 API：send_and_reply_stream（流式完整流程）
+# ═══════════════════════════════════════════════
 
 async def send_and_reply_stream(
     user_id: str,
@@ -931,7 +712,7 @@ async def send_and_reply_stream(
         if loop.is_running():
             loop.create_task(emotion_analyzer.classify(user_text, user_id))
     except Exception:
-        pass
+        logger.debug("异步图谱更新事件循环获取失败", exc_info=True)
 
     yield {"type": "user_message", "message": user_node.model_dump(mode="json")}
 
@@ -1061,4 +842,4 @@ async def send_and_reply_stream(
                     context_type="lower",
                 ))
     except Exception:
-        pass
+        logger.debug("CognitiveNode 流式路径联动跳过", exc_info=True)

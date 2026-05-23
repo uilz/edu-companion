@@ -25,10 +25,9 @@ def _get_cognitive_proficiency(user_id: str, skill_id: str) -> float | None:
         if node and node.belief:
             return round(node.belief.proficiency_mean, 4)
     except Exception:
-        pass
+        logger.debug("CognitiveNode 掌握度查询失败，返回 None")
     return None
 from app.schemas.practice import (
-    AnswerType,
     AttemptRecord,
     BloomLevel,
     CoverageGap,
@@ -299,7 +298,7 @@ async def create_session(req: CreateSessionRequest):
         from app.shared.state import active_practice_sessions
         active_practice_sessions[session_id] = response_data["session"]
     except Exception:
-        pass
+        logger.debug("共享状态写入失败（非关键路径）", exc_info=True)
 
     # 附上卡控信息
     if blocked_skills:
@@ -412,7 +411,7 @@ async def complete_session(
         )
         asyncio.create_task(container.event_bus.publish(event))
     except Exception:
-        pass
+        logger.debug("SessionCompleted 事件发布失败", exc_info=True)
 
     return {
         "session": session,
@@ -464,7 +463,7 @@ async def submit_answer(req: SubmitAnswerRequest):
             consecutive=req.hints_used == 0,
         )
     except Exception:
-        pass
+        logger.debug("CognitiveNode 练习事件提交失败", exc_info=True)
 
     # v3.0: 记录练习事件
     try:
@@ -489,7 +488,7 @@ async def submit_answer(req: SubmitAnswerRequest):
                 data={"before": old_p, "after": new_p},
             )
     except Exception:
-        pass
+        logger.debug("学习事件记录失败", exc_info=True)
 
     # 生成反馈
     import json
@@ -618,7 +617,7 @@ async def submit_answer(req: SubmitAnswerRequest):
             )
             asyncio.create_task(bus.publish(ks_event))
     except Exception:
-        pass  # 事件发布失败不影响答题流
+        logger.debug("事件发布失败（不影响答题流）", exc_info=True)
 
     return feedback
 

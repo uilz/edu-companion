@@ -1,22 +1,36 @@
-# 智能伴学系统 — 文档
+# 项目文档
 
-## 文件结构
+## 📚 文档结构
 
-```
-docs/
-├── architecture-v3.md    ← 唯一最新设计文档（从这里开始）
-├── PROGRESS.md           ← 项目进度跟踪
-├── phase1/               ← Phase 1 MVP 设计（已归档）
-├── phase2/               ← Phase 2 学习画像设计（已归档）
-├── phase3/               ← Phase 3 智能路由设计（已归档）
-├── phase4/               ← Phase 4 对话系统设计（已归档）
-├── phase5/               ← Phase 5 认知事件设计（已归档）
-├── phase6/               ← Phase 6 CognitiveNode 设计（当前阶段）
-└── phase7/ (待建)        ← Phase 7 LearningTutor 设计
-```
+| 路径 | 内容 |
+|------|------|
+| `../README.md` | 项目总览、架构、快速开始 |
+| `architecture-v3.md` | 系统架构设计 v3 |
+| `PROGRESS.md` | 开发进度追踪 |
+| `phase1/` | MVP 练习系统设计 |
+| `phase2/` | 错题本、知识图谱、学习日历 |
+| `phase3/` | 统一搜索、多模态、学习规划 |
+| `phase4/` | 对话系统 v4 设计 |
+| `phase5/` | 模块联动升级、对话实现计划 |
+| `phase6/` | CognitiveNode 认知节点系统 |
 
-## 快速入口
+## 🔧 最近重构（2026-05）
 
-- **当前架构**: [`architecture-v3.md`](./architecture-v3.md)
-- **项目进度**: [`PROGRESS.md`](./PROGRESS.md)
-- **最新阶段**: [`phase6/readme.md`](./phase6/readme.md)
+见 `../README.md` 的「近期重构」章节。
+
+## 💡 设计原则
+
+1. **分层架构**：API 路由薄，业务逻辑在 `services/`，数据在 `schemas/`，基础设施在 `infra/`
+2. **对话系统 4 层结构**：分区 → 领域 → 专题 → 对话
+3. **事件驱动**：通过 EventBus 解耦模块间通信
+4. **双存储后端**：PG 为主，JSON 文件为备降
+5. **BKT 知识追踪**：基于贝叶斯知识追踪的掌握度评估
+
+## ⚡ 快速入口
+
+| 文件 | 说明 |
+|------|------|
+| `backend/app/services/conversation_llm.py` | AI 对话核心逻辑 |
+| `backend/app/api/conversation.py` | 对话系统 API 路由 |
+| `backend/app/services/tree_ops.py` | 侧栏树 CRUD 操作 |
+| `backend/app/services/pg_storage.py` | PostgreSQL 存储引擎 |

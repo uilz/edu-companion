@@ -16,20 +16,24 @@ from pydantic import BaseModel, Field
 # ── Content Blocks（多模态内容块，不变） ──
 
 class TextBlock(BaseModel):
+    """纯文本内容块"""
     type: Literal["text"] = "text"
     text: str
 
 class ImageBlock(BaseModel):
+    """图片内容块"""
     type: Literal["image"] = "image"
     file_id: str
 
 class AudioBlock(BaseModel):
+    """音频内容块，含可选的转写文本"""
     type: Literal["audio"] = "audio"
     file_id: str
     duration_ms: int | None = None
     transcription: str | None = None
 
 class VideoBlock(BaseModel):
+    """视频内容块，含可选的缩略图和转写"""
     type: Literal["video"] = "video"
     file_id: str
     duration_ms: int | None = None
@@ -37,6 +41,7 @@ class VideoBlock(BaseModel):
     transcription: str | None = None
 
 class DocumentBlock(BaseModel):
+    """文档内容块，支持 word/pdf/ppt/excel/markdown/code 等类型"""
     type: Literal["document"] = "document"
     file_id: str
     document_kind: str  # word/pdf/ppt/excel/markdown/code/other
@@ -50,6 +55,7 @@ ContentBlock = TextBlock | ImageBlock | AudioBlock | VideoBlock | DocumentBlock
 # ── File Record（不变） ──
 
 class FileRecord(BaseModel):
+    """文件记录，记录上传的媒体/文档文件元数据"""
     id: str = Field(default_factory=lambda: str(uuid4()))
     user_id: str
     original_name: str
@@ -72,6 +78,7 @@ class FileRecord(BaseModel):
 # ── Cross Partition Mark（不变） ──
 
 class CrossPartitionMark(BaseModel):
+    """跨分区标记，记录消息是否关联到其他分区"""
     is_cross: bool = False
     primary_partition: str = ""
     linked_partitions: list[str] = Field(default_factory=list)
@@ -80,6 +87,7 @@ class CrossPartitionMark(BaseModel):
 # ── TreeNode（核心消息节点，branch_id → conversation_id） ──
 
 class TreeNode(BaseModel):
+    """消息节点，构成对话的树形结构。支持多版本（编辑时在同一父节点下产生同级兄弟版本）。"""
     id: str = Field(default_factory=lambda: str(uuid4()))
     parent_id: str  # virtual root id if top-level
     children_ids: list[str] = Field(default_factory=list)  # alternative versions (for edit)
@@ -103,6 +111,7 @@ class TreeNode(BaseModel):
 # ── Link Node（不变，branch_id → conversation_id） ──
 
 class LinkNode(BaseModel):
+    """链接节点，记录跨对话/跨分区的消息引用关系"""
     id: str = Field(default_factory=lambda: str(uuid4()))
     type: Literal["link"] = "link"
     target_message_id: str
@@ -117,7 +126,8 @@ class LinkNode(BaseModel):
 # ── Conversation（v4: 替换旧 Branch） ──
 
 class Conversation(BaseModel):
-    """专题下的一个对话线程。用户在专题下手动创建，非自动分叉。"""
+    """专题下的一个对话线程。用户在专题下手动创建，非自动分叉。
+    path 字段按序记录消息节点 ID 列表。"""
     id: str = Field(default_factory=lambda: str(uuid4()))
     topic_id: str
     name: str = ""
@@ -161,6 +171,7 @@ class Domain(BaseModel):
 # ── Partition（清理 active_branch_id） ──
 
 class Partition(BaseModel):
+    """顶层分区，代表一个学习方向或科目大类。包含虚拟根节点和上下文摘要。"""
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
     subject: str = ""
@@ -182,6 +193,7 @@ class Partition(BaseModel):
 # ── Knowledge Graph（不变） ──
 
 class KGNode(BaseModel):
+    """知识图谱节点，代表一个知识点概念"""
     id: str = Field(default_factory=lambda: str(uuid4()))
     label: str
     description: str = ""
@@ -193,6 +205,7 @@ class KGNode(BaseModel):
     created_at: float = Field(default_factory=time.time)
 
 class KGEdge(BaseModel):
+    """知识图谱边，描述知识点间的关系（如 prerequisite）"""
     id: str = Field(default_factory=lambda: str(uuid4()))
     from_id: str
     to_id: str
@@ -201,6 +214,7 @@ class KGEdge(BaseModel):
     weight: float = 1.0
 
 class KnowledgeGraph(BaseModel):
+    """知识图谱，按分区组织的知识点网络"""
     id: str = Field(default_factory=lambda: str(uuid4()))
     partition_id: str
     name: str = ""
@@ -215,6 +229,7 @@ class KnowledgeGraph(BaseModel):
 # ── Response Block（branch_id → conversation_id） ──
 
 class ResponseBlock(BaseModel):
+    """助教回复块，包含各类多模态回复内容（文本/练习/视频/思维导图等）"""
     id: str = Field(default_factory=lambda: str(uuid4()))
     message_id: str = ""
     partition_id: str = ""
@@ -229,6 +244,7 @@ class ResponseBlock(BaseModel):
 
 
 class BackgroundJob(BaseModel):
+    """后台任务记录，用于异步处理长时间运行的操作"""
     id: str = Field(default_factory=lambda: str(uuid4()))
     tool_name: str
     status: str = "queued"
@@ -246,6 +262,7 @@ class BackgroundJob(BaseModel):
 # ── User Data Root（v4: branches→conversations, +domains, +topics） ──
 
 class UserData(BaseModel):
+    """用户数据根模型，包含 v4 完整层级结构：分区→领域→专题→对话→消息节点"""
     user_id: str
     role: str = "student"
     org_id: str | None = None

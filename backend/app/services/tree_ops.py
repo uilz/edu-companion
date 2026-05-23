@@ -34,7 +34,7 @@ class TreeOpsService:
         direction: str = "subject",
         emoji: str = "💬",
     ) -> Partition:
-        """创建新分区，附带虚拟根节点 + 默认领域"""
+        """创建新分区，附带虚拟根节点 + 默认领域及默认对话"""
         data = storage.load(user_id)
 
         root_id = str(uuid4())
@@ -77,6 +77,7 @@ class TreeOpsService:
     def create_domain(
         self, user_id: str, partition_id: str, name: str, emoji: str = "📚",
     ) -> Domain:
+        """在指定分区下创建新领域"""
         data = storage.load(user_id)
         if partition_id not in data.partitions:
             raise ValueError(f"Partition {partition_id} not found")
@@ -86,6 +87,7 @@ class TreeOpsService:
         return domain
 
     def rename_domain(self, user_id: str, domain_id: str, name: str) -> Domain:
+        """重命名领域"""
         data = storage.load(user_id)
         domain = data.domains.get(domain_id)
         if not domain:
@@ -96,6 +98,7 @@ class TreeOpsService:
         return domain
 
     def delete_domain(self, user_id: str, domain_id: str) -> None:
+        """删除领域，同时归档所有下属专题和对话"""
         data = storage.load(user_id)
         domain = data.domains.get(domain_id)
         if not domain:
@@ -113,6 +116,7 @@ class TreeOpsService:
     def create_topic(
         self, user_id: str, domain_id: str, name: str, emoji: str = "📝",
     ) -> Topic:
+        """在指定领域下创建新专题，同时创建首个默认对话"""
         data = storage.load(user_id)
         if domain_id not in data.domains:
             raise ValueError(f"Domain {domain_id} not found")
@@ -128,6 +132,7 @@ class TreeOpsService:
         return topic
 
     def rename_topic(self, user_id: str, topic_id: str, name: str) -> Topic:
+        """重命名专题"""
         data = storage.load(user_id)
         topic = data.topics.get(topic_id)
         if not topic:
@@ -138,6 +143,7 @@ class TreeOpsService:
         return topic
 
     def delete_topic(self, user_id: str, topic_id: str) -> None:
+        """删除专题，同时归档下属所有对话和消息"""
         data = storage.load(user_id)
         topic = data.topics.get(topic_id)
         if not topic:
@@ -202,6 +208,7 @@ class TreeOpsService:
         return conv
 
     def rename_conversation(self, user_id: str, conv_id: str, name: str) -> Conversation:
+        """重命名对话"""
         data = storage.load(user_id)
         conv = data.conversations.get(conv_id)
         if not conv:
@@ -406,6 +413,7 @@ class TreeOpsService:
     # ── 分区/领域/专题编辑与删除 ──
 
     def rename_partition(self, user_id: str, partition_id: str, name: str) -> Partition:
+        """重命名分区"""
         data = storage.load(user_id)
         partition = data.partitions.get(partition_id)
         if not partition:
@@ -416,6 +424,7 @@ class TreeOpsService:
         return partition
 
     def delete_partition(self, user_id: str, partition_id: str) -> None:
+        """删除分区及其所有下属领域、专题、对话和消息"""
         data = storage.load(user_id)
         if partition_id not in data.partitions:
             raise ValueError(f"Partition {partition_id} not found")

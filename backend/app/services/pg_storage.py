@@ -32,7 +32,10 @@ class PgStorageEngine:
     def __init__(self) -> None:
         self._initialized = False
 
+    # ── 初始化与 schema 确保 ──
+
     def _ensure_schema(self) -> None:
+        """确保数据库 schema 已初始化（幂等操作）"""
         if self._initialized:
             return
         db = Database.get()
@@ -248,7 +251,7 @@ class PgStorageEngine:
         self._ensure_schema()
         db = Database.get()
 
-        # ── 用户元数据 ──
+        # ── 用户元数据：写入/更新 conversation_user_meta 表（JSONB 字段全量替换）──
         db.execute(
             """
             INSERT INTO conversation_user_meta
@@ -289,7 +292,7 @@ class PgStorageEngine:
             ),
         )
 
-        # ── 分区 ──
+        # ── 分区：逐条 upsert 到 conversation_partitions 表 ──
         for p in data.partitions.values():
             db.execute(
                 """
@@ -317,7 +320,7 @@ class PgStorageEngine:
                 ),
             )
 
-        # ── 对话 (v4 Conversation → conversation_branches 表) ──
+        # ── 对话 (v4 Conversation → conversation_branches 表)：通过 topic→domain 追溯真实的 partition_id ──
         for b in data.conversations.values():
             # 从 Topic → Domain → Partition 追溯真实的 partition_id (FK 约束)
             partition_id_for_table = None
@@ -424,6 +427,7 @@ class PgStorageEngine:
             )
 
         # ── 清理已删除的记录（PG 只 upsert 不自动删除，需手动清理）──
+        # 检测哪些分区已被删除，在 PG 中执行级联删除（按外键约束顺序：先子表后父表）
         existing_part_ids = {r["id"] for r in db.fetchall(
             "SELECT id FROM conversation_partitions WHERE user_id = %s", (user_id,)
         )}
@@ -435,7 +439,7 @@ class PgStorageEngine:
         if removed_pids:
             pid_list = list(removed_pids)
             logger.info(f"Cleaning up {len(pid_list)} deleted partitions: {pid_list}")
-            # 按 FK 顺序删除（先子后父）
+            # 按 FK 顺序删除（先子后父）：link_nodes → response_blocks → nodes → branches → partitions
             for pid in pid_list:
                 db.execute("DELETE FROM conversation_link_nodes WHERE source_partition_id = %s OR target_partition_id = %s", (pid, pid))
                 db.execute("DELETE FROM conversation_response_blocks WHERE partition_id = %s", (pid,))
@@ -448,6 +452,7 @@ class PgStorageEngine:
     # ── 迁移：JSON → PG ──
 
     def migrate_from_json(self, user_id: str, json_path: Path) -> None:
+        """从 JSON 文件迁移用户数据到 PostgreSQL"""
         if not json_path.exists():
             logger.warning(f"JSON file not found: {json_path}")
             return
