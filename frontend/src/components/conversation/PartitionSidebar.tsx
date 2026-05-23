@@ -490,6 +490,38 @@ export default function PartitionSidebar({
         console.log("[DEBUG] Firing onTreeChanged");
         onTreeChanged?.();
       }
+      
+      // ── Refresh parent's children from API to prevent stale cache ──
+      // After deleting a conversation/topic/domain, the cached children in childMap
+      // become stale. Directly re-fetch the parent's children.
+      if (targetLevel !== "partition") {
+        // Find parent node by searching which key's children contain targetId
+        let parentId: string | null = null;
+        childMapRef.current.forEach((children, key) => {
+          if (parentId) return;
+          if (children.some(c => c.id === targetId)) {
+            parentId = key;
+          }
+        });
+        
+        if (parentId && parentId !== ROOT_KEY) {
+          // Find the parent FlatNode from grandparent's children
+          let parentFlatNode: FlatNode | null = null;
+          childMapRef.current.forEach((children, key) => {
+            if (parentFlatNode) return;
+            const parent = children.find(c => c.id === parentId);
+            if (parent) {
+              parentFlatNode = parent;
+            }
+          });
+          
+          if (parentFlatNode) {
+            // Re-fetch from API — this will overwrite the stale childMap entry
+            loadChildren(parentFlatNode).catch(() => {});
+          }
+        }
+      }
+      
       console.log("[DEBUG] Delete complete");
     } catch (e) {
       console.error("[DEBUG] Delete failed:", e);
