@@ -155,6 +155,10 @@ edu-companion/
 ├── docs/                       # 设计文档
 │   ├── phase1/ ~ phase6/         # 分阶段设计文档
 │   └── architecture-v3.md       # 架构设计 v3
+├── models/                      # 模型下载说明（模型文件被 gitignore）
+├── backend/models/              # 后端模型文件（含 granite-embedding-97m，被 gitignore）
+├── PROGRESS.md                  # 开发进度
+├── CHANGELOG.md                 # 版本更新日志
 └── README.md
 ```
 

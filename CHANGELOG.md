@@ -4,6 +4,20 @@
 
 ---
 
+## [0.3.1] - 2026-05-23
+
+### 修复
+- **Embedding 模型路径修正**：`classifier.py` 路径从 `backend/app/models/` 改为 `backend/models/`，与实际模型文件位置对齐
+- **`.gitignore` 更新**：新增 `models/*` 和 `backend/models/*` 规则，保持目录但忽略模型文件
+
+### 文档
+- **`models/README.md` 重写**：从 7 个虚构模型降至 1 个实际模型（granite-embedding-97m），移除不存在的 bge/CosyVoice/Qwen 条目
+- **删除 `backend/models/README.md`**：下载说明整合到根目录 README
+- **`PROGRESS.md` 更新**：移除已过时的"Embedding 模型未装"技术债务项
+- **`CHANGELOG.md`**：本版本新增
+
+---
+
 ## [0.3.0] - 2026-05-17
 
 ### 新增 - 对话系统 ⭐
