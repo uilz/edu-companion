@@ -85,7 +85,7 @@ def compute_embedding(text: str) -> list[float] | None:
     """计算 embedding，优先加载本地模型（无网络时也不卡60s）"""
     import os
     model_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         "models", "granite-embedding-97m"
     )
     if not os.path.isdir(model_path):
