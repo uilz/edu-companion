@@ -141,10 +141,10 @@ export default function MessageList({
   }, [responseBlocks]);
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="flex-1 flex flex-col overflow-hidden">
       <div
         ref={containerRef}
-        className="h-full overflow-y-auto px-4 py-6 space-y-6"
+        className="flex-1 overflow-y-auto px-4 py-6 space-y-6"
         onScroll={handleScroll}
       >
         {dedupedMessages.map((message) => {
@@ -204,7 +204,7 @@ export default function MessageList({
                       )}
                     </div>
                   ) : (
-                    <div className="bg-[var(--color-surface)] text-[var(--color-text)] px-4 py-3 rounded-2xl rounded-tl-md">
+                    <div className="group bg-[var(--color-surface)] text-[var(--color-text)] px-4 py-3 rounded-2xl rounded-tl-md">
                       {isEditing ? (
                         <div className="space-y-2 min-w-[200px]">
                           <textarea

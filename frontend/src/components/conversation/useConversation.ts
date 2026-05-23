@@ -48,6 +48,8 @@ type WSCallbacks = {
     domain_name: string; topic_name: string;
     switch_detail: Record<string, string>;
   }) => void;
+  onConnect?: () => void;
+  onDisconnect?: () => void;
 };
 
 class ConversationWS {
@@ -66,7 +68,7 @@ class ConversationWS {
 
     try {
       this.ws = new WebSocket(url);
-      this.ws.onopen = () => { this.attempts = 0; };
+      this.ws.onopen = () => { this.attempts = 0; this.callbacks?.onConnect?.(); };
       this.ws.onmessage = (event) => {
         try {
           const data: WSIncomingMessage = JSON.parse(event.data);
@@ -94,6 +96,7 @@ class ConversationWS {
       this.ws.onerror = () => {}; // onclose handles retry
       this.ws.onclose = () => {
         if (this.destroyed) return;
+        this.callbacks?.onDisconnect?.();
         this.ws = null;
         const delay = Math.min(1000 * Math.pow(2, this.attempts), 30000);
         this.attempts++;
@@ -515,6 +518,8 @@ export function useConversation(): UseConversationReturn {
           topicName: data.topic_name || "",
         });
       },
+      onConnect: () => setWsConnected(true),
+      onDisconnect: () => setWsConnected(false),
     });
 
     return () => {
@@ -697,6 +702,7 @@ export function useConversation(): UseConversationReturn {
     try {
       await fetch("/api/conversations/messages/" + messageId, { method: "DELETE" });
       setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      setResponseBlocks((prev) => prev.filter((b) => b.message_id !== messageId));
     } catch (e) { console.error("Delete failed:", e); }
   }, []);
 

@@ -220,13 +220,42 @@ export default function PartitionSidebar({
   const treeRef = useRef(tree);
   treeRef.current = tree;
 
-  // ── Fetch children ──
+  // ── Helpers ──
+  function updateTreeChildren(children: TreeItem[], targetId: string, newChildren: TreeItem[]): TreeItem[] {
+    return children.map(n => {
+      if (n.id === targetId) return { ...n, children: newChildren, loading: false, expanded: true } as typeof n;
+      if ("children" in n && n.children) return { ...n, children: updateTreeChildren(n.children as TreeItem[], targetId, newChildren) } as typeof n;
+      return n;
+    });
+  }
+
+  function markNotLoading(children: TreeItem[], targetId: string): TreeItem[] {
+    return children.map(n => {
+      if (n.id === targetId) return { ...n, loading: false } as typeof n;
+      if ("children" in n && n.children) return { ...n, children: markNotLoading(n.children as TreeItem[], targetId) } as typeof n;
+      return n;
+    });
+  }
+
+  // Get the partition_id for an item (regardless of level)
+  function getParentPartitionId(item: PartitionItem | DomainItem | TopicItem): string {
+    if (item.level === "partition") return item.id;
+    return (item as DomainItem | TopicItem).partition_id;
+  }
+
+  // ── Load children (only affects the target partition) ──
   const loadChildren = useCallback(async (item: PartitionItem | DomainItem | TopicItem) => {
     if (item.loading) return;
+    const parentPid = getParentPartitionId(item);
+    if (!parentPid) return;
 
+    // Set loading: true — only on the target partition
     setTree(prev => prev.map(p => {
-      if (p.id === item.id) return { ...p, loading: true } as PartitionItem;
-      // search in children
+      if (p.id !== parentPid) return p; // ← KEY: other partitions unchanged (same reference)
+      if (item.level === "partition") {
+        return { ...p, loading: true } as PartitionItem;
+      }
+      // domain/topic: search in children
       const search = (nodes: TreeItem[]): TreeItem[] =>
         nodes.map(n => {
           if (n.id === item.id) return { ...n, loading: true } as typeof n;
@@ -239,69 +268,88 @@ export default function PartitionSidebar({
     try {
       if (item.level === "partition") {
         const { domains } = await apiFetch<{ domains: Domain[] }>(`/partitions/${item.id}/domains`);
-        const domainItems: DomainItem[] = domains.map((d: Domain) => ({
-          ...d, level: "domain" as const, expanded: false, loading: false, children: [],
-          partition_id: item.id,  // 继承分区ID
-        }));
-        setTree(prev => prev.map(p => p.id === item.id
-          ? { ...p, children: domainItems, loading: false, expanded: true } as PartitionItem
-          : p
-        ));
+        setTree(prev => {
+          // Preserve existing expanded states for domains
+          const oldPartition = prev.find(p => p.id === item.id) as PartitionItem | undefined;
+          const oldExpanded = new Map<string, boolean>();
+          if (oldPartition?.children) {
+            for (const d of oldPartition.children as DomainItem[]) {
+              oldExpanded.set(d.id, d.expanded);
+            }
+          }
+          const domainItems: DomainItem[] = domains.map((d: Domain) => ({
+            ...d, level: "domain" as const,
+            expanded: oldExpanded.get(d.id) ?? false, // ← preserve previous expanded state
+            loading: false, children: [],
+            partition_id: item.id,
+          }));
+          return prev.map(p => p.id === item.id
+            ? { ...p, children: domainItems, loading: false, expanded: true } as PartitionItem
+            : p
+          );
+        });
       } else if (item.level === "domain") {
         const d = item as DomainItem;
         const { topics } = await apiFetch<{ topics: Topic[] }>(`/domains/${item.id}/topics`);
         const topicItems: TopicItem[] = topics.map((t: Topic) => ({
           ...t, level: "topic" as const, expanded: false, loading: false, children: [],
-          partition_id: item.partition_id,  // 继承分区ID
+          partition_id: item.partition_id,
         }));
-        setTree(prev => prev.map(p => ({
-          ...p, children: updateTreeChildren(p.children, item.id, topicItems),
-        } as PartitionItem)));
+        setTree(prev => prev.map(p =>
+          p.id === parentPid
+            ? { ...p, children: updateTreeChildren(p.children, item.id, topicItems) } as PartitionItem
+            : p // ← other partitions unchanged
+        ));
       } else if (item.level === "topic") {
         const t = item as TopicItem;
         const { conversations } = await apiFetch<{ conversations: Conversation[] }>(`/topics/${item.id}/conversations`);
         const convItems: ConversationItem[] = conversations.map((c: Conversation) => ({
           ...c, level: "conversation" as const, expanded: false, loading: false,
-          partition_id: item.partition_id,  // 继承分区ID
+          partition_id: item.partition_id,
         }));
-        setTree(prev => prev.map(p => ({
-          ...p, children: updateTreeChildren(p.children, item.id, convItems),
-        } as PartitionItem)));
+        setTree(prev => prev.map(p =>
+          p.id === parentPid
+            ? { ...p, children: updateTreeChildren(p.children, item.id, convItems) } as PartitionItem
+            : p // ← other partitions unchanged
+        ));
       }
     } catch (e: any) {
       console.error("loadChildren failed:", e);
-      // If topic returns 404, it means the topic was deleted — remove it from tree
       const errMsg = e?.message || "";
       if (errMsg.includes("404")) {
-        // Recursively remove the deleted item from the tree
-        const removeFromTree = (items: TreeItem[]): TreeItem[] =>
-          items
-            .map(d => {
-              // If this is the deleted item, remove it
-              if (d.id === item.id) return null;
-              // If this is the parent domain, filter out the deleted topic
-              if (item.level === "topic" && d.id === (item as TopicItem).domain_id) {
-                return { ...d, children: ((d as any).children || []).filter((t: any) => t.id !== item.id) } as typeof d;
-              }
-              // Otherwise, recurse into children
-              if ("children" in d && d.children) {
-                return { ...d, children: removeFromTree(d.children as TreeItem[]) } as typeof d;
-              }
-              return d;
-            })
-            .filter(Boolean) as TreeItem[];
-
-        setTree(prev => prev.map(p => ({
-          ...p,
-          children: removeFromTree(p.children as TreeItem[]),
-        } as PartitionItem)));
+        // Recursively remove the deleted item from the tree (only in its partition)
+        setTree(prev => prev.map(p => {
+          if (p.id !== parentPid) return p;
+          return {
+            ...p,
+            children: removeFromTree(p.children as TreeItem[], item.id, item.level, (item as TopicItem).domain_id),
+          } as PartitionItem;
+        }));
       }
+      // Mark loading=false — only on the target partition
       setTree(prev => prev.map(p => {
-        if (p.id === item.id) return { ...p, loading: false } as PartitionItem;
+        if (p.id !== parentPid) return p;
+        if (p.id === item.id || item.level === "partition") {
+          return { ...p, loading: false } as PartitionItem;
+        }
         return { ...p, children: markNotLoading(p.children as TreeItem[], item.id) } as PartitionItem;
       }));
     }
   }, []);
+
+  function removeFromTree(children: TreeItem[], targetId: string, level: TreeNodeLevel, domainId?: string): TreeItem[] {
+    return children
+      .filter(c => {
+        if (level === "topic" && (c as any).domain_id === domainId && c.id === targetId) return false;
+        return c.id !== targetId;
+      })
+      .map(c => {
+        if ("children" in c && c.children) {
+          return { ...c, children: removeFromTree(c.children as TreeItem[], targetId, level, domainId) } as typeof c;
+        }
+        return c;
+      });
+  }
 
   // ── Auto-expand path to active conversation ──
   useEffect(() => {
@@ -314,8 +362,13 @@ export default function PartitionSidebar({
 
     (async () => {
       try {
-        // Give tree a tick to build from partitions
-        await new Promise(r => setTimeout(r, 0));
+        // Wait for partitions to be available in the tree
+        for (let attempt = 0; attempt < 50; attempt++) {
+          if (cancelled) return;
+          const found = treeRef.current.find(p => p.id === selectedPartitionId);
+          if (found) break;
+          await new Promise(r => setTimeout(r, 100));
+        }
         if (cancelled) return;
 
         // 1. Load domains for the partition if empty
@@ -374,22 +427,6 @@ export default function PartitionSidebar({
 
     return () => { cancelled = true; };
   }, [selectedPartitionId, activeConversationId, initialConversationId, loadChildren]);
-
-  function updateTreeChildren(children: TreeItem[], targetId: string, newChildren: TreeItem[]): TreeItem[] {
-    return children.map(n => {
-      if (n.id === targetId) return { ...n, children: newChildren, loading: false, expanded: true } as typeof n;
-      if ("children" in n && n.children) return { ...n, children: updateTreeChildren(n.children as TreeItem[], targetId, newChildren) } as typeof n;
-      return n;
-    });
-  }
-
-  function markNotLoading(children: TreeItem[], targetId: string): TreeItem[] {
-    return children.map(n => {
-      if (n.id === targetId) return { ...n, loading: false } as typeof n;
-      if ("children" in n && n.children) return { ...n, children: markNotLoading(n.children as TreeItem[], targetId) } as typeof n;
-      return n;
-    });
-  }
 
   // ── Toggle expand ──
   const toggleExpand = useCallback((item: TreeItem) => {
@@ -521,7 +558,17 @@ export default function PartitionSidebar({
       await apiFetch(paths[deleteTarget.level], { method: "DELETE" });
 
       // Remove from tree
-      setTree(prev => prev.filter(p => p.id !== deleteTarget.id).map(p => removeFromTree(p, deleteTarget.id)) as any);
+      setTree(prev => prev
+        .filter(p => p.id !== deleteTarget.id)
+        .map(p => {
+          if ("children" in p && p.children) {
+            const newChildren = removeFromTree(p.children as TreeItem[], deleteTarget.id, deleteTarget.level);
+            if (newChildren === p.children) return p;
+            return { ...p, children: newChildren } as PartitionItem;
+          }
+          return p;
+        })
+      );
       if (deleteTarget.level === "partition" && onDeletePartition) {
         onDeletePartition(deleteTarget.id);
       }
@@ -535,13 +582,6 @@ export default function PartitionSidebar({
     }
     setDeleteTarget(null);
   };
-
-  function removeFromTree(node: TreeItem, targetId: string): TreeItem {
-    if ("children" in node && node.children) {
-      return { ...node, children: node.children.filter(c => c.id !== targetId).map(c => removeFromTree(c, targetId)) as typeof node["children"] } as typeof node;
-    }
-    return node;
-  }
 
   // ── Render ──
   const [hoveredId, setHoveredId] = useState<string | null>(null);

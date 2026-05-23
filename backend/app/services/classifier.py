@@ -73,16 +73,30 @@ def keyword_score(text: str, subject: str) -> float:
     return min(1.0, best * 0.7 + bonus)
 
 
+def _model_cached(model_name: str) -> bool:
+    """检查 HuggingFace 模型是否已在本地缓存（无网络时不卡60秒）"""
+    from pathlib import Path
+    cache_dir = Path.home() / ".cache" / "huggingface" / "hub"
+    model_dir_name = f"models--{model_name.replace('/', '--')}"
+    return (cache_dir / model_dir_name).exists()
+
+
 def compute_embedding(text: str) -> list[float] | None:
-    """计算 embedding，模型未装时返回 None"""
+    """计算 embedding，优先加载本地模型（无网络时也不卡60s）"""
+    import os
+    model_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "models", "granite-embedding-97m"
+    )
+    if not os.path.isdir(model_path):
+        logger.warning("Embedding model not found at %s, skipping", model_path)
+        return None
     try:
         from sentence_transformers import SentenceTransformer
-        import os
-        _model = SentenceTransformer(
-            "ibm-granite/granite-embedding-278m-multilingual"
-        )
+        _model = SentenceTransformer(model_path)
         return _model.encode(text).tolist()
     except Exception:
+        logger.debug("Embedding failed", exc_info=True)
         return None
 
 
