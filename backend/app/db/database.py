@@ -286,7 +286,11 @@ class Database:
             cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute(sql, params)
             row = cur.fetchone()
+            conn.commit()  # 清除只读事务，防止连接池残留导致后续读不到新数据
             return dict(row) if row else None
+        except Exception:
+            conn.rollback()
+            raise
         finally:
             cur.close()
             self.put_conn(conn)
@@ -296,7 +300,11 @@ class Database:
         try:
             cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute(sql, params)
+            conn.commit()  # 清除只读事务
             return [dict(r) for r in cur.fetchall()]
+        except Exception:
+            conn.rollback()
+            raise
         finally:
             cur.close()
             self.put_conn(conn)

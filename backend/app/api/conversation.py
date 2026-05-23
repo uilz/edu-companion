@@ -461,8 +461,40 @@ async def _publish_reply_event(user_id, partition_id, conversation_id, content, 
 
 
 # ═══════════════════════════════════════════
-# 修改/删除消息
+# 消息持久化 & 编辑
 # ═══════════════════════════════════════════
+
+class PersistMessageRequest(BaseModel):
+    conversation_id: str
+    role: str
+    content: str
+    source: str = "user"
+    metadata: dict = {}
+
+@router.post("/messages/persist")
+async def persist_message(req: PersistMessageRequest):
+    """持久化一条消息（不触发 LLM 回复）"""
+    return _add_message_to_tree(req.conversation_id, req.role, req.content, req.source, req.metadata)
+
+def _add_message_to_tree(conversation_id: str, role: str, content: str, source: str, metadata: dict = None) -> dict:
+    """在对话树中插入一条消息并返回"""
+    from app.services.tree_operations import TreeOperations
+    from app.schemas.conversation import TextBlock
+    tree_ops = TreeOperations(storage)
+    data = storage.load(USER_ID)
+    conv = data.conversations.get(conversation_id)
+    if not conv:
+        raise HTTPException(404, "Conversation not found")
+
+    blocks = [TextBlock(text=content)]
+    node = tree_ops.add_leaf(USER_ID, conversation_id, role, blocks, text_summary=source)
+
+    if metadata:
+        for k, v in metadata.items():
+            tree_ops.set_metadata(USER_ID, node.id, k, v)
+
+    return {"id": node.id, "role": node.role, "content": content}
+
 
 @router.put("/messages/{message_id}")
 async def modify_message(message_id: str, req: ModifyMessageRequest):
