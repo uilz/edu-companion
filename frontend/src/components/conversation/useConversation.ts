@@ -371,6 +371,14 @@ export function useConversation(): UseConversationReturn {
       const errMsg = e?.message || "";
       if (errMsg.includes("404")) {
         setConvError("该对话已被删除");
+        // Clear stale conversation reference from URL and localStorage
+        setActiveConversationId(null);
+        try {
+          const params = new URLSearchParams(window.location.search);
+          params.delete("c");
+          window.history.replaceState(null, "", params.toString() ? `${window.location.pathname}?${params.toString()}` : window.location.pathname);
+          localStorage.removeItem("learn-page-state");
+        } catch {}
       } else if (errMsg.includes("403") || errMsg.includes("401")) {
         setConvError("无权访问该对话");
       } else {
@@ -381,7 +389,7 @@ export function useConversation(): UseConversationReturn {
     } finally {
       setLoadingMessages(false);
     }
-  }, []);
+  }, [setActiveConversationId]);
 
   // ── Load messages when conversation selected ──
   useEffect(() => {
