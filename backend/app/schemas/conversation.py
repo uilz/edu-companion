@@ -106,6 +106,7 @@ class TreeNode(BaseModel):
     links_to: list[str] = Field(default_factory=list)
     linked_from: list[str] = Field(default_factory=list)
     discussed_skill_ids: list[str] = Field(default_factory=list)
+    metadata: dict = Field(default_factory=dict)
 
 
 # ── Link Node（不变，branch_id → conversation_id） ──
