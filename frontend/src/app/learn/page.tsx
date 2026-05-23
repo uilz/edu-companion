@@ -269,7 +269,9 @@ export default function LearnPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showNewPartition, setShowNewPartition] = useState(false);
   const [loadingPartitions, setLoadingPartitions] = useState(true);
+  const [isLoadingPartitions, setIsLoadingPartitions] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [convError, setConvError] = useState<string | null>(null);
 
   const router = useRouter();
 
@@ -340,12 +342,14 @@ export default function LearnPage() {
   const loadPartitions = useCallback(async () => {
     try {
       setLoadingPartitions(true);
+      setIsLoadingPartitions(true);
       const data = await apiFetch<{ partitions: Partition[] }>("/conversations/partitions");
       setPartitions(data.partitions || []);
     } catch (e) {
       console.error("Failed to load partitions:", e);
     } finally {
       setLoadingPartitions(false);
+      setIsLoadingPartitions(false);
     }
   }, []);
 
@@ -374,12 +378,19 @@ export default function LearnPage() {
       setResponseBlocks(allBlocks);
     } catch (e: any) {
       console.error("Failed to load messages:", e);
-      // If conversation was deleted (404), clear state
+      // If conversation was deleted (404), show error but keep convId
       const errMsg = e?.message || "";
       if (errMsg.includes("404")) {
-        setActiveConversationId(null);
+        setConvError("该对话已被删除");
         setMessages([]);
         setResponseBlocks([]);
+        // Do NOT clear activeConversationId - let the user see the error
+      } else if (errMsg.includes("403") || errMsg.includes("401")) {
+        setConvError("无权访问该对话");
+        setMessages([]);
+        setResponseBlocks([]);
+      } else {
+        setConvError("加载失败: " + errMsg.slice(0, 80));
       }
     } finally {
       setLoadingMessages(false);
@@ -387,16 +398,17 @@ export default function LearnPage() {
   }, []);
 
   // ── Load messages when conversation selected ──
-  const msgInitialRender = useRef(true);
   useEffect(() => {
-    if (msgInitialRender.current) { msgInitialRender.current = false; return; }
+    if (!urlInitialized || isLoadingPartitions) return;
     if (activeConversationId) {
+      setConvError(null);
       loadMessages(activeConversationId);
     } else {
       setMessages([]);
       setResponseBlocks([]);
+      setConvError(null);
     }
-  }, [activeConversationId, loadMessages]);
+  }, [activeConversationId, loadMessages, urlInitialized, isLoadingPartitions]);
 
   // ── WebSocket callbacks ──
   useEffect(() => {
@@ -609,6 +621,7 @@ export default function LearnPage() {
       const cId = convData.conversation.id;
       setSelectedPartitionId(pId);
       setActiveConversationId(cId);
+      setConvError(null);
       return { partitionId: pId, conversationId: cId };
     } catch (e) {
       console.error("Auto-create conversation failed:", e);
@@ -752,6 +765,7 @@ export default function LearnPage() {
     (partitionId: string, conversationId: string) => {
       setSelectedPartitionId(partitionId);
       setActiveConversationId(conversationId);
+      setConvError(null);
       setShowPartitionSidebar(false);
       setSwitchBanner(null);
     },
@@ -763,6 +777,7 @@ export default function LearnPage() {
     if (switchBanner) {
       setSelectedPartitionId(switchBanner.partitionId);
       setActiveConversationId(switchBanner.conversationId);
+      setConvError(null);
       setSwitchBanner(null);
     }
   }, [switchBanner]);
@@ -887,6 +902,7 @@ export default function LearnPage() {
         if (id === selectedPartitionId) {
           setSelectedPartitionId(null);
           setActiveConversationId(null);
+          setConvError(null);
           setMessages([]);
           setResponseBlocks([]);
         }
@@ -988,6 +1004,7 @@ export default function LearnPage() {
           body: JSON.stringify({ topic_id: topicId, name: "" }),
         });
         setActiveConversationId(convData.conversation.id);
+        setConvError(null);
         await loadPartitions();
 
         // On mobile, close sidebar
@@ -1031,6 +1048,11 @@ export default function LearnPage() {
               onDismiss={handleSwitchDismiss}
             />
           )}
+          {convError && (
+            <div className="flex-shrink-0 mx-4 mt-2 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
+              {convError}
+            </div>
+          )}
           <MessageList
             messages={messages}
             responseBlocks={responseBlocks}
@@ -1053,6 +1075,7 @@ export default function LearnPage() {
               partitions={partitions}
               selectedPartitionId={selectedPartitionId}
               activeConversationId={activeConversationId}
+              initialConversationId={activeConversationId ?? undefined}
               onSelectConversation={handleSelectConversation}
               onCreatePartition={() => {
                 setShowPartitionSidebar(false);
@@ -1135,6 +1158,7 @@ export default function LearnPage() {
                 partitions={partitions}
                 selectedPartitionId={selectedPartitionId}
                 activeConversationId={activeConversationId}
+                initialConversationId={activeConversationId ?? undefined}
                 onSelectConversation={handleSelectConversation}
                 onCreatePartition={() => setShowNewPartition(true)}
                 onRenamePartition={handleRenamePartition}
@@ -1182,6 +1206,11 @@ export default function LearnPage() {
           />
         )}
 
+        {convError && (
+          <div className="flex-shrink-0 mx-6 mt-2 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
+            {convError}
+          </div>
+        )}
         <MessageList
           messages={messages}
           responseBlocks={responseBlocks}

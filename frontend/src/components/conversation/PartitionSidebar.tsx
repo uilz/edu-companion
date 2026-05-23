@@ -168,6 +168,7 @@ interface PartitionSidebarProps {
   partitions: Partition[];
   selectedPartitionId: string | null;
   activeConversationId: string | null;
+  initialConversationId?: string;
   onSelectConversation: (partitionId: string, conversationId: string) => void;
   onCreatePartition: () => void;
   onRenamePartition?: (id: string, name: string) => void;
@@ -182,6 +183,7 @@ export default function PartitionSidebar({
   partitions,
   selectedPartitionId,
   activeConversationId,
+  initialConversationId,
   onSelectConversation,
   onCreatePartition,
   onRenamePartition,
@@ -213,69 +215,10 @@ export default function PartitionSidebar({
     });
   }, [partitions]);
 
-  // ── Auto-expand path to active conversation ──
+  // ── Auto-expand path to active conversation (defined after loadChildren) ──
   const autoExpandRef = useRef<string>("");
   const treeRef = useRef(tree);
   treeRef.current = tree;
-
-  useEffect(() => {
-    if (!selectedPartitionId || !activeConversationId) return;
-    if (autoExpandRef.current === activeConversationId) return;
-    autoExpandRef.current = activeConversationId;
-
-    // 遍历树，找到包含 activeConversationId 的分支，展开整条路径
-    const expandPath = () => {
-      setTree(prev => {
-        // 递归查找：哪条链包含 activeConversationId
-        function findConvInTree(items: TreeItem[], level: string): boolean {
-          for (const item of items) {
-            if ((item as any).children?.some((c: any) => c.id === activeConversationId)) {
-              item.expanded = true;
-              setTimeout(() => (loadChildren as any)(item), 50);
-              return true;
-            }
-            if ((item as any).children?.length && findConvInTree((item as any).children, level)) {
-              item.expanded = true;
-              return true;
-            }
-          }
-          return false;
-        }
-
-        const newTree = prev.map(p => {
-          if (p.id !== selectedPartitionId) return p;
-          // 先展开分区
-          if (!p.expanded) {
-            setTimeout(() => (loadChildren as any)(p), 50);
-          }
-          return { ...p, expanded: true, children: (p.children as any[])?.map(d => {
-            // 检查直接子对话
-            if ((d as any).id === activeConversationId) return { ...d, expanded: true };
-            // 检查更深层
-            if ((d as any).children?.length) {
-              const found = (d as any).children.some((t: any) => {
-                return t.id === activeConversationId ||
-                  (t as any).children?.some((c: any) => c.id === activeConversationId);
-              });
-              if (found) {
-                setTimeout(() => (loadChildren as any)(d), 100);
-                return { ...d, expanded: true, children: (d as any).children.map((t: any) =>
-                  t.id === activeConversationId || (t as any).children?.some((c: any) => c.id === activeConversationId)
-                    ? { ...t, expanded: true } : t
-                )};
-              }
-            }
-            return d;
-          })};
-        });
-        return newTree as any;
-      });
-    };
-
-    // 延迟执行，等 loadChildren 先获取数据
-    setTimeout(expandPath, 100);
-    setTimeout(expandPath, 800);
-  }, [selectedPartitionId, activeConversationId]);
 
   // ── Fetch children ──
   const loadChildren = useCallback(async (item: PartitionItem | DomainItem | TopicItem) => {
@@ -359,6 +302,78 @@ export default function PartitionSidebar({
       }));
     }
   }, []);
+
+  // ── Auto-expand path to active conversation ──
+  useEffect(() => {
+    const convId = activeConversationId || initialConversationId || "";
+    if (!selectedPartitionId || !convId) return;
+    if (autoExpandRef.current === convId) return;
+    autoExpandRef.current = convId;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        // Give tree a tick to build from partitions
+        await new Promise(r => setTimeout(r, 0));
+        if (cancelled) return;
+
+        // 1. Load domains for the partition if empty
+        const partition = treeRef.current.find(p => p.id === selectedPartitionId);
+        if (!partition) return;
+        if (partition.children.length === 0 && !partition.loading) {
+          await loadChildren(partition);
+          if (cancelled) return;
+        }
+
+        // 2. Load topics for each domain
+        const p = treeRef.current.find(p => p.id === selectedPartitionId);
+        if (!p) return;
+        for (const domain of (p.children || []) as DomainItem[]) {
+          if (cancelled) return;
+          if (domain.children.length === 0 && !domain.loading) {
+            await loadChildren(domain);
+            if (cancelled) return;
+          }
+        }
+
+        // 3. Load conversations for each topic
+        const p2 = treeRef.current.find(p => p.id === selectedPartitionId);
+        if (!p2) return;
+        for (const domain of (p2.children || []) as DomainItem[]) {
+          if (cancelled) return;
+          for (const topic of (domain.children || []) as TopicItem[]) {
+            if (topic.children.length === 0 && !topic.loading) {
+              await loadChildren(topic);
+              if (cancelled) return;
+            }
+          }
+        }
+
+        if (cancelled) return;
+
+        // 4. Batch expand: find the path to convId and expand all ancestors
+        setTree(prev => {
+          const expandPathTo = (items: TreeItem[]): TreeItem[] =>
+            items.map(item => {
+              if (item.level === "conversation" && item.id === convId) return item;
+              if ("children" in item && item.children) {
+                const newChildren = expandPathTo(item.children as TreeItem[]);
+                const found = newChildren !== item.children ||
+                  (item.children as TreeItem[]).some(c => c.id === convId);
+                if (found) return { ...item, expanded: true, children: newChildren } as typeof item;
+              }
+              return item;
+            });
+          return expandPathTo(prev) as PartitionItem[];
+        });
+      } catch (e) {
+        console.error("Auto-expand failed:", e);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [selectedPartitionId, activeConversationId, initialConversationId, loadChildren]);
 
   function updateTreeChildren(children: TreeItem[], targetId: string, newChildren: TreeItem[]): TreeItem[] {
     return children.map(n => {
