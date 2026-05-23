@@ -1,34 +1,42 @@
 "use client";
 
+// React hooks 导入
 import { useState, useEffect, useCallback } from "react";
+// UI 图标组件导入
 import { Search, X, Loader2, BookOpen, CheckSquare, Square } from "lucide-react";
+// 资料元数据类型导入
 import type { MaterialMeta } from "@/types";
 
+// 资料选择器组件属性接口
 interface MaterialPickerProps {
-  partitionId: string;
-  selectedIds: string[];
-  onConfirm: (ids: string[]) => void;
-  onClose: () => void;
+  partitionId: string;    // 当前分区 ID
+  selectedIds: string[];  // 已选中的资料 ID 列表
+  onConfirm: (ids: string[]) => void;  // 确认选择回调
+  onClose: () => void;    // 关闭弹窗回调
 }
 
+// 格式化文件大小（B/KB/MB）
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
+// 资料选择器组件：弹窗形式，从知识库分区中选取资料
 export default function MaterialPicker({
   partitionId,
   selectedIds,
   onConfirm,
   onClose,
 }: MaterialPickerProps) {
+  // 状态：资料列表、加载中、搜索关键词、选中集合、错误信息
   const [materials, setMaterials] = useState<MaterialMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [checked, setChecked] = useState<Set<string>>(new Set(selectedIds));
   const [error, setError] = useState("");
 
+  // 加载资料列表：根据分区 ID 和搜索关键词请求 API
   const loadMaterials = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -48,10 +56,12 @@ export default function MaterialPicker({
     }
   }, [partitionId, searchQuery]);
 
+  // 首次挂载或依赖变化时加载资料
   useEffect(() => {
     loadMaterials();
   }, [loadMaterials]);
 
+  // 切换资料选中状态
   const toggleMaterial = (materialId: string) => {
     setChecked((prev) => {
       const next = new Set(prev);
@@ -65,9 +75,10 @@ export default function MaterialPicker({
   };
 
   return (
+    // 遮罩层 + 弹窗容器
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50">
       <div className="bg-[var(--color-bg)] border border-[var(--color-border)] shadow-xl w-[420px] max-h-[70vh] flex flex-col">
-        {/* Header */}
+        {/* 弹窗头部：标题 + 关闭按钮 */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
           <div className="flex items-center gap-2">
             <BookOpen size={16} className="text-[var(--color-accent)]" />
@@ -80,7 +91,7 @@ export default function MaterialPicker({
           </button>
         </div>
 
-        {/* Search */}
+        {/* 搜索框 */}
         <div className="px-4 py-2">
           <div className="flex items-center gap-1.5 px-2 py-1.5 text-xs bg-[var(--color-surface)] border border-[var(--color-border)]">
             <Search size={13} className="text-[var(--color-text-muted)]" />
@@ -99,24 +110,27 @@ export default function MaterialPicker({
           </div>
         </div>
 
-        {/* Error */}
+        {/* 错误提示 */}
         {error && (
           <div className="px-4 py-1.5 text-xs text-red-400">{error}</div>
         )}
 
-        {/* List */}
+        {/* 资料列表区域 */}
         <div className="flex-1 overflow-y-auto">
           {loading ? (
+            // 加载中状态
             <div className="px-4 py-8 text-center">
               <Loader2 size={16} className="animate-spin mx-auto mb-2" />
               <div className="text-xs text-[var(--color-text-muted)]">加载中...</div>
             </div>
           ) : materials.length === 0 ? (
+            // 无资料提示
             <div className="px-4 py-8 text-center">
               <BookOpen size={20} className="text-[var(--color-text-muted)] mx-auto mb-2" />
               <div className="text-xs text-[var(--color-text-muted)]">本分区暂无资料</div>
             </div>
           ) : (
+            // 资料列表
             <div className="space-y-0.5 p-2">
               {materials.map((mat) => {
                 const isChecked = checked.has(mat.material_id);
@@ -128,14 +142,17 @@ export default function MaterialPicker({
                       isChecked ? "bg-[var(--color-accent)]/5" : ""
                     }`}
                   >
+                    {/* 选中图标 */}
                     {isChecked ? (
                       <CheckSquare size={15} className="text-[var(--color-accent)] flex-shrink-0" />
                     ) : (
                       <Square size={15} className="text-[var(--color-text-muted)] flex-shrink-0" />
                     )}
+                    {/* 文件名 */}
                     <span className="truncate flex-1 text-[var(--color-text-secondary)]">
                       {mat.file_name}
                     </span>
+                    {/* 文件大小 */}
                     <span className="text-[10px] text-[var(--color-text-muted)] flex-shrink-0">
                       {formatSize(mat.file_size)}
                     </span>
@@ -146,7 +163,7 @@ export default function MaterialPicker({
           )}
         </div>
 
-        {/* Footer */}
+        {/* 底部操作栏：已选数量 + 取消/确认按钮 */}
         <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--color-border)]">
           <span className="text-xs text-[var(--color-text-muted)]">
             已选: {checked.size}

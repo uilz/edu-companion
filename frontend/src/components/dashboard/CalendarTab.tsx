@@ -1,33 +1,38 @@
 "use client";
 
+// ── 外部依赖导入 ──
 import { useState, useEffect, useCallback } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight, Loader2, Flame, Target, Zap } from "lucide-react";
 import Link from "next/link";
 
+// ── API 基础地址（可配置） ──
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-// ── Types ──
+// ── 类型定义 ──
 
+// 单日学习记录
 interface DayEntry {
-  date: string;
-  day: number;
-  total: number;
-  correct: number;
-  accuracy: number | null;
+  date: string;       // 日期字符串（YYYY-MM-DD）
+  day: number;        // 日（1-31）
+  total: number;      // 当日总答题数
+  correct: number;    // 当日正确数
+  accuracy: number | null;  // 正确率（0-1），无数据时为 null
 }
 
+// 月历整体数据
 interface CalendarData {
   year: number;
   month: number;
   days: DayEntry[];
-  month_total: number;
-  month_correct: number;
-  month_accuracy: number | null;
-  month_streak: number;
-  best_day: { date: string; total: number } | null;
+  month_total: number;       // 本月总答题数
+  month_correct: number;     // 本月总正确数
+  month_accuracy: number | null;  // 本月正确率
+  month_streak: number;      // 本月连续学习天数
+  best_day: { date: string; total: number } | null;  // 本月答题最多的一天
 }
 
-// ── Heatmap color ──
+// ── 热力图颜色函数 ──
+// 根据答题数量返回背景色（GitHub 贡献图风格）
 
 function heatColor(total: number): string {
   if (total === 0) return "var(--color-surface)";
@@ -37,20 +42,26 @@ function heatColor(total: number): string {
   return "#39d353";
 }
 
+// 根据答题数量返回文字颜色（深色背景用白色，浅色用灰色）
+
 function textColor(total: number): string {
   if (total === 0) return "var(--color-text-muted)";
   if (total <= 5) return "#666";
   return "#fff";
 }
 
-// ── Helpers ──
+// ── 辅助常量与工具函数 ──
 
+// 月份中文名称数组
 const MONTH_NAMES = [
   "1月", "2月", "3月", "4月", "5月", "6月",
   "7月", "8月", "9月", "10月", "11月", "12月",
 ];
 
+// 星期表头（周一至周日，与日历网格对齐）
 const DAY_HEADERS = ["一", "二", "三", "四", "五", "六", "日"];
+
+// 计算某月1日是星期几，返回值 0=周一 ... 6=周日
 
 function dayOfWeek(year: number, month: number, day: number): number {
   // 0=Sun, 1=Mon, ..., 6=Sat → 我们 0=Mon, 6=Sun
@@ -58,7 +69,8 @@ function dayOfWeek(year: number, month: number, day: number): number {
   return d === 0 ? 6 : d - 1;
 }
 
-// ── DayDetail Popover ──
+// ── 日期详情弹窗组件 ──
+// 点击日历格子后弹出，显示该日答题数、正确数和正确率
 
 function DayDetail({ day, onClose }: { day: DayEntry; onClose: () => void }) {
   const date = new Date(day.date);
@@ -122,19 +134,23 @@ function DayDetail({ day, onClose }: { day: DayEntry; onClose: () => void }) {
   );
 }
 
-// ── Main page ──
+// ── 主页面组件 ──
 
 export function CalendarTab() {
+  // 当前选中的年/月
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
-  const [data, setData] = useState<CalendarData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [selectedDay, setSelectedDay] = useState<DayEntry | null>(null);
+  const [data, setData] = useState<CalendarData | null>(null);   // 月历数据
+  const [loading, setLoading] = useState(true);                  // 加载状态
+  const [selectedDay, setSelectedDay] = useState<DayEntry | null>(null); // 当前选中的日
+
+  // 获取指定年月的日历数据
 
   const fetchCalendar = useCallback(async (y: number, m: number) => {
     setLoading(true);
     try {
+      // 调用后端 API 获取月历数据
       const res = await fetch(
         `${API_BASE}/api/progress/default_user/calendar?year=${y}&month=${m}`
       );
@@ -142,25 +158,35 @@ export function CalendarTab() {
       const json: CalendarData = await res.json();
       setData(json);
     } catch {
-      setData(null);
+      setData(null);  // 请求失败时清空数据
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // 当年或月份变化时重新获取数据
+
   useEffect(() => {
     fetchCalendar(year, month);
   }, [year, month, fetchCalendar]);
+
+  // ── 月份导航 ──
+
+  // 上一个月
 
   const goPrev = () => {
     if (month === 1) { setYear(y => y - 1); setMonth(12); }
     else setMonth(m => m - 1);
   };
 
+  // 下一个月
+
   const goNext = () => {
     if (month === 12) { setYear(y => y + 1); setMonth(1); }
     else setMonth(m => m + 1);
   };
+
+  // 跳转到本月
 
   const goToday = () => {
     const n = new Date();
@@ -168,15 +194,16 @@ export function CalendarTab() {
     setMonth(n.getMonth() + 1);
   };
 
-  // Build grid
+  // ── 构建日历网格 ──
+
   const days = data?.days || [];
-  const firstDow = dayOfWeek(year, month, 1);
-  const totalDays = new Date(year, month, 0).getDate(); // days in month
+  const firstDow = dayOfWeek(year, month, 1);                     // 当月1日的星期索引
+  const totalDays = new Date(year, month, 0).getDate();          // 当月总天数
 
   const cells: (DayEntry | null)[] = [];
-  // Leading blanks
+  // 填充月初空白格子（使1日对齐到正确星期列）
   for (let i = 0; i < firstDow; i++) cells.push(null);
-  // Actual days
+  // 填充当月每一天，若后端无数据则用默认空记录
   for (let d = 1; d <= totalDays; d++) {
     const entry = days.find((dd) => dd.day === d) || {
       date: `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`,
@@ -190,6 +217,8 @@ export function CalendarTab() {
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
+  // ── 加载中：显示旋转图标 ──
+
   if (loading) {
     return (
       <div>
@@ -201,7 +230,7 @@ export function CalendarTab() {
   return (
     <div>
       <div>
-        {/* Header */}
+        {/* ── 页面标题 ── */}
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-[var(--color-text)]">
@@ -214,7 +243,7 @@ export function CalendarTab() {
           </div>
         </div>
 
-        {/* Month selector */}
+        {/* ── 月份选择器（上/下月切换，跳转今天） ── */}
         <div className="flex items-center justify-between mb-6">
           <button
             onClick={goPrev}
@@ -241,9 +270,9 @@ export function CalendarTab() {
           </button>
         </div>
 
-        {/* Heatmap grid */}
+        {/* ── 热力图网格（GitHub 贡献图风格） ── */}
         <div className="border border-[var(--color-border)] bg-[var(--color-card)] p-4 mb-6">
-          {/* Day headers */}
+          {/* 星期表头行 */}
           <div className="grid grid-cols-7 gap-1 mb-2">
             {DAY_HEADERS.map((h) => (
               <div key={h} className="text-center text-[10px] text-[var(--color-text-muted)] py-1">
@@ -252,10 +281,11 @@ export function CalendarTab() {
             ))}
           </div>
 
-          {/* Cells */}
+          {/* 日历格子：空白占位 / 当日格子 */}
           <div className="grid grid-cols-7 gap-1">
             {cells.map((cell, i) => {
               if (!cell) {
+                // 空白占位格
                 return <div key={`empty-${i}`} className="aspect-square" />;
               }
               const isToday = cell.date === todayStr;
@@ -286,7 +316,7 @@ export function CalendarTab() {
             })}
           </div>
 
-          {/* Legend */}
+          {/* ── 图例（少 → 多） ── */}
           <div className="flex items-center gap-2 mt-4 justify-end text-[10px] text-[var(--color-text-muted)]">
             <span>少</span>
             {[0, 5, 10, 20].map((n) => (
@@ -301,7 +331,7 @@ export function CalendarTab() {
           </div>
         </div>
 
-        {/* Month stats */}
+        {/* ── 本月统计概览（答题数、正确率、连续学习、学习天数） ── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           <div className="border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-center">
             <div className="text-xl font-bold text-[var(--color-text)]">{data?.month_total || 0}</div>
@@ -328,7 +358,7 @@ export function CalendarTab() {
           </div>
         </div>
 
-        {/* Best day highlight */}
+        {/* ── 本月最佳学习日高亮 ── */}
         {data?.best_day && (
           <div className="border border-[var(--color-border)] bg-[var(--color-card)] p-4 flex items-center gap-3">
             <Zap size={18} className="text-[var(--color-warning)] flex-shrink-0" />
@@ -344,7 +374,7 @@ export function CalendarTab() {
           </div>
         )}
 
-        {/* Quick links */}
+        {/* ── 快捷操作链接（开始练习 / 查看学情） ── */}
         <div className="flex gap-3 mt-6">
           <Link
             href="/practice"
@@ -361,7 +391,7 @@ export function CalendarTab() {
         </div>
       </div>
 
-      {/* Day detail popover */}
+      {/* ── 日期详情弹窗 ── */}
       {selectedDay && (
         <DayDetail day={selectedDay} onClose={() => setSelectedDay(null)} />
       )}

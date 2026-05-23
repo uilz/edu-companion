@@ -1,5 +1,6 @@
 "use client";
 
+// ── 导入依赖 ──
 import { useState, useEffect } from "react";
 import {
   RotateCcw, CheckCircle, XCircle, Loader2, BookOpen,
@@ -8,10 +9,11 @@ import {
 import Card from "@/components/ui/Card";
 import MathContent from "@/components/ui/MathContent";
 
+// ── API 基础地址 ──
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // ── Types ──
-
+// 错因归因数据（AI 分析结果）
 interface Attribution {
   primary: string;
   secondary: string | null;
@@ -21,6 +23,7 @@ interface Attribution {
   recommendation: string;
 }
 
+// 错题条目结构
 interface ErrorEntry {
   entry_id: string;
   question_id: string;
@@ -41,6 +44,7 @@ interface ErrorEntry {
   }>;
 }
 
+// 错题统计信息
 interface ErrorStats {
   total: number;
   by_group: Record<string, number>;
@@ -48,7 +52,7 @@ interface ErrorStats {
   top_weak_skills: string[];
 }
 
-// ── Labels ──
+// ── 错误类型中文标签 ──
 
 const errorLabel: Record<string, string> = {
   conceptual: "概念错误",
@@ -68,7 +72,7 @@ const groupColors: Record<string, string> = {
   "未分类": "#737373",
 };
 
-// ── Parse attribution (may be JSON string) ──
+// ── 解析归因数据（可能是 JSON 字符串） ──
 function parseAttr(a: Attribution | string | undefined): Attribution | null {
   if (!a) return null;
   if (typeof a === "string") {
@@ -77,7 +81,7 @@ function parseAttr(a: Attribution | string | undefined): Attribution | null {
   return a;
 }
 
-// ── Main page ──
+// ── 主页面：错题本 ──
 
 export default function ErrorBookPage() {
   const [entries, setEntries] = useState<ErrorEntry[]>([]);
@@ -87,6 +91,7 @@ export default function ErrorBookPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState<string | null>(null);
 
+  // ── 获取错题列表（按过滤状态） ──
   const fetchErrors = async (status: string) => {
     setLoading(true);
     try {
@@ -103,6 +108,7 @@ export default function ErrorBookPage() {
     setLoading(false);
   };
 
+  // ── 获取错题统计 ──
   const fetchStats = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/practice/errors/stats`);
@@ -113,11 +119,13 @@ export default function ErrorBookPage() {
     } catch {}
   };
 
+  // ── 初始化：数据加载 ──
   useEffect(() => {
     fetchErrors(filter);
     fetchStats();
   }, [filter]);
 
+  // ── 标记错题为"已掌握" ──
   const markResolved = async (entryId: string) => {
     await fetch(`${API_BASE}/api/practice/errors/${entryId}/review?is_correct=true`, {
       method: "POST",
@@ -126,6 +134,7 @@ export default function ErrorBookPage() {
     fetchStats();
   };
 
+  // ── AI 分析错因 ──
   const analyzeError = async (entryId: string) => {
     setAnalyzing(entryId);
     try {

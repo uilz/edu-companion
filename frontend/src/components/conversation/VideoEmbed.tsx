@@ -1,8 +1,13 @@
 "use client";
 
+// 导入 React hooks 和图标组件
 import { useState } from "react";
 import { Play, ExternalLink } from "lucide-react";
 
+// ── 组件属性类型定义 ──
+// url: 视频链接（B站/YouTube/直链）
+// title: 视频标题（可选）
+// thumbnail: 自定义缩略图 URL（可选）
 interface VideoEmbedProps {
   url: string;
   title?: string;
@@ -11,14 +16,24 @@ interface VideoEmbedProps {
 
 // ── URL Parser ──
 
+// ── 解析后的视频信息类型 ──
+// platform: 视频平台标识（bilibili / youtube / direct）
+// embedUrl: 用于嵌入播放的 URL
 interface VideoInfo {
   platform: "bilibili" | "youtube" | "direct";
   embedUrl: string;
 }
 
+/**
+ * 解析视频 URL，提取嵌入播放所需的参数
+ * 支持三种格式：
+ *   - B站：bilibili.com/video/BVxxx
+ *   - YouTube：youtube.com/watch?v=xxx / youtu.be/xxx
+ *   - 直接视频文件：.mp4 / .webm / .mov / .flv
+ */
 function parseVideoUrl(url: string): VideoInfo | null {
   // B站: bilibili.com/video/BVxxx
-  const biliMatch = url.match(/bilibili\.com\/video\/(BV[a-zA-Z0-9]+)/);
+  const biliMatch = url.match(/bilibili\\.com\\/video\\/(BV[a-zA-Z0-9]+)/);
   if (biliMatch) {
     return {
       platform: "bilibili",
@@ -28,7 +43,7 @@ function parseVideoUrl(url: string): VideoInfo | null {
 
   // YouTube: youtube.com/watch?v=xxx or youtu.be/xxx
   const ytMatch = url.match(
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]+)/
+    /(?:youtube\\.com\\/watch\\?v=|youtu\\.be\\/|youtube\\.com\\/embed\\/)([a-zA-Z0-9_-]+)/
   );
   if (ytMatch) {
     return {
@@ -38,7 +53,7 @@ function parseVideoUrl(url: string): VideoInfo | null {
   }
 
   // Direct video file
-  if (/\.(mp4|webm|mov|flv)(\?|$)/i.test(url)) {
+  if (/\\.(mp4|webm|mov|flv)(\\?|$)/i.test(url)) {
     return { platform: "direct", embedUrl: url };
   }
 
@@ -47,13 +62,19 @@ function parseVideoUrl(url: string): VideoInfo | null {
 
 // ── Component ──
 
+/**
+ * 视频嵌入组件
+ * 根据 URL 自动识别平台（B站 / YouTube / 直链视频），
+ * 渲染对应的嵌入播放器或缩略图预览 + 点击播放界面。
+ */
 export default function VideoEmbed({ url, title, thumbnail }: VideoEmbedProps) {
   const [showVideo, setShowVideo] = useState(false);
   const videoInfo = parseVideoUrl(url);
 
   if (!videoInfo) return null;
 
-  // Thumbnail / click-to-play for iframe embeds
+  // ── 缩略图预览 + 点击播放（仅 iframe 嵌入的视频） ──
+  // 首次渲染时显示缩略图和播放按钮，用户点击后才加载 iframe
   if (videoInfo.platform !== "direct" && !showVideo) {
     return (
       <div className="border border-[var(--color-border)] bg-[var(--color-surface)] mt-2 overflow-hidden">
@@ -96,7 +117,8 @@ export default function VideoEmbed({ url, title, thumbnail }: VideoEmbedProps) {
     );
   }
 
-  // Inline iframe (B站 / YouTube)
+  // ── iframe 嵌入播放器（B站 / YouTube） ──
+  // 用户已点击播放，或直接渲染非直链视频的 iframe
   if (videoInfo.platform !== "direct") {
     return (
       <div className="border border-[var(--color-border)] bg-[var(--color-surface)] mt-2 overflow-hidden">
@@ -128,7 +150,7 @@ export default function VideoEmbed({ url, title, thumbnail }: VideoEmbedProps) {
     );
   }
 
-  // Direct <video> tag
+  // ── 原生 <video> 标签播放器（直链视频文件） ──
   return (
     <div className="border border-[var(--color-border)] bg-[var(--color-surface)] mt-2 overflow-hidden">
       <video src={videoInfo.embedUrl} controls className="w-full max-h-96" preload="metadata">

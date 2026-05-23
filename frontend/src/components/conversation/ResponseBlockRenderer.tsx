@@ -10,17 +10,21 @@ import { renderContent } from "@/lib/math";
 import { useRenderedContent } from "@/lib/useRenderedContent";
 import type { ResponseBlock } from "@/types";
 
+// ResponseBlockRenderer 组件的 props 类型：接收一个 ResponseBlock 数据块
 interface ResponseBlockRendererProps {
   block: ResponseBlock;
 }
 
+/** 主渲染组件：根据 block 的状态和类型，分发到对应的子组件进行渲染 */
 export default function ResponseBlockRenderer({ block }: ResponseBlockRendererProps) {
   const { type, status, content } = block;
 
+  // 状态：生成中 —— 显示加载占位动画
   if (status === "generating") {
     return <GeneratingPlaceholder type={type} />;
   }
 
+  // 状态：失败 —— 显示错误信息，支持重试提示
   if (status === "failed") {
     return (
       <div className="border border-[var(--color-error)] bg-[var(--color-error)]/5 px-4 py-3 mt-2">
@@ -34,6 +38,7 @@ export default function ResponseBlockRenderer({ block }: ResponseBlockRendererPr
     );
   }
 
+  // 根据内容块 type 分发到对应的渲染子组件
   switch (type) {
     case "text":
       return <TextBlock content={content} sources={block.sources} />;
@@ -54,7 +59,9 @@ export default function ResponseBlockRenderer({ block }: ResponseBlockRendererPr
   }
 }
 
+/** 生成中的占位组件：根据内容类型显示对应的 loading 图标和动画 */
 function GeneratingPlaceholder({ type }: { type: string }) {
+  // 各类型对应的加载提示文本
   const labels: Record<string, string> = {
     image: "正在生成图像...",
     audio: "正在合成语音...",
@@ -62,6 +69,7 @@ function GeneratingPlaceholder({ type }: { type: string }) {
     document: "正在生成文档...",
   };
 
+  // 各类型对应的加载图标
   const icons: Record<string, React.ReactNode> = {
     image: <Image size={16} />,
     audio: <Volume2 size={16} />,
@@ -87,6 +95,7 @@ function GeneratingPlaceholder({ type }: { type: string }) {
   );
 }
 
+/** 纯文本块组件：渲染 Markdown/数学公式 转换后的 HTML，并显示引用来源 */
 function TextBlock({ content, sources }: { content: Record<string, unknown>; sources?: string[] }) {
   const text = (content.text as string) || "";
   const renderedHtml = useRenderedContent(text);
@@ -116,36 +125,42 @@ function TextBlock({ content, sources }: { content: Record<string, unknown>; sou
   );
 }
 
+/** 视频块路由组件：判断内容是视频嵌入还是媒体搜索结果，分发到对应组件 */
 function VideoBlockRouter({ content }: { content: Record<string, unknown> }) {
   const url = (content.url as string) || "";
   const title = (content.title as string) || "";
   const thumbnail = (content.thumbnail as string) || "";
   const platforms = content.platforms as Array<unknown> | undefined;
 
+  // 如果有 platforms 数组 → 是媒体搜索结果 → 使用 MediaSearchBlock 展示
   // If this has platforms array → it's a MediaSearch result → show MediaSearchBlock
   if (platforms && platforms.length > 0) {
     return <MediaSearchBlock content={content} />;
   }
 
+  // 如果 URL 匹配视频平台 → 使用 VideoEmbed 嵌入播放
   // If URL looks like a video platform → embed it
   if (url && /bilibili\.com|youtu\.be|youtube\.com|\.mp4|\.webm/i.test(url)) {
     return <VideoEmbed url={url} title={title} thumbnail={thumbnail} />;
   }
 
+  // 兜底：显示 MediaSearchBlock（兼容旧格式）
   // Fallback: show MediaSearchBlock (handles legacy format)
   return <MediaSearchBlock content={content} />;
 }
 
+/** 练习块路由组件：判断是交互式练习还是旧格式被动展示，分发到对应组件 */
 function PracticeBlockRouter({ content }: { content: Record<string, unknown> }) {
-  // Check if this is an interactive inline practice block (has block_id + stem)
+  // 提取练习数据：交互式练习需要包含 block_id 和 stem
   const blockId = content.block_id as string;
   const stem = content.stem as string;
   const options = (content.options as Option[]) || [];
   const answerType = (content.answer_type as string) || "choice";
   const hint = (content.hint as string) || "再想想思路";
 
+  // 有 block_id 且 stem 存在 → 渲染交互式练习组件
   if (blockId && stem) {
-    // Interactive inline practice
+    // 交互式在线练习（支持答题交互和即时反馈）
     return (
       <InlinePracticeBlock
         blockId={blockId}
@@ -155,22 +170,25 @@ function PracticeBlockRouter({ content }: { content: Record<string, unknown> }) 
         answerType={answerType}
         hint={hint}
         onAnswer={async (_blockId, _answer) => {
-          // Answer callback - handled internally by the component
+          // 答题回调——由组件内部处理逻辑
         }}
       />
     );
   }
 
-  // Fallback to passive display (old format)
+  // 兜底：以静态方式展示练习内容（兼容旧格式无交互版本）
   return <PracticeBlock content={content} />;
 }
 
+/** 练习选项的数据结构：选项字母 + 文本内容 */
 interface Option {
   letter: string;
   text: string;
 }
 
+/** 旧格式练习块组件：静态展示题目、选项和解析（无交互） */
 function PracticeBlock({ content }: { content: Record<string, unknown> }) {
+  // 从 content 中提取练习数据
   const subject = (content.subject as string) || "";
   const question = (content.question as string) || "";
   const options = (content.options as string[]) || [];
@@ -197,8 +215,8 @@ function PracticeBlock({ content }: { content: Record<string, unknown> }) {
         {options.length > 0 && (
           <div className="mt-3 space-y-1.5">
             {options.map((opt, i) => {
-              const letter = String.fromCharCode(65 + i);
-              const isCorrect = opt === answer || letter === answer;
+              const letter = String.fromCharCode(65 + i);  // A, B, C, D...
+              const isCorrect = opt === answer || letter === answer;  // 判断该选项是否为正确答案
               return (
                 <div
                   key={i}
@@ -236,6 +254,7 @@ function PracticeBlock({ content }: { content: Record<string, unknown> }) {
   );
 }
 
+/** 图像块组件：显示生成的图片及对应的提示词 */
 function ImageBlock({ content }: { content: Record<string, unknown> }) {
   const prompt = (content.prompt as string) || "";
   const url = (content.url as string) || "";
@@ -269,6 +288,7 @@ function ImageBlock({ content }: { content: Record<string, unknown> }) {
   );
 }
 
+/** 思维导图块组件：显示思维导图标题和入口提示 */
 function MindMapBlock({ content }: { content: Record<string, unknown> }) {
   const topic = (content.topic as string) || "";
 
@@ -292,6 +312,7 @@ function MindMapBlock({ content }: { content: Record<string, unknown> }) {
   );
 }
 
+/** 文档块组件：显示文档标题、格式及下载链接 */
 function DocumentBlock({ content }: { content: Record<string, unknown> }) {
   const title = (content.title as string) || "文档";
   const format = (content.format as string) || "pdf";
@@ -324,6 +345,7 @@ function DocumentBlock({ content }: { content: Record<string, unknown> }) {
   );
 }
 
+/** 语音块组件：根据是否有 URL 显示语音生成中状态或播放器 */
 function AudioBlock({ content }: { content: Record<string, unknown> }) {
   const url = (content.url as string) || "";
   const text = (content.text as string) || "";

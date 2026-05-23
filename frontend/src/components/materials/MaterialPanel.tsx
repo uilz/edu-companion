@@ -1,6 +1,12 @@
 "use client";
 
+/**
+ * MaterialPanel - 学习资料面板组件
+ * 展示、上传、搜索、删除学习资料，并支持将资料转为知识库条目。
+ */
+
 import { useState, useEffect, useCallback } from "react";
+// UI 图标库导入
 import {
   FileText,
   Search,
@@ -15,16 +21,25 @@ import {
 } from "lucide-react";
 import type { MaterialMeta } from "@/types";
 
+// 组件属性接口：需传入分区 ID
 interface MaterialPanelProps {
   partitionId: string;
 }
 
+/**
+ * 格式化文件大小（B / KB / MB）
+ * @param bytes 字节数
+ */
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
+/**
+ * 根据文件类型返回对应的图标元素
+ * @param fileType 文件扩展名（pdf / docx / pptx 等）
+ */
 function fileIcon(fileType: string) {
   if (fileType === "pdf") return <FileText size={14} className="text-red-400" />;
   if (fileType === "docx") return <FileText size={14} className="text-blue-400" />;
@@ -33,18 +48,20 @@ function fileIcon(fileType: string) {
 }
 
 export default function MaterialPanel({ partitionId }: MaterialPanelProps) {
-  const [materials, setMaterials] = useState<MaterialMeta[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [error, setError] = useState("");
+  // ── 状态管理 ──
+  const [materials, setMaterials] = useState<MaterialMeta[]>([]); // 资料列表
+  const [loading, setLoading] = useState(true);                   // 加载中状态
+  const [uploading, setUploading] = useState(false);              // 上传中状态
+  const [searchQuery, setSearchQuery] = useState("");             // 搜索关键词
+  const [expandedId, setExpandedId] = useState<string | null>(null); // 当前展开的资料项 ID
+  const [error, setError] = useState("");                         // 错误信息
 
-  // ── Load ──
+  // ── 加载资料列表 ──
   const loadMaterials = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
+      // 构造请求 URL，附加分区 ID 和搜索关键词
       const url = new URL("/api/materials", window.location.origin);
       if (partitionId) url.searchParams.set("partition_id", partitionId);
       if (searchQuery) url.searchParams.set("search", searchQuery);
@@ -60,16 +77,18 @@ export default function MaterialPanel({ partitionId }: MaterialPanelProps) {
     }
   }, [partitionId, searchQuery]);
 
+  // 组件挂载 / 依赖变化时重新加载
   useEffect(() => {
     loadMaterials();
   }, [loadMaterials]);
 
-  // ── Upload ──
+  // ── 上传资料 ──
   const handleUpload = useCallback(
     async (file: File) => {
       setUploading(true);
       setError("");
       try {
+        // 使用 FormData 上传文件及分区 ID
         const formData = new FormData();
         formData.append("file", file);
         formData.append("partition_id", partitionId);
@@ -81,6 +100,7 @@ export default function MaterialPanel({ partitionId }: MaterialPanelProps) {
           const err = await res.json();
           throw new Error(err.detail || "上传失败");
         }
+        // 上传成功后刷新列表
         await loadMaterials();
       } catch (e) {
         setError(e instanceof Error ? e.message : "上传失败");
@@ -91,7 +111,7 @@ export default function MaterialPanel({ partitionId }: MaterialPanelProps) {
     [partitionId, loadMaterials]
   );
 
-  // ── Delete ──
+  // ── 删除资料 ──
   const handleDelete = useCallback(
     async (materialId: string) => {
       try {
@@ -99,6 +119,7 @@ export default function MaterialPanel({ partitionId }: MaterialPanelProps) {
           method: "DELETE",
         });
         if (!res.ok) throw new Error("删除失败");
+        // 从本地状态中移除已删除项，避免重新请求
         setMaterials((prev) => prev.filter((m) => m.material_id !== materialId));
       } catch (e) {
         setError(e instanceof Error ? e.message : "删除失败");
@@ -107,7 +128,7 @@ export default function MaterialPanel({ partitionId }: MaterialPanelProps) {
     []
   );
 
-  // ── Promote ──
+  // ── 转为知识库 ──
   const handlePromote = useCallback(
     async (materialId: string) => {
       try {
@@ -118,6 +139,7 @@ export default function MaterialPanel({ partitionId }: MaterialPanelProps) {
           const err = await res.json();
           throw new Error(err.detail || "转为知识库失败");
         }
+        // 成功后刷新列表以更新资料状态
         await loadMaterials();
       } catch (e) {
         setError(e instanceof Error ? e.message : "转为知识库失败");
@@ -128,7 +150,7 @@ export default function MaterialPanel({ partitionId }: MaterialPanelProps) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
+      {/* ── 面板标题与上传入口 ── */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
         <div className="flex items-center gap-2">
           <BookOpen size={16} className="text-[var(--color-accent)]" />
@@ -141,6 +163,7 @@ export default function MaterialPanel({ partitionId }: MaterialPanelProps) {
             </span>
           )}
         </div>
+        {/* 上传按钮 - 点击触发隐藏的 file input */}
         <label className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] cursor-pointer transition-colors">
           {uploading ? (
             <Loader2 size={16} className="animate-spin" />
@@ -160,7 +183,7 @@ export default function MaterialPanel({ partitionId }: MaterialPanelProps) {
         </label>
       </div>
 
-      {/* Search */}
+      {/* ── 搜索框 ── */}
       <div className="px-3 py-2">
         <div className="flex items-center gap-1.5 px-2 py-1.5 text-xs bg-[var(--color-surface)] border border-[var(--color-border)]">
           <Search size={13} className="text-[var(--color-text-muted)]" />
@@ -179,19 +202,21 @@ export default function MaterialPanel({ partitionId }: MaterialPanelProps) {
         </div>
       </div>
 
-      {/* Error */}
+      {/* ── 错误提示 ── */}
       {error && (
         <div className="px-3 py-1.5 text-xs text-red-400">{error}</div>
       )}
 
-      {/* Content */}
+      {/* ── 主体内容区域 ── */}
       <div className="flex-1 overflow-y-auto">
         {loading ? (
+          /* 加载中状态 */
           <div className="px-4 py-8 text-center">
             <Loader2 size={16} className="animate-spin mx-auto mb-2 text-[var(--color-text-muted)]" />
             <div className="text-xs text-[var(--color-text-muted)]">加载中...</div>
           </div>
         ) : materials.length === 0 ? (
+          /* 空状态 - 暂无资料 */
           <div className="px-4 py-8 text-center">
             <BookOpen size={20} className="text-[var(--color-text-muted)] mx-auto mb-2" />
             <div className="text-xs text-[var(--color-text-muted)]">暂无资料</div>
@@ -200,12 +225,13 @@ export default function MaterialPanel({ partitionId }: MaterialPanelProps) {
             </div>
           </div>
         ) : (
+          /* 资料列表 */
           <div className="space-y-0.5 px-2 pb-4">
             {materials.map((mat) => {
               const isExpanded = expandedId === mat.material_id;
               return (
                 <div key={mat.material_id} className="border border-[var(--color-border)]">
-                  {/* Row */}
+                  {/* 资料行 - 点击展开/收起详情 */}
                   <button
                     onClick={() =>
                       setExpandedId(isExpanded ? null : mat.material_id)
@@ -230,7 +256,7 @@ export default function MaterialPanel({ partitionId }: MaterialPanelProps) {
                     )}
                   </button>
 
-                  {/* Expanded detail */}
+                  {/* 展开后的详情面板 */}
                   {isExpanded && (
                     <div className="px-3 py-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]">
                       <div className="space-y-1.5 text-[11px] text-[var(--color-text-muted)]">
@@ -250,6 +276,7 @@ export default function MaterialPanel({ partitionId }: MaterialPanelProps) {
                             {mat.status === "ready" ? "已索引" : mat.status === "stored" ? "已存储" : mat.status}
                           </span>
                         </div>
+                        {/* 关联知识点标签 */}
                         {mat.skills_covered && mat.skills_covered.length > 0 && (
                           <div className="flex gap-2 flex-wrap">
                             <span className="text-[var(--color-text-secondary)]">知识点:</span>
@@ -264,7 +291,7 @@ export default function MaterialPanel({ partitionId }: MaterialPanelProps) {
                           </div>
                         )}
 
-                        {/* Actions */}
+                        {/* 操作按钮：转为知识库 + 删除 */}
                         <div className="flex gap-2 pt-1">
                           {mat.status === "stored" && (
                             <button

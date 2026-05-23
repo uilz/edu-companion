@@ -1,11 +1,16 @@
-'use client';
+'use client'; // 客户端组件，使用浏览器 API（URL 参数等）
 
+// React / Next.js 核心导入
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Loader2 } from 'lucide-react';
 import DashboardShell, { type TabId } from '@/components/dashboard/DashboardShell';
 
+/**
+ * TabLoader - 标签页懒加载时的加载动画组件
+ * 显示一个旋转的 accent 色加载图标
+ */
 function TabLoader() {
   return (
     <div className="flex items-center justify-center py-20">
@@ -14,7 +19,8 @@ function TabLoader() {
   );
 }
 
-// Lazy-load tab components
+// ----- 懒加载各标签页组件 -----
+// 使用 next/dynamic 按需加载，减少首屏包体积
 const OverviewTab = dynamic(() => import('@/components/dashboard/OverviewTab'), {
   loading: () => <TabLoader />,
 });
@@ -49,6 +55,10 @@ const StudyTab = dynamic(() => import('@/components/dashboard/StudyTab').then(m 
   loading: () => <TabLoader />,
 });
 
+/**
+ * TAB_COMPONENTS - TabId 到组件实例的映射表
+ * 用于根据 URL 参数快速查找对应的标签页组件
+ */
 const TAB_COMPONENTS: Record<TabId, React.ComponentType> = {
   overview: OverviewTab,
   analytics: AnalyticsTab,
@@ -63,6 +73,11 @@ const TAB_COMPONENTS: Record<TabId, React.ComponentType> = {
   study: StudyTab,
 };
 
+/**
+ * DashboardContent - 仪表盘主内容区
+ * 从 URL 查询参数中读取 ?tab=xxx，渲染对应的标签页组件
+ * 若参数无效或缺失，默认显示 overview 标签页
+ */
 function DashboardContent() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab') as TabId | null;
@@ -77,6 +92,10 @@ function DashboardContent() {
   );
 }
 
+/**
+ * DashboardPage - 仪表盘页面入口（默认导出）
+ * 使用 Suspense 包裹 DashboardContent，整体渲染前先显示全屏加载动画
+ */
 export default function DashboardPage() {
   return (
     <Suspense

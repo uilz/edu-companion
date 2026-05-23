@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * 练习页面 - Practice Page
+ * 提供自适应练习题练习功能，包含答题、提示、知识状态追踪和错因分析。
+ * 用户可通过 URL 参数 (skill) 指定练习的技能领域。
+ */
+
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
@@ -16,12 +22,18 @@ import MathContent from "@/components/ui/MathContent";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+/**
+ * 题目选项接口：字母标识 + 选项文本 + 是否正确
+ */
 interface QuestionOption {
   letter: string;
   text: string;
   is_correct: boolean;
 }
 
+/**
+ * 题目接口：包含题目元数据、选项、正确答案、解析和提示
+ */
 interface Question {
   question_id: string;
   skill_id: string;
@@ -35,6 +47,9 @@ interface Question {
   difficulty: number;
 }
 
+/**
+ * 练习会话接口：会话 ID、题目列表、技能规划和模式
+ */
 interface Session {
   session_id: string;
   question_ids: string[];
@@ -43,6 +58,9 @@ interface Session {
   status: string;
 }
 
+/**
+ * 提交答案结果接口：正确性、解析、知识状态更新、错因分析和情感反馈
+ */
 interface SubmitResult {
   is_correct: boolean;
   correct_answer: string;
@@ -60,6 +78,9 @@ interface SubmitResult {
   emotional_feedback?: string;
 }
 
+/**
+ * 提示结果接口：提示层级、文本内容和类型
+ */
 interface HintResult {
   level: number;
   text: string;
@@ -69,21 +90,26 @@ interface HintResult {
 export const dynamic = 'force-dynamic';
 
 function PracticeContent() {
+  // --- URL 参数与状态管理 ---
   const searchParams = useSearchParams();
   const skillParam = searchParams.get('skill');
   const [initialSkill] = useState<string | null>(skillParam);
 
+  // 练习会话、题目列表、当前进度
   const [session, setSession] = useState<Session | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  // 用户选择、提交状态、提交结果
   const [selected, setSelected] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [submitResult, setSubmitResult] = useState<SubmitResult | null>(null);
+  // 加载状态、提示信息、计时
   const [loading, setLoading] = useState(false);
   const [hint, setHint] = useState<HintResult | null>(null);
   const [hintLevel, setHintLevel] = useState(0);
   const [startTime, setStartTime] = useState<number>(0);
 
+  // 当前题目与正确性快捷引用
   const q = questions[currentIndex];
   const isCorrect = submitResult?.is_correct;
 
@@ -221,7 +247,7 @@ function PracticeContent() {
     }
   };
 
-  // 加载中
+  // --- 渲染：加载中 ---
   if (loading && !q) {
     return (
       <main className="min-h-screen bg-[var(--color-bg)]">
@@ -233,7 +259,7 @@ function PracticeContent() {
     );
   }
 
-  // 无题目
+  // --- 渲染：无可用题目（提示重新生成） ---
   if (!q) {
     return (
       <main className="min-h-screen bg-[var(--color-bg)]">
@@ -253,10 +279,11 @@ function PracticeContent() {
     );
   }
 
+  // --- 渲染：主练习界面 ---
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
       <div className="max-w-3xl mx-auto px-6 py-16">
-        {/* Header */}
+        {/* 顶栏：标题 + 重新开始按钮 */}
         <div className="flex items-center justify-between mb-12">
           <h1 className="text-4xl font-bold tracking-tight text-[var(--color-text)]">
             练习
@@ -270,7 +297,7 @@ function PracticeContent() {
           </button>
         </div>
 
-        {/* Progress */}
+        {/* 进度条：显示科目 / 认知层级 / 难度与题号进度 */}
         <div className="mb-8">
           <div className="flex items-center justify-between text-xs text-[var(--color-text-muted)] mb-2">
             <span>
@@ -290,14 +317,15 @@ function PracticeContent() {
           </div>
         </div>
 
-        {/* Question */}
+        {/* 题目卡片：题目文本 + 选项 + 提示 + 操作按钮 + 结果反馈 */}
         <Card>
+          {/* 题目内容（支持 LaTeX 数学公式渲染） */}
           <MathContent
             text={q.text}
             className="text-base text-[var(--color-text)] leading-relaxed mb-8 message-content"
           />
 
-          {/* Options */}
+          {/* 选项列表：单选按钮，提交后显示正确/错误状态 */}
           {q.options && (
             <div className="space-y-3">
               {q.options.map((opt) => {
@@ -330,7 +358,7 @@ function PracticeContent() {
             </div>
           )}
 
-          {/* Hint */}
+          {/* 提示区域：显示分层提示内容 */}
           {hint && (
             <div className="mt-4 p-4 border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/5 text-sm">
               <div className="flex items-center gap-2 mb-1 text-[var(--color-accent)] font-semibold">
@@ -343,7 +371,7 @@ function PracticeContent() {
             </div>
           )}
 
-          {/* Action buttons */}
+          {/* 操作按钮：提交答案 / 获取提示（未提交时）；重新开始（已提交后） */}
           <div className="flex items-center gap-3 mt-8">
             {!submitted ? (
               <>
@@ -377,7 +405,7 @@ function PracticeContent() {
             )}
           </div>
 
-          {/* Result feedback */}
+          {/* 结果反馈区域：正确/错误提示、知识更新、解析、错因分析、情感反馈 */}
           {submitted && submitResult && (
             <div
               className={`mt-6 p-5 border text-sm leading-relaxed ${
@@ -448,7 +476,7 @@ function PracticeContent() {
           )}
         </Card>
 
-        {/* Complete button (last question) */}
+        {/* 完成按钮：最后一题提交后出现，通知后端写入对话分支 */}
         {submitted && currentIndex >= questions.length - 1 && !completed && (
           <div className="flex justify-center mb-4">
             <button
@@ -460,7 +488,7 @@ function PracticeContent() {
           </div>
         )}
 
-        {/* Navigation */}
+        {/* 导航按钮：上一题 / 下一题 */}
         <div className="flex items-center justify-between mt-6">
           <button
             onClick={handlePrev}
@@ -484,9 +512,14 @@ function PracticeContent() {
   );
 }
 
+/**
+ * 练习页面入口组件
+ * 使用 Suspense 包裹以支持 useSearchParams() 的客户端渲染
+ */
 export default function PracticePage() {
   return (
     <Suspense fallback={
+      // 外层加载状态（Suspense fallback）
       <main className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <Loader2 size={24} className="animate-spin text-[var(--color-accent)]" />

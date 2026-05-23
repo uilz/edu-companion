@@ -1,69 +1,79 @@
 "use client";
 
+// ── React 与 UI 图标导入 ──
 import { useState, useEffect, useCallback } from "react";
 import {
   Shield, AlertTriangle, CheckCircle, XCircle, Loader2,
   ChevronDown, ChevronUp, Trash2, Zap, BarChart3,
 } from "lucide-react";
 
+// ── API 基础地址：优先使用环境变量，默认回退到本地 8000 端口 ──
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-// ── Types ──
+// ── 类型定义 ──
+
+/** 质量概览数据 */
 interface QualitySummaryData {
-  total_questions: number;
-  analyzed: number;
-  excellent: number;
-  good: number;
-  marginal: number;
-  poor: number;
-  flagged: number;
-  retired: number;
-  avg_quality: number;
-  worst_questions: QuestionPreview[];
+  total_questions: number;   // 总题目数
+  analyzed: number;          // 已完成分析的题目数
+  excellent: number;         // 优秀
+  good: number;              // 良好
+  marginal: number;          // 一般
+  poor: number;              // 差（需淘汰）
+  flagged: number;           // 被标记的题目数
+  retired: number;           // 已淘汰的题目数
+  avg_quality: number;       // 平均质量分（0~1）
+  worst_questions: QuestionPreview[];  // 质量最差的题目列表
 }
 
+/** 题目预览（列表展示用） */
 interface QuestionPreview {
-  question_id: string;
-  text: string;
-  quality_score: number;
-  quality_grade: string;
-  correct_rate: number;
-  total_attempts: number;
-  flags: string[];
-  status_action: string;
+  question_id: string;       // 题目 ID
+  text: string;              // 题目文本
+  quality_score: number;     // 质量评分
+  quality_grade: string;     // 质量等级（excellent/good/marginal/poor）
+  correct_rate: number;      // 正确率
+  total_attempts: number;    // 总答题次数
+  flags: string[];           // 问题标记列表
+  status_action: string;     // 建议操作（retire/flag/keep）
 }
 
+/** 题目详情（右侧面板完整分析） */
 interface QuestionDetail {
   question_id: string;
   text: string;
-  skill_id: string;
-  subject: string;
+  skill_id: string;          // 所属技能
+  subject: string;           // 所属科目
   total_attempts: number;
-  correct_count: number;
+  correct_count: number;     // 答对次数
   correct_rate: number;
-  avg_time_seconds: number;
-  difficulty: number;
-  discrimination: number;
-  guess_rate: number;
+  avg_time_seconds: number;  // 平均作答时间（秒）
+  difficulty: number;        // IRT 难度参数
+  discrimination: number;    // IRT 区分度参数
+  guess_rate: number;        // 猜测率（低能力者答对概率）
   quality_score: number;
   quality_grade: string;
   flags: string[];
-  distractors: Distractor[];
-  time_fast_ratio: number;
-  time_slow_ratio: number;
-  current_status: string;
+  distractors: Distractor[]; // 干扰项分析
+  time_fast_ratio: number;   // 快速作答比例
+  time_slow_ratio: number;   // 慢速作答比例
+  current_status: string;    // 当前状态
   status_action: string;
 }
 
+/** 干扰项数据 */
 interface Distractor {
-  letter: string;
-  text: string;
-  count: number;
-  rate: number;
-  quality: string;
-  is_correct: boolean;
+  letter: string;            // 选项字母
+  text: string;              // 选项文本
+  count: number;             // 被选次数
+  rate: number;              // 被选比例
+  quality: string;           // 干扰项质量（excellent/good/marginal/dead）
+  is_correct: boolean;       // 是否为正确答案
 }
 
+// ── 常量配置 ──
+
+/** 质量等级对应的 Tailwind 颜色类名 */
 const GRADE_COLORS: Record<string, string> = {
   excellent: "text-[#10b981] bg-[#10b981]/10",
   good: "text-[#3b82f6] bg-[#3b82f6]/10",
@@ -71,20 +81,24 @@ const GRADE_COLORS: Record<string, string> = {
   poor: "text-[#ef4444] bg-[#ef4444]/10",
 };
 
+/** 问题标记标签（中文） */
 const FLAG_LABELS: Record<string, string> = {
   too_easy: "太简单", too_hard: "太难", low_disc: "区分度低",
   ambiguous: "有歧义", dead_distractor: "无效干扰项", high_guess: "猜测率高",
 };
 
+// ── 主组件：题库质量分析 Tab ──
 export function QualityTab() {
-  const [summary, setSummary] = useState<QualitySummaryData | null>(null);
-  const [detail, setDetail] = useState<QuestionDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [applying, setApplying] = useState(false);
-  const [applyResult, setApplyResult] = useState("");
-  const [error, setError] = useState("");
+  // ── 状态管理 ──
+  const [summary, setSummary] = useState<QualitySummaryData | null>(null);  // 质量概览数据
+  const [detail, setDetail] = useState<QuestionDetail | null>(null);        // 当前选中的题目详情
+  const [loading, setLoading] = useState(true);                             // 初次加载中
+  const [detailLoading, setDetailLoading] = useState(false);                // 详情加载中
+  const [applying, setApplying] = useState(false);                          // 正在执行淘汰操作
+  const [applyResult, setApplyResult] = useState("");                       // 操作结果提示文本
+  const [error, setError] = useState("");                                   // 错误信息
 
+  // ── 加载质量概览数据 ──
   const loadSummary = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/practice/quality`);
@@ -96,8 +110,10 @@ export function QualityTab() {
     }
   }, []);
 
+  // 组件挂载时自动加载数据
   useEffect(() => { loadSummary(); }, [loadSummary]);
 
+  // ── 加载指定题目的详细分析 ──
   const loadDetail = async (qid: string) => {
     setDetailLoading(true);
     try {
@@ -108,6 +124,7 @@ export function QualityTab() {
     }
   };
 
+  // ── 执行"淘汰差题"操作 ──
   const handleApply = async () => {
     setApplying(true);
     try {
@@ -116,7 +133,7 @@ export function QualityTab() {
       });
       const data = await res.json();
       setApplyResult(data.message || "操作完成");
-      await loadSummary();
+      await loadSummary();  // 操作完成后刷新概览
     } catch {
       setApplyResult("操作失败");
     } finally {
@@ -124,6 +141,7 @@ export function QualityTab() {
     }
   };
 
+  // ── 初次加载：显示加载动画 ──
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -132,10 +150,11 @@ export function QualityTab() {
     );
   }
 
+  // ── 主界面渲染 ──
   return (
     <div className="min-h-screen bg-[var(--color-bg)]">
       <div>
-        {/* Header */}
+        {/* ── 页面标题与操作按钮 ── */}
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-2xl font-bold text-[var(--color-text)] tracking-tight">
@@ -155,17 +174,19 @@ export function QualityTab() {
           </button>
         </div>
 
+        {/* ── 操作结果提示 ── */}
         {applyResult && (
           <div className="mb-6 px-4 py-2.5 border border-[var(--color-border)] text-sm text-[var(--color-text-muted)]">
             {applyResult}
           </div>
         )}
 
+        {/* ── 有数据时展示分析内容，否则显示空状态 ── */}
         {!summary ? (
           <EmptyState />
         ) : (
           <>
-            {/* ── Distribution bar ── */}
+            {/* ── 质量分布条 ── */}
             <div className="mb-8">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs text-[var(--color-text-muted)] uppercase tracking-wider">
@@ -175,6 +196,7 @@ export function QualityTab() {
                   {summary.analyzed}/{summary.total_questions} 已分析
                 </span>
               </div>
+              {/* 四色分布条：绿（优秀）→ 蓝（良好）→ 黄（一般）→ 红（待淘汰） */}
               <div className="h-3 flex overflow-hidden">
                 {summary.excellent > 0 && (
                   <div
@@ -205,6 +227,7 @@ export function QualityTab() {
                   />
                 )}
               </div>
+              {/* 图例说明 */}
               <div className="flex gap-4 mt-2 text-[10px] text-[var(--color-text-muted)]">
                 <span>🟢 优秀 {summary.excellent}</span>
                 <span>🔵 良好 {summary.good}</span>
@@ -214,9 +237,9 @@ export function QualityTab() {
               </div>
             </div>
 
-            {/* ── Two-column layout ── */}
+            {/* ── 左右两栏布局 ── */}
             <div className="grid lg:grid-cols-5 gap-6">
-              {/* Left: Worst questions */}
+              {/* 左侧：问题题目列表（占 2/5） */}
               <div className="lg:col-span-2">
                 <h2 className="text-sm font-semibold text-[var(--color-text)] uppercase tracking-wider mb-4 flex items-center gap-2">
                   <AlertTriangle size={14} className="text-[#ef4444]" />
@@ -261,7 +284,7 @@ export function QualityTab() {
                 </div>
               </div>
 
-              {/* Right: Detail panel */}
+              {/* 右侧：题目详情面板（占 3/5） */}
               <div className="lg:col-span-3">
                 {detailLoading ? (
                   <div className="flex items-center justify-center py-16">
@@ -284,10 +307,11 @@ export function QualityTab() {
   );
 }
 
-// ── Detail Panel ──
+// ── 题目详情面板组件 ──
 function QuestionDetailPanel({ detail }: { detail: QuestionDetail }) {
   return (
     <div className="border border-[var(--color-border)]">
+      {/* 题目基本信息 */}
       <div className="px-4 py-3 border-b border-[var(--color-border)]">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] font-mono text-[var(--color-text-muted)]">
@@ -305,7 +329,7 @@ function QuestionDetailPanel({ detail }: { detail: QuestionDetail }) {
         </div>
       </div>
 
-      {/* IRT metrics */}
+      {/* IRT 模型指标：难度、区分度、猜测率、质量分 */}
       <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Metric label="难度" value={detail.difficulty.toFixed(2)} hint="0=易 1=难" />
         <Metric label="区分度" value={detail.discrimination.toFixed(2)} hint=">0.3=好" />
@@ -313,7 +337,7 @@ function QuestionDetailPanel({ detail }: { detail: QuestionDetail }) {
         <Metric label="质量分" value={detail.quality_score.toFixed(2)} hint=">0.7=优秀" />
       </div>
 
-      {/* Stats */}
+      {/* 答题统计 */}
       <div className="px-4 py-2 border-t border-[var(--color-border)] grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] text-[var(--color-text-muted)]">
         <span>答题 {detail.total_attempts}次</span>
         <span>正确率 {(detail.correct_rate * 100).toFixed(0)}%</span>
@@ -321,7 +345,7 @@ function QuestionDetailPanel({ detail }: { detail: QuestionDetail }) {
         <span>状态: {detail.current_status}</span>
       </div>
 
-      {/* Flags */}
+      {/* 问题标记（如：太简单、区分度低等） */}
       {detail.flags.length > 0 && (
         <div className="px-4 py-2 border-t border-[var(--color-border)] flex flex-wrap gap-1.5">
           {detail.flags.map((f) => (
@@ -332,7 +356,7 @@ function QuestionDetailPanel({ detail }: { detail: QuestionDetail }) {
         </div>
       )}
 
-      {/* Distractors */}
+      {/* 干扰项分析 */}
       {detail.distractors.length > 0 && (
         <div className="border-t border-[var(--color-border)]">
           <div className="px-4 py-2 text-[10px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
@@ -365,7 +389,7 @@ function QuestionDetailPanel({ detail }: { detail: QuestionDetail }) {
         </div>
       )}
 
-      {/* Action */}
+      {/* 建议操作 */}
       {detail.status_action && (
         <div className="px-4 py-2.5 border-t border-[var(--color-border)] text-[10px] text-[var(--color-text-muted)]">
           建议: {detail.status_action === "retire" ? "🔴 建议淘汰" : detail.status_action === "flag" ? "🟡 建议标记" : "🟢 保持"}
@@ -375,6 +399,7 @@ function QuestionDetailPanel({ detail }: { detail: QuestionDetail }) {
   );
 }
 
+// ── 指标展示小组件 ──
 function Metric({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
     <div>
@@ -385,6 +410,7 @@ function Metric({ label, value, hint }: { label: string; value: string; hint: st
   );
 }
 
+// ── 空状态组件：尚无质量数据时展示 ──
 function EmptyState() {
   return (
     <div className="text-center py-16">

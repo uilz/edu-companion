@@ -1,10 +1,12 @@
 "use client";
 
+// ===== 导入依赖 =====
 import { useState, useEffect } from "react";
 import { Sun, Moon, Globe, Key, Cpu, MessageSquare, Info, Brain } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import Card from "@/components/ui/Card";
 
+// ===== 设置项类型定义 =====
 interface Settings {
   apiEndpoint: string;
   apiKey: string;
@@ -13,6 +15,7 @@ interface Settings {
   socraticMode: boolean;
 }
 
+// ===== 默认设置值 =====
 const defaultSettings: Settings = {
   apiEndpoint: "",
   apiKey: "",
@@ -21,10 +24,14 @@ const defaultSettings: Settings = {
   socraticMode: true,
 };
 
+// ===== 设置页面组件 =====
 export default function SettingsPage() {
+  // 主题上下文
   const { theme, toggleTheme, setTheme } = useTheme();
+  // 设置状态
   const [settings, setSettings] = useState<Settings>(defaultSettings);
 
+  // 从 localStorage 加载已保存的设置
   useEffect(() => {
     const saved = localStorage.getItem("edu-companion-settings");
     if (saved) {
@@ -35,6 +42,7 @@ export default function SettingsPage() {
     }
   }, []);
 
+  // 设置变更时自动持久化到 localStorage
   useEffect(() => {
     localStorage.setItem("edu-companion-settings", JSON.stringify(settings));
   }, [settings]);
@@ -47,7 +55,7 @@ export default function SettingsPage() {
         </h1>
 
         <div className="space-y-8">
-          {/* Appearance */}
+          {/* ===== 外观设置 ===== */}
           <Card title="外观">
             <div className="space-y-4">
               <div>
@@ -80,7 +88,7 @@ export default function SettingsPage() {
             </div>
           </Card>
 
-          {/* API Settings */}
+          {/* ===== API 设置 ===== */}
           <Card title="API 设置">
             <div className="space-y-4">
               <div>
@@ -143,7 +151,7 @@ export default function SettingsPage() {
             </div>
           </Card>
 
-          {/* Learning Preferences */}
+          {/* ===== 学习偏好设置 ===== */}
           <Card title="学习偏好">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -176,7 +184,7 @@ export default function SettingsPage() {
             </div>
           </Card>
 
-          {/* About */}
+          {/* ===== 关于页面 ===== */}
           <Card title="关于">
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">

@@ -1,5 +1,6 @@
 'use client';
 
+// ── 依赖导入 ──
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -12,16 +13,20 @@ import {
 } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 
+// ── 导航菜单项配置 ──
+// href: 路由路径, label: 显示文字, icon: Lucide 图标组件
 const navItems = [
   { href: '/dashboard', label: '驾驶舱', icon: LayoutDashboard },
   { href: '/learn',    label: '学习空间', icon: Brain },
   { href: '/practice', label: '专注练习', icon: Dumbbell },
 ];
 
+// ── 桌面端侧边栏导航组件 ──
 export default function Sidebar() {
   const pathname = usePathname();
   const { theme, toggleTheme } = useTheme();
 
+  // 判断当前路由是否与给定 href 匹配（用于高亮激活项）
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/';
     return pathname?.startsWith(href);
@@ -32,7 +37,7 @@ export default function Sidebar() {
       className="hidden md:flex flex-col fixed left-0 top-0 bottom-0 z-40 bg-[var(--color-bg)] border-r border-[var(--color-border)]"
       style={{ width: 'var(--sidebar-width)' }}
     >
-      {/* Logo */}
+      {/* ── 品牌 Logo 与标题 ── */}
       <div className="px-5 py-5 border-b border-[var(--color-border)]">
         <Link href="/" className="flex items-center gap-3 group">
           <div className="w-8 h-8 bg-[var(--color-accent)] flex items-center justify-center rounded transition-transform group-hover:scale-105">
@@ -44,7 +49,7 @@ export default function Sidebar() {
         </Link>
       </div>
 
-      {/* Nav */}
+      {/* ── 主导航菜单 ── */}
       <nav className="flex-1 px-2 py-4">
         <div className="space-y-0.5">
           {navItems.map((item) => {
@@ -66,6 +71,7 @@ export default function Sidebar() {
               >
                 <Icon size={18} strokeWidth={active ? 2.2 : 1.6} />
                 <span>{item.label}</span>
+                {/* 激活指示器小圆点 */}
                 {active && (
                   <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[var(--color-accent)]" />
                 )}
@@ -75,8 +81,9 @@ export default function Sidebar() {
         </div>
       </nav>
 
-      {/* Bottom */}
+      {/* ── 底部区域：设置、主题切换、版本号 ── */}
       <div className="border-t border-[var(--color-border)]">
+        {/* 设置入口 */}
         <Link
           href="/settings"
           className={`flex items-center gap-2.5 px-5 py-3 text-sm transition-colors
@@ -89,6 +96,7 @@ export default function Sidebar() {
           <span>设置</span>
         </Link>
 
+        {/* 深色/浅色主题切换按钮 */}
         <button
           onClick={toggleTheme}
           className="w-full flex items-center gap-2.5 px-5 py-3 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
@@ -97,6 +105,7 @@ export default function Sidebar() {
           <span>{theme === 'dark' ? '浅色模式' : '深色模式'}</span>
         </button>
 
+        {/* 版本信息 */}
         <div className="px-5 py-3 text-[10px] text-[var(--color-text-muted)] tracking-wide">
           智学伴 v1.0
         </div>

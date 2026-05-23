@@ -1,15 +1,19 @@
 "use client";
 
+// ===== React Hooks =====
 import { useState, useMemo, useCallback } from "react";
+// ===== 图标组件 =====
 import { BookOpen, Lightbulb, Check, X, Loader2 } from "lucide-react";
 import MathContent from "@/components/ui/MathContent";
 import { renderMath, renderMarkdown } from "@/lib/math";
 
+// ===== 选项接口 =====
 interface Option {
   letter: string;
   text: string;
 }
 
+// ===== 内联练习块属性接口 =====
 interface InlinePracticeBlockProps {
   blockId: string;
   questionId: string;
@@ -20,7 +24,7 @@ interface InlinePracticeBlockProps {
   onAnswer: (blockId: string, answer: string) => Promise<void>;
 }
 
-// API helpers
+// ===== API 请求封装 =====
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     headers: { "Content-Type": "application/json", ...options?.headers },
@@ -30,6 +34,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+// ===== 内联练习块主组件 =====
 export default function InlinePracticeBlock({
   blockId,
   questionId,
@@ -39,21 +44,24 @@ export default function InlinePracticeBlock({
   hint,
   onAnswer,
 }: InlinePracticeBlockProps) {
-  const [selectedAnswer, setSelectedAnswer] = useState<string>("");
-  const [submitted, setSubmitted] = useState(false);
-  const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
-  const [replyText, setReplyText] = useState("");
-  const [showHint, setShowHint] = useState(false);
-  const [currentHint, setCurrentHint] = useState(hint);
-  const [hintLevel, setHintLevel] = useState(1);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [skipped, setSkipped] = useState(false);
+  // ===== 状态管理 =====
+  const [selectedAnswer, setSelectedAnswer] = useState<string>("");   // 用户选择的答案
+  const [submitted, setSubmitted] = useState(false);                  // 是否已提交
+  const [isCorrect, setIsCorrect] = useState<boolean | null>(null);   // 答案是否正确
+  const [replyText, setReplyText] = useState("");                     // 提交后回复文本
+  const [showHint, setShowHint] = useState(false);                    // 是否显示提示
+  const [currentHint, setCurrentHint] = useState(hint);               // 当前提示内容
+  const [hintLevel, setHintLevel] = useState(1);                     // 提示层级
+  const [isSubmitting, setIsSubmitting] = useState(false);            // 是否正在提交
+  const [skipped, setSkipped] = useState(false);                      // 是否已跳过
 
+  // ===== 渲染题干（支持数学公式与 Markdown）=====
   const stemHtml = useMemo(() => {
     const withMath = renderMath(stem);
     return renderMarkdown(withMath);
   }, [stem]);
 
+  // ===== 提交答案 =====
   const handleSubmit = useCallback(async () => {
     if (!selectedAnswer || isSubmitting) return;
     setIsSubmitting(true);
@@ -82,6 +90,7 @@ export default function InlinePracticeBlock({
     }
   }, [blockId, selectedAnswer, isSubmitting, onAnswer]);
 
+  // ===== 获取提示 =====
   const handleGetHint = useCallback(async () => {
     try {
       const result = await apiFetch<{
@@ -99,6 +108,7 @@ export default function InlinePracticeBlock({
     }
   }, [blockId]);
 
+  // ===== 跳过题目 =====
   const handleSkip = useCallback(async () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
@@ -113,7 +123,7 @@ export default function InlinePracticeBlock({
     }
   }, [isSubmitting]);
 
-  // If already submitted, show result
+  // ===== 已提交状态：显示结果 =====
   if (submitted) {
     return (
       <div className="border border-[var(--color-border)] bg-[var(--color-surface)] mt-2">
@@ -136,6 +146,7 @@ export default function InlinePracticeBlock({
     );
   }
 
+  // ===== 未提交状态：显示练习题 =====
   return (
     <div className="border border-[var(--color-border)] bg-[var(--color-surface)] mt-2">
       {/* Header */}

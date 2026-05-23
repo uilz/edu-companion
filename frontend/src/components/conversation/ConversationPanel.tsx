@@ -10,7 +10,11 @@ import MessageList from "@/components/conversation/MessageList";
 import ConversationChatInput from "@/components/conversation/ChatInput";
 import type { UseConversationReturn } from "@/components/conversation/useConversation";
 
-// ── New partition dialog ──
+/**
+ * 新建分区弹窗组件
+ * - 显示一个模态对话框，让用户输入分区名称和选择 Emoji
+ * - 通过 open 控制显隐，onCreate 回调将 name 和 emoji 传递出去
+ */
 function NewPartitionDialog({
   open,
   onClose,
@@ -20,9 +24,11 @@ function NewPartitionDialog({
   onClose: () => void;
   onCreate: (name: string, emoji: string) => void;
 }) {
+  // 分区名称和 Emoji 的本地状态
   const [name, setName] = React.useState("");
   const [emoji, setEmoji] = React.useState("📐");
 
+  // 弹窗未打开时直接返回 null，不渲染任何内容
   if (!open) return null;
 
   return (
@@ -63,7 +69,12 @@ function NewPartitionDialog({
   );
 }
 
-// ── Context switch banner ──
+/**
+ * 上下文切换横幅组件
+ * - 当检测到用户正在讨论某个学科/知识点时，显示此横幅提示切换会话
+ * - domainName: 学科名称；topicName: 知识点名称（可选）
+ * - onSwitch: 用户点击"切换"后的回调；onDismiss: 点击"留在此处"的回调
+ */
 function SwitchBanner({
   domainName, topicName, onSwitch, onDismiss,
 }: {
@@ -100,7 +111,11 @@ function SwitchBanner({
   );
 }
 
-// ── Mobile bottom sheet ──
+/**
+ * 移动端底部弹出侧栏组件
+ * - 在移动端以底部 sheet 的形式展示分区导航
+ * - 点击遮罩层或关闭按钮均可关闭
+ */
 function MobileBottomSheet({
   children,
   onClose,
@@ -124,10 +139,15 @@ function MobileBottomSheet({
   );
 }
 
-// ── ConversationPanel Component ──
+/**
+ * ConversationPanel — 对话面板主布局组件
+ * - 根据 isDesktop 值自适应渲染移动端或桌面端布局
+ * - 接收 useConversation hook 返回的所有状态和回调，组合各子组件
+ */
 export default function ConversationPanel(props: UseConversationReturn) {
+  // 从 props 中解构所有状态变量
   const {
-    // State
+    // State — 对话面板状态
     partitions,
     selectedPartitionId,
     activeConversationId,
@@ -144,7 +164,7 @@ export default function ConversationPanel(props: UseConversationReturn) {
     isDesktop,
     activePartition,
 
-    // Handlers
+    // Handlers — 事件处理回调
     handleSelectConversation,
     handleNewConversation,
     handleSend,
@@ -162,13 +182,15 @@ export default function ConversationPanel(props: UseConversationReturn) {
     loadPartitions,
   } = props;
 
-  // ── Mobile layout ──
+  // ── Mobile layout: 移动端竖屏布局 ──
+  // 以底部导航栏上方为容器，顶部显示标题栏和菜单按钮，底部是输入框
   if (!isDesktop) {
     return (
       <div
         className="fixed inset-0 bg-[var(--color-bg)] z-30 flex flex-col"
         style={{ bottom: "var(--bottom-nav-height)" }}
       >
+        {/* 移动端顶部标题栏：菜单按钮 + 当前分区名称 */}
         <div className="flex-shrink-0 border-b border-[var(--color-border)] px-4 py-3 flex items-center gap-3">
           <button
             onClick={() => setShowPartitionSidebar(true)}
@@ -185,7 +207,9 @@ export default function ConversationPanel(props: UseConversationReturn) {
           </div>
         </div>
 
+        {/* 移动端内容区域：切换横幅 + 错误提示 + 消息列表 + 输入框 */}
         <div className="flex-1 overflow-hidden flex flex-col">
+          {/* 移动端切换横幅 */}
           {switchBanner && (
             <SwitchBanner
               domainName={switchBanner.domainName}
@@ -194,11 +218,13 @@ export default function ConversationPanel(props: UseConversationReturn) {
               onDismiss={handleSwitchDismiss}
             />
           )}
+          {/* 移动端错误提示 */}
           {convError && (
             <div className="flex-shrink-0 mx-4 mt-2 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
               {convError}
             </div>
           )}
+          {/* 移动端消息列表 */}
           <MessageList
             messages={messages}
             responseBlocks={responseBlocks}
@@ -208,6 +234,7 @@ export default function ConversationPanel(props: UseConversationReturn) {
             onEditMessage={handleEditMessage}
             onVersionSwitch={handleVersionSwitch}
           />
+          {/* 移动端聊天输入框 */}
           <ConversationChatInput
             onSend={handleSend}
             disabled={isLoading}
@@ -215,6 +242,7 @@ export default function ConversationPanel(props: UseConversationReturn) {
           />
         </div>
 
+        {/* 移动端底部弹出分区侧栏 */}
         {showPartitionSidebar && (
           <MobileBottomSheet onClose={() => setShowPartitionSidebar(false)}>
             <PartitionSidebar
@@ -236,6 +264,7 @@ export default function ConversationPanel(props: UseConversationReturn) {
           </MobileBottomSheet>
         )}
 
+        {/* 移动端新建分区弹窗 */}
         <NewPartitionDialog
           open={showNewPartition}
           onClose={() => setShowNewPartition(false)}
@@ -245,19 +274,20 @@ export default function ConversationPanel(props: UseConversationReturn) {
     );
   }
 
-  // ── Desktop layout: merged sidebar ──
+  // ── Desktop layout: 桌面端合并侧栏布局 ──
+  // 侧栏宽度固定为 260px，可折叠收起；主聊天区占据剩余空间
   const SIDEBAR_WIDTH = 260;
 
   return (
     <div className="fixed inset-0 bg-[var(--color-bg)] z-30 flex">
-      {/* Merged sidebar: nav links + partition tree */}
+      {/* 桌面端左侧：集成导航链接和分区树的侧栏 */}
       <div
         className="flex-shrink-0 flex flex-col border-r border-[var(--color-border)] transition-all duration-200"
         style={{ width: sidebarCollapsed ? "0px" : `${SIDEBAR_WIDTH}px`, overflow: "hidden" }}
       >
         {!sidebarCollapsed && (
           <div className="flex flex-col h-full">
-            {/* Mini header with back to dashboard link */}
+            {/* 桌面端侧栏迷你标题栏：返回驾驶舱链接 + 新建会话/分区/收起按钮 */}
             <div className="flex items-center justify-between px-3 py-2.5 border-b border-[var(--color-border)]">
               <a
                 href="/dashboard"
@@ -267,12 +297,13 @@ export default function ConversationPanel(props: UseConversationReturn) {
                 <span>驾驶舱</span>
               </a>
               <div className="flex items-center gap-1">
+                {/* 新建会话按钮：有选中分区时在该分区下创建，否则创建默认分区会话 */}
                 <button
                   onClick={() => {
                     if (selectedPartitionId) {
                       handleNewConversation("partition", selectedPartitionId);
                     } else {
-                      // No partition selected — create default first
+                      // 未选中分区时创建默认会话
                       handleNewConversation("default", "");
                     }
                   }}
@@ -281,6 +312,7 @@ export default function ConversationPanel(props: UseConversationReturn) {
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                 </button>
+                {/* 新建分区按钮 */}
                 <button
                   onClick={() => setShowNewPartition(true)}
                   className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"
@@ -288,6 +320,7 @@ export default function ConversationPanel(props: UseConversationReturn) {
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
                 </button>
+                {/* 收起侧栏按钮 */}
                 <button
                   onClick={() => setSidebarCollapsed(true)}
                   className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] rounded"
@@ -298,7 +331,7 @@ export default function ConversationPanel(props: UseConversationReturn) {
               </div>
             </div>
 
-            {/* Partition tree */}
+            {/* 桌面端侧栏分区树组件 */}
             <div className="flex-1 overflow-hidden">
               <PartitionSidebar
                 partitions={partitions}
@@ -319,7 +352,7 @@ export default function ConversationPanel(props: UseConversationReturn) {
         )}
       </div>
 
-      {/* Collapse toggle when sidebar hidden */}
+      {/* 桌面端侧栏折叠后显示的展开按钮 */}
       {sidebarCollapsed && (
         <button
           onClick={() => setSidebarCollapsed(false)}
@@ -330,8 +363,9 @@ export default function ConversationPanel(props: UseConversationReturn) {
         </button>
       )}
 
-      {/* Main chat area */}
+      {/* 桌面端右侧主聊天区 */}
       <div className="flex-1 flex flex-col min-w-0">
+        {/* 当前分区标题栏 */}
         {selectedPartitionId && activePartition && (
           <div className="flex-shrink-0 border-b border-[var(--color-border)] px-6 py-3 flex items-center gap-3">
             <Bot size={18} className="text-[var(--color-accent)]" />
@@ -343,6 +377,7 @@ export default function ConversationPanel(props: UseConversationReturn) {
           </div>
         )}
 
+        {/* 桌面端上下文切换横幅 */}
         {switchBanner && (
           <SwitchBanner
             domainName={switchBanner.domainName}
@@ -352,11 +387,13 @@ export default function ConversationPanel(props: UseConversationReturn) {
           />
         )}
 
+        {/* 桌面端对话错误提示 */}
         {convError && (
           <div className="flex-shrink-0 mx-6 mt-2 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
             {convError}
           </div>
         )}
+        {/* 桌面端消息列表 */}
         <MessageList
           messages={messages}
           responseBlocks={responseBlocks}
@@ -367,6 +404,7 @@ export default function ConversationPanel(props: UseConversationReturn) {
           onVersionSwitch={handleVersionSwitch}
         />
 
+        {/* 桌面端聊天输入框 */}
         <ConversationChatInput
           onSend={handleSend}
           disabled={isLoading}
@@ -374,6 +412,7 @@ export default function ConversationPanel(props: UseConversationReturn) {
         />
       </div>
 
+      {/* 桌面端新建分区弹窗 */}
       <NewPartitionDialog
         open={showNewPartition}
         onClose={() => setShowNewPartition(false)}

@@ -1,13 +1,16 @@
-"use client";
+"use client"; // 客户端组件，使用 React 客户端特性
 
 import { useState, useEffect, useCallback } from "react";
+// UI 图标库及路由组件
 import { CalendarDays, ChevronLeft, ChevronRight, Loader2, Flame, Target, Zap } from "lucide-react";
 import Link from "next/link";
 
+// 后端 API 基础地址，优先使用环境变量
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // ── Types ──
 
+// 单日学习记录
 interface DayEntry {
   date: string;
   day: number;
@@ -16,6 +19,7 @@ interface DayEntry {
   accuracy: number | null;
 }
 
+// 月度日历数据（包含统计数据）
 interface CalendarData {
   year: number;
   month: number;
@@ -29,6 +33,7 @@ interface CalendarData {
 
 // ── Heatmap color ──
 
+// 根据答题数量返回热力图颜色（绿色越深表示越活跃）
 function heatColor(total: number): string {
   if (total === 0) return "var(--color-surface)";
   if (total <= 5) return "#0e4429";
@@ -37,6 +42,7 @@ function heatColor(total: number): string {
   return "#39d353";
 }
 
+// 根据答题数量返回文字颜色（确保可读性）
 function textColor(total: number): string {
   if (total === 0) return "var(--color-text-muted)";
   if (total <= 5) return "#666";
@@ -45,13 +51,16 @@ function textColor(total: number): string {
 
 // ── Helpers ──
 
+// 中文月份名称
 const MONTH_NAMES = [
   "1月", "2月", "3月", "4月", "5月", "6月",
   "7月", "8月", "9月", "10月", "11月", "12月",
 ];
 
+// 星期表头（周一 → 周日）
 const DAY_HEADERS = ["一", "二", "三", "四", "五", "六", "日"];
 
+// 计算某月1号是星期几（返回值 0=周一 ... 6=周日）
 function dayOfWeek(year: number, month: number, day: number): number {
   // 0=Sun, 1=Mon, ..., 6=Sat → 我们 0=Mon, 6=Sun
   const d = new Date(year, month - 1, day).getDay();
@@ -60,6 +69,7 @@ function dayOfWeek(year: number, month: number, day: number): number {
 
 // ── DayDetail Popover ──
 
+// 点击日期后弹出的详情弹窗
 function DayDetail({ day, onClose }: { day: DayEntry; onClose: () => void }) {
   const date = new Date(day.date);
   const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
@@ -124,6 +134,7 @@ function DayDetail({ day, onClose }: { day: DayEntry; onClose: () => void }) {
 
 // ── Main page ──
 
+// 学习日历主页面组件
 export default function CalendarPage() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -132,6 +143,7 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState<DayEntry | null>(null);
 
+  // 从后端获取指定年月的日历学习数据
   const fetchCalendar = useCallback(async (y: number, m: number) => {
     setLoading(true);
     try {
@@ -148,35 +160,40 @@ export default function CalendarPage() {
     }
   }, []);
 
+  // 当 year 或 month 变化时自动重新获取数据
   useEffect(() => {
     fetchCalendar(year, month);
   }, [year, month, fetchCalendar]);
 
+  // 切换到上一个月
   const goPrev = () => {
     if (month === 1) { setYear(y => y - 1); setMonth(12); }
     else setMonth(m => m - 1);
   };
 
+  // 切换到下一个月
   const goNext = () => {
     if (month === 12) { setYear(y => y + 1); setMonth(1); }
     else setMonth(m => m + 1);
   };
 
+  // 跳转到本月
   const goToday = () => {
     const n = new Date();
     setYear(n.getFullYear());
     setMonth(n.getMonth() + 1);
   };
 
-  // Build grid
+  // ── 构建日历网格 ──
+  // 构建日历网格：计算每个单元格对应的日期数据
   const days = data?.days || [];
   const firstDow = dayOfWeek(year, month, 1);
-  const totalDays = new Date(year, month, 0).getDate(); // days in month
+  const totalDays = new Date(year, month, 0).getDate(); // 当月总天数
 
   const cells: (DayEntry | null)[] = [];
-  // Leading blanks
+  // 月初空白占位格
   for (let i = 0; i < firstDow; i++) cells.push(null);
-  // Actual days
+  // 当月实际日期
   for (let d = 1; d <= totalDays; d++) {
     const entry = days.find((dd) => dd.day === d) || {
       date: `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`,
@@ -188,8 +205,10 @@ export default function CalendarPage() {
     cells.push(entry);
   }
 
+  // 今天的 ISO 日期字符串，用于高亮"今天"
   const todayStr = new Date().toISOString().slice(0, 10);
 
+  // 加载中：显示 loading 动画
   if (loading) {
     return (
       <main className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center">
@@ -198,6 +217,7 @@ export default function CalendarPage() {
     );
   }
 
+  // ── 主界面渲染 ──
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
       <div className="max-w-2xl mx-auto px-4 md:px-6 py-8 md:py-12">
@@ -243,7 +263,7 @@ export default function CalendarPage() {
 
         {/* Heatmap grid */}
         <div className="border border-[var(--color-border)] bg-[var(--color-card)] p-4 mb-6">
-          {/* Day headers */}
+          {/* Day headers：周一至周日 */}
           <div className="grid grid-cols-7 gap-1 mb-2">
             {DAY_HEADERS.map((h) => (
               <div key={h} className="text-center text-[10px] text-[var(--color-text-muted)] py-1">
@@ -252,7 +272,7 @@ export default function CalendarPage() {
             ))}
           </div>
 
-          {/* Cells */}
+          {/* Cells：热力图日期格子，点击查看详情 */}
           <div className="grid grid-cols-7 gap-1">
             {cells.map((cell, i) => {
               if (!cell) {
@@ -286,7 +306,7 @@ export default function CalendarPage() {
             })}
           </div>
 
-          {/* Legend */}
+          {/* Legend：热力图颜色图例（少→多） */}
           <div className="flex items-center gap-2 mt-4 justify-end text-[10px] text-[var(--color-text-muted)]">
             <span>少</span>
             {[0, 5, 10, 20].map((n) => (
@@ -301,7 +321,7 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        {/* Month stats */}
+        {/* Month stats：月度统计卡片（答题数、正确率、连续学习、学习天数） */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           <div className="border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-center">
             <div className="text-xl font-bold text-[var(--color-text)]">{data?.month_total || 0}</div>
@@ -328,7 +348,7 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        {/* Best day highlight */}
+        {/* Best day highlight：本月最佳表现日 */}
         {data?.best_day && (
           <div className="border border-[var(--color-border)] bg-[var(--color-card)] p-4 flex items-center gap-3">
             <Zap size={18} className="text-[var(--color-warning)] flex-shrink-0" />
@@ -344,7 +364,7 @@ export default function CalendarPage() {
           </div>
         )}
 
-        {/* Quick links */}
+        {/* Quick links：快捷操作（开始练习、查看学情） */}
         <div className="flex gap-3 mt-6">
           <Link
             href="/practice"
@@ -361,7 +381,7 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* Day detail popover */}
+      {/* Day detail popover：点击日期后弹出的详情弹窗 */}
       {selectedDay && (
         <DayDetail day={selectedDay} onClose={() => setSelectedDay(null)} />
       )}

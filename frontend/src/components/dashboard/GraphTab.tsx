@@ -1,11 +1,13 @@
+// ── 客户端组件声明 ──
 'use client';
 
+// ── 导入依赖 ──
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { ZoomIn, ZoomOut, Maximize2, Info, Loader2, RefreshCw, ChevronDown, GitGraph } from "lucide-react";
 import Card from "@/components/ui/Card";
 
-// ── Types ──
+// ── 类型定义 ──
 interface GraphNode {
   id: string; label: string; subject: string;
   mastery: number; mastery_level: string; confidence: number;
@@ -17,14 +19,14 @@ interface GraphNode {
 interface GraphEdge { from: string; to: string; label: string; satisfied: boolean; }
 interface Coverage { total: number; mastered: number; learning: number; weak: number; untouched: number; }
 
-// ── Colors ──
+// ── 学科配色方案 ──
 const subjectColors: Record<string, string> = {
   "高等数学": "#0066FF", "大学物理": "#f59e0b",
   "计算机": "#22c55e", "线性代数": "#a855f7", "概率论": "#ec4899",
 };
 const fallbackColor = "#737373";
 
-// ── Layout ──
+// ── 拓扑布局算法（按入度分层） ──
 function computeLayout(nodes: GraphNode[], edges: GraphEdge[]): GraphNode[] {
   if (nodes.length === 0) return nodes;
   const inDegree = new Map<string, number>();
@@ -67,13 +69,14 @@ function computeLayout(nodes: GraphNode[], edges: GraphEdge[]): GraphNode[] {
   return result;
 }
 
+// ── 掌握度 → 颜色映射 ──
 function masteryColor(m: number) {
   if (m >= 95) return "#22c55e"; if (m >= 70) return "#84cc16";
   if (m >= 40) return "#f59e0b"; if (m > 0) return "#f97316";
   return "#525252";
 }
 
-// ── Main component ──
+// ── 主组件 ──
 export function GraphTab() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -97,7 +100,7 @@ export function GraphTab() {
   const panStart = useRef({ x: 0, y: 0 });
   const svgRef = useRef<SVGSVGElement>(null);
 
-  // ── Partition picker ──
+  // ── 分区选择器 ──
   const [partitions, setPartitions] = useState<{ id: string; name: string; emoji: string }[]>([]);
   const [showPicker, setShowPicker] = useState(false);
   const [loadingParts, setLoadingParts] = useState(false);
@@ -111,14 +114,14 @@ export function GraphTab() {
     finally { setLoadingParts(false); }
   }, []);
 
-  // ── Sync partitionId from URL ──
+  // ── 从 URL 同步分区 ID ──
   useEffect(() => {
     if (partitionIdFromUrl && partitionIdFromUrl !== partitionId) {
       setPartitionId(partitionIdFromUrl);
     }
   }, [partitionIdFromUrl]);
 
-  // ── Fetch graph ──
+  // ── 获取图谱数据 ──
   const fetchGraph = useCallback(async () => {
     if (!partitionId) { setNodes([]); setEdges([]); return; }
     setLoading(true); setError("");
@@ -127,7 +130,7 @@ export function GraphTab() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const pp = await res.json();
 
-      // Map skills → GraphNode
+      // 技能 → GraphNode 映射
       const skills = pp.skills || {};
       const anomalies = pp.anomalies || [];
       const anomalyMap = new Map<string, typeof anomalies[0]>();
@@ -152,7 +155,7 @@ export function GraphTab() {
         anomaly_detail: anomalyMap.has(s.skill_id) ? anomalyMap.get(s.skill_id).detail : null,
       }));
 
-      // Map dependencies → GraphEdge
+      // 依赖关系 → GraphEdge 映射
       const deps: any[] = pp.dependencies || [];
       const rawEdges: GraphEdge[] = deps.map((d: any) => ({
         from: d.from_skill,
@@ -174,7 +177,7 @@ export function GraphTab() {
 
   useEffect(() => { fetchGraph(); }, [fetchGraph]);
 
-  // ── AI Generate ──
+  // ── AI 生成图谱 ──
   const handleGenerate = async () => {
     setGenerating(true); setGenerateError("");
     try {
@@ -191,18 +194,18 @@ export function GraphTab() {
     } finally { setGenerating(false); }
   };
 
-  // ── Switch partition ──
+  // ── 切换分区 ──
   const switchPartition = (pid: string) => {
     setPartitionId(pid);
     setShowPicker(false);
     setSelectedNode(null);
-    // Update URL without page reload
+    // 更新 URL（不触发页面刷新）
     const params = new URLSearchParams(searchParams.toString());
     params.set("partition_id", pid);
     router.replace(`/dashboard?${params.toString()}`, { scroll: false });
   };
 
-  // ── Pan & zoom ──
+  // ── 平移与缩放交互 ──
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.target === svgRef.current || (e.target as Element).tagName === "rect") {
       setIsPanning(true);
@@ -232,16 +235,16 @@ export function GraphTab() {
   }, [handleWheel]);
   const resetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
 
-  // ── Stats ──
+  // ── 统计数据 ──
   const avgMastery = nodes.length > 0 ? Math.round(nodes.reduce((s, n) => s + n.mastery, 0) / nodes.length) : 0;
   const unlockedCount = nodes.filter((n) => !n.blocked).length;
   const blockedCount = nodes.filter((n) => n.blocked).length;
 
-  // ── ViewBox ──
+  // ── 视图框计算 ──
   const maxX = Math.max(700, ...nodes.map((n) => (n.x || 0) + 100));
   const maxY = Math.max(500, ...nodes.map((n) => (n.y || 0) + 100));
 
-  // ── Empty: no partition selected ──
+  // ── 空状态：未选择分区 ──
   if (!partitionId) {
     return (
       <div className="text-center py-16">
@@ -278,7 +281,7 @@ export function GraphTab() {
     );
   }
 
-  // ── Loading ──
+  // ── 加载状态 ──
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20 gap-4">
@@ -288,7 +291,7 @@ export function GraphTab() {
     );
   }
 
-  // ── Error ──
+  // ── 错误状态 ──
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4">
@@ -302,10 +305,10 @@ export function GraphTab() {
 
   return (
     <div>
-      {/* ── Top bar: partition selector + actions ── */}
+      {/* ── 顶栏：分区选择器 + 操作按钮 ── */}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          {/* Partition selector */}
+          {/* 分区选择器 */}
           <div className="relative">
             <button onClick={() => { setShowPicker(!showPicker); if (!showPicker) loadPartitions(); }}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm border border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
@@ -333,7 +336,7 @@ export function GraphTab() {
               </>
             )}
           </div>
-          {/* Stats inline */}
+          {/* 内联统计信息 */}
           <span className="text-xs text-[var(--color-text-muted)]">
             {totalNodes} 知识点 · {totalEdges} 关联 · 
             掌握 {coverage.mastered} · 学习 {coverage.learning} · 
@@ -344,7 +347,7 @@ export function GraphTab() {
           </span>
         </div>
 
-        {/* Action buttons */}
+        {/* 操作按钮 */}
         <div className="flex items-center gap-2">
           <button onClick={handleGenerate} disabled={generating}
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
@@ -355,15 +358,15 @@ export function GraphTab() {
         </div>
       </div>
 
-      {/* ── Generate error ── */}
+      {/* ── 生成错误提示 ── */}
       {generateError && <p className="text-xs text-[#f97316] mb-4">{generateError}</p>}
 
-      {/* ── Main: graph + sidebar ── */}
+      {/* ── 主区域：图谱 + 侧边栏 ── */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Graph area */}
+        {/* 图谱区域 */}
         <div className="lg:col-span-3">
           <div className="border border-[var(--color-border)] bg-[var(--color-card)] overflow-hidden relative" style={{ minHeight: 480 }}>
-            {/* Zoom controls */}
+            {/* 缩放控制按钮 */}
             <div className="absolute top-3 right-3 z-10 flex gap-1">
               <button onClick={() => setZoom((z) => Math.min(2, z + 0.2))}
                 className="w-8 h-8 flex items-center justify-center bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]">
@@ -395,7 +398,7 @@ export function GraphTab() {
                 style={{ cursor: isPanning ? "grabbing" : "grab", userSelect: "none", WebkitUserSelect: "none" as any }}
               >
                 <g transform={`translate(${pan.x / 2},${pan.y / 2}) scale(${zoom})`}>
-                  {/* Edges */}
+                  {/* 边/关系 */}
                   {edges.map((edge) => {
                     const fromNode = nodes.find((n) => n.id === edge.from);
                     const toNode = nodes.find((n) => n.id === edge.to);
@@ -425,7 +428,7 @@ export function GraphTab() {
                       </g>
                     );
                   })}
-                  {/* Nodes */}
+                  {/* 节点 */}
                   {nodes.map((node) => {
                     if (!node.x || !node.y) return null;
                     const isSelected = selectedNode?.id === node.id;
@@ -466,9 +469,9 @@ export function GraphTab() {
           </div>
         </div>
 
-        {/* Sidebar */}
+        {/* 侧边栏 */}
         <div className="space-y-4">
-          {/* Legend */}
+          {/* 图例 */}
           <Card title="图例">
             <div className="space-y-2">
               <div className="flex items-center gap-2.5 text-sm">
@@ -493,7 +496,7 @@ export function GraphTab() {
             </div>
           </Card>
 
-          {/* Stats */}
+          {/* 统计面板 */}
           <Card title="统计">
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
@@ -537,7 +540,7 @@ export function GraphTab() {
             </div>
           </Card>
 
-          {/* Node detail */}
+          {/* 知识点详情 */}
           {selectedNode ? (
             <Card title="知识点详情">
               <div className="space-y-3">
@@ -582,7 +585,7 @@ export function GraphTab() {
                     </span>
                   )}
                 </div>
-                {/* Anomaly warning */}
+                {/* 异常警告 */}
                 {selectedNode.anomaly_type && (
                   <div className="p-2 border border-[#f59e0b] bg-[#f59e0b]/10 text-xs">
                     <span className="text-[#f59e0b] font-medium">⚠️ {selectedNode.anomaly_type}</span>
@@ -591,7 +594,7 @@ export function GraphTab() {
                     )}
                   </div>
                 )}
-                {/* Prerequisites */}
+                {/* 前置知识 */}
                 <div>
                   <div className="text-xs text-[var(--color-text-muted)] mb-1">前置知识</div>
                   <div className="flex flex-wrap gap-1.5">
@@ -613,7 +616,7 @@ export function GraphTab() {
                     )}
                   </div>
                 </div>
-                {/* Error clusters */}
+                {/* 常见错误集 */}
                 {selectedNode.error_clusters.length > 0 && (
                   <div>
                     <div className="text-xs text-[var(--color-text-muted)] mb-1">常见错误</div>

@@ -1,7 +1,14 @@
+// ============================================================
+// 首页入口页面 (app/page.tsx)
+// 展示欢迎语、学习概览、快速入口、薄弱项、学习建议及成就等
+// ============================================================
+
 "use client";
 
+// React / Next 核心依赖
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+// Lucide 图标库
 import {
   Brain,
   Target,
@@ -18,29 +25,38 @@ import {
   Zap,
   Clock,
 } from "lucide-react";
+// 内部组件
 import Card from "@/components/ui/Card";
 import UnifiedSearch from "@/components/search/UnifiedSearch";
 
+// API 基础地址，优先使用环境变量，否则回退到本地 8000 端口
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// ---------- 类型定义 ----------
+
+/** 后端返回的学习进度摘要 */
 interface ProgressSummary {
-  total_questions: number;
-  correct_answers: number;
-  accuracy_rate: number;
-  study_minutes: number;
-  mastered_skills: string[];
-  struggling_skills: string[];
-  recommendations: string[];
+  total_questions: number;      // 总答题数
+  correct_answers: number;     // 正确数
+  accuracy_rate: number;       // 正确率（0~1）
+  study_minutes: number;       // 学习时长（分钟）
+  mastered_skills: string[];   // 已掌握的知识点
+  struggling_skills: string[]; // 薄弱知识点
+  recommendations: string[];   // 个性化建议列表
 }
 
+/** 成就项 */
 interface Achievement {
   id: string;
   name: string;
-  icon: string;
-  unlocked: boolean;
-  tier: string;
+  icon: string;       // 表情符号
+  unlocked: boolean;  // 是否已解锁
+  tier: string;       // 等级
 }
 
+// ---------- 常量 ----------
+
+/** 首页四宫格快捷入口配置 */
 const QUICK_ACTIONS = [
   { emoji: "💬", title: "智能对话", desc: "随时提问，启发式学习", href: "/learn", color: "from-blue-500/20 to-cyan-500/10" },
   { emoji: "✏️", title: "开始练习", desc: "定制化刷题检测", href: "/practice", color: "from-emerald-500/20 to-teal-500/10" },
@@ -49,6 +65,7 @@ const QUICK_ACTIONS = [
 ];
 
 export default function HomePage() {
+  // ---- 根据当前时间生成问候语 ----
   const greeting = useMemo(() => {
     const h = new Date().getHours();
     if (h < 5) return { text: "夜深了", sub: "注意休息，明天继续 🌙", emoji: "🌙" };
@@ -58,10 +75,12 @@ export default function HomePage() {
     return { text: "晚上好", sub: "温故知新，沉淀一天 🏠", emoji: "🏠" };
   }, []);
 
-  const [progress, setProgress] = useState<ProgressSummary | null>(null);
-  const [achievements, setAchievements] = useState<Achievement[]>([]);
-  const [loading, setLoading] = useState(true);
+  // ---- 状态管理 ----
+  const [progress, setProgress] = useState<ProgressSummary | null>(null);   // 学习进度数据
+  const [achievements, setAchievements] = useState<Achievement[]>([]);      // 成就列表
+  const [loading, setLoading] = useState(true);                             // 加载中标志
 
+  // ---- 页面初始化：并行拉取进度和成就数据 ----
   useEffect(() => {
     async function loadData() {
       try {
@@ -83,6 +102,7 @@ export default function HomePage() {
     loadData();
   }, []);
 
+  // ---- 从原始数据派生展示值 ----
   const accuracy = progress?.accuracy_rate
     ? `${(progress.accuracy_rate * 100).toFixed(1)}%`
     : "—";
@@ -96,7 +116,7 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-        {/* ── Hero Section ── */}
+        {/* ═════════ Hero 区域：问候语 + 统计小标签 ═════════ */}
         <header className="mb-10 sm:mb-14">
           <div className="flex items-center gap-3 mb-3">
             <span className="text-3xl">{greeting.emoji}</span>
@@ -110,7 +130,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Stats mini-bar */}
+          {/* Stats mini-bar: 总题数、正确率、学习时长、掌握数 */}
           <div className="flex flex-wrap gap-3 mt-6">
             {loading ? (
               <Loader2 size={14} className="animate-spin text-[var(--color-text-muted)]" />
@@ -137,12 +157,12 @@ export default function HomePage() {
           </div>
         </header>
 
-        {/* ── Search ── */}
+        {/* ═════════ 全局搜索框 ═════════ */}
         <div className="mb-8">
           <UnifiedSearch />
         </div>
 
-        {/* ── Quick Actions ── */}
+        {/* ═════════ 四宫格快捷入口 ═════════ */}
         <section className="mb-10">
           <div className="swiss-section-header">
             <span className="swiss-section-title">快速入口</span>
@@ -170,7 +190,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ── Stats Grid ── */}
+        {/* ═════════ 学习概览统计卡片 (四列网格) ═════════ */}
         <section className="mb-10">
           <div className="swiss-section-header">
             <span className="swiss-section-title">学习概览</span>
@@ -208,9 +228,9 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ── Main Grid ── */}
+        {/* ═════════ 主内容区：薄弱项 + 学习建议 + 成就 ═════════ */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Weak areas */}
+          {/* ---- 薄弱知识点 ---- */}
           <Card title="⚠️ 需要加强" accent>
             {loading ? (
               <div className="py-6 flex justify-center">
@@ -245,7 +265,7 @@ export default function HomePage() {
             )}
           </Card>
 
-          {/* Recommendations */}
+          {/* ---- 个性化学习建议 ---- */}
           <Card title="💡 学习建议" accent>
             {loading ? (
               <div className="py-6 flex justify-center">
@@ -282,7 +302,7 @@ export default function HomePage() {
             )}
           </Card>
 
-          {/* Achievements */}
+          {/* ---- 成就展示 ---- */}
           {achievements.length > 0 && (
             <div className="lg:col-span-2">
               <Card title={`🏆 成就 (${unlockedAchievements}/${achievements.length})`} accent>
@@ -309,7 +329,7 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* ── Bottom CTA ── */}
+        {/* ═════════ 底部行动号召按钮 ═════════ */}
         <div className="mt-12 text-center">
           <div className="swiss-divider" />
           <Link

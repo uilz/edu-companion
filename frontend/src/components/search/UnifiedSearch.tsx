@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { Search, X, Loader2, MessageSquare, FileText, Brain, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
 
+// 搜索结果项类型定义：对话、资料、知识点、错题
 interface SearchResultItem {
   type: "conversation" | "material" | "knowledge" | "error";
   title: string;
@@ -12,6 +13,7 @@ interface SearchResultItem {
   score: number;
 }
 
+// 搜索响应数据结构定义
 interface SearchResponse {
   query: string;
   conversations: SearchResultItem[];
@@ -21,6 +23,7 @@ interface SearchResponse {
   total: number;
 }
 
+// 分类配置：标签、图标、颜色
 const CATEGORY_CONFIG = {
   conversation: { label: "对话", icon: MessageSquare, color: "text-blue-400" },
   material: { label: "资料", icon: FileText, color: "text-green-400" },
@@ -28,16 +31,20 @@ const CATEGORY_CONFIG = {
   error: { label: "错题", icon: AlertTriangle, color: "text-red-400" },
 };
 
+// 统一搜索组件：搜索对话、资料、知识点、错题
 export default function UnifiedSearch() {
+  // 状态管理：查询关键词、搜索结果、加载状态、焦点状态
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [focused, setFocused] = useState(false);
+  // ref：输入框、容器、防抖定时器
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const router = useRouter();
 
+  // 执行搜索：调用 /api/search 接口，查询长度 >= 2 时才发起请求
   const doSearch = useCallback(async (q: string) => {
     if (q.length < 2) {
       setResults(null);
@@ -59,6 +66,7 @@ export default function UnifiedSearch() {
     }
   }, []);
 
+  // 输入处理：更新查询值并防抖触发搜索（250ms 延迟）
   const handleInput = useCallback(
     (value: string) => {
       setQuery(value);
@@ -68,7 +76,7 @@ export default function UnifiedSearch() {
     [doSearch]
   );
 
-  // Close on outside click
+  // 点击外部关闭下拉框
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -79,7 +87,7 @@ export default function UnifiedSearch() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Keyboard shortcut
+  // 键盘快捷键：⌘K / Ctrl+K 聚焦搜索框
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -91,8 +99,10 @@ export default function UnifiedSearch() {
     return () => document.removeEventListener("keydown", handler);
   }, []);
 
+  // 是否显示下拉：有焦点且查询长度 >= 2 或正在加载
   const showDropdown = focused && (query.length >= 2 || loading);
 
+  // 渲染分类结果：按类型分组展示搜索项，点击跳转对应链接
   const renderCategory = (
     items: SearchResultItem[],
     type: "conversation" | "material" | "knowledge" | "error"
@@ -134,7 +144,7 @@ export default function UnifiedSearch() {
 
   return (
     <div ref={containerRef} className="relative w-full max-w-[560px] mx-auto">
-      {/* Search box */}
+      {/* 搜索框 */}
       <div
         className={`flex items-center gap-2 px-4 py-2.5 bg-[var(--color-bg)] border transition-all ${
           focused
@@ -170,9 +180,10 @@ export default function UnifiedSearch() {
         </kbd>
       </div>
 
-      {/* Dropdown results */}
+      {/* 下拉结果面板 */}
       {showDropdown && (
         <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--color-bg)] border border-[var(--color-border)] shadow-xl max-h-[420px] overflow-y-auto z-50">
+          {/* 无结果提示 */}
           {results && results.total === 0 ? (
             <div className="px-4 py-6 text-center">
               <div className="text-xs text-[var(--color-text-muted)]">
@@ -186,6 +197,7 @@ export default function UnifiedSearch() {
               {renderCategory(results.knowledge, "knowledge")}
               {renderCategory(results.errors, "error")}
             </>
+          {/* 加载中状态 */}
           ) : loading ? (
             <div className="px-4 py-6 text-center">
               <Loader2 size={14} className="animate-spin mx-auto text-[var(--color-text-muted)]" />

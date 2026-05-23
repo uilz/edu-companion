@@ -1,18 +1,25 @@
+// 学习分析页面 — 客户端组件，展示学情数据、习惯追踪与遗忘曲线
 "use client";
 
+// React 状态与副作用管理
 import { useState, useEffect, useMemo } from "react";
+// 图标库：统计图表、目标、时钟、趋势、加载、书本、日历、闪电、警告、心形、火焰、计时器等
 import {
   BarChart3, Target, Clock, TrendingUp, Loader2, BookOpen,
   CalendarDays, Zap, AlertTriangle, Heart, Flame, Timer,
 } from "lucide-react";
 import Link from "next/link";
+// 内部组件：通用卡片容器
 import Card from "@/components/ui/Card";
+// 内部组件：能力雷达图
 import RadarChart from "@/components/analytics/RadarChart";
 
+// API 基础地址（默认 fallback 本地开发端口）
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // ── 类型 ──
 
+// 总览概览：总题数、正确率、学习天数、学习时长及与上周对比
 interface Overview {
   total_questions: number;
   accuracy: number;
@@ -26,6 +33,7 @@ interface Overview {
   };
 }
 
+// 每日学习数据点：日期、做题数、正确数、正确率
 interface DailyPoint {
   date: string;
   questions: number;
@@ -33,6 +41,7 @@ interface DailyPoint {
   accuracy: number;
 }
 
+// 知识点掌握度：技能 ID、掌握概率、等级、尝试次数、正确次数
 interface MasteryBar {
   skill_id: string;
   p_known: number;
@@ -41,17 +50,20 @@ interface MasteryBar {
   correct_count: number;
 }
 
+// 学习时段热力单元格：星期几、第几小时、做题数量
 interface HeatmapCell {
   day: number;
   hour: number;
   count: number;
 }
 
+// 遗忘曲线数据点：第 N 天、保持率百分比
 interface RetentionPoint {
   day: number;
   retention: number;
 }
 
+// 单个知识点的遗忘曲线：技能 ID、名称、学科、掌握度、尝试次数、衰减曲线数组
 interface RetentionSkill {
   skill_id: string;
   label: string;
@@ -61,6 +73,7 @@ interface RetentionSkill {
   curve: RetentionPoint[];
 }
 
+// 遗忘曲线完整响应：技能列表、总量、7日平均保持率、高风险知识点列表
 interface RetentionData {
   skills: RetentionSkill[];
   total: number;
@@ -68,12 +81,14 @@ interface RetentionData {
   at_risk: RetentionSkill[];
 }
 
+// 错误分布条目：错误类型标识、出现次数、占比百分比
 interface ErrorDist {
   type: string;
   count: number;
   pct: number;
 }
 
+// 行为时序数据点：天数序号、星期名称、小时、做题数
 interface BehaviorPoint {
   day: number;
   day_name: string;
@@ -81,6 +96,7 @@ interface BehaviorPoint {
   questions: number;
 }
 
+// 分析数据主结构：用户 ID、时间范围、概览、趋势、掌握度、错误分布、热力图
 interface AnalyticsData {
   user_id: string;
   time_range: string;
@@ -91,6 +107,7 @@ interface AnalyticsData {
   hourly_heatmap: HeatmapCell[];
 }
 
+// 行为与习惯数据：学习行为、每日目标、微习惯、番茄钟配置
 interface BehaviorData {
   behavior: {
     current_streak: number;
@@ -128,10 +145,12 @@ interface BehaviorData {
   };
 }
 
+// 页面选项卡类型："analytics"（学情数据）| "habits"（习惯养成）
 type Tab = "analytics" | "habits";
 
 // ── 辅助 ──
 
+// 错误类型 → 中文标签映射表
 const ERROR_LABELS: Record<string, string> = {
   conceptual: "概念错误",
   procedural: "程序错误",
@@ -141,6 +160,7 @@ const ERROR_LABELS: Record<string, string> = {
   meta: "元认知",
 };
 
+// 掌握度等级 → 颜色值映射表
 const MASTERY_COLORS: Record<string, string> = {
   "已掌握": "var(--color-success)",
   "接近掌握": "#60a5fa",
@@ -149,6 +169,7 @@ const MASTERY_COLORS: Record<string, string> = {
   "未接触": "var(--color-text-muted)",
 };
 
+// 掌握度等级 → Emoji 映射表（UI 中视觉标识）
 const MASTERY_EMOJI: Record<string, string> = {
   "已掌握": "✅",
   "接近掌握": "🔷",
@@ -157,6 +178,7 @@ const MASTERY_EMOJI: Record<string, string> = {
   "未接触": "⬜",
 };
 
+// 计算数值变化量：↑增长 / ↓下降 / →持平（带格式化输出）
 function deltaStr(curr: number, prev: number, fmt: (n: number) => string): string {
   const d = curr - prev;
   if (d > 0) return `↑${fmt(d)}`;
@@ -164,6 +186,7 @@ function deltaStr(curr: number, prev: number, fmt: (n: number) => string): strin
   return "→ 0";
 }
 
+// 根据增减趋势返回对应颜色：增长=绿色，下降=红色，持平=灰色
 function deltaColor(curr: number, prev: number): string {
   if (curr > prev) return "var(--color-success)";
   if (curr < prev) return "var(--color-error)";
@@ -172,6 +195,7 @@ function deltaColor(curr: number, prev: number): string {
 
 // ── 趋势图（纯 SVG） ──
 
+// 每日做题趋势折线图（SVG 渲染，无外部依赖）
 function TrendChart({ data }: { data: DailyPoint[] }) {
   const w = 600, h = 160, pad = { t: 20, r: 20, b: 30, l: 40 };
   const pw = w - pad.l - pad.r;
@@ -236,6 +260,7 @@ function TrendChart({ data }: { data: DailyPoint[] }) {
 
 // ── 热力图 ──
 
+// 学习时段热力图（星期 × 小时，色深表示做题密度）
 function HeatmapGrid({ data }: { data: HeatmapCell[] }) {
   const dayNames = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
   const hours = [8, 10, 14, 16, 20, 22];
@@ -294,6 +319,7 @@ function HeatmapGrid({ data }: { data: HeatmapCell[] }) {
 
 // ── 建议行动生成 ──
 
+// 根据当前概览、掌握度、错误分布自动生成个性化学习建议（最多 5 条）
 function generateSuggestions(
   overview: Overview | undefined,
   masteryBars: MasteryBar[] | undefined,
@@ -360,12 +386,14 @@ function generateSuggestions(
 
 // ── 习惯养成 Tab ──
 
+// 将 24 小时制数字转为中文描述（如 8 → "上午8点"）
 function hourLabel(h: number): string {
   if (h < 12) return `上午${h}点`;
   if (h < 18) return `下午${h - 12}点`;
   return `晚上${h - 12}点`;
 }
 
+// 习惯养成 Tab 主组件：展示每日目标、连续学习、最佳时段、规律性、番茄钟、微习惯等
 function HabitTab({ data }: { data: BehaviorData | null }) {
   if (!data) {
     return (
@@ -561,6 +589,7 @@ function HabitTab({ data }: { data: BehaviorData | null }) {
 
 // ── 遗忘曲线面板 ──
 
+// 遗忘曲线预估面板：从 API 获取各知识点衰减曲线，SVG 渲染并标记高风险知识点
 function RetentionPanel() {
   const [data, setData] = useState<RetentionData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -630,6 +659,7 @@ function RetentionPanel() {
 
 // ── 每日摘要组件 ──
 
+// 昨日学习摘要数据类型：日期、做题量、正确率、与前日对比、连续天数、推荐知识点、鼓励语
 interface DailySummary {
   yesterday: { date: string; total: number; correct: number; accuracy: number };
   vs_previous: { total: number; delta: number };
@@ -638,6 +668,7 @@ interface DailySummary {
   encourage: string;
 }
 
+// 昨日学习摘要卡片：拉取 API 展示昨日表现、连续天数、推荐练习知识点
 function DailySummaryCard() {
   const [summary, setSummary] = useState<DailySummary | null>(null);
 
@@ -709,6 +740,7 @@ function DailySummaryCard() {
 
 // ── 主导出 ──
 
+// 学情分析主页面：管理数据获取、选项卡切换、时间范围选择，渲染分析仪表盘或习惯面板
 export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [behaviorData, setBehaviorData] = useState<BehaviorData | null>(null);
@@ -716,6 +748,7 @@ export default function AnalyticsPage() {
   const [tab, setTab] = useState<Tab>("analytics");
   const [timeRange, setTimeRange] = useState<"week" | "month" | "all">("week");
 
+  // 根据时间范围从 API 拉取分析数据（概览、趋势、掌握度、错误分布、热力图）
   useEffect(() => {
     setLoading(true);
     fetch(`${API_BASE}/api/practice/stats?time_range=${timeRange}`)
@@ -736,6 +769,7 @@ export default function AnalyticsPage() {
       });
   }, [timeRange]);
 
+  // 切换到「习惯」Tab 时，按需拉取行为与习惯数据
   useEffect(() => {
     if (tab === "habits") {
       fetch(`${API_BASE}/api/practice/behavior?time_range=${timeRange}`)
@@ -745,11 +779,13 @@ export default function AnalyticsPage() {
     }
   }, [tab, timeRange]);
 
+  // 使用 useMemo 缓存建议列表，仅在 data 变化时重新计算
   const suggestions = useMemo(() => {
     if (!data) return [];
     return generateSuggestions(data.overview, data.mastery_bars, data.error_distribution);
   }, [data]);
 
+  // 加载中状态：居中旋转加载图标
   if (loading) {
     return (
       <main className="min-h-screen bg-[var(--color-bg)]">
@@ -760,6 +796,7 @@ export default function AnalyticsPage() {
     );
   }
 
+  // 空数据状态：无练习数据时展示引导页面，引导用户去练习
   if (!data || !data.overview || data.overview.total_questions === 0) {
     return (
       <main className="min-h-screen bg-[var(--color-bg)]">
@@ -790,7 +827,7 @@ export default function AnalyticsPage() {
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
       <div className="max-w-4xl mx-auto px-4 md:px-6 py-8 md:py-12">
-        {/* ── Header ── */}
+        {/* ── Header：页面标题、Tab 切换、时间范围选择、错题本入口 ── */}
         <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
           <div className="flex items-center gap-4">
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-[var(--color-text)]">
@@ -819,6 +856,7 @@ export default function AnalyticsPage() {
               ))}
             </div>
           </div>
+          {/* 时间范围选择按钮 + 错题本入口链接 */}
           <div className="flex items-center gap-2">
             {(["week", "month", "all"] as const).map((r) => (
               <button
@@ -905,7 +943,7 @@ export default function AnalyticsPage() {
 
         {/* ── ③ + ④ Mastery + Errors ── */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          {/* Mastery Bars */}
+          {/* ③ 知识掌握度：各知识点 p_known 进度条，按掌握率着色 */}
           <Card title="🔥 知识掌握度" className="!p-5">
             {mastery_bars.length === 0 ? (
               <p className="text-xs text-[var(--color-text-muted)]">暂无数据，答几道题就出来了</p>
@@ -943,7 +981,7 @@ export default function AnalyticsPage() {
             )}
           </Card>
 
-          {/* Error Distribution */}
+          {/* ④ 错因分布：错误类型占比横向条形图 */}
           <Card title="📊 错因分布" className="!p-5">
             {error_distribution.length === 0 ? (
               <p className="text-xs text-[var(--color-text-muted)]">暂无错题，继续保持！</p>

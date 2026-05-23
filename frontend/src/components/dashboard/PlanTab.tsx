@@ -1,5 +1,6 @@
 "use client";
 
+// ── 导入依赖 ──
 import { useState, useEffect, useCallback } from "react";
 import {
   BookOpen, CheckCircle2, Circle, RefreshCw, Loader2,
@@ -7,9 +8,12 @@ import {
 } from "lucide-react";
 import Card from "@/components/ui/Card";
 
+// ── 后端 API 基础地址，通过环境变量配置 ──
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-// ── Types ──
+// ── 类型定义 ──
+
+// 单条学习任务项
 interface PlanItem {
   task_id: string;
   skill_id: string;
@@ -24,6 +28,7 @@ interface PlanItem {
   level: string;
 }
 
+// 学习计划整体数据
 interface PlanData {
   items: PlanItem[];
   total_items: number;
@@ -35,6 +40,7 @@ interface PlanData {
   week_number: number;
 }
 
+// AI 学习建议中的单个技能项
 interface Suggestion {
   skill_id: string;
   label: string;
@@ -43,8 +49,9 @@ interface Suggestion {
   subject: string;
 }
 
+// ── 主组件：学习规划 Tab ──
 export function PlanTab() {
-  // State
+  // ── 状态管理 ──
   const [planItems, setPlanItems] = useState<PlanItem[]>([]);
   const [planMeta, setPlanMeta] = useState<PlanData | null>(null);
   const [progress, setProgress] = useState<{
@@ -58,7 +65,7 @@ export function PlanTab() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
 
-  // ── Fetch all data on mount ──
+  // ── 组件挂载时加载所有数据（计划、进度、建议） ──
   const loadData = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -91,7 +98,7 @@ export function PlanTab() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // ── Generate / Refresh plan ──
+  // ── 手动生成 / 刷新学习计划（调用后端生成接口） ──
   const handleGenerate = async () => {
     setGenerating(true);
     try {
@@ -110,7 +117,7 @@ export function PlanTab() {
     }
   };
 
-  // ── Complete task ──
+  // ── 将指定任务标记为已完成 ──
   const handleComplete = async (taskId: string) => {
     try {
       const res = await fetch(
@@ -118,7 +125,7 @@ export function PlanTab() {
         { method: "PUT" }
       );
       if (res.ok) {
-        // Refetch progress
+        // 完成后重新拉取进度数据
         const progRes = await fetch(`${API_BASE}/api/study/plan/default_user/progress`);
         if (progRes.ok) setProgress(await progRes.json());
       }
@@ -127,13 +134,13 @@ export function PlanTab() {
     }
   };
 
-  // ── Helpers ──
+  // ── 辅助变量 ──
   const completionRate = progress?.completion_rate ?? 0;
   const habitLabel: Record<string, string> = {
     beginner: "🌱 初学", regular: "📚 日常", intensive: "💪 强化",
   };
 
-  // ── Loading state ──
+  // ── 加载中状态：显示旋转加载图标 ──
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -145,7 +152,7 @@ export function PlanTab() {
   return (
     <div className="min-h-screen bg-[var(--color-bg)]">
       <div>
-        {/* Header */}
+        {/* ── 页面头部：标题 + 操作按钮 ── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
             <h1 className="text-2xl font-bold text-[var(--color-text)] tracking-tight">
@@ -171,13 +178,14 @@ export function PlanTab() {
           </button>
         </div>
 
+        {/* ── 错误提示 ── */}
         {error && (
           <div className="mb-6 px-4 py-3 border border-[var(--color-border)] text-sm text-[var(--color-text-muted)] flex items-center gap-2">
             <AlertCircle size={15} /> {error}
           </div>
         )}
 
-        {/* Empty state */}
+        {/* ── 空状态：尚无学习计划时显示引导文案 ── */}
         {!planItems.length && !loading && (
           <div className="text-center py-16">
             <div className="w-16 h-16 mx-auto mb-4 border border-[var(--color-border)] flex items-center justify-center">
@@ -200,10 +208,10 @@ export function PlanTab() {
           </div>
         )}
 
-        {/* Plan content */}
+        {/* ── 计划内容区域（有任务时显示） ── */}
         {planItems.length > 0 && (
           <>
-            {/* ── Overview cards ── */}
+            {/* ── 概览统计卡片：已完成、预计耗时、每日题量、完成率 ── */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
               <OverviewCard
                 icon={<CheckCircle2 size={16} />}
@@ -227,7 +235,7 @@ export function PlanTab() {
               />
             </div>
 
-            {/* ── Progress bar ── */}
+            {/* ── 整体进度条 ── */}
             <div className="mb-8">
               <div className="h-1.5 bg-[var(--color-surface)] overflow-hidden">
                 <div
@@ -237,7 +245,7 @@ export function PlanTab() {
               </div>
             </div>
 
-            {/* ── Task list ── */}
+            {/* ── 本周任务列表 ── */}
             <h2 className="text-sm font-semibold text-[var(--color-text)] uppercase tracking-widest mb-4">
               本周任务
             </h2>
@@ -252,7 +260,7 @@ export function PlanTab() {
               ))}
             </div>
 
-            {/* ── Suggestions ── */}
+            {/* ── AI 学习建议：急需突破 / 稳步推进 / 新主题 ── */}
             {suggestions && (suggestions.urgent.length > 0 || suggestions.building.length > 0) && (
               <>
                 <h2 className="text-sm font-semibold text-[var(--color-text)] uppercase tracking-widest mb-4">
@@ -287,8 +295,9 @@ export function PlanTab() {
   );
 }
 
-// ── Sub-components ──
+// ── 子组件 ──
 
+// 概览统计卡片组件：显示图标、标签和数值
 function OverviewCard({ icon, label, value }: {
   icon: React.ReactNode; label: string; value: string;
 }) {
@@ -303,9 +312,11 @@ function OverviewCard({ icon, label, value }: {
   );
 }
 
+// 单个任务卡片组件：显示序号、掌握等级、学科、标题、描述、耗时、难度、每日题量
 function TaskCard({ item, index, onComplete }: {
   item: PlanItem; index: number; onComplete: () => void;
 }) {
+  // 掌握等级对应的文字颜色
   const levelColors: Record<string, string> = {
     "未接触": "text-[var(--color-text-muted)]", "初学": "text-[#f59e0b]",
     "发展中": "text-[#3b82f6]", "接近掌握": "text-[#10b981]", "已掌握": "text-[var(--color-text-muted)]",
@@ -350,6 +361,7 @@ function TaskCard({ item, index, onComplete }: {
   );
 }
 
+// 学习建议列组件：按类别（急需突破 / 稳步推进 / 新主题）展示建议技能列表
 function SuggestionColumn({ title, items, color }: {
   title: string; items: Suggestion[]; color: string;
 }) {

@@ -1,16 +1,21 @@
-'use client';
+'use client'; // 客户端组件标识
 
+// React 与 Next.js 核心导入
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+// 图标库导入
 import {
   BookOpen, Brain, Target, TrendingUp, MessageCircle,
   Loader2, Dumbbell, Trophy, AlertCircle, Sparkles,
 } from 'lucide-react';
+// 自定义 UI 组件导入
 import Card from '@/components/ui/Card';
 import UnifiedSearch from '@/components/search/UnifiedSearch';
 
+// 后端 API 基地址，默认本地开发端口 8000
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+// 学习进度概览数据结构
 interface ProgressSummary {
   total_questions: number;
   correct_answers: number;
@@ -21,6 +26,7 @@ interface ProgressSummary {
   recommendations: string[];
 }
 
+// 成就徽章数据结构
 interface Achievement {
   id: string;
   name: string;
@@ -29,6 +35,7 @@ interface Achievement {
   tier: string;
 }
 
+// 快捷操作配置列表
 const QUICK_ACTIONS = [
   { emoji: '💬', title: '智能对话', desc: '随时提问', href: '/learn' },
   { emoji: '✏️', title: '开始练习', desc: '刷题检测', href: '/practice' },
@@ -36,7 +43,9 @@ const QUICK_ACTIONS = [
   { emoji: '🧠', title: '知识图谱', desc: '补充薄弱', href: '/dashboard?tab=graph' },
 ];
 
+// 概览 Tab 主组件：展示学习总览、统计、薄弱项、建议和成就
 export default function OverviewTab() {
+  // 根据当前时段生成问候语（仅计算一次）
   const greeting = useMemo(() => {
     const h = new Date().getHours();
     if (h < 6) return '夜深了，注意休息 🌙';
@@ -45,10 +54,12 @@ export default function OverviewTab() {
     return '晚上好 🌙';
   }, []);
 
+  // 状态：学习进度、成就列表、加载状态
   const [progress, setProgress] = useState<ProgressSummary | null>(null);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // 组件挂载时并行拉取学习概览与成就数据
   useEffect(() => {
     async function loadData() {
       try {
@@ -70,6 +81,7 @@ export default function OverviewTab() {
     loadData();
   }, []);
 
+  // 衍生展示值：正确率百分比、掌握 / 薄弱项数量、已解锁成就数
   const accuracy = progress?.accuracy_rate
     ? `${(progress.accuracy_rate * 100).toFixed(1)}%`
     : '—';
@@ -79,7 +91,7 @@ export default function OverviewTab() {
 
   return (
     <div>
-      {/* Header */}
+      {/* Header — 问候语与学习概览摘要 */}
       <header className="mb-8">
         <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-[var(--color-text)] mb-2">
           {greeting}
@@ -100,12 +112,12 @@ export default function OverviewTab() {
         </p>
       </header>
 
-      {/* Unified Search */}
+      {/* 统一搜索栏：搜索知识点、题目等 */}
       <div className="mb-8">
         <UnifiedSearch />
       </div>
 
-      {/* Quick Actions */}
+      {/* 快捷操作入口：智能对话、练习、分析、知识图谱 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
         {QUICK_ACTIONS.map((action) => (
           <Link
@@ -122,7 +134,7 @@ export default function OverviewTab() {
         ))}
       </div>
 
-      {/* Stats Cards */}
+      {/* 统计卡片：总题数、正确率、已掌握技能、成就数 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
         {[
           { icon: <Dumbbell size={18} />, label: '总题数', value: loading ? '—' : `${progress?.total_questions || 0} 题`, color: 'text-blue-400' },
@@ -138,9 +150,9 @@ export default function OverviewTab() {
         ))}
       </div>
 
-      {/* Main Grid */}
+      {/* 主栅格：薄弱项、学习建议、成就预览 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Weak Areas — with cross-page links */}
+        {/* 薄弱知识点：点击可跳转到针对性练习页 */}
         <div>
           <Card title="需要加强">
             {loading ? (
@@ -178,7 +190,7 @@ export default function OverviewTab() {
           </Card>
         </div>
 
-        {/* Recommendations */}
+        {/* 学习建议：基于 AI 分析生成的个性化推荐 */}
         <div>
           <Card title="学习建议">
             {loading ? (
@@ -201,7 +213,7 @@ export default function OverviewTab() {
           </Card>
         </div>
 
-        {/* Achievements Preview */}
+        {/* 成就徽章预览：展示已解锁/未解锁的成就 */}
         {achievements.length > 0 && (
           <div className="lg:col-span-2">
             <Card title={`成就 (${unlockedAchievements}/${achievements.length})`}>

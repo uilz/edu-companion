@@ -7,7 +7,9 @@ import {
 } from "lucide-react";
 import type { Partition, Domain, Topic, Conversation } from "@/types";
 
-// ── API helper ──
+// ══════════════════════════════════════════════════════════════
+//  API 请求封装（前缀 /api/conversations）
+// ══════════════════════════════════════════════════════════════
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`/api/conversations${path}`, {
     headers: { "Content-Type": "application/json", ...options?.headers },
@@ -20,7 +22,11 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
-// ── Small UI components ──
+// ══════════════════════════════════════════════════════════════
+//  小 UI 组件
+// ══════════════════════════════════════════════════════════════
+
+/** 行内编辑输入框: 用于重命名节点 */
 function InlineEdit({ value, onConfirm, onCancel, placeholder = "名称" }: {
   value: string; onConfirm: (v: string) => void; onCancel: () => void; placeholder?: string;
 }) {
@@ -39,6 +45,7 @@ function InlineEdit({ value, onConfirm, onCancel, placeholder = "名称" }: {
   );
 }
 
+/** 确认删除弹窗 */
 function ConfirmDialog({ message, onConfirm, onCancel }: { message: string; onConfirm: () => void; onCancel: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onCancel}>
@@ -53,6 +60,7 @@ function ConfirmDialog({ message, onConfirm, onCancel }: { message: string; onCo
   );
 }
 
+/** 新建节点弹窗（领域/专题/对话共用） */
 function NewItemDialog({ open, title, placeholder, onClose, onCreate, emoji }: {
   open: boolean; title: string; placeholder: string; emoji: string;
   onClose: () => void; onCreate: (name: string, emoji: string) => void;
@@ -86,7 +94,9 @@ function NewItemDialog({ open, title, placeholder, onClose, onCreate, emoji }: {
   );
 }
 
-// ── Types ──
+// ══════════════════════════════════════════════════════════════
+//  树节点类型定义
+// ══════════════════════════════════════════════════════════════
 type FlatLevel = "partition" | "domain" | "topic" | "conversation";
 
 interface FlatNode {
@@ -95,9 +105,12 @@ interface FlatNode {
   [key: string]: unknown;
 }
 
+/** 根节点 key，用于存储顶层分区列表 */
 const ROOT_KEY = "__sidebar_root__";
 
-// ── Props ──
+// ══════════════════════════════════════════════════════════════
+//  Props 类型
+// ══════════════════════════════════════════════════════════════
 interface Props {
   partitions: Partition[];
   selectedPartitionId: string | null;
@@ -113,17 +126,24 @@ interface Props {
   onTreeChanged?: () => void;
 }
 
+// ══════════════════════════════════════════════════════════════
+//  PartitionSidebar — 分区侧边栏
+//  扁平化数据架构: childMap（数据） + expandedSet（展开状态） + loadingSet（加载状态）
+//  三状态完全分离，展开/收起只操作单个 ID
+// ══════════════════════════════════════════════════════════════
 export default function PartitionSidebar({
   partitions, selectedPartitionId, activeConversationId, initialConversationId,
   onSelectConversation, onCreatePartition, onRenamePartition, onDeletePartition,
   loading = false, compact = false, onNewConversation, onTreeChanged,
 }: Props) {
-  // ── Flat state: data ↔ UI state separated ──
+  // ── 数据状态: childMap 缓存树节点 (parentKey → children[]) ──
   const [childMap, setChildMap] = useState<Map<string, FlatNode[]>>(() => new Map());
+  // ── UI 状态: 展开/收起 (不存储数据) ──
   const [expandedSet, setExpandedSet] = useState<Set<string>>(new Set());
+  // ── UI 状态: 加载中 ──
   const [loadingSet, setLoadingSet] = useState<Set<string>>(new Set());
 
-  // Refs: always reflect latest state
+  // Refs: 避免闭包过期（React state 更新异步，ref 立即同步）
   const childMapRef = useRef(childMap);
   childMapRef.current = childMap;
   const expandedSetRef = useRef(expandedSet);
@@ -131,31 +151,21 @@ export default function PartitionSidebar({
   const loadingSetRef = useRef(loadingSet);
   loadingSetRef.current = loadingSet;
 
-  // ── Sync partitions prop into childMap ──
+  // ── 同步 partitions prop 到 childMap ──
   useEffect(() => {
-    const partNames = partitions.map(p => p.name);
-    console.log("[D2] partitions useEffect fired, counts:", partitions.length, "name:", partNames);
     setChildMap(prev => {
-      const prevRoot = prev.get(ROOT_KEY)?.map(p => p.name) || [];
       const next = new Map(prev);
       next.set(ROOT_KEY, partitions.map(p => ({
         ...p, level: "partition" as const, partition_id: p.id,
       })));
-      console.log("[D2] childMap ROOT_KEY replaced:", prevRoot, "→", partNames);
-      // Log topic-level children sizes to detect stale cache
-      next.forEach((value, key) => {
-        if (key !== ROOT_KEY && value?.length > 0 && value[0]?.level === "conversation") {
-          console.log("[D2] topic stash:", key.substring(0,16), "has", value.length, "convs:", value.map(c => c.name));
-        }
-      });
       return next;
     });
   }, [partitions]);
 
-  // ── Helpers ──
+  // ── 工具函数 ──
   const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-  // Expand a single node (no-op if already expanded)
+  /** 展开一个节点（幂等，已展开则无操作） */
   const doExpand = useCallback((id: string) => {
     setExpandedSet(prev => {
       if (prev.has(id)) return prev;
@@ -165,20 +175,17 @@ export default function PartitionSidebar({
     });
   }, []);
 
-  // ── loadChildren: ONLY loads data, NEVER expands ──
-  // Returns the loaded children so callers can use them immediately
-  // without relying on refs (which lag behind React state updates).
+  // ── loadChildren: 只加载数据，不触发展开 ──
+  // 返回 Promise<FlatNode[]> 让调用方可以直接使用结果
+  //（从 ref 读取有延迟，不如直接用返回的数据）
   const loadPromisesRef = useRef<Map<string, Promise<FlatNode[]>>>(new Map());
 
+  /** 加载某节点的子节点，缓存到 childMap */
   const loadChildren = useCallback(async (node: FlatNode): Promise<FlatNode[]> => {
     const { id } = node;
-    // Return existing promise if already loading
+    // 如果已有加载中的 Promise，复用（去重）
     const existing = loadPromisesRef.current.get(id);
-    if (existing) {
-      console.log("[D3] loadChildren CACHED HIT:", node.level, node.name, id.substring(0,16));
-      return existing;
-    }
-    console.log("[D3] loadChildren FRESH CALL:", node.level, node.name, id.substring(0,16));
+    if (existing) return existing;
 
     const promise = (async (): Promise<FlatNode[]> => {
       setLoadingSet(prev => { const next = new Set(prev); next.add(id); return next; });
@@ -186,12 +193,15 @@ export default function PartitionSidebar({
       try {
         let children: FlatNode[];
         if (node.level === "partition") {
+          // 分区 → 加载领域
           const { domains } = await apiFetch<{ domains: Domain[] }>(`/partitions/${id}/domains`);
           children = domains.map(d => ({ ...d, level: "domain" as const, partition_id: id }));
         } else if (node.level === "domain") {
+          // 领域 → 加载专题
           const { topics } = await apiFetch<{ topics: Topic[] }>(`/domains/${id}/topics`);
           children = topics.map(t => ({ ...t, level: "topic" as const, partition_id: node.partition_id, domain_id: id }));
         } else {
+          // 专题 → 加载对话
           const { conversations } = await apiFetch<{ conversations: Conversation[] }>(`/topics/${id}/conversations`);
           children = conversations.map(c => ({ ...c, level: "conversation" as const, partition_id: node.partition_id }));
         }
@@ -203,7 +213,8 @@ export default function PartitionSidebar({
         });
         return children;
       } catch (e: any) {
-        console.error("loadChildren failed:", e);
+        console.error("加载子节点失败:", e);
+        // 404 → 节点已删除，清理缓存
         if (e?.message?.includes("404")) {
           setChildMap(prev => {
             const next = new Map(prev);
@@ -221,7 +232,7 @@ export default function PartitionSidebar({
           });
           setExpandedSet(prev => { const next = new Set(prev); next.delete(id); return next; });
         }
-        throw e; // re-throw so caller knows loading failed
+        throw e; // 让调用方知道加载失败
       } finally {
         setLoadingSet(prev => { const next = new Set(prev); next.delete(id); return next; });
         loadPromisesRef.current.delete(id);
@@ -231,15 +242,17 @@ export default function PartitionSidebar({
     loadPromisesRef.current.set(id, promise);
     return promise;
   }, []);
-  // ── Toggle expand/collapse ──
+
+  // ── 展开/收起切换 ──
   const toggleExpand = useCallback((node: FlatNode) => {
+    // 点击对话 → 选中
     if (node.level === "conversation") {
       onSelectConversation(node.partition_id || selectedPartitionId || "", node.id);
       return;
     }
 
     if (expandedSetRef.current.has(node.id)) {
-      // Collapse: remove node + all descendants
+      // 收起: 移除节点 + 所有后代
       setExpandedSet(prev => {
         const next = new Set(prev);
         next.delete(node.id);
@@ -255,20 +268,21 @@ export default function PartitionSidebar({
         return next;
       });
     } else {
-      // Expand: load if not cached, then expand
+      // 展开: 如果未缓存则先加载，再展开
       if (!childMapRef.current.has(node.id)) {
         loadChildren(node).then(() => {
           if (!expandedSetRef.current.has(node.id)) {
             doExpand(node.id);
           }
-        }).catch(() => {}); // ignore — already logged by loadChildren
+        }).catch(() => {});
       } else {
         doExpand(node.id);
       }
     }
   }, [loadChildren, doExpand, onSelectConversation, selectedPartitionId]);
 
-  // ── Auto-expand path to active conversation ──
+  // ── 自动展开到活跃对话路径 ──
+  // 当选中对话时，自动展开所在分区→领域→专题，高亮对话
   const prevAutoExpandRef = useRef("");
   useEffect(() => {
     const convId = activeConversationId || initialConversationId || "";
@@ -280,7 +294,7 @@ export default function PartitionSidebar({
 
     (async () => {
       try {
-        // 1. Wait for the partition to appear in childMap
+        // 1. 等待分区出现在 childMap
         for (let i = 0; i < 50; i++) {
           if (cancelled) return;
           if (childMapRef.current.get(ROOT_KEY)?.some(p => p.id === selectedPartitionId)) break;
@@ -291,8 +305,7 @@ export default function PartitionSidebar({
         const partition = childMapRef.current.get(ROOT_KEY)?.find(p => p.id === selectedPartitionId);
         if (!partition) return;
 
-        // 2. Load + expand partition
-        // Use returned children directly instead of reading ref (which lags behind state)
+        // 2. 加载 + 展开分区
         let domainList: FlatNode[];
         if (childMapRef.current.has(selectedPartitionId)) {
           domainList = childMapRef.current.get(selectedPartitionId) || [];
@@ -302,28 +315,25 @@ export default function PartitionSidebar({
         }
         doExpand(selectedPartitionId);
 
-        // 3. Search for which domain/topic contains the active conversation
+        // 3. 搜索哪个领域/专题包含该对话
         for (const domain of domainList) {
           if (cancelled) return;
 
-          // Load this domain's topics — use returned data
           const topicList = childMapRef.current.has(domain.id)
             ? (childMapRef.current.get(domain.id) || [])
             : await loadChildren(domain);
           if (cancelled) return;
 
-          // Check if any topic under this domain contains the conversation
           for (const topic of topicList) {
             if (cancelled) return;
 
-            // Load this topic's conversations — use returned data
             const convs = childMapRef.current.has(topic.id)
               ? (childMapRef.current.get(topic.id) || [])
               : await loadChildren(topic);
             if (cancelled) return;
 
+            // 找到了 → 展开领域和专题，不再继续搜索
             if (convs.some(c => c.id === convId || (c as any).conversation_id === convId)) {
-              // Found! Expand this domain + topic, skip remaining domains/topics
               doExpand(domain.id);
               doExpand(topic.id);
               return;
@@ -331,18 +341,19 @@ export default function PartitionSidebar({
           }
         }
       } catch (e) {
-        console.error("Auto-expand failed:", e);
+        console.error("自动展开失败:", e);
       }
     })();
 
     return () => { cancelled = true; };
   }, [selectedPartitionId, activeConversationId, initialConversationId, loadChildren, doExpand]);
 
-  // ── Create ──
+  // ── 创建 ──
   const [createDialog, setCreateDialog] = useState<{
     level: FlatLevel; parentId: string; title: string; placeholder: string; emoji: string;
   } | null>(null);
 
+  /** 处理创建（领域/专题/对话） */
   const handleCreate = async (name: string, emoji: string) => {
     if (!createDialog) return;
     try {
@@ -355,29 +366,29 @@ export default function PartitionSidebar({
         const { conversation } = await apiFetch<{ conversation: { id: string } }>("/conversations", { method: "POST", body: JSON.stringify({ topic_id: createDialog.parentId, name }) });
         createdId = conversation.id;
       }
-      // Refresh parent silently (load children without expanding)
+      // 刷新父节点缓存（不展开，用户点击展开就能看到新的）
       let foundParent = false;
       Array.from(childMapRef.current.values()).some(children => {
         const n = children.find(c => c.id === createDialog.parentId);
         if (n) {
-          loadChildren(n); // no auto-expand — stays collapsed, user can open to see new item
+          loadChildren(n);
           foundParent = true;
           return true;
         }
         return false;
       });
       onTreeChanged?.();
-      // Auto-navigate to new conversation
+      // 新建对话后自动导航过去
       if (createdId && createDialog.level === "conversation") {
         onSelectConversation(selectedPartitionId || "", createdId);
       }
     } catch (e) {
-      console.error("Create failed:", e);
+      console.error("创建失败:", e);
     }
     setCreateDialog(null);
   };
 
-  // ── Rename ──
+  // ── 重命名 ──
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
@@ -386,12 +397,13 @@ export default function PartitionSidebar({
     setEditValue(node.name || "");
   };
 
+  /** 确认重命名 */
   const confirmEdit = async (newName?: string) => {
     if (!editingId) return;
     const name = (newName || editValue).trim();
     if (!name) { setEditingId(null); return; }
 
-    // Find the node's level
+    // 找到节点的层级
     let level: FlatLevel | null = null;
     Array.from(childMapRef.current.values()).some(children => {
       const n = children.find(c => c.id === editingId);
@@ -408,15 +420,15 @@ export default function PartitionSidebar({
         conversation: `/conversations/${editingId}`,
       };
 
-      // For partition: delegate to onRenamePartition (it handles API + loadPartitions)
-      // For other levels: make the API call here
+      // 分区委托给 onRenamePartition（它处理 API + loadPartitions）
+      // 其他层级直接调 API
       if (level === "partition") {
         onRenamePartition?.(editingId, name);
       } else {
         await apiFetch(paths[level], { method: "PATCH", body: JSON.stringify({ name }) });
       }
 
-      // Locally update name in childMap
+      // 本地更新 childMap 中的名称（无需等 API 返回）
       setChildMap(prev => {
         const next = new Map(prev);
         next.forEach((children, key) => {
@@ -434,17 +446,17 @@ export default function PartitionSidebar({
         onTreeChanged?.();
       }
     } catch (e) {
-      console.error("Rename failed:", e);
+      console.error("重命名失败:", e);
     }
     setEditingId(null);
   };
 
-  // ── Delete ──
+  // ── 删除 ──
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; level: FlatLevel } | null>(null);
 
+  /** 确认删除：API 调用 + 清理 childMap 缓存 */
   const confirmDelete = async () => {
     if (!deleteTarget) return;
-    console.log("[DEBUG] confirmDelete called", { id: deleteTarget.id, name: deleteTarget.name, level: deleteTarget.level, activeConv: activeConversationId });
     const targetLevel = deleteTarget.level;
     const targetId = deleteTarget.id;
     try {
@@ -455,57 +467,48 @@ export default function PartitionSidebar({
         conversation: `/conversations/${targetId}`,
       };
 
-      console.log("[DEBUG] Calling API:", targetLevel, paths[targetLevel]);
-      // For partition: delegate to onDeletePartition (it handles API + loadPartitions)
-      // For other levels: make the API call here
+      // 分区委托给 onDeletePartition（它处理 API + 切换分区 + loadPartitions）
+      // 其他层级直接调 API
       if (targetLevel === "partition") {
         onDeletePartition?.(targetId);
       } else {
         try {
           const result = await apiFetch(paths[targetLevel], { method: "DELETE" });
-          console.log("[DEBUG] API delete response:", result);
         } catch (apiErr: any) {
-          // If conversation/topic/domain was already deleted (400/404), still clean up frontend
+          // 如果后端已删除（400/404），前端静默处理，继续清理缓存
           const msg = apiErr?.message || "";
           if (msg.includes("400") || msg.includes("404") || msg.includes("not found")) {
-            console.log("[DEBUG] Already deleted on server, cleaning up frontend cache only");
+            // 继续执行下方的缓存清理
           } else {
-            throw apiErr; // Re-throw other errors
+            throw apiErr;
           }
         }
       }
 
-      console.log("[DEBUG] Removing from childMap, id:", targetId);
-      // Remove from childMap + expandedSet
+      // 从 childMap 和 expandedSet 中移除被删节点
       setChildMap(prev => {
-        const before = prev.get(ROOT_KEY)?.length || 0;
         const next = new Map(prev);
         next.forEach((children, key) => {
           const filtered = children.filter(c => c.id !== targetId);
           if (filtered.length !== children.length) next.set(key, filtered);
         });
         next.delete(targetId);
-        const after = next.get(ROOT_KEY)?.length || 0;
-        console.log("[DEBUG] childMap root items:", before, "->", after, "ROOT_KEY children:", next.get(ROOT_KEY)?.map(c => c.name));
         return next;
       });
-      setExpandedSet(prev => { const next = new Set(prev); next.delete(targetId); console.log("[DEBUG] expandedSet after delete:", next.size, "items"); return next; });
+      setExpandedSet(prev => { const next = new Set(prev); next.delete(targetId); return next; });
 
-      // If deleting the active conversation, clear it
+      // 如果删除的是当前活跃对话，清除选中状态
       if (targetId === activeConversationId) {
-        console.log("[DEBUG] Clearing active conversation");
         onSelectConversation(selectedPartitionId || "", "");
       }
       if (targetLevel !== "partition") {
-        console.log("[DEBUG] Firing onTreeChanged");
         onTreeChanged?.();
       }
-      
-      // ── Refresh parent's children from API to prevent stale cache ──
-      // After deleting a conversation/topic/domain, the cached children in childMap
-      // become stale. Directly re-fetch the parent's children.
+
+      // ── 刷新父节点子列表（防止 childMap 缓存过期）──
+      // 删除后，缓存中可能还有旧的子节点数据
+      // 直接重新加载父节点以刷新
       if (targetLevel !== "partition") {
-        // Find parent node by searching which key's children contain targetId
         let parentId: string | null = null;
         childMapRef.current.forEach((children, key) => {
           if (parentId) return;
@@ -513,9 +516,9 @@ export default function PartitionSidebar({
             parentId = key;
           }
         });
-        
+
         if (parentId && parentId !== ROOT_KEY) {
-          // Find the parent FlatNode from grandparent's children
+          // 从祖节点的子节点中找到父节点 FlatNode
           let parentFlatNode: FlatNode | null = null;
           childMapRef.current.forEach((children, key) => {
             if (parentFlatNode) return;
@@ -524,24 +527,22 @@ export default function PartitionSidebar({
               parentFlatNode = parent;
             }
           });
-          
+
           if (parentFlatNode) {
-            // Re-fetch from API — this will overwrite the stale childMap entry
             loadChildren(parentFlatNode).catch(() => {});
           }
         }
       }
-      
-      console.log("[DEBUG] Delete complete");
     } catch (e) {
-      console.error("[DEBUG] Delete failed:", e);
+      console.error("删除失败:", e);
     }
     setDeleteTarget(null);
   };
 
-  // ── Render ──
+  // ── 渲染 ──
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
+  /** 展开/加载图标 */
   const renderIcon = (node: FlatNode) => {
     if (loadingSet.has(node.id)) {
       return <span className="w-3 h-3 border border-[var(--color-accent)] border-t-transparent rounded-full animate-spin" />;
@@ -554,6 +555,7 @@ export default function PartitionSidebar({
     return <span className="w-3.5 flex-shrink-0" />;
   };
 
+  /** 层级图标 */
   const levelIcon = (level: FlatLevel) => {
     switch (level) {
       case "partition": return <FolderOpen size={14} />;
@@ -563,6 +565,7 @@ export default function PartitionSidebar({
     }
   };
 
+  /** 递归渲染树节点 */
   const renderItem = (node: FlatNode, depth: number): React.ReactNode => {
     const isHovered = hoveredId === node.id;
     const isEditing = editingId === node.id;
@@ -596,6 +599,7 @@ export default function PartitionSidebar({
                 style={{ color: isActive ? "var(--color-text)" : "var(--color-text-secondary)", fontWeight: isActive ? 600 : 400 }}>
                 {node.name || "未命名"}
               </span>
+              {/* 悬浮操作按钮: 新建对话/重命名/删除/新建子节点/知识图谱 */}
               {isHovered && (
                 <div className="flex items-center gap-0.5 ml-1">
                   {(node.level === "partition" || node.level === "domain" || node.level === "topic") && onNewConversation && (

@@ -1,9 +1,11 @@
 "use client";
 
+// ──── 导入依赖：lucide-react 图标库和类型定义 ────
 import { Loader2, ExternalLink } from "lucide-react";
 import type { ResponseBlock } from "@/types";
 
-// ──── Platform Icons ────
+// ──── 平台图标映射表 ────
+// 为每个支持的平台（B站、YouTube、知乎等）分配对应的 Emoji 图标
 const PLATFORM_ICONS: Record<string, string> = {
   bilibili: "🎬",
   youtube: "▶️",
@@ -17,9 +19,12 @@ const PLATFORM_ICONS: Record<string, string> = {
   baidu: "🌐",
 };
 
-// ──── Multi-platform media search block ────
+// ──── 多平台媒体搜索结果展示组件 ────
+// 接收 content 对象，渲染跨平台的视频/媒体搜索卡片列表
 export default function MediaSearchBlock({ content }: { content: Record<string, unknown> }) {
+  // 提取搜索关键词（如用户在对话中输入的查询）
   const query = (content.query as string) || "";
+  // 提取各平台的搜索结果列表
   const platforms = (content.platforms as Array<{
     platform: string;
     name: string;
@@ -28,16 +33,17 @@ export default function MediaSearchBlock({ content }: { content: Record<string, 
     links: Array<{ query: string; url: string }>;
   }>) || [];
 
-  // Old format (single video result) — fallback
+  // ──── 旧格式兼容：单个视频结果（无 platforms 字段时降级） ────
   if (content.url && !platforms.length) {
     return <LegacyVideoBlock content={content} />;
   }
 
+  // 无搜索结果时直接返回空
   if (!platforms.length) return null;
 
   return (
     <div className="border border-[var(--color-border)] bg-[var(--color-surface)] mt-2">
-      {/* Header */}
+      {/* ──── 头部：显示搜索图标、标题和关键词 ──── */}
       <div className="px-3 py-2 border-b border-[var(--color-border)] flex items-center gap-2">
         <span className="text-sm">🔍</span>
         <span className="text-xs font-medium text-[var(--color-text)]">
@@ -50,13 +56,14 @@ export default function MediaSearchBlock({ content }: { content: Record<string, 
         )}
       </div>
 
-      {/* Platform cards */}
+      {/* ──── 平台卡片列表：遍历每个平台的搜索结果 ──── */}
       <div className="p-2 space-y-2">
         {platforms.map((p) => {
+          // 从映射表中取图标，找不到则使用平台自带图标或默认链接图标
           const icon = PLATFORM_ICONS[p.platform] || p.icon || "🔗";
           return (
             <div key={p.platform} className="border border-[var(--color-border)] px-3 py-2.5">
-              {/* Platform header */}
+              {/* ──── 平台头部：图标 + 平台名称 + 描述 ──── */}
               <div className="flex items-center gap-1.5 mb-2">
                 <span className="text-sm">{icon}</span>
                 <span className="text-xs font-medium text-[var(--color-text)]">
@@ -67,7 +74,7 @@ export default function MediaSearchBlock({ content }: { content: Record<string, 
                 </span>
               </div>
 
-              {/* Search links */}
+              {/* ──── 搜索链接列表：每个链接跳转到对应平台的搜索结果页 ──── */}
               <div className="space-y-1">
                 {p.links.map((link, i) => (
                   <a
@@ -90,7 +97,7 @@ export default function MediaSearchBlock({ content }: { content: Record<string, 
         })}
       </div>
 
-      {/* Footer hint */}
+      {/* ──── 底部提示：操作说明（在新窗口打开、AI 优化搜索词） ──── */}
       <div className="px-3 py-1.5 border-t border-[var(--color-border)] text-[9px] text-[var(--color-text-muted)]">
         点击链接在新窗口打开搜索 · AI 优化搜索词
       </div>
@@ -98,7 +105,8 @@ export default function MediaSearchBlock({ content }: { content: Record<string, 
   );
 }
 
-// ──── Legacy single video block (backward compat) ────
+// ──── 旧格式视频块组件（向后兼容） ────
+// 当 content 使用旧的单视频格式（只有 url 无 platforms）时渲染
 function LegacyVideoBlock({ content }: { content: Record<string, unknown> }) {
   const title = (content.title as string) || "视频";
   const url = (content.url as string) || "";

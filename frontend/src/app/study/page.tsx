@@ -1,15 +1,22 @@
+// 客户端组件声明，启用 React 客户端交互功能
 "use client";
 
+// 导入 React 状态管理与副作用钩子
 import { useState, useEffect, useCallback } from "react";
+// 导入 UI 图标组件
 import {
   BookOpen, CheckCircle2, Circle, RefreshCw, Loader2,
   Clock, Target, TrendingUp, AlertCircle, ChevronRight, Zap,
 } from "lucide-react";
+// 导入自定义卡片组件
 import Card from "@/components/ui/Card";
 
+// API 基础地址，优先使用环境变量，否则回退到本地后端
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-// ── Types ──
+// ── 类型定义 ──
+
+/** 学习计划中的单个任务项 */
 interface PlanItem {
   task_id: string;
   skill_id: string;
@@ -24,6 +31,7 @@ interface PlanItem {
   level: string;
 }
 
+/** 学习计划整体数据 */
 interface PlanData {
   items: PlanItem[];
   total_items: number;
@@ -35,6 +43,7 @@ interface PlanData {
   week_number: number;
 }
 
+/** AI 学习建议项 */
 interface Suggestion {
   skill_id: string;
   label: string;
@@ -43,8 +52,9 @@ interface Suggestion {
   subject: string;
 }
 
+// 学习页面主组件
 export default function StudyPage() {
-  // State
+  // 页面状态：学习计划列表、元数据、进度、建议、加载与错误状态
   const [planItems, setPlanItems] = useState<PlanItem[]>([]);
   const [planMeta, setPlanMeta] = useState<PlanData | null>(null);
   const [progress, setProgress] = useState<{
@@ -58,11 +68,12 @@ export default function StudyPage() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
 
-  // ── Fetch all data on mount ──
+  // ── 组件挂载时加载所有数据（计划、进度、建议） ──
   const loadData = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
+      // 并行请求：学习计划、进度数据、AI 建议
       const [planRes, progRes, suggRes] = await Promise.all([
         fetch(`${API_BASE}/api/study/plan/default_user`),
         fetch(`${API_BASE}/api/study/plan/default_user/progress`),
@@ -89,9 +100,10 @@ export default function StudyPage() {
     }
   }, []);
 
+  // 页面加载时自动获取数据
   useEffect(() => { loadData(); }, [loadData]);
 
-  // ── Generate / Refresh plan ──
+  // ── 生成/刷新学习计划（用户手动触发） ──
   const handleGenerate = async () => {
     setGenerating(true);
     try {
@@ -110,7 +122,7 @@ export default function StudyPage() {
     }
   };
 
-  // ── Complete task ──
+  // ── 标记任务完成 ──
   const handleComplete = async (taskId: string) => {
     try {
       const res = await fetch(
@@ -118,7 +130,7 @@ export default function StudyPage() {
         { method: "PUT" }
       );
       if (res.ok) {
-        // Refetch progress
+        // 完成后续刷新进度数据
         const progRes = await fetch(`${API_BASE}/api/study/plan/default_user/progress`);
         if (progRes.ok) setProgress(await progRes.json());
       }
@@ -127,13 +139,14 @@ export default function StudyPage() {
     }
   };
 
-  // ── Helpers ──
+  // ── 辅助函数 ──
   const completionRate = progress?.completion_rate ?? 0;
+  // 学习习惯等级对应的中文标签
   const habitLabel: Record<string, string> = {
     beginner: "🌱 初学", regular: "📚 日常", intensive: "💪 强化",
   };
 
-  // ── Loading state ──
+  // ── 加载状态：显示旋转加载图标 ──
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -145,7 +158,7 @@ export default function StudyPage() {
   return (
     <div className="min-h-screen bg-[var(--color-bg)]">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
-        {/* Header */}
+        {/* 页面头部：标题、学习阶段与操作按钮 */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
             <h1 className="text-2xl font-bold text-[var(--color-text)] tracking-tight">
@@ -157,6 +170,7 @@ export default function StudyPage() {
               {planMeta && ` · 准确率 ${(planMeta.recent_accuracy * 100).toFixed(0)}%`}
             </p>
           </div>
+          {/* 生成/刷新计划按钮 */}
           <button
             onClick={handleGenerate}
             disabled={generating}
@@ -171,13 +185,14 @@ export default function StudyPage() {
           </button>
         </div>
 
+        {/* 错误提示信息 */}
         {error && (
           <div className="mb-6 px-4 py-3 border border-[var(--color-border)] text-sm text-[var(--color-text-muted)] flex items-center gap-2">
             <AlertCircle size={15} /> {error}
           </div>
         )}
 
-        {/* Empty state */}
+        {/* 空状态：尚无学习计划时的引导界面 */}
         {!planItems.length && !loading && (
           <div className="text-center py-16">
             <div className="w-16 h-16 mx-auto mb-4 border border-[var(--color-border)] flex items-center justify-center">
@@ -200,10 +215,10 @@ export default function StudyPage() {
           </div>
         )}
 
-        {/* Plan content */}
+        {/* 计划内容（有任务时渲染） */}
         {planItems.length > 0 && (
           <>
-            {/* ── Overview cards ── */}
+            {/* ── 概览卡片：已完成数、预计耗时、每日题量、完成率 ── */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
               <OverviewCard
                 icon={<CheckCircle2 size={16} />}
@@ -227,7 +242,7 @@ export default function StudyPage() {
               />
             </div>
 
-            {/* ── Progress bar ── */}
+            {/* ── 进度条：直观展示整体完成进度 ── */}
             <div className="mb-8">
               <div className="h-1.5 bg-[var(--color-surface)] overflow-hidden">
                 <div
@@ -237,7 +252,7 @@ export default function StudyPage() {
               </div>
             </div>
 
-            {/* ── Task list ── */}
+            {/* ── 本周任务列表 ── */}
             <h2 className="text-sm font-semibold text-[var(--color-text)] uppercase tracking-widest mb-4">
               本周任务
             </h2>
@@ -252,7 +267,7 @@ export default function StudyPage() {
               ))}
             </div>
 
-            {/* ── Suggestions ── */}
+            {/* ── AI 学习建议：分"急需突破""稳步推进""新主题"三个栏目 ── */}
             {suggestions && (suggestions.urgent.length > 0 || suggestions.building.length > 0) && (
               <>
                 <h2 className="text-sm font-semibold text-[var(--color-text)] uppercase tracking-widest mb-4">
@@ -287,8 +302,9 @@ export default function StudyPage() {
   );
 }
 
-// ── Sub-components ──
+// ── 子组件 ──
 
+/** 概览卡片：展示某项统计数据的图标、标签和数值 */
 function OverviewCard({ icon, label, value }: {
   icon: React.ReactNode; label: string; value: string;
 }) {
@@ -303,9 +319,11 @@ function OverviewCard({ icon, label, value }: {
   );
 }
 
+/** 任务卡片：展示单个学习任务的详情，包含完成按钮、标题、描述、预估时间和难度 */
 function TaskCard({ item, index, onComplete }: {
   item: PlanItem; index: number; onComplete: () => void;
 }) {
+  // 掌握等级对应的文字颜色
   const levelColors: Record<string, string> = {
     "未接触": "text-[var(--color-text-muted)]", "初学": "text-[#f59e0b]",
     "发展中": "text-[#3b82f6]", "接近掌握": "text-[#10b981]", "已掌握": "text-[var(--color-text-muted)]",
@@ -313,6 +331,7 @@ function TaskCard({ item, index, onComplete }: {
 
   return (
     <div className="flex items-start gap-3 px-4 py-3.5 border border-[var(--color-border)] bg-[var(--color-bg)] hover:border-[var(--color-border-hover)] transition-colors group">
+      {/* 标记完成按钮 */}
       <button
         onClick={onComplete}
         className="flex-shrink-0 mt-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors"
@@ -321,6 +340,7 @@ function TaskCard({ item, index, onComplete }: {
         <Circle size={18} />
       </button>
       <div className="flex-1 min-w-0">
+        {/* 任务元数据：序号、掌握等级、学科 */}
         <div className="flex items-center gap-2 mb-1">
           <span className="text-[10px] font-mono text-[var(--color-text-muted)]">
             #{index + 1}
@@ -332,13 +352,16 @@ function TaskCard({ item, index, onComplete }: {
             {item.subject}
           </span>
         </div>
+        {/* 任务标题 */}
         <h3 className="text-sm font-semibold text-[var(--color-text)] truncate">
           {item.title}
         </h3>
+        {/* 任务描述 */}
         <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
           {item.description}
         </p>
       </div>
+      {/* 右侧信息：预估时间、难度、每日题量 */}
       <div className="flex-shrink-0 flex flex-col items-end gap-1 text-[10px] text-[var(--color-text-muted)]">
         <span className="flex items-center gap-1">
           <Clock size={10} /> {item.estimated_minutes}分钟
@@ -350,6 +373,7 @@ function TaskCard({ item, index, onComplete }: {
   );
 }
 
+/** 建议列：按类别展示 AI 推荐的学习主题列表 */
 function SuggestionColumn({ title, items, color }: {
   title: string; items: Suggestion[]; color: string;
 }) {

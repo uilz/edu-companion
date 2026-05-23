@@ -1,9 +1,12 @@
 "use client";
 
+// ===== 聊天输入框组件 =====
+// 提供文本输入、文件上传（图片/文档）以及语音转录功能，是用户与 AI 对话的核心输入入口。
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Paperclip, Image, Loader2, X } from "lucide-react";
 import VoiceRecorder from "./VoiceRecorder";
 
+// --- 组件属性接口 ---
 interface ConversationChatInputProps {
   onSend: (text: string, files?: UploadedFile[]) => void;
   disabled?: boolean;
@@ -12,6 +15,7 @@ interface ConversationChatInputProps {
   conversationId?: string | null;
 }
 
+// --- 已上传文件类型定义 ---
 export interface UploadedFile {
   name: string;
   type: "image" | "file";
@@ -20,6 +24,7 @@ export interface UploadedFile {
   materialId?: string;
 }
 
+// ===== 组件实现 =====
 export default function ConversationChatInput({
   onSend,
   disabled = false,
@@ -27,14 +32,17 @@ export default function ConversationChatInput({
   conversationId,
 }: ConversationChatInputProps) {
   const _convId = conversationId ?? branchId;
-  const [text, setText] = useState("");
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState("");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // --- 状态定义 ---
+  const [text, setText] = useState("");               // 输入框文本内容
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]); // 已上传的文件列表
+  const [uploading, setUploading] = useState(false);    // 是否正在上传
+  const [uploadError, setUploadError] = useState("");   // 上传错误信息
+  const textareaRef = useRef<HTMLTextAreaElement>(null); // 文本框 DOM 引用
+  const imageInputRef = useRef<HTMLInputElement>(null);  // 图片选择 input 引用
+  const fileInputRef = useRef<HTMLInputElement>(null);   // 文件选择 input 引用
+
+  // --- 自动调整文本框高度（自适应内容）---
   const autoResize = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -42,11 +50,12 @@ export default function ConversationChatInput({
     el.style.height = Math.min(el.scrollHeight, 160) + "px";
   }, []);
 
+  // --- 文本或高度依赖变化时自动重置文本框高度 ---
   useEffect(() => {
     autoResize();
   }, [text, autoResize]);
 
-  // ── Upload handler ──
+  // --- 文件上传处理（图片/文档通用）：上传到 workspace 服务端并记录返回的 fileId ---
   const handleFileUpload = useCallback(async (file: File, type: "image" | "file") => {
     setUploading(true);
     setUploadError("");
@@ -72,23 +81,27 @@ export default function ConversationChatInput({
     }
   }, [_convId]);
 
+  // --- 图片选择处理 ---
   const handleImageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) handleFileUpload(file, "image");
     if (imageInputRef.current) imageInputRef.current.value = "";
   }, [handleFileUpload]);
 
+  // --- 文档（PDF/DOCX/PPTX/MD/TXT）选择处理 ---
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) handleFileUpload(file, "file");
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, [handleFileUpload]);
 
+  // --- 移除指定索引的已上传文件 ---
   const removeFile = useCallback((index: number) => {
     setUploadedFiles(prev => prev.filter((_, i) => i !== index));
   }, []);
 
   // ── Send ──
+  // --- 发送消息：调用 onSend 回调并清空输入框及文件列表 ---
   const handleSend = () => {
     const trimmed = text.trim();
     if (!trimmed || disabled) return;
@@ -97,6 +110,7 @@ export default function ConversationChatInput({
     setUploadedFiles([]);
   };
 
+  // --- 键盘事件：Enter 直接发送，Shift+Enter 换行 ---
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -104,10 +118,11 @@ export default function ConversationChatInput({
     }
   };
 
+  // ===== 渲染界面 =====
   return (
     <div className="border-t border-[var(--color-border)] bg-[var(--color-bg)]">
       <div className="max-w-3xl mx-auto px-4 py-3">
-        {/* Uploaded files preview */}
+        {/* 已上传文件预览区域 */}
         {uploadedFiles.length > 0 && (
           <div className="flex items-center gap-1.5 mb-2 flex-wrap">
             {uploadedFiles.map((f, i) => (
@@ -121,11 +136,11 @@ export default function ConversationChatInput({
           </div>
         )}
 
-        {/* Hidden file inputs */}
+        {/* 隐藏的文件选择 input */}
         <input ref={imageInputRef} type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
         <input ref={fileInputRef} type="file" accept=".pdf,.docx,.pptx,.md,.txt" onChange={handleFileChange} className="hidden" />
 
-        {/* Attachment buttons */}
+        {/* 附件操作按钮组：上传图片、上传文件、语音输入 */}
         <div className="flex items-center gap-1 mb-2">
           <button
             onClick={() => imageInputRef.current?.click()}
@@ -149,12 +164,12 @@ export default function ConversationChatInput({
           />
         </div>
 
-        {/* Error message */}
+        {/* 上传错误提示 */}
         {uploadError && (
           <div className="text-[10px] text-[#ef4444] mb-1">{uploadError}</div>
         )}
 
-        {/* Input area */}
+        {/* 输入区域：文本框 + 发送按钮 */}
         <div className="flex items-end gap-3">
           <textarea
             ref={textareaRef}

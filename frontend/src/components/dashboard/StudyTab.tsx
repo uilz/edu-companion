@@ -1,49 +1,58 @@
 'use client';
 
+// ── 导入 React Hooks 和 UI 图标库 ──
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Play, Pause, RotateCcw, Timer, Coffee, Flame, TrendingUp, Clock, Zap, Brain, Target } from 'lucide-react';
+// ── 导入自定义卡片组件 ──
 import Card from '@/components/ui/Card';
 
 // ── Constants ──
+// 番茄钟工作时长：25 分钟（单位：秒）
 const POMODORO_WORK = 25 * 60;
+// 番茄钟休息时长：5 分钟（单位：秒）
 const POMODORO_BREAK = 5 * 60;
 
+// ── 当前阶段的类型：工作 or 休息 ──
 type Phase = 'work' | 'break';
 
+// ── 单次番茄钟会话的日志接口 ──
 interface SessionLog {
-  date: string;
-  minutes: number;
-  completed: boolean;
+  date: string;       // 日期（YYYY-MM-DD）
+  minutes: number;    // 专注分钟数
+  completed: boolean; // 是否完成
 }
 
+// ── 学习计划 Tab 主组件 ──
 export function StudyTab() {
-  const [seconds, setSeconds] = useState(POMODORO_WORK);
-  const [isRunning, setIsRunning] = useState(false);
-  const [phase, setPhase] = useState<Phase>('work');
-  const [todaySessions, setTodaySessions] = useState<SessionLog[]>([]);
-  const [streak, setStreak] = useState(0);
-  const [todayMinutes, setTodayMinutes] = useState(0);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  // ── 状态管理 ──
+  const [seconds, setSeconds] = useState(POMODORO_WORK);           // 当前倒计时秒数
+  const [isRunning, setIsRunning] = useState(false);                // 计时器是否正在运行
+  const [phase, setPhase] = useState<Phase>('work');                // 当前阶段（工作/休息）
+  const [todaySessions, setTodaySessions] = useState<SessionLog[]>([]); // 今日已完成会话列表
+  const [streak, setStreak] = useState(0);                          // 连续学习天数
+  const [todayMinutes, setTodayMinutes] = useState(0);              // 今日累计专注分钟数
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);          // 定时器引用
 
-  // ── Load today's sessions from localStorage ──
+  // ── 组件挂载时：从 localStorage 加载今日会话和连续天数 ──
   useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    const stored = localStorage.getItem(`study-sessions-${today}`);
+    const today = new Date().toISOString().slice(0, 10);           // 获取今天的日期字符串
+    const stored = localStorage.getItem(`study-sessions-${today}`); // 读取今日存储的会话数据
     if (stored) {
       const sessions: SessionLog[] = JSON.parse(stored);
       setTodaySessions(sessions);
-      setTodayMinutes(sessions.reduce((s, l) => s + l.minutes, 0));
+      setTodayMinutes(sessions.reduce((s, l) => s + l.minutes, 0)); // 累加今日总分钟数
     }
     const streakVal = parseInt(localStorage.getItem('study-streak') || '0', 10);
     setStreak(streakVal);
   }, []);
 
-  // ── Timer logic ──
+  // ── 计时器核心逻辑：每秒 tick，到点时切换阶段并记录会话 ──
   const tick = useCallback(() => {
     setSeconds((prev) => {
       if (prev <= 1) {
-        // Timer done — switch phase
+        // 计时结束——切换阶段
         if (phase === 'work') {
+          // 工作阶段结束：记录本次会话并切换到休息
           const session: SessionLog = {
             date: new Date().toISOString().slice(0, 10),
             minutes: POMODORO_WORK / 60,
@@ -55,42 +64,48 @@ export function StudyTab() {
           const today = new Date().toISOString().slice(0, 10);
           localStorage.setItem(`study-sessions-${today}`, JSON.stringify(updated));
           setPhase('break');
-          return POMODORO_BREAK;
+          return POMODORO_BREAK; // 重置为休息时长
         } else {
+          // 休息阶段结束：切回工作
           setPhase('work');
-          return POMODORO_WORK;
+          return POMODORO_WORK; // 重置为工作时长
         }
       }
-      return prev - 1;
+      return prev - 1; // 正常倒计时
     });
   }, [phase, todaySessions]);
 
+  // ── 根据 isRunning 状态启动/停止定时器 ──
   useEffect(() => {
     if (isRunning) {
-      intervalRef.current = setInterval(tick, 1000);
+      intervalRef.current = setInterval(tick, 1000); // 每秒执行一次 tick
     }
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (intervalRef.current) clearInterval(intervalRef.current); // 清理定时器
     };
   }, [isRunning, tick]);
 
+  // ── 切换计时器运行/暂停状态 ──
   const toggleTimer = () => setIsRunning((r) => !r);
+
+  // ── 重置计时器到当前阶段的初始时长 ──
   const resetTimer = () => {
     setIsRunning(false);
     setSeconds(phase === 'work' ? POMODORO_WORK : POMODORO_BREAK);
   };
 
-  // ── Format ──
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  const timeStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  // ── 格式化显示时间 ──
+  const mins = Math.floor(seconds / 60);          // 取分钟部分
+  const secs = seconds % 60;                      // 取秒部分
+  const timeStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`; // 格式化为 MM:SS
 
-  const workSessions = todaySessions.length;
-  const goalSessions = 6; // 6×25 = 150 min/day
+  // ── 统计信息 ──
+  const workSessions = todaySessions.length;       // 已完成番茄钟数
+  const goalSessions = 6; // 每日目标：6 个番茄钟（6×25 = 150 分钟/天）
 
   return (
     <div className="max-w-3xl mx-auto space-y-8 py-4">
-      {/* ── Timer ── */}
+      {/* ── Timer 计时器区域 ── */}
       <Card className="!p-8 text-center">
         <div className="inline-flex items-center gap-2 text-xs text-[var(--color-text-muted)] uppercase tracking-widest mb-4">
           {phase === 'work' ? (
@@ -100,11 +115,13 @@ export function StudyTab() {
           )}
         </div>
 
+        {/* 倒计时数字展示 */}
         <div className="text-7xl font-bold text-[var(--color-text)] tabular-nums tracking-tight mb-8"
           style={{ fontVariantNumeric: 'tabular-nums' }}>
           {timeStr}
         </div>
 
+        {/* 控制按钮组：开始/暂停 + 重置 */}
         <div className="flex items-center justify-center gap-3">
           <button
             onClick={toggleTimer}
@@ -122,6 +139,7 @@ export function StudyTab() {
           </button>
         </div>
 
+        {/* 工作时长提示信息 */}
         {phase === 'work' && (
           <p className="text-xs text-[var(--color-text-muted)] mt-4">
             番茄钟 · {POMODORO_WORK / 60}分钟专注 → {POMODORO_BREAK / 60}分钟休息
@@ -129,8 +147,9 @@ export function StudyTab() {
         )}
       </Card>
 
-      {/* ── Today stats ── */}
+      {/* ── Today stats 今日统计数据 ── */}
       <div className="grid grid-cols-3 gap-4">
+        {/* 连续天数 */}
         <Card className="!p-5 text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
             <Flame size={18} className="text-[var(--color-warning)]" />
@@ -139,6 +158,7 @@ export function StudyTab() {
           <div className="text-[10px] text-[var(--color-text-muted)] mt-1">连续天数</div>
         </Card>
 
+        {/* 今日专注总分钟数 */}
         <Card className="!p-5 text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
             <Timer size={18} className="text-[var(--color-accent)]" />
@@ -147,6 +167,7 @@ export function StudyTab() {
           <div className="text-[10px] text-[var(--color-text-muted)] mt-1">今日分钟</div>
         </Card>
 
+        {/* 今日已完成番茄钟数 / 目标 */}
         <Card className="!p-5 text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
             <Target size={18} className="text-[var(--color-success)]" />
@@ -158,7 +179,7 @@ export function StudyTab() {
         </Card>
       </div>
 
-      {/* ── Progress bar ── */}
+      {/* ── Progress bar 今日进度条 ── */}
       <Card className="!p-5">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-semibold text-[var(--color-text)]">
@@ -168,24 +189,27 @@ export function StudyTab() {
             {Math.round((workSessions / goalSessions) * 100)}%
           </span>
         </div>
+        {/* 进度条填充 */}
         <div className="h-2 bg-[var(--color-surface)] overflow-hidden">
           <div
             className="h-full bg-[var(--color-accent)] transition-all duration-700"
             style={{ width: `${Math.min((workSessions / goalSessions) * 100, 100)}%` }}
           />
         </div>
+        {/* 每日目标描述 */}
         <p className="text-[10px] text-[var(--color-text-muted)] mt-3">
           目标：每天 {goalSessions} 个番茄钟 ({goalSessions * POMODORO_WORK / 60} 分钟)
         </p>
       </Card>
 
-      {/* ── Session log ── */}
+      {/* ── Session log 今日会话记录 ── */}
       {todaySessions.length > 0 && (
         <Card title="📋 今日记录">
           <div className="space-y-2">
             {todaySessions.map((s, i) => (
               <div key={i} className="flex items-center justify-between text-sm py-1 border-b border-[var(--color-surface)] last:border-0">
                 <div className="flex items-center gap-2">
+                  {/* 序号标识 */}
                   <span className="w-6 h-6 rounded-full bg-[var(--color-accent-soft)] text-[var(--color-accent)] text-[10px] font-bold flex items-center justify-center">
                     {i + 1}
                   </span>
@@ -195,6 +219,7 @@ export function StudyTab() {
                 </div>
                 <div className="flex items-center gap-3 text-xs text-[var(--color-text-muted)]">
                   <span>{s.minutes}分钟</span>
+                  {/* 完成状态标识 */}
                   {s.completed ? (
                     <span className="text-[var(--color-success)]">✓ 完成</span>
                   ) : (
@@ -207,7 +232,7 @@ export function StudyTab() {
         </Card>
       )}
 
-      {/* ── Tips ── */}
+      {/* ── Tips 专注技巧提示 ── */}
       <Card title="💡 专注技巧" className="!p-5">
         <div className="space-y-2 text-xs text-[var(--color-text-secondary)] leading-relaxed">
           <p>• <b>5秒法则</b>：想做一件事时，在5秒内行动，否则大脑会找借口</p>
