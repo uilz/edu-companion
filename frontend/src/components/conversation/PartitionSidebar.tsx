@@ -156,16 +156,17 @@ export default function PartitionSidebar({
   }, []);
 
   // ── loadChildren: ONLY loads data, NEVER expands ──
-  // Returns a Promise so callers can chain expansion after load completes.
-  const loadPromisesRef = useRef<Map<string, Promise<void>>>(new Map());
+  // Returns the loaded children so callers can use them immediately
+  // without relying on refs (which lag behind React state updates).
+  const loadPromisesRef = useRef<Map<string, Promise<FlatNode[]>>>(new Map());
 
-  const loadChildren = useCallback(async (node: FlatNode): Promise<void> => {
+  const loadChildren = useCallback(async (node: FlatNode): Promise<FlatNode[]> => {
     const { id } = node;
     // Return existing promise if already loading
     const existing = loadPromisesRef.current.get(id);
     if (existing) return existing;
 
-    const promise = (async () => {
+    const promise = (async (): Promise<FlatNode[]> => {
       setLoadingSet(prev => { const next = new Set(prev); next.add(id); return next; });
 
       try {
@@ -186,6 +187,7 @@ export default function PartitionSidebar({
           next.set(id, children);
           return next;
         });
+        return children;
       } catch (e: any) {
         console.error("loadChildren failed:", e);
         if (e?.message?.includes("404")) {
@@ -205,6 +207,7 @@ export default function PartitionSidebar({
           });
           setExpandedSet(prev => { const next = new Set(prev); next.delete(id); return next; });
         }
+        throw e; // re-throw so caller knows loading failed
       } finally {
         setLoadingSet(prev => { const next = new Set(prev); next.delete(id); return next; });
         loadPromisesRef.current.delete(id);
@@ -214,7 +217,6 @@ export default function PartitionSidebar({
     loadPromisesRef.current.set(id, promise);
     return promise;
   }, []);
-
   // ── Toggle expand/collapse ──
   const toggleExpand = useCallback((node: FlatNode) => {
     if (node.level === "conversation") {
@@ -285,60 +287,44 @@ export default function PartitionSidebar({
         console.log(`[AE] Partition node:`, partition.name, partition.id);
 
         // 2. Load + expand partition
-        if (!childMapRef.current.has(selectedPartitionId)) {
-          console.log(`[AE] Loading partition children...`);
-          await loadChildren(partition);
+        // Use returned children directly instead of reading ref (which lags behind state)
+        let domainList: FlatNode[];
+        if (childMapRef.current.has(selectedPartitionId)) {
+          domainList = childMapRef.current.get(selectedPartitionId) || [];
+        } else {
+          domainList = await loadChildren(partition);
           if (cancelled) return;
-          console.log(`[AE] Partition children loaded, childMap has ${selectedPartitionId}?`, childMapRef.current.has(selectedPartitionId));
         }
         doExpand(selectedPartitionId);
-        console.log(`[AE] Partition expanded`);
 
         // 3. Search for which domain/topic contains the active conversation
-        const domains = childMapRef.current.get(selectedPartitionId) || [];
-        console.log(`[AE] Found ${domains.length} domains under partition`);
-        for (const domain of domains) {
+        for (const domain of domainList) {
           if (cancelled) return;
-          console.log(`[AE] Checking domain: ${domain.name} (${domain.id})`);
 
-          // Load this domain's topics
-          if (!childMapRef.current.has(domain.id)) {
-            console.log(`[AE] Loading domain ${domain.id} children...`);
-            await loadChildren(domain);
-            if (cancelled) return;
-            console.log(`[AE] Domain children loaded, childMap has ${domain.id}?`, childMapRef.current.has(domain.id));
-          } else {
-            console.log(`[AE] Domain already has cached children`);
-          }
+          // Load this domain's topics — use returned data
+          const topicList = childMapRef.current.has(domain.id)
+            ? (childMapRef.current.get(domain.id) || [])
+            : await loadChildren(domain);
+          if (cancelled) return;
 
           // Check if any topic under this domain contains the conversation
-          const topics = childMapRef.current.get(domain.id) || [];
-          console.log(`[AE] ${topics.length} topics in domain ${domain.name}`);
-          for (const topic of topics) {
+          for (const topic of topicList) {
             if (cancelled) return;
-            console.log(`[AE] Checking topic: ${topic.name} (${topic.id})`);
 
-            if (!childMapRef.current.has(topic.id)) {
-              console.log(`[AE] Loading topic ${topic.id} children...`);
-              await loadChildren(topic);
-              if (cancelled) return;
-              console.log(`[AE] Topic children loaded`);
-            }
+            // Load this topic's conversations — use returned data
+            const convs = childMapRef.current.has(topic.id)
+              ? (childMapRef.current.get(topic.id) || [])
+              : await loadChildren(topic);
+            if (cancelled) return;
 
-            const convs = childMapRef.current.get(topic.id) || [];
-            console.log(`[AE] ${convs.length} conversations in topic ${topic.name}, looking for ${convId}`);
-            const found = convs.some(c => c.id === convId || (c as any).conversation_id === convId);
-            if (found) {
-              console.log(`[AE] FOUND! Expanding domain ${domain.id} + topic ${topic.id}`);
+            if (convs.some(c => c.id === convId || (c as any).conversation_id === convId)) {
+              // Found! Expand this domain + topic, skip remaining domains/topics
               doExpand(domain.id);
               doExpand(topic.id);
               return;
-            } else {
-              console.log(`[AE] Not found in this topic. First conv id:`, convs[0]?.id);
             }
           }
         }
-        console.log(`[AE] Conversation ${convId} not found in any domain/topic!`);
       } catch (e) {
         console.error("[AE] Auto-expand failed:", e);
       }
