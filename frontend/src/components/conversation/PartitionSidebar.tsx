@@ -479,7 +479,7 @@ export default function PartitionSidebar({
         console.log("[DEBUG] childMap root items:", before, "->", after, "ROOT_KEY children:", next.get(ROOT_KEY)?.map(c => c.name));
         return next;
       });
-      setExpandedSet(prev => { const next = new Set(prev); next.delete(targetId); console.log("[DEBUG] expandedSet after delete:", [...next]); return next; });
+      setExpandedSet(prev => { const next = new Set(prev); next.delete(targetId); console.log("[DEBUG] expandedSet after delete:", next.size, "items"); return next; });
 
       // If deleting the active conversation, clear it
       if (targetId === activeConversationId) {
