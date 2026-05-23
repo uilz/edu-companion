@@ -478,9 +478,7 @@ async def persist_message(req: PersistMessageRequest):
 
 def _add_message_to_tree(conversation_id: str, role: str, content: str, source: str, metadata: dict = None) -> dict:
     """在对话树中插入一条消息并返回"""
-    from app.services.tree_operations import TreeOperations
     from app.schemas.conversation import TextBlock
-    tree_ops = TreeOperations(storage)
     data = storage.load(USER_ID)
     conv = data.conversations.get(conversation_id)
     if not conv:
@@ -490,8 +488,9 @@ def _add_message_to_tree(conversation_id: str, role: str, content: str, source: 
     node = tree_ops.add_leaf(USER_ID, conversation_id, role, blocks, text_summary=source)
 
     if metadata:
-        for k, v in metadata.items():
-            tree_ops.set_metadata(USER_ID, node.id, k, v)
+        node.metadata = node.metadata or {}
+        node.metadata.update(metadata)
+        storage.save(USER_ID, data)
 
     return {"id": node.id, "role": node.role, "content": content}
 
