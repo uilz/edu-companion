@@ -133,11 +133,21 @@ export default function PartitionSidebar({
 
   // ── Sync partitions prop into childMap ──
   useEffect(() => {
+    const partNames = partitions.map(p => p.name);
+    console.log("[D2] partitions useEffect fired, counts:", partitions.length, "name:", partNames);
     setChildMap(prev => {
+      const prevRoot = prev.get(ROOT_KEY)?.map(p => p.name) || [];
       const next = new Map(prev);
       next.set(ROOT_KEY, partitions.map(p => ({
         ...p, level: "partition" as const, partition_id: p.id,
       })));
+      console.log("[D2] childMap ROOT_KEY replaced:", prevRoot, "→", partNames);
+      // Log topic-level children sizes to detect stale cache
+      for (const [key, value] of next) {
+        if (key !== ROOT_KEY && value?.length > 0 && value[0]?.level === "conversation") {
+          console.log("[D2] topic stash:", key.substring(0,16), "has", value.length, "convs:", value.map(c => c.name));
+        }
+      }
       return next;
     });
   }, [partitions]);
@@ -164,7 +174,11 @@ export default function PartitionSidebar({
     const { id } = node;
     // Return existing promise if already loading
     const existing = loadPromisesRef.current.get(id);
-    if (existing) return existing;
+    if (existing) {
+      console.log("[D3] loadChildren CACHED HIT:", node.level, node.name, id.substring(0,16));
+      return existing;
+    }
+    console.log("[D3] loadChildren FRESH CALL:", node.level, node.name, id.substring(0,16));
 
     const promise = (async (): Promise<FlatNode[]> => {
       setLoadingSet(prev => { const next = new Set(prev); next.add(id); return next; });
@@ -430,43 +444,55 @@ export default function PartitionSidebar({
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
+    console.log("[DEBUG] confirmDelete called", { id: deleteTarget.id, name: deleteTarget.name, level: deleteTarget.level, activeConv: activeConversationId });
+    const targetLevel = deleteTarget.level;
+    const targetId = deleteTarget.id;
     try {
       const paths: Record<FlatLevel, string> = {
-        partition: `/partitions/${deleteTarget.id}`,
-        domain: `/domains/${deleteTarget.id}`,
-        topic: `/topics/${deleteTarget.id}`,
-        conversation: `/conversations/${deleteTarget.id}`,
+        partition: `/partitions/${targetId}`,
+        domain: `/domains/${targetId}`,
+        topic: `/topics/${targetId}`,
+        conversation: `/conversations/${targetId}`,
       };
 
+      console.log("[DEBUG] Calling API:", targetLevel, paths[targetLevel]);
       // For partition: delegate to onDeletePartition (it handles API + loadPartitions)
       // For other levels: make the API call here
-      if (deleteTarget.level === "partition") {
-        onDeletePartition?.(deleteTarget.id);
+      if (targetLevel === "partition") {
+        onDeletePartition?.(targetId);
       } else {
-        await apiFetch(paths[deleteTarget.level], { method: "DELETE" });
+        const result = await apiFetch(paths[targetLevel], { method: "DELETE" });
+        console.log("[DEBUG] API delete response:", result);
       }
 
+      console.log("[DEBUG] Removing from childMap, id:", targetId);
       // Remove from childMap + expandedSet
       setChildMap(prev => {
+        const before = prev.get(ROOT_KEY)?.length || 0;
         const next = new Map(prev);
         next.forEach((children, key) => {
-          const filtered = children.filter(c => c.id !== deleteTarget.id);
+          const filtered = children.filter(c => c.id !== targetId);
           if (filtered.length !== children.length) next.set(key, filtered);
         });
-        next.delete(deleteTarget.id);
+        next.delete(targetId);
+        const after = next.get(ROOT_KEY)?.length || 0;
+        console.log("[DEBUG] childMap root items:", before, "->", after, "ROOT_KEY children:", next.get(ROOT_KEY)?.map(c => c.name));
         return next;
       });
-      setExpandedSet(prev => { const next = new Set(prev); next.delete(deleteTarget.id); return next; });
+      setExpandedSet(prev => { const next = new Set(prev); next.delete(targetId); console.log("[DEBUG] expandedSet after delete:", [...next]); return next; });
 
       // If deleting the active conversation, clear it
-      if (deleteTarget.id === activeConversationId) {
+      if (targetId === activeConversationId) {
+        console.log("[DEBUG] Clearing active conversation");
         onSelectConversation(selectedPartitionId || "", "");
       }
-      if (deleteTarget.level !== "partition") {
+      if (targetLevel !== "partition") {
+        console.log("[DEBUG] Firing onTreeChanged");
         onTreeChanged?.();
       }
+      console.log("[DEBUG] Delete complete");
     } catch (e) {
-      console.error("Delete failed:", e);
+      console.error("[DEBUG] Delete failed:", e);
     }
     setDeleteTarget(null);
   };
