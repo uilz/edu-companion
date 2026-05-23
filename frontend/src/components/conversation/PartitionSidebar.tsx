@@ -244,11 +244,10 @@ export default function PartitionSidebar({
       // Expand: load if not cached, then expand
       if (!childMapRef.current.has(node.id)) {
         loadChildren(node).then(() => {
-          // Only expand if user hasn't collapsed it during loading
           if (!expandedSetRef.current.has(node.id)) {
             doExpand(node.id);
           }
-        });
+        }).catch(() => {}); // ignore — already logged by loadChildren
       } else {
         doExpand(node.id);
       }
@@ -265,26 +264,18 @@ export default function PartitionSidebar({
 
     let cancelled = false;
 
-    console.log(`[AE] Start: pid=${selectedPartitionId} cid=${convId}`);
-
     (async () => {
       try {
         // 1. Wait for the partition to appear in childMap
-        console.log(`[AE] Waiting for partition ${selectedPartitionId} in childMap...`);
         for (let i = 0; i < 50; i++) {
           if (cancelled) return;
-          const found = childMapRef.current.get(ROOT_KEY)?.some(p => p.id === selectedPartitionId);
-          if (found) {
-            console.log(`[AE] Partition found after ${i+1} polls`);
-            break;
-          }
+          if (childMapRef.current.get(ROOT_KEY)?.some(p => p.id === selectedPartitionId)) break;
           await sleep(100);
         }
         if (cancelled) return;
 
         const partition = childMapRef.current.get(ROOT_KEY)?.find(p => p.id === selectedPartitionId);
-        if (!partition) { console.log(`[AE] Partition ${selectedPartitionId} not found in childMap!`); return; }
-        console.log(`[AE] Partition node:`, partition.name, partition.id);
+        if (!partition) return;
 
         // 2. Load + expand partition
         // Use returned children directly instead of reading ref (which lags behind state)
@@ -326,11 +317,11 @@ export default function PartitionSidebar({
           }
         }
       } catch (e) {
-        console.error("[AE] Auto-expand failed:", e);
+        console.error("Auto-expand failed:", e);
       }
     })();
 
-    return () => { cancelled = true; console.log("[AE] Cancelled"); };
+    return () => { cancelled = true; };
   }, [selectedPartitionId, activeConversationId, initialConversationId, loadChildren, doExpand]);
 
   // ── Create ──
