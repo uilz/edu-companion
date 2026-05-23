@@ -484,8 +484,25 @@ def _add_message_to_tree(conversation_id: str, role: str, content: str, source: 
     if not conv:
         raise HTTPException(404, "Conversation not found")
 
+    # 找到 conversation 所属的 partition_id
+    partition_id = conv.partition_id
+    if not partition_id:
+        # fallback: 从 topic → domain → partition 反向查找
+        for topic in data.topics.values():
+            if topic.id == conv.topic_id:
+                domain = data.domains.get(topic.domain_id)
+                if domain:
+                    partition_id = domain.partition_id
+                    break
+
+    if not partition_id:
+        raise HTTPException(400, "Cannot determine partition for this conversation")
+
     blocks = [TextBlock(text=content)]
-    node = tree_ops.add_leaf(USER_ID, conversation_id, role, blocks, text_summary=source)
+    node = tree_ops.add_message(
+        USER_ID, partition_id, role, blocks,
+        text_summary=source, conversation_id=conversation_id,
+    )
 
     if metadata:
         node.metadata = node.metadata or {}
