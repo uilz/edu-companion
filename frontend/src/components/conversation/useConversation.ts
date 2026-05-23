@@ -2,28 +2,27 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import type {
-  Partition,
-  TreeNode,
-  ResponseBlock,
-  WSIncomingMessage,
-} from "@/types";
+import type { Partition, TreeNode, ResponseBlock, WSIncomingMessage } from "@/types";
 
-// ── Media query hook ──
+// ─────────────────────────────────────────────
+//  Media query helper
+// ─────────────────────────────────────────────
 function useMediaQuery(query: string): boolean {
   const [matches, setMatches] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const media = window.matchMedia(query);
-    setMatches(media.matches);
+    const mq = window.matchMedia(query);
+    setMatches(mq.matches);
     const listener = (e: MediaQueryListEvent) => setMatches(e.matches);
-    media.addEventListener("change", listener);
-    return () => media.removeEventListener("change", listener);
+    mq.addEventListener("change", listener);
+    return () => mq.removeEventListener("change", listener);
   }, [query]);
   return matches;
 }
 
-// ── API helpers ──
+// ─────────────────────────────────────────────
+//  API helper
+// ─────────────────────────────────────────────
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     headers: { "Content-Type": "application/json", ...options?.headers },
@@ -36,126 +35,102 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
-// ── WebSocket manager ──
+// ─────────────────────────────────────────────
+//  WebSocket manager — class-based, not module-level singleton
+// ─────────────────────────────────────────────
 type WSCallbacks = {
-  onStatus: (msg: string) => void;
   onToken: (content: string, blockId?: string) => void;
-  onDone: (partitionId: string, assistantMessage: TreeNode) => void;
+  onDone: (partitionId: string, assistantMessage: TreeNode, responseBlocks?: ResponseBlock[]) => void;
   onError: (msg: string) => void;
   onBlockUpdate: (block: ResponseBlock) => void;
   onContextSwitch: (data: {
-    partition_id: string;
-    conversation_id: string;
-    domain_name: string;
-    topic_name: string;
+    partition_id: string; conversation_id: string;
+    domain_name: string; topic_name: string;
     switch_detail: Record<string, string>;
   }) => void;
 };
 
-let ws: WebSocket | null = null;
-let wsCallbacks: WSCallbacks | null = null;
-let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
-let wsReconnectAttempts = 0;
+class ConversationWS {
+  private ws: WebSocket | null = null;
+  private callbacks: WSCallbacks | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private attempts = 0;
+  private destroyed = false;
 
-function connectConversationWS(callbacks: WSCallbacks) {
-  wsCallbacks = callbacks;
+  connect(cbs: WSCallbacks) {
+    this.callbacks = cbs;
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
 
-  if (ws && ws.readyState === WebSocket.OPEN) return;
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const url = `${protocol}//${window.location.host}/api/conversations/ws`;
 
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const wsUrl = `${protocol}//${window.location.host}/api/conversations/ws`;
+    try {
+      this.ws = new WebSocket(url);
+      this.ws.onopen = () => { this.attempts = 0; };
+      this.ws.onmessage = (event) => {
+        try {
+          const data: WSIncomingMessage = JSON.parse(event.data);
+          switch (data.type) {
+            case "token":
+              this.callbacks?.onToken(data.content, data.block_id);
+              break;
+            case "tool_block":
+            case "block_update":
+              this.callbacks?.onBlockUpdate(data.block);
+              break;
+            case "done":
+              this.callbacks?.onDone(data.partition_id, data.assistant_message, data.response_blocks);
+              break;
+            case "error":
+              this.callbacks?.onError(data.message);
+              break;
+            case "context_switch":
+              this.callbacks?.onContextSwitch(data);
+              break;
+            // user_message, pong, status — no-op
+          }
+        } catch { /* ignore parse errors */ }
+      };
+      this.ws.onerror = () => {}; // onclose handles retry
+      this.ws.onclose = () => {
+        if (this.destroyed) return;
+        this.ws = null;
+        const delay = Math.min(1000 * Math.pow(2, this.attempts), 30000);
+        this.attempts++;
+        this.reconnectTimer = setTimeout(() => {
+          if (this.callbacks) this.connect(this.callbacks);
+        }, delay);
+      };
+    } catch {
+      this.ws = null;
+    }
+  }
 
-  try {
-    ws = new WebSocket(wsUrl);
+  send(data: Record<string, unknown>): boolean {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(data));
+      return true;
+    }
+    return false;
+  }
 
-    ws.onopen = () => {
-      wsReconnectAttempts = 0;
-      console.log("[ConvWS] connected");
-    };
-
-    ws.onmessage = (event: MessageEvent) => {
-      try {
-        const data: WSIncomingMessage = JSON.parse(event.data);
-        switch (data.type) {
-          case "status":
-            wsCallbacks?.onStatus(data.message);
-            break;
-          case "token":
-            wsCallbacks?.onToken(data.content, data.block_id);
-            break;
-          case "tool_block":
-            wsCallbacks?.onBlockUpdate(data.block);
-            break;
-          case "done":
-            wsCallbacks?.onDone(data.partition_id, data.assistant_message);
-            if (data.response_blocks) {
-              for (const rb of data.response_blocks) {
-                wsCallbacks?.onBlockUpdate(rb);
-              }
-            }
-            break;
-          case "error":
-            wsCallbacks?.onError(data.message);
-            break;
-          case "block_update":
-            wsCallbacks?.onBlockUpdate(data.block);
-            break;
-          case "context_switch":
-            wsCallbacks?.onContextSwitch(data);
-            break;
-          case "user_message":
-          case "pong":
-            break;
-        }
-      } catch (e) {
-        // ignore parse errors
-      }
-    };
-
-    ws.onerror = () => {
-      // Don't show error to user unless persistent — onclose handles reconnection
-    };
-
-    ws.onclose = () => {
-      ws = null;
-      // Exponential backoff reconnect
-      const delay = Math.min(1000 * Math.pow(2, wsReconnectAttempts), 30000);
-      wsReconnectAttempts++;
-      wsReconnectTimer = setTimeout(() => {
-        if (wsCallbacks) connectConversationWS(wsCallbacks);
-      }, delay);
-    };
-  } catch (e) {
-    // Connection failed, will retry via onclose path
-    ws = null;
+  destroy() {
+    this.destroyed = true;
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    if (this.ws) {
+      this.ws.onclose = null;
+      this.ws.close();
+      this.ws = null;
+    }
+    this.callbacks = null;
+    this.attempts = 0;
   }
 }
 
-function sendWSMessage(data: Record<string, unknown>): boolean {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(data));
-    return true;
-  }
-  return false;
-}
-
-function disconnectWS() {
-  if (wsReconnectTimer) {
-    clearTimeout(wsReconnectTimer);
-    wsReconnectTimer = null;
-  }
-  if (ws) {
-    ws.onclose = null; // prevent reconnect
-    ws.close();
-    ws = null;
-  }
-  wsCallbacks = null;
-  wsReconnectAttempts = 0;
-}
-
-// ── Hook return type ──
+// ─────────────────────────────────────────────
+//  Hook return type
+// ─────────────────────────────────────────────
 export interface UseConversationReturn {
-  // State
   partitions: Partition[];
   selectedPartitionId: string | null;
   activeConversationId: string | null;
@@ -164,23 +139,20 @@ export interface UseConversationReturn {
   isLoading: boolean;
   statusMessage: string;
   switchBanner: {
-    partitionId: string;
-    conversationId: string;
-    domainName: string;
-    topicName: string;
+    partitionId: string; conversationId: string;
+    domainName: string; topicName: string;
   } | null;
   showPartitionSidebar: boolean;
   sidebarCollapsed: boolean;
   showNewPartition: boolean;
   loadingPartitions: boolean;
-  isLoadingPartitions: boolean;
   loadingMessages: boolean;
   convError: string | null;
   isDesktop: boolean;
   activePartition: Partition | undefined;
+  wsConnected: boolean;
 
-  // Handlers
-  handleSelectConversation: (partitionId: string, conversationId: string) => void;
+  handleSelectConversation: (pid: string, cid: string) => void;
   handleNewConversation: (level: string, parentId: string) => Promise<void>;
   handleSend: (text: string, files?: { name: string; type: string; materialId?: string }[]) => Promise<void>;
   handleDeleteMessage: (messageId: string) => Promise<void>;
@@ -197,8 +169,74 @@ export interface UseConversationReturn {
   loadPartitions: () => Promise<void>;
 }
 
+// ─────────────────────────────────────────────
+//  createConversationChain — single source of truth
+//  For a given partition (or auto-create one), ensure domain→topic→conversation exist.
+// ─────────────────────────────────────────────
+async function createConversationChain(
+  partitionId?: string | null,
+): Promise<{ partitionId: string; conversationId: string } | null> {
+  try {
+    let pId = partitionId || undefined;
+    if (!pId) {
+      // Check if any partition exists at all
+      const pData = await apiFetch<{ partitions: Partition[] }>("/conversations/partitions");
+      if (pData.partitions?.length > 0) {
+        pId = pData.partitions[0].id;
+      } else {
+        // Create default partition
+        const newP = await apiFetch<{ partition: Partition }>("/conversations/partitions", {
+          method: "POST",
+          body: JSON.stringify({ name: "默认分区", subject: "默认", emoji: "💬" }),
+        });
+        pId = newP.partition.id;
+      }
+    }
+
+    // Find or create domain → topic under pId
+    const domainData = await apiFetch<{ domains: { id: string }[] }>(`/conversations/partitions/${pId}/domains`);
+    let domainId: string;
+    if (domainData.domains?.length > 0) {
+      domainId = domainData.domains[0].id;
+    } else {
+      const newD = await apiFetch<{ domain: { id: string } }>("/conversations/domains", {
+        method: "POST",
+        body: JSON.stringify({ partition_id: pId, name: "默认领域", emoji: "📚" }),
+      });
+      domainId = newD.domain.id;
+    }
+
+    // Find or create topic under domainId
+    const topicData = await apiFetch<{ topics: { id: string }[] }>(`/conversations/domains/${domainId}/topics`);
+    let topicId: string;
+    if (topicData.topics?.length > 0) {
+      topicId = topicData.topics[0].id;
+    } else {
+      const newT = await apiFetch<{ topic: { id: string } }>("/conversations/topics", {
+        method: "POST",
+        body: JSON.stringify({ domain_id: domainId, name: "默认专题", emoji: "📝" }),
+      });
+      topicId = newT.topic.id;
+    }
+
+    // Create conversation
+    const convData = await apiFetch<{ conversation: { id: string } }>("/conversations/conversations", {
+      method: "POST",
+      body: JSON.stringify({ topic_id: topicId, name: "" }),
+    });
+    return { partitionId: pId, conversationId: convData.conversation.id };
+  } catch (e) {
+    console.error("[createConversationChain] failed:", e);
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────
+//  useConversation hook
+// ─────────────────────────────────────────────
 export function useConversation(): UseConversationReturn {
   const isDesktop = useMediaQuery("(min-width: 768px)");
+  const router = useRouter();
 
   // ── State ──
   const [partitions, setPartitions] = useState<Partition[]>([]);
@@ -208,27 +246,30 @@ export function useConversation(): UseConversationReturn {
   const [responseBlocks, setResponseBlocks] = useState<ResponseBlock[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
-
-  // Context switch banner
   const [switchBanner, setSwitchBanner] = useState<{
-    partitionId: string;
-    conversationId: string;
-    domainName: string;
-    topicName: string;
+    partitionId: string; conversationId: string;
+    domainName: string; topicName: string;
   } | null>(null);
-
-  // Mobile sidebar state
   const [showPartitionSidebar, setShowPartitionSidebar] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showNewPartition, setShowNewPartition] = useState(false);
   const [loadingPartitions, setLoadingPartitions] = useState(true);
-  const [isLoadingPartitions, setIsLoadingPartitions] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [convError, setConvError] = useState<string | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
+  const [urlInitialized, setUrlInitialized] = useState(false);
 
-  const router = useRouter();
+  // ── Refs (no stale closure issues) ──
+  const wsRef = useRef<ConversationWS | null>(null);
+  const activeConvIdRef = useRef<string | null>(null);
+  const activePartIdRef = useRef<string | null>(null);
+  const streamingPartIdRef = useRef<string | null>(null);
+  const streamingConvIdRef = useRef<string | null>(null);
+  const streamingMsgIdRef = useRef<string | null>(null);
+  const streamBufferRef = useRef("");
+  const loadPartitionsRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
-  // ── panel=graph → redirect ──
+  // ── panel=graph redirect ──
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -239,19 +280,12 @@ export function useConversation(): UseConversationReturn {
     } catch {}
   }, [router]);
 
-  // Stream buffer refs
-  const streamBufferRef = useRef("");
-  const streamingMsgIdRef = useRef<string | null>(null);
-  const streamingContextRef = useRef<{ partitionId: string; conversationId: string } | null>(null);
-
   // ── URL / localStorage restore ──
-  const [urlInitialized, setUrlInitialized] = useState(false);
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const pId = params.get("p") || params.get("partition_id");
       const cId = params.get("c") || params.get("conversation_id");
-
       if (pId) {
         setSelectedPartitionId(pId);
         if (cId) setActiveConversationId(cId);
@@ -275,15 +309,17 @@ export function useConversation(): UseConversationReturn {
       if (selectedPartitionId) params.set("p", selectedPartitionId);
       if (activeConversationId) params.set("c", activeConversationId);
       const qs = params.toString();
-      const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
-      window.history.replaceState(null, "", newUrl);
-
+      window.history.replaceState(null, "", qs ? `${window.location.pathname}?${qs}` : window.location.pathname);
       localStorage.setItem("learn-page-state", JSON.stringify({
         partitionId: selectedPartitionId,
         conversationId: activeConversationId,
       }));
     } catch {}
   }, [selectedPartitionId, activeConversationId, urlInitialized]);
+
+  // Keep refs in sync with state
+  useEffect(() => { activeConvIdRef.current = activeConversationId; }, [activeConversationId]);
+  useEffect(() => { activePartIdRef.current = selectedPartitionId; }, [selectedPartitionId]);
 
   // Lock body scroll
   useEffect(() => {
@@ -295,56 +331,50 @@ export function useConversation(): UseConversationReturn {
   const loadPartitions = useCallback(async () => {
     try {
       setLoadingPartitions(true);
-      setIsLoadingPartitions(true);
       const data = await apiFetch<{ partitions: Partition[] }>("/conversations/partitions");
       setPartitions(data.partitions || []);
     } catch (e) {
       console.error("Failed to load partitions:", e);
     } finally {
       setLoadingPartitions(false);
-      setIsLoadingPartitions(false);
     }
   }, []);
 
-  // ── Load messages for conversation ──
+  loadPartitionsRef.current = loadPartitions; // keep ref fresh for WS callbacks
+
+  // ── Load messages (single batch: messages + blocks) ──
   const loadMessages = useCallback(async (conversationId: string) => {
     streamingMsgIdRef.current = null;
     streamBufferRef.current = "";
-    streamingContextRef.current = null;
+    streamingPartIdRef.current = null;
+    streamingConvIdRef.current = null;
     try {
       setLoadingMessages(true);
-      const data = await apiFetch<{ messages: TreeNode[] }>(
-        `/conversations/conversations/${conversationId}/messages?limit=50&offset=0`
-      );
-      setMessages(data.messages || []);
-
-      const assistantMsgs = (data.messages || []).filter((m) => m.role === "assistant");
-      const allBlocks: ResponseBlock[] = [];
-      for (const msg of assistantMsgs) {
-        try {
-          const blockData = await apiFetch<{ blocks: ResponseBlock[] }>(
-            `/conversations/messages/${msg.id}/blocks`
-          );
-          allBlocks.push(...(blockData.blocks || []));
-        } catch {}
-      }
-      setResponseBlocks(allBlocks);
+      setConvError(null);
+      // Load both messages and blocks in parallel
+      const [msgData, allBlocks] = await Promise.all([
+        apiFetch<{ messages: TreeNode[] }>(
+          `/conversations/conversations/${conversationId}/messages?limit=50&offset=0`
+        ),
+        // Fetch blocks for all assistant messages in a single call
+        apiFetch<{ blocks: ResponseBlock[] }>(
+          `/conversations/conversations/${conversationId}/blocks?limit=100`
+        ).catch(() => ({ blocks: [] as ResponseBlock[] })),
+      ]);
+      setMessages(msgData.messages || []);
+      setResponseBlocks(allBlocks.blocks || []);
     } catch (e: any) {
       console.error("Failed to load messages:", e);
-      // If conversation was deleted (404), show error but keep convId
       const errMsg = e?.message || "";
       if (errMsg.includes("404")) {
         setConvError("该对话已被删除");
-        setMessages([]);
-        setResponseBlocks([]);
-        // Do NOT clear activeConversationId - let the user see the error
       } else if (errMsg.includes("403") || errMsg.includes("401")) {
         setConvError("无权访问该对话");
-        setMessages([]);
-        setResponseBlocks([]);
       } else {
         setConvError("加载失败: " + errMsg.slice(0, 80));
       }
+      setMessages([]);
+      setResponseBlocks([]);
     } finally {
       setLoadingMessages(false);
     }
@@ -352,7 +382,7 @@ export function useConversation(): UseConversationReturn {
 
   // ── Load messages when conversation selected ──
   useEffect(() => {
-    if (!urlInitialized || isLoadingPartitions) return;
+    if (!urlInitialized) return;
     if (activeConversationId) {
       setConvError(null);
       loadMessages(activeConversationId);
@@ -361,53 +391,57 @@ export function useConversation(): UseConversationReturn {
       setResponseBlocks([]);
       setConvError(null);
     }
-  }, [activeConversationId, loadMessages, urlInitialized, isLoadingPartitions]);
+  }, [activeConversationId, loadMessages, urlInitialized]);
 
-  // ── WebSocket callbacks ──
+  // ── WebSocket ──
   useEffect(() => {
-    connectConversationWS({
-      onStatus: (msg) => setStatusMessage(msg),
-      onToken: (content, _blockId) => {
-        const ctx = streamingContextRef.current;
-        if (!ctx || ctx.partitionId !== selectedPartitionId || ctx.conversationId !== activeConversationId) return;
+    const wsClient = new ConversationWS();
+    wsRef.current = wsClient;
+    wsClient.connect({
+      onToken: (content) => {
+        if (!streamingMsgIdRef.current) return;
+        // Check if this streaming context is still current (use refs, not closure state)
+        if (streamingPartIdRef.current !== activePartIdRef.current ||
+            streamingConvIdRef.current !== activeConvIdRef.current) return;
 
         streamBufferRef.current += content;
-        const buffer = streamBufferRef.current;
+        const text = streamBufferRef.current;
         const msgId = streamingMsgIdRef.current;
 
-        if (msgId) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === msgId
-                ? { ...m, content_blocks: [{ type: "text" as const, text: buffer }], text_summary: buffer }
-                : m
-            )
-          );
-        }
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === msgId
+              ? { ...m, content_blocks: [{ type: "text" as const, text }], text_summary: text }
+              : m
+          )
+        );
       },
-      onDone: (_partitionId, assistantMessage) => {
+      onDone: (_partId, assistantMessage, responseBlocks) => {
         setIsLoading(false);
         setStatusMessage("");
 
-        const ctx = streamingContextRef.current;
-        streamingContextRef.current = null;
-        if (ctx && (ctx.partitionId !== selectedPartitionId || ctx.conversationId !== activeConversationId)) {
-          setMessages((prev) => prev.filter((m) => m.id !== streamingMsgIdRef.current));
-          streamingMsgIdRef.current = null;
-          streamBufferRef.current = "";
-          return;
-        }
-
-        const currentStreamingId = streamingMsgIdRef.current;
+        const streamPid = streamingPartIdRef.current;
+        const streamCid = streamingConvIdRef.current;
+        const streamMsgId = streamingMsgIdRef.current;
+        streamingPartIdRef.current = null;
+        streamingConvIdRef.current = null;
         streamingMsgIdRef.current = null;
         streamBufferRef.current = "";
 
+        // If user switched conversations during streaming, discard the stale message
+        if (streamPid !== activePartIdRef.current || streamCid !== activeConvIdRef.current) {
+          if (streamMsgId) {
+            setMessages((prev) => prev.filter((m) => m.id !== streamMsgId));
+          }
+          return;
+        }
+
+        // Replace placeholder with final message
         if (assistantMessage) {
           const textBlock = assistantMessage.content_blocks?.find((b: { type: string }) => b.type === "text");
           const hasContent = textBlock?.text?.trim();
-
           setMessages((prev) => {
-            const idx = prev.findIndex((m) => m.id === currentStreamingId || m.id === assistantMessage.id);
+            const idx = prev.findIndex((m) => m.id === streamMsgId || m.id === assistantMessage.id);
             if (idx >= 0) {
               const updated = [...prev];
               updated[idx] = hasContent ? assistantMessage : {
@@ -419,37 +453,43 @@ export function useConversation(): UseConversationReturn {
             }
             return prev;
           });
-        } else if (currentStreamingId) {
-          setMessages((prev) => prev.filter((m) => m.id !== currentStreamingId));
+        } else if (streamMsgId) {
+          setMessages((prev) => prev.filter((m) => m.id !== streamMsgId));
         }
 
-        setTimeout(() => loadPartitions(), 300);
-        // 流完成后从服务端刷新消息，确保数据一致
+        // Add response blocks from done message
+        if (responseBlocks?.length) {
+          setResponseBlocks((prev) => {
+            const existing = new Set(prev.map((b) => b.id));
+            const newBlocks = responseBlocks.filter((b) => !existing.has(b.id));
+            return newBlocks.length ? [...prev, ...newBlocks] : prev;
+          });
+        }
+
+        // Refresh sidebar + messages after a short delay
+        setTimeout(() => loadPartitionsRef.current(), 300);
         setTimeout(() => {
-          if (activeConversationId) loadMessages(activeConversationId);
+          const cid = activeConvIdRef.current;
+          if (cid && cid === streamCid) loadMessages(cid);
         }, 500);
       },
       onError: (msg) => {
         setIsLoading(false);
         setStatusMessage("");
-        // Don't add error node for transient WS errors during reconnection
         const errorNode: TreeNode = {
           id: "err-" + Date.now(),
-          parent_id: selectedPartitionId || "",
-          children_ids: [],
-          partition_id: selectedPartitionId || "",
-          conversation_id: activeConversationId || "",
+          parent_id: "", children_ids: [],
+          partition_id: activePartIdRef.current || "",
+          conversation_id: activeConvIdRef.current || "",
           content_blocks: [{ type: "text" as const, text: `❌ ${msg}` }],
           text_summary: msg,
-          role: "assistant",
-          timestamp: Date.now(),
-          token_count: 0,
-          is_deleted: false,
-          is_archived: false,
-          has_modified_version: false,
+          role: "assistant", timestamp: Date.now(),
+          token_count: 0, is_deleted: false, is_archived: false, has_modified_version: false,
         };
         if (streamingMsgIdRef.current) {
-          setMessages((prev) => prev.map((m) => m.id === streamingMsgIdRef.current ? errorNode : m));
+          setMessages((prev) =>
+            prev.map((m) => m.id === streamingMsgIdRef.current ? errorNode : m)
+          );
         } else {
           setMessages((prev) => [...prev, errorNode]);
         }
@@ -477,13 +517,16 @@ export function useConversation(): UseConversationReturn {
       },
     });
 
-    return () => disconnectWS();
-  }, [activeConversationId, loadMessages, loadPartitions, selectedPartitionId]);
+    return () => {
+      wsClient.destroy();
+      wsRef.current = null;
+    };
+  }, []); // Only mount/unmount once — WS reconnection handled internally
 
   // ── Initial load ──
   useEffect(() => { loadPartitions(); }, [loadPartitions]);
 
-  // ── Periodic polling for real-time updates ──
+  // ── Periodic polling ──
   useEffect(() => {
     if (!activeConversationId) return;
     const interval = setInterval(() => {
@@ -492,12 +535,11 @@ export function useConversation(): UseConversationReturn {
     return () => clearInterval(interval);
   }, [activeConversationId, loadMessages]);
 
-  // ── Validate URL params ──
+  // ── Validate URL partition ──
   const validatedRef = useRef(false);
   useEffect(() => {
     if (!urlInitialized || loadingPartitions) return;
     if (validatedRef.current) return;
-
     if (selectedPartitionId && partitions.length > 0 &&
         !partitions.some((p) => p.id === selectedPartitionId)) {
       validatedRef.current = true;
@@ -506,159 +548,72 @@ export function useConversation(): UseConversationReturn {
       window.history.replaceState(null, "", "/learn");
       return;
     }
-
     validatedRef.current = true;
   }, [urlInitialized, loadingPartitions, partitions, selectedPartitionId]);
-
-  // ── Auto-create conversation when sending without one ──
-  const ensureConversation = useCallback(async (): Promise<{ partitionId: string; conversationId: string } | null> => {
-    // If already have both, return them
-    if (selectedPartitionId && activeConversationId) {
-      return { partitionId: selectedPartitionId, conversationId: activeConversationId };
-    }
-
-    try {
-      let pId = selectedPartitionId;
-
-      // Auto-create partition if none selected
-      if (!pId) {
-        if (partitions.length > 0) {
-          pId = partitions[0].id;
-        } else {
-          const data = await apiFetch<{ partition: Partition }>("/conversations/partitions", {
-            method: "POST",
-            body: JSON.stringify({ name: "默认分区", subject: "默认", emoji: "💬" }),
-          });
-          pId = data.partition.id;
-          await loadPartitions();
-        }
-      }
-
-      // Auto-create conversation — need a topic first, so create full chain if needed
-      // Try to find or create: domain → topic → conversation
-      let topicId = "";
-
-      // Check if partition has any domains
-      const domainsData = await apiFetch<{ domains: { id: string }[] }>(`/conversations/partitions/${pId}/domains`);
-      const domains = domainsData.domains || [];
-
-      if (domains.length > 0) {
-        // Check first domain for topics
-        const topicsData = await apiFetch<{ topics: { id: string }[] }>(`/conversations/domains/${domains[0].id}/topics`);
-        if (topicsData.topics?.length > 0) {
-          topicId = topicsData.topics[0].id;
-        } else {
-          const newTopic = await apiFetch<{ topic: { id: string } }>("/conversations/topics", {
-            method: "POST",
-            body: JSON.stringify({ domain_id: domains[0].id, name: "默认专题", emoji: "📝" }),
-          });
-          topicId = newTopic.topic.id;
-        }
-      } else {
-        const newDomain = await apiFetch<{ domain: { id: string } }>("/conversations/domains", {
-          method: "POST",
-          body: JSON.stringify({ partition_id: pId, name: "默认领域", emoji: "📚" }),
-        });
-        const newTopic = await apiFetch<{ topic: { id: string } }>("/conversations/topics", {
-          method: "POST",
-          body: JSON.stringify({ domain_id: newDomain.domain.id, name: "默认专题", emoji: "📝" }),
-        });
-        topicId = newTopic.topic.id;
-      }
-
-      const convData = await apiFetch<{ conversation: { id: string } }>("/conversations/conversations", {
-        method: "POST",
-        body: JSON.stringify({ topic_id: topicId, name: "" }),
-      });
-
-      const cId = convData.conversation.id;
-      setSelectedPartitionId(pId);
-      setActiveConversationId(cId);
-      setConvError(null);
-      return { partitionId: pId, conversationId: cId };
-    } catch (e) {
-      console.error("Auto-create conversation failed:", e);
-      return null;
-    }
-  }, [selectedPartitionId, activeConversationId, partitions, loadPartitions]);
 
   // ── Handle send ──
   const handleSend = useCallback(
     async (text: string, files?: { name: string; type: string; materialId?: string }[]) => {
       if (!text.trim() || isLoading) return;
 
-      // Auto-create conversation if needed
-      const ctx = await ensureConversation();
-      if (!ctx) {
-        setMessages((prev) => [...prev, {
-          id: "err-" + Date.now(),
-          parent_id: "", children_ids: [], partition_id: "", conversation_id: "",
-          content_blocks: [{ type: "text" as const, text: "❌ 无法创建对话，请检查后端连接" }],
-          text_summary: "", role: "assistant" as const, timestamp: Date.now(),
-          token_count: 0, is_deleted: false, is_archived: false, has_modified_version: false,
-        }]);
-        return;
-      }
+      // Ensure we have a conversation to send to
+      let pId = selectedPartitionId;
+      let cId = activeConversationId;
 
-      const { partitionId, conversationId } = ctx;
-
-      const userMsgId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
-      const blocks: { type: string; text?: string; url?: string; name?: string }[] = [{ type: "text", text }];
-      if (files) {
-        for (const f of files) {
-          blocks.push({ type: f.type === "image" ? "image" : "file", name: f.name });
+      if (!pId || !cId) {
+        const chain = await createConversationChain(selectedPartitionId);
+        if (!chain) {
+          setMessages((prev) => [...prev, {
+            id: "err-" + Date.now(), parent_id: "", children_ids: [],
+            partition_id: "", conversation_id: "",
+            content_blocks: [{ type: "text" as const, text: "❌ 无法创建对话，请检查后端连接" }],
+            text_summary: "", role: "assistant" as const,
+            timestamp: Date.now(), token_count: 0,
+            is_deleted: false, is_archived: false, has_modified_version: false,
+          }]);
+          return;
         }
+        pId = chain.partitionId;
+        cId = chain.conversationId;
+        setSelectedPartitionId(pId);
+        setActiveConversationId(cId);
+        setConvError(null);
+        await loadPartitions();
       }
 
+      // Build user message
+      const userMsgId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
       const userMsg: TreeNode = {
-        id: userMsgId,
-        parent_id: partitionId || "virtual_root",
-        children_ids: [],
-        partition_id: partitionId || "",
-        conversation_id: conversationId || "",
-        content_blocks: blocks as TreeNode["content_blocks"],
-        text_summary: text,
-        role: "user",
-        timestamp: Date.now(),
-        token_count: 0,
-        is_deleted: false,
-        is_archived: false,
-        has_modified_version: false,
+        id: userMsgId, parent_id: pId || "virtual_root",
+        children_ids: [], partition_id: pId || "", conversation_id: cId || "",
+        content_blocks: [
+          { type: "text", text },
+          ...(files?.map((f) => ({ type: f.type === "image" ? "image" as const : "file" as const, name: f.name })) || []),
+        ] as TreeNode["content_blocks"],
+        text_summary: text, role: "user", timestamp: Date.now(),
+        token_count: 0, is_deleted: false, is_archived: false, has_modified_version: false,
       };
 
-      setMessages((prev) => [...prev, userMsg]);
+      // Assistant placeholder
+      const asstId = Date.now().toString(36) + "a" + Math.random().toString(36).substr(2, 9);
+      streamingMsgIdRef.current = asstId;
+      streamBufferRef.current = "";
+      streamingPartIdRef.current = pId;
+      streamingConvIdRef.current = cId;
+
+      setMessages((prev) => [...prev, userMsg, {
+        id: asstId, parent_id: userMsgId, children_ids: [],
+        partition_id: pId || "", conversation_id: cId || "",
+        content_blocks: [{ type: "text" as const, text: "" }],
+        text_summary: "", role: "assistant", timestamp: Date.now(),
+        token_count: 0, is_deleted: false, is_archived: false, has_modified_version: false,
+      }]);
       setIsLoading(true);
       setStatusMessage("正在思考...");
 
-      const assistantMsgId = Date.now().toString(36) + "a" + Math.random().toString(36).substr(2, 9);
-      streamingMsgIdRef.current = assistantMsgId;
-      streamBufferRef.current = "";
-      streamingContextRef.current = {
-        partitionId: partitionId || "",
-        conversationId: conversationId || "",
-      };
-      const assistantPlaceholder: TreeNode = {
-        id: assistantMsgId,
-        parent_id: userMsgId,
-        children_ids: [],
-        partition_id: partitionId || "",
-        conversation_id: conversationId || "",
-        content_blocks: [{ type: "text" as const, text: "" }],
-        text_summary: "",
-        role: "assistant",
-        timestamp: Date.now(),
-        token_count: 0,
-        is_deleted: false,
-        is_archived: false,
-        has_modified_version: false,
-      };
-
-      setMessages((prev) => [...prev, assistantPlaceholder]);
-
-      const sent = sendWSMessage({
-        text,
-        partition_id: partitionId || undefined,
-        conversation_id: conversationId || undefined,
+      // Try WebSocket first, fallback to HTTP
+      const sent = wsRef.current?.send({
+        text, partition_id: pId, conversation_id: cId,
       });
       if (!sent) {
         setStatusMessage("WebSocket 未连接，尝试 HTTP...");
@@ -666,7 +621,7 @@ export function useConversation(): UseConversationReturn {
           const res = await fetch("/api/conversations/message", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text, partition_id: partitionId, conversation_id: conversationId }),
+            body: JSON.stringify({ text, partition_id: pId, conversation_id: cId }),
           });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
@@ -675,42 +630,41 @@ export function useConversation(): UseConversationReturn {
             "（回复获取成功但没有显示内容）";
           streamingMsgIdRef.current = null;
           streamBufferRef.current = "";
+          streamingPartIdRef.current = null;
+          streamingConvIdRef.current = null;
           setMessages((prev) =>
             prev.map((m) =>
-              m.id === assistantMsgId
+              m.id === asstId
                 ? { ...m, content_blocks: [{ type: "text" as const, text: replyText }], text_summary: replyText }
                 : m
             )
           );
           setIsLoading(false);
           setStatusMessage("");
-          setTimeout(() => loadPartitions(), 300);
+          setTimeout(() => loadPartitionsRef.current(), 300);
         } catch (httpErr) {
           const errMsg = `无法连接服务器：${httpErr instanceof Error ? httpErr.message : "未知错误"}`;
-          const errNode: TreeNode = {
-            id: "err-" + Date.now(),
-            parent_id: partitionId || "",
-            children_ids: [],
-            partition_id: partitionId || "",
-            conversation_id: conversationId || "",
-            content_blocks: [{ type: "text" as const, text: `❌ ${errMsg}` }],
-            text_summary: errMsg,
-            role: "assistant",
-            timestamp: Date.now(),
-            token_count: 0,
-            is_deleted: false,
-            is_archived: false,
-            has_modified_version: false,
-          };
-          setMessages((prev) => prev.map((m) => (m.id === assistantMsgId ? errNode : m)));
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === asstId
+                ? {
+                    ...m, id: "err-" + Date.now(),
+                    content_blocks: [{ type: "text" as const, text: `❌ ${errMsg}` }],
+                    text_summary: errMsg,
+                  }
+                : m
+            )
+          );
           streamingMsgIdRef.current = null;
           streamBufferRef.current = "";
+          streamingPartIdRef.current = null;
+          streamingConvIdRef.current = null;
           setIsLoading(false);
           setStatusMessage("");
         }
       }
     },
-    [isLoading, loadPartitions, ensureConversation]
+    [isLoading, selectedPartitionId, activeConversationId, loadPartitions],
   );
 
   // ── Handle conversation selection ──
@@ -721,8 +675,7 @@ export function useConversation(): UseConversationReturn {
       setConvError(null);
       setShowPartitionSidebar(false);
       setSwitchBanner(null);
-    },
-    []
+    }, [],
   );
 
   // ── Handle switch banner ──
@@ -744,13 +697,10 @@ export function useConversation(): UseConversationReturn {
     try {
       await fetch("/api/conversations/messages/" + messageId, { method: "DELETE" });
       setMessages((prev) => prev.filter((m) => m.id !== messageId));
-    } catch (e) {
-      console.error("Delete failed:", e);
-    }
+    } catch (e) { console.error("Delete failed:", e); }
   }, []);
 
-  // ── Handle edit message (v4: inline version, no new branch) ──
-  // Returns version_count for MessageList to update version counter
+  // ── Handle edit message ──
   const handleEditMessage = useCallback(async (messageId: string, newText: string) => {
     const res = await fetch("/api/conversations/messages/" + messageId, {
       method: "PUT",
@@ -760,61 +710,41 @@ export function useConversation(): UseConversationReturn {
         text_summary: newText,
       }),
     });
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      throw new Error(`Edit failed ${res.status}: ${errText}`);
-    }
+    if (!res.ok) throw new Error(`Edit failed ${res.status}: ${await res.text().catch(() => "")}`);
     const data = await res.json();
     return data.version_count || 0;
   }, []);
 
   // ── Handle version switch ──
-  // Returns { index, total } for the MessageList to display version counter
   const handleVersionSwitch = useCallback(async (messageId: string, direction: "prev" | "next") => {
     try {
-      // Fetch message + versions list (backend now filters by same role)
       const msgRes = await fetch(`/api/conversations/messages/${messageId}`);
       if (!msgRes.ok) return null;
       const msgData = await msgRes.json();
       const versions: string[] = msgData.versions || [];
       if (versions.length <= 1) return { index: 1, total: 1 };
-
-      // Find current position in versions list
       const curIdx = versions.indexOf(messageId);
       if (curIdx === -1) return null;
-
       const newIdx = direction === "prev"
         ? (curIdx - 1 + versions.length) % versions.length
         : (curIdx + 1) % versions.length;
       const targetId = versions[newIdx];
-
-      // Load target version
       const targetRes = await fetch(`/api/conversations/messages/${targetId}`);
       if (!targetRes.ok) return null;
       const targetData = await targetRes.json();
       const targetMsg = targetData.message;
       if (!targetMsg) return null;
-
-      // Extract text from target version's content_blocks
       const targetText = (targetMsg.content_blocks || [])
         .filter((b: any) => b.type === "text")
         .map((b: any) => b.text || "")
         .join("\n\n");
-
-      // Update the message in-place with the target version's content
       setMessages((prev) =>
         prev.map((m) =>
           m.id === messageId
-            ? {
-                ...targetMsg,
-                id: messageId, // keep same ID so React doesn't remount
-                content_blocks: [{ type: "text" as const, text: targetText || "(空)" }],
-                text_summary: targetText,
-              }
+            ? { ...targetMsg, id: messageId, content_blocks: [{ type: "text" as const, text: targetText || "(空)" }], text_summary: targetText }
             : m
         )
       );
-
       return { index: newIdx + 1, total: versions.length };
     } catch (e) {
       console.error("Version switch failed:", e);
@@ -822,189 +752,87 @@ export function useConversation(): UseConversationReturn {
     }
   }, []);
 
-  // ── Handle new partition ──
-  const handleCreatePartition = useCallback(
-    async (name: string, emoji: string) => {
-      try {
-        await apiFetch("/conversations/partitions", {
-          method: "POST",
-          body: JSON.stringify({ name, subject: name, emoji }),
-        });
-        await loadPartitions();
-      } catch (e) {
-        console.error("Failed to create partition:", e);
+  // ── Partition CRUD ──
+  const handleCreatePartition = useCallback(async (name: string, emoji: string) => {
+    try {
+      await apiFetch("/conversations/partitions", {
+        method: "POST",
+        body: JSON.stringify({ name, subject: name, emoji }),
+      });
+      await loadPartitions();
+    } catch (e) { console.error("Failed to create partition:", e); }
+  }, [loadPartitions]);
+
+  const handleRenamePartition = useCallback(async (id: string, name: string) => {
+    try {
+      await apiFetch(`/conversations/partitions/${id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+      await loadPartitions();
+    } catch (e) { console.error(e); }
+  }, [loadPartitions]);
+
+  const handleDeletePartition = useCallback(async (id: string) => {
+    try {
+      await apiFetch(`/conversations/partitions/${id}`, { method: "DELETE" });
+      if (id === selectedPartitionId) {
+        setSelectedPartitionId(null);
+        setActiveConversationId(null);
+        setConvError(null);
+        setMessages([]);
+        setResponseBlocks([]);
       }
-    },
-    [loadPartitions]
-  );
+      await loadPartitions();
+    } catch (e) { console.error(e); }
+  }, [selectedPartitionId, loadPartitions]);
 
-  // ── Handle rename / delete partition ──
-  const handleRenamePartition = useCallback(
-    async (id: string, name: string) => {
-      try {
-        await apiFetch(`/conversations/partitions/${id}`, { method: "PATCH", body: JSON.stringify({ name }) });
-        await loadPartitions();
-      } catch (e) { console.error(e); }
-    },
-    [loadPartitions]
-  );
-
-  const handleDeletePartition = useCallback(
-    async (id: string) => {
-      try {
-        await apiFetch(`/conversations/partitions/${id}`, { method: "DELETE" });
-        if (id === selectedPartitionId) {
-          setSelectedPartitionId(null);
-          setActiveConversationId(null);
-          setConvError(null);
-          setMessages([]);
-          setResponseBlocks([]);
+  // ── Handle new conversation ──
+  const handleNewConversation = useCallback(async (level: string, parentId: string) => {
+    try {
+      let pId = selectedPartitionId;
+      if (level === "default") {
+        if (!pId) {
+          if (partitions.length > 0) {
+            pId = partitions[0].id;
+          } else {
+            const pData = await apiFetch<{ partition: Partition }>("/conversations/partitions", {
+              method: "POST",
+              body: JSON.stringify({ name: "默认分区", subject: "默认", emoji: "💬" }),
+            });
+            pId = pData.partition.id;
+            await loadPartitions();
+          }
+          setSelectedPartitionId(pId);
         }
-        await loadPartitions();
-      } catch (e) { console.error(e); }
-    },
-    [selectedPartitionId, loadPartitions]
-  );
+        return handleNewConversation("partition", pId);
+      }
+
+      // For partition/domain/topic level: create chain and return the conversation
+      const chain = await createConversationChain(level === "partition" ? parentId : pId);
+      if (!chain) return;
+
+      if (level === "partition") setSelectedPartitionId(parentId);
+      setActiveConversationId(chain.conversationId);
+      setConvError(null);
+      await loadPartitions();
+      setShowPartitionSidebar(false);
+    } catch (e) {
+      console.error("New conversation failed:", e);
+    }
+  }, [selectedPartitionId, partitions, loadPartitions]);
 
   // ── Active partition for header ──
   const activePartition = partitions.find((p) => p.id === selectedPartitionId);
 
-  // ── Handle new conversation (partition / domain / topic level) ──
-  const handleNewConversation = useCallback(
-    async (level: string, parentId: string) => {
-      try {
-        let topicId = "";
-
-        if (level === "default") {
-          // No partition selected — use or create default partition
-          let pId = selectedPartitionId;
-          if (!pId) {
-            if (partitions.length > 0) {
-              pId = partitions[0].id;
-            } else {
-              const pData = await apiFetch<{ partition: Partition }>("/conversations/partitions", {
-                method: "POST",
-                body: JSON.stringify({ name: "默认分区", subject: "默认", emoji: "💬" }),
-              });
-              pId = pData.partition.id;
-              await loadPartitions();
-            }
-            setSelectedPartitionId(pId);
-          }
-          // Now proceed as partition level
-          return handleNewConversation("partition", pId);
-        }
-
-        if (level === "topic") {
-          // Direct: create conversation under this topic
-          topicId = parentId;
-        } else {
-          // Need to find or create a topic under this partition/domain
-          const endpoint = level === "domain"
-            ? `/conversations/domains/${parentId}/topics`
-            : `/conversations/partitions/${parentId}/domains`;
-
-          const data = await apiFetch<any>(endpoint);
-          const items = data?.domains || data?.topics || [];
-
-          if (items.length > 0) {
-            // Use first item
-            if (level === "partition") {
-              // Got domains, need first domain's first topic
-              const domainId = items[0].id;
-              const topicData = await apiFetch<{ topics: any[] }>(`/conversations/domains/${domainId}/topics`);
-              if (topicData.topics?.length > 0) {
-                topicId = topicData.topics[0].id;
-              } else {
-                // Create default topic under first domain
-                const newTopic = await apiFetch<{ topic: { id: string } }>("/conversations/topics", {
-                  method: "POST",
-                  body: JSON.stringify({ domain_id: domainId, name: "默认专题", emoji: "📝" }),
-                });
-                topicId = newTopic.topic.id;
-              }
-            } else {
-              // domain level: got topics directly
-              topicId = items[0].id;
-            }
-          } else {
-            // No items — create default chain
-            if (level === "partition") {
-              const newDomain = await apiFetch<{ domain: { id: string } }>("/conversations/domains", {
-                method: "POST",
-                body: JSON.stringify({ partition_id: parentId, name: "默认领域", emoji: "📚" }),
-              });
-              const newTopic = await apiFetch<{ topic: { id: string } }>("/conversations/topics", {
-                method: "POST",
-                body: JSON.stringify({ domain_id: newDomain.domain.id, name: "默认专题", emoji: "📝" }),
-              });
-              topicId = newTopic.topic.id;
-            } else {
-              const newTopic = await apiFetch<{ topic: { id: string } }>("/conversations/topics", {
-                method: "POST",
-                body: JSON.stringify({ domain_id: parentId, name: "默认专题", emoji: "📝" }),
-              });
-              topicId = newTopic.topic.id;
-            }
-          }
-        }
-
-        // Set partition_id for context
-        if (level === "partition") setSelectedPartitionId(parentId);
-
-        // Create conversation
-        const convData = await apiFetch<{ conversation: { id: string } }>("/conversations/conversations", {
-          method: "POST",
-          body: JSON.stringify({ topic_id: topicId, name: "" }),
-        });
-        setActiveConversationId(convData.conversation.id);
-        setConvError(null);
-        await loadPartitions();
-
-        // On mobile, close sidebar
-        setShowPartitionSidebar(false);
-      } catch (e) {
-        console.error("New conversation failed:", e);
-      }
-    },
-    [loadPartitions]
-  );
-
   return {
-    // State
-    partitions,
-    selectedPartitionId,
-    activeConversationId,
-    messages,
-    responseBlocks,
-    isLoading,
-    statusMessage,
-    switchBanner,
-    showPartitionSidebar,
-    sidebarCollapsed,
-    showNewPartition,
-    loadingPartitions,
-    isLoadingPartitions,
-    loadingMessages,
-    convError,
-    isDesktop,
-    activePartition,
-
-    // Handlers
-    handleSelectConversation,
-    handleNewConversation,
-    handleSend,
-    handleDeleteMessage,
-    handleEditMessage,
-    handleVersionSwitch,
-    handleCreatePartition,
-    handleRenamePartition,
-    handleDeletePartition,
-    handleSwitchConfirm,
-    handleSwitchDismiss,
-    setShowPartitionSidebar,
-    setShowNewPartition,
-    setSidebarCollapsed,
+    partitions, selectedPartitionId, activeConversationId,
+    messages, responseBlocks, isLoading, statusMessage,
+    switchBanner, showPartitionSidebar, sidebarCollapsed,
+    showNewPartition, loadingPartitions, loadingMessages,
+    convError, isDesktop, activePartition, wsConnected,
+    handleSelectConversation, handleNewConversation, handleSend,
+    handleDeleteMessage, handleEditMessage, handleVersionSwitch,
+    handleCreatePartition, handleRenamePartition, handleDeletePartition,
+    handleSwitchConfirm, handleSwitchDismiss,
+    setShowPartitionSidebar, setShowNewPartition, setSidebarCollapsed,
     loadPartitions,
   };
 }
