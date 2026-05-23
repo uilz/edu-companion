@@ -501,6 +501,19 @@ async def get_message_blocks(message_id: str):
     blocks = [b.model_dump(mode="json") for b in data.response_blocks.values() if b.message_id == message_id]
     return {"blocks": blocks}
 
+@router.get("/conversations/{conv_id}/blocks")
+async def get_conversation_blocks(conv_id: str, limit: int = 100):
+    blocks = []
+    data = storage.load(USER_ID)
+    conv = data.conversations.get(conv_id)
+    if conv:
+        asst_ids = {nid for nid in conv.path
+                    if (n := data.nodes.get(nid)) and n.role == "assistant" and not n.is_deleted}
+        blocks = [b.model_dump(mode="json")
+                  for b in data.response_blocks.values()
+                  if b.message_id in asst_ids][:limit]
+    return {"blocks": blocks}
+
 @router.get("/messages/{message_id}")
 async def get_message(message_id: str):
     """获取单条消息（用于版本切换）"""
