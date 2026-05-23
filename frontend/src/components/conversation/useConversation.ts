@@ -675,8 +675,8 @@ export function useConversation(): UseConversationReturn {
   // ── Handle conversation selection ──
   const handleSelectConversation = useCallback(
     (partitionId: string, conversationId: string) => {
-      setSelectedPartitionId(partitionId);
-      setActiveConversationId(conversationId);
+      setSelectedPartitionId(partitionId || null);
+      setActiveConversationId(conversationId || null);
       setConvError(null);
       setShowPartitionSidebar(false);
       setSwitchBanner(null);

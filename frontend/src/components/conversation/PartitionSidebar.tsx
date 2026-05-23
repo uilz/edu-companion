@@ -393,7 +393,14 @@ export default function PartitionSidebar({
         topic: `/topics/${editingId}`,
         conversation: `/conversations/${editingId}`,
       };
-      await apiFetch(paths[level], { method: "PATCH", body: JSON.stringify({ name }) });
+
+      // For partition: delegate to onRenamePartition (it handles API + loadPartitions)
+      // For other levels: make the API call here
+      if (level === "partition") {
+        onRenamePartition?.(editingId, name);
+      } else {
+        await apiFetch(paths[level], { method: "PATCH", body: JSON.stringify({ name }) });
+      }
 
       // Locally update name in childMap
       setChildMap(prev => {
@@ -409,10 +416,9 @@ export default function PartitionSidebar({
         return next;
       });
 
-      if (level === "partition" && onRenamePartition) {
-        onRenamePartition(editingId, name);
+      if (level !== "partition") {
+        onTreeChanged?.();
       }
-      onTreeChanged?.();
     } catch (e) {
       console.error("Rename failed:", e);
     }
@@ -431,7 +437,14 @@ export default function PartitionSidebar({
         topic: `/topics/${deleteTarget.id}`,
         conversation: `/conversations/${deleteTarget.id}`,
       };
-      await apiFetch(paths[deleteTarget.level], { method: "DELETE" });
+
+      // For partition: delegate to onDeletePartition (it handles API + loadPartitions)
+      // For other levels: make the API call here
+      if (deleteTarget.level === "partition") {
+        onDeletePartition?.(deleteTarget.id);
+      } else {
+        await apiFetch(paths[deleteTarget.level], { method: "DELETE" });
+      }
 
       // Remove from childMap + expandedSet
       setChildMap(prev => {
@@ -445,13 +458,13 @@ export default function PartitionSidebar({
       });
       setExpandedSet(prev => { const next = new Set(prev); next.delete(deleteTarget.id); return next; });
 
-      if (deleteTarget.level === "partition" && onDeletePartition) {
-        onDeletePartition(deleteTarget.id);
-      }
+      // If deleting the active conversation, clear it
       if (deleteTarget.id === activeConversationId) {
         onSelectConversation(selectedPartitionId || "", "");
       }
-      onTreeChanged?.();
+      if (deleteTarget.level !== "partition") {
+        onTreeChanged?.();
+      }
     } catch (e) {
       console.error("Delete failed:", e);
     }
@@ -589,7 +602,7 @@ export default function PartitionSidebar({
       )}
       {deleteTarget && (
         <ConfirmDialog
-          message={`确定删除${deleteTarget.level === "partition" ? "分区" : deleteTarget.level === "domain" ? "领域" : deleteTarget.level === "topic" ? "专题" : "对话"}「${deleteTarget.name}」？此操作不可撤销。`}
+          message={`确定删除${deleteTarget.level === "partition" ? "分区" : deleteTarget.level === "domain" ? "领域" : deleteTarget.level === "topic" ? "专题" : "对话"}「${deleteTarget.name}」？此操作不可撤销。${deleteTarget.id === activeConversationId ? "\n\n⚠️ 这是当前对话，删除后将回到空状态。" : ""}`}
           onConfirm={confirmDelete} onCancel={() => setDeleteTarget(null)} />
       )}
     </div>
