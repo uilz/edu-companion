@@ -461,8 +461,18 @@ export default function PartitionSidebar({
       if (targetLevel === "partition") {
         onDeletePartition?.(targetId);
       } else {
-        const result = await apiFetch(paths[targetLevel], { method: "DELETE" });
-        console.log("[DEBUG] API delete response:", result);
+        try {
+          const result = await apiFetch(paths[targetLevel], { method: "DELETE" });
+          console.log("[DEBUG] API delete response:", result);
+        } catch (apiErr: any) {
+          // If conversation/topic/domain was already deleted (400/404), still clean up frontend
+          const msg = apiErr?.message || "";
+          if (msg.includes("400") || msg.includes("404") || msg.includes("not found")) {
+            console.log("[DEBUG] Already deleted on server, cleaning up frontend cache only");
+          } else {
+            throw apiErr; // Re-throw other errors
+          }
+        }
       }
 
       console.log("[DEBUG] Removing from childMap, id:", targetId);
