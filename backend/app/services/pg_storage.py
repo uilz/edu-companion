@@ -447,6 +447,23 @@ class PgStorageEngine:
                 db.execute("DELETE FROM conversation_branches WHERE partition_id = %s", (pid,))
                 db.execute("DELETE FROM conversation_partitions WHERE id = %s", (pid,))
 
+        # ── 清理已删除的对话（branch）──
+        # PG 中 conversation_branches 没有 user_id 列，通过当前分区的 id 范围查询
+        if current_part_ids:
+            existing_branch_ids = {r["id"] for r in db.fetchall(
+                "SELECT id FROM conversation_branches WHERE partition_id = ANY(%s)",
+                (list(current_part_ids),),
+            )}
+            current_branch_ids = set(data.conversations.keys())
+            removed_branch_ids = existing_branch_ids - current_branch_ids
+            if removed_branch_ids:
+                bid_list = list(removed_branch_ids)
+                logger.info(f"Cleaning up {len(bid_list)} deleted conversations: {bid_list}")
+                for bid in bid_list:
+                    db.execute("DELETE FROM conversation_nodes WHERE branch_id = %s", (bid,))
+                    db.execute("DELETE FROM conversation_response_blocks WHERE branch_id = %s", (bid,))
+                    db.execute("DELETE FROM conversation_branches WHERE id = %s", (bid,))
+
         logger.info(f"Conversation data saved for user {user_id} ({len(data.nodes)} nodes)")
 
     # ── 迁移：JSON → PG ──
