@@ -143,11 +143,11 @@ export default function PartitionSidebar({
       })));
       console.log("[D2] childMap ROOT_KEY replaced:", prevRoot, "→", partNames);
       // Log topic-level children sizes to detect stale cache
-      for (const [key, value] of next) {
+      next.forEach((value, key) => {
         if (key !== ROOT_KEY && value?.length > 0 && value[0]?.level === "conversation") {
           console.log("[D2] topic stash:", key.substring(0,16), "has", value.length, "convs:", value.map(c => c.name));
         }
-      }
+      });
       return next;
     });
   }, [partitions]);
