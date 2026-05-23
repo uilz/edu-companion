@@ -439,6 +439,12 @@ class TreeOpsService:
                 self._archive_topic(data, tid)
                 data.topics.pop(tid, None)
             data.domains.pop(did, None)
+
+        # 清理该分区下的所有对话（分支模型）
+        for cid, conv in list(data.conversations.items()):
+            if conv.partition_id == partition_id:
+                self.delete_conversation(user_id, cid)
+
         data.partitions.pop(partition_id, None)
         storage.save(user_id, data)
 
