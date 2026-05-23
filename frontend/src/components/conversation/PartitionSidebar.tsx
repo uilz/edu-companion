@@ -263,63 +263,88 @@ export default function PartitionSidebar({
 
     let cancelled = false;
 
+    console.log(`[AE] Start: pid=${selectedPartitionId} cid=${convId}`);
+
     (async () => {
       try {
         // 1. Wait for the partition to appear in childMap
+        console.log(`[AE] Waiting for partition ${selectedPartitionId} in childMap...`);
         for (let i = 0; i < 50; i++) {
           if (cancelled) return;
-          if (childMapRef.current.get(ROOT_KEY)?.some(p => p.id === selectedPartitionId)) break;
+          const found = childMapRef.current.get(ROOT_KEY)?.some(p => p.id === selectedPartitionId);
+          if (found) {
+            console.log(`[AE] Partition found after ${i+1} polls`);
+            break;
+          }
           await sleep(100);
         }
         if (cancelled) return;
 
         const partition = childMapRef.current.get(ROOT_KEY)?.find(p => p.id === selectedPartitionId);
-        if (!partition) return;
+        if (!partition) { console.log(`[AE] Partition ${selectedPartitionId} not found in childMap!`); return; }
+        console.log(`[AE] Partition node:`, partition.name, partition.id);
 
         // 2. Load + expand partition
         if (!childMapRef.current.has(selectedPartitionId)) {
+          console.log(`[AE] Loading partition children...`);
           await loadChildren(partition);
           if (cancelled) return;
+          console.log(`[AE] Partition children loaded, childMap has ${selectedPartitionId}?`, childMapRef.current.has(selectedPartitionId));
         }
         doExpand(selectedPartitionId);
+        console.log(`[AE] Partition expanded`);
 
         // 3. Search for which domain/topic contains the active conversation
         const domains = childMapRef.current.get(selectedPartitionId) || [];
+        console.log(`[AE] Found ${domains.length} domains under partition`);
         for (const domain of domains) {
           if (cancelled) return;
+          console.log(`[AE] Checking domain: ${domain.name} (${domain.id})`);
 
           // Load this domain's topics
           if (!childMapRef.current.has(domain.id)) {
+            console.log(`[AE] Loading domain ${domain.id} children...`);
             await loadChildren(domain);
             if (cancelled) return;
+            console.log(`[AE] Domain children loaded, childMap has ${domain.id}?`, childMapRef.current.has(domain.id));
+          } else {
+            console.log(`[AE] Domain already has cached children`);
           }
 
           // Check if any topic under this domain contains the conversation
           const topics = childMapRef.current.get(domain.id) || [];
+          console.log(`[AE] ${topics.length} topics in domain ${domain.name}`);
           for (const topic of topics) {
             if (cancelled) return;
+            console.log(`[AE] Checking topic: ${topic.name} (${topic.id})`);
 
             if (!childMapRef.current.has(topic.id)) {
+              console.log(`[AE] Loading topic ${topic.id} children...`);
               await loadChildren(topic);
               if (cancelled) return;
+              console.log(`[AE] Topic children loaded`);
             }
 
             const convs = childMapRef.current.get(topic.id) || [];
-            if (convs.some(c => c.id === convId || (c as any).conversation_id === convId)) {
-              // Found! Expand this domain + topic, skip remaining domains/topics
+            console.log(`[AE] ${convs.length} conversations in topic ${topic.name}, looking for ${convId}`);
+            const found = convs.some(c => c.id === convId || (c as any).conversation_id === convId);
+            if (found) {
+              console.log(`[AE] FOUND! Expanding domain ${domain.id} + topic ${topic.id}`);
               doExpand(domain.id);
               doExpand(topic.id);
-              // Load all conversations in this topic to find the conv (already done)
               return;
+            } else {
+              console.log(`[AE] Not found in this topic. First conv id:`, convs[0]?.id);
             }
           }
         }
+        console.log(`[AE] Conversation ${convId} not found in any domain/topic!`);
       } catch (e) {
-        console.error("Auto-expand failed:", e);
+        console.error("[AE] Auto-expand failed:", e);
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => { cancelled = true; console.log("[AE] Cancelled"); };
   }, [selectedPartitionId, activeConversationId, initialConversationId, loadChildren, doExpand]);
 
   // ── Create ──
