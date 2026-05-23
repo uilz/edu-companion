@@ -503,9 +503,13 @@ def _add_message_to_tree(conversation_id: str, role: str, content: str, source: 
     )
 
     if metadata:
-        node.metadata = node.metadata or {}
-        node.metadata.update(metadata)
-        storage.save(USER_ID, data)
+        # 重新加载数据（避免 add_message 内部 save 后 data 过期）
+        data = storage.load(USER_ID)
+        updated_node = data.nodes.get(node.id)
+        if updated_node:
+            updated_node.metadata = updated_node.metadata or {}
+            updated_node.metadata.update(metadata)
+            storage.save(USER_ID, data)
 
     return {"id": node.id, "role": node.role, "content": content}
 
