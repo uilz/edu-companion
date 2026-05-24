@@ -87,8 +87,8 @@ class DailyBriefModule(SecretaryModule):
 
         # 如果有薄弱点，加一条明日规划
         try:
-            from ...analysis import find_weakness_clusters
-            from ...models import ScopeSpec, AnalyzeOptions
+            from ..analysis import find_weakness_clusters
+            from ..models import ScopeSpec, AnalyzeOptions
 
             weakness = find_weakness_clusters(user_id, ScopeSpec(level="user"), AnalyzeOptions(max_items=1, threshold=0.3))
             if weakness.items:

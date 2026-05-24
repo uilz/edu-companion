@@ -38,8 +38,8 @@ class ReviewReminderModule(SecretaryModule):
         self, user_id: str, ctx: SessionContext | None = None,
     ) -> list[Proposal]:
         """检查是否需要复习提醒"""
-        from ...analysis import find_overdue_reviews, detect_stagnant_topics
-        from ...models import ScopeSpec, AnalyzeOptions
+        from ..analysis import find_overdue_reviews, detect_stagnant_topics
+        from ..models import ScopeSpec, AnalyzeOptions
 
         options = AnalyzeOptions(threshold=0.4, max_items=5, sort_by="urgency")
         scope = ScopeSpec(level="user")

@@ -39,8 +39,8 @@ class FatigueManagerModule(SecretaryModule):
         self, user_id: str, ctx: SessionContext | None = None,
     ) -> list[Proposal]:
         """检测疲劳信号"""
-        from ...analysis import predict_fatigue_risk
-        from ...models import ScopeSpec, AnalyzeOptions
+        from ..analysis import predict_fatigue_risk
+        from ..models import ScopeSpec, AnalyzeOptions
 
         options = AnalyzeOptions(threshold=0.5, max_items=5)
         scope = ScopeSpec(level="user")
