@@ -18,7 +18,8 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from ..models import Proposal, ScopedInsight, SessionContext
+from ..models import Proposal, ScopedInsight
+from .context_engine import SessionContext
 from .module_registry import SecretaryModule, ModuleMeta
 
 logger = logging.getLogger(__name__)
