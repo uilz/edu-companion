@@ -46,6 +46,19 @@ class ActiveChecker:
 
         # 2. 运行所有已启用模块
         proposals = await module_registry.run_enabled_checks(self._user_id, ctx)
+
+        # 2.5 策略引擎过滤
+        from .policy_engine import policy_engine
+        daily_used = await policy_engine.get_daily_usage(self._user_id)
+        proposals = await policy_engine.filter(
+            proposals,
+            user_id=self._user_id,
+            quiet_hours=ctx.quiet_hours if ctx else False,
+            daily_used=daily_used,
+            max_daily=5,
+            session_id="_active_check",
+        )
+        findings["filtered_count"] = len(proposals)
         findings["modules_run"] = len(module_registry._enabled)
         findings["proposals_generated"] = len(proposals)
 

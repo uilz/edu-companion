@@ -104,6 +104,9 @@ class SecretaryModuleRegistry:
         from .builtin_review_reminder import ReviewReminderModule
         from .builtin_fatigue_manager import FatigueManagerModule
         from .builtin_daily_brief import DailyBriefModule
+        if "exam_mode" not in self._modules:
+            from .exam_mode import ExamModeModule
+            self.register(ExamModeModule())
 
         for cls in [ReviewReminderModule, FatigueManagerModule, DailyBriefModule]:
             self.register(cls())
