@@ -14,8 +14,7 @@ import logging
 import time
 from typing import Any
 
-from ..models import SessionContext
-from .context_engine import ContextEngine
+from .context_engine import ContextEngine, SessionContext
 
 logger = logging.getLogger(__name__)
 
