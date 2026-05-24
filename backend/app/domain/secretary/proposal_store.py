@@ -14,7 +14,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from ..models import Proposal, SecretaryPrefs
+from .models import Proposal, SecretaryPrefs
 
 logger = logging.getLogger(__name__)
 
