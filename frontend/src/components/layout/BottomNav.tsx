@@ -13,6 +13,7 @@ import {
   Settings,
   LucideIcon,
 } from 'lucide-react';
+import SecretaryBellBadge from '@/components/secretary/SecretaryBellBadge';
 
 // 导航项的类型定义：路径、标签文字、对应图标
 interface NavItem {
@@ -82,11 +83,14 @@ export default function BottomNav() {
               )}
 
               {/* 导航图标 */}
-              <Icon
-                size={22}
-                strokeWidth={active ? 2.2 : 1.8}
-                className="mb-1"
-              />
+              <span className="relative inline-flex">
+                <Icon
+                  size={22}
+                  strokeWidth={active ? 2.2 : 1.8}
+                  className="mb-1"
+                />
+                {item.label === '秘书' && <SecretaryBellBadge />}
+              </span>
 
               {/* 导航文字标签 */}
               <span

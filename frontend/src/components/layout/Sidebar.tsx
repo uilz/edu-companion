@@ -13,6 +13,7 @@ import {
   Moon,
 } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
+import SecretaryBellBadge from '@/components/secretary/SecretaryBellBadge';
 
 // ── 导航菜单项配置 ──
 // href: 路由路径, label: 显示文字, icon: Lucide 图标组件
@@ -73,6 +74,7 @@ export default function Sidebar() {
               >
                 <Icon size={18} strokeWidth={active ? 2.2 : 1.6} />
                 <span>{item.label}</span>
+                {item.label === '秘书' && <SecretaryBellBadge />}
                 {/* 激活指示器小圆点 */}
                 {active && (
                   <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[var(--color-accent)]" />

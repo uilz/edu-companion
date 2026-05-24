@@ -107,6 +107,15 @@ class SecretaryModuleRegistry:
         if "exam_mode" not in self._modules:
             from .exam_mode import ExamModeModule
             self.register(ExamModeModule())
+        if "return_user_detection" not in self._modules:
+            from .return_user_detection import ReturnUserDetectionModule
+            self.register(ReturnUserDetectionModule())
+        if "meta_cognitive_prompt" not in self._modules:
+            from .meta_cognitive_prompt import MetaCognitivePromptModule
+            self.register(MetaCognitivePromptModule())
+        if "silent_task" not in self._modules:
+            from .silent_task import SilentTaskModule
+            self.register(SilentTaskModule())
 
         for cls in [ReviewReminderModule, FatigueManagerModule, DailyBriefModule]:
             self.register(cls())

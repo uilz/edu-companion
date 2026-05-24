@@ -1,6 +1,6 @@
 "use client";
 
-import { Settings, Moon, Volume2, Bell, RefreshCw, ChevronRight, Check, BookOpen } from "lucide-react";
+import { Settings, Moon, Volume2, Bell, RefreshCw, ChevronRight, Check, BookOpen, Download, Trash2 } from "lucide-react";
 import { useState, useEffect } from "react";
 
 interface ModuleInfo {
@@ -234,6 +234,60 @@ export default function SecretarySettingsPage() {
           <RefreshCw size={10} />
           设置自动保存。模块开启后，秘书系统将在 10 分钟周期内自动检查并推送建议。
         </p>
+      </div>
+
+      {/* ── 数据管理 ── */}
+      <div className="space-y-2">
+        <h2 className="text-sm font-semibold text-[var(--color-text)] flex items-center gap-1.5">
+          <Download size={14} />
+          数据管理
+        </h2>
+        <div className="flex gap-2">
+          <button
+            onClick={async () => {
+              try {
+                const res = await fetch(
+                  "/api/secretary/data/export?user_id=default_user"
+                );
+                if (!res.ok) return;
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `secretary-data-${new Date().toISOString().split("T")[0]}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              } catch {
+                // silently fail
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
+          >
+            <Download size={14} />
+            导出数据
+          </button>
+          <button
+            onClick={() => {
+              if (
+                !window.confirm(
+                  "确定要删除所有秘书数据吗？此操作不可撤销！"
+                )
+              ) return;
+              fetch(
+                "/api/secretary/data/delete?user_id=default_user",
+                { method: "DELETE" }
+              ).then((res) => {
+                if (res.ok) {
+                  alert("数据已删除");
+                }
+              });
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
+          >
+            <Trash2 size={14} />
+            删除数据
+          </button>
+        </div>
       </div>
     </div>
   );

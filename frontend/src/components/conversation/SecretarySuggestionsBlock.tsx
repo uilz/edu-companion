@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Bell, Check, Clock, X } from "lucide-react";
 
 interface SecretaryProposal {
+  id: string;
   emoji: string;
   title: string;
   description: string;
@@ -61,8 +62,40 @@ export default function SecretarySuggestionsBlock({
 
 function ProposalCard({ proposal }: { proposal: SecretaryProposal }) {
   const [dismissed, setDismissed] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  if (dismissed) return null;
+  if (dismissed || accepted) return null;
+
+  const handleAccept = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(
+        `/api/secretary/proposals/${proposal.id}/accept?user_id=default_user`,
+        { method: "POST" }
+      );
+      if (res.ok) {
+        setAccepted(true);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDismiss = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(
+        `/api/secretary/proposals/${proposal.id}/dismiss?user_id=default_user`,
+        { method: "POST" }
+      );
+      if (res.ok) {
+        setDismissed(true);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const priorityColors: Record<number, string> = {
     5: "border-l-red-500",
@@ -93,17 +126,17 @@ function ProposalCard({ proposal }: { proposal: SecretaryProposal }) {
       {/* Actions */}
       <div className="flex gap-1.5 mt-2 ml-6">
         <button
-          onClick={() => {
-            /* TODO: POST /secretary/proposals/{id}/accept */
-          }}
-          className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-[var(--color-accent)] text-white rounded hover:opacity-90 transition-opacity"
+          onClick={handleAccept}
+          disabled={loading}
+          className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-[var(--color-accent)] text-white rounded hover:opacity-90 transition-opacity disabled:opacity-50"
         >
           <Check size={10} />
           执行
         </button>
         <button
-          onClick={() => setDismissed(true)}
-          className="inline-flex items-center gap-1 px-2 py-1 text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] bg-[var(--color-surface)] rounded border border-[var(--color-border)] hover:border-[var(--color-text-muted)] transition-colors"
+          onClick={handleDismiss}
+          disabled={loading}
+          className="inline-flex items-center gap-1 px-2 py-1 text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] bg-[var(--color-surface)] rounded border border-[var(--color-border)] hover:border-[var(--color-text-muted)] transition-colors disabled:opacity-50"
         >
           <X size={10} />
           忽略
