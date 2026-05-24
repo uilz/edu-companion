@@ -145,7 +145,7 @@ interface Props {
   onRenamePartition?: (id: string, name: string) => void;
   loading?: boolean;
   compact?: boolean;
-  onNewConversation?: (level: string, parentId: string) => void;
+  onNewConversation?: (level: string, parentId: string, partitionId?: string) => void;
   onTreeChanged?: () => void;
 }
 
@@ -410,8 +410,14 @@ export default function PartitionSidebar({
         conversationId = result?.conversation?.id;
       }
 
-      // 确定目标分区 ID：领域父节点就是分区，其他层级使用当前选中的分区
-      const targetPartitionId = level === "domain" ? parentId : (selectedPartitionId || "");
+      // 从 childMap 查找 parentNode 的实际 partition_id，而不是用 selectedPartitionId
+      let targetPartitionId = selectedPartitionId || "";
+      childMapRef.current.forEach((children) => {
+        const found = children.find(c => c.id === parentId);
+        if (found && found.partition_id) {
+          targetPartitionId = found.partition_id;
+        }
+      });
 
       onTreeChanged?.();
 
@@ -597,7 +603,7 @@ export default function PartitionSidebar({
               {isHovered && (
                 <div className="flex items-center gap-0.5 ml-1">
                   {node.level !== "conversation" && onNewConversation && (
-                    <button onClick={(e) => { e.stopPropagation(); onNewConversation(node.level, node.id); }}
+                    <button onClick={(e) => { e.stopPropagation(); onNewConversation(node.level, node.id, node.partition_id); }}
                       className="p-1 text-[var(--color-text-muted)] hover:text-green-400 rounded" title="新建会话"><MessageSquare size={12} /></button>
                   )}
                   <button onClick={(e) => { e.stopPropagation(); startEdit(node); }}

@@ -725,9 +725,9 @@ export function useConversation(): UseConversationReturn {
   }, [loadPartitions]);
 
   // ── 新建对话 ──
-  const handleNewConversation = useCallback(async (level: string, parentId: string) => {
+  const handleNewConversation = useCallback(async (level: string, parentId: string, partitionId?: string) => {
     try {
-      let pId = selectedPartitionId;
+      let pId = partitionId || selectedPartitionId;
       if (level === "default") {
         if (!pId) {
           if (partitions.length > 0) pId = partitions[0].id;
@@ -748,6 +748,52 @@ export function useConversation(): UseConversationReturn {
         return handleNewConversation("partition", pId);
       }
 
+      if (level === "partition") {
+        const chain = await createConversationChain(parentId);
+        if (!chain) return;
+        handleSelectConversation(chain.partitionId, chain.conversationId);
+        await loadPartitions();
+        setShowPartitionSidebar(false);
+        return;
+      }
+
+      if (level === "domain") {
+        // 找或创建该领域下的专题
+        const topicData = await apiFetch<{ topics: { id: string }[] }>(`/tree/topic?parent_id=${parentId}`);
+        let topicId: string;
+        if (topicData.topics?.length > 0) {
+          topicId = topicData.topics[0].id;
+        } else {
+          const newT = await apiFetch<{ topic: { id: string }; conversation_id?: string }>("/tree/topic", {
+            method: "POST",
+            body: JSON.stringify({ parent_id: parentId, name: "默认专题", emoji: "📝" }),
+          });
+          topicId = newT.topic.id;
+        }
+        // 在该专题下创建对话
+        const convData = await apiFetch<{ conversation: { id: string } }>("/tree/conversation", {
+          method: "POST",
+          body: JSON.stringify({ parent_id: topicId, name: "" }),
+        });
+        handleSelectConversation(pId || "", convData.conversation.id);
+        await loadPartitions();
+        setShowPartitionSidebar(false);
+        return;
+      }
+
+      if (level === "topic") {
+        // 直接在该专题下创建对话
+        const convData = await apiFetch<{ conversation: { id: string } }>("/tree/conversation", {
+          method: "POST",
+          body: JSON.stringify({ parent_id: parentId, name: "" }),
+        });
+        handleSelectConversation(pId || "", convData.conversation.id);
+        await loadPartitions();
+        setShowPartitionSidebar(false);
+        return;
+      }
+
+      // fallback: 旧逻辑
       const chain = await createConversationChain(level === "partition" ? parentId : pId);
       if (!chain) return;
 
