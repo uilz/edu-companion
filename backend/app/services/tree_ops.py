@@ -1,5 +1,5 @@
 """
-树形对话操作服务 v4.0
+树形对话操作服务 v4.0（归一化版）
 层级：分区 → 领域 → 专题 → 对话 → 消息节点
 内联分支：编辑消息在当前对话内创建新版本，不另开对话线程
 """
@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import time
 from uuid import uuid4
+import logging
 
+logger = logging.getLogger(__name__)
 from app.schemas.conversation import (
     ContentBlock,
     Conversation,
@@ -22,244 +24,308 @@ from app.services.storage import storage
 
 
 class TreeOpsService:
-    """所有树形结构操作（v4: 领域/专题/对话 体系）"""
+    """所有树形结构操作（归一化版本）"""
 
-    # ── 分区 ──
+    # ═══════════════════════════════════════════════════════
+    # 层级配置常量
+    # ═══════════════════════════════════════════════════════
+    LEVELS = ["partition", "domain", "topic", "conversation"]
 
-    def create_partition(
-        self,
-        user_id: str,
-        name: str,
-        subject: str = "",
-        direction: str = "subject",
-        emoji: str = "💬",
-    ) -> Partition:
-        """创建新分区，附带虚拟根节点 + 默认领域及默认对话"""
-        data = storage.load(user_id)
+    LEVEL_CONFIG = {
+        "partition": {
+            "collection": "partitions",
+            "child_collection": "domains",
+            "child_key": "partition_id",
+            "parent_key": None,
+            "factory": lambda name, emoji, **kw: Partition(
+                name=name,
+                subject=name,
+                direction="subject",
+                emoji=emoji,
+                root_id=str(uuid4()),
+            ),
+            "auto_create_child": {
+                "level": "domain",
+                "name": "默认领域",  # 固定名称
+                "emoji": "{emoji}",  # 继承分区的 emoji
+            },
+        },
+        "domain": {
+            "collection": "domains",
+            "child_collection": "topics",
+            "child_key": "domain_id",
+            "parent_key": "partition_id",
+            "factory": lambda name, emoji, **kw: Domain(
+                partition_id=kw["parent_id"], name=name, emoji=emoji
+            ),
+            "auto_create_child": {  # 新增：创建领域时自动创建默认专题
+                "level": "topic",
+                "name": "默认专题",
+                "emoji": "📝",
+            },
+        },
+        "topic": {
+            "collection": "topics",
+            "child_collection": "conversations",
+            "child_key": "topic_id",
+            "parent_key": "domain_id",
+            "factory": lambda name, emoji, **kw: Topic(
+                domain_id=kw["parent_id"], name=name, emoji=emoji
+            ),
+            "auto_create_child": {
+                "level": "conversation",
+                "name": "新对话",  # 固定名称
+                "emoji": "",
+            },
+        },
+        "conversation": {
+            "collection": "conversations",
+            "child_collection": None,
+            "child_key": None,
+            "parent_key": "topic_id",
+            "factory": lambda name, emoji, **kw: Conversation(
+                topic_id=kw["parent_id"], name=name or "新对话"
+            ),
+        },
+    }
 
-        root_id = str(uuid4())
-        root_node = TreeNode(
-            id=root_id,
-            parent_id=root_id,
-            partition_id="",
-            conversation_id="",
-            role="assistant",
-            content_blocks=[],
-            text_summary="[virtual_root]",
-        )
+    def _get_collection(self, data: UserData, level: str):
+        return getattr(data, self.LEVEL_CONFIG[level]["collection"])
 
-        partition = Partition(
-            name=name,
-            subject=subject,
-            direction=direction,
-            emoji=emoji,
-            root_id=root_id,
-        )
-        root_node.partition_id = partition.id
+    def _delete_node(
+        self, user_id: str, node_id: str, level: str, data: UserData | None = None
+    ) -> None:
+        if data is None:
+            data = storage.load(user_id)
 
-        # 创建默认领域
-        domain = Domain(
-            partition_id=partition.id,
-            name=name,
-            emoji=emoji,
-        )
+        config = self.LEVEL_CONFIG[level]
+        collection = self._get_collection(data, level)
 
-        data.nodes[root_id] = root_node
-        data.partitions[partition.id] = partition
-        data.domains[domain.id] = domain
-        data.active_partition_id = partition.id
+        if node_id not in collection:
+            raise ValueError(f"{level.capitalize()} {node_id} not found")
+        logger.info(f"Deleting {level} {node_id}")
 
-        storage.save(user_id, data)
-        return partition
-
-    # ── 领域 ──
-
-    def create_domain(
-        self, user_id: str, partition_id: str, name: str, emoji: str = "📚",
-    ) -> Domain:
-        """在指定分区下创建新领域"""
-        data = storage.load(user_id)
-        if partition_id not in data.partitions:
-            raise ValueError(f"Partition {partition_id} not found")
-        domain = Domain(partition_id=partition_id, name=name, emoji=emoji)
-        data.domains[domain.id] = domain
-        storage.save(user_id, data)
-        return domain
-
-    def rename_domain(self, user_id: str, domain_id: str, name: str) -> Domain:
-        """重命名领域"""
-        data = storage.load(user_id)
-        domain = data.domains.get(domain_id)
-        if not domain:
-            raise ValueError(f"Domain {domain_id} not found")
-        domain.name = name
-        domain.updated_at = time.time()
-        storage.save(user_id, data)
-        return domain
-
-    def delete_domain(self, user_id: str, domain_id: str) -> None:
-        """删除领域，同时归档所有下属专题和对话"""
-        data = storage.load(user_id)
-        domain = data.domains.get(domain_id)
-        if not domain:
-            raise ValueError(f"Domain {domain_id} not found")
-        # 归档所有下属 topic 和 conversation
-        for tid, topic in list(data.topics.items()):
-            if topic.domain_id != domain_id:
-                continue
-            self._archive_topic(data, tid)
-        data.domains.pop(domain_id, None)
-        storage.save(user_id, data)
-
-    # ── 专题 ──
-
-    def create_topic(
-        self, user_id: str, domain_id: str, name: str, emoji: str = "📝",
-    ) -> Topic:
-        """在指定领域下创建新专题，同时创建首个默认对话"""
-        data = storage.load(user_id)
-        if domain_id not in data.domains:
-            raise ValueError(f"Domain {domain_id} not found")
-        topic = Topic(domain_id=domain_id, name=name, emoji=emoji)
-
-        # 为专题创建首个默认对话
-        conv = Conversation(topic_id=topic.id, name=name)
-        topic.active_conversation_id = conv.id
-
-        data.topics[topic.id] = topic
-        data.conversations[conv.id] = conv
-        storage.save(user_id, data)
-        return topic
-
-    def rename_topic(self, user_id: str, topic_id: str, name: str) -> Topic:
-        """重命名专题"""
-        data = storage.load(user_id)
-        topic = data.topics.get(topic_id)
-        if not topic:
-            raise ValueError(f"Topic {topic_id} not found")
-        topic.name = name
-        topic.updated_at = time.time()
-        storage.save(user_id, data)
-        return topic
-
-    def delete_topic(self, user_id: str, topic_id: str) -> None:
-        """删除专题，同时归档下属所有对话和消息"""
-        data = storage.load(user_id)
-        topic = data.topics.get(topic_id)
-        if not topic:
-            raise ValueError(f"Topic {topic_id} not found")
-        self._archive_topic(data, topic_id)
-        data.topics.pop(topic_id, None)
-        storage.save(user_id, data)
-
-    def _archive_topic(self, data: UserData, topic_id: str) -> None:
-        """软删专题下所有对话和消息"""
-        for cid, conv in list(data.conversations.items()):
-            if conv.topic_id != topic_id:
-                continue
+        if level == "conversation":
+            conv = collection[node_id]
+            if conv.is_active:
+                conv.is_active = False
+                topic = data.topics.get(conv.topic_id)
+                if topic and topic.active_conversation_id == node_id:
+                    topic.active_conversation_id = ""
             for nid in conv.path:
                 node = data.nodes.get(nid)
                 if node:
                     node.is_deleted = True
-            data.conversations.pop(cid, None)
+            collection.pop(node_id, None)
+        else:
+            next_level = self.LEVELS[self.LEVELS.index(level) + 1]
+            child_collection = self._get_collection(data, next_level)
+            child_key = config["child_key"]
+            child_ids = [
+                cid
+                for cid, child in list(child_collection.items())
+                if getattr(child, child_key, None) == node_id
+            ]
+            for child_id in child_ids:
+                self._delete_node(user_id, child_id, next_level, data=data)
+            collection.pop(node_id, None)
 
-    # ── 对话 ──
-
-    def create_conversation(
-        self, user_id: str, topic_id: str, name: str = "",
-    ) -> Conversation:
-        """用户在专题下手动创建新对话"""
+    def _rename_node(self, user_id: str, node_id: str, level: str, new_name: str):
         data = storage.load(user_id)
-        topic = data.topics.get(topic_id)
-        if not topic:
-            raise ValueError(f"Topic {topic_id} not found")
+        collection = self._get_collection(data, level)
+        node = collection.get(node_id)
+        if not node:
+            raise ValueError(f"{level.capitalize()} {node_id} not found")
+        node.name = new_name
+        node.updated_at = time.time()
+        storage.save(user_id, data)
+        logger.info(f"Renamed {level} {node_id} to {new_name}")
+        return node
 
-        # 停用旧活跃对话
-        old_cid = topic.active_conversation_id
-        if old_cid and old_cid in data.conversations:
-            data.conversations[old_cid].is_active = False
+    def _create_node(
+        self,
+        user_id: str,
+        level: str,
+        parent_id: str | None,
+        name: str,
+        emoji: str = "",
+        data: UserData | None = None,
+    ):
+        if data is None:
+            data = storage.load(user_id)
 
-        conv = Conversation(topic_id=topic_id, name=name or "新对话")
-        topic.active_conversation_id = conv.id
-        data.conversations[conv.id] = conv
+        config = self.LEVEL_CONFIG[level]
+
+        if config["parent_key"] is not None:
+            parent_level = self.LEVELS[self.LEVELS.index(level) - 1]
+            parent_collection = self._get_collection(data, parent_level)
+            if parent_id not in parent_collection:
+                raise ValueError(f"Parent {parent_level} {parent_id} not found")
+
+        kwargs = {}
+        if parent_id is not None:
+            kwargs["parent_id"] = parent_id
+        entity = config["factory"](name, emoji, **kwargs)
+
+        if level == "partition":
+            root_id = entity.root_id
+            root_node = TreeNode(
+                id=root_id,
+                parent_id=root_id,
+                partition_id=entity.id,
+                conversation_id="",
+                role="assistant",
+                content_blocks=[],
+                text_summary="[virtual_root]",
+            )
+            data.nodes[root_id] = root_node
+            entity.root_id = root_id
+
+        collection = self._get_collection(data, level)
+        collection[entity.id] = entity
+
+        auto_config = config.get("auto_create_child")
+        if auto_config:
+            child_level = auto_config["level"]
+            child_name = auto_config["name"].format(name=name, emoji=emoji)
+            child_emoji = auto_config["emoji"].format(name=name, emoji=emoji)
+            child = self._create_node(
+                user_id, child_level, entity.id, child_name, child_emoji, data=data
+            )
+            if level == "topic" and child_level == "conversation":
+                entity.active_conversation_id = child.id
+
+        if level == "partition":
+            data.active_partition_id = entity.id
+
+        return entity
+
+    # ═══════════════════════════════════════════════════════
+    # 公开接口
+    # ═══════════════════════════════════════════════════════
+
+    def create_partition(
+        self, user_id, name, subject="", direction="subject", emoji="💬"
+    ):
+        data = storage.load(user_id)
+        partition = self._create_node(
+            user_id, "partition", None, name, emoji, data=data
+        )
+        storage.save(user_id, data)
+        return partition
+
+    def delete_partition(self, user_id, partition_id):
+        data = storage.load(user_id)
+        self._delete_node(user_id, partition_id, "partition", data=data)
+        storage.save(user_id, data)
+
+    def rename_partition(self, user_id, partition_id, name):
+        return self._rename_node(user_id, partition_id, "partition", name)
+
+    def create_domain(self, user_id, partition_id, name, emoji="📚"):
+        data = storage.load(user_id)
+        domain = self._create_node(
+            user_id, "domain", partition_id, name, emoji, data=data
+        )
+        storage.save(user_id, data)
+        return domain
+
+    def delete_domain(self, user_id, domain_id):
+        data = storage.load(user_id)
+        self._delete_node(user_id, domain_id, "domain", data=data)
+        storage.save(user_id, data)
+
+    def rename_domain(self, user_id, domain_id, name):
+        return self._rename_node(user_id, domain_id, "domain", name)
+
+    def create_topic(self, user_id, domain_id, name, emoji="📝"):
+        data = storage.load(user_id)
+        topic = self._create_node(user_id, "topic", domain_id, name, emoji, data=data)
+        storage.save(user_id, data)
+        return topic
+
+    def delete_topic(self, user_id, topic_id):
+        data = storage.load(user_id)
+        self._delete_node(user_id, topic_id, "topic", data=data)
+        storage.save(user_id, data)
+
+    def rename_topic(self, user_id, topic_id, name):
+        return self._rename_node(user_id, topic_id, "topic", name)
+
+    def create_conversation(self, user_id, topic_id, name=""):
+        data = storage.load(user_id)
+        conv = self._create_node(user_id, "conversation", topic_id, name, data=data)
         storage.save(user_id, data)
         return conv
 
+    def delete_conversation(self, user_id, conv_id):
+        data = storage.load(user_id)
+        self._delete_node(user_id, conv_id, "conversation", data=data)
+        storage.save(user_id, data)
+
+    def rename_conversation(self, user_id, conv_id, name):
+        return self._rename_node(user_id, conv_id, "conversation", name)
+
+    def get_partition_context(self, user_id: str, partition_id: str) -> dict:
+        data = storage.load(user_id)
+        partition = data.partitions.get(partition_id)
+        if not partition:
+            raise ValueError(f"Partition {partition_id} not found")
+        messages: list[TreeNode] = []
+        conv = None
+        for topic in data.topics.values():
+            domain = data.domains.get(topic.domain_id)
+            if domain and domain.partition_id == partition_id:
+                cid = topic.active_conversation_id
+                if cid:
+                    conv = data.conversations.get(cid)
+                break
+        if conv:
+            for nid in conv.path:
+                node = data.nodes.get(nid)
+                if node and not node.is_deleted:
+                    messages.append(node)
+        return {
+            "partition": partition,
+            "conversation": conv,
+            "messages": messages,
+            "context_summary": partition.context_summary,
+        }
+
     def switch_conversation(
-        self, user_id: str, topic_id: str, conversation_id: str,
+        self, user_id: str, topic_id: str, conversation_id: str
     ) -> Conversation:
-        """切换专题的活跃对话"""
         data = storage.load(user_id)
         topic = data.topics.get(topic_id)
         if not topic:
             raise ValueError(f"Topic {topic_id} not found")
-
         for c in data.conversations.values():
             if c.topic_id == topic_id:
                 c.is_active = False
-
         conv = data.conversations.get(conversation_id)
         if not conv or conv.topic_id != topic_id:
-            raise ValueError(f"Conversation {conversation_id} not found in topic {topic_id}")
-
+            raise ValueError(
+                f"Conversation {conversation_id} not found in topic {topic_id}"
+            )
         conv.is_active = True
         topic.active_conversation_id = conversation_id
         storage.save(user_id, data)
         return conv
 
-    def rename_conversation(self, user_id: str, conv_id: str, name: str) -> Conversation:
-        """重命名对话"""
-        data = storage.load(user_id)
-        conv = data.conversations.get(conv_id)
-        if not conv:
-            raise ValueError(f"Conversation {conv_id} not found")
-        conv.name = name
-        storage.save(user_id, data)
-        return conv
-
-    def delete_conversation(self, user_id: str, conv_id: str) -> None:
-        """删除对话（软删消息，移除对话记录）。
-        若为活跃对话则先取消活跃状态。"""
-        data = storage.load(user_id)
-        conv = data.conversations.get(conv_id)
-        if not conv:
-            raise ValueError(f"Conversation {conv_id} not found")
-
-        # 如果删除的是活跃对话，先取消活跃状态
-        if conv.is_active:
-            conv.is_active = False
-            # 清除关联专题的 active_conversation_id
-            topic = data.topics.get(conv.topic_id)
-            if topic and topic.active_conversation_id == conv_id:
-                topic.active_conversation_id = ""
-
-        for nid in conv.path:
-            node = data.nodes.get(nid)
-            if node:
-                node.is_deleted = True
-        data.conversations.pop(conv_id, None)
-        storage.save(user_id, data)
-
-    # ── 消息 ──
-
     def add_message(
         self,
-        user_id: str,
-        partition_id: str,
-        role: str,
-        content_blocks: list[ContentBlock],
-        text_summary: str = "",
-        conversation_id: str = "",
+        user_id,
+        partition_id,
+        role,
+        content_blocks,
+        text_summary="",
+        conversation_id="",
     ) -> TreeNode:
-        """向活跃对话添加消息"""
         data = storage.load(user_id)
         partition = data.partitions.get(partition_id)
         if not partition:
             raise ValueError(f"Partition {partition_id} not found")
-
-        # 找到活跃 topic → conversation
         if not conversation_id:
-            # 从 partition 的 domains 中找到活跃的 topic 和 conversation
             conv = None
             for topic in data.topics.values():
                 domain = data.domains.get(topic.domain_id)
@@ -274,7 +340,6 @@ class TreeOpsService:
             conv = data.conversations.get(conversation_id)
             if not conv:
                 raise ValueError(f"Conversation {conversation_id} not found")
-
         node = TreeNode(
             parent_id=conv.path[-1] if conv.path else partition.root_id,
             partition_id=partition_id,
@@ -283,42 +348,26 @@ class TreeOpsService:
             content_blocks=content_blocks,
             text_summary=text_summary,
         )
-
         parent = data.nodes.get(node.parent_id)
         if parent:
             parent.children_ids.append(node.id)
-
         conv.path.append(node.id)
         conv.last_message_at = time.time()
         partition.message_count += 1
         partition.updated_at = time.time()
         partition.last_active_at = time.time()
-
         data.nodes[node.id] = node
         storage.save(user_id, data)
         return node
 
     def modify_message(
-        self,
-        user_id: str,
-        message_id: str,
-        new_content_blocks: list[ContentBlock],
-        new_text_summary: str = "",
+        self, user_id, message_id, new_content_blocks, new_text_summary=""
     ) -> TreeNode:
-        """
-        编辑消息 — v4: 不创建新对话，在当前对话内创建新版本。
-        新版本加入父节点的 children_ids，原消息标记 has_modified_version。
-        前端用 < > 按钮在同级版本间切换。
-        """
         data = storage.load(user_id)
         node = data.nodes.get(message_id)
         if not node:
             raise ValueError(f"Message {message_id} not found")
-
-        # 标记原消息有修改版本
         node.has_modified_version = True
-
-        # 在同父节点下创建新版本
         new_node = TreeNode(
             parent_id=node.parent_id,
             partition_id=node.partition_id,
@@ -327,32 +376,32 @@ class TreeOpsService:
             content_blocks=new_content_blocks,
             text_summary=new_text_summary,
         )
-
-        # 添加到父节点的 children_ids（同级版本列表）
         parent = data.nodes.get(node.parent_id)
         if parent and new_node.id not in parent.children_ids:
             parent.children_ids.append(new_node.id)
-
         data.nodes[new_node.id] = new_node
-
-        # 找到当前在 conv.path 中的版本（首编=原消息，多次编=上一版本）
         conv = data.conversations.get(node.conversation_id)
-        current_version = node  # 默认：原消息
+        current_version = node
         replace_idx = None
         if conv:
             if message_id in conv.path:
                 replace_idx = conv.path.index(message_id)
             else:
-                # 多次编辑：找路径中同父+同角色的兄弟版本
                 for i, nid in enumerate(conv.path):
                     sibling = data.nodes.get(nid)
-                    if sibling and sibling.parent_id == node.parent_id and sibling.role == node.role:
+                    if (
+                        sibling
+                        and sibling.parent_id == node.parent_id
+                        and sibling.role == node.role
+                    ):
                         current_version = sibling
                         replace_idx = i
                         break
-
-        # 迁移「当前路径中的版本」（可能是原消息也可能是上一版本）的子节点到新版本
-        if current_version and current_version.id != new_node.id and current_version.children_ids:
+        if (
+            current_version
+            and current_version.id != new_node.id
+            and current_version.children_ids
+        ):
             new_node.children_ids = list(current_version.children_ids)
             for child_id in current_version.children_ids:
                 child = data.nodes.get(child_id)
@@ -360,23 +409,18 @@ class TreeOpsService:
                     child.parent_id = new_node.id
             current_version.children_ids = []
             current_version.has_modified_version = True
-
-        # 用新版本替换 conv.path 中的位置
         if replace_idx is not None:
+            assert conv is not None
             conv.path[replace_idx] = new_node.id
-
-        # 标记摘要需刷新（消息内容已变）
         if conv:
             conv.summary_dirty = True
-
         storage.save(user_id, data)
         return new_node
 
-    def delete_message(self, user_id: str, message_id: str) -> None:
-        """软删除消息及其子树"""
+    def delete_message(self, user_id, message_id) -> None:
         data = storage.load(user_id)
 
-        def delete_subtree(nid: str) -> None:
+        def delete_subtree(nid):
             node = data.nodes.get(nid)
             if not node:
                 return
@@ -394,96 +438,25 @@ class TreeOpsService:
                 delete_subtree(child_id)
 
         delete_subtree(message_id)
-
         node = data.nodes.get(message_id)
         if node:
             conv = data.conversations.get(node.conversation_id)
             if conv:
                 conv.summary_dirty = True
                 conv.path = [
-                    nid for nid in conv.path
+                    nid
+                    for nid in conv.path
                     if not data.nodes.get(
                         nid,
-                        TreeNode(parent_id="", conversation_id="", partition_id="", role="user"),
+                        TreeNode(
+                            parent_id="",
+                            conversation_id="",
+                            partition_id="",
+                            role="user",
+                        ),
                     ).is_deleted
                 ]
-
         storage.save(user_id, data)
 
-    # ── 分区/领域/专题编辑与删除 ──
 
-    def rename_partition(self, user_id: str, partition_id: str, name: str) -> Partition:
-        """重命名分区"""
-        data = storage.load(user_id)
-        partition = data.partitions.get(partition_id)
-        if not partition:
-            raise ValueError(f"Partition {partition_id} not found")
-        partition.name = name
-        partition.updated_at = time.time()
-        storage.save(user_id, data)
-        return partition
-
-    def delete_partition(self, user_id: str, partition_id: str) -> None:
-        """删除分区及其所有下属领域、专题、对话和消息"""
-        data = storage.load(user_id)
-        if partition_id not in data.partitions:
-            raise ValueError(f"Partition {partition_id} not found")
-
-        # 归档所有下属领域/专题/对话
-        for did, domain in list(data.domains.items()):
-            if domain.partition_id != partition_id:
-                continue
-            for tid, topic in list(data.topics.items()):
-                if topic.domain_id != did:
-                    continue
-                self._archive_topic(data, tid)
-                data.topics.pop(tid, None)
-            data.domains.pop(did, None)
-
-        # 清理该分区下的所有对话（分支模型）
-        for cid, conv in list(data.conversations.items()):
-            if conv.partition_id == partition_id:
-                # Soft-delete nodes in path
-                for nid in conv.path:
-                    node = data.nodes.get(nid)
-                    if node:
-                        node.is_deleted = True
-                data.conversations.pop(cid, None)
-
-        data.partitions.pop(partition_id, None)
-        storage.save(user_id, data)
-
-    def get_partition_context(self, user_id: str, partition_id: str) -> dict:
-        """获取分区完整上下文"""
-        data = storage.load(user_id)
-        partition = data.partitions.get(partition_id)
-        if not partition:
-            raise ValueError(f"Partition {partition_id} not found")
-
-        # 找到活跃对话的消息
-        messages: list[TreeNode] = []
-        conv = None
-        for topic in data.topics.values():
-            domain = data.domains.get(topic.domain_id)
-            if domain and domain.partition_id == partition_id:
-                cid = topic.active_conversation_id
-                if cid:
-                    conv = data.conversations.get(cid)
-                break
-
-        if conv:
-            for nid in conv.path:
-                node = data.nodes.get(nid)
-                if node and not node.is_deleted:
-                    messages.append(node)
-
-        return {
-            "partition": partition,
-            "conversation": conv,
-            "messages": messages,
-            "context_summary": partition.context_summary,
-        }
-
-
-# 全局单例
 tree_ops = TreeOpsService()

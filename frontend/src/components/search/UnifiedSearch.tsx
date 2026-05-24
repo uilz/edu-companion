@@ -197,9 +197,9 @@ export default function UnifiedSearch() {
               {renderCategory(results.knowledge, "knowledge")}
               {renderCategory(results.errors, "error")}
             </>
-          {/* 加载中状态 */}
           ) : loading ? (
             <div className="px-4 py-6 text-center">
+              {/* 加载中状态 */}
               <Loader2 size={14} className="animate-spin mx-auto text-[var(--color-text-muted)]" />
             </div>
           ) : null}

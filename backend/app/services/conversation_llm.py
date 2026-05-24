@@ -488,6 +488,7 @@ async def _analyze_conversation_evidence(
     partition_id: str,
     user_text: str,
     assistant_reply: str,
+    conversation_id: str = "",
 ):
     """分析一轮对话，提取知识证据写入 SharedKnowledgeState"""
     try:
@@ -496,6 +497,7 @@ async def _analyze_conversation_evidence(
 
         # 从 partition 推断涉及的技能
         data = _st.load(user_id)
+        conversation = data.conversations.get(conversation_id) if conversation_id else _find_active_conversation(data, partition_id)
         partition = data.partitions.get(partition_id)
         skill_ids = []
         if partition and partition.subject:
@@ -506,7 +508,7 @@ async def _analyze_conversation_evidence(
                 user_text=user_text,
                 assistant_reply=assistant_reply,
                 skill_ids=skill_ids,
-                conversation_id=conversation.id if conversation else "",
+                conversation_id=conversation.id if conversation else "", # type: ignore
             )
     except Exception as e:
         logger.debug(f"知识证据分析跳过: {e}")
@@ -552,6 +554,7 @@ async def send_and_reply(
     partition_id: str,
     user_text: str,
     content_blocks: list[ContentBlock] | None = None,
+    conversation_id: str = "",
 ) -> dict:
     """
     完整流程：存用户消息 → 生成回复（含工具） → 存助手消息。
@@ -560,7 +563,7 @@ async def send_and_reply(
     # 1. 存用户消息
     blocks = content_blocks or [TextBlock(text=user_text)]
     user_node = tree_ops.add_message(
-        user_id, partition_id, "user", blocks, user_text
+        user_id, partition_id, "user", blocks, user_text, conversation_id=conversation_id,
     )
 
     # P0: 异步写入元历史 + 触发分支自动命名
@@ -588,11 +591,12 @@ async def send_and_reply(
     # 3. 存助手消息
     reply_blocks = [TextBlock(text=reply_text)] if reply_text else [TextBlock(text="[工具响应]")]
     assistant_node = tree_ops.add_message(
-        user_id, partition_id, "assistant", reply_blocks, reply_text
+        user_id, partition_id, "assistant", reply_blocks, reply_text, conversation_id=conversation_id,
     )
 
     # 回填 message_id 到 ResponseBlock（之前存储时 message_id 尚未知）
     data = storage.load(user_id)
+    
     for block in response_blocks:
         if block.id in data.response_blocks:
             data.response_blocks[block.id].message_id = assistant_node.id
@@ -605,6 +609,8 @@ async def send_and_reply(
             skill_ids = _resolve_skill_ids(source_labels, partition_id, user_id)
             if skill_ids:
                 data = storage.load(user_id)
+                # 获取对话对象（优先使用传入的 conversation_id，否则查找活跃对话）
+                conversation = data.conversations.get(conversation_id) if conversation_id else _find_active_conversation(data, partition_id)
                 if assistant_node.id in data.nodes:
                     data.nodes[assistant_node.id].discussed_skill_ids = skill_ids
                     storage.save(user_id, data)
@@ -617,7 +623,7 @@ async def send_and_reply(
                         EventType.SKILL_DISCUSSED,
                         user_id=user_id,
                         partition_id=partition_id,
-                        conversation_id=conversation.id if conversation else None,
+                        conversation_id=conversation.id if conversation else None, # type: ignore
                         skill_ids=[sid],
                     )
                 # Phase 6: 对话 → CognitiveNode 对话上下文联动
@@ -641,7 +647,8 @@ async def send_and_reply(
         loop = _asyncio.get_event_loop()
         if loop.is_running():
             loop.create_task(_analyze_conversation_evidence(
-                user_id, partition_id, user_text, reply_text
+                user_id, partition_id, user_text, reply_text,
+                conversation_id=conversation_id    # ← 已修复：传递 conversation_id
             ))
     except Exception:
         logger.debug("异步图谱更新事件循环获取失败", exc_info=True)
@@ -808,7 +815,7 @@ async def send_and_reply_stream(
     # 4. 存助手消息
     reply_blocks = [TextBlock(text=full_reply)]
     assistant_node = tree_ops.add_message(
-        user_id, partition_id, "assistant", reply_blocks, full_reply
+        user_id, partition_id, "assistant", reply_blocks, full_reply, conversation_id=conversation_id,
     )
 
     # P0: async meta history for assistant

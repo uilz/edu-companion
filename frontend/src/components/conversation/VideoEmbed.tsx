@@ -33,7 +33,7 @@ interface VideoInfo {
  */
 function parseVideoUrl(url: string): VideoInfo | null {
   // B站: bilibili.com/video/BVxxx
-  const biliMatch = url.match(/bilibili\\.com\\/video\\/(BV[a-zA-Z0-9]+)/);
+  const biliMatch = url.match(/bilibili\.com\/video\/(BV[a-zA-Z0-9]+)/);
   if (biliMatch) {
     return {
       platform: "bilibili",
@@ -43,7 +43,7 @@ function parseVideoUrl(url: string): VideoInfo | null {
 
   // YouTube: youtube.com/watch?v=xxx or youtu.be/xxx
   const ytMatch = url.match(
-    /(?:youtube\\.com\\/watch\\?v=|youtu\\.be\\/|youtube\\.com\\/embed\\/)([a-zA-Z0-9_-]+)/
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]+)/
   );
   if (ytMatch) {
     return {
@@ -53,7 +53,7 @@ function parseVideoUrl(url: string): VideoInfo | null {
   }
 
   // Direct video file
-  if (/\\.(mp4|webm|mov|flv)(\\?|$)/i.test(url)) {
+  if (/\.(mp4|webm|mov|flv)(\?|$)/i.test(url)) {
     return { platform: "direct", embedUrl: url };
   }
 

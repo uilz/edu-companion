@@ -173,7 +173,6 @@ export default function ConversationPanel(props: UseConversationReturn) {
     handleVersionSwitch,
     handleCreatePartition,
     handleRenamePartition,
-    handleDeletePartition,
     handleSwitchConfirm,
     handleSwitchDismiss,
     setShowPartitionSidebar,
@@ -256,7 +255,6 @@ export default function ConversationPanel(props: UseConversationReturn) {
                 setShowNewPartition(true);
               }}
               onRenamePartition={handleRenamePartition}
-              onDeletePartition={handleDeletePartition}
               loading={loadingPartitions}
               onNewConversation={handleNewConversation}
               onTreeChanged={loadPartitions}
@@ -341,7 +339,6 @@ export default function ConversationPanel(props: UseConversationReturn) {
                 onSelectConversation={handleSelectConversation}
                 onCreatePartition={() => setShowNewPartition(true)}
                 onRenamePartition={handleRenamePartition}
-                onDeletePartition={handleDeletePartition}
                 loading={loadingPartitions}
                 compact
                 onNewConversation={handleNewConversation}
