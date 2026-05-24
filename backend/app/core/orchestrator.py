@@ -250,7 +250,16 @@ class Orchestrator:
                 "content": f"学生的知识状态概览: {state_summary}",
             })
 
-        # 5. 调用Agent处理
+        # 5. 检查黑板是否有秘书提案
+        if session_id:
+            proposals_context = await self._read_secretary_proposals(session_id)
+            if proposals_context:
+                context_messages.append({
+                    "role": "system",
+                    "content": proposals_context,
+                })
+
+        # 6. 调用Agent处理
         reply = await agent.handle(user_message, context_messages, metadata)
 
         # 6. 更新会话
@@ -336,7 +345,16 @@ class Orchestrator:
                 "content": f"学生的知识状态概览: {state_summary}",
             })
 
-        # 5. 流式处理
+        # 5. 检查黑板是否有秘书提案
+        if session_id:
+            proposals_context = await self._read_secretary_proposals(session_id)
+            if proposals_context:
+                context_messages.append({
+                    "role": "system",
+                    "content": proposals_context,
+                })
+
+        # 6. 流式处理
         full_reply = ""
         async for chunk in agent.handle_stream(user_message, context_messages, metadata):
             full_reply += chunk
@@ -380,6 +398,30 @@ class Orchestrator:
             }
             for agent in self.agents.values()
         ]
+
+    async def _read_secretary_proposals(self, session_id: str) -> str | None:
+        """从黑板读取秘书提案，格式化为上下文文本"""
+        try:
+            from app.core.blackboard import blackboard
+            data = await blackboard.get(f"bb:secretary:{session_id}")
+            if not data or data.get("status") != "ready":
+                return None
+            proposals = data.get("proposals", [])
+            if not proposals:
+                return None
+
+            lines = ["📋 秘书建议（用户可自主选择，以协商口吻呈现）:"]
+            for p in proposals[:3]:
+                lines.append(f"- {p.get('emoji', '')} {p.get('title', '')}: {p.get('description', '')}")
+            lines.append("请以上述建议为参考，与用户协商下一步行动，让用户自主选择。")
+
+            report = data.get("report_summary")
+            if report:
+                lines.append(f"💡 诊断摘要: {report.get('summary', '')}")
+
+            return "\n".join(lines)
+        except Exception:
+            return None
 
 
 # ── 全局编排器实例 ──

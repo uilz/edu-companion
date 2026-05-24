@@ -6,6 +6,7 @@ import MathContent from "@/components/ui/MathContent";
 import InlinePracticeBlock from "./InlinePracticeBlock";
 import MediaSearchBlock from "./MediaSearchBlock";
 import VideoEmbed from "./VideoEmbed";
+import SecretarySuggestionsBlock from "./SecretarySuggestionsBlock";
 import { renderContent } from "@/lib/math";
 import { useRenderedContent } from "@/lib/useRenderedContent";
 import type { ResponseBlock } from "@/types";
@@ -54,6 +55,8 @@ export default function ResponseBlockRenderer({ block }: ResponseBlockRendererPr
       return <MindMapBlock content={content} />;
     case "document":
       return <DocumentBlock content={content} />;
+    case "secretary_suggestions":
+      return <SecretarySuggestionsBlock content={content} />;
     default:
       return null;
   }

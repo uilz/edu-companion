@@ -322,5 +322,5 @@ docs/
 ├── phase4/                     ← 对话系统设计
 ├── phase5/                     ← 认知事件设计
 ├── phase6/                     ← CognitiveNode 设计
-└── phase7/ (待建)              ← LearningTutor 设计
+└── phase7/                     ← 秘书系统 (Secretary) 设计
 ```

@@ -34,6 +34,7 @@ from app.api.learning_events import router as learning_events_router
 from app.api.multimodal import router as multimodal_router
 from app.api.achievements import router as achievements_router
 from app.api.search import router as search_router
+from app.api.secretary import router as secretary_router
 from app.config import settings
 from app.core.learner_model import learner_engine
 
@@ -173,6 +174,7 @@ app.include_router(multimodal_router)
 app.include_router(achievements_router)
 # P1 全站搜索
 app.include_router(search_router)
+app.include_router(secretary_router)
 
 
 # ── 健康检查 ──
