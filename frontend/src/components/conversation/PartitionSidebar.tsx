@@ -352,9 +352,14 @@ export default function PartitionSidebar({
     let cancelled = false;
 
     (async () => {
-      // 等待目标分区出现在根节点
-      const partition = childMapRef.current.get(ROOT_KEY)?.find(p => p.id === selectedPartitionId);
-      if (!partition) return; // 分区尚未加载，静默等待下次 childMap 更新
+      // 重试等待分区加载（最多 3 秒，200ms 间隔）
+      let partition: FlatNode | undefined;
+      for (let i = 0; i < 15; i++) {
+        partition = childMapRef.current.get(ROOT_KEY)?.find(p => p.id === selectedPartitionId);
+        if (partition || cancelled) break;
+        await new Promise(r => setTimeout(r, 200));
+      }
+      if (!partition || cancelled) return;
       if (prevAutoExpandRef.current === convId) return;
       prevAutoExpandRef.current = convId;
 
