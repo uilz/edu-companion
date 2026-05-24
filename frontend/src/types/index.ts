@@ -160,7 +160,8 @@ export type WSIncomingMessage =
   | { type: "block_update"; block: ResponseBlock }                                                  // 响应块更新
   | { type: "job_update"; job: BackgroundJob }                                                      // 后台任务状态更新
   | { type: "context_switch"; partition_id: string; conversation_id: string; domain_name: string; topic_name: string; switch_detail: Record<string, string> }  // 上下文切换
-  | { type: "pong" };                                                                               // pong 心跳回复
+  | { type: "pong" }                                                                                 // pong 心跳回复
+  | { type: "secretary_update"; content: { reason: string[]; proposal_count: number } };  // 秘书系统更新通知
 
 // ── Legacy aliases (backward compat) ──
 /** @deprecated 请使用 Conversation 替代 */

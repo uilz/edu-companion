@@ -113,6 +113,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Phase 5: 注入 WebSocket 管理器到 ConversationService（block_update 推送）
     container.conversation_service.set_ws_manager(ws_manager)
     logger.info("📡 ConversationService 已注入 WebSocket Manager (Phase 5)")
+
+    # Phase 7.3: 启动秘书主动检查器
+    try:
+        from app.domain.secretary.engines.active_checker import active_checker
+        active_checker.start()
+        logger.info("🔍 秘书主动检查器已启动 (Phase 7.3)")
+    except Exception as e:
+        logger.warning("秘书主动检查器启动失败: %s", e)
+
     cleaned = learner_engine.clean_expired_sessions()
     if cleaned > 0:
         logger.info("🧹 清理了 %d 个过期会话", cleaned)
@@ -120,6 +129,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("✅ 应用启动完成")
 
     yield
+
+    # Phase 7.3: 停止秘书主动检查器
+    try:
+        from app.domain.secretary.engines.active_checker import active_checker
+        await active_checker.stop()
+        logger.info("🔍 秘书主动检查器已停止")
+    except Exception as e:
+        pass
 
     logger.info("👋 应用关闭")
 
