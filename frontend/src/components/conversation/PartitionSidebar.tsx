@@ -672,7 +672,7 @@ export default function PartitionSidebar({
         <ConfirmDialog onConfirm={confirmDelete} onCancel={() => setDeleteTarget(null)}>
           <p>确定删除{deleteTarget.level === "partition" ? "分区" : deleteTarget.level === "domain" ? "领域" : deleteTarget.level === "topic" ? "专题" : "对话"}「{deleteTarget.name}」？此操作不可撤销。</p>
           {deleteTarget.id === activeConversationId && <p className="mt-2 text-yellow-400">⚠️ 这是当前对话，删除后将回到空状态。</p>}
-          {deleteTarget.id === "__uncategorized__" && <p className="mt-2 text-blue-400">💡 该分区会在下次发送未分类消息时自动重新创建。</p>}
+          {deleteTarget.id === "__uncategorized__" && <p className="mt-2 text-blue-400">💡 该分区已废弃，新消息将自动创建命名分区。</p>}
         </ConfirmDialog>
       )}
     </div>
