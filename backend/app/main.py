@@ -114,11 +114,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     container.conversation_service.set_ws_manager(ws_manager)
     logger.info("📡 ConversationService 已注入 WebSocket Manager (Phase 5)")
 
-    # Phase 7.3: 启动秘书主动检查器
+    # Phase 7.4: 发现内置模块 + 启动秘书主动检查器
+    try:
+        from app.domain.secretary.engines.module_registry import module_registry
+        count = module_registry.discover_builtin()
+        logger.info("🔌 秘书模块注册: %d 个内置模块 (Phase 7.4)", count)
+    except Exception as e:
+        logger.warning("秘书模块注册失败: %s", e)
+
     try:
         from app.domain.secretary.engines.active_checker import active_checker
         active_checker.start()
-        logger.info("🔍 秘书主动检查器已启动 (Phase 7.3)")
+        logger.info("🔍 秘书主动检查器已启动 (Phase 7.4)")
     except Exception as e:
         logger.warning("秘书主动检查器启动失败: %s", e)
 

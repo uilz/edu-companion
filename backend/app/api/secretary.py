@@ -241,7 +241,147 @@ async def push_proposals_to_blackboard(
     }
 
 
-# ── 辅助 ──
+# ── 模块管理 ──
+
+
+@router.get("/modules")
+async def list_modules(
+    user_id: str = "default_user",
+) -> list[dict]:
+    """列出所有秘书模块及其状态"""
+    from app.domain.secretary.engines.module_registry import module_registry
+    # 确保模块已加载
+    if not module_registry._modules:
+        module_registry.discover_builtin()
+    modules = module_registry.list_modules()
+    # 恢复用户偏好覆盖
+    try:
+        prefs = _load_prefs(user_id)
+        if prefs.get("enabled_extensions"):
+            module_registry.apply_prefs(prefs["enabled_extensions"])
+            modules = module_registry.list_modules()
+    except Exception:
+        pass
+    return modules
+
+
+@router.post("/modules/toggle")
+async def toggle_module(
+    name: str,
+    enabled: bool,
+    user_id: str = "default_user",
+) -> dict:
+    """启用/禁用指定模块"""
+    from app.domain.secretary.engines.module_registry import module_registry
+    if not module_registry._modules:
+        module_registry.discover_builtin()
+
+    if enabled:
+        module_registry.enable(name)
+    else:
+        module_registry.disable(name)
+
+    # 持久化偏好
+    prefs = _load_prefs(user_id)
+    prefs["enabled_extensions"] = module_registry.to_prefs_list()
+    _save_prefs(user_id, prefs)
+
+    return {
+        "status": "ok",
+        "module": name,
+        "enabled": enabled,
+    }
+
+
+# ── 冷启动引导 ──
+
+
+@router.get("/onboarding")
+async def get_onboarding_status(
+    user_id: str = "default_user",
+) -> dict:
+    """获取冷启动状态与引导信息"""
+    try:
+        from app.cognitive.storage import list_all_nodes
+        nodes = list_all_nodes(user_id)
+        total_nodes = len(nodes) if nodes else 0
+    except Exception:
+        total_nodes = 0
+
+    is_cold_start = total_nodes < 5
+    has_suggestions = total_nodes > 0
+
+    guide_steps = [
+        {
+            "step": 1,
+            "title": "开始学习",
+            "description": "打开任意分区开始你的第一次学习对话",
+            "link": "/",
+            "done": has_suggestions,
+        },
+        {
+            "step": 2,
+            "title": "完成练习",
+            "description": "做几道练习题，秘书系统会根据错题生成个性化建议",
+            "link": "/practice",
+            "done": total_nodes > 3,
+        },
+        {
+            "step": 3,
+            "title": "查看秘书建议",
+            "description": "回到秘书页面，查看系统为你生成的个性化学习建议",
+            "link": "/secretary",
+            "done": False,
+        },
+        {
+            "step": 4,
+            "title": "个性化配置",
+            "description": "关闭不需要的模块，设置安静时段，定制秘书行为",
+            "link": "/secretary/settings",
+            "done": False,
+        },
+    ]
+
+    return {
+        "is_cold_start": is_cold_start,
+        "total_nodes": total_nodes,
+        "guide_steps": guide_steps,
+        "current_step": 1 if total_nodes == 0 else 2 if total_nodes < 3 else 3 if total_nodes < 5 else 4,
+        "message": "你好！我是你的学习秘书，欢迎开始学习之旅 🎉" if is_cold_start else "感谢继续使用！你的学习数据正在丰富中 📈",
+    }
+
+
+# ── 辅助函数 ──
+
+
+def _load_prefs(user_id: str) -> dict:
+    """加载用户偏好（简单 JSON 文件存储）"""
+    import json, os
+    prefs_dir = os.path.join(os.path.dirname(__file__), "..", "data", "secretary_prefs")
+    os.makedirs(prefs_dir, exist_ok=True)
+    path = os.path.join(prefs_dir, f"{user_id}.json")
+    if os.path.exists(path):
+        with open(path) as f:
+            return json.load(f)
+    return {
+        "enabled_extensions": ["review_reminder", "fatigue_manager", "daily_brief"],
+        "quiet_hours_start": "22:00",
+        "quiet_hours_end": "08:00",
+        "max_proactive_per_day": 5,
+    }
+
+
+def _save_prefs(user_id: str, prefs: dict) -> None:
+    """保存用户偏好"""
+    import json, os
+    prefs_dir = os.path.join(os.path.dirname(__file__), "..", "data", "secretary_prefs")
+    os.makedirs(prefs_dir, exist_ok=True)
+    path = os.path.join(prefs_dir, f"{user_id}.json")
+    with open(path, "w") as f:
+        json.dump(prefs, f, ensure_ascii=False, indent=2)
+
+
+# ── 辅助 (原CRUD辅助函数保留) ──
 
 async def _ensure_db_schema(store: ProposalStore):
     """确保数据库表存在"""

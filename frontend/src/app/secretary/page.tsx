@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Check, X, Clock, AlertTriangle, TrendingUp } from "lucide-react";
+import { Bell, Check, X, Clock, AlertTriangle, TrendingUp, Settings } from "lucide-react";
 import { useState, useEffect } from "react";
 
 interface ProposalItem {
@@ -125,6 +125,13 @@ export default function SecretaryPage() {
           {generating ? "生成中…" : "生成建议"}
           <Bell size={12} />
         </button>
+        <a
+          href="/secretary/settings"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[var(--color-surface)] text-[var(--color-text-muted)] rounded-md border border-[var(--color-border)] hover:text-[var(--color-text)] transition-colors"
+        >
+          <Settings size={12} />
+          设置
+        </a>
       </div>
 
       {/* ── 状态卡片 ── */}
