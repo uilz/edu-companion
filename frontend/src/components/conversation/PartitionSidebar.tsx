@@ -385,7 +385,7 @@ export default function PartitionSidebar({
     })();
 
     return () => { cancelled = true; controller.abort(); };
-  }, [selectedPartitionId, activeConversationId, initialConversationId, childMap, loadChildren, doExpand]);
+  }, [selectedPartitionId, activeConversationId, initialConversationId]);
 
   // ── 创建对话框 ──
   const [createDialog, setCreateDialog] = useState<{
