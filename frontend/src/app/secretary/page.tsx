@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Check, X, Clock, AlertTriangle, TrendingUp, Settings } from "lucide-react";
+import { Bell, Check, X, Clock, AlertTriangle, TrendingUp, Settings, MessageSquare, ExternalLink } from "lucide-react";
 import { useState, useEffect } from "react";
 
 interface ProposalItem {
@@ -28,6 +28,7 @@ export default function SecretaryPage() {
   const [snapshot, setSnapshot] = useState<SnapshotData | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [actionFeedback, setActionFeedback] = useState<{ id: string; message: string; success: boolean } | null>(null);
 
   useEffect(() => {
     loadData();
@@ -51,10 +52,16 @@ export default function SecretaryPage() {
   };
 
   const handleAccept = async (id: string) => {
-    await fetch(`/api/secretary/proposals/${id}/accept?user_id=default_user`, {
+    const res = await fetch(`/api/secretary/proposals/${id}/accept?user_id=default_user`, {
       method: "POST",
     });
-    setProposals((prev) => prev.filter((p) => p.id !== id));
+    if (res.ok) {
+      const data = await res.json();
+      const msg = data.action_result?.message || "已采纳！";
+      setActionFeedback({ id, message: msg, success: true });
+      setTimeout(() => setActionFeedback(null), 4000);
+      setProposals((prev) => prev.filter((p) => p.id !== id));
+    }
   };
 
   const handleDismiss = async (id: string) => {
@@ -163,6 +170,14 @@ export default function SecretaryPage() {
               <p className="text-sm text-yellow-400">📊 学习数据不足，建议先进行一些练习，秘书系统才能提供个性化建议</p>
             </div>
           )}
+
+          {/* ── 动作反馈 ── */}
+          {actionFeedback && actionFeedback.success && (
+            <div className="p-3 rounded-lg border border-green-500/20 bg-green-500/5 flex items-center gap-2">
+              <Check size={14} className="text-green-400 flex-shrink-0" />
+              <span className="text-sm text-green-400">{actionFeedback.message}</span>
+            </div>
+          )}
         </>
       )}
 
@@ -211,6 +226,12 @@ export default function SecretaryPage() {
                   >
                     <X size={10} />忽略
                   </button>
+                  <a
+                    href={`/learn?negotiate=${encodeURIComponent(p.title)}`}
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[10px] text-blue-400 hover:text-blue-300 bg-[var(--color-surface)] rounded border border-blue-400/30 hover:border-blue-400/60 transition-colors"
+                  >
+                    <MessageSquare size={10} />协商
+                  </a>
                 </div>
               </div>
             ))}

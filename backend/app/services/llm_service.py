@@ -250,6 +250,7 @@ class LLMService:
 - encouragement: 寻求鼓励
 - frustration: 表达挫败感
 - chitchat: 闲聊
+- negotiate: 协商/调整学习建议（如"改成明天""换个方式""今日太忙"）
 
 可选的情绪类型（emotion）：
 - neutral: 中性

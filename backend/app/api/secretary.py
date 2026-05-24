@@ -152,11 +152,43 @@ async def accept_proposal(
     user_id: str = "default_user",
     store: ProposalStore = Depends(_get_store),
 ) -> dict:
-    """采纳提案"""
+    """采纳提案 — 更新状态 + 触发对应系统动作"""
+    # 先获取提案详情
+    try:
+        proposal = _get_proposal_by_id(store, proposal_id, user_id)
+        if not proposal:
+            raise HTTPException(404, "提案不存在或已处理")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning("获取提案详情失败: %s", e)
+        proposal = None
+
     ok = store.update_status(proposal_id, "accepted", user_id, {"action": "user_accepted", "timestamp": __import__('time').time()})
     if not ok:
         raise HTTPException(404, "提案不存在或已处理")
-    return {"status": "accepted"}
+
+    # 执行提案动作
+    action_result = None
+    plan_adjustment = None
+    if proposal:
+        from app.domain.secretary.engines.proposal_action_handler import action_handler
+        try:
+            action_result = await action_handler.execute(proposal, user_id)
+            logger.info("提案动作执行: %s → %s", proposal.action_type, action_result.get("success"))
+
+            # 触发学习路径调整
+            if action_result.get("success"):
+                from app.domain.secretary.engines.secretary_plan_bridge import plan_bridge
+                plan_adjustment = await plan_bridge.on_proposal_accepted(proposal, user_id)
+        except Exception as e:
+            logger.warning("提案动作/计划调整失败: %s", e)
+
+    return {
+        "status": "accepted",
+        "action_result": action_result,
+        "plan_adjustment": plan_adjustment,
+    }
 
 
 @router.post("/proposals/{proposal_id}/dismiss")
@@ -400,3 +432,18 @@ async def _ensure_db_schema(store: ProposalStore):
             with open(schema_path) as f:
                 db.execute(f.read())
             logger.info("✅ created secretary_proposals table")
+
+
+def _get_proposal_by_id(store: ProposalStore, proposal_id: str, user_id: str) -> Proposal | None:
+    """通过 ID 获取提案对象"""
+    try:
+        db = store._get_db()
+        row = db.fetchone(
+            "SELECT proposal FROM secretary_proposals WHERE id = %s AND user_id = %s",
+            (proposal_id, user_id),
+        )
+        if row and row.get("proposal"):
+            return Proposal(**row["proposal"])
+    except Exception as e:
+        logger.debug("获取提案失败: %s", e)
+    return None

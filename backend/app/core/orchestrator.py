@@ -124,6 +124,13 @@ class Orchestrator:
             "tutor": 2,  # 知识讲解次之
         }
 
+        # Phase 7.5: 协商意图直接路由到 CoachAgent
+        if intent == IntentType.NEGOTIATE:
+            coach = self.agents.get("coach")
+            if coach:
+                logger.info("检测到协商意图，选择 CoachAgent")
+                return coach
+
         candidates: list[tuple[int, BaseAgent]] = []
 
         for name, agent in self.agents.items():

@@ -21,9 +21,10 @@ class IntentType(str, Enum):
     EXPLAIN = "explain"             # 请求解释
     PRACTICE = "practice"           # 想要练习
     REVIEW = "review"               # 复习
-    ENCOURAGEMENT = "encouragement"  # 寻求鼓励
+    ENCOURAGEMENT = "encouragement" # 寻求鼓励
     FRUSTRATION = "frustration"     # 挫败感/抱怨
     CHITCHAT = "chitchat"           # 闲聊
+    NEGOTIATE = "negotiate"         # 提案协商（\"改成明天行吗？\"）
     UNKNOWN = "unknown"
 
 
