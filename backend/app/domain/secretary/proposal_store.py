@@ -45,19 +45,44 @@ class ProposalStore:
             "generated_at": now.isoformat(),
         }
 
-        db.execute(
-            """INSERT INTO secretary_proposals
-               (user_id, proposal, status, decision_log, session_id, expires_at, created_at)
-               VALUES (%s, %s, 'pending', %s, %s, %s, %s)""",
-            (
-                user_id,
-                json.dumps(proposal.model_dump(), ensure_ascii=False),
-                json.dumps(decision_log, ensure_ascii=False),
-                session_id,
-                datetime.fromtimestamp(proposal.expires_at, tz=timezone.utc) if proposal.expires_at else None,
-                now,
-            ),
-        )
+        # 尝试扁平表结构（优先），回退到 JSONB
+        try:
+            db.execute(
+                """INSERT INTO secretary_proposals
+                   (user_id, emoji, title, description, action_type, payload, priority,
+                    generated_by, overrideable, status, decision_log, session_id, expires_at, created_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s, %s, %s, %s)""",
+                (
+                    user_id,
+                    proposal.emoji,
+                    proposal.title,
+                    proposal.description,
+                    proposal.action_type,
+                    json.dumps(proposal.payload or {}, ensure_ascii=False),
+                    proposal.priority,
+                    proposal.generated_by or "",
+                    proposal.overrideable,
+                    json.dumps(decision_log, ensure_ascii=False),
+                    session_id,
+                    datetime.fromtimestamp(proposal.expires_at, tz=timezone.utc) if proposal.expires_at else None,
+                    now,
+                ),
+            )
+        except Exception:
+            # 回退：JSONB proposal 列
+            db.execute(
+                """INSERT INTO secretary_proposals
+                   (user_id, proposal, status, decision_log, session_id, expires_at, created_at)
+                   VALUES (%s, %s, 'pending', %s, %s, %s, %s)""",
+                (
+                    user_id,
+                    json.dumps(proposal.model_dump(), ensure_ascii=False),
+                    json.dumps(decision_log, ensure_ascii=False),
+                    session_id,
+                    datetime.fromtimestamp(proposal.expires_at, tz=timezone.utc) if proposal.expires_at else None,
+                    now,
+                ),
+            )
         return proposal.id
 
     def update_status(
@@ -91,17 +116,40 @@ class ProposalStore:
         return db.conn.status == 0  # 粗略判断
 
     def get_pending_proposals(self, user_id: str, limit: int = 20) -> list[Proposal]:
-        """获取待处理的提案"""
+        """获取待处理的提案（适配扁平表结构）"""
         db = self._get_db()
         rows = db.fetchall(
-            """SELECT proposal, id, status, created_at
+            """SELECT id, emoji, title, description, action_type, payload,
+                      priority, generated_by, overrideable, status, created_at
                FROM secretary_proposals
                WHERE user_id = %s AND status = 'pending'
-               ORDER BY proposal->>'priority' DESC, created_at DESC
+               ORDER BY priority DESC, created_at DESC
                LIMIT %s""",
             (user_id, limit),
         )
-        return [Proposal(**r["proposal"]) for r in rows]
+        result = []
+        for r in rows:
+            try:
+                # Try Proposal.model_validate first
+                from ..models import Proposal
+                payload = r.get("payload") or {}
+                if isinstance(payload, str):
+                    import json
+                    payload = json.loads(payload)
+                result.append(Proposal(
+                    id=r["id"],
+                    emoji=r.get("emoji", "💡"),
+                    title=r["title"],
+                    description=r.get("description", ""),
+                    action_type=r["action_type"],
+                    payload=payload,
+                    priority=r.get("priority", 3),
+                    generated_by=r.get("generated_by", ""),
+                    overrideable=r.get("overrideable", True),
+                ))
+            except Exception as e:
+                logger.debug("解析提案行失败: %s", e)
+        return result
 
     def get_history(
         self, user_id: str, days: int = 7, limit: int = 50,
@@ -112,7 +160,9 @@ class ProposalStore:
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
         rows = db.fetchall(
-            """SELECT id, proposal, status, decision_log, created_at, accepted_at, dismissed_at
+            """SELECT id, emoji, title, description, action_type, payload,
+                      priority, generated_by, overrideable, status, decision_log,
+                      created_at, accepted_at, dismissed_at
                FROM secretary_proposals
                WHERE user_id = %s AND created_at >= %s
                ORDER BY created_at DESC
@@ -122,7 +172,16 @@ class ProposalStore:
         return [
             {
                 "id": r["id"],
-                "proposal": r["proposal"],
+                "proposal": {
+                    "emoji": r.get("emoji", "💡"),
+                    "title": r["title"],
+                    "description": r.get("description", ""),
+                    "action_type": r["action_type"],
+                    "payload": r.get("payload"),
+                    "priority": r.get("priority", 3),
+                    "generated_by": r.get("generated_by"),
+                    "overrideable": r.get("overrideable", True),
+                },
                 "status": r["status"],
                 "created_at": r["created_at"].isoformat() if hasattr(r["created_at"], 'isoformat') else str(r["created_at"]),
                 "accepted_at": r.get("accepted_at"),
