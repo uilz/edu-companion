@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   Dumbbell,
   MessageSquare,
+  Bell,
   Settings,
   LucideIcon,
 } from 'lucide-react';
@@ -25,6 +26,7 @@ const navItems: NavItem[] = [
   { href: '/dashboard', label: '驾驶舱', icon: LayoutDashboard },
   { href: '/learn', label: '学习空间', icon: MessageSquare },
   { href: '/practice', label: '专注练习', icon: Dumbbell },
+  { href: '/secretary', label: '秘书', icon: Bell },
   { href: '/settings', label: '设置', icon: Settings },
 ];
 

@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Dumbbell,
   Brain,
+  Bell,
   Settings,
   Sun,
   Moon,
@@ -19,6 +20,7 @@ const navItems = [
   { href: '/dashboard', label: '驾驶舱', icon: LayoutDashboard },
   { href: '/learn',    label: '学习空间', icon: Brain },
   { href: '/practice', label: '专注练习', icon: Dumbbell },
+  { href: '/secretary', label: '秘书', icon: Bell },
 ];
 
 // ── 桌面端侧边栏导航组件 ──
