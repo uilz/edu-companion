@@ -98,7 +98,7 @@ export interface ResponseBlock {
   message_id: string;                        // 所属消息 ID
   partition_id: string;                      // 所属分区 ID
   conversation_id: string;                   // 所属对话 ID
-  type: "text" | "video" | "practice" | "image" | "audio" | "mindmap" | "document";  // 响应块类型
+  type: "text" | "video" | "practice" | "image" | "audio" | "mindmap" | "document" | "secretary_suggestions";  // 响应块类型
   status: "streaming" | "ready" | "generating" | "failed";                            // 处理状态
   content: Record<string, unknown>;          // 具体内容（格式取决于 type）
   order: number;                             // 显示顺序
