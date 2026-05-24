@@ -15,7 +15,7 @@ from typing import Any
 from ..models import (
     DiagnosisReport,
     Proposal,
-    ScopedInsight as ScoredInsight,
+    ScoredInsight,
     ScopeSpec,
 )
 from ..analysis import (

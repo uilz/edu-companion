@@ -28,7 +28,7 @@ from .models import (
     AnalysisMeta,
     AnalysisResult,
     AnalyzeOptions,
-    ScopedInsight as ScoredInsight,
+    ScoredInsight,
     ScopeSpec,
     compute_priority,
     normalize_value,
