@@ -345,9 +345,9 @@ class Classifier:
                 domain_name = dname
 
         if domain_score < 0.3:
-            # 用分区名自己作为默认领域
-            domain_name = partition_subject if partition_subject else "基础"
-            domain_score = 0.3
+            # 低分不强制 fallback，设为 None 让上层决定
+            domain_name = None
+            domain_score = 0.0
 
         # Step 3: 专题分类
         topic_name: str | None = None
@@ -454,8 +454,8 @@ class Classifier:
                 "to_partition": partition_id,
                 "reason": "消息内容更适合另一个分区",
             }
-        elif current_conversation_id and conversation_id != current_conversation_id:
-            # 同一分区，但对话不同
+        elif current_conversation_id and conversation_id != current_conversation_id and domain_name:
+            # 同一分区，但对话不同（需有有效领域检测结果）
             should_recommend_switch = True
             switch_detail = {
                 "from_conversation": current_conversation_id,
