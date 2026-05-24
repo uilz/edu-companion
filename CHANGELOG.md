@@ -4,6 +4,38 @@
 
 ---
 
+## [0.4.0] - 2026-05-24
+
+### 新增 — 智能秘书系统 (Phase 7) ⭐
+- **诊断与提案系统**: DiagnosisEngine + ProposalGenerator (模板优先+LLM润色)
+- **策略引擎**: PolicyEngine (勿扰时段/去重/每日上限/关系记忆)
+- **事件总线集成**: 订阅 AnswerSubmitted/SessionCompleted/KnowledgeStateUpdated 驱动主动诊断
+- **模块扩展框架**: SecretaryModuleRegistry + 7个内置模块
+| 模块 | 功能 |
+|------|------|
+| 🔁 复习提醒 | BKT遗忘概率>0.4触发温习建议 |
+| 😴 疲劳管理 | 认知负荷>0.8或连续学习>50min建议休息 |
+| 📊 学习简报 | 每日学习总结+明日建议 |
+| 📚 备考模式 (opt-in) | 考试检测+冲刺清单 |
+| 👋 回归用户检测 | 5天未登录→欢迎归来提案 |
+| 🧠 元认知反思 | 8种反思提示，活跃会话触发 |
+| ⚙️ 静默任务 | 后台记账，零用户可见输出 |
+- **冷启动引导**: 3步学习风格探测对话
+- **隐私合规**: 全数据导出(GET /data/export) + 遗忘权删除(DELETE /data/delete)
+
+### 前端新增
+- **SecretaryBellBadge**: 导航栏铃铛红点，60s自动轮询待处理提案数
+- **SecretarySuggestionsBlock**: 对话内嵌提案卡片，支持采纳/忽略
+- **秘书设置页**: 模块开关/安静时段/每日上限/数据管理(导出+删除)
+- **秘书主页**: 实时快照(薄弱点/停滞项/学习天数/认知负荷)
+
+### 修复
+- ProposalStore 扁平表结构适配(JSONB→扁平列)
+- main.py 事件总线引用修正(event_bus→container.event_bus)
+- TypeScript 零错误编译
+
+---
+
 ## [0.3.1] - 2026-05-23
 
 ### 修复

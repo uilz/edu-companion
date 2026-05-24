@@ -1,6 +1,6 @@
 # 智能伴学系统 · 秘书系统 (Secretary) 最终设计实现方案
 
-> **版本**: 1.0  
+> **版本**: 2.0  
 > **目标**: 构建一个独立、可扩展的“秘书系统”，承担学情诊断、协商提案、主动服务与模块化学习管理职责。通过与 Orchestrator、Tutor、Coach 松耦合协作，实现“懂克制、有温度”的伴学管家体验，并符合认知科学和学习科学原理。
 
 ---
@@ -73,8 +73,7 @@
 
 ### 2.1 新增文件结构
 
-```
-backend/
+```backend/
 ├── app/core/
 │   ├── blackboard.py             # Redis黑板
 │   └── orchestrator.py           # 改造：增加秘书提案等待逻辑
@@ -83,21 +82,30 @@ backend/
 │   ├── secretary_service.py      # 主服务入口
 │   ├── models.py                 # Pydantic模型 + ScoredInsight / AnalysisResult
 │   ├── analysis.py               # 分析洞察层（18个分析函数，替代知识总线）
+│   ├── proposal_store.py         # 提案持久化存储
 │   ├── engines/
-│   │   ├── diagnosis.py          # 诊断引擎（基于 analysis.py 结果）
-│   │   ├── proposal_generator.py # 提案生成 (LLM+模板)
-│   │   ├── context_engine.py     # 情境与意图预测
-│   │   └── policy_engine.py      # 策略与规则引擎
-│   ├── extensions/
-│   │   ├── base.py               # 扩展基类
-│   │   ├── review_reminder.py    # 复习提醒
-│   │   ├── fatigue_manager.py    # 疲劳管理
-│   │   ├── exam_mode.py          # 备考模式
-│   │   ├── daily_brief.py        # 日简报生成
-│   │   └── cold_start.py         # 冷启动引导
+│   │   ├── module_registry.py            # 模块注册与生命周期管理
+│   │   ├── active_checker.py             # 活跃检查与提案推送
+│   │   ├── policy_engine.py              # 策略与规则引擎
+│   │   ├── secretary_event_handler.py    # 事件处理（订阅事件总线）
+│   │   ├── context_engine.py             # 情境与意图预测
+│   │   ├── diagnosis.py                  # 诊断引擎（基于 analysis.py 结果）
+│   │   ├── proposal_generator.py         # 提案生成 (LLM+模板)
+│   │   ├── proposal_action_handler.py    # 提案采纳/忽略/暂缓处理
+│   │   ├── secretary_plan_bridge.py      # 学习计划桥接
+│   │   ├── llm_proposal_generator.py     # LLM 提案生成器
+│   │   ├── builtin_review_reminder.py    # 复习提醒
+│   │   ├── builtin_fatigue_manager.py    # 疲劳管理
+│   │   ├── builtin_daily_brief.py        # 日简报生成
+│   │   ├── exam_mode.py                  # 备考模式
+│   │   ├── return_user_detection.py      # 回归用户检测
+│   │   ├── meta_cognitive_prompt.py      # 元认知反思提示
+│   │   └── silent_task.py                # 静默任务/后台记账
 │   └── tasks.py                  # 定时主动检查
 ├── app/api/
-│   └── secretary.py              # 秘书配置与提案API
+│   └── secretary.py              # 秘书配置与提案API（含模块管理、数据导出等）
+├── app/data/
+│   └── secretary_prefs/          # 秘书偏好数据
 └── app/services/
     └── context_builder.py        # 改造：增加secretary_proposals上下文层
 ```
@@ -372,7 +380,10 @@ class SecretaryExtension(ABC):
 | **疲劳管理** | 认知负荷 > 0.8 或连续学习 > 50min | 建议休息/换科 |
 | **日简报** | 每日首次打开 | 生成昨日总结，含积极归因和自我解释提示 |
 | **备考模式** | 日历中有考试事件 (需 opt-in) | 提升相关知识点优先级，生成冲刺清单 |
-| **冷启动引导** | 新用户，数据不足 | 主动发起“学习风格初探”对话，生成初始策略包 |
+| **冷启动引导** | 新用户，数据不足 | 主动发起"学习风格初探"对话，生成初始策略包 |
+| **回归用户检测** | 超过 5 天未登录 | 检测用户回归，生成欢迎回提案（基于文件跟踪 `data/secretary/last_active_{user_id}.json`） |
+| **元认知反思** | 活跃会话（5min+ / 3+ 问题） | 生成 8 种元认知反思提示，引导学生自我评估学习策略 |
+| **静默任务** | 定时周期 | 后台记账与内部状态维护，零提案产出（跟踪已用时间、检查次数） |
 
 ### 5.3 模块生命周期
 
@@ -426,6 +437,8 @@ Orchestrator 在回复前: 等待黑板数据 (超时 1s)
 |------|------|------|
 | GET | `/secretary/preferences` | 获取当前用户秘书偏好 |
 | PATCH | `/secretary/preferences` | 更新偏好 (勿扰/上限/扩展等) |
+| GET | `/secretary/modules` | 获取所有模块列表及状态 |
+| POST | `/secretary/modules/toggle` | 启用/禁用指定模块 |
 | GET | `/secretary/proposals/pending` | 获取待处理提案列表 |
 | POST | `/secretary/proposals/{id}/accept` | 采纳提案 |
 | POST | `/secretary/proposals/{id}/dismiss` | 忽略提案 |
@@ -433,6 +446,8 @@ Orchestrator 在回复前: 等待黑板数据 (超时 1s)
 | GET | `/secretary/proposals/history?days=7` | 近期提案历史 |
 | GET | `/secretary/snapshot` | 当前学习快照摘要 (供面板) |
 | GET | `/secretary/daily-brief` | 今日简报 |
+| POST | `/secretary/generate-llm-proposals` | 手动触发 LLM 提案生成 |
+| GET | `/secretary/onboarding` | 获取冷启动引导状态与内容 |
 | POST | `/secretary/onboarding/dialogue` | 冷启动对话交互 |
 | GET | `/secretary/data/export` | 导出所有秘书相关个人数据 |
 | DELETE | `/secretary/data/delete` | 删除所有秘书相关个人数据 (遗忘权) |
@@ -554,14 +569,14 @@ CREATE INDEX idx_sp_user_status ON secretary_proposals(user_id, status);
 
 ## 14. 实施路线图
 
-| 阶段 | 内容 | 依赖 | 预计工作量 |
-|------|------|------|:---:|
-| **Phase 7.1** | 分析层 (analysis.py) + 黑板 + 诊断引擎 + 模板提案 + Orchestrator 集成 + 前端提案卡片 | 依赖 CognitiveNode 存储 | 5-7天 |
-| **Phase 7.2** | LLM 提案生成器 + 协商对话流程 + 秘书页基础 UI (列表+历史) | LLM Service | 5-7天 |
-| **Phase 7.3** | 情境引擎 + 主动检查定时任务 + 提案持久化与 WebSocket 通知 | Redis, 事件总线 | 3-5天 |
-| **Phase 7.4** | 扩展框架 + 内置模块 (复习提醒/疲劳/简报) + 秘书设置页 + 冷启动引导 | 前端设置组件 | 5-7天 |
-| **Phase 7.5** | 自然语言自定义规则、静默任务、备考模式、决策链日志、A/B框架 | 规则解析LLM | 5-7天 |
-| **Phase 7.6** | 认知科学微调 (自我评估提示、积极归因、必要难度保留) + 隐私/伦理完善 | 全栈 | 3-5天 |
+| 阶段 | 内容 | 依赖 | 预计工作量 | 完成状态 |
+|------|------|------|:---:|:---:|
+| **Phase 7.1** | 分析层 (analysis.py) + 黑板 + 诊断引擎 + 模板提案 + Orchestrator 集成 + 前端提案卡片 | 依赖 CognitiveNode 存储 | 5-7天 | ✅ 已完成 |
+| **Phase 7.2** | LLM 提案生成器 + 协商对话流程 + 秘书页基础 UI (列表+历史) | LLM Service | 5-7天 | ✅ 已完成 |
+| **Phase 7.3** | 情境引擎 + 主动检查定时任务 + 提案持久化与 WebSocket 通知 | Redis, 事件总线 | 3-5天 | ✅ 已完成 |
+| **Phase 7.4** | 扩展框架 + 内置模块 (复习提醒/疲劳/简报) + 秘书设置页 + 冷启动引导 | 前端设置组件 | 5-7天 | ✅ 已完成 |
+| **Phase 7.5** | 自然语言自定义规则、静默任务、备考模式、决策链日志、A/B框架 | 规则解析LLM | 5-7天 | ⚠️ 部分完成（静默任务、备考模式 ✅；自然语言规则、决策链日志面板、A/B框架待补） |
+| **Phase 7.6** | 认知科学微调 (自我评估提示、积极归因、必要难度保留) + 隐私/伦理完善 | 全栈 | 3-5天 | ⚠️ 部分完成（元认知提示 ✅；认知科学微调持续优化中） |
 
 ---
 
@@ -597,7 +612,11 @@ CREATE INDEX idx_sp_user_status ON secretary_proposals(user_id, status);
 | 11 | Orchestrator 否决权规则 | 中 | `overrideable` 字段 + 意图匹配 |
 | 12 | 调试与审计能力缺失 | 中 | 决策链日志 + 管理面板 |
 | 13 | 效果评估/A/B 框架缺失 | 中 | 指标定义 + 实验分组预留 |
+| 14 | 前端提案卡片未集成 (G4) | 低 | 已解决 — SecretarySuggestionsBlock + accepting API |
+| 15 | 铃铛红点缺失 (G4) | 低 | 已解决 — SecretaryBellBadge 60s polling |
+| 16 | 回归用户检测缺失 (G5) | 中 | 已解决 — return_user_detection module |
+| 17 | 隐私数据导出/删除 (G3) | 中 | 已解决 — /data/export + /data/delete |
 
 ---
 
-**文档状态**: 最终设计，可进入开发阶段。所有模块边界清晰，认知科学合规已校准，冷启动与隐私问题已覆盖，具备完整的可测试性与可演进性。
+**文档状态**: 实现跟进 v2.0。核心架构与引擎已落地，内置模块持续扩展中。Phase 7.1-7.4 全部完成，7.5-7.6 部分完成，剩余项（自然语言规则、决策链日志面板、A/B框架、认知科学深度微调）持续迭代中。
