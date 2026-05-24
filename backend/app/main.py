@@ -132,7 +132,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Phase 7.5+: 订阅领域事件
     try:
         from app.domain.secretary.engines.secretary_event_handler import secretary_event_handler
-        secretary_event_handler.subscribe(event_bus)
+        secretary_event_handler.subscribe(container.event_bus)
         logger.info("📡 秘书事件处理器已订阅 (Phase 7.5)")
     except Exception as e:
         logger.warning("秘书事件处理器订阅失败: %s", e)
