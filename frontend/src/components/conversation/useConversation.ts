@@ -408,7 +408,6 @@ export function useConversation(): UseConversationReturn {
   // ── ref 同步 ──
   // 同步 ref
   useEffect(() => { activeConvIdRef.current = activeConversationId; }, [activeConversationId]);
-  useEffect(() => { loadMessagesRef.current = loadMessages; }, [loadMessages]);
   useEffect(() => { activePartIdRef.current = selectedPartitionId; }, [selectedPartitionId]);
 
   // ── 锁定 body 滚动 ──
@@ -447,6 +446,9 @@ export function useConversation(): UseConversationReturn {
       setResponseBlocks([]);
     } finally { setLoadingMessages(false); }
   }, []);
+
+  // 同步 loadMessagesRef
+  useEffect(() => { loadMessagesRef.current = loadMessages; }, [loadMessages]);
 
   // ── 选中对话时加载消息 ──
   useEffect(() => { if (activeConversationId) loadMessages(activeConversationId); else { setMessages([]); setResponseBlocks([]); } }, [activeConversationId, loadMessages]);
