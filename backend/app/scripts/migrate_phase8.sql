@@ -1,9 +1,6 @@
-"""
-Phase 8 数据库迁移脚本
-
-逐条执行（幂等）：
-    psql -h localhost -p 5433 -U companion -d edu_companion -f migrate_phase8.sql
-"""
+-- Phase 8 数据库迁移脚本
+-- 逐条执行（幂等）：
+--     psql -h localhost -p 5433 -U companion -d edu_companion -f migrate_phase8.sql
 
 -- =============================================
 -- 1. cognitive_nodes 加列
@@ -15,12 +12,13 @@ ALTER TABLE cognitive_nodes ADD COLUMN IF NOT EXISTS subsystems JSONB DEFAULT '{
 ALTER TABLE cognitive_nodes ADD COLUMN IF NOT EXISTS embedding JSONB;
 ALTER TABLE cognitive_nodes ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
 
--- 索引
+-- deleted_at 列（软删除支持）
+ALTER TABLE cognitive_nodes ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+-- 索引 (path_id 唯一索引)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_cn_path_id
     ON cognitive_nodes(user_id, path_id)
     WHERE path_id IS NOT NULL AND deleted_at IS NULL;
-
--- vector index removed — uses Python cosine similarity instead
 
 CREATE INDEX IF NOT EXISTS idx_cn_parent
     ON cognitive_nodes(user_id, parent)
@@ -38,10 +36,10 @@ CREATE INDEX IF NOT EXISTS idx_cn_visible
 -- 2. 知识图谱边表
 -- =============================================
 CREATE TABLE IF NOT EXISTS knowledge_edges (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     user_id VARCHAR(255) NOT NULL,
-    source_node_id UUID NOT NULL REFERENCES cognitive_nodes(id),
-    target_node_id UUID NOT NULL REFERENCES cognitive_nodes(id),
+    source_node_id TEXT NOT NULL REFERENCES cognitive_nodes(id),
+    target_node_id TEXT NOT NULL REFERENCES cognitive_nodes(id),
     edge_type VARCHAR(50) NOT NULL DEFAULT 'related_to',
     strength FLOAT DEFAULT 0.5,
     confidence FLOAT,
@@ -61,9 +59,9 @@ CREATE INDEX IF NOT EXISTS idx_ke_status ON knowledge_edges(user_id, edge_status
 -- 3. 会话-节点关联表
 -- =============================================
 CREATE TABLE IF NOT EXISTS conversation_node_links (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     conversation_id VARCHAR(255) NOT NULL,
-    node_id UUID NOT NULL REFERENCES cognitive_nodes(id),
+    node_id TEXT NOT NULL REFERENCES cognitive_nodes(id),
     added_by VARCHAR(50) DEFAULT 'system',
     is_primary BOOLEAN DEFAULT false,
     added_at TIMESTAMPTZ DEFAULT now(),
