@@ -198,9 +198,17 @@ def delete_conversation_link(
 def get_graph_nodes(
     user_id: str = "default_user",
     parent_id: str | None = None,
+    level: str | None = None,
 ) -> list[dict]:
-    """获取可见子节点（含 suggested_count）"""
-    if parent_id:
+    """获取可见子节点（含 suggested_count）
+
+    参数：
+        parent_id: 指定父节点下钻
+        level: 按层级过滤（如 topic、domain、partition）
+    """
+    if level:
+        children = [n for n in get_nodes_by_level(level, user_id) if n.is_visible]
+    elif parent_id:
         children = get_visible_children(parent_id, user_id)
     else:
         children = [n for n in get_nodes_by_level("partition", user_id) if n.is_visible]

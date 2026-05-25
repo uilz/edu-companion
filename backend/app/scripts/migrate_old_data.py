@@ -9,6 +9,7 @@ import logging
 import uuid
 import sys
 import os
+import json
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 os.environ.setdefault("APP_DEBUG", "true")
@@ -84,14 +85,14 @@ def migrate():
             )
             children = partition_node.get("children", []) if partition_node else []
             if isinstance(children, str):
-                import json
+                pass  # json already imported at top
                 children = json.loads(children)
             if did not in children:
                 from datetime import datetime, timezone
                 new_children = children + [did]
                 db.execute(
                     "UPDATE cognitive_nodes SET children = %s, updated_at = %s WHERE id = %s",
-                    (str(new_children), datetime.now(timezone.utc).isoformat(), node.id),
+                    (json.dumps(new_children), datetime.now(timezone.utc).isoformat(), node.id),
                 )
             logger.info(f"    created domain node: {dnode.label} ({domain_key})")
             created_nodes += 1
