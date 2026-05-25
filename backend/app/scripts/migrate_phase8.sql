@@ -12,7 +12,7 @@ ALTER TABLE cognitive_nodes ADD COLUMN IF NOT EXISTS path_id VARCHAR(500);
 ALTER TABLE cognitive_nodes ADD COLUMN IF NOT EXISTS node_type VARCHAR(50) DEFAULT 'explicit';
 ALTER TABLE cognitive_nodes ADD COLUMN IF NOT EXISTS is_visible BOOLEAN DEFAULT false;
 ALTER TABLE cognitive_nodes ADD COLUMN IF NOT EXISTS subsystems JSONB DEFAULT '{}';
-ALTER TABLE cognitive_nodes ADD COLUMN IF NOT EXISTS embedding VECTOR(1536);
+ALTER TABLE cognitive_nodes ADD COLUMN IF NOT EXISTS embedding JSONB;
 ALTER TABLE cognitive_nodes ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
 
 -- 索引
@@ -20,9 +20,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_cn_path_id
     ON cognitive_nodes(user_id, path_id)
     WHERE path_id IS NOT NULL AND deleted_at IS NULL;
 
-CREATE INDEX IF NOT EXISTS idx_cn_embedding
-    ON cognitive_nodes USING ivfflat (embedding vector_cosine_ops)
-    WITH (lists = 100) WHERE embedding IS NOT NULL;
+-- vector index removed — uses Python cosine similarity instead
 
 CREATE INDEX IF NOT EXISTS idx_cn_parent
     ON cognitive_nodes(user_id, parent)

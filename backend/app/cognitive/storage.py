@@ -298,6 +298,23 @@ def _ts_to_pg(ts: float) -> str:
     return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
 
 
+def _parse_embedding(raw) -> list[float] | None:
+    """Parse embedding from JSONB column into list[float]"""
+    if raw is None:
+        return None
+    if isinstance(raw, list):
+        try:
+            return [float(v) for v in raw]
+        except (TypeError, ValueError):
+            return None
+    if isinstance(raw, str):
+        try:
+            return json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return None
+    return None
+
+
 def _row_to_node(row: dict) -> CognitiveNode:
     """数据库行 → CognitiveNode"""
     raw = row
@@ -344,6 +361,13 @@ def _row_to_node(row: dict) -> CognitiveNode:
         associates=_parse_list("associates", str),
         param_refs=_parse_json_dict(raw.get("param_refs")),
         meta=_parse_json_dict(raw.get("meta")),
+        # Phase 8 字段
+        path_id=raw.get("path_id") or "",
+        node_type=raw.get("node_type") or "explicit",
+        is_visible=raw.get("is_visible", False),
+        subsystems=_parse_json_dict(raw.get("subsystems")),
+        embedding=_parse_embedding(raw.get("embedding")),
+        is_active=raw.get("is_active", True),
     )
 
 
@@ -409,46 +433,78 @@ def vector_search(
     limit: int = 10,
     min_similarity: float = 0.1,
 ) -> list[dict]:
-    """向量检索：按余弦相似度搜索节点
+    """向量检索：按余弦相似度在 Python 端计算
 
+    JSONB 存储 embedding，不支持 pgvector 时用 Python 计算。
     返回：
     [{"id": str, "label": str, "path_id": str, "level": str,
       "similarity": float, "is_visible": bool}, ...]
     """
-    db = get_db()
-    embed_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
+    query_norm = _cosine_normalize(query_embedding)
 
+    db = get_db()
     level_filter = "AND level = %s" if level else ""
     level_param = (level,) if level else ()
-
-    params = (embed_str, user_id) + level_param + (limit,)
+    params = (user_id,) + level_param
 
     rows = db.fetchall(
         f"""
-        SELECT id, label, path_id, level, is_visible,
-               1 - (embedding <=> %s::vector) AS similarity
+        SELECT id, label, path_id, level, is_visible, embedding
         FROM cognitive_nodes
         WHERE user_id = %s
           AND embedding IS NOT NULL
           AND deleted_at IS NULL
           {level_filter}
-          AND 1 - (embedding <=> %s::vector) > %s
-        ORDER BY similarity DESC
-        LIMIT %s
         """,
-        (embed_str, user_id, embed_str, min_similarity, limit),
+        params,
     )
-    return [
-        {
+
+    results = []
+    for r in rows:
+        embed = _parse_embedding(r.get("embedding"))
+        if not embed:
+            continue
+        sim = _cosine_similarity(query_norm, embed)
+        if sim < min_similarity:
+            continue
+        results.append({
             "id": r["id"],
             "label": r["label"],
-            "path_id": r["path_id"],
+            "path_id": r.get("path_id") or "",
             "level": r["level"],
-            "is_visible": r["is_visible"],
-            "similarity": float(r["similarity"]),
-        }
-        for r in rows
-    ]
+            "is_visible": r.get("is_visible", False),
+            "similarity": round(sim, 6),
+        })
+
+    results.sort(key=lambda x: -x["similarity"])
+    return results[:limit]
+
+
+def _cosine_normalize(vec: list[float]) -> tuple[list[float], float]:
+    """归一化向量，同时返回原始范数"""
+    norm = sum(v * v for v in vec) ** 0.5
+    if norm == 0:
+        return vec, 0.0
+    return [v / norm for v in vec], norm
+
+
+def _cosine_similarity(norm_a: tuple[list[float], float] | list[float],
+                       norm_b: tuple[list[float], float] | list[float]) -> float:
+    """计算两个归一化向量的余弦相似度
+
+    接受 (vec, norm) tuple 或裸 list（自动归一化）
+    """
+    if isinstance(norm_a, tuple):
+        a = norm_a[0]
+    else:
+        a, _ = _cosine_normalize(norm_a)
+    if isinstance(norm_b, tuple):
+        b = norm_b[0]
+    else:
+        b, _ = _cosine_normalize(norm_b)
+
+    dot = sum(av * bv for av, bv in zip(a, b))
+    return max(-1.0, min(1.0, dot))
 
 
 def get_visible_children(parent_id: str, user_id: str = "default_user") -> list[CognitiveNode]:
