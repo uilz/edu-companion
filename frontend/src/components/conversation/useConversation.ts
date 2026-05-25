@@ -266,7 +266,46 @@ export function useConversation(): UseConversationReturn {
   const streamingConvIdRef = useRef<string | null>(null);
   const streamingMsgIdRef = useRef<string | null>(null);
   const streamBufferRef = useRef("");
+  const streamSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadPartitionsRef = useRef<() => Promise<void>>(() => Promise.resolve());
+
+  // ── 流式缓存: sessionStorage 持久化（刷新恢复）──
+  const STREAM_CACHE_KEY = "stream_cache";
+
+  function getStreamCache(): Record<string, string> {
+    try { return JSON.parse(sessionStorage.getItem(STREAM_CACHE_KEY) || "{}"); } catch { return {}; }
+  }
+
+  function setStreamCache(convId: string, text: string) {
+    try {
+      const cache = getStreamCache();
+      cache[convId] = text;
+      sessionStorage.setItem(STREAM_CACHE_KEY, JSON.stringify(cache));
+    } catch { /* quota exceeded, 忽略 */ }
+  }
+
+  function clearStreamCache(convId?: string) {
+    try {
+      if (convId) {
+        const cache = getStreamCache();
+        delete cache[convId];
+        sessionStorage.setItem(STREAM_CACHE_KEY, JSON.stringify(cache));
+      } else {
+        sessionStorage.removeItem(STREAM_CACHE_KEY);
+      }
+    } catch { /* 忽略 */ }
+  }
+
+  // 页面关闭/刷新前保存当前流式状态
+  useEffect(() => {
+    const handler = () => {
+      const cid = streamingConvIdRef.current;
+      const text = streamBufferRef.current;
+      if (cid && text) setStreamCache(cid, text);
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, []);
 
   // 如果 URL 有 ?panel=graph，跳转到仪表盘知识图谱页
   useEffect(() => {
@@ -297,7 +336,55 @@ export function useConversation(): UseConversationReturn {
         }
       } catch { }
     }
-    setUrlInitialized(true);  // 完成后同步 URL
+    setUrlInitialized(true);
+
+    // 恢复中断的流式缓存（刷新前 AI 还在回复中的消息）
+    try {
+      const cache = getStreamCache();
+      const targetConv = cId || (() => {
+        try { return JSON.parse(localStorage.getItem("learn-page-state") || "{}").conversationId; } catch { return null; }
+      })();
+      if (targetConv && cache[targetConv]) {
+        const partialText = cache[targetConv];
+        const asstId = "restored-" + Date.now().toString(36);
+        const userMsgId = "restored-user-" + Date.now().toString(36);
+        // 注入一条占位用户消息 + 占位助手消息显示已有内容
+        setMessages([
+          {
+            id: userMsgId, parent_id: pId || "virtual_root", children_ids: [],
+            partition_id: pId || "", conversation_id: targetConv,
+            content_blocks: [{ type: "text" as const, text: "（上一条消息在回复中刷新了页面）" }],
+            text_summary: "（刷新中断）", role: "user", timestamp: Date.now(),
+            token_count: 0, is_deleted: false, is_archived: false, has_modified_version: false,
+          },
+          {
+            id: asstId, parent_id: userMsgId, children_ids: [],
+            partition_id: pId || "", conversation_id: targetConv,
+            content_blocks: [{ type: "text" as const, text: partialText }],
+            text_summary: partialText, role: "assistant", timestamp: Date.now(),
+            token_count: 0, is_deleted: false, is_archived: false, has_modified_version: false,
+          },
+        ]);
+        // 标记恢复状态，不重新发送
+        streamingMsgIdRef.current = asstId;
+        streamBufferRef.current = partialText;
+        streamingPartIdRef.current = pId;
+        streamingConvIdRef.current = targetConv;
+        setIsLoading(true);
+        setStatusMessage("已恢复部分回复内容（连接已断开）");
+        // 10秒后自动清除恢复标记
+        setTimeout(() => {
+          if (streamingMsgIdRef.current === asstId) {
+            streamingMsgIdRef.current = null;
+            streamBufferRef.current = "";
+            streamingPartIdRef.current = null;
+            streamingConvIdRef.current = null;
+            setIsLoading(false);
+            setStatusMessage("");
+          }
+        }, 10000);
+      }
+    } catch { /* 恢复失败静默忽略 */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -370,13 +457,21 @@ export function useConversation(): UseConversationReturn {
       // 流式 token 回调: 实时更新消息内容
       onToken: (content) => {
         if (!streamingMsgIdRef.current) return;
-        // 检查流式上下文是否仍有效（用 ref 避免闭包过期）
         if (streamingPartIdRef.current !== activePartIdRef.current ||
           streamingConvIdRef.current !== activeConvIdRef.current) return;
 
         streamBufferRef.current += content;
         const text = streamBufferRef.current;
         const msgId = streamingMsgIdRef.current;
+
+        // 每 300ms 节流写入 sessionStorage
+        if (!streamSaveTimerRef.current) {
+          streamSaveTimerRef.current = setTimeout(() => {
+            streamSaveTimerRef.current = null;
+            const cid = streamingConvIdRef.current;
+            if (cid && streamBufferRef.current) setStreamCache(cid, streamBufferRef.current);
+          }, 300);
+        }
 
         setMessages((prev) =>
           prev.map((m) =>
@@ -398,6 +493,9 @@ export function useConversation(): UseConversationReturn {
         streamingConvIdRef.current = null;
         streamingMsgIdRef.current = null;
         streamBufferRef.current = "";
+        if (streamSaveTimerRef.current) { clearTimeout(streamSaveTimerRef.current); streamSaveTimerRef.current = null; }
+        // 清除流式缓存
+        clearStreamCache(streamCid || undefined);
 
         // 如果用户已切换对话，丢弃这个过时的流式消息
         if (streamPid !== activePartIdRef.current || streamCid !== activeConvIdRef.current) {

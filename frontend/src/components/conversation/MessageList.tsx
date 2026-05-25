@@ -228,6 +228,20 @@ export default function MessageList({
                           <MessageContent text={displayText} />
                         </div>
                       )}
+                      {/* 用户消息操作按钮：编辑/删除/复制 */}
+                      {!isEditing && (
+                        <div className="flex items-center gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => handleStartEdit(message.id, displayText)} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]" title="编辑">
+                            <Pencil size={12} />
+                          </button>
+                          <button onClick={() => handleDeleteMessage(message.id)} className="p-1 text-[var(--color-text-muted)] hover:text-red-500" title="删除">
+                            <Trash2 size={12} />
+                          </button>
+                          <button onClick={() => handleCopyMessage(displayText)} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]" title="复制">
+                            <Copy size={12} />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="group bg-[var(--color-surface)] text-[var(--color-text)] px-4 py-3 rounded-2xl rounded-tl-md">
