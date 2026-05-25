@@ -85,6 +85,11 @@ class ConversationWS {
             case "context_switch": // 上下文切换通知
               this.callbacks?.onContextSwitch(data);
               break;
+            case "resume":        // 断线续流：服务端回放缓冲内容
+              this.callbacks?.onToken(data.content);
+              break;
+            case "resume_done":   // 无活跃流可续
+              break;
             // user_message, pong, status — 无需处理
           }
         } catch { /* 忽略解析错误 */ }
@@ -371,20 +376,37 @@ export function useConversation(): UseConversationReturn {
         streamingPartIdRef.current = pId;
         streamingConvIdRef.current = targetConv;
         setIsLoading(true);
-        setStatusMessage("已恢复部分回复内容（连接已断开）");
-        // 10秒后自动清除恢复标记
+        setStatusMessage("正在恢复回复...");
+
+        // 3 秒后通过 WS 发起 resume，尝试续接服务端流
         setTimeout(() => {
           if (streamingMsgIdRef.current === asstId) {
-            streamingMsgIdRef.current = null;
-            streamBufferRef.current = "";
-            streamingPartIdRef.current = null;
-            streamingConvIdRef.current = null;
-            setIsLoading(false);
-            setStatusMessage("");
+            const sent = wsRef.current?.send({
+              type: "resume",
+              conversation_id: targetConv,
+            });
+            if (!sent) {
+              // WS 未连接或 resume 失败 → 10 秒后自动清除
+              setTimeout(() => {
+                if (streamingMsgIdRef.current === asstId) {
+                  streamingMsgIdRef.current = null;
+                  streamBufferRef.current = "";
+                  streamingPartIdRef.current = null;
+                  streamingConvIdRef.current = null;
+                  setIsLoading(false);
+                  setStatusMessage("");
+                  clearStreamCache(targetConv);
+                }
+              }, 10000);
+            }
           }
-        }, 10000);
+        }, 3000);
       }
     } catch { /* 恢复失败静默忽略 */ }
+
+    // 处理 WS resume 事件
+    const originalConnect = wsRef.current?.connect;
+    // WS 已初始化，在 onmessage 中处理 resume 事件由下层回调负责
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

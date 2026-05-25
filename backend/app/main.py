@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import logging
+import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -38,6 +39,7 @@ from app.api.secretary import router as secretary_router
 from app.api.phase8 import router as phase8_router
 from app.config import settings
 from app.core.learner_model import learner_engine
+from app.services.stream_manager import stream_manager
 
 # 配置日志
 logging.basicConfig(
@@ -115,7 +117,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     logger.info("✅ 应用启动完成")
 
+    # StreamManager 定期清理（每 60 秒清理过期流）
+    async def _stream_cleanup():
+        while True:
+            await asyncio.sleep(60)
+            cleaned = stream_manager.cleanup_expired()
+            if cleaned:
+                logger.info("🧹 StreamManager 清理了 %d 个过期流", cleaned)
+
+    cleanup_task = asyncio.create_task(_stream_cleanup())
+
     yield
+
+    cleanup_task.cancel()
 
     # Phase 7.3: 停止秘书主动检查器
     try:
