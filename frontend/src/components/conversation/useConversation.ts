@@ -344,65 +344,18 @@ export function useConversation(): UseConversationReturn {
     setUrlInitialized(true);
 
     // 恢复中断的流式缓存（刷新前 AI 还在回复中的消息）
+    // 服务端已增量写入 DB，刷新后 loadMessages 直接拿最新内容
     try {
       const cache = getStreamCache();
       const targetConv = cId || (() => {
         try { return JSON.parse(localStorage.getItem("learn-page-state") || "{}").conversationId; } catch { return null; }
       })();
       if (targetConv && cache[targetConv]) {
-        const partialText = cache[targetConv];
-        const asstId = "restored-" + Date.now().toString(36);
-        const userMsgId = "restored-user-" + Date.now().toString(36);
-        // 注入一条占位用户消息 + 占位助手消息显示已有内容
-        setMessages([
-          {
-            id: userMsgId, parent_id: pId || "virtual_root", children_ids: [],
-            partition_id: pId || "", conversation_id: targetConv,
-            content_blocks: [{ type: "text" as const, text: "（上一条消息在回复中刷新了页面）" }],
-            text_summary: "（刷新中断）", role: "user", timestamp: Date.now(),
-            token_count: 0, is_deleted: false, is_archived: false, has_modified_version: false,
-          },
-          {
-            id: asstId, parent_id: userMsgId, children_ids: [],
-            partition_id: pId || "", conversation_id: targetConv,
-            content_blocks: [{ type: "text" as const, text: partialText }],
-            text_summary: partialText, role: "assistant", timestamp: Date.now(),
-            token_count: 0, is_deleted: false, is_archived: false, has_modified_version: false,
-          },
-        ]);
-        // 标记恢复状态，不重新发送
-        streamingMsgIdRef.current = asstId;
-        streamBufferRef.current = partialText;
-        streamingPartIdRef.current = pId;
-        streamingConvIdRef.current = targetConv;
-        setIsLoading(true);
-        setStatusMessage("正在恢复回复...");
-
-        // 3 秒后通过 WS 发起 resume，尝试续接服务端流
-        setTimeout(() => {
-          if (streamingMsgIdRef.current === asstId) {
-            const sent = wsRef.current?.send({
-              type: "resume",
-              conversation_id: targetConv,
-            });
-            if (!sent) {
-              // WS 未连接或 resume 失败 → 10 秒后自动清除
-              setTimeout(() => {
-                if (streamingMsgIdRef.current === asstId) {
-                  streamingMsgIdRef.current = null;
-                  streamBufferRef.current = "";
-                  streamingPartIdRef.current = null;
-                  streamingConvIdRef.current = null;
-                  setIsLoading(false);
-                  setStatusMessage("");
-                  clearStreamCache(targetConv);
-                }
-              }, 10000);
-            }
-          }
-        }, 3000);
+        setStatusMessage("正在加载已生成的内容...");
+        // 清除缓存，不再需要
+        clearStreamCache(targetConv);
       }
-    } catch { /* 恢复失败静默忽略 */ }
+    } catch { /* 忽略 */ }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

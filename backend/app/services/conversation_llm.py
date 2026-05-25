@@ -794,14 +794,27 @@ async def send_and_reply_stream(
             yield {"type": "tool_block", "block": block.model_dump(mode="json")}
 
     # 3. 流式生成回复（LLM 现在能看到工具执行结果）
+    # 先创建空助手节点（后续增量覆写，刷新不丢）
+    reply_blocks_placeholder = [TextBlock(text="")]
+    assistant_node = tree_ops.add_message(
+        user_id, partition_id, "assistant", reply_blocks_placeholder, "",
+        conversation_id=resolved_conversation_id,
+    )
+    asst_node_id = assistant_node.id
     full_reply = ""
+    token_since_save = 0
     try:
         async for chunk in generate_reply_stream(
             user_id, partition_id, user_text,
             extra_tool_context=extra_tool_context,
         ):
             full_reply += chunk
+            token_since_save += 1
             yield {"type": "token", "content": chunk}
+            # 每 20 token 覆写一次 DB，刷新后 loadMessages 能拿到最新文本
+            if token_since_save >= 20:
+                tree_ops.update_message_content(user_id, asst_node_id, full_reply)
+                token_since_save = 0
     except Exception as e:
         logger.error("generate_reply_stream 失败: %s", str(e))
         fallback = f"抱歉，生成回复时遇到了问题 😣\n\n错误信息：{str(e)[:200]}\n\n请稍后重试或检查系统配置。"
@@ -812,11 +825,11 @@ async def send_and_reply_stream(
     if not full_reply.strip():
         full_reply = "抱歉，我暂时无法回复 😣\n\n请检查：\n1. API Key 是否正确配置\n2. 模型是否可用\n3. 稍后重试"
 
-    # 4. 存助手消息
-    reply_blocks = [TextBlock(text=full_reply)]
-    assistant_node = tree_ops.add_message(
-        user_id, partition_id, "assistant", reply_blocks, full_reply, conversation_id=conversation_id,
-    )
+    # 4. 覆写最终版本到 DB（此时已完成）
+    tree_ops.update_message_content(user_id, asst_node_id, full_reply)
+    # 刷新 assistant_node 对象，用于后续 yield done
+    data = storage.load(user_id)
+    assistant_node = data.nodes.get(asst_node_id) or assistant_node
 
     # P0: async meta history for assistant
     _p0_post_message_hooks(user_id, partition_id, assistant_node)

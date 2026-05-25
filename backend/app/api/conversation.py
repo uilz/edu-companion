@@ -16,7 +16,6 @@ from app.schemas.conversation import TextBlock
 from app.services.storage import storage
 from app.services.tree_ops import tree_ops
 from app.services.classifier import classifier
-from app.services.stream_manager import stream_manager
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -386,19 +385,9 @@ async def persist_message(conv_id: str, req: PersistMessageRequest):
 
 @router.websocket("/ws")
 async def websocket_conversation(websocket: WebSocket) -> None:
-    """WebSocket 流式对话端点，支持断线续流（resume）"""
+    """WebSocket 流式对话端点，逐 token 流式输出（DB 持久化由 send_and_reply_stream 内部完成）"""
     await websocket.accept()
     user_id = USER_ID
-
-    # 注册 WS 断开回调：清理流
-    _ws_done = asyncio.Event()
-
-    async def _cleanup_check():
-        await _ws_done.wait()
-        # WS 断开后清理所有由该连接发起的流
-        # 不立即清理（留给 resume 机会），StreamManager 的过期机制会自动处理
-
-    asyncio.create_task(_cleanup_check())
 
     try:
         while True:
@@ -411,54 +400,16 @@ async def websocket_conversation(websocket: WebSocket) -> None:
                 )
                 continue
 
-            msg_type = data.get("type", "send")
-            request_id = data.get("request_id", str(uuid.uuid4())[:8])
-
-            # ── 类型：resume（断线续流）──
-            if msg_type == "resume":
-                conv_id = data.get("conversation_id", "")
-                if not conv_id:
-                    await websocket.send_text(
-                        json.dumps({"type": "error", "message": "缺少 conversation_id", "request_id": request_id})
-                    )
-                    continue
-
-                logger.info(f"WS resume request [{conv_id[:8]}]")
-                sub = await stream_manager.subscribe(conv_id)
-                if sub is None:
-                    # 没有活跃流 → 前端只需正常加载消息
-                    await websocket.send_text(
-                        json.dumps({"type": "resume_done", "message": "无活跃流", "request_id": request_id})
-                    )
-                    continue
-
-                # 转发缓冲 + 实时事件
-                try:
-                    async for event in sub:
-                        event["request_id"] = request_id
-                        await websocket.send_text(
-                            json.dumps(event, ensure_ascii=False, default=str)
-                        )
-                except Exception as e:
-                    logger.error(f"Resume stream error [{conv_id[:8]}]: {e}")
-                continue
-
-            # ── 类型：send（发送消息——兼容旧格式，text 字段存在时也自动识别）──
             text = data.get("text", "").strip()
-            if not text and msg_type == "send":
-                await websocket.send_text(
-                    json.dumps({"type": "error", "message": "消息不能为空", "request_id": request_id})
-                )
-                continue
-
-            # 没有 type 字段但有 text → 兼容旧客户端（视为 send）
-            if not text:
-                text = data.get("text", "").strip()
-                if not text:
-                    continue
-
             partition_id = data.get("partition_id")
             conversation_id = data.get("conversation_id", "")
+            request_id = data.get("request_id", str(uuid.uuid4())[:8])
+
+            if not text:
+                await websocket.send_text(
+                    json.dumps({"type": "error", "message": "消息不能为空"})
+                )
+                continue
 
             await websocket.send_text(
                 json.dumps({"type": "status", "message": "正在思考...", "request_id": request_id})
@@ -467,49 +418,41 @@ async def websocket_conversation(websocket: WebSocket) -> None:
             try:
                 from app.services.conversation_llm import send_and_reply_stream
 
-                # 启动流并注册到 StreamManager
-                stream_gen = send_and_reply_stream(
+                assistant_content = ""
+                async for event in send_and_reply_stream(
                     user_id, partition_id, text, conversation_id=conversation_id,
-                )
-                conv_id_for_stream = conversation_id or f"anon-{uuid.uuid4().hex[:8]}"
-                state = await stream_manager.start_stream(conv_id_for_stream, stream_gen)
+                ):
+                    event["request_id"] = request_id
 
-                # 订阅该流（当前 WS 连接作为第一个订阅者）
-                sub = await stream_manager.subscribe(conv_id_for_stream)
-                if sub:
-                    async for event in sub:
-                        event["request_id"] = request_id
+                    if event.get("type") == "context_switch":
+                        rec_pid = event.get("partition_id", "")
+                        rec_cid = event.get("conversation_id", "")
+                        if rec_pid:
+                            partition_id = rec_pid
+                        if rec_cid:
+                            conversation_id = rec_cid
+                        event["partition_id"] = partition_id
 
-                        # context_switch 事件：更新 partition_id 为推荐值
-                        if event.get("type") == "context_switch":
-                            rec_pid = event.get("partition_id", "")
-                            rec_cid = event.get("conversation_id", "")
-                            if rec_pid:
-                                partition_id = rec_pid
-                            if rec_cid:
-                                conversation_id = rec_cid
-                            event["partition_id"] = partition_id
+                    if "partition_id" not in event or not event["partition_id"]:
+                        event["partition_id"] = partition_id
 
-                        if "partition_id" not in event or not event["partition_id"]:
-                            event["partition_id"] = partition_id
-
-                        await websocket.send_text(
-                            json.dumps(event, ensure_ascii=False, default=str)
-                        )
+                    await websocket.send_text(
+                        json.dumps(event, ensure_ascii=False, default=str)
+                    )
+                    if event.get("type") == "token":
+                        assistant_content += event.get("content", "")
 
                 # 流完成后异步发布事件
-                if state and state.accumulated_text.strip():
-                    from app.services.conversation_llm import parse_sources
-                    import re as _re
+                if assistant_content.strip():
                     import asyncio as _asyncio
+                    import re as _re
 
-                    cleaned, source_labels = parse_sources(state.accumulated_text)
-                    skill_ids = _re.findall(r"\[KNOWLEDGE:(\w+)\]", state.accumulated_text)
-                    contains_math = bool(_re.search(r"\$", state.accumulated_text))
+                    skill_ids = _re.findall(r"\[KNOWLEDGE:(\w+)\]", assistant_content)
+                    contains_math = bool(_re.search(r"\$", assistant_content))
                     _asyncio.ensure_future(
                         _publish_reply_event(
                             user_id, partition_id, conversation_id,
-                            state.accumulated_text, skill_ids, contains_math,
+                            assistant_content, skill_ids, contains_math,
                         )
                     )
 
@@ -521,8 +464,6 @@ async def websocket_conversation(websocket: WebSocket) -> None:
 
     except WebSocketDisconnect:
         logger.info("对话WebSocket断开")
-    finally:
-        _ws_done.set()
 
 
 async def _publish_reply_event(

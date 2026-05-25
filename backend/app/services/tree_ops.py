@@ -1,5 +1,4 @@
-"""
-树形对话操作服务 v4.0（归一化版）
+"""树形对话操作服务 v4.0（归一化版）
 层级：分区 → 领域 → 专题 → 对话 → 消息节点
 内联分支：编辑消息在当前对话内创建新版本，不另开对话线程
 """
@@ -359,6 +358,21 @@ class TreeOpsService:
         data.nodes[node.id] = node
         storage.save(user_id, data)
         return node
+
+    def update_message_content(
+        self,
+        user_id: str,
+        message_id: str,
+        text: str,
+    ) -> None:
+        """覆写消息内容（原地更新，不创建版本）"""
+        data = storage.load(user_id)
+        node = data.nodes.get(message_id)
+        if not node:
+            return
+        node.content_blocks = [ContentBlock(text=text)]
+        node.text_summary = text
+        storage.save(user_id, data)
 
     def modify_message(
         self, user_id, message_id, new_content_blocks, new_text_summary=""
