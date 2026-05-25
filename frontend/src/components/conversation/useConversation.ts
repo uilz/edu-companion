@@ -404,9 +404,6 @@ export function useConversation(): UseConversationReturn {
       }
     } catch { /* 恢复失败静默忽略 */ }
 
-    // 处理 WS resume 事件
-    const originalConnect = wsRef.current?.connect;
-    // WS 已初始化，在 onmessage 中处理 resume 事件由下层回调负责
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
