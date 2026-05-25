@@ -119,6 +119,13 @@ class SecretaryModuleRegistry:
 
         for cls in [ReviewReminderModule, FatigueManagerModule, DailyBriefModule]:
             self.register(cls())
+
+        # Phase 8 模块
+        from .builtin_temp_conv_cleanup import TempConversationCleanupModule
+        from .builtin_lateral_expansion import LateralExpansionModule
+        self.register(TempConversationCleanupModule())
+        self.register(LateralExpansionModule())
+
         return len(self._modules)
 
     def get_module(self, name: str) -> SecretaryModule | None:
