@@ -204,7 +204,7 @@ export default function MessageList({
               <div className={`flex-1 min-w-0 ${isUser ? "flex justify-end" : ""}`}>
                 <div className={`max-w-[85%] ${isUser ? "" : "space-y-0"}`}>
                   {isUser ? (
-                    <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-4 py-2.5 rounded-2xl rounded-tr-md">
+                    <div className="group bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-4 pb-2.5 pt-2.5 rounded-2xl rounded-tr-md">
                       {isEditing ? (
                         <div className="space-y-2 min-w-[200px]">
                           <textarea
@@ -230,7 +230,7 @@ export default function MessageList({
                       )}
                       {/* 用户消息操作按钮：编辑/删除/复制 */}
                       {!isEditing && (
-                        <div className="flex items-center gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => handleStartEdit(message.id, displayText)} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]" title="编辑">
                             <Pencil size={12} />
                           </button>
@@ -286,11 +286,8 @@ export default function MessageList({
                               </button>
                             </div>
                           )}
-                          {/* 消息操作按钮：编辑/删除/复制/语音 */}
-                          <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => handleStartEdit(message.id, displayText)} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]" title="编辑">
-                              <Pencil size={12} />
-                            </button>
+                          {/* 消息操作按钮：删除/复制/语音（AI 消息不可编辑） */}
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button onClick={() => handleDeleteMessage(message.id)} className="p-1 text-[var(--color-text-muted)] hover:text-red-500" title="删除">
                               <Trash2 size={12} />
                             </button>
