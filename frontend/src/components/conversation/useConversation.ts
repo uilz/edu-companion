@@ -266,6 +266,7 @@ export function useConversation(): UseConversationReturn {
   // ── Refs ──
   const wsRef = useRef<ConversationWS | null>(null);
   const activeConvIdRef = useRef<string | null>(null);
+  const loadMessagesRef = useRef<((cid: string) => void) | null>(null);
   const activePartIdRef = useRef<string | null>(null);
   const streamingPartIdRef = useRef<string | null>(null);
   const streamingConvIdRef = useRef<string | null>(null);
@@ -352,8 +353,35 @@ export function useConversation(): UseConversationReturn {
       })();
       if (targetConv && cache[targetConv]) {
         setStatusMessage("正在加载已生成的内容...");
-        // 清除缓存，不再需要
         clearStreamCache(targetConv);
+
+        // 轮询检测后台活跃流 → 有则持续刷新消息
+        const pollConvId = targetConv;
+        let pollCount = 0;
+        const pollInterval = setInterval(async () => {
+          pollCount++;
+          try {
+            const res = await fetch(`/api/conversations/tree/stream/active/${pollConvId}`);
+            const data = await res.json();
+            if (data.active) {
+              if (activeConvIdRef.current === pollConvId) {
+                loadMessagesRef.current(pollConvId);
+              }
+            } else {
+              clearInterval(pollInterval);
+              if (activeConvIdRef.current === pollConvId) {
+                loadMessagesRef.current(pollConvId);
+                setIsLoading(false);
+                setStatusMessage("");
+              }
+            }
+          } catch { /* 忽略 */ }
+          if (pollCount > 60) {
+            clearInterval(pollInterval);
+            setIsLoading(false);
+            setStatusMessage("");
+          }
+        }, 2000);
       }
     } catch { /* 忽略 */ }
 
@@ -378,7 +406,9 @@ export function useConversation(): UseConversationReturn {
   }, [selectedPartitionId, activeConversationId, urlInitialized]);
 
   // ── ref 同步 ──
+  // 同步 ref
   useEffect(() => { activeConvIdRef.current = activeConversationId; }, [activeConversationId]);
+  useEffect(() => { loadMessagesRef.current = loadMessages; }, [loadMessages]);
   useEffect(() => { activePartIdRef.current = selectedPartitionId; }, [selectedPartitionId]);
 
   // ── 锁定 body 滚动 ──

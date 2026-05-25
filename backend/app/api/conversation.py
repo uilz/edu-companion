@@ -16,6 +16,7 @@ from app.schemas.conversation import TextBlock
 from app.services.storage import storage
 from app.services.tree_ops import tree_ops
 from app.services.classifier import classifier
+from app.services.active_stream import active_streams
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -343,6 +344,13 @@ async def get_response_block(block_id: str):
 
 
 # 持久化消息（无 LLM）
+@router.get("/tree/stream/active/{conversation_id}")
+async def check_stream_active(conversation_id: str):
+    """检测指定对话是否正在后台流式生成"""
+    active = await active_streams.is_active(conversation_id)
+    return {"active": active, "conversation_id": conversation_id}
+
+
 @router.post("/tree/conversation/{conv_id}/message/persist")
 async def persist_message(conv_id: str, req: PersistMessageRequest):
     from app.schemas.conversation import TextBlock
@@ -385,7 +393,7 @@ async def persist_message(conv_id: str, req: PersistMessageRequest):
 
 @router.websocket("/ws")
 async def websocket_conversation(websocket: WebSocket) -> None:
-    """WebSocket 流式对话端点，逐 token 流式输出（DB 持久化由 send_and_reply_stream 内部完成）"""
+    """WebSocket 流式对话端点，后台 generator 不依赖 WS 连接"""
     await websocket.accept()
     user_id = USER_ID
 
@@ -415,13 +423,47 @@ async def websocket_conversation(websocket: WebSocket) -> None:
                 json.dumps({"type": "status", "message": "正在思考...", "request_id": request_id})
             )
 
-            try:
-                from app.services.conversation_llm import send_and_reply_stream
+            from app.services.conversation_llm import send_and_reply_stream
 
-                assistant_content = ""
-                async for event in send_and_reply_stream(
-                    user_id, partition_id, text, conversation_id=conversation_id,
-                ):
+            # 后台 generator + 队列解耦（WS 断后 generator 继续跑，持续写 DB）
+            stream_queue: asyncio.Queue[dict | None] = asyncio.Queue(maxsize=200)
+
+            async def _background_consume():
+                """后台消费 generator，产出→队列，不依赖 WS"""
+                await active_streams.mark_start(conversation_id)
+                assistant_text = ""
+                try:
+                    async for event in send_and_reply_stream(
+                        user_id, partition_id, text, conversation_id=conversation_id,
+                    ):
+                        await stream_queue.put(event)
+                        if event.get("type") == "token":
+                            assistant_text += event.get("content", "")
+                    await stream_queue.put(None)  # 哨兵：流结束
+                except Exception as e:
+                    logger.error("后台流异常: %s", str(e))
+                    await stream_queue.put({"type": "error", "message": str(e)})
+                    await stream_queue.put(None)
+                finally:
+                    await active_streams.mark_done(conversation_id)
+                    # 发布回复事件
+                    if assistant_text.strip():
+                        import re as _re
+                        skill_ids = _re.findall(r"\[KNOWLEDGE:(\w+)\]", assistant_text)
+                        contains_math = bool(_re.search(r"\$", assistant_text))
+                        asyncio.ensure_future(_publish_reply_event(
+                            user_id, partition_id, conversation_id,
+                            assistant_text, skill_ids, contains_math,
+                        ))
+
+            bg_task = asyncio.create_task(_background_consume())
+
+            # 从队列读取并转发到 WS
+            try:
+                while True:
+                    event = await asyncio.wait_for(stream_queue.get(), timeout=120)
+                    if event is None:
+                        break  # 流正常结束
                     event["request_id"] = request_id
 
                     if event.get("type") == "context_switch":
@@ -439,28 +481,18 @@ async def websocket_conversation(websocket: WebSocket) -> None:
                     await websocket.send_text(
                         json.dumps(event, ensure_ascii=False, default=str)
                     )
-                    if event.get("type") == "token":
-                        assistant_content += event.get("content", "")
-
-                # 流完成后异步发布事件
-                if assistant_content.strip():
-                    import asyncio as _asyncio
-                    import re as _re
-
-                    skill_ids = _re.findall(r"\[KNOWLEDGE:(\w+)\]", assistant_content)
-                    contains_math = bool(_re.search(r"\$", assistant_content))
-                    _asyncio.ensure_future(
-                        _publish_reply_event(
-                            user_id, partition_id, conversation_id,
-                            assistant_content, skill_ids, contains_math,
-                        )
-                    )
-
+            except (WebSocketDisconnect, asyncio.TimeoutError, ConnectionError):
+                # WS 断开 → generator 仍在后台跑，持续写 DB
+                logger.info(f"WS 断开 [{conversation_id[:8]}], 后台流继续")
+                # 不取消 bg_task，让它自然完成
             except Exception as e:
                 logger.error("消息处理失败: %s", str(e), exc_info=True)
-                await websocket.send_text(
-                    json.dumps({"type": "error", "message": str(e), "request_id": request_id})
-                )
+                try:
+                    await websocket.send_text(
+                        json.dumps({"type": "error", "message": str(e), "request_id": request_id})
+                    )
+                except Exception:
+                    pass
 
     except WebSocketDisconnect:
         logger.info("对话WebSocket断开")
