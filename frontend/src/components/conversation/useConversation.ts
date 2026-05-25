@@ -364,12 +364,12 @@ export function useConversation(): UseConversationReturn {
             const res = await fetch(`/api/conversations/tree/stream/active/${pollConvId}`);
             const data = await res.json();
             if (data.active) {
-              if (activeConvIdRef.current === pollConvId) {
+              if (activeConvIdRef.current === pollConvId && loadMessagesRef.current) {
                 loadMessagesRef.current(pollConvId);
               }
             } else {
               clearInterval(pollInterval);
-              if (activeConvIdRef.current === pollConvId) {
+              if (activeConvIdRef.current === pollConvId && loadMessagesRef.current) {
                 loadMessagesRef.current(pollConvId);
                 setIsLoading(false);
                 setStatusMessage("");
