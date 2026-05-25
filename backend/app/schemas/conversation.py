@@ -142,6 +142,9 @@ class Conversation(BaseModel):
     practice_sessions: list[str] = Field(default_factory=list)
     practice_summary: str = ""
     material_refs: list[str] = Field(default_factory=list)
+    # ── Phase 8 融合会话 ──
+    primary_node_id: str | None = None  # 关联 cognitive_nodes.id (topic 级)
+    is_temporary: bool = False          # 临时会话标记
 
 
 # ── Topic（v4 新增） ──

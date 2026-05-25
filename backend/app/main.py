@@ -35,6 +35,7 @@ from app.api.multimodal import router as multimodal_router
 from app.api.achievements import router as achievements_router
 from app.api.search import router as search_router
 from app.api.secretary import router as secretary_router
+from app.api.phase8 import router as phase8_router
 from app.config import settings
 from app.core.learner_model import learner_engine
 
@@ -178,6 +179,8 @@ app.include_router(achievements_router)
 # P1 全站搜索
 app.include_router(search_router)
 app.include_router(secretary_router)
+# Phase 8 认知图驱动分类
+app.include_router(phase8_router)
 
 
 # ── 健康检查 ──

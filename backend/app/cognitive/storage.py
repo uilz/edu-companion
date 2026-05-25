@@ -74,6 +74,8 @@ def upsert_node(node: CognitiveNode, user_id: str = "default_user") -> None:
         "metacognition", "engagement", "composition", "deep_links", "deep_processing",
         "goal_alignment", "diagnostic", "prerequisites", "unlocks", "associates",
         "param_refs", "meta", "updated_at",
+        # Phase 8
+        "path_id", "node_type", "is_visible", "subsystems", "embedding", "is_active",
     ]
     # 确保所有 JSONB 值为合法 JSON 字符串
     vals = {c: _to_json(getattr(node, c, None)) for c in columns}
@@ -383,3 +385,118 @@ def _parse_json_dict(raw) -> dict:
         except (json.JSONDecodeError, TypeError):
             return {}
     return {}
+
+
+# ── Phase 8 新方法 ──
+
+
+def find_node_by_path(path_id: str, user_id: str = "default_user") -> Optional[CognitiveNode]:
+    """通过 path_id 查找节点"""
+    db = get_db()
+    row = db.fetchone(
+        "SELECT * FROM cognitive_nodes WHERE path_id = %s AND user_id = %s AND deleted_at IS NULL",
+        (path_id, user_id),
+    )
+    if not row:
+        return None
+    return _row_to_node(row)
+
+
+def vector_search(
+    query_embedding: list[float],
+    user_id: str = "default_user",
+    level: str | None = None,
+    limit: int = 10,
+    min_similarity: float = 0.1,
+) -> list[dict]:
+    """向量检索：按余弦相似度搜索节点
+
+    返回：
+    [{"id": str, "label": str, "path_id": str, "level": str,
+      "similarity": float, "is_visible": bool}, ...]
+    """
+    db = get_db()
+    embed_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
+
+    level_filter = "AND level = %s" if level else ""
+    level_param = (level,) if level else ()
+
+    params = (embed_str, user_id) + level_param + (limit,)
+
+    rows = db.fetchall(
+        f"""
+        SELECT id, label, path_id, level, is_visible,
+               1 - (embedding <=> %s::vector) AS similarity
+        FROM cognitive_nodes
+        WHERE user_id = %s
+          AND embedding IS NOT NULL
+          AND deleted_at IS NULL
+          {level_filter}
+          AND 1 - (embedding <=> %s::vector) > %s
+        ORDER BY similarity DESC
+        LIMIT %s
+        """,
+        (embed_str, user_id, embed_str, min_similarity, limit),
+    )
+    return [
+        {
+            "id": r["id"],
+            "label": r["label"],
+            "path_id": r["path_id"],
+            "level": r["level"],
+            "is_visible": r["is_visible"],
+            "similarity": float(r["similarity"]),
+        }
+        for r in rows
+    ]
+
+
+def get_visible_children(parent_id: str, user_id: str = "default_user") -> list[CognitiveNode]:
+    """获取某节点下可见的直接子节点"""
+    db = get_db()
+    rows = db.fetchall(
+        "SELECT * FROM cognitive_nodes "
+        "WHERE parent = %s AND user_id = %s AND is_visible = true AND deleted_at IS NULL "
+        "ORDER BY label",
+        (parent_id, user_id),
+    )
+    return [_row_to_node(r) for r in rows]
+
+
+def get_suggested_count(parent_id: str, user_id: str = "default_user") -> int:
+    """获取某节点下的建议/隐藏子节点数量（用于预览计数）"""
+    db = get_db()
+    row = db.fetchone(
+        "SELECT COUNT(*) as cnt FROM cognitive_nodes "
+        "WHERE parent = %s AND user_id = %s AND is_visible = false AND deleted_at IS NULL "
+        "AND node_type IN ('auto_generated', 'suggested')",
+        (parent_id, user_id),
+    )
+    return row["cnt"] if row else 0
+
+
+def set_node_visible(node_id: str, user_id: str = "default_user") -> None:
+    """设置节点可见，并级联设置所有祖先节点可见"""
+    node = get_node(node_id, user_id)
+    if not node:
+        return
+    db = get_db()
+    db.execute(
+        "UPDATE cognitive_nodes SET is_visible = true, updated_at = now() WHERE id = %s AND user_id = %s",
+        (node_id, user_id),
+    )
+    # 级联设置父节点可见
+    parent_id = node.parent
+    visited = {node_id}
+    while parent_id and parent_id not in visited:
+        visited.add(parent_id)
+        db.execute(
+            "UPDATE cognitive_nodes SET is_visible = true, updated_at = now() WHERE id = %s AND user_id = %s",
+            (parent_id, user_id),
+        )
+        parent_row = db.fetchone(
+            "SELECT parent FROM cognitive_nodes WHERE id = %s AND user_id = %s",
+            (parent_id, user_id),
+        )
+        parent_id = parent_row["parent"] if parent_row else None
+

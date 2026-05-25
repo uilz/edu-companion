@@ -374,6 +374,14 @@ class CognitiveNode(BaseModel):
     # ─── 元信息 ───
     meta: MetaInfo = Field(default_factory=MetaInfo)
 
+    # ─── Phase 8 认知图字段 ───
+    path_id: str = ""           # 不变路径标识，如 "大学物理.电磁学.静电场"
+    node_type: str = "explicit"  # explicit | auto_generated | user_created | suggested
+    is_visible: bool = False
+    subsystems: dict = Field(default_factory=dict)
+    embedding: list[float] | None = None
+    is_active: bool = True
+
     def update_timestamp(self):
         self.meta.updated_at = time.time()
 
