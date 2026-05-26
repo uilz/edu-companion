@@ -599,7 +599,7 @@ export default function PartitionSidebar({
 
     return (
       <div key={node.id}>
-        <div className={`flex items-center group relative cursor-pointer ${isActive ? "transition-colors" : ""}`}
+        <div className="flex items-center group relative cursor-pointer transition-colors"
           style={{
             paddingLeft: `${depth * 16 + 8}px`, paddingRight: "8px", paddingTop: "6px", paddingBottom: "6px",
             backgroundColor: isActive ? "var(--color-surface)" : isHovered ? "var(--color-bg-elevated)" : "transparent",
