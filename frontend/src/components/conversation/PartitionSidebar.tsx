@@ -603,7 +603,7 @@ export default function PartitionSidebar({
           style={{
             paddingLeft: `${depth * 16 + 8}px`, paddingRight: "8px", paddingTop: "6px", paddingBottom: "6px",
             backgroundColor: isActive ? "var(--color-surface)" : isHovered ? "var(--color-bg-elevated)" : "transparent",
-            borderLeft: isActive ? "3px solid var(--color-accent)" : "3px solid transparent",
+            borderLeft: isActive ? "3px solid var(--color-accent)" : undefined,
           }}
           onMouseEnter={() => setHoveredId(node.id)}
           onMouseLeave={() => setHoveredId(null)}
