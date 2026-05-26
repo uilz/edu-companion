@@ -593,14 +593,13 @@ export default function PartitionSidebar({
     const isHovered = hoveredId === node.id;
     const isEditing = editingId === node.id;
     const isActive = node.level === "conversation" && node.id === activeConversationId;
-    if (isActive) console.log('[PIS] isActive TRUE:', node.level, node.id, node.name);
     const children = childMap.get(node.id);
     const isExpanded = expandedSet.has(node.id);
     const hasChildren = node.level !== "conversation";
 
     return (
       <div key={node.id}>
-        <div className="flex items-center group relative cursor-pointer transition-colors"
+        <div className={`flex items-center group relative cursor-pointer ${isActive ? "transition-colors" : ""}`}
           style={{
             paddingLeft: `${depth * 16 + 8}px`, paddingRight: "8px", paddingTop: "6px", paddingBottom: "6px",
             backgroundColor: isActive ? "var(--color-surface)" : isHovered ? "var(--color-bg-elevated)" : "transparent",
