@@ -218,6 +218,7 @@ def _build_cognitive_node(
 
     return CognitiveNode(
         id=node_id, label=label, level=level, parent=parent, is_core=is_core,
+        path_id=node_id,
         activation=Activation(base_level=math.log(max(n_obs,1)+1)/math.log(10), recency=0.0, spread_targets=[]),
         belief=Belief(alpha=beta_data["alpha"], beta=beta_data["beta"], proficiency_mean=beta_data["proficiency_mean"],
                       proficiency_precision=beta_data["proficiency_precision"], peak_proficiency=beta_data["peak_proficiency"],
@@ -357,6 +358,7 @@ def migrate_user(
                 try:
                     upsert_node(CognitiveNode(
                         id=partition_id, label=partition_label, level="partition",
+                        path_id=partition_id,
                         activation=Activation(base_level=0.1, recency=0.0, spread_targets=[]),
                         meta=MetaInfo(created_by="migration", version=1),
                     ))
@@ -406,6 +408,7 @@ def migrate_user(
                 if not existing:
                     upsert_node(CognitiveNode(
                         id=partition_id, label="题库技能", level="partition",
+                        path_id=partition_id,
                         activation=Activation(base_level=0.1, recency=0.0, spread_targets=[]),
                         meta=MetaInfo(created_by="migration_auto", version=1),
                     ))
