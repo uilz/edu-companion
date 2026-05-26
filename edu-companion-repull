@@ -62,22 +62,26 @@ fi
 echo ""
 echo "   ✅ 前端构建完成"
 
-# 4. 重启后端 (systemd user service)
+# 4. 重启后端 (systemd user service) — 先释放端口
 echo ""
 echo "🔄 重启后端..."
+fuser -k 8000/tcp 2>/dev/null || true
+sleep 2
 systemctl --user restart edu-backend.service 2>/dev/null || {
     pkill -f "uvicorn app.main:app" 2>/dev/null || true
     sleep 2
 }
 echo "   ✅ 后端已重启"
 
-# 5. 重启前端 (systemd user service)
+# 5. 重启前端 (systemd user service) — 先释放端口防 EADDRINUSE
 echo ""
 echo "🔄 重启前端..."
+fuser -k 3000/tcp 2>/dev/null || true
+sleep 2
 systemctl --user restart edu-frontend.service 2>/dev/null || {
     # 处理旧进程卡住的情况
     pgrep -f "next-server" | xargs -r kill -9 2>/dev/null || true
-    sleep 1
+    sleep 2
     systemctl --user reset-failed edu-frontend.service 2>/dev/null
     systemctl --user restart edu-frontend.service
 }
