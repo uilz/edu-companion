@@ -15,7 +15,8 @@ from app.cognitive.models import (
     Activation, Belief, CognitiveEvent, CognitiveLoad, CognitiveNode,
     Composition, DeepLink, DeepProcessing, Diagnostic, DialogueContext,
     Engagement, ErrorCluster, GoalAlignment, Metacognition, PracticeEvent,
-    PracticeSummary, Prediction, Scheduling, Trend, UserCognitiveState,
+    PracticeSummary, Prediction, Prerequisite, Scheduling, Trend,
+    Unlock, Associate, UserCognitiveState,
 )
 from app.db.database import Database, get_db
 
@@ -356,9 +357,9 @@ def _row_to_node(row: dict) -> CognitiveNode:
         deep_processing=_from_json(DeepProcessing, raw.get("deep_processing")),
         goal_alignment=_from_json(GoalAlignment, raw.get("goal_alignment")),
         diagnostic=_from_json(Diagnostic, raw.get("diagnostic")),
-        prerequisites=_parse_list("prerequisites", str),
-        unlocks=_parse_list("unlocks", str),
-        associates=_parse_list("associates", str),
+        prerequisites=_parse_list("prerequisites", Prerequisite),
+        unlocks=_parse_list("unlocks", Unlock),
+        associates=_parse_list("associates", Associate),
         param_refs=_parse_json_dict(raw.get("param_refs")),
         meta=_parse_json_dict(raw.get("meta")),
         # Phase 8 字段
