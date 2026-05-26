@@ -62,6 +62,10 @@ fi
 echo ""
 echo "   ✅ 前端构建完成"
 
+# 复制静态资源到 standalone（Next.js 14 build 后不会自动 copy）
+cp -r .next/static .next/standalone/.next/static
+echo "   📋 静态资源已复制到 standalone"
+
 # 4. 重启后端 (systemd user service) — 先释放端口
 echo ""
 echo "🔄 重启后端..."
