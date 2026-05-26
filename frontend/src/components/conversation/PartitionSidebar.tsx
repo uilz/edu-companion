@@ -620,37 +620,36 @@ export default function PartitionSidebar({
                 style={{ color: isActive ? "var(--color-text)" : "var(--color-text-secondary)", fontWeight: isActive ? 600 : 400 }}>
                 {node.name || "未命名"}
               </span>
-              {isHovered && (
-                <div className="flex items-center gap-0.5 ml-1">
-                  {node.level !== "conversation" && onNewConversation && (
-                    <button onClick={(e) => { e.stopPropagation(); onNewConversation(node.level, node.id, node.partition_id); }}
-                      className="p-1 text-[var(--color-text-muted)] hover:text-green-400 rounded" title="新建会话"><MessageSquare size={12} /></button>
-                  )}
-                  <button onClick={(e) => { e.stopPropagation(); startEdit(node); }}
-                    className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded" title="重命名"><Pencil size={12} /></button>
-                  <button onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: node.id, name: node.name || "", level: node.level }); }}
-                    className="p-1 text-[var(--color-text-muted)] hover:text-red-400 rounded" title="删除"><Trash2 size={12} /></button>
-                  {[
-                    { parentLevel: "partition", childLevel: "domain", title: "新建领域", emoji: "📚", placeholder: "领域名称" },
-                    { parentLevel: "domain", childLevel: "topic", title: "新建专题", emoji: "📝", placeholder: "专题名称" },
-                    { parentLevel: "topic", childLevel: "conversation", title: "新建对话", emoji: "💬", placeholder: "对话名称（可选）" },
-                  ]
-                    .filter(cfg => cfg.parentLevel === node.level)
-                    .map(cfg => (
-                      <button key={cfg.childLevel} onClick={(e) => {
-                        e.stopPropagation();
-                        setCreateDialog({ level: cfg.childLevel as FlatLevel, parentId: node.id, title: cfg.title, placeholder: cfg.placeholder, emoji: cfg.emoji });
-                      }}
-                        className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded" title={cfg.title}>
-                        <Plus size={12} />
-                      </button>
-                    ))}
-                  {node.level === "partition" && (
-                    <button onClick={(e) => { e.stopPropagation(); window.location.href = `/dashboard?tab=graph&partition_id=${node.id}`; }}
-                      className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded" title="知识图谱"><GitGraph size={12} /></button>
-                  )}
-                </div>
-              )}
+              {/* 悬浮操作按钮：opacity 控制始终占位，不改变布局 */}
+              <div className="flex items-center gap-0.5 ml-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                {node.level !== "conversation" && onNewConversation && (
+                  <button onClick={(e) => { e.stopPropagation(); onNewConversation(node.level, node.id, node.partition_id); }}
+                    className="p-1 text-[var(--color-text-muted)] hover:text-green-400 rounded" title="新建会话"><MessageSquare size={12} /></button>
+                )}
+                <button onClick={(e) => { e.stopPropagation(); startEdit(node); }}
+                  className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded" title="重命名"><Pencil size={12} /></button>
+                <button onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: node.id, name: node.name || "", level: node.level }); }}
+                  className="p-1 text-[var(--color-text-muted)] hover:text-red-400 rounded" title="删除"><Trash2 size={12} /></button>
+                {[
+                  { parentLevel: "partition", childLevel: "domain", title: "新建领域", emoji: "📚", placeholder: "领域名称" },
+                  { parentLevel: "domain", childLevel: "topic", title: "新建专题", emoji: "📝", placeholder: "专题名称" },
+                  { parentLevel: "topic", childLevel: "conversation", title: "新建对话", emoji: "💬", placeholder: "对话名称（可选）" },
+                ]
+                  .filter(cfg => cfg.parentLevel === node.level)
+                  .map(cfg => (
+                    <button key={cfg.childLevel} onClick={(e) => {
+                      e.stopPropagation();
+                      setCreateDialog({ level: cfg.childLevel as FlatLevel, parentId: node.id, title: cfg.title, placeholder: cfg.placeholder, emoji: cfg.emoji });
+                    }}
+                      className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded" title={cfg.title}>
+                      <Plus size={12} />
+                    </button>
+                  ))}
+                {node.level === "partition" && (
+                  <button onClick={(e) => { e.stopPropagation(); window.location.href = `/dashboard?tab=graph&partition_id=${node.id}`; }}
+                    className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded" title="知识图谱"><GitGraph size={12} /></button>
+                )}
+              </div>
             </>
           )}
         </div>
