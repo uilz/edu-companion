@@ -5,6 +5,7 @@ import {
   Plus, FolderOpen, Hash, GitGraph, Pencil, Trash2, Check, X,
   ChevronRight, ChevronDown, MessageSquare, BookOpen, Layers, AlertTriangle,
 } from "lucide-react";
+import { useState, useEffect, useCallback, useRef, useMemo, startTransition } from "react";
 import type { Partition, Domain, Topic, Conversation } from "@/types";
 
 // ══════════════════════════════════════════════════════════════
@@ -364,33 +365,48 @@ export default function PartitionSidebar({
       prevAutoExpandRef.current = convId;
 
       try {
-        // ★ 强制刷新领域列表，不使用缓存，确保新创建的节点存在
+        // ★ 一次性加载所有层级，找到路径后再批量展开（消除逐级闪动）
         const domainList = await loadChildren(partition, controller.signal, true);
         if (cancelled) return;
-        doExpand(selectedPartitionId);
 
-        for (const domain of domainList) {
-          // 强制刷新专题列表
+        // 并行加载所有领域的专题
+        const domainTopicMap = new Map<string, FlatNode[]>();
+        await Promise.all(domainList.map(async (domain) => {
           const topicList = await loadChildren(domain, controller.signal, true);
           if (cancelled) return;
-          for (const topic of topicList) {
-            // 强制刷新对话列表
+          domainTopicMap.set(domain.id, topicList);
+        }));
+        if (cancelled) return;
+
+        // 并行加载所有专题的对话
+        let foundPath: { domainId: string; topicId: string } | null = null;
+        await Promise.all([...domainTopicMap.entries()].map(async ([domainId, topicList]) => {
+          if (cancelled || foundPath) return;
+          const convResults = await Promise.all(topicList.map(async (topic) => {
             const convs = await loadChildren(topic, controller.signal, true);
-            if (cancelled) return;
-            if (convs.some(c => c.id === convId)) {
-              doExpand(domain.id);
-              doExpand(topic.id);
-              return;
-            }
+            if (convs.some(c => c.id === convId)) return { domainId, topicId: topic.id };
+            return null;
+          }));
+          const match = convResults.find(r => r !== null);
+          if (match) foundPath = match;
+        }));
+        if (cancelled) return;
+
+        // ★ 批量展开（一次 re-render）
+        startTransition(() => {
+          doExpand(selectedPartitionId);
+          if (foundPath) {
+            doExpand(foundPath.domainId);
+            doExpand(foundPath.topicId);
           }
-        }
+        });
       } catch (e: any) {
         if (e.name !== "AbortError") console.error("自动展开失败:", e);
       }
     })();
 
     return () => { cancelled = true; controller.abort(); };
-  }, [selectedPartitionId, activeConversationId, initialConversationId]);
+  }, [selectedPartitionId, activeConversationId, initialConversationId, loadChildren, doExpand]);
 
   // ── 创建对话框 ──
   const [createDialog, setCreateDialog] = useState<{
