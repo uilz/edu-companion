@@ -214,7 +214,7 @@ def _build_cognitive_node(
             if fid == node_id and rel in ("prerequisite","builds_on"):
                 unlocks.append(Unlock(target_id=tid, label=rel))
             if tid == node_id and rel == "prerequisite":
-                prerequisites.append(Prerequisite(target_id=fid, label=graph_nodes.get(fid,{}).get("label",fid), satisfied=p_known>=0.8))
+                prerequisites.append(Prerequisite(id=fid, type="strict"))
 
     return CognitiveNode(
         id=node_id, label=label, level=level, parent=parent, is_core=is_core,
