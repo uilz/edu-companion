@@ -379,7 +379,7 @@ export default function PartitionSidebar({
 
         // 并行加载所有专题的对话
         let foundPath: { domainId: string; topicId: string } | null = null;
-        await Promise.all([...domainTopicMap.entries()].map(async ([domainId, topicList]) => {
+        await Promise.all(Array.from(domainTopicMap.entries()).map(async ([domainId, topicList]) => {
           if (cancelled || foundPath) return;
           const convResults = await Promise.all(topicList.map(async (topic) => {
             const convs = await loadChildren(topic, controller.signal, true);
