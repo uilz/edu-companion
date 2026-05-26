@@ -5,7 +5,7 @@ import {
   Menu, X, Bot, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import type { Partition, TreeNode, ResponseBlock } from "@/types";
-import PartitionSidebar from "@/components/conversation/PartitionSidebar";
+import Phase8Sidebar from "@/components/conversation/Phase8Sidebar";
 import MessageList from "@/components/conversation/MessageList";
 import ConversationChatInput from "@/components/conversation/ChatInput";
 import type { UseConversationReturn } from "@/components/conversation/useConversation";
@@ -244,19 +244,20 @@ export default function ConversationPanel(props: UseConversationReturn) {
         {/* 移动端底部弹出分区侧栏 */}
         {showPartitionSidebar && (
           <MobileBottomSheet onClose={() => setShowPartitionSidebar(false)}>
-            <PartitionSidebar
+            <Phase8Sidebar
               partitions={partitions}
               selectedPartitionId={selectedPartitionId}
               activeConversationId={activeConversationId}
-              initialConversationId={activeConversationId ?? undefined}
               onSelectConversation={handleSelectConversation}
               onCreatePartition={() => {
                 setShowPartitionSidebar(false);
                 setShowNewPartition(true);
               }}
-              onRenamePartition={handleRenamePartition}
               loading={loadingPartitions}
-              onNewConversation={handleNewConversation}
+              onNewConversation={(level, parentId) => {
+                setShowPartitionSidebar(false);
+                handleNewConversation(level, parentId);
+              }}
               onTreeChanged={loadPartitions}
             />
           </MobileBottomSheet>
@@ -331,7 +332,7 @@ export default function ConversationPanel(props: UseConversationReturn) {
 
             {/* 桌面端侧栏分区树组件 */}
             <div className="flex-1 overflow-hidden">
-              <PartitionSidebar
+              <Phase8Sidebar
                 partitions={partitions}
                 selectedPartitionId={selectedPartitionId}
                 activeConversationId={activeConversationId}

@@ -3,14 +3,27 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Plus, Hash, Pencil, Trash2, Check, X,
-  ChevronRight, ChevronDown, MessageSquare, Sparkles,
+  ChevronRight, ChevronDown, MessageSquare, Sparkles, FolderOpen,
 } from "lucide-react";
+import type { Conversation } from "@/types";
 
 // ══════════════════════════════════════════════════════════════
-//  API — Phase 8 (/api/v2)
+//  API — Phase 8 (/api/v2) + 旧树 API (/api/conversations/tree)
 // ══════════════════════════════════════════════════════════════
-async function graphFetch<T>(path: string, options?: RequestInit): Promise<T> {
+async function v2Fetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`/api/v2${path}`, {
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    ...options,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API ${res.status}: ${text.slice(0, 100)}`);
+  }
+  return res.json();
+}
+
+async function treeFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`/api/conversations${path}`, {
     headers: { "Content-Type": "application/json", ...options?.headers },
     ...options,
   });
@@ -24,7 +37,7 @@ async function graphFetch<T>(path: string, options?: RequestInit): Promise<T> {
 // ══════════════════════════════════════════════════════════════
 //  类型
 // ══════════════════════════════════════════════════════════════
-type GraphLevel = "partition" | "domain" | "topic" | "concept" | "atom";
+type GraphLevel = "partition" | "domain" | "topic";
 
 interface GraphNode {
   id: string;
@@ -34,22 +47,32 @@ interface GraphNode {
   is_visible: boolean;
   node_type: string;
   suggested_count: number;
-  created_at: string;
+  created_at: number;
+}
+
+interface TreeConv {
+  id: string;
+  name: string;
+  partition_id: string;
+  is_active: boolean;
 }
 
 const ROOT_KEY = "__graph_root__";
-const LEVEL_ORDER: GraphLevel[] = ["partition", "domain", "topic", "concept", "atom"];
 
 // ══════════════════════════════════════════════════════════════
-//  Props
+//  Props — 兼容 PartitionSidebar 接口 + Phase8 扩展
 // ══════════════════════════════════════════════════════════════
 interface Props {
-  selectedNodeId: string | null;
+  partitions?: any[];                // 兼容 PartitionSidebar（旧 prop，新版忽略）
+  selectedPartitionId: string | null;
   activeConversationId: string | null;
-  onSelectConversation: (nodeId: string, convId: string) => void;
+  initialConversationId?: string;
+  onSelectConversation: (pid: string, cid: string) => void;
   onCreatePartition: () => void;
+  onRenamePartition?: (id: string, name: string) => void;
   loading?: boolean;
   compact?: boolean;
+  onNewConversation?: (level: string, parentId: string, partitionId?: string) => void;
   onTreeChanged?: () => void;
 }
 
@@ -90,75 +113,38 @@ function ConfirmDialog({ children, onConfirm, onCancel }: {
   );
 }
 
-function NewItemDialog({ open, title, placeholder, onClose, onCreate }: {
-  open: boolean; title: string; placeholder: string;
-  onClose: () => void; onCreate: (name: string) => void;
-}) {
-  const [name, setName] = useState("");
-  useEffect(() => { if (open) setName(""); }, [open]);
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="bg-[var(--color-bg)] border border-[var(--color-border)] w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
-        <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-[var(--color-text)]">{title}</h3>
-          <button onClick={onClose} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]"><X size={16} /></button>
-        </div>
-        <div className="px-4 py-4">
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder={placeholder}
-            className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 focus:outline-none focus:border-[var(--color-border-hover)]" autoFocus />
-        </div>
-        <div className="px-4 py-3 border-t border-[var(--color-border)] flex justify-end gap-2">
-          <button onClick={onClose} className="px-3 py-1.5 text-xs text-[var(--color-text-secondary)]">取消</button>
-          <button onClick={() => { if (name.trim()) { onCreate(name.trim()); onClose(); } }} disabled={!name.trim()}
-            className="px-3 py-1.5 text-xs bg-[var(--color-accent)] text-white disabled:opacity-30">创建</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ══════════════════════════════════════════════════════════════
-//  层级图标
-// ══════════════════════════════════════════════════════════════
-const LEVEL_ICONS: Record<GraphLevel, React.ReactNode> = {
-  partition: <Hash size={14} />,
-  domain: <Hash size={12} />,
-  topic: <Hash size={11} />,
-  concept: <Hash size={10} />,
-  atom: <Hash size={9} />,
-};
-
-const LEVEL_COLORS: Record<GraphLevel, string> = {
-  partition: "var(--color-accent)",
-  domain: "var(--color-info)",
-  topic: "var(--color-text)",
-  concept: "var(--color-text-muted)",
-  atom: "var(--color-text-muted)",
-};
-
-// ══════════════════════════════════════════════════════════════
-//  Phase8Sidebar
+//  Phase8Sidebar — 替换 PartitionSidebar
 // ══════════════════════════════════════════════════════════════
 export default function Phase8Sidebar({
-  selectedNodeId, activeConversationId,
-  onSelectConversation, onCreatePartition,
-  loading = false, compact = false, onTreeChanged,
+  selectedPartitionId: selectedNodeId,
+  activeConversationId,
+  initialConversationId,
+  onSelectConversation,
+  onCreatePartition,
+  onRenamePartition,
+  loading = false, compact = false,
+  onNewConversation,
+  onTreeChanged,
 }: Props) {
+  // ── 两级缓存: graphNodes (知识图谱) + convCache (会话) ──
   const [childMap, setChildMap] = useState<Map<string, GraphNode[]>>(() => new Map());
+  const [convCache, setConvCache] = useState<Map<string, TreeConv[]>>(() => new Map());
   const [expandedSet, setExpandedSet] = useState<Set<string>>(new Set());
   const [loadingSet, setLoadingSet] = useState<Set<string>>(new Set());
-  const loadingSetRef = useRef(loadingSet);
-  loadingSetRef.current = loadingSet;
 
   const childMapRef = useRef(childMap);
   childMapRef.current = childMap;
+  const convCacheRef = useRef(convCache);
+  convCacheRef.current = convCache;
   const expandedSetRef = useRef(expandedSet);
   expandedSetRef.current = expandedSet;
+  const loadingSetRef = useRef(loadingSet);
+  loadingSetRef.current = loadingSet;
 
-  // ── 初始加载分区 ──
+  // ── 初始加载根节点 ──
   useEffect(() => {
-    graphFetch<GraphNode[]>("/graph/nodes")
+    v2Fetch<GraphNode[]>("/graph/nodes")
       .then(nodes => {
         setChildMap(prev => {
           const next = new Map(prev);
@@ -166,7 +152,7 @@ export default function Phase8Sidebar({
           return next;
         });
       })
-      .catch(e => console.error("加载分区失败:", e));
+      .catch(() => { /* 忽略加载失败 */ });
   }, []);
 
   // ── 加载子节点 ──
@@ -175,16 +161,52 @@ export default function Phase8Sidebar({
     if (loadingSetRef.current.has(id)) return;
     setLoadingSet(prev => { const next = new Set(prev); next.add(id); return next; });
     try {
-      const children = await graphFetch<GraphNode[]>(`/graph/nodes?parent_id=${id}`);
+      const children = await v2Fetch<GraphNode[]>(`/graph/nodes?parent_id=${id}`);
       setChildMap(prev => {
         const next = new Map(prev);
         next.set(id, children);
         return next;
       });
-    } catch (e) {
-      console.error("加载子节点失败:", e);
+    } catch {
+      // parent_id 检索不存在的 fallback: 通过 level 取下一级
+      const levelMap: Record<string, string> = { partition: "domain", domain: "topic" };
+      const nextLevel = levelMap[node.level];
+      if (nextLevel) {
+        try {
+          const children = await v2Fetch<GraphNode[]>(`/graph/nodes?level=${nextLevel}`);
+          setChildMap(prev => {
+            const next = new Map(prev);
+            next.set(id, children);
+            return next;
+          });
+        } catch { /* 忽略 */ }
+      }
     } finally {
       setLoadingSet(prev => { const next = new Set(prev); next.delete(id); return next; });
+    }
+  }, []);
+
+  // ── 加载会话 ├─
+  const loadConversations = useCallback(async (parentId: string) => {
+    if (loadingSetRef.current.has(`conv:${parentId}`)) return;
+    setLoadingSet(prev => { const next = new Set(prev); next.add(`conv:${parentId}`); return next; });
+    try {
+      // 尝试通过树 API 加载该节点下的会话
+      const data = await treeFetch<{ conversations: Conversation[] }>(`/tree/conversation?parent_id=${parentId}`);
+      const convs = (data.conversations || []).map(c => ({
+        id: c.id, name: c.name,
+        partition_id: parentId, is_active: c.is_active,
+      }));
+      setConvCache(prev => {
+        const next = new Map(prev);
+        next.set(parentId, convs);
+        return next;
+      });
+    } catch {
+      // 通过 links API 加载关联会话
+      // 暂不支持，静默
+    } finally {
+      setLoadingSet(prev => { const next = new Set(prev); next.delete(`conv:${parentId}`); return next; });
     }
   }, []);
 
@@ -200,6 +222,8 @@ export default function Phase8Sidebar({
       if (!childMapRef.current.has(node.id)) {
         loadChildren(node);
       }
+      // 展开时同时加载会话
+      loadConversations(node.id);
       setExpandedSet(prev => {
         if (prev.has(node.id)) return prev;
         const next = new Set(prev);
@@ -207,178 +231,40 @@ export default function Phase8Sidebar({
         return next;
       });
     }
-  }, [loadChildren]);
+  }, [loadChildren, loadConversations]);
 
-  // ── 对话树条目渲染 ──
-  const renderNode = (node: GraphNode, depth: number) => {
-    const isExpanded = expandedSet.has(node.id);
-    const isLoading = loadingSet.has(node.id);
-    const children = childMap.get(node.id) || [];
-    const isSelected = node.id === selectedNodeId;
-    const canExpand = node.level !== "atom";
-    const nextLevel = canExpand ? LEVEL_ORDER[LEVEL_ORDER.indexOf(node.level) + 1] : null;
-
-    return (
-      <div key={node.id}>
-        <div
-          className={`flex items-center gap-1 px-2 py-1.5 cursor-pointer select-none text-xs
-            ${isSelected ? "bg-[var(--color-surface)] text-[var(--color-accent)]" : "text-[var(--color-text)] hover:bg-[var(--color-surface)]"}`}
-          style={{ paddingLeft: `${12 + depth * 16}px` }}
-          onClick={() => {
-            if (canExpand) toggleExpand(node);
-            else onSelectConversation(node.id, "");
-          }}
-        >
-          {/* 展开图标 */}
-          <span className="w-4 flex-shrink-0 flex items-center justify-center">
-            {isLoading ? (
-              <span className="w-3 h-3 border-2 border-[var(--color-text-muted)] border-t-transparent rounded-full animate-spin" />
-            ) : canExpand ? (
-              isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />
-            ) : (
-              <span className="w-3" />
-            )}
-          </span>
-
-          {/* 层级图标 */}
-          <span className="flex-shrink-0" style={{ color: LEVEL_COLORS[node.level] }}>
-            {LEVEL_ICONS[node.level]}
-          </span>
-
-          {/* 标签 */}
-          <span className="flex-1 truncate">{node.label}</span>
-
-          {/* 预览计数 */}
-          {canExpand && node.suggested_count > 0 && !isExpanded && (
-            <span className="text-[10px] text-[var(--color-text-muted)] bg-[var(--color-surface)] px-1.5 rounded">
-              +{node.suggested_count}
-            </span>
-          )}
-
-          {/* 节点类型标记 */}
-          {node.node_type === "auto_generated" && (
-            <span className="text-[10px] text-[var(--color-text-muted)] italic">自动</span>
-          )}
-          {node.node_type === "suggested" && (
-            <Sparkles size={10} className="text-[var(--color-warning)]" />
-          )}
-
-          {/* 操作按钮 */}
-          {isSelected && (
-            <div className="flex gap-0.5 ml-1" onClick={e => e.stopPropagation()}>
-              {canExpand && nextLevel && (
-                <button
-                  onClick={() => {
-                    setCreateTarget({ parentId: node.id, level: nextLevel, parentLabel: node.label });
-                  }}
-                  className="p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)]"
-                  title={`新建${nextLevel}`}
-                >
-                  <Plus size={11} />
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  setEditingId(node.id);
-                  setEditValue(node.label);
-                }}
-                className="p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)]"
-                title="重命名"
-              >
-                <Pencil size={11} />
-              </button>
-              <button
-                onClick={() => setDeleteTarget({ id: node.id, label: node.label, level: node.level })}
-                className="p-0.5 text-[var(--color-text-muted)] hover:text-red-400"
-                title="删除"
-              >
-                <Trash2 size={11} />
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* 行内编辑 */}
-        {editingId === node.id && (
-          <div style={{ paddingLeft: `${12 + depth * 16}px` }}>
-            <InlineEdit
-              value={editValue}
-              onConfirm={async (name) => {
-                try {
-                  await graphFetch(`/graph/nodes/${node.id}/expand`, {
-                    method: "POST",
-                    body: JSON.stringify({ label: name }),
-                  }).catch(() => {}); // rename not supported yet, skip
-                } catch {}
-                setEditingId(null);
-              }}
-              onCancel={() => setEditingId(null)}
-            />
-          </div>
-        )}
-
-        {/* 子节点 */}
-        {isExpanded && (
-          <>
-            {children.filter(c => c.is_visible).map(child => renderNode(child, depth + 1))}
-
-            {/* 新建子节点按钮 */}
-            <div
-              className="flex items-center gap-1 px-2 py-1 cursor-pointer text-xs text-[var(--color-text-muted)] hover:text-[var(--color-accent)]"
-              style={{ paddingLeft: `${12 + (depth + 1) * 16}px` }}
-              onClick={() => {
-                const nextLevel = LEVEL_ORDER[LEVEL_ORDER.indexOf(node.level) + 1];
-                setCreateTarget({ parentId: node.id, level: nextLevel, parentLabel: node.label });
-              }}
-            >
-              <Plus size={12} />
-              <span>新建{node.level === "partition" ? "领域" : node.level === "domain" ? "专题" : "子节点"}</span>
-            </div>
-          </>
-        )}
-      </div>
-    );
-  };
-
-  // ── 创建对话框 ──
-  const [createTarget, setCreateTarget] = useState<{
-    parentId: string; level: GraphLevel; parentLabel: string;
-  } | null>(null);
-
-  const handleCreate = async (name: string) => {
-    if (!createTarget) return;
-    try {
-      await graphFetch(`/graph/nodes/${createTarget.parentId}/expand`, {
-        method: "POST",
-        body: JSON.stringify({ label: name }),
+  // ── 自动展开到当前对话（简化版）──
+  const prevAutoExpandRef = useRef<string | null>(null);
+  useEffect(() => {
+    const convId = activeConversationId || initialConversationId || "";
+    if (!selectedNodeId || !convId) return;
+    if (prevAutoExpandRef.current === convId) return;
+    prevAutoExpandRef.current = convId;
+    // 展开分区
+    setExpandedSet(prev => { const next = new Set(prev); next.add(selectedNodeId); return next; });
+    const partition = childMapRef.current.get(ROOT_KEY)?.find(n => n.id === selectedNodeId);
+    if (partition && !childMapRef.current.has(partition.id)) {
+      loadChildren(partition).then(() => {
+        // 展开第一层 domain
+        const domains = childMapRef.current.get(partition.id);
+        if (domains?.length) {
+          setExpandedSet(prev => { const next = new Set(prev); domains.forEach(d => next.add(d.id)); return next; });
+        }
       });
-      // 重新加载父节点
-      const parent = childMapRef.current.get(ROOT_KEY)?.find(n => n.id === createTarget.parentId)
-        || Array.from(childMapRef.current.values()).flat().find(n => n.id === createTarget.parentId);
-      if (parent) loadChildren(parent);
-      onTreeChanged?.();
-    } catch (e) {
-      console.error("创建失败:", e);
     }
-    setCreateTarget(null);
-  };
+  }, [selectedNodeId, activeConversationId, initialConversationId, loadChildren]);
 
   // ── 编辑 ──
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
   // ── 删除 ──
-  const [deleteTarget, setDeleteTarget] = useState<{
-    id: string; label: string; level: GraphLevel;
-  } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     try {
-      await graphFetch(`/graph/nodes/${deleteTarget.id}?recursive=true`, {
-        method: "DELETE",
-      });
-      // 从 childMap 中移除
+      await v2Fetch(`/graph/nodes/${deleteTarget.id}?recursive=true`, { method: "DELETE" });
       childMapRef.current.forEach((children, parentId) => {
         const filtered = children.filter(c => c.id !== deleteTarget.id);
         if (filtered.length !== children.length) {
@@ -390,55 +276,159 @@ export default function Phase8Sidebar({
         }
       });
       onTreeChanged?.();
-    } catch (e) {
-      console.error("删除失败:", e);
-    }
+    } catch { /* 忽略 */ }
     setDeleteTarget(null);
   };
 
-  // ── 当前展开的 node 列表 ──
+  // ── 层级图标 ──
+  const levelIcon = (level: GraphLevel) => {
+    switch (level) {
+      case "partition": return <FolderOpen size={14} />;
+      case "domain": return <Hash size={12} />;
+      case "topic": return <Sparkles size={11} />;
+    }
+  };
+
+  // ── 节点渲染 ──
+  const renderNode = (node: GraphNode, depth: number) => {
+    const isExpanded = expandedSet.has(node.id);
+    const isLoading = loadingSet.has(node.id);
+    const children = childMap.get(node.id) || [];
+    const isActive = node.id === selectedNodeId;
+    const convs = convCache.get(node.id) || [];
+
+    return (
+      <div key={node.id}>
+        <div
+          className="flex items-center group relative cursor-pointer transition-colors"
+          style={{
+            paddingLeft: `${12 + depth * 16}px`, paddingRight: "8px",
+            paddingTop: "6px", paddingBottom: "6px",
+            backgroundColor: isActive ? "var(--color-surface)" : "transparent",
+            borderLeft: isActive ? "3px solid var(--color-accent)" : undefined,
+          }}
+          onClick={() => {
+            toggleExpand(node);
+            // topic 节点视为可对话
+            if (node.level === "topic") {
+              onNewConversation?.(node.level, node.id, node.id);
+            }
+          }}
+        >
+          {/* 展开图标 */}
+          <span className="w-4 flex-shrink-0 flex items-center justify-center mr-1">
+            {isLoading ? (
+              <span className="w-3 h-3 border-2 border-[var(--color-text-muted)] border-t-transparent rounded-full animate-spin" />
+            ) : (
+              isExpanded ? <ChevronDown size={12} className="text-[var(--color-text-muted)]" /> : <ChevronRight size={12} className="text-[var(--color-text-muted)]" />
+            )}
+          </span>
+
+          {/* 层级图标 */}
+          <span className="flex-shrink-0 mr-1.5 text-[var(--color-text-muted)]">
+            {levelIcon(node.level)}
+          </span>
+
+          {/* 标签 */}
+          <span className="flex-1 truncate text-xs"
+            style={{ color: isActive ? "var(--color-text)" : "var(--color-text-secondary)", fontWeight: isActive ? 600 : 400 }}>
+            {node.label}
+          </span>
+
+          {/* 预览计数 */}
+          {node.suggested_count > 0 && !isExpanded && (
+            <span className="text-[10px] text-[var(--color-text-muted)] bg-[var(--color-surface)] px-1.5 rounded ml-1">
+              +{node.suggested_count}
+            </span>
+          )}
+
+          {/* 悬浮按钮 */}
+          <div className="flex items-center gap-0.5 ml-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+            {onNewConversation && (
+              <button onClick={(e) => { e.stopPropagation(); onNewConversation(node.level, node.id); }}
+                className="p-1 text-[var(--color-text-muted)] hover:text-green-400" title="新建会话"><MessageSquare size={11} /></button>
+            )}
+            <button onClick={(e) => { e.stopPropagation(); setEditingId(node.id); setEditValue(node.label); }}
+              className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)]" title="重命名"><Pencil size={11} /></button>
+            <button onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: node.id, label: node.label }); }}
+              className="p-1 text-[var(--color-text-muted)] hover:text-red-400" title="删除"><Trash2 size={11} /></button>
+          </div>
+        </div>
+
+        {/* 行内编辑 */}
+        {editingId === node.id && (
+          <div style={{ paddingLeft: `${12 + depth * 16}px` }}>
+            <InlineEdit
+              value={editValue}
+              onConfirm={async (name) => {
+                if (onRenamePartition && node.level === "partition") {
+                  onRenamePartition(node.id, name);
+                }
+                setEditingId(null);
+              }}
+              onCancel={() => setEditingId(null)}
+            />
+          </div>
+        )}
+
+        {/* 子节点 */}
+        {isExpanded && (
+          <div>
+            {children.filter(c => c.is_visible).map(child => renderNode(child, depth + 1))}
+            {convs.filter(c => c.id !== activeConversationId).map(conv => (
+              <div key={`conv:${conv.id}`}
+                className="flex items-center cursor-pointer transition-colors"
+                style={{
+                  paddingLeft: `${12 + (depth + 1) * 16}px`, paddingRight: "8px",
+                  paddingTop: "4px", paddingBottom: "4px",
+                  borderLeft: activeConversationId === conv.id ? "3px solid var(--color-accent)" : undefined,
+                  backgroundColor: activeConversationId === conv.id ? "var(--color-surface)" : "transparent",
+                }}
+                onClick={() => onSelectConversation(node.id, conv.id)}
+              >
+                <span className="w-4 flex-shrink-0 mr-1" />
+                <MessageSquare size={11} className="text-[var(--color-text-muted)] mr-1.5" />
+                <span className="text-xs truncate text-[var(--color-text-muted)]">{conv.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const rootNodes = childMap.get(ROOT_KEY) || [];
 
   return (
-    <div className="h-full flex flex-col bg-[var(--color-bg)] border-r border-[var(--color-border)]">
-      {/* 头部 */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--color-border)]">
-        <span className="text-xs font-semibold text-[var(--color-text)]">知识树</span>
-        <button
-          onClick={onCreatePartition}
-          className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)]"
-          title="新建分区"
-        >
-          <Plus size={14} />
-        </button>
-      </div>
-
-      {/* 树形列表 */}
+    <div className="flex flex-col h-full bg-[var(--color-bg)] border-r border-[var(--color-border)]">
+      {!compact && (
+        <div className="flex items-center justify-between px-3 py-2.5 border-b border-[var(--color-border)]">
+          <div className="flex items-center gap-1.5">
+            <FolderOpen size={15} className="text-[var(--color-accent)]" />
+            <span className="text-xs font-semibold text-[var(--color-text)]">学习空间</span>
+          </div>
+          <button onClick={onCreatePartition}
+            className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface)] transition-colors rounded" title="新建分区">
+            <Plus size={15} />
+          </button>
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto py-1">
         {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <span className="w-5 h-5 border-2 border-[var(--color-text-muted)] border-t-transparent rounded-full animate-spin" />
-          </div>
+          <div className="px-4 py-8 text-center text-xs text-[var(--color-text-muted)]">加载中...</div>
         ) : rootNodes.length === 0 ? (
-          <div className="text-xs text-[var(--color-text-muted)] text-center py-8">暂无分区</div>
+          <div className="px-4 py-8 text-center">
+            <Hash size={18} className="text-[var(--color-text-muted)] mx-auto mb-2" />
+            <div className="text-xs text-[var(--color-text-muted)]">暂无分区</div>
+            <div className="text-[10px] text-[var(--color-text-muted)] mt-1 opacity-60">发送消息将自动创建</div>
+          </div>
         ) : (
           rootNodes.map(node => renderNode(node, 0))
         )}
       </div>
-
-      {/* 创建对话框 */}
-      <NewItemDialog
-        open={!!createTarget}
-        title={`新建${createTarget?.level || ""}`}
-        placeholder={`${createTarget?.parentLabel || ""} 下的名称`}
-        onClose={() => setCreateTarget(null)}
-        onCreate={handleCreate}
-      />
-
-      {/* 删除确认 */}
       {deleteTarget && (
         <ConfirmDialog onConfirm={confirmDelete} onCancel={() => setDeleteTarget(null)}>
-          确认删除「{deleteTarget.label}」及其所有子节点？{deleteTarget.level !== "atom" && "\n此项操作不可恢复。"}
+          确认删除「{deleteTarget.label}」及其所有子节点？此项操作不可恢复。
         </ConfirmDialog>
       )}
     </div>
