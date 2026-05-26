@@ -212,7 +212,7 @@ def _build_cognitive_node(
         for edge in graph_edges:
             fid, tid, rel = edge.get("from_id",""), edge.get("to_id",""), edge.get("relation","prerequisite")
             if fid == node_id and rel in ("prerequisite","builds_on"):
-                unlocks.append(Unlock(target_id=tid, label=rel))
+                unlocks.append(Unlock(id=tid))
             if tid == node_id and rel == "prerequisite":
                 prerequisites.append(Prerequisite(id=fid, type="strict"))
 
