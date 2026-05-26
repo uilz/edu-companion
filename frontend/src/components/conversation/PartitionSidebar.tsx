@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, startTransition } from "react";
 import {
   Plus, FolderOpen, Hash, GitGraph, Pencil, Trash2, Check, X,
   ChevronRight, ChevronDown, MessageSquare, BookOpen, Layers, AlertTriangle,
 } from "lucide-react";
-import { useState, useEffect, useCallback, useRef, useMemo, startTransition } from "react";
 import type { Partition, Domain, Topic, Conversation } from "@/types";
 
 // ══════════════════════════════════════════════════════════════
