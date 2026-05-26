@@ -28,6 +28,20 @@
 - **build 错误**: `loadMessagesRef` 声明顺序问题
 - **resume 残留清理**: 移除不再使用的 `case "resume"/"resume_done"` 代码
 
+### 新增 — 知识图谱侧栏 + 分类器 (Phase 8 续)
+- **Phase8Sidebar**: 替换旧的 PartitionSidebar，展示知识图谱树 (partition→domain→topic→concept→atom)
+- **自动归类**: 发送消息时 fire-and-forget 调用 `/api/v2/classify`
+- **数据迁移**: 旧 knowledge_graph JSON → cognitive_nodes 表（10节点）
+
+
+### 修复
+- **WS 崩溃**: `conversation.py` 缺 `import asyncio`
+- **storage 序列化**: path_id/node_type 双引号问题；prerequisites/unlocks/associates 类型解析
+- **迁移脚本**: Prerequisite/Unlock 字段兼容；path_id/is_visible 补全
+- **父子关系**: 知识图谱节点 parent 字段补齐
+- **蓝线闪现**: 分区/领域/专题不设 borderLeft
+- **代码清理**: 删除旧的 PartitionSidebar.tsx
+
 ---
 
 ## [0.4.0] - 2026-05-24

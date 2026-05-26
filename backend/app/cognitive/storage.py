@@ -89,6 +89,11 @@ def upsert_node(node: CognitiveNode, user_id: str = "default_user") -> None:
         "is_core": node.is_core,
         "children": _to_json(node.children),
         "updated_at": now_iso,
+        # Phase 8 — 明文存储，不 JSON 双序列化
+        "path_id": node.path_id or "",
+        "node_type": node.node_type or "explicit",
+        "is_visible": node.is_visible,
+        "is_active": node.is_active,
     })
 
     placeholders = ", ".join(f"%({k})s" for k in vals)

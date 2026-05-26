@@ -32,6 +32,27 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+// ══════════════════ Phase 8 API 封装 ══════════════════
+async function v2Fetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`/api/v2${path}`, {
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    cache: 'no-store',
+    ...options,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`v2 API error ${res.status}: ${text}`);
+  }
+  return res.json();
+}
+
+function fireClassify(convId: string, text: string) {
+  v2Fetch("/classify", {
+    method: "POST",
+    body: JSON.stringify({ conversation_id: convId, message: text }),
+  }).catch(() => {}); // fire-and-forget
+}
+
 // ══════════════════ WebSocket 管理器: 单连接 + 指数退避重连 (保持不变) ══════════════════
 type WSCallbacks = {
   onToken: (content: string, blockId?: string) => void;
@@ -673,6 +694,7 @@ export function useConversation(): UseConversationReturn {
         text_summary: "", role: "assistant", timestamp: Date.now(),
         token_count: 0, is_deleted: false, is_archived: false, has_modified_version: false,
       }]);
+      fireClassify(cId || "", text);
       setIsLoading(true);
       setStatusMessage("正在思考...");
 
