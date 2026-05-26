@@ -45,7 +45,7 @@ class TreeOpsService:
             ),
             "auto_create_child": {
                 "level": "domain",
-                "name": "默认领域",  # 固定名称
+                "name": "临时领域",  # 固定名称
                 "emoji": "{emoji}",  # 继承分区的 emoji
             },
         },
@@ -57,9 +57,9 @@ class TreeOpsService:
             "factory": lambda name, emoji, **kw: Domain(
                 partition_id=kw["parent_id"], name=name, emoji=emoji
             ),
-            "auto_create_child": {  # 新增：创建领域时自动创建默认专题
+            "auto_create_child": {  # 新增：创建领域时自动创建临时专题
                 "level": "topic",
-                "name": "默认专题",
+                "name": "临时专题",
                 "emoji": "📝",
             },
         },

@@ -191,7 +191,7 @@ async function createConversationChain(
       } else {
         const newP = await apiFetch<{ partition: Partition; conversation_id?: string }>("/tree/partition", {
           method: "POST",
-          body: JSON.stringify({ name: "默认分区", emoji: "💬" }),
+          body: JSON.stringify({ name: "临时分区", emoji: "💬" }),
         });
         pId = newP.partition.id;
       }
@@ -205,7 +205,7 @@ async function createConversationChain(
     } else {
       const newD = await apiFetch<{ domain: { id: string }; conversation_id?: string }>("/tree/domain", {
         method: "POST",
-        body: JSON.stringify({ parent_id: pId, name: "默认领域", emoji: "📚" }),
+        body: JSON.stringify({ parent_id: pId, name: "临时领域", emoji: "📚" }),
       });
       domainId = newD.domain.id;
     }
@@ -218,7 +218,7 @@ async function createConversationChain(
     } else {
       const newT = await apiFetch<{ topic: { id: string }; conversation_id?: string }>("/tree/topic", {
         method: "POST",
-        body: JSON.stringify({ parent_id: domainId, name: "默认专题", emoji: "📝" }),
+        body: JSON.stringify({ parent_id: domainId, name: "临时专题", emoji: "📝" }),
       });
       topicId = newT.topic.id;
     }
@@ -274,6 +274,7 @@ export function useConversation(): UseConversationReturn {
   const streamBufferRef = useRef("");
   const streamSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadPartitionsRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const isSendingRef = useRef(false);
 
   // ── 流式缓存: sessionStorage 持久化（刷新恢复）──
   const STREAM_CACHE_KEY = "stream_cache";
@@ -451,7 +452,11 @@ export function useConversation(): UseConversationReturn {
   useEffect(() => { loadMessagesRef.current = loadMessages; }, [loadMessages]);
 
   // ── 选中对话时加载消息 ──
-  useEffect(() => { if (activeConversationId) loadMessages(activeConversationId); else { setMessages([]); setResponseBlocks([]); } }, [activeConversationId, loadMessages]);
+  useEffect(() => {
+    if (isSendingRef.current) { isSendingRef.current = false; return; }
+    if (activeConversationId) loadMessages(activeConversationId);
+    else { setMessages([]); setResponseBlocks([]); }
+  }, [activeConversationId, loadMessages]);
 
   // ── WebSocket 初始化 ──
   useEffect(() => {
@@ -634,6 +639,7 @@ export function useConversation(): UseConversationReturn {
         }
         pId = chain.partitionId;
         cId = chain.conversationId;
+        isSendingRef.current = true;  // 阻断 loadMessages 效果清空刚加的消息
         setSelectedPartitionId(pId);
         setActiveConversationId(cId);
         setConvError(null);
@@ -836,7 +842,7 @@ export function useConversation(): UseConversationReturn {
           else {
             const pData = await apiFetch<{ partition: Partition; conversation_id?: string }>("/tree/partition", {
               method: "POST",
-              body: JSON.stringify({ name: "默认分区", emoji: "💬" }),
+              body: JSON.stringify({ name: "临时分区", emoji: "💬" }),
             });
             pId = pData.partition.id;
             if (pData.conversation_id) {
@@ -868,7 +874,7 @@ export function useConversation(): UseConversationReturn {
         } else {
           const newT = await apiFetch<{ topic: { id: string }; conversation_id?: string }>("/tree/topic", {
             method: "POST",
-            body: JSON.stringify({ parent_id: parentId, name: "默认专题", emoji: "📝" }),
+            body: JSON.stringify({ parent_id: parentId, name: "临时专题", emoji: "📝" }),
           });
           topicId = newT.topic.id;
         }
