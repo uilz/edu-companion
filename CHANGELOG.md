@@ -4,6 +4,32 @@
 
 ---
 
+## [0.5.0] - 2026-05-26
+
+### 新增 — 流式续写 + 后台 generator 解耦 (Phase 8)
+
+#### 后端
+- **流式增量持久化**: `send_and_reply_stream` 提前创建空助手节点，每 20 token 覆写 DB → 刷新后 `loadMessages` 直接拿最新内容
+- **后台 generator 解耦**: WS 断连后 generator 通过 `asyncio.Queue` 继续运行，不依赖 WS 生命周期
+- **ActiveStreamTracker**: 追踪活跃流，提供 `GET /tree/stream/active/{conv_id}` 检测端点
+- **`tree_ops.update_message_content()`**: 新增原地覆写（不创建版本）
+- **删除 StreamManager**（172 行复杂架构 → 45 行简洁方案）
+
+#### 前端
+- **轮询续流**: 刷新后检测 sessionStorage 缓存 → 查活跃端点 → 有流则每 2s `loadMessages` 获取增量
+- **用户消息功能栏**: 补 `group` 类使 hover 正常显示，去掉多余 `mt-1` 空白
+- **AI 消息去掉编辑按钮**: 助手消息不可编辑
+- **`isSendingRef`**: 阻断 `loadMessages` effect 清空 handleSend 刚加的消息（修复无树下发消息不显示）
+- **默认→临时**: 所有"默认分区/领域/专题"改为"临时"
+
+### 修复
+- **无树下发消息不显示**: `isSendingRef` flag 阻断 loadMessages 竞争条件
+- **秘书系统验证**: 确认 9 模块 + 18 路由 + 主动检查器正常运行
+- **build 错误**: `loadMessagesRef` 声明顺序问题
+- **resume 残留清理**: 移除不再使用的 `case "resume"/"resume_done"` 代码
+
+---
+
 ## [0.4.0] - 2026-05-24
 
 ### 新增 — 智能秘书系统 (Phase 7) ⭐
