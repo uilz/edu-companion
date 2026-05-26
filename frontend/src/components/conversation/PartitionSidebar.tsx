@@ -593,6 +593,7 @@ export default function PartitionSidebar({
     const isHovered = hoveredId === node.id;
     const isEditing = editingId === node.id;
     const isActive = node.level === "conversation" && node.id === activeConversationId;
+    if (isActive) console.log('[PIS] isActive TRUE:', node.level, node.id, node.name);
     const children = childMap.get(node.id);
     const isExpanded = expandedSet.has(node.id);
     const hasChildren = node.level !== "conversation";
