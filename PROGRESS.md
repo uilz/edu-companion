@@ -156,7 +156,21 @@ Phase 1 MVP:  █████████████████████  ~
 | 回归用户检测 (return_user_detection) | 识别旧用户并触发恢复策略 | ✅ |
 | 元认知反思 (meta_cognitive_prompt) | 8种提示池，引导深度反思 | ✅ |
 | 静默任务 (silent_task) | 后台记账零提案，无干扰 | ✅ |
-| 模块管理 | 7个内置模块，设置页开关 | ✅ |
+| 模块管理 | 9个内置模块，设置页开关 | ✅ |
+
+---
+
+## Phase 8 — 流式续写 + 后台解耦
+
+| 模块 | 说明 | 状态 |
+|------|------|------|
+| 流式增量持久化 | send_and_reply_stream 每 20 token 覆写 DB | ✅ |
+| 后台 generator 解耦 | asyncio.Queue 解耦，WS 断连后流继续跑 | ✅ |
+| ActiveStreamTracker | 追踪活跃流，GET 端点检测 | ✅ |
+| 轮询续流 | 刷新后检测活跃流 → 每 2s loadMessages | ✅ |
+| 用户功能栏修复 | group 类补回 / AI 不可编辑 / 去掉空白行 | ✅ |
+| isSendingRef | 阻断 loadMessages 竞争条件（无树下发消息修复） | ✅ |
+| 默认→临时 | 前后端全部替换命名 | ✅ |
 
 ---
 
@@ -213,6 +227,13 @@ Phase 1 MVP:  █████████████████████  ~
 |------|------|
 | `fb58def` | feat: ProposalStore adapt to flat schema |
 | `1e09420` | feat: Phase 7 G4+G5 features (秘书系统完整功能) |
+
+### 2026-05-26 — Phase 8 流式续写 + 后台解耦
+| 提交 | 内容 |
+|------|------|
+| `da1b7f3` | feat: WS断连后台流不中断 + 刷新后轮询加载活跃流 |
+| `b0ead7b` | fix: 无树下发消息 + 默认→临时 + secretary检查 |
+| `bdfef07` | fix: 恢复原 edu-companion-repull 脚本名，更新为 systemd 方式 |
 
 ## 技术债务
 - 自动展开逻辑仍有极少数边界情况（刷新后未完全展开）待继续优化
