@@ -8,6 +8,8 @@ set -e
 
 PROJECT_DIR="$HOME/edu-companion"
 BRANCH="main"
+NODE="/home/deploy/.nvm/versions/node/v20.20.2/bin/node"
+NPM="/home/deploy/.nvm/versions/node/v20.20.2/bin/npm"
 
 echo "🔄 智能伴学系统 - 更新部署"
 echo "================================"
@@ -48,7 +50,9 @@ echo ""
 echo "🔨 构建前端..."
 # 清除上次构建缓存（避免跨版本兼容问题）
 rm -rf .next
-npm run build 2>&1
+
+export PATH="/home/deploy/.nvm/versions/node/v20.20.2/bin:$PATH"
+$NPM run build 2>&1
 BUILD_EXIT=$?
 if [ $BUILD_EXIT -ne 0 ]; then
     echo ""
@@ -58,126 +62,46 @@ fi
 echo ""
 echo "   ✅ 前端构建完成"
 
-# Next.js standalone 模式下需手动复制 static 资源
-if [ -d ".next/static" ] && [ ! -d ".next/standalone/.next/static" ]; then
-    cp -r .next/static .next/standalone/.next/static
-    echo "   📋 静态资源已复制到 standalone"
-fi
-
-# 4. 环境变量检查 + 数据库设置
-echo ""
-echo "🔧 检查环境配置..."
-cd "$PROJECT_DIR/backend"
-source venv/bin/activate
-
-# 确保 .env 存在
-if [ ! -f ".env" ]; then
-    echo "   ⚠️  .env 不存在，从模板创建..."
-    cat > .env << 'ENVEOF'
-# 模型配置 (LiteLLM 网关，OpenAI 兼容)
-OPENAI_API_KEY=sk-your-key
-OPENAI_API_BASE=http://localhost:4000
-TEXT_MODEL=openai/gpt-4o-mini
-TEXT_REASONING_MODEL=openai/gpt-4o
-TEXT_FAST_MODEL=openai/gpt-4o-mini
-
-# 数据库
-DB_NAME=edu_companion
-DB_USER=companion
-DB_PASSWORD=companion123
-DB_HOST=localhost
-DB_PORT=5432
-ENVEOF
-    echo "   ⚠️  请编辑 backend/.env 填入 API Key"
-fi
-
-# 检测 .env 中是否缺少 DB_PASSWORD，自动补上
-if ! grep -q "^DB_PASSWORD=" .env 2>/dev/null; then
-    echo "   ⚠️  .env 缺少 DB_PASSWORD，自动补充..."
-    cat >> .env << 'ENVEOF'
-
-# 数据库
-DB_NAME=edu_companion
-DB_USER=companion
-DB_PASSWORD=companion123
-DB_HOST=localhost
-DB_PORT=5432
-ENVEOF
-fi
-
-# 数据库连接检查
-echo ""
-echo "🗄️  检查数据库..."
-if python -c "
-from app.db.database import DB_CONFIG
-print(f'  DB: {DB_CONFIG[\"dbname\"]}@{DB_CONFIG[\"host\"]}:{DB_CONFIG[\"port\"]} as {DB_CONFIG[\"user\"]}')
-" 2>/dev/null; then
-    true
-fi
-
-if python -c "
-from app.db.database import Database
-db = Database.get()
-print('connected ok')
-" 2>/dev/null; then
-    echo "   ✅ 数据库连接正常"
-else
-    echo "   ❌ 数据库连接失败"
-    echo ""
-    echo "   📋 请在 edu-server 上执行以下命令初始化数据库:"
-    echo ""  
-    echo "   sudo -u postgres psql << SQL"
-    echo "   CREATE USER companion WITH PASSWORD '你的密码';"
-    echo "   CREATE DATABASE edu_companion OWNER companion;"
-    echo "   GRANT ALL PRIVILEGES ON DATABASE edu_companion TO companion;"
-    echo "   SQL"
-    echo ""
-    echo "   然后在 backend/.env 中添加:"
-    echo "   DB_PASSWORD=你的密码"
-    echo ""
-    exit 1
-fi
-
-# 5. 重启后端
+# 4. 重启后端 (systemd user service)
 echo ""
 echo "🔄 重启后端..."
-pkill -f "uvicorn app.main:app" 2>/dev/null || true
-sleep 2
+systemctl --user restart edu-backend.service 2>/dev/null || {
+    pkill -f "uvicorn app.main:app" 2>/dev/null || true
+    sleep 2
+}
+echo "   ✅ 后端已重启"
 
-cd "$PROJECT_DIR/backend"
-source venv/bin/activate
-nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > /tmp/edu-backend.log 2>&1 &
-BACKEND_PID=$!
-echo "   📝 日志: /tmp/edu-backend.log"
-echo "   🆔 PID: $BACKEND_PID"
-
-# 6. 重启前端（生产模式）
+# 5. 重启前端 (systemd user service)
 echo ""
 echo "🔄 重启前端..."
-# 杀掉任何监听 3000 端口的进程（兼容旧版 next start 残留）
-fuser -k 3000/tcp 2>/dev/null || true
-sleep 2
-
-# 验证端口已释放
-if lsof -i :3000 > /dev/null 2>&1; then
-    echo "   ⚠️  3000 端口仍被占用，强制释放..."
-    fuser -k 3000/tcp 2>/dev/null || true
+systemctl --user restart edu-frontend.service 2>/dev/null || {
+    # 处理旧进程卡住的情况
+    pgrep -f "next-server" | xargs -r kill -9 2>/dev/null || true
     sleep 1
-fi
+    systemctl --user reset-failed edu-frontend.service 2>/dev/null
+    systemctl --user restart edu-frontend.service
+}
+echo "   ✅ 前端已重启"
 
-cd "$PROJECT_DIR/frontend"
-nohup node .next/standalone/server.js > /tmp/edu-frontend.log 2>&1 &
-FRONTEND_PID=$!
-echo "   📝 日志: /tmp/edu-frontend.log"
-echo "   🆔 PID: $FRONTEND_PID"
-
-# 7. 等待服务就绪（带重试）
+# 6. 等待后端就绪
 echo ""
 echo "⏳ 等待后端就绪..."
 for i in $(seq 1 15); do
-    CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/ 2>/dev/null || echo "000")
-    if [ "$CODE" = "200" ] || [ "$CODE" = "404" ]; then
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health 2>/dev/null || echo "000")
+    if [ "$CODE" = "200" ]; then
         echo "   ✅ 后端就绪 (${i}s)"
+        break
+    fi
+    sleep 1
+done
+
+# 7. 等待前端就绪
+echo ""
+echo "⏳ 等待前端就绪..."
+for i in $(seq 1 15); do
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" -L http://localhost:3000/ 2>/dev/null || echo "000")
+    if [ "$CODE" = "200" ]; then
+        echo "   ✅ 前端就绪 (${i}s)"
         break
     fi
     sleep 1
@@ -191,24 +115,13 @@ echo "🏥 健康检查"
 IP=$(hostname -I | awk '{print $1}')
 FAIL=0
 
-# 后端根路径
-BACKEND_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/ 2>/dev/null || echo "000")
-if [ "$BACKEND_CODE" = "200" ] || [ "$BACKEND_CODE" = "404" ]; then
-    echo "   ✅ 后端基础   http://$IP:8000 (HTTP $BACKEND_CODE)"
+# 后端
+BACKEND_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health 2>/dev/null || echo "000")
+if [ "$BACKEND_CODE" = "200" ]; then
+    echo "   ✅ 后端健康   http://$IP:8000 (HTTP $BACKEND_CODE)"
 else
-    echo "   ❌ 后端基础   HTTP $BACKEND_CODE"
+    echo "   ❌ 后端       HTTP $BACKEND_CODE"
     FAIL=1
-fi
-
-# 知识图谱接口（之前 500 的问题）
-GRAPH_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8000/api/knowledge/graph" 2>/dev/null || echo "000")
-if [ "$GRAPH_CODE" = "200" ]; then
-    echo "   ✅ 知识图谱   /api/knowledge/graph (HTTP $GRAPH_CODE)"
-elif [ "$GRAPH_CODE" = "500" ]; then
-    echo "   ❌ 知识图谱   HTTP 500 — 检查依赖: pip install networkx"
-    FAIL=1
-else
-    echo "   ⚠️  知识图谱   HTTP $GRAPH_CODE"
 fi
 
 # 前端
@@ -222,16 +135,16 @@ fi
 
 echo ""
 
-# 9. 失败时打印日志
+# 9. 失败时输出
 if [ "$FAIL" -eq 1 ]; then
     echo "================================"
-    echo "❌ 部分服务异常，打印最近日志:"
+    echo "❌ 部分服务异常，打印日志:"
     echo ""
-    echo "── 后端日志（最后 20 行）──"
-    tail -20 /tmp/edu-backend.log 2>/dev/null || echo "(无日志)"
+    echo "── 后端日志（最后 10 行）──"
+    journalctl --user -u edu-backend.service --no-pager -n 10 2>/dev/null || echo "(无日志)"
     echo ""
-    echo "── 前端日志（最后 20 行）──"
-    tail -20 /tmp/edu-frontend.log 2>/dev/null || echo "(无日志)"
+    echo "── 前端日志（最后 10 行）──"
+    journalctl --user -u edu-frontend.service --no-pager -n 10 2>/dev/null || echo "(无日志)"
     echo ""
     exit 1
 fi
