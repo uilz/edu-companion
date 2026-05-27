@@ -260,6 +260,10 @@ export default function ConversationPanel(props: UseConversationReturn) {
                 setShowPartitionSidebar(false);
                 handleNewConversation(level, parentId, partitionId);
               }}
+              onConversationReady={(pid, cid) => {
+                setShowPartitionSidebar(false);
+                handleSelectConversation(pid, cid);
+              }}
               onTreeChanged={loadPartitions}
             />
           </MobileBottomSheet>
@@ -345,6 +349,7 @@ export default function ConversationPanel(props: UseConversationReturn) {
                 loading={loadingPartitions}
                 compact
                 onNewConversation={handleNewConversation}
+                onConversationReady={handleSelectConversation}
                 onTreeChanged={loadPartitions}
               />
             </div>

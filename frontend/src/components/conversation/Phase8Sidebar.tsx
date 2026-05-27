@@ -133,6 +133,8 @@ interface Props {
   loading?: boolean;
   compact?: boolean;
   onNewConversation?: (level: string, parentId: string, partitionId?: string) => void;
+  /** 通知父组件会话已创建/选中 (替代 onNewConversation 的间接回调) */
+  onConversationReady?: (partitionId: string, conversationId: string) => void;
   onTreeChanged?: () => void;
 }
 
@@ -144,6 +146,7 @@ export default function Phase8Sidebar({
   onCreatePartition,
   loading = false, compact = false,
   onNewConversation,
+  onConversationReady,
   onTreeChanged,
 }: Props) {
   // ── 状态 ──
@@ -167,6 +170,48 @@ export default function Phase8Sidebar({
     childMap.forEach(children => children.forEach(n => m.set(n.id, n)));
     return m;
   }, [childMap]);
+
+  /** 强制刷新指定 topic 的会话缓存（绕过 withLoading 去重） */
+  const forceRefreshConvs = useCallback(async (topicId: string) => {
+    try {
+      const data = await tree<{ conversations: Conversation[] }>(`/tree/conversation?parent_id=${topicId}`);
+      const seen = new Set<string>();
+      const convs = (data.conversations || [])
+        .map(c => ({ id: c.id, name: c.name, partition_id: topicId, is_active: c.is_active }))
+        .filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
+      setConvCache(prev => mapSet(prev, topicId, convs));
+    } catch { /* 忽略 */ }
+  }, []);
+
+  /** 点击 💬 按钮：直接在 sidebar 内创建/查找会话并选中 */
+  const handleNewConvClick = useCallback(async (node: GraphNode, pid?: string) => {
+    const partitionId = pid || node.id;
+    try {
+      if (node.level === "topic") {
+        // 直接在该专题下查找已有空会话
+        const data = await tree<{ conversations: Conversation[] }>(`/tree/conversation?parent_id=${node.id}`);
+        const emptyConv = (data.conversations || []).find(c => !c.message_count || c.message_count === 0);
+        if (emptyConv) {
+          await forceRefreshConvs(node.id);
+          onConversationReady?.(partitionId, emptyConv.id);
+          return;
+        }
+        // 没有空会话，创建新会话
+        const created = await tree<{ conversation: { id: string } }>("/tree/conversation", {
+          method: "POST",
+          body: JSON.stringify({ parent_id: node.id, name: "" }),
+        });
+        await forceRefreshConvs(node.id);
+        onConversationReady?.(partitionId, created.conversation.id);
+        return;
+      }
+      // domain / partition 级：委托给父组件（需要创建 domain→topic 链）
+      onNewConversation?.(node.level, node.id, pid);
+    } catch (e) {
+      console.warn("sidebar 新建会话失败，回退:", e);
+      onNewConversation?.(node.level, node.id, pid);
+    }
+  }, [forceRefreshConvs, onConversationReady, onNewConversation]);
 
   // ── 通用 loading 包装 ──
   const withLoading = useCallback(async <T,>(key: string, fn: () => Promise<T>): Promise<T | undefined> => {
@@ -378,7 +423,10 @@ export default function Phase8Sidebar({
               <button onClick={(e) => { e.stopPropagation(); handleCreateChild(node); }}
                 className="p-1 text-[var(--color-text-muted)] hover:text-green-400" title={`新建${CHILD_LEVEL[node.level].name.slice(1)}`}><Plus size={11} /></button>
             )}
-            <button onClick={(e) => { e.stopPropagation(); onNewConversation?.(node.level, node.id, pid); }}
+            <button onClick={(e) => {
+              e.stopPropagation();
+              handleNewConvClick(node, pid);
+            }}
               className="p-1 text-[var(--color-text-muted)] hover:text-green-400" title="新建会话"><MessageSquare size={11} /></button>
             <button onClick={(e) => { e.stopPropagation(); setEditingId(node.id); setEditValue(node.label); }}
               className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)]" title="重命名"><Pencil size={11} /></button>
