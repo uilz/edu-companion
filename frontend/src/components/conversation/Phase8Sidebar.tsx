@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   Plus, Hash, Pencil, Trash2, Check, X,
   ChevronRight, ChevronDown, MessageSquare, Sparkles, FolderOpen,
@@ -8,10 +8,10 @@ import {
 import type { Conversation } from "@/types";
 
 // ══════════════════════════════════════════════════════════════
-//  API — Phase 8 (/api/v2) + 旧树 API (/api/conversations/tree)
+//  API — 统一请求函数
 // ══════════════════════════════════════════════════════════════
-async function v2Fetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`/api/v2${path}`, {
+async function apiFetch<T,>(base: string, path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${base}${path}`, {
     headers: { "Content-Type": "application/json", ...options?.headers },
     ...options,
   });
@@ -21,18 +21,8 @@ async function v2Fetch<T>(path: string, options?: RequestInit): Promise<T> {
   }
   return res.json();
 }
-
-async function treeFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`/api/conversations${path}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    ...options,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API ${res.status}: ${text.slice(0, 100)}`);
-  }
-  return res.json();
-}
+const v2 = <T,>(p: string, o?: RequestInit) => apiFetch<T>("/api/v2", p, o);
+const tree = <T,>(p: string, o?: RequestInit) => apiFetch<T>("/api/conversations", p, o);
 
 // ══════════════════════════════════════════════════════════════
 //  类型
@@ -59,21 +49,37 @@ interface TreeConv {
 
 const ROOT_KEY = "__graph_root__";
 
+// 子级映射：partition→domain, domain→topic
+const CHILD_LEVEL: Record<string, { level: GraphLevel; name: string; emoji: string }> = {
+  partition: { level: "domain", name: "新领域", emoji: "📚" },
+  domain: { level: "topic", name: "新专题", emoji: "📝" },
+};
+
 // ══════════════════════════════════════════════════════════════
-//  Props — 兼容 PartitionSidebar 接口 + Phase8 扩展
+//  工具函数
 // ══════════════════════════════════════════════════════════════
-interface Props {
-  partitions?: unknown[];         // 兼容 PartitionSidebar（旧 prop，新版忽略）
-  selectedPartitionId: string | null;
-  activeConversationId: string | null;
-  initialConversationId?: string;
-  onSelectConversation: (pid: string, cid: string) => void;
-  onCreatePartition: () => void;
-  onRenamePartition?: (id: string, name: string) => void;
-  loading?: boolean;
-  compact?: boolean;
-  onNewConversation?: (level: string, parentId: string, partitionId?: string) => void;
-  onTreeChanged?: () => void;
+/** Map 不可变 set */
+function mapSet<K, V>(prev: Map<K, V>, key: K, value: V): Map<K, V> {
+  const next = new Map(prev);
+  next.set(key, value);
+  return next;
+}
+/** Map 不可变 delete */
+function mapDelete<K, V>(prev: Map<K, V>, key: K): Map<K, V> {
+  const next = new Map(prev);
+  next.delete(key);
+  return next;
+}
+/** Set 不可变 add */
+function setAdd(prev: Set<string>, value: string): Set<string> {
+  if (prev.has(value)) return prev;
+  return new Set(prev).add(value);
+}
+/** Set 不可变 delete */
+function setDelete(prev: Set<string>, value: string): Set<string> {
+  const next = new Set(prev);
+  next.delete(value);
+  return next;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -114,123 +120,161 @@ function ConfirmDialog({ children, onConfirm, onCancel }: {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  Phase8Sidebar — 替换 PartitionSidebar
+//  Phase8Sidebar
 // ══════════════════════════════════════════════════════════════
+interface Props {
+  partitions?: unknown[];
+  selectedPartitionId: string | null;
+  activeConversationId: string | null;
+  initialConversationId?: string;
+  onSelectConversation: (pid: string, cid: string) => void;
+  onCreatePartition: () => void;
+  onRenamePartition?: (id: string, name: string) => void;
+  loading?: boolean;
+  compact?: boolean;
+  onNewConversation?: (level: string, parentId: string, partitionId?: string) => void;
+  onTreeChanged?: () => void;
+}
+
 export default function Phase8Sidebar({
   selectedPartitionId: selectedNodeId,
   activeConversationId,
   initialConversationId,
   onSelectConversation,
   onCreatePartition,
-  onRenamePartition,
   loading = false, compact = false,
   onNewConversation,
   onTreeChanged,
 }: Props) {
-  // ── 两级缓存: graphNodes (知识图谱) + convCache (会话) ──
+  // ── 状态 ──
   const [childMap, setChildMap] = useState<Map<string, GraphNode[]>>(() => new Map());
   const [convCache, setConvCache] = useState<Map<string, TreeConv[]>>(() => new Map());
   const [expandedSet, setExpandedSet] = useState<Set<string>>(new Set());
   const [loadingSet, setLoadingSet] = useState<Set<string>>(new Set());
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
 
-  const childMapRef = useRef(childMap);
-  childMapRef.current = childMap;
-  const convCacheRef = useRef(convCache);
-  convCacheRef.current = convCache;
-  const expandedSetRef = useRef(expandedSet);
-  expandedSetRef.current = expandedSet;
-  const loadingSetRef = useRef(loadingSet);
-  loadingSetRef.current = loadingSet;
+  // ── Ref 同步 ──
+  const childMapRef = useRef(childMap); childMapRef.current = childMap;
+  const expandedSetRef = useRef(expandedSet); expandedSetRef.current = expandedSet;
+  const loadingSetRef = useRef(loadingSet); loadingSetRef.current = loadingSet;
+  const rootLoadedRef = useRef(false);
+
+  // ── 所有节点平铺索引（用于查找节点信息） ──
+  const nodeById = useMemo(() => {
+    const m = new Map<string, GraphNode>();
+    childMap.forEach(children => children.forEach(n => m.set(n.id, n)));
+    return m;
+  }, [childMap]);
+
+  // ── 通用 loading 包装 ──
+  const withLoading = useCallback(async <T,>(key: string, fn: () => Promise<T>): Promise<T | undefined> => {
+    if (loadingSetRef.current.has(key)) return undefined;
+    setLoadingSet(prev => new Set(prev).add(key));
+    try { return await fn(); }
+    finally { setLoadingSet(prev => { const next = new Set(prev); next.delete(key); return next; }); }
+  }, []);
 
   // ── 初始加载根节点 ──
   useEffect(() => {
-    v2Fetch<GraphNode[]>("/graph/nodes")
-      .then(nodes => {
-        setChildMap(prev => {
-          const next = new Map(prev);
-          next.set(ROOT_KEY, nodes);
-          return next;
-        });
-        rootLoadedRef.current = true;
-      })
-      .catch(() => { /* 忽略加载失败 */ });
+    v2<GraphNode[]>("/graph/nodes")
+      .then(nodes => { setChildMap(prev => mapSet(prev, ROOT_KEY, nodes)); rootLoadedRef.current = true; })
+      .catch(() => {});
   }, []);
 
   // ── 加载子节点 ──
   const loadChildren = useCallback(async (node: GraphNode) => {
-    const { id } = node;
-    if (loadingSetRef.current.has(id)) return;
-    setLoadingSet(prev => { const next = new Set(prev); next.add(id); return next; });
-    try {
-      const children = await v2Fetch<GraphNode[]>(`/graph/nodes?parent_id=${id}`);
-      setChildMap(prev => {
-        const next = new Map(prev);
-        next.set(id, children);
-        return next;
-      });
-    } catch {
-      // 静默失败，不 fallback 到 level 过滤（会显示所有同级节点）
-    } finally {
-      setLoadingSet(prev => { const next = new Set(prev); next.delete(id); return next; });
-    }
-  }, []);
+    await withLoading(node.id, async () => {
+      const children = await v2<GraphNode[]>(`/graph/nodes?parent_id=${node.id}`);
+      setChildMap(prev => mapSet(prev, node.id, children));
+    });
+  }, [withLoading]);
 
-  // ── 加载会话 ├─
-  const loadConversations = useCallback(async (parentId: string) => {
-    if (loadingSetRef.current.has(`conv:${parentId}`)) return;
-    setLoadingSet(prev => { const next = new Set(prev); next.add(`conv:${parentId}`); return next; });
-    try {
-      // 尝试通过树 API 加载该节点下的会话
-      const data = await treeFetch<{ conversations: Conversation[] }>(`/tree/conversation?parent_id=${parentId}`);
-      const convs = (data.conversations || []).map(c => ({
-        id: c.id, name: c.name,
-        partition_id: parentId, is_active: c.is_active,
-      }));
-      // 去重：按 id 去重
+  // ── 加载会话（仅 topic 级） ──
+  const loadConversations = useCallback(async (topicId: string) => {
+    await withLoading(`conv:${topicId}`, async () => {
+      const data = await tree<{ conversations: Conversation[] }>(`/tree/conversation?parent_id=${topicId}`);
       const seen = new Set<string>();
-      const uniqueConvs = convs.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
-      setConvCache(prev => {
-        const next = new Map(prev);
-        next.set(parentId, uniqueConvs);
-        return next;
-      });
-    } catch {
-      // 通过 links API 加载关联会话
-      // 暂不支持，静默
-    } finally {
-      setLoadingSet(prev => { const next = new Set(prev); next.delete(`conv:${parentId}`); return next; });
-    }
-  }, []);
+      const convs = (data.conversations || [])
+        .map(c => ({ id: c.id, name: c.name, partition_id: topicId, is_active: c.is_active }))
+        .filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
+      setConvCache(prev => mapSet(prev, topicId, convs));
+    });
+  }, [withLoading]);
 
   // ── 展开/收起 ──
   const toggleExpand = useCallback((node: GraphNode) => {
     if (expandedSetRef.current.has(node.id)) {
-      setExpandedSet(prev => {
-        const next = new Set(prev);
-        next.delete(node.id);
-        return next;
-      });
+      setExpandedSet(prev => setDelete(prev, node.id));
     } else {
-      if (!childMapRef.current.has(node.id)) {
-        loadChildren(node);
-      }
-      // 只在 topic 级加载会话（会话挂在 topic 下）
-      if (node.level === "topic") {
-        loadConversations(node.id);
-      }
-      setExpandedSet(prev => {
-        if (prev.has(node.id)) return prev;
-        const next = new Set(prev);
-        next.add(node.id);
-        return next;
-      });
+      if (!childMapRef.current.has(node.id)) loadChildren(node);
+      if (node.level === "topic") loadConversations(node.id);
+      setExpandedSet(prev => prev.has(node.id) ? prev : setAdd(prev, node.id));
     }
   }, [loadChildren, loadConversations]);
 
-  // ── 根节点加载完成的引用 ──
-  const rootLoadedRef = useRef(false);
+  // ── 新建子级 ──
+  const handleCreateChild = useCallback(async (node: GraphNode) => {
+    const cfg = CHILD_LEVEL[node.level];
+    if (!cfg) return;
+    try {
+      await tree(`/tree/${cfg.level}`, {
+        method: "POST",
+        body: JSON.stringify({ parent_id: node.id, name: cfg.name, emoji: cfg.emoji }),
+      });
+      await loadChildren(node);
+      setExpandedSet(prev => setAdd(prev, node.id));
+      onTreeChanged?.();
+    } catch { /* 忽略 */ }
+  }, [loadChildren, onTreeChanged]);
 
-  // ── 自动展开到当前对话（递归展开每一层） ──
+  // ── 重命名 ──
+  const handleRename = useCallback(async (node: GraphNode, name: string) => {
+    try {
+      await tree(`/tree/${node.level}/${node.id}`, {
+        method: "PATCH", body: JSON.stringify({ name }),
+      });
+      setChildMap(prev => {
+        const next = new Map(prev);
+        next.forEach((children, key) => {
+          const idx = children.findIndex(c => c.id === node.id);
+          if (idx >= 0) {
+            const updated = [...children];
+            updated[idx] = { ...updated[idx], label: name };
+            next.set(key, updated);
+          }
+        });
+        return next;
+      });
+      setConvCache(prev => mapDelete(prev, node.id));
+      onTreeChanged?.();
+    } catch { /* 忽略 */ }
+    setEditingId(null);
+  }, [onTreeChanged]);
+
+  // ── 删除 ──
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    try {
+      await v2(`/graph/nodes/${deleteTarget.id}?recursive=true`, { method: "DELETE" });
+      // 从所有父级的 childMap 中移除
+      setChildMap(prev => {
+        const next = new Map(prev);
+        next.forEach((children, key) => {
+          const filtered = children.filter(c => c.id !== deleteTarget.id);
+          if (filtered.length !== children.length) next.set(key, filtered);
+        });
+        next.delete(deleteTarget.id);
+        return next;
+      });
+      setConvCache(prev => mapDelete(prev, deleteTarget.id));
+      onTreeChanged?.();
+    } catch { /* 忽略 */ }
+    setDeleteTarget(null);
+  }, [deleteTarget, onTreeChanged]);
+
+  // ── 自动展开到当前对话 ──
   const prevAutoExpandRef = useRef<string | null>(null);
   const autoExpandAttemptRef = useRef(0);
   useEffect(() => {
@@ -251,80 +295,26 @@ export default function Phase8Sidebar({
     autoExpandAttemptRef.current = 0;
     prevAutoExpandRef.current = expandKey;
 
-    // 递归展开：从分区开始，逐层加载子节点和会话
     const expandLevel = async (nodeId: string, depth: number) => {
-      if (depth > 5) return; // 防止无限递归
-      setExpandedSet(prev => { const next = new Set(prev); next.add(nodeId); return next; });
+      if (depth > 5) return;
+      setExpandedSet(prev => setAdd(prev, nodeId));
 
-      // 加载子节点（如果尚未加载）
+      // 加载子节点
       if (!childMapRef.current.has(nodeId)) {
-        const node: GraphNode | undefined = depth === 0
-          ? rootNodes.find(n => n.id === nodeId)
-          : undefined;
-        if (node) {
-          await loadChildren(node);
-        } else {
-          // 从已有 childMap 中查找
-          for (const [, children] of Array.from(childMapRef.current.entries())) {
-            const found = (children as GraphNode[]).find((c: GraphNode) => c.id === nodeId);
-            if (found) { await loadChildren(found); break; }
-          }
-        }
+        const node = depth === 0 ? rootNodes.find(n => n.id === nodeId) : nodeById.get(nodeId);
+        if (node) await loadChildren(node);
       }
 
-      // 加载该层级的会话（仅 topic 级，通过节点 level 判断而非 depth）
-      const nodeInfo = (childMapRef.current.get(ROOT_KEY) || []).find((n: GraphNode) => n.id === nodeId)
-        || Array.from(childMapRef.current.values()).flat().find((n: GraphNode) => n.id === nodeId);
-      if (nodeInfo?.level === "topic") {
-        loadConversations(nodeId);
-      }
+      // topic 级加载会话
+      const info = nodeById.get(nodeId) || rootNodes.find(n => n.id === nodeId);
+      if (info?.level === "topic") loadConversations(nodeId);
 
-      // 递归展开子节点（不过滤 is_visible，确保目标路径可达）
+      // 递归子节点
       const children = childMapRef.current.get(nodeId) || [];
-      for (const child of children) {
-        await expandLevel(child.id, depth + 1);
-      }
+      for (const child of children) await expandLevel(child.id, depth + 1);
     };
-
     expandLevel(selectedNodeId, 0);
-  }, [selectedNodeId, activeConversationId, initialConversationId, loadChildren, loadConversations, childMap]);
-
-  // ── 编辑 ──
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState("");
-
-  // ── 删除 ──
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
-
-  const confirmDelete = async () => {
-    if (!deleteTarget) return;
-    try {
-      await v2Fetch(`/graph/nodes/${deleteTarget.id}?recursive=true`, { method: "DELETE" });
-      childMapRef.current.forEach((children, parentId) => {
-        const filtered = children.filter(c => c.id !== deleteTarget.id);
-        if (filtered.length !== children.length) {
-          setChildMap(prev => {
-            const next = new Map(prev);
-            next.set(parentId, filtered);
-            return next;
-          });
-        }
-      });
-      // 清理该节点的会话缓存和子节点缓存
-      setConvCache(prev => {
-        const next = new Map(prev);
-        next.delete(deleteTarget.id);
-        return next;
-      });
-      setChildMap(prev => {
-        const next = new Map(prev);
-        next.delete(deleteTarget.id);
-        return next;
-      });
-      onTreeChanged?.();
-    } catch { /* 忽略 */ }
-    setDeleteTarget(null);
-  };
+  }, [selectedNodeId, activeConversationId, initialConversationId, loadChildren, loadConversations, childMap, nodeById]);
 
   // ── 层级图标 ──
   const levelIcon = (level: GraphLevel) => {
@@ -332,82 +322,52 @@ export default function Phase8Sidebar({
       case "partition": return <FolderOpen size={14} />;
       case "domain": return <Hash size={12} />;
       case "topic": return <Sparkles size={11} />;
+      default: return null;
     }
-  };
+  }
 
   // ── 节点渲染 ──
-  const renderNode = (node: GraphNode, depth: number, partitionId?: string) => {
+  function renderNode(node: GraphNode, depth: number, partitionId?: string) {
     const isExpanded = expandedSet.has(node.id);
     const isLoading = loadingSet.has(node.id);
     const children = childMap.get(node.id) || [];
     const isActive = node.id === selectedNodeId;
     const convs = convCache.get(node.id) || [];
-    // 当前节点所在的分区 ID：如果是 partition 层则用自身，否则继承父级传入的
-    const currentPartitionId = node.level === "partition" ? node.id : partitionId;
+    const pid = node.level === "partition" ? node.id : partitionId;
+    const indent = 12 + depth * 16;
+    const hasChildLevel = node.level in CHILD_LEVEL;
 
     return (
       <div key={node.id}>
         <div
           className="flex items-center group relative cursor-pointer transition-colors"
-          style={{
-            paddingLeft: `${12 + depth * 16}px`, paddingRight: "8px",
-            paddingTop: "6px", paddingBottom: "6px",
-            backgroundColor: isActive ? "var(--color-surface)" : "transparent",
-            borderLeft: isActive ? "3px solid var(--color-border)" : undefined,
-          }}
-          onClick={() => {
-            toggleExpand(node);
-          }}
+          style={{ paddingLeft: indent, paddingRight: 8, paddingBlock: 6, backgroundColor: isActive ? "var(--color-surface)" : "transparent", borderLeft: isActive ? "3px solid var(--color-border)" : undefined }}
+          onClick={() => toggleExpand(node)}
         >
           {/* 展开图标 */}
           <span className="w-4 flex-shrink-0 flex items-center justify-center mr-1">
-            {isLoading ? (
-              <span className="w-3 h-3 border-2 border-[var(--color-text-muted)] border-t-transparent rounded-full animate-spin" />
-            ) : (
-              isExpanded ? <ChevronDown size={12} className="text-[var(--color-text-muted)]" /> : <ChevronRight size={12} className="text-[var(--color-text-muted)]" />
-            )}
+            {isLoading
+              ? <span className="w-3 h-3 border-2 border-[var(--color-text-muted)] border-t-transparent rounded-full animate-spin" />
+              : isExpanded ? <ChevronDown size={12} className="text-[var(--color-text-muted)]" /> : <ChevronRight size={12} className="text-[var(--color-text-muted)]" />}
           </span>
 
-          {/* 层级图标 */}
-          <span className="flex-shrink-0 mr-1.5 text-[var(--color-text-muted)]">
-            {levelIcon(node.level)}
-          </span>
+          <span className="flex-shrink-0 mr-1.5 text-[var(--color-text-muted)]">{levelIcon(node.level)}</span>
 
-          {/* 标签 */}
-          <span className="flex-1 truncate text-xs"
-            style={{ color: isActive ? "var(--color-text)" : "var(--color-text-secondary)", fontWeight: isActive ? 600 : 400 }}>
+          <span className="flex-1 truncate text-xs" style={{ color: isActive ? "var(--color-text)" : "var(--color-text-secondary)", fontWeight: isActive ? 600 : 400 }}>
             {node.label}
           </span>
 
-          {/* 预览计数 */}
           {node.suggested_count > 0 && !isExpanded && (
-            <span className="text-[10px] text-[var(--color-text-muted)] bg-[var(--color-surface)] px-1.5 rounded ml-1">
-              +{node.suggested_count}
-            </span>
+            <span className="text-[10px] text-[var(--color-text-muted)] bg-[var(--color-surface)] px-1.5 rounded ml-1">+{node.suggested_count}</span>
           )}
 
           {/* 操作按钮 */}
           <div className="flex items-center gap-0.5 ml-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity max-md:opacity-100">
-            {/* 新建子级：partition→domain, domain→topic */}
-            {(node.level === "partition" || node.level === "domain") && (
-              <button onClick={async (e) => {
-                e.stopPropagation();
-                const childLevel = node.level === "partition" ? "domain" : "topic";
-                const childName = childLevel === "domain" ? "新领域" : "新专题";
-                try {
-                  await treeFetch(`/tree/${childLevel}`, {
-                    method: "POST",
-                    body: JSON.stringify({ parent_id: node.id, name: childName, emoji: childLevel === "domain" ? "📚" : "📝" }),
-                  });
-                  // 刷新子节点
-                  await loadChildren(node);
-                  setExpandedSet(prev => { const next = new Set(prev); next.add(node.id); return next; });
-                  onTreeChanged?.();
-                } catch { /* 忽略 */ }
-              }}
-                className="p-1 text-[var(--color-text-muted)] hover:text-green-400" title={`新建${node.level === "partition" ? "领域" : "专题"}`}><Plus size={11} /></button>
+            {hasChildLevel && (
+              <button onClick={(e) => { e.stopPropagation(); handleCreateChild(node); }}
+                className="p-1 text-[var(--color-text-muted)] hover:text-green-400" title={`新建${CHILD_LEVEL[node.level].name.slice(1)}`}><Plus size={11} /></button>
             )}
-            <button onClick={(e) => { e.stopPropagation(); onNewConversation?.(node.level, node.id, currentPartitionId); }}
+            <button onClick={(e) => { e.stopPropagation(); onNewConversation?.(node.level, node.id, pid); }}
               className="p-1 text-[var(--color-text-muted)] hover:text-green-400" title="新建会话"><MessageSquare size={11} /></button>
             <button onClick={(e) => { e.stopPropagation(); setEditingId(node.id); setEditValue(node.label); }}
               className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)]" title="重命名"><Pencil size={11} /></button>
@@ -418,57 +378,20 @@ export default function Phase8Sidebar({
 
         {/* 行内编辑 */}
         {editingId === node.id && (
-          <div style={{ paddingLeft: `${12 + depth * 16}px` }}>
-            <InlineEdit
-              value={editValue}
-              onConfirm={async (name) => {
-                try {
-                  await treeFetch(`/tree/${node.level}/${node.id}`, {
-                    method: "PATCH",
-                    body: JSON.stringify({ name }),
-                  });
-                  // 更新本地 childMap 中的 label
-                  setChildMap(prev => {
-                    const next = new Map(prev);
-                    next.forEach((children, key) => {
-                      const idx = children.findIndex(c => c.id === node.id);
-                      if (idx >= 0) {
-                        const updated = [...children];
-                        updated[idx] = { ...updated[idx], label: name };
-                        next.set(key, updated);
-                      }
-                    });
-                    return next;
-                  });
-                  // 清除该节点的会话缓存，下次展开重新加载
-                  setConvCache(prev => {
-                    const next = new Map(prev);
-                    next.delete(node.id);
-                    return next;
-                  });
-                  onTreeChanged?.();
-                } catch { /* 忽略 */ }
-                setEditingId(null);
-              }}
-              onCancel={() => setEditingId(null)}
-            />
+          <div style={{ paddingLeft: indent }}>
+            <InlineEdit value={editValue} onConfirm={(name) => handleRename(node, name)} onCancel={() => setEditingId(null)} />
           </div>
         )}
 
         {/* 子节点 */}
         {isExpanded && (
           <div>
-            {children.filter(c => c.is_visible).map(child => renderNode(child, depth + 1, currentPartitionId))}
+            {children.filter(c => c.is_visible).map(child => renderNode(child, depth + 1, pid))}
             {convs.map(conv => (
               <div key={`conv:${conv.id}`}
                 className="flex items-center cursor-pointer transition-colors"
-                style={{
-                  paddingLeft: `${12 + (depth + 1) * 16}px`, paddingRight: "8px",
-                  paddingTop: "4px", paddingBottom: "4px",
-                  borderLeft: activeConversationId === conv.id ? "3px solid var(--color-accent)" : undefined,
-                  backgroundColor: activeConversationId === conv.id ? "var(--color-surface)" : "transparent",
-                }}
-                onClick={() => onSelectConversation(currentPartitionId || node.id, conv.id)}
+                style={{ paddingLeft: indent + 16, paddingRight: 8, paddingBlock: 4, borderLeft: activeConversationId === conv.id ? "3px solid var(--color-accent)" : undefined, backgroundColor: activeConversationId === conv.id ? "var(--color-surface)" : "transparent" }}
+                onClick={() => onSelectConversation(pid || node.id, conv.id)}
               >
                 <span className="w-4 flex-shrink-0 mr-1" />
                 <MessageSquare size={11} className="text-[var(--color-text-muted)] mr-1.5" />
