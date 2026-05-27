@@ -20,7 +20,7 @@ from app.cognitive.growth_engine import growth_engine
 from app.cognitive.models import CognitiveNode
 from app.cognitive.storage import (
     find_node_by_path, get_node, get_visible_children, get_suggested_count,
-    get_nodes_by_level, list_all_nodes,
+    get_nodes_by_level, list_all_nodes, delete_node,
     set_node_visible, upsert_node, vector_search,
 )
 from app.cognitive.edge_storage import (
