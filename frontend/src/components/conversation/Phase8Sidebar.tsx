@@ -322,12 +322,14 @@ export default function Phase8Sidebar({
   };
 
   // ── 节点渲染 ──
-  const renderNode = (node: GraphNode, depth: number) => {
+  const renderNode = (node: GraphNode, depth: number, partitionId?: string) => {
     const isExpanded = expandedSet.has(node.id);
     const isLoading = loadingSet.has(node.id);
     const children = childMap.get(node.id) || [];
     const isActive = node.id === selectedNodeId;
     const convs = convCache.get(node.id) || [];
+    // 当前节点所在的分区 ID：如果是 partition 层则用自身，否则继承父级传入的
+    const currentPartitionId = node.level === "partition" ? node.id : partitionId;
 
     return (
       <div key={node.id}>
@@ -343,7 +345,7 @@ export default function Phase8Sidebar({
             toggleExpand(node);
             // topic 节点视为可对话
             if (node.level === "topic") {
-              onNewConversation?.(node.level, node.id, node.id);
+              onNewConversation?.(node.level, node.id, currentPartitionId);
             }
           }}
         >
@@ -376,7 +378,7 @@ export default function Phase8Sidebar({
 
           {/* 悬浮按钮 */}
           <div className="flex items-center gap-0.5 ml-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-            <button onClick={(e) => { e.stopPropagation(); onNewConversation?.(node.level, node.id); }}
+            <button onClick={(e) => { e.stopPropagation(); onNewConversation?.(node.level, node.id, currentPartitionId); }}
               className="p-1 text-[var(--color-text-muted)] hover:text-green-400" title="新建会话"><MessageSquare size={11} /></button>
             <button onClick={(e) => { e.stopPropagation(); setEditingId(node.id); setEditValue(node.label); }}
               className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)]" title="重命名"><Pencil size={11} /></button>
@@ -427,7 +429,7 @@ export default function Phase8Sidebar({
         {/* 子节点 */}
         {isExpanded && (
           <div>
-            {children.filter(c => c.is_visible).map(child => renderNode(child, depth + 1))}
+            {children.filter(c => c.is_visible).map(child => renderNode(child, depth + 1, currentPartitionId))}
             {convs.map(conv => (
               <div key={`conv:${conv.id}`}
                 className="flex items-center cursor-pointer transition-colors"
@@ -476,7 +478,7 @@ export default function Phase8Sidebar({
             <div className="text-[10px] text-[var(--color-text-muted)] mt-1 opacity-60">发送消息将自动创建</div>
           </div>
         ) : (
-          rootNodes.map(node => renderNode(node, 0))
+          rootNodes.map(node => renderNode(node, 0, node.level === "partition" ? node.id : undefined))
         )}
       </div>
       {deleteTarget && (
