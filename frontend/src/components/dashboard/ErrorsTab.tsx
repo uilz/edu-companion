@@ -120,7 +120,9 @@ export function ErrorsTab() {
         const data = await res.json();
         setStats(data);
       }
-    } catch {}
+    } catch (e) {
+      console.error("获取错题统计概览失败", e);
+    }
   };
 
   // ── 筛选变化时重新加载数据 ──

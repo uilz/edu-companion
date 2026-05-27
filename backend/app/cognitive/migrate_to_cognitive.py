@@ -1,7 +1,9 @@
 """
-Phase 6.4: 旧知识图谱 + BKT → CognitiveNode 迁移脚本
+Phase 6.4: 旧知识图谱 + BKT → CognitiveNode 迁移脚本 (DEPRECATED)
 
-迁移流程:
+⚠️ 迁移已在 Phase 6 完成，此脚本保留供参考，请不要再执行。
+
+原迁移流程:
   1. 从 JSON userData.json 读取 knowledge_graphs (图谱结构)
   2. 从 PG knowledge_states 读取旧 BKT 掌握度
   3. 从 JSON userData.json 读取 practice_sessions + event_log (练习历史)
@@ -9,7 +11,7 @@ Phase 6.4: 旧知识图谱 + BKT → CognitiveNode 迁移脚本
   5. 重建图谱层级结构 (partition → domain → topic → concept → atom)
   6. 迁移练习事件 → cognitive_events 表
 
-使用:
+原使用:
   python -m app.cognitive.migrate_to_cognitive --user default_user
   python -m app.cognitive.migrate_to_cognitive --user default_user --dry-run
 
@@ -17,8 +19,7 @@ Phase 6.4: 旧知识图谱 + BKT → CognitiveNode 迁移脚本
 """
 
 from __future__ import annotations
-
-import argparse
+from app.shared.constants import DEFAULT_USER_ID
 import json
 import logging
 import math
@@ -35,7 +36,7 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────
 
 
-def _load_user_data(user_id: str = "default_user") -> dict:
+def _load_user_data(user_id: str = DEFAULT_USER_ID) -> dict:
     """从 JSON 文件加载 UserData"""
     import os
     base = os.path.expanduser("~/.companion/data")
@@ -235,7 +236,7 @@ def _build_cognitive_node(
 
 
 def migrate_user(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     dry_run: bool = False,
     clean_first: bool = False,
 ) -> dict:
@@ -501,7 +502,7 @@ def main():
     )
 
     parser = argparse.ArgumentParser(description="旧 BKT + 知识图谱 → CognitiveNode 迁移")
-    parser.add_argument("--user", default="default_user", help="用户 ID")
+    parser.add_argument("--user", default=DEFAULT_USER_ID, help="用户 ID")
     parser.add_argument("--dry-run", action="store_true", help="仅预览，不写入数据库")
     parser.add_argument("--clean-first", action="store_true", help="迁移前清除该用户的 CognitiveNode")
     args = parser.parse_args()

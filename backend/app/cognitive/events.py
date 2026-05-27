@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from app.shared.constants import DEFAULT_USER_ID
 import logging
 import time
 from typing import Any
@@ -15,7 +16,6 @@ from .equations import (
     calc_dynamic_load,
     calc_latency_ms,
     calc_retrieval_prob,
-    calc_scheduling,
     decay_belief,
     update_belief,
     update_decayed_count,
@@ -59,7 +59,7 @@ logger = logging.getLogger(__name__)
 _global_states: dict[str, UserCognitiveState] = {}
 
 
-def get_state(user_id: str = "default_user") -> UserCognitiveState:
+def get_state(user_id: str = DEFAULT_USER_ID) -> UserCognitiveState:
     """Get or create per-session cognitive state."""
     if user_id not in _global_states:
         _global_states[user_id] = UserCognitiveState(user_id=user_id)
@@ -104,7 +104,7 @@ def process_event(event: CognitiveEvent) -> dict[str, Any]:
         return {"status": "error", "error": str(e)}
 
 
-def process_unprocessed(user_id: str = "default_user") -> list[dict]:
+def process_unprocessed(user_id: str = DEFAULT_USER_ID) -> list[dict]:
     """Process all unprocessed events for a user."""
     from .storage import get_unprocessed_events
 
@@ -247,7 +247,7 @@ def handle_practice_response(event: CognitiveEvent) -> dict[str, Any]:
         dialogue_contexts=node.dialogue_contexts,
         is_core=node.is_core,
     )
-    new_scheduling = calc_scheduling(temp_node, state.fatigue_level, now)
+    # scheduling 已由 Phase 10 SM-2 独立管理，cognitive pipeline 不覆写
 
     # ─── 13. 激励 ───
     new_engagement = update_engagement(node.engagement, success, consecutive)
@@ -259,7 +259,7 @@ def handle_practice_response(event: CognitiveEvent) -> dict[str, Any]:
     node.trend = new_trend
     node.activation = new_activation
     node.cognitive_load = new_load
-    node.scheduling = new_scheduling
+    # scheduling 由 Phase 10 SM-2 独立管理
     node.engagement = new_engagement
     upsert_node(node, user_id)
 

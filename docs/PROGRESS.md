@@ -1,6 +1,6 @@
 # 智能伴学系统 — 项目进度
 
-> 最后更新: 2026-05-23 (模型路径修复 + gitignore + 文档清理)
+> 最后更新: 2026-05-26 (Phase 16 S14-S17 完成)
 
 ---
 
@@ -13,8 +13,107 @@ Phase 3 路由:  █████████████████████
 Phase 4 对话:  █████████████████████  完成
 Phase 5 事件:  █████████████████████  完成
 Phase 6 认知:  █████████████████████  完成
-Phase 7 秘书:  █░░░░░░░░░░░░░░░░░░░░  5%  ← 当前 (设计中)
+Phase 7 秘书:  █████████████████████  完成 ✅
+Phase 8 图谱:  █████████████████████  完成 ✅
+Phase 9 同步:  █████████████████████  完成 ✅
+Phase 10 调度: █████████████████████  完成 ✅
+Phase 11 填充: █████████████████████  完成 ✅
+Phase 12 看板: █████████████████████  完成 ✅
+Phase 13 讲解: █████████████████████  完成 ✅
+Phase 14 心智: █████████████████████  完成 ✅
+Phase 15 多模态:█████████████████████  完成 ✅
+Phase 16 整合: █████████████████████  完成 ✅
 ```
+
+---
+
+## Phase 14 · 伴学心智系统（行为分析 + 心理陪伴 + 习惯养成 + 创造扩展）
+
+| 模块 | 状态 | 说明 |
+|------|:----:|------|
+| 情感分析 API | ✅ | `POST /api/v2/emotion/analyze` + `GET /api/v2/emotion/trend/{user_id}` |
+| 情感对话集成 | ✅ | `context_builder.py` 自动注入情绪上下文，`conversation_llm.py` 自动分类 |
+| 情绪看板前端 | ✅ | `EmotionCard.tsx` — 情绪标签 + 平衡条 + 最近记录 |
+| 智能创造扩展 | ✅ | `knowledge_expander.py` — 知识拓展/变式题/关联发现 |
+| 创造扩展 API | ✅ | `POST /api/v2/expand/knowledge/variant/discover` |
+| 创造扩展前端 | ✅ | `ExpandPanel.tsx` — 拓展面板 + 变式题交互 |
+| habits 空壳填充 | ✅ | `domain/habits/service.py` 事件驱动完整实现 |
+| analytics 空壳填充 | ✅ | `domain/analytics/service.py` 行为分析完整实现 |
+
+---
+
+## Phase 15 · 多模态输入 + 图谱可视化
+
+| 模块 | 状态 | 说明 |
+|------|:----:|------|
+| 视觉理解 API | ✅ | `POST /api/v2/vision/{ocr,understand-problem,analyze,chat-image}` |
+| 视觉理解服务 | ✅ | `vision_service.py` — LiteLLM 视觉模型 OCR + 拍题理解 + 通用分析 |
+| 对话图片上传 | ✅ | `ChatInput.tsx` 已有完整图片上传流程（File → FormData → workspace/upload） |
+| 图谱独立路由页 | ✅ | `/graph` 路由 + 全屏力导向布局（基于现有 GraphTab 644行） |
+| 48h 临时对话清理 | ✅ | `scripts/cleanup_temp_convs.py` + 每日午夜 cron |
+| Classify 确认 UI | ✅ | `ClassifyConfirmPopover.tsx` — 浮窗确认/搜索/8s 自动隐藏 |
+
+---
+
+## Phase 16 · 系统整合与质量提升 (全部完成 ✅)
+
+| S | 模块 | 状态 | 说明 |
+|:-:|------|:----:|------|
+| S1 | DB 迁移链修复 | ✅ | `database.py` → `conversation_schema.sql` → `cognitive_schema.sql` 链式执行保障 |
+| S2 | 事件总线统一 | ✅ | 移除重复的 in-memory bus，统一使用 `infra/event_bus.py` |
+| S3 | Cognitive 管线精简 | ✅ | 事件处理去重，ZPD 调度与 TargetSelector 合并 |
+| S4 | 后端债务清理 | ✅ | 移除废弃 renderers，API 响应统一，`domain/practice/service.py` 空壳 stubs 清理 |
+| S5 | 前端债务清理 | ✅ | `useRenderedContent.ts`, `dashboard` 页加载顺序优化 |
+| S6 | `default_user` 硬编码替换 | ✅ | ~100 处 → `DEFAULT_USER_ID` 常量，36 文件，165 tests 通 |
+| S7 | `progress.py` 切换 cognitive_nodes | ✅ | `get_progress`/`get_stats`/`get_profile` 数据源从 `learner_engine` 切到 `cognitive_nodes` 表 |
+| S8a | `AnalyticsTab.tsx` 拆分 | ✅ | 1083→353 行，拆为 6 子模块（utils/TrendChart/HeatmapGrid/HabitTab/RetentionPanel/DailySummaryCard） |
+| S8b | `useConversation.ts` 拆分 | ✅ | 954→808 行，拆为 3 文件（ws.ts/api.ts/useMediaQuery.ts） |
+| S9 | `@/types` 路径解析 | ✅ | 验证通过，所有 10 处 `@/types` 导入正确解析 |
+| S10 | 修复 broken imports | ✅ | `shared/protocols/__init__.py` 中 `shared.schemas.*` → `app.schemas.*` |
+| S11 | 清理 duplicate 表定义 | ✅ | `migrate_materials.py` 标记为 DEPRECATED (no-op)，`database.py` 为 canonical 源 |
+| S12 | 同步 secretary_schema.sql | ✅ | SQL 参考文件更新为匹配 `secretary.py` 的 inline schema |
+| S13 | 标记废弃迁移脚本 | ✅ | `migrate_to_cognitive.py` 添加 `DEPRECATED` 头 |
+| S14 | 修复 TODO stubs | ✅ | `domain/practice/service.py` 3 个 TODO 填充实现（generate_questions/get_stats/get_behavior_report） |
+| S15 | 合并 duplicate KnowledgeState | ✅ | `learner.py` 的 `KnowledgeState` 改为 re-export `practice.py` 多维版 |
+| S16 | 清理死目录 | ✅ | 移除 `app/domain/data/` 空壳目录 |
+| S17 | 修复重叠路由 | ✅ | `practice_quality.py` `/{question_id}` → `/quality/detail/{question_id}`，同步前端 2 文件 |
+
+---
+
+## Phase 8 · 知识图谱树 + 分类器 + 融合会话
+
+| 模块 | 状态 | 说明 |
+|------|:----:|------|
+| 知识图谱数据迁移 | ✅ | 10节点从旧 JSON 迁至 cognitive_nodes 表 |
+| DB 列迁移 (path_id/node_type/is_visible) | ✅ | 与 Phase 6 老字段共存 |
+| 序列化修复 | ✅ | path_id/node_type 不再双序列化 |
+| WebSocket asyncio 补丁 | ✅ | conversation.py 缺 import asyncio |
+| Phase8Sidebar 替换 PartitionSidebar | ✅ | 知识图谱树 + 会话混合展示，替代旧的 partition→domain→topic 硬编码 |
+| Classify 自动归类 | ✅ | 发消息时 fire-and-forget /api/v2/classify |
+| 旧代码清理 | ✅ | PartitionSidebar.tsx (705 行) 删除 |
+| 蓝线闪现修复 | ✅ | 非会话节点不设 borderLeft |
+| 后端 API 健康 | ✅ | Phase 8 API 正常返回图节点 |
+| 远端部署 | ✅ | 双 VM 构建 → 部署 → 验证通过 |
+
+<!-- 所有遗留待办已在 Phase 15 解决 -->
+
+---
+
+## Phase 7 · 秘书系统 (Secretary) ✅
+
+| 模块 | 状态 | 说明 |
+|------|:----:|------|
+| 诊断引擎 DiagnosisEngine | ✅ | 薄弱点检测、错误模式分类、趋势分析 |
+| 提案生成器 ProposalGenerator | ✅ | 模板优先 + LLM 润色，多选项协商式提案 |
+| 策略引擎 PolicyEngine | ✅ | 勿扰时段 / 去重 / 每日上限 / 关系记忆 |
+| 事件总线集成 | ✅ | 订阅 AnswerSubmitted/SessionCompleted/KnowledgeStateUpdated |
+| 模块扩展框架 | ✅ | 7 个内置模块（复习/疲劳/简报/备考/回归/元认知/静默） |
+| 冷启动引导 | ✅ | 3 步学习风格探测对话 |
+| 隐私合规 | ✅ | 全数据导出 + 遗忘权删除 |
+| 前端秘书主页 | ✅ | 实时快照、待处理提案、设置页 |
+| SecretaryBellBadge | ✅ | 导航栏铃铛红点，60s 轮询 |
+| SecretarySuggestionsBlock | ✅ | 对话内嵌提案卡片，支持采纳/忽略 |
+| 后端系统 | ✅ | 9 模块 + 18 路由 + 主动检查 |
 
 ---
 
@@ -80,36 +179,21 @@ Phase 7 秘书:  █░░░░░░░░░░░░░░░░░░░░
 
 ---
 
-## Phase 7 · 秘书系统 (Secretary) (设计中)
-
-**目标**：基于 CognitiveNode 的数据洞察、提案协商与主动服务系统
-
-| 模块 | 说明 | 优先级 |
-|------|------|:------:|
-| 知识总线 + 黑板 | 统一数据查询接口 + Redis 提案传递 | 🔴 P0 |
-| 诊断引擎 | 薄弱点检测、错误模式分类、趋势分析 | 🔴 P0 |
-| 提案生成器 | 模板优先+LLM润色，多选项协商式提案 | 🔴 P0 |
-| 策略引擎 | 勿扰 / 去重 / 上限 / 优先级过滤 | 🔴 P0 |
-| 情境引擎 | 意图预测、认知负荷估计、互动偏好学习 | 🟡 P1 |
-| 扩展框架 | 复习提醒 / 疲劳管理 / 日简报 / 备考模式 / 冷启动引导 | 🟡 P1 |
-| 前端秘书页 | 待处理建议、学习状态速览、偏好设置 | 🟡 P1 |
-| 主动检查 | APScheduler 定时诊断 + WebSocket 推送 | 🟢 P2 |
-
----
-
 ## 旧文档归档
 
 ```
 docs/
-├── architecture-v3.md    ← 唯一最新设计文档
+├── architecture-v3.md    ← 系统架构设计 v3
 ├── PROGRESS.md           ← 本文件
+├── README.md             ← 文档总入口
 ├── phase1/               ← MVP 设计 (已归档)
 ├── phase2/               ← 学习画像设计 (已归档)
 ├── phase3/               ← 智能路由设计 (已归档)
 ├── phase4/               ← 对话系统设计 (已归档)
 ├── phase5/               ← 认知事件设计 (已归档)
 ├── phase6/               ← CognitiveNode 设计 (已归档)
-└── phase7/ (待建)        ← LearningTutor 设计
+├── phase7/               ← 秘书系统设计 (已归档)
+└── phase8/               ← 知识图谱树+分类器设计 (已归档)
 ```
 
-> 除 `architecture-v3.md` 和 `PROGRESS.md` 外，所有旧设计文档已按 Phase 归档。
+> 除 `architecture-v3.md`、`PROGRESS.md` 和 `README.md` 外，所有旧设计文档已按 Phase 归档。

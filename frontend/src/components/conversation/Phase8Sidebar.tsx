@@ -63,7 +63,7 @@ const ROOT_KEY = "__graph_root__";
 //  Props — 兼容 PartitionSidebar 接口 + Phase8 扩展
 // ══════════════════════════════════════════════════════════════
 interface Props {
-  partitions?: any[];                // 兼容 PartitionSidebar（旧 prop，新版忽略）
+  partitions?: unknown[];         // 兼容 PartitionSidebar（旧 prop，新版忽略）
   selectedPartitionId: string | null;
   activeConversationId: string | null;
   initialConversationId?: string;

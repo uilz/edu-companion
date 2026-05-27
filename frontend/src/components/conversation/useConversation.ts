@@ -2,158 +2,11 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import type { Partition, TreeNode, ResponseBlock, WSIncomingMessage } from "@/types";
+import type { Partition, TreeNode, ResponseBlock } from "@/types";
 
-// ══════════════════ 工具函数: 响应式断点检测══════════════════
-function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia(query);
-    setMatches(mq.matches);
-    const listener = (e: MediaQueryListEvent) => setMatches(e.matches);
-    mq.addEventListener("change", listener);
-    return () => mq.removeEventListener("change", listener);
-  }, [query]);
-  return matches;
-}
-
-// ══════════════════ API 封装 ══════════════════
-async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`/api/conversations${path}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    cache: 'no-store',
-    ...options,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API error ${res.status}: ${text}`);
-  }
-  return res.json();
-}
-
-// ══════════════════ Phase 8 API 封装 ══════════════════
-async function v2Fetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`/api/v2${path}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    cache: 'no-store',
-    ...options,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`v2 API error ${res.status}: ${text}`);
-  }
-  return res.json();
-}
-
-function fireClassify(convId: string, text: string) {
-  v2Fetch("/classify", {
-    method: "POST",
-    body: JSON.stringify({ conversation_id: convId, message: text }),
-  }).catch(() => {}); // fire-and-forget
-}
-
-// ══════════════════ WebSocket 管理器: 单连接 + 指数退避重连 (保持不变) ══════════════════
-type WSCallbacks = {
-  onToken: (content: string, blockId?: string) => void;
-  onDone: (partitionId: string, assistantMessage: TreeNode, responseBlocks?: ResponseBlock[]) => void;
-  onError: (msg: string) => void;
-  onBlockUpdate: (block: ResponseBlock) => void;
-  onContextSwitch: (data: {
-    partition_id: string; conversation_id: string;
-    domain_name: string; topic_name: string;
-    switch_detail: Record<string, string>;
-  }) => void;
-  onConnect?: () => void;
-  onDisconnect?: () => void;
-};
-
-class ConversationWS {
-  private ws: WebSocket | null = null;
-  private callbacks: WSCallbacks | null = null;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private attempts = 0;
-  private destroyed = false;
-
-  /** 建立 WebSocket 连接 */
-  connect(cbs: WSCallbacks) {
-    this.callbacks = cbs;
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
-
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${protocol}//${window.location.host}/api/conversations/ws`;
-
-    try {
-      this.ws = new WebSocket(url);
-      this.ws.onopen = () => { this.attempts = 0; this.callbacks?.onConnect?.(); };
-      this.ws.onmessage = (event) => {
-        try {
-          const data: WSIncomingMessage = JSON.parse(event.data);
-          switch (data.type) {
-            case "token":        // AI 输出流式 token
-              this.callbacks?.onToken(data.content, data.block_id);
-              break;
-            case "tool_block":   // 工具调用结果块
-            case "block_update": // 块状态更新
-              this.callbacks?.onBlockUpdate(data.block);
-              break;
-            case "done":         // AI 回复完成
-              this.callbacks?.onDone(data.partition_id, data.assistant_message, data.response_blocks);
-              break;
-            case "error":
-              this.callbacks?.onError(data.message);
-              break;
-            case "context_switch": // 上下文切换通知
-              this.callbacks?.onContextSwitch(data);
-              break;
-            case "resume":        // 断线续流：服务端回放缓冲内容
-              this.callbacks?.onToken(data.content);
-              break;
-            case "resume_done":   // 无活跃流可续
-              break;
-            // user_message, pong, status — 无需处理
-          }
-        } catch { /* 忽略解析错误 */ }
-      };
-      this.ws.onerror = () => { }; // onclose 处理重连
-      this.ws.onclose = () => {
-        if (this.destroyed) return;
-        this.callbacks?.onDisconnect?.();
-        this.ws = null;
-        // 指数退避: 1s → 2s → 4s → ... → 30s 上限
-        const delay = Math.min(1000 * Math.pow(2, this.attempts), 30000);
-        this.attempts++;
-        this.reconnectTimer = setTimeout(() => {
-          if (this.callbacks) this.connect(this.callbacks);
-        }, delay);
-      };
-    } catch {
-      this.ws = null;
-    }
-  }
-
-  /** 发送消息到 WebSocket */
-  send(data: Record<string, unknown>): boolean {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(data));
-      return true;
-    }
-    return false;
-  }
-
-  /** 销毁连接（组件卸载时调用） */
-  destroy() {
-    this.destroyed = true;
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-    if (this.ws) {
-      this.ws.onclose = null;
-      this.ws.close();
-      this.ws = null;
-    }
-    this.callbacks = null;
-    this.attempts = 0;
-  }
-}
+import { useMediaQuery } from "./useMediaQuery";
+import { apiFetch, fireClassify } from "./api";
+import { ConversationWS } from "./ws";
 
 // ══════════════════════════════════════════════════════════════
 //  Hook 返回值类型定义 (不变)
@@ -197,7 +50,7 @@ export interface UseConversationReturn {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  
+//
 // ══════════════════创建对话链 (归一化后)══════════════════
 async function createConversationChain(
   partitionId?: string | null,
@@ -343,7 +196,7 @@ export function useConversation(): UseConversationReturn {
         const pId = params.get("p") || params.get("partition_id");
         router.replace(pId ? `/dashboard?tab=graph&partition_id=${pId}` : "/dashboard?tab=graph");
       }
-    } catch { }
+    } catch { console.error("URL panel redirect failed"); }
   }, [router]);
 
   // URL / localStorage 恢复状态 (合并为一个 effect)
@@ -457,8 +310,8 @@ export function useConversation(): UseConversationReturn {
       ]);
       setMessages(msgData.messages || []);
       setResponseBlocks(blocksData.blocks || []);
-    } catch (e: any) {
-      if (e.message.includes("404")) {
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message.includes("404")) {
         setConvError("该对话已被删除");
         setActiveConversationId(null);
       } else {
@@ -814,7 +667,9 @@ export function useConversation(): UseConversationReturn {
       if (!targetMsg) return null;
 
       const targetText = (targetMsg.content_blocks || [])
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .filter((b: any) => b.type === "text")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .map((b: any) => b.text || "")
         .join("\n\n");
 
@@ -950,4 +805,4 @@ export function useConversation(): UseConversationReturn {
     setShowPartitionSidebar, setShowNewPartition, setSidebarCollapsed,
     loadPartitions,
   };
-} 
+}

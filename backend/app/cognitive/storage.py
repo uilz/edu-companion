@@ -11,6 +11,7 @@ import logging
 import time
 from typing import Optional
 
+from app.shared.constants import DEFAULT_USER_ID
 from app.cognitive.models import (
     Activation, Belief, CognitiveEvent, CognitiveLoad, CognitiveNode,
     Composition, DeepLink, DeepProcessing, Diagnostic, DialogueContext,
@@ -61,7 +62,7 @@ def _from_json(cls, raw: str | dict | None):
 # ── CognitiveNode CRUD ──
 
 
-def upsert_node(node: CognitiveNode, user_id: str = "default_user") -> None:
+def upsert_node(node: CognitiveNode, user_id: str = DEFAULT_USER_ID) -> None:
     """插入或更新一个 CognitiveNode（完整覆盖）"""
     db = get_db()
     from datetime import datetime, timezone
@@ -118,7 +119,7 @@ def upsert_node(node: CognitiveNode, user_id: str = "default_user") -> None:
         db.put_conn(conn)
 
 
-def get_node(node_id: str, user_id: str = "default_user") -> Optional[CognitiveNode]:
+def get_node(node_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[CognitiveNode]:
     """通过 ID 获取 CognitiveNode"""
     db = get_db()
     row = db.fetchone(
@@ -131,7 +132,7 @@ def get_node(node_id: str, user_id: str = "default_user") -> Optional[CognitiveN
 
 
 def get_nodes_by_level(
-    level: str, user_id: str = "default_user",
+    level: str, user_id: str = DEFAULT_USER_ID,
 ) -> list[CognitiveNode]:
     """获取某一层级的所有节点"""
     db = get_db()
@@ -142,7 +143,7 @@ def get_nodes_by_level(
     return [_row_to_node(r) for r in rows]
 
 
-def get_children(parent_id: str, user_id: str = "default_user") -> list[CognitiveNode]:
+def get_children(parent_id: str, user_id: str = DEFAULT_USER_ID) -> list[CognitiveNode]:
     """获取某节点的直接子节点"""
     db = get_db()
     rows = db.fetchall(
@@ -152,7 +153,7 @@ def get_children(parent_id: str, user_id: str = "default_user") -> list[Cognitiv
     return [_row_to_node(r) for r in rows]
 
 
-def get_subtree(root_id: str, user_id: str = "default_user") -> dict[str, CognitiveNode]:
+def get_subtree(root_id: str, user_id: str = DEFAULT_USER_ID) -> dict[str, CognitiveNode]:
     """获取以 root_id 为根的整个子树（广度优先）"""
     db = get_db()
     # 用递归 CTE 或简单的一层一层查
@@ -173,7 +174,7 @@ def get_subtree(root_id: str, user_id: str = "default_user") -> dict[str, Cognit
     return {r["id"]: _row_to_node(r) for r in rows}
 
 
-def delete_node(node_id: str, user_id: str = "default_user") -> None:
+def delete_node(node_id: str, user_id: str = DEFAULT_USER_ID) -> None:
     """删除节点（含子节点级联）"""
     db = get_db()
     db.execute(
@@ -190,7 +191,7 @@ def delete_node(node_id: str, user_id: str = "default_user") -> None:
 
 
 def search_nodes(
-    query: str, user_id: str = "default_user", limit: int = 20,
+    query: str, user_id: str = DEFAULT_USER_ID, limit: int = 20,
 ) -> list[CognitiveNode]:
     """按 label 或 id 搜索节点"""
     db = get_db()
@@ -204,7 +205,7 @@ def search_nodes(
     return [_row_to_node(r) for r in rows]
 
 
-def list_all_nodes(user_id: str = "default_user") -> list[CognitiveNode]:
+def list_all_nodes(user_id: str = DEFAULT_USER_ID) -> list[CognitiveNode]:
     """获取用户所有节点"""
     db = get_db()
     rows = db.fetchall(
@@ -215,7 +216,7 @@ def list_all_nodes(user_id: str = "default_user") -> list[CognitiveNode]:
 
 
 def get_urgent_nodes(
-    limit: int = 10, user_id: str = "default_user",
+    limit: int = 10, user_id: str = DEFAULT_USER_ID,
 ) -> list[CognitiveNode]:
     """获取紧迫度最高的节点（用于调度）"""
     db = get_db()
@@ -251,7 +252,7 @@ def append_event(event: CognitiveEvent) -> None:
 
 
 def get_unprocessed_events(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     limit: int = 50,
 ) -> list[CognitiveEvent]:
     """获取未处理事件"""
@@ -276,7 +277,7 @@ def mark_event_processed(event_id: str) -> None:
 def query_events(
     event_type: str | None = None,
     node_id: str | None = None,
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     limit: int = 50,
 ) -> list[CognitiveEvent]:
     """查询事件（按类型和/或节点过滤）"""
@@ -354,7 +355,7 @@ def _row_to_node(row: dict) -> CognitiveNode:
         dialogue_contexts=_parse_list("dialogue_contexts", DialogueContext),
         practice_events=_parse_list("practice_events", PracticeEvent),
         practice_summary=_from_json(PracticeSummary, raw.get("practice_summary")),
-        error_clusters=_parse_list("error_clusters", str),
+        error_clusters=_parse_list("error_clusters", ErrorCluster),
         metacognition=_from_json(Metacognition, raw.get("metacognition")),
         engagement=_from_json(Engagement, raw.get("engagement")),
         composition=_from_json(Composition, raw.get("composition")),
@@ -366,7 +367,7 @@ def _row_to_node(row: dict) -> CognitiveNode:
         unlocks=_parse_list("unlocks", Unlock),
         associates=_parse_list("associates", Associate),
         param_refs=_parse_json_dict(raw.get("param_refs")),
-        meta=_parse_json_dict(raw.get("meta")),
+        meta=_from_json(MetaInfo, raw.get("meta")),
         # Phase 8 字段
         path_id=raw.get("path_id") or "",
         node_type=raw.get("node_type") or "explicit",
@@ -420,7 +421,7 @@ def _parse_json_dict(raw) -> dict:
 # ── Phase 8 新方法 ──
 
 
-def find_node_by_path(path_id: str, user_id: str = "default_user") -> Optional[CognitiveNode]:
+def find_node_by_path(path_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[CognitiveNode]:
     """通过 path_id 查找节点"""
     db = get_db()
     row = db.fetchone(
@@ -434,7 +435,7 @@ def find_node_by_path(path_id: str, user_id: str = "default_user") -> Optional[C
 
 def vector_search(
     query_embedding: list[float],
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     level: str | None = None,
     limit: int = 10,
     min_similarity: float = 0.1,
@@ -513,7 +514,7 @@ def _cosine_similarity(norm_a: tuple[list[float], float] | list[float],
     return max(-1.0, min(1.0, dot))
 
 
-def get_visible_children(parent_id: str, user_id: str = "default_user") -> list[CognitiveNode]:
+def get_visible_children(parent_id: str, user_id: str = DEFAULT_USER_ID) -> list[CognitiveNode]:
     """获取某节点下可见的直接子节点"""
     db = get_db()
     rows = db.fetchall(
@@ -525,7 +526,173 @@ def get_visible_children(parent_id: str, user_id: str = "default_user") -> list[
     return [_row_to_node(r) for r in rows]
 
 
-def get_suggested_count(parent_id: str, user_id: str = "default_user") -> int:
+def find_node_by_label(
+    label: str, user_id: str = DEFAULT_USER_ID,
+) -> Optional[CognitiveNode]:
+    """通过 label 查找节点（精确匹配优先，降级 ILIKE）"""
+    db = get_db()
+    # 精确匹配
+    row = db.fetchone(
+        "SELECT * FROM cognitive_nodes WHERE label = %s AND user_id = %s AND deleted_at IS NULL",
+        (label, user_id),
+    )
+    if row:
+        return _row_to_node(row)
+    # 降级：模糊匹配取最相似的
+    pattern = f"%{label}%"
+    rows = db.fetchall(
+        "SELECT * FROM cognitive_nodes WHERE user_id = %s AND deleted_at IS NULL "
+        "AND label ILIKE %s "
+        "ORDER BY length(label) DESC LIMIT 1",
+        (user_id, pattern),
+    )
+    if rows:
+        return _row_to_node(rows[0])
+    return None
+
+
+def sync_from_practice_event(
+    user_id: str,
+    skill_id: str,
+    is_correct: bool,
+    p_known_before: float = 0.5,
+    p_known_after: float = 0.5,
+    time_spent: float = 0.0,
+    hints_used: int = 0,
+) -> None:
+    """练习事件 → 更新 cognitive_nodes 的 belief + practice_summary
+
+    这是 Phase 9 的核心数据通路：将练习系统的 BKT 后验结果
+    同步到 CognitiveNode 的 Beta 分布信念。
+    """
+    node = find_node_by_label(skill_id, user_id)
+    if not node:
+        logger.info(
+            "sync_from_practice: no node found for skill=%s, creating atom node",
+            skill_id,
+        )
+        # 自动创建原子节点
+        node = CognitiveNode(
+            id=skill_id,  # 复用 skill_id 作为 ID
+            label=skill_id.split(".")[-1] if "." in skill_id else skill_id,
+            level="atom",
+            node_type="auto_generated",
+            is_visible=False,
+        )
+        upsert_node(node, user_id)
+        # 重新读取以获得全字段
+        node = get_node(skill_id, user_id)
+        if not node:
+            logger.error("sync_from_practice: failed to create node for %s", skill_id)
+            return
+
+    # Beta 分布后验更新
+    is_correct_int = 1 if is_correct else 0
+    old_alpha = node.belief.alpha
+    old_beta = node.belief.beta
+    node.belief.alpha = old_alpha + is_correct_int
+    node.belief.beta = old_beta + (1 - is_correct_int)
+    total = node.belief.alpha + node.belief.beta
+    node.belief.proficiency_mean = node.belief.alpha / total if total > 0 else 0.5
+    node.belief.proficiency_precision = total
+    node.belief.last_updated = time.time()
+    node.belief.peak_proficiency = max(node.belief.peak_proficiency, node.belief.proficiency_mean)
+
+    # 更新 practice_summary
+    node.practice_summary.total_attempts += 1
+    node.practice_summary.correct_attempts += is_correct_int
+    node.practice_summary.total_time_spent += time_spent
+    if node.practice_summary.total_attempts > 0:
+        recent_rate = node.practice_summary.correct_attempts / node.practice_summary.total_attempts
+    else:
+        recent_rate = 0.0
+    node.practice_summary.recent_success_rate_7d = recent_rate
+    node.practice_summary.last_practiced = time.time()
+
+    # 记录练习事件
+    node.practice_events.append(PracticeEvent(
+        timestamp=time.time(),
+        success=is_correct,
+        latency_ms=time_spent * 1000,
+        weight=1.0 - (hints_used * 0.1),
+    ))
+
+    # ── Phase 11: CognitiveNode 预建字段填充 ──
+
+    # 1. Trend: 记录近期掌握度变化
+    window = node.trend.recent_proficiencies
+    window.append(node.belief.proficiency_mean)
+    if len(window) > 20:
+        window.pop(0)
+    node.trend.recent_proficiencies = window
+
+    if len(window) >= 3:
+        recent = window[-3:]
+        slope = (recent[-1] - recent[0]) / 2.0
+        prev_vel = node.trend.velocity_ewma or 0.0
+        node.trend.velocity_ewma = 0.3 * slope + 0.7 * prev_vel
+        if abs(node.trend.velocity_ewma) < 0.01:
+            node.trend.direction = "stable"
+        elif node.trend.velocity_ewma > 0.01:
+            node.trend.direction = "ascending"
+        else:
+            node.trend.direction = "descending"
+
+    # 停滞天数：没有显著进步的天数
+    if node.trend.direction in ("stable", "descending"):
+        if node.practice_summary.last_practiced:
+            node.trend.stagnation_days = (
+                time.time() - node.practice_summary.last_practiced
+            ) / 86400.0
+
+    # 2. CognitiveLoad: 根据错误率
+    err_rate = 0.0
+    if node.practice_summary.total_attempts > 0:
+        err_rate = 1.0 - (node.practice_summary.correct_attempts / node.practice_summary.total_attempts)
+    node.cognitive_load.intrinsic = min(err_rate * 1.5, 0.95)
+    # 动态负荷：近期练习密度
+    recent_count = sum(1 for e in node.practice_events if e.timestamp > time.time() - 3600)
+    node.cognitive_load.dynamic = min(recent_count / 20.0, 1.0)
+
+    # 3. ErrorClusters: 答错时追加错误记录
+    if not is_correct:
+        clusters = node.error_clusters
+        cluster_id = f"err_{skill_id[:16]}"
+        existing = next((c for c in clusters if c.cluster_id == cluster_id), None)
+        if existing:
+            existing.count += 1
+            existing.last_seen = time.time()
+        else:
+            node.error_clusters.append(ErrorCluster(
+                cluster_id=cluster_id,
+                count=1,
+                last_seen=time.time(),
+            ))
+
+    # 4. Engagement: XP + 连续练习
+    xp_gain = 10 if is_correct else 2
+    xp_gain += max(0, 10 - time_spent) * 0.5  # 快速作答奖励
+    node.engagement.xp += xp_gain
+    node.engagement.effort_estimate = max(0.0, 1.0 - err_rate * 1.2)
+    # streak: 当天只要有一次练习就计一次连续
+    now = time.time()
+    today_start = now - (now % 86400)
+    if node.practice_summary.last_practiced and node.practice_summary.last_practiced >= today_start:
+        node.engagement.streak_current = max(node.engagement.streak_current, 1)
+    else:
+        node.engagement.streak_current = 1
+
+    upsert_node(node, user_id)
+    logger.info(
+        "✅ Practice synced to CognitiveNode: skill=%s correct=%s "
+        "belief=%.3f→%.3f (α=%d β=%d)",
+        skill_id, is_correct,
+        p_known_before, node.belief.proficiency_mean,
+        node.belief.alpha, node.belief.beta,
+    )
+
+
+def get_suggested_count(parent_id: str, user_id: str = DEFAULT_USER_ID) -> int:
     """获取某节点下的建议/隐藏子节点数量（用于预览计数）"""
     db = get_db()
     row = db.fetchone(
@@ -537,7 +704,7 @@ def get_suggested_count(parent_id: str, user_id: str = "default_user") -> int:
     return row["cnt"] if row else 0
 
 
-def set_node_visible(node_id: str, user_id: str = "default_user") -> None:
+def set_node_visible(node_id: str, user_id: str = DEFAULT_USER_ID) -> None:
     """设置节点可见，并级联设置所有祖先节点可见"""
     node = get_node(node_id, user_id)
     if not node:

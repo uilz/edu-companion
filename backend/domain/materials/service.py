@@ -1,4 +1,9 @@
-"""资料系统领域服务 — 骨架"""
+"""资料系统领域服务 — 日志增强版"""
+
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class MaterialServiceImpl:
     def __init__(self, event_bus):
@@ -15,4 +20,8 @@ class MaterialServiceImpl:
 
     async def on_indexed(self, event):
         """事件: 索引完成 → 自动出题建议"""
-        pass
+        logger.info(
+            "Material: indexed user=%s material=%s",
+            getattr(event, "user_id", "?"),
+            getattr(event, "material_id", "?"),
+        )

@@ -6,7 +6,7 @@
   - KnowledgeStateUpdated → 触发学习路径调整
 
 使用方式:
-    from app.infra.event_bus import EventBus
+    from infra.event_bus import EventBus
     from domain.secretary.engines.secretary_event_handler import secretary_event_handler
     secretary_event_handler.subscribe(bus)
 """
@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.shared.events import (
+from shared.events import (
     AnswerSubmitted,
     DomainEvent,
     KnowledgeStateUpdated,
@@ -39,9 +39,10 @@ class SecretaryEventHandler:
             return
         self._bus = bus
 
-        from app.infra.event_bus import EventBus
+        from infra.event_bus import EventBus
         if not isinstance(bus, EventBus):
-            logger.warning("传入的对象不是 EventBus 实例，跳过订阅")
+            logger.warning("传入的对象不是 EventBus 实例（%s vs %s），跳过订阅",
+                           type(bus).__module__, EventBus.__module__)
             return
 
         bus.subscribe("AnswerSubmitted", self._on_answer_submitted)

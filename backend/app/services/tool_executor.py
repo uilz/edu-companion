@@ -8,6 +8,7 @@ import time
 from uuid import uuid4
 from app.schemas.conversation import ResponseBlock, BackgroundJob
 
+from app.shared.constants import DEFAULT_USER_ID
 logger = logging.getLogger(__name__)
 
 # ── 意图预判规则 ──
@@ -176,7 +177,7 @@ async def _handle_generate_practice(params: dict) -> dict:
         if questions:
             # 创建练习会话
             session_id = learner_engine.create_session(
-                user_id="default_user",
+                user_id=DEFAULT_USER_ID,
                 subject=subject,
             )
             return {

@@ -1,3 +1,4 @@
+from app.shared.constants import DEFAULT_USER_ID
 """秘书-计划桥接 — 将秘书分析结果转化为学习路径调整
 
 工作流程:
@@ -13,10 +14,7 @@
 """
 
 from __future__ import annotations
-
 import logging
-from typing import Any
-
 from ..models import Proposal
 
 logger = logging.getLogger(__name__)
@@ -36,7 +34,7 @@ class SecretaryPlanBridge:
         return self._planner
 
     async def on_proposal_accepted(
-        self, proposal: Proposal, user_id: str = "default_user",
+        self, proposal: Proposal, user_id: str = DEFAULT_USER_ID,
     ) -> dict[str, Any]:
         """提案被采纳时触发计划调整"""
         action_type = proposal.action_type
@@ -71,7 +69,7 @@ class SecretaryPlanBridge:
             return {"adjusted": False, "reason": str(e)}
 
     async def get_plan_summary(
-        self, user_id: str = "default_user",
+        self, user_id: str = DEFAULT_USER_ID,
     ) -> dict[str, Any]:
         """获取当前学习计划摘要"""
         try:

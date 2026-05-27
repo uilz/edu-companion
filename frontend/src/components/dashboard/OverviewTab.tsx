@@ -7,15 +7,16 @@ import Link from 'next/link';
 import {
   BookOpen, Brain, Target, TrendingUp, MessageCircle,
   Loader2, Dumbbell, Trophy, AlertCircle, Sparkles,
+  CheckCircle2, Clock, Zap, Flame,
 } from 'lucide-react';
 // 自定义 UI 组件导入
 import Card from '@/components/ui/Card';
 import UnifiedSearch from '@/components/search/UnifiedSearch';
 
-// 后端 API 基地址，默认本地开发端口 8000
+// 后端 API 基地址
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-// 学习进度概览数据结构
+// 学习进度概览
 interface ProgressSummary {
   total_questions: number;
   correct_answers: number;
@@ -26,7 +27,7 @@ interface ProgressSummary {
   recommendations: string[];
 }
 
-// 成就徽章数据结构
+// 成就
 interface Achievement {
   id: string;
   name: string;
@@ -35,7 +36,35 @@ interface Achievement {
   tier: string;
 }
 
-// 快捷操作配置列表
+// CognitiveNode Dashboard (Phase 12)
+interface DashboardOverview {
+  mastery: Record<string, number>;
+  queue: {
+    node_id: string;
+    label: string;
+    level: string;
+    urgency: number;
+    proficiency_mean: number;
+    direction: string;
+    stagnation_days: number;
+    action_type: string;
+    reason: string;
+  }[];
+  trends: {
+    improving: { label: string; proficiency_mean: number; stagnation_days: number; direction: string }[];
+    declining: { label: string; proficiency_mean: number; stagnation_days: number; direction: string }[];
+    stagnating: { label: string; proficiency_mean: number; stagnation_days: number; direction: string }[];
+  };
+  errors: Record<string, number>;
+  engagement: {
+    xp: number;
+    streak: number;
+    today_accuracy: number;
+    today_practiced: number;
+  };
+}
+
+// 快捷操作
 const QUICK_ACTIONS = [
   { emoji: '💬', title: '智能对话', desc: '随时提问', href: '/learn' },
   { emoji: '✏️', title: '开始练习', desc: '刷题检测', href: '/practice' },
@@ -43,9 +72,7 @@ const QUICK_ACTIONS = [
   { emoji: '🧠', title: '知识图谱', desc: '补充薄弱', href: '/dashboard?tab=graph' },
 ];
 
-// 概览 Tab 主组件：展示学习总览、统计、薄弱项、建议和成就
 export default function OverviewTab() {
-  // 根据当前时段生成问候语（仅计算一次）
   const greeting = useMemo(() => {
     const h = new Date().getHours();
     if (h < 6) return '夜深了，注意休息 🌙';
@@ -54,20 +81,21 @@ export default function OverviewTab() {
     return '晚上好 🌙';
   }, []);
 
-  // 状态：学习进度、成就列表、加载状态
   const [progress, setProgress] = useState<ProgressSummary | null>(null);
+  const [dashboard, setDashboard] = useState<DashboardOverview | null>(null);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 组件挂载时并行拉取学习概览与成就数据
   useEffect(() => {
     async function loadData() {
       try {
-        const [progressRes, achieveRes] = await Promise.all([
+        const [progressRes, dashRes, achieveRes] = await Promise.all([
           fetch(`${API_BASE}/api/progress/summary?user_id=default_user`),
+          fetch(`${API_BASE}/api/v2/dashboard/overview?user_id=default_user`),
           fetch(`${API_BASE}/api/achievements/default_user`),
         ]);
         if (progressRes.ok) setProgress(await progressRes.json());
+        if (dashRes.ok) setDashboard(await dashRes.json());
         if (achieveRes.ok) {
           const aData = await achieveRes.json();
           setAchievements(aData.achievements || []);
@@ -81,17 +109,23 @@ export default function OverviewTab() {
     loadData();
   }, []);
 
-  // 衍生展示值：正确率百分比、掌握 / 薄弱项数量、已解锁成就数
-  const accuracy = progress?.accuracy_rate
-    ? `${(progress.accuracy_rate * 100).toFixed(1)}%`
-    : '—';
+  const accuracy = dashboard
+    ? `${(dashboard.engagement.today_accuracy * 100).toFixed(1)}%`
+    : progress?.accuracy_rate
+      ? `${(progress.accuracy_rate * 100).toFixed(1)}%`
+      : '—';
   const masteredCount = progress?.mastered_skills?.length || 0;
   const strugglingCount = progress?.struggling_skills?.length || 0;
   const unlockedAchievements = achievements.filter((a) => a.unlocked).length;
 
+  // 练习队列：urgent 优先，取前 5
+  const urgentItems = dashboard?.queue?.filter((q) => q.urgency > 0.5) || [];
+  const learningItems = dashboard?.queue?.filter((q) => q.urgency <= 0.5) || [];
+  const queueItems = [...urgentItems, ...learningItems].slice(0, 6);
+
   return (
     <div>
-      {/* Header — 问候语与学习概览摘要 */}
+      {/* Header */}
       <header className="mb-8">
         <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-[var(--color-text)] mb-2">
           {greeting}
@@ -103,21 +137,30 @@ export default function OverviewTab() {
             <>
               已练习{' '}
               <span className="text-[var(--color-text)] font-semibold">
-                {progress?.total_questions || 0}
-              </span>{' '}
+                {progress?.total_questions || dashboard?.engagement.today_practiced || 0}
+              </span>
               题 · 正确率{' '}
               <span className="text-[var(--color-accent)] font-semibold">{accuracy}</span>
+              {dashboard && (
+                <>
+                  {' · '}经验值{' '}
+                  <span className="text-yellow-400 font-semibold">{dashboard.engagement.xp}</span>
+                  {' · '}连续
+                  <span className="text-orange-400 font-semibold"> {dashboard.engagement.streak} 天</span>
+                  <Flame size={14} className="inline ml-1 text-orange-400" />
+                </>
+              )}
             </>
           )}
         </p>
       </header>
 
-      {/* 统一搜索栏：搜索知识点、题目等 */}
+      {/* 搜索栏 */}
       <div className="mb-8">
         <UnifiedSearch />
       </div>
 
-      {/* 快捷操作入口：智能对话、练习、分析、知识图谱 */}
+      {/* 快捷操作 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
         {QUICK_ACTIONS.map((action) => (
           <Link
@@ -134,11 +177,11 @@ export default function OverviewTab() {
         ))}
       </div>
 
-      {/* 统计卡片：总题数、正确率、已掌握技能、成就数 */}
+      {/* 统计卡片 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
         {[
-          { icon: <Dumbbell size={18} />, label: '总题数', value: loading ? '—' : `${progress?.total_questions || 0} 题`, color: 'text-blue-400' },
-          { icon: <Target size={18} />, label: '正确率', value: loading ? '—' : accuracy, color: 'text-green-400' },
+          { icon: <Dumbbell size={18} />, label: '今日练习', value: loading ? '—' : `${dashboard?.engagement.today_practiced || progress?.total_questions || 0} 题`, color: 'text-blue-400' },
+          { icon: <Target size={18} />, label: '今日正确率', value: loading ? '—' : accuracy, color: 'text-green-400' },
           { icon: <Brain size={18} />, label: '已掌握', value: loading ? '—' : `${masteredCount} 个`, color: 'text-purple-400' },
           { icon: <Trophy size={18} />, label: '成就', value: loading ? '—' : `${unlockedAchievements} 个`, color: 'text-yellow-400' },
         ].map((stat) => (
@@ -150,9 +193,114 @@ export default function OverviewTab() {
         ))}
       </div>
 
-      {/* 主栅格：薄弱项、学习建议、成就预览 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 薄弱知识点：点击可跳转到针对性练习页 */}
+        {/* 练习队列（Phase 10+12） */}
+        <div>
+          <Card title="🎯 今日练习队列">
+            {loading ? (
+              <div className="py-4 text-center"><Loader2 size={14} className="animate-spin mx-auto" /></div>
+            ) : queueItems.length > 0 ? (
+              <div className="space-y-1">
+                {queueItems.map((item) => {
+                  const isUrgent = item.urgency > 0.5;
+                  return (
+                    <Link
+                      key={item.node_id}
+                      href={`/practice?skill=${encodeURIComponent(item.label)}`}
+                      className="flex items-center gap-2 px-3 py-2.5 bg-[var(--color-surface)] text-xs hover:bg-[var(--color-accent)]/10 transition-colors group"
+                    >
+                      <span className={`flex-shrink-0 ${isUrgent ? 'text-red-400' : 'text-blue-400'}`}>
+                        {isUrgent ? <Clock size={13} /> : <BookOpen size={13} />}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[var(--color-text-secondary)] group-hover:text-[var(--color-accent)] truncate font-medium">
+                          {item.label}
+                        </div>
+                        <div className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+                          掌握度 {Math.round(item.proficiency_mean * 100)}% · {item.reason}
+                        </div>
+                      </div>
+                      <div className={`text-[10px] font-semibold flex-shrink-0 ${isUrgent ? 'text-red-400' : 'text-gray-400'}`}>
+                        {isUrgent ? '⚠ 复习' : '📖 练习'}
+                      </div>
+                    </Link>
+                  );
+                })}
+                <Link
+                  href="/practice"
+                  className="block text-center text-xs text-[var(--color-accent)] hover:underline mt-2"
+                >
+                  查看更多练习 →
+                </Link>
+              </div>
+            ) : (
+              <div className="py-4 text-center text-xs text-[var(--color-text-muted)]">
+                <CheckCircle2 size={16} className="mx-auto mb-1 text-green-400" />
+                暂无待办练习，继续学习新知识吧！
+              </div>
+            )}
+          </Card>
+        </div>
+
+        {/* 掌握度热力图 */}
+        {dashboard?.mastery && Object.keys(dashboard.mastery).length > 0 && (
+          <div>
+            <Card title="🧠 掌握度概览">
+              <div className="space-y-2">
+                {Object.entries(dashboard.mastery).sort(([, a], [, b]) => a - b).map(([label, score]) => {
+                  const pct = Math.round(score * 100);
+                  let color: string;
+                  if (pct >= 80) color = 'bg-green-500';
+                  else if (pct >= 60) color = 'bg-emerald-400';
+                  else if (pct >= 40) color = 'bg-yellow-400';
+                  else if (pct >= 20) color = 'bg-orange-400';
+                  else color = 'bg-red-400';
+                  return (
+                    <div key={label} className="flex items-center gap-2">
+                      <span className="text-xs text-[var(--color-text-secondary)] w-20 truncate flex-shrink-0">{label}</span>
+                      <div className="flex-1 h-2.5 bg-[var(--color-surface)] rounded-full overflow-hidden">
+                        <div className={`h-full ${color} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-[10px] text-[var(--color-text-muted)] w-8 text-right flex-shrink-0">{pct}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* 趋势（下降/停滞的知识点） */}
+        {dashboard && (dashboard.trends.declining.length > 0 || dashboard.trends.stagnating.length > 0) && (
+          <div>
+            <Card title="📉 需要关注">
+              {dashboard.trends.declining.slice(0, 3).map((item) => (
+                <Link
+                  key={`dec-${item.label}`}
+                  href={`/practice?skill=${encodeURIComponent(item.label)}`}
+                  className="flex items-center gap-2 px-3 py-2 bg-[var(--color-surface)] text-xs hover:bg-[var(--color-accent)]/10 transition-colors group mb-1"
+                >
+                  <TrendingUp size={13} className="text-red-400 flex-shrink-0 rotate-180" />
+                  <span className="text-[var(--color-text-secondary)] group-hover:text-[var(--color-accent)] flex-1">{item.label}</span>
+                  <span className="text-[10px] text-red-400">{Math.round(item.proficiency_mean * 100)}% ↓</span>
+                </Link>
+              ))}
+              {dashboard.trends.stagnating.slice(0, 3).map((item) => (
+                <Link
+                  key={`stg-${item.label}`}
+                  href={`/practice?skill=${encodeURIComponent(item.label)}`}
+                  className="flex items-center gap-2 px-3 py-2 bg-[var(--color-surface)] text-xs hover:bg-[var(--color-accent)]/10 transition-colors group mb-1"
+                >
+                  <AlertCircle size={13} className="text-yellow-400 flex-shrink-0" />
+                  <span className="text-[var(--color-text-secondary)] group-hover:text-[var(--color-accent)] flex-1">{item.label}</span>
+                  <span className="text-[10px] text-yellow-400">停滞 {Math.round(item.stagnation_days)}天</span>
+                </Link>
+              ))}
+            </Card>
+          </div>
+        )}
+
+        {/* 薄弱知识点（原有） */}
         <div>
           <Card title="需要加强">
             {loading ? (
@@ -190,7 +338,7 @@ export default function OverviewTab() {
           </Card>
         </div>
 
-        {/* 学习建议：基于 AI 分析生成的个性化推荐 */}
+        {/* 学习建议（原有） */}
         <div>
           <Card title="学习建议">
             {loading ? (
@@ -213,7 +361,7 @@ export default function OverviewTab() {
           </Card>
         </div>
 
-        {/* 成就徽章预览：展示已解锁/未解锁的成就 */}
+        {/* 成就（原有） */}
         {achievements.length > 0 && (
           <div className="lg:col-span-2">
             <Card title={`成就 (${unlockedAchievements}/${achievements.length})`}>

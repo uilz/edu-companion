@@ -46,19 +46,57 @@ class ConversationServiceImpl:
 
     async def on_session_completed(self, event: SessionCompleted) -> None:
         """练习完成 → 写入对话记忆"""
-        pass
+        logger.info(
+            "Conversation: session completed user=%s session=%s accuracy=%.2f",
+            getattr(event, "user_id", "?"),
+            getattr(event, "session_id", "?"),
+            getattr(event, "accuracy", 0.0),
+        )
 
     async def on_knowledge_updated(self, event: KnowledgeStateUpdated) -> None:
         """知识升级 → LLM 上下文感知"""
-        pass
+        logger.debug(
+            "Conversation: knowledge updated user=%s skill=%s %s→%s",
+            getattr(event, "user_id", "?"),
+            getattr(event, "skill_id", "?"),
+            getattr(event, "old_mastery", "?"),
+            getattr(event, "new_mastery", "?"),
+        )
 
     async def on_plan_generated(self, event: StudyPlanGenerated) -> None:
         """计划生成 → 向用户推送新计划"""
-        pass
+        logger.info(
+            "Conversation: plan generated user=%s partition=%s items=%d",
+            getattr(event, "user_id", "?"),
+            getattr(event, "partition_id", "?"),
+            len(getattr(event, "items", []) or []),
+        )
+        # 如有 WS 管理器，推送通知
+        if self._ws_manager:
+            try:
+                await self._ws_manager.send_json(
+                    getattr(event, "user_id", ""),
+                    {"type": "plan_updated", "payload": {}},
+                )
+            except Exception:
+                pass
 
     async def on_goal_achieved(self, event: DailyGoalAchieved) -> None:
         """目标达成 → 推送祝贺"""
-        pass
+        logger.info(
+            "Achievement: goal achieved user=%s goal=%s progress=%.0f%%",
+            getattr(event, "user_id", "?"),
+            getattr(event, "goal_type", "practice"),
+            getattr(event, "progress_pct", 0.0),
+        )
+        if self._ws_manager:
+            try:
+                await self._ws_manager.send_json(
+                    getattr(event, "user_id", ""),
+                    {"type": "goal_achieved", "payload": {"goal": getattr(event, "goal_type", "practice")}},
+                )
+            except Exception:
+                pass
 
     async def on_audio_synthesized(self, event: AudioSynthesized) -> None:
         """Phase 5: TTS 完成 → WebSocket 推送 AudioBlock"""
@@ -124,4 +162,8 @@ class ConversationServiceImpl:
     async def inject_practice_context(
         self, user_id: str, branch_id: str, context: dict,
     ) -> None:
-        pass
+        """注入练习上下文到对话系统"""
+        logger.debug(
+            "Conversation: practice context injected user=%s branch=%s keys=%s",
+            user_id, branch_id[:8], list(context.keys()),
+        )

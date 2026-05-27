@@ -12,9 +12,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from shared.schemas.practice import Question, PracticeSession, SubmitResult, KnowledgeState
-    from shared.schemas.conversation import Message, Branch, Partition
-    from shared.schemas.learner import StudyPlan, DailyGoal, LearnerProfile, ProgressSummary
+    from app.schemas.practice import Question, PracticeSession, SubmitResult, KnowledgeState
+    from app.schemas.conversation import Message, Branch, Partition
+    from app.schemas.learner import StudyPlan, DailyGoal, LearnerProfile, ProgressSummary
 
 
 # ═══════════════════════════════════════════════════════════

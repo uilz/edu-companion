@@ -121,7 +121,7 @@ export default function QualityPage() {
   const loadDetail = async (qid: string) => {
     setDetailLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/practice/quality/${qid}`);
+      const res = await fetch(`${API_BASE}/api/practice/quality/detail/${qid}`);
       if (res.ok) setDetail(await res.json());
     } finally {
       setDetailLoading(false);

@@ -15,6 +15,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from app.shared.constants import DEFAULT_USER_ID
 from app.schemas.conversation import KGEdge, KGNode, KnowledgeGraph
 
 logger = logging.getLogger(__name__)
@@ -34,7 +35,7 @@ def _classify_mastery_cognitive(p: float) -> str:
     return "未接触"
 
 
-def _sync_graph_to_cognitive(partition_id: str, user_id: str = "default_user") -> None:
+def _sync_graph_to_cognitive(partition_id: str, user_id: str = DEFAULT_USER_ID) -> None:
     """图谱生成后自动创建/更新 CognitiveNode（Phase 6 联动）"""
     try:
         from app.services.storage import storage
@@ -122,12 +123,12 @@ def _sync_graph_to_cognitive(partition_id: str, user_id: str = "default_user") -
 
 def _get_user_data():
     from app.services.storage import storage
-    data = storage.load("default_user")
+    data = storage.load(DEFAULT_USER_ID)
     return data
 
 def _save_user_data(data):
     from app.services.storage import storage
-    storage.save("default_user", data)
+    storage.save(DEFAULT_USER_ID, data)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -171,7 +172,7 @@ async def get_graph(partition_id: str):
         from app.core.knowledge_trace import bkt_engine
         for node_id, node in graph.nodes.items():
             try:
-                state = bkt_engine.load_or_create("default_user", node_id)
+                state = bkt_engine.load_or_create(DEFAULT_USER_ID, node_id)
                 node.mastery = round(state.p_known * 100, 1)
                 node.mastery_level = bkt_engine.get_mastery_level(state)
             except Exception:
@@ -195,7 +196,7 @@ async def get_graph(partition_id: str):
 # ═══════════════════════════════════════════════════════════
 
 async def generate_graph_logic(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     partition_id: str = "",
     data: Any = None,
     branch_name: str = "",

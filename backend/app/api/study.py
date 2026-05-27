@@ -13,6 +13,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.shared.constants import DEFAULT_USER_ID
 from app.services.adaptive_planner import adaptive_planner
 from app.core.knowledge_trace import bkt_engine
 
@@ -23,7 +24,7 @@ router = APIRouter(prefix="/api/study", tags=["学习计划"])
 
 @router.post("/plan/generate")
 async def generate_study_plan(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     subject: Optional[str] = None,
     reason: str = "manual",
 ):
@@ -127,7 +128,7 @@ async def get_plan_history(user_id: str, limit: int = 5):
 
 @router.post("/plan/refresh")
 async def refresh_plan(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     force: bool = False,
 ):
     """
@@ -161,7 +162,7 @@ async def refresh_plan(
 
 @router.get("/suggestions")
 async def get_learning_suggestions(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     subject: Optional[str] = None,
 ):
     """

@@ -1,7 +1,7 @@
 """
 契约测试: Event Schema 验证
 
-验证所有 10 个领域事件:
+验证所有 13 个领域事件:
 - 字段类型正确
 - 默认值合理
 - event_type 属性返回正确字符串
@@ -30,11 +30,11 @@ from shared.events import (
     AssistantReplied,
     AudioSynthesized,
     ImageRendered,
+    CognitiveNodeUpdated,
     EVENT_TYPES,
 )
 
-
-# ── 事件清单 ──
+# ── 全部领域事件 ──
 
 ALL_EVENTS = [
     AnswerSubmitted,
@@ -50,9 +50,10 @@ ALL_EVENTS = [
     AssistantReplied,
     AudioSynthesized,
     ImageRendered,
+    CognitiveNodeUpdated,
 ]
 
-
+# ── 注册表完整性 ──
 # ═══════════════════════════════════════════
 # 注册表完整性
 # ═══════════════════════════════════════════

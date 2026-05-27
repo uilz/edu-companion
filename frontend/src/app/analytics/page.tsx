@@ -13,6 +13,7 @@ import Link from "next/link";
 import Card from "@/components/ui/Card";
 // 内部组件：能力雷达图
 import RadarChart from "@/components/analytics/RadarChart";
+import EmotionCard from "@/components/analytics/EmotionCard";
 
 // API 基础地址（默认 fallback 本地开发端口）
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -734,6 +735,9 @@ function DailySummaryCard() {
         </div>
       )}
       <p className="text-[10px] text-[var(--color-text-muted)] mt-2">{summary.encourage}</p>
+
+      {/* ── ❤️ 心理陪伴 ── */}
+      <EmotionCard />
     </div>
   );
 }

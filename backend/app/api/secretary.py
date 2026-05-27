@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..domain.secretary.secretary_service import SecretaryService
 from ..domain.secretary.models import Proposal, ScopeSpec, SecretaryPrefs
 from ..domain.secretary.proposal_store import ProposalStore
+from app.shared.constants import DEFAULT_USER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +135,7 @@ def _get_store() -> ProposalStore:
 
 @router.get("/preferences")
 async def get_preferences(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
 ) -> dict:
     """获取用户秘书偏好"""
     prefs = _load_prefs(user_id)
@@ -149,7 +150,7 @@ async def get_preferences(
 @router.patch("/preferences")
 async def update_preferences(
     prefs: SecretaryPrefs,
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
 ) -> dict:
     """更新用户秘书偏好"""
     _save_prefs(user_id, prefs.model_dump())
@@ -163,7 +164,7 @@ async def update_preferences(
 
 @router.get("/snapshot")
 async def get_snapshot(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     service: SecretaryService = Depends(_get_service),
 ) -> dict:
     """获取当前学习状态快照"""
@@ -179,7 +180,7 @@ async def get_snapshot(
 
 @router.get("/daily-brief")
 async def get_daily_brief(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     service: SecretaryService = Depends(_get_service),
 ) -> dict:
     """获取今日简报"""
@@ -199,7 +200,7 @@ async def get_daily_brief(
 
 @router.post("/diagnose")
 async def run_diagnosis(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     scope_level: str = "user",
     scope_node_id: str | None = None,
     service: SecretaryService = Depends(_get_service),
@@ -218,7 +219,7 @@ async def run_diagnosis(
 
 @router.post("/suggest")
 async def get_suggestions(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     service: SecretaryService = Depends(_get_service),
 ) -> list[dict]:
     """获取学习建议"""
@@ -233,7 +234,7 @@ async def get_suggestions(
 
 @router.get("/proposals/pending")
 async def get_pending_proposals(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     store: ProposalStore = Depends(_get_store),
 ) -> list[dict]:
     """获取待处理提案"""
@@ -244,7 +245,7 @@ async def get_pending_proposals(
 
 @router.get("/proposals/history")
 async def get_proposal_history(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     days: int = 7,
     store: ProposalStore = Depends(_get_store),
 ) -> list[dict]:
@@ -255,7 +256,7 @@ async def get_proposal_history(
 @router.post("/proposals/{proposal_id}/accept")
 async def accept_proposal(
     proposal_id: str,
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     store: ProposalStore = Depends(_get_store),
 ) -> dict:
     """采纳提案 — 更新状态 + 触发对应系统动作"""
@@ -304,7 +305,7 @@ async def accept_proposal(
 @router.post("/proposals/{proposal_id}/dismiss")
 async def dismiss_proposal(
     proposal_id: str,
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     reason: str = "",
     store: ProposalStore = Depends(_get_store),
 ) -> dict:
@@ -327,7 +328,7 @@ async def dismiss_proposal(
 @router.post("/proposals/{proposal_id}/snooze")
 async def snooze_proposal(
     proposal_id: str,
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     minutes: int = 60,
     store: ProposalStore = Depends(_get_store),
 ) -> dict:
@@ -347,7 +348,7 @@ async def snooze_proposal(
 
 @router.post("/generate-llm-proposals")
 async def generate_llm_proposals(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     service: SecretaryService = Depends(_get_service),
     store: ProposalStore = Depends(_get_store),
 ) -> list[dict]:
@@ -379,7 +380,7 @@ async def generate_llm_proposals(
 @router.post("/push-to-blackboard")
 async def push_proposals_to_blackboard(
     session_id: str,
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     service: SecretaryService = Depends(_get_service),
 ) -> dict:
     """运行诊断并将提案推送到黑板"""
@@ -401,7 +402,7 @@ async def push_proposals_to_blackboard(
 
 @router.get("/modules")
 async def list_modules(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
 ) -> list[dict]:
     """列出所有秘书模块及其状态"""
     from app.domain.secretary.engines.module_registry import module_registry
@@ -423,7 +424,7 @@ async def list_modules(
 async def toggle_module(
     name: str,
     enabled: bool,
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
 ) -> dict:
     """启用/禁用指定模块"""
     from app.domain.secretary.engines.module_registry import module_registry
@@ -454,7 +455,7 @@ async def toggle_module(
 
 @router.get("/onboarding")
 async def get_onboarding_status(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
 ) -> dict:
     """获取冷启动状态与引导信息"""
     try:
@@ -489,7 +490,7 @@ async def get_onboarding_status(
 
 
 @router.get("/data/export")
-async def export_secretary_data(user_id: str = "default_user") -> dict:
+async def export_secretary_data(user_id: str = DEFAULT_USER_ID) -> dict:
     """导出所有秘书相关个人数据"""
     data = {
         "user_id": user_id,
@@ -529,7 +530,7 @@ async def export_secretary_data(user_id: str = "default_user") -> dict:
 
 
 @router.delete("/data/delete")
-async def delete_secretary_data(user_id: str = "default_user") -> dict:
+async def delete_secretary_data(user_id: str = DEFAULT_USER_ID) -> dict:
     """删除所有秘书相关个人数据 (遗忘权)"""
     deleted = {"proposals": False, "prefs_file": False, "policy_memory": False}
 
@@ -564,7 +565,7 @@ async def delete_secretary_data(user_id: str = "default_user") -> dict:
 
 @router.post("/onboarding/dialogue")
 async def onboarding_dialogue(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     message: str = "",
     step: int = 1,
 ) -> dict:

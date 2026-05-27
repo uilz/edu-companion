@@ -5,7 +5,7 @@
 """
 
 from __future__ import annotations
-
+from app.shared.constants import DEFAULT_USER_ID
 import json
 import logging
 from datetime import datetime
@@ -119,7 +119,7 @@ class SessionRepo:
         db = await get_db()
         data = {
             "session_id": session["session_id"],
-            "user_id": session.get("user_id", "default_user"),
+            "user_id": session.get("user_id", DEFAULT_USER_ID),
             "planned_skills_json": session.get("planned_skills", []),
             "question_ids_json": session.get("question_ids", []),
             "current_index": session.get("current_index", 0),
@@ -141,7 +141,7 @@ class SessionRepo:
         return await db.fetchone("SELECT * FROM practice_sessions WHERE session_id = ?", (session_id,))
 
     @staticmethod
-    async def list_by_user(user_id: str = "default_user", since: str = "") -> list[dict]:
+    async def list_by_user(user_id: str = DEFAULT_USER_ID, since: str = "") -> list[dict]:
         db = await get_db()
         if since:
             rows = await db.fetchall(
@@ -170,7 +170,7 @@ class AttemptRepo:
         db = await get_db()
         data = {
             "attempt_id": attempt["attempt_id"],
-            "user_id": attempt.get("user_id", "default_user"),
+            "user_id": attempt.get("user_id", DEFAULT_USER_ID),
             "question_id": attempt["question_id"],
             "session_id": attempt.get("session_id"),
             "user_answer": attempt.get("user_answer", ""),
@@ -206,7 +206,7 @@ class AttemptRepo:
         return [dict(r) for r in rows]
 
     @staticmethod
-    async def list_all(user_id: str = "default_user", since: str = "") -> list[dict]:
+    async def list_all(user_id: str = DEFAULT_USER_ID, since: str = "") -> list[dict]:
         db = await get_db()
         if since:
             rows = await db.fetchall(
@@ -231,7 +231,7 @@ class ErrorBookRepo:
         db = await get_db()
         data = {
             "entry_id": entry["entry_id"],
-            "user_id": entry.get("user_id", "default_user"),
+            "user_id": entry.get("user_id", DEFAULT_USER_ID),
             "question_id": entry["question_id"],
             "skill_id": entry.get("skill_id", ""),
             "error_type": str(entry.get("error_type", "")),
@@ -248,7 +248,7 @@ class ErrorBookRepo:
         await db.insert("error_book", data)
 
     @staticmethod
-    async def list_by_user(user_id: str = "default_user") -> list[dict]:
+    async def list_by_user(user_id: str = DEFAULT_USER_ID) -> list[dict]:
         db = await get_db()
         rows = await db.fetchall(
             "SELECT * FROM error_book WHERE user_id = ? ORDER BY created_at DESC",

@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, Re
 from fastapi.responses import FileResponse  # type: ignore
 from pydantic import BaseModel, Field  # type: ignore
 
+from app.shared.constants import DEFAULT_USER_ID
 from app.schemas.conversation import TextBlock
 from app.services.storage import storage
 from app.services.tree_ops import tree_ops
@@ -70,7 +71,7 @@ class PersistMessageRequest(BaseModel):
     metadata: dict = {}
 
 
-USER_ID = "default_user"
+USER_ID = DEFAULT_USER_ID
 
 
 # ══════════════════ ETag 辅助 ══════════════════
@@ -504,7 +505,7 @@ async def _publish_reply_event(
 ):
     try:
         from app.application.di import container
-        from app.shared.events import AssistantReplied
+        from shared.events import AssistantReplied
 
         await container.event_bus.publish(
             AssistantReplied(

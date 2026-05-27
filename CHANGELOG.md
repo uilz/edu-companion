@@ -4,6 +4,88 @@
 
 ---
 
+## [0.7.0] - 2026-05-26
+
+### Phase 16 · 系统整合与质量提升
+
+| S | 变更 | 说明 |
+|:-:|------|------|
+| S1 | DB 迁移链修复 | `database.py` → `conversation_schema.sql` → `cognitive_schema.sql` 链式执行 |
+| S2 | 事件总线统一 | 移除重复 in-memory bus，统一 `infra/event_bus.py` |
+| S3 | Cognitive 管线精简 | 事件处理去重，ZPD 调度与 TargetSelector 合并 |
+| S4 | 后端债务清理 | 废弃 renderers 移除、API 响应统一、`domain/practice/service.py` 空壳清理 |
+| S5 | 前端债务清理 | 加载顺序优化、`useRenderedContent.ts` 精简 |
+| S6 | `default_user` 硬编码替换 | **~100 处** → `DEFAULT_USER_ID` 常量，36 文件 + 165 tests |
+| S7 | progress.py 切 cognitive_nodes | `get_progress`/`get_stats`/`get_profile` 数据源从内存切换到 PG |
+| S8 | 前端大组件拆分 | `AnalyticsTab.tsx` 1083→353 行拆 6 子模块；`useConversation.ts` 954→808 行拆 3 文件 |
+| S9 | @/types 路径验证 | 10 处导入全部正确解析 |
+| S10 | broken imports 修复 | `shared/protocols` 中 `shared.schemas.*` → `app.schemas.*` |
+| S11 | duplicate 表清理 | `migrate_materials.py` 标记 DEPRECATED |
+| S12 | secretary_schema.sql 同步 | 匹配 `secretary.py` inline schema |
+| S13 | 废弃迁移脚本标记 | `migrate_to_cognitive.py` 添加 DEPRECATED |
+| S14 | TODO stubs 填充 | `domain/practice/service.py` 3 个 stub → 完整实现 |
+| S15 | KnowledgeState 合并 | `learner.py` 改为 re-export `practice.py` 多维版 |
+| S16 | 死目录清理 | 移除 `app/domain/data/` 空壳目录 |
+| S17 | 重叠路由修复 | `/{question_id}` → `/quality/detail/`（前后端同步） |
+
+### 审计报告 Top 3 全部清零
+- ~~硬编码 default_user~~ ✅ S6
+- ~~broken imports~~ ✅ S10
+- ~~duplicate 表定义~~ ✅ S11-S12
+
+---
+
+## [0.6.0] - 2026-05-26
+
+### 新增 — Phase 9-15 全线贯通
+
+#### Phase 9 · 认知追踪同步 + 分类器降级
+- **认知同步链路**: `sync_from_practice_event()` — 练习事件 → CognitiveNode Beta 信念更新
+- **分类器降级**: `phase8_classifier.py` 关键词 + LLM 双模式备降
+- **测试脚手架**: `conftest.py` + 23 项测试全绿
+
+#### Phase 10 · 间隔重复 + 自适应选题
+- **SM-2 算法**: `spaced_repetition.py` — 四级质量 + Beta 信念掌握修正 + 停滞惩罚
+- **自适应队列**: `adaptive_selector.py` — 复习紧迫×2.0 / ZPD 甜点×1.5 / 探索×0.5 三级权重
+- **36 项测试**: 全绿
+
+#### Phase 11 · 事件驱动填充 + 认知字段增强
+- **8 个空壳 handler 填充**: habits / analytics / knowledge / planning / materials / media / conversation / multimedia
+- **认知字段增强**: trend / cognitive_load / error_clusters / engagement 写入
+- **死代码清理**: 删除 `app/infra/` 6 个文件，统一 `infra.` import
+
+#### Phase 12 · 仪表盘 API + 前端展示
+- `GET /api/v2/dashboard/overview` — 队列状态 / 掌握度 / trend / XP / streak
+- **OverviewTab 增强**: 后端聚合数据卡片 + 前端现有展示互为补充
+
+#### Phase 13 · 多模态讲解助手
+- `POST /api/v2/explain/for-error` — 错题 → B站/知乎/Youtube 视频检索
+- `POST /api/v2/explain/tts` — 知识点 → Edge-TTS 语音讲解
+- `POST /api/v2/explain/card` — 结构化图文卡片
+- **ExplainPanel 前端**: 视频列表 + 语音播放 + 图文卡片展示
+
+#### Phase 14 · 伴学心智系统
+- **心理陪伴 API**: `POST /api/v2/emotion/analyze` + `GET /api/v2/emotion/trend/{user_id}`
+- **情绪对话集成**: `context_builder.py` 自动注入 + `conversation_llm.py` 自动分类
+- **EmotionCard 前端**: 情绪标签 + 平衡条 + 趋势 + 最近记录
+- **智能创造扩展**: `knowledge_expander.py` — 知识拓展 / 变式题 / 关联发现
+- **ExpandPanel 前端**: 拓展面板 + 变式题交互
+- **domain handler 填充**: `habits/service.py` + `analytics/service.py` 完整实现
+
+#### Phase 15 · 多模态输入 + 图谱可视化
+- **视觉理解 API** (4 端点): OCR / 拍题理解 / 通用分析 / 对话图片
+- **vision_service.py**: LiteLLM 视觉模型（gpt-4o等）多模态推理
+- **力导向图谱可视化**: 独立 `/graph` 路由 + 全屏 644 行 GraphTab
+- **48h 临时对话清理**: `scripts/cleanup_temp_convs.py` + 每日 cron
+- **Classify 确认 UI**: `ClassifyConfirmPopover.tsx` — 浮窗确认 + 搜索 + 自动隐藏
+
+### 工程指标
+- **后端**: 134 个源文件, 31 个 v2 API 端点
+- **前端**: 17 个路由页面, 40+ 组件
+- **测试**: 165 项 pytest, 15 个测试文件
+- **TypeScript**: 零错误编译
+- **DB**: cognitive_nodes 31 列 JSONB + 15 子系统 + 22 方程
+
 ## [0.5.0] - 2026-05-26
 
 ### 新增 — 流式续写 + 后台 generator 解耦 (Phase 8)

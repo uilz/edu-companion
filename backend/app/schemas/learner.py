@@ -50,30 +50,10 @@ class LearningStyle(str, Enum):
 # ──────────────────────────────────────────────
 # 知识点状态
 # ──────────────────────────────────────────────
-class KnowledgeState(BaseModel):
-    """单个知识点的掌握状态（BKT模型参数）"""
-    skill_id: str                          # 知识点/技能ID
-    p_known: float = Field(default=0.0, ge=0.0, le=1.0)    # 掌握概率 P(K)
-    p_learned: float = Field(default=0.0, ge=0.0, le=1.0)  # 已学会概率 P(L)
-    p_guess: float = Field(default=0.25, ge=0.0, le=1.0)   # 猜对概率 P(G)
-    p_slip: float = Field(default=0.1, ge=0.0, le=1.0)     # 失手概率 P(S)
-    p_transit: float = Field(default=0.3, ge=0.0, le=1.0)  # 学习转移概率 P(T)
-    attempt_count: int = 0                                  # 尝试次数
-    correct_count: int = 0                                  # 正确次数
-    last_updated: datetime = Field(default_factory=datetime.now)
-    mastery_threshold: float = Field(default=0.8, description="掌握阈值")
+from app.schemas.practice import KnowledgeState
 
-    @property
-    def is_mastered(self) -> bool:
-        """判断该知识点是否已掌握"""
-        return self.p_known >= self.mastery_threshold
-
-    @property
-    def accuracy(self) -> float:
-        """计算正确率"""
-        if self.attempt_count == 0:
-            return 0.0
-        return self.correct_count / self.attempt_count
+# 知识点状态（统一使用 practice.py 的多维版 KnowledgeState）
+# 此 re-export 保持向后兼容，消除 duplicate schema 问题
 
 
 # ──────────────────────────────────────────────

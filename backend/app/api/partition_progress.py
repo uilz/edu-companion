@@ -19,6 +19,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 
+from app.shared.constants import DEFAULT_USER_ID
 from app.schemas.learning_profile import (
     Anomaly,
     Coverage,
@@ -41,7 +42,7 @@ router = APIRouter(prefix="/api/partition-progress", tags=["学习画像"])
 # ═══════════════════════════════════════════════════
 
 
-def _has_cognitive_nodes(user_id: str = "default_user") -> bool:
+def _has_cognitive_nodes(user_id: str = DEFAULT_USER_ID) -> bool:
     """检查用户是否有 CognitiveNode 数据"""
     try:
         from app.cognitive.storage import get_node
@@ -60,7 +61,7 @@ def _has_cognitive_nodes(user_id: str = "default_user") -> bool:
 def _get_user_data():
     """旧 JSON 存储 — 向后兼容"""
     from app.services.storage import storage
-    return storage.load("default_user")
+    return storage.load(DEFAULT_USER_ID)
 
 
 # ═══════════════════════════════════════════════════
@@ -507,14 +508,15 @@ async def get_partition_progress(partition_id: str):
         if result is not None:
             return result
 
-    # 备降: 旧 JSON
+    # 备降: 旧 JSON (Phase 9: deprecated, will be removed)
+    logger.warning("⚠️ CognitiveNode 无数据，降级到旧 JSON (legacy path) — Phase 9 will remove this fallback")
     result = _compute_partition_progress_legacy(partition_id)
     if result is not None:
         return result
 
     # 空
     from app.services.storage import storage
-    data = storage.load("default_user")
+    data = storage.load(DEFAULT_USER_ID)
     partition = data.partitions.get(partition_id)
     if not partition:
         raise HTTPException(status_code=404, detail="分区不存在")

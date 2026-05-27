@@ -47,9 +47,9 @@ async def apply_quality_actions(dry_run: bool = True):
     return result
 
 
-@router.get("/quality/{question_id}")
+@router.get("/quality/detail/{question_id}")
 async def get_question_quality(question_id: str):
-    """获取单题质量分析"""
+    """获取单题质量分析（精确 path，避免与 /stats /errors 等潜在冲突）"""
     from app.services.quality_analyzer import quality_analyzer
     result = quality_analyzer.analyze_question(question_id)
     if result is None:

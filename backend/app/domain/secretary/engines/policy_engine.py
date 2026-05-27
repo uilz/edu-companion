@@ -1,3 +1,4 @@
+from app.shared.constants import DEFAULT_USER_ID
 """策略引擎 — 提案过滤、去重、优先级衰减、打扰预算管理
 
 设计:
@@ -19,9 +20,6 @@ import logging
 import os
 import time
 from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Any
-
 from ..models import Proposal
 
 logger = logging.getLogger(__name__)
@@ -101,7 +99,7 @@ class PolicyEngine:
     async def filter(
         self,
         proposals: list[Proposal],
-        user_id: str = "default_user",
+        user_id: str = DEFAULT_USER_ID,
         quiet_hours: bool = False,
         daily_used: int = 0,
         max_daily: int = 5,

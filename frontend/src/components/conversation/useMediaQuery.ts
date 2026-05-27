@@ -1,0 +1,17 @@
+"use client";
+
+import { useState, useEffect } from "react";
+
+/** 响应式断点检测 hook */
+export function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia(query);
+    setMatches(mq.matches);
+    const listener = (e: MediaQueryListEvent) => setMatches(e.matches);
+    mq.addEventListener("change", listener);
+    return () => mq.removeEventListener("change", listener);
+  }, [query]);
+  return matches;
+}

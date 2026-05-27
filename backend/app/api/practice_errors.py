@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
+from app.shared.constants import DEFAULT_USER_ID
 from app.db.database import get_db
 from app.core.knowledge_trace import bkt_engine
 
@@ -23,7 +24,7 @@ async def get_error_book(
     """获取错题本"""
     db = get_db()
     conditions = ["user_id = %s"]
-    params = ["default_user"]
+    params = [DEFAULT_USER_ID]
     if resolved is not None:
         conditions.append("is_resolved = %s"); params.append(resolved)
     if skill_id:
@@ -31,8 +32,8 @@ async def get_error_book(
     sql = f"SELECT * FROM error_book WHERE {' AND '.join(conditions)} ORDER BY created_at DESC LIMIT %s"
     params.append(limit)
     rows = db.fetchall(sql, tuple(params))
-    total = db.fetchone("SELECT COUNT(*) as cnt FROM error_book WHERE user_id = %s", ("default_user",))
-    unresolved = db.fetchone("SELECT COUNT(*) as cnt FROM error_book WHERE user_id = %s AND is_resolved = FALSE", ("default_user",))
+    total = db.fetchone("SELECT COUNT(*) as cnt FROM error_book WHERE user_id = %s", (DEFAULT_USER_ID,))
+    unresolved = db.fetchone("SELECT COUNT(*) as cnt FROM error_book WHERE user_id = %s AND is_resolved = FALSE", (DEFAULT_USER_ID,))
     return {"entries": [dict(r) for r in rows], "total": total["cnt"] if total else 0, "unresolved_count": unresolved["cnt"] if unresolved else 0}
 
 
@@ -52,7 +53,7 @@ async def review_error(entry_id: str, is_correct: bool = True):
 async def get_due_errors():
     """获取待复习错题"""
     db = get_db()
-    rows = db.fetchall("SELECT * FROM error_book WHERE user_id = %s AND is_resolved = FALSE ORDER BY created_at LIMIT 10", ("default_user",))
+    rows = db.fetchall("SELECT * FROM error_book WHERE user_id = %s AND is_resolved = FALSE ORDER BY created_at LIMIT 10", (DEFAULT_USER_ID,))
     return {"due": [dict(r) for r in rows], "total_due": len(rows)}
 
 
@@ -104,7 +105,7 @@ async def get_error_attribution_stats():
     db = get_db()
     rows = db.fetchall(
         "SELECT * FROM error_book WHERE user_id = %s AND is_resolved = FALSE",
-        ("default_user",),
+        (DEFAULT_USER_ID,),
     )
     entries = [dict(r) for r in rows]
     stats = get_error_stats(entries)

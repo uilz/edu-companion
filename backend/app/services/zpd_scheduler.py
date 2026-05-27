@@ -3,8 +3,7 @@ ZPD自适应调度器
 基于最近发展区(Zone of Proximal Development)的题目调度
 """
 
-from __future__ import annotations
-
+from app.shared.constants import DEFAULT_USER_ID
 import math
 import logging
 from typing import Optional
@@ -15,8 +14,6 @@ from app.schemas.practice import (
     PracticeSessionPlan,
     Question,
     ReviewTask,
-)
-
 logger = logging.getLogger(__name__)
 
 
@@ -110,7 +107,7 @@ class ZPDScheduler:
         self,
         knowledge_states: dict[str, KnowledgeState],
         skill_id: str,
-        user_id: str = "default_user",
+        user_id: str = DEFAULT_USER_ID,
     ) -> float:
         """
         估计学生在某知识点的能力θ

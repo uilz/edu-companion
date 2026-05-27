@@ -18,6 +18,7 @@ from typing import Any, Optional
 import networkx as nx
 from fastapi import APIRouter, HTTPException, Query
 
+from app.shared.constants import DEFAULT_USER_ID
 from app.core.knowledge_trace import bkt_engine
 from domain.knowledge.checker import PrerequisiteChecker
 from domain.knowledge.prerequisites import (
@@ -170,7 +171,7 @@ def compute_force_layout(nodes: list[dict], edges: list[dict]) -> dict[str, tupl
 
 @router.get("/graph")
 async def get_knowledge_graph(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     subject: Optional[str] = None,
 ):
     """
@@ -250,7 +251,7 @@ async def get_prerequisites(skill_id: str = Query(..., description="知识点ID"
 from pydantic import BaseModel
 
 class CheckRequest(BaseModel):
-    user_id: str = "default_user"
+    user_id: str = DEFAULT_USER_ID
     skill_ids: list[str]
 
 @router.post("/check")
@@ -274,7 +275,7 @@ async def check_prerequisites(req: CheckRequest):
 # ═══════════════════════════════════════════════════════════
 
 @router.get("/blocked")
-async def get_blocked_skills(user_id: str = "default_user"):
+async def get_blocked_skills(user_id: str = DEFAULT_USER_ID):
     """获取用户被前置知识卡控的所有技能"""
     checker = _get_checker()
     blocked = await checker.get_blocked_skills(user_id)
@@ -290,7 +291,7 @@ async def get_blocked_skills(user_id: str = "default_user"):
 
 @router.get("/ready")
 async def get_ready_skills(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     subject: Optional[str] = None,
 ):
     """获取用户当前可以练习的技能清单"""
@@ -309,7 +310,7 @@ async def get_ready_skills(
 
 @router.get("/path")
 async def get_learning_path(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     target_skill: str = Query(..., description="目标知识点ID"),
 ):
     """
@@ -367,7 +368,7 @@ async def get_learning_path(
 # ═══════════════════════════════════════════════════════════
 
 @router.get("/retention")
-async def get_retention_curve(user_id: str = "default_user"):
+async def get_retention_curve(user_id: str = DEFAULT_USER_ID):
     """
     获取遗忘曲线（艾宾浩斯估算）。
 

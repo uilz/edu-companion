@@ -1,3 +1,4 @@
+from app.shared.constants import DEFAULT_USER_ID
 """提案采纳行动引擎 — 采纳提案后自动触发对应系统动作
 
 工作机制:
@@ -14,12 +15,9 @@
 """
 
 from __future__ import annotations
-
 import json
 import logging
 import time
-from typing import Any
-
 from ..models import Proposal
 
 logger = logging.getLogger(__name__)
@@ -38,7 +36,7 @@ class ProposalActionHandler:
         }
 
     async def execute(
-        self, proposal: Proposal, user_id: str = "default_user",
+        self, proposal: Proposal, user_id: str = DEFAULT_USER_ID,
     ) -> dict[str, Any]:
         """执行提案动作，返回结果
 

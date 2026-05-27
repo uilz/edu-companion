@@ -13,7 +13,9 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
+from app.shared.constants import DEFAULT_USER_ID
 from app.cognitive.growth_engine import growth_engine
 from app.cognitive.models import CognitiveNode
 from app.cognitive.storage import (
@@ -29,6 +31,7 @@ from app.cognitive.link_storage import (
     count_links_for_conversation,
 )
 from app.services.phase8_classifier import phase8_classifier
+from app.services.adaptive_selector import adaptive_selector
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +199,7 @@ def delete_conversation_link(
 
 @router.get("/graph/nodes")
 def get_graph_nodes(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     parent_id: str | None = None,
     level: str | None = None,
 ) -> list[dict]:
@@ -232,7 +235,7 @@ def get_graph_nodes(
 @router.get("/graph/search")
 def graph_search(
     q: str = Query(..., min_length=1),
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
 ) -> list[dict]:
     """全局搜索节点"""
     from app.cognitive.storage import search_nodes
@@ -288,7 +291,7 @@ def expand_node(
 @router.get("/graph/edges")
 def get_graph_edges(
     node_id: str,
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
 ) -> list[dict]:
     """获取某节点的所有边"""
     edges = get_edges_for_node(node_id, user_id)
@@ -331,7 +334,7 @@ def remove_edge(edge_id: str) -> dict:
 
 @router.get("/graph/export")
 def export_graph(
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
 ) -> dict[str, Any]:
     """导出用户全量图谱"""
     nodes = list_all_nodes(user_id)
@@ -347,3 +350,412 @@ def export_graph(
             "proficiency": n.proficiency,
         } for n in nodes],
     }
+
+
+# ═══════════════════════════════════════════════
+# Practice Queue (Phase 10)
+# ═══════════════════════════════════════════════
+
+
+class QueueRequest(BaseModel):
+    user_id: str = DEFAULT_USER_ID
+    count: int = 8
+    mode: str = "balanced"
+    partition_id: str | None = None
+
+
+class SchedulingUpdateRequest(BaseModel):
+    node_id: str
+    user_id: str = DEFAULT_USER_ID
+    is_correct: bool = True
+    hints_used: int = 0
+
+
+@router.post("/practice/queue", tags=["practice"])
+def practice_queue(req: QueueRequest) -> list[dict]:
+    """获取自适应练习队列"""
+    results = adaptive_selector.get_queue(
+        user_id=req.user_id,
+        count=req.count,
+        mode=req.mode,
+        partition_id=req.partition_id,
+        include_cognitive_metrics=True,
+    )
+    return [
+        {
+            "node_id": r.node_id,
+            "label": r.label,
+            "level": r.level,
+            "proficiency_mean": r.proficiency_mean,
+            "urgency": r.urgency,
+            "next_review": r.next_review,
+            "interval_days": r.interval_days,
+            "ease_factor": r.ease_factor,
+            "stagnation_days": r.stagnation_days,
+            "direction": r.direction,
+            "action_type": r.action_type,
+            "reason": r.reason,
+        }
+        for r in results
+    ]
+
+
+@router.patch("/practice/scheduling", tags=["practice"])
+def update_scheduling(req: SchedulingUpdateRequest) -> dict:
+    """手动更新某个知识点的间隔重复调度参数"""
+    from app.cognitive.storage import get_node, upsert_node
+
+    node = get_node(req.node_id, req.user_id)
+    if not node:
+        raise HTTPException(status_code=404, detail="Node not found")
+
+    from app.services.spaced_repetition import spaced_repetition
+    result = spaced_repetition.update_node_scheduling(
+        node, req.is_correct, hints_used=req.hints_used,
+    )
+    upsert_node(node, req.user_id)
+
+    return {
+        "node_id": req.node_id,
+        "label": node.label,
+        **result,
+        "proficiency_mean": node.belief.proficiency_mean if node.belief else 0.5,
+    }
+
+
+# ═══════════════════════════════════════════════
+# Dashboard (Phase 12)
+# ═══════════════════════════════════════════════
+
+
+@router.get("/dashboard/overview", tags=["dashboard"])
+def dashboard_overview(
+    user_id: str = DEFAULT_USER_ID,
+) -> dict:
+    """学情仪表盘概览 — 掌握度 + 队列 + 趋势 + 错误 + XP"""
+    from app.cognitive.storage import list_all_nodes
+
+    all_nodes = list_all_nodes(user_id)
+
+    # 1. 掌握度热力图
+    partition_means: dict[str, float] = {}
+    for n in all_nodes:
+        if n.level == "partition" and n.belief:
+            partition_means[n.label] = round(n.belief.proficiency_mean, 2)
+
+    # 2. 练习队列
+    results = adaptive_selector.get_queue(
+        user_id, count=8,
+        include_cognitive_metrics=True,
+    )
+    queue = [
+        {
+            "node_id": r.node_id,
+            "label": r.label,
+            "level": r.level,
+            "urgency": r.urgency,
+            "proficiency_mean": r.proficiency_mean,
+            "direction": r.direction,
+            "stagnation_days": r.stagnation_days,
+            "action_type": r.action_type,
+            "reason": r.reason,
+        }
+        for r in results
+    ]
+
+    # 3. 趋势分类
+    trends: dict[str, list[dict]] = {"improving": [], "declining": [], "stagnating": []}
+    for n in all_nodes:
+        if n.level not in ("atom", "concept"):
+            continue
+        if n.belief and n.belief.proficiency_mean >= 0.85:
+            continue
+        cat = n.trend.direction if n.trend and n.trend.direction in trends else "stagnating"
+        trends[cat].append({
+            "label": n.label,
+            "proficiency_mean": round(n.belief.proficiency_mean, 2) if n.belief else 0.5,
+            "stagnation_days": round(n.trend.stagnation_days, 1) if n.trend else 0,
+            "direction": n.trend.direction if n.trend else "unknown",
+        })
+
+    # 4. 错误聚类
+    errors = {}
+    for n in all_nodes:
+        for ec in n.error_clusters:
+            errors[n.label] = errors.get(n.label, 0) + ec.count
+
+    # 5. XP / Streak
+    total_xp = sum(n.engagement.xp for n in all_nodes)
+    max_streak = max((n.engagement.streak_current for n in all_nodes), default=0)
+
+    import time
+    today_start = time.time() - (time.time() % 86400)
+    today_total = sum(
+        1 for n in all_nodes
+        for evt in n.practice_events
+        if evt.timestamp >= today_start
+    )
+    today_correct = sum(
+        1 for n in all_nodes
+        for evt in n.practice_events
+        if evt.timestamp >= today_start and evt.success
+    )
+
+    return {
+        "mastery": partition_means,
+        "queue": queue,
+        "trends": trends,
+        "errors": errors,
+        "engagement": {
+            "xp": total_xp,
+            "streak": max_streak,
+            "today_accuracy": round(today_correct / today_total, 2) if today_total > 0 else 0.0,
+            "today_practiced": today_total,
+        },
+    }
+
+
+# ═══════════════════════════════════════════════
+# Explain / Multimedia 讲解 (Phase 13)
+# ═══════════════════════════════════════════════
+
+
+class ExplainForErrorRequest(BaseModel):
+    skill_id: str = ""
+    error_type: str = "conceptual"
+    user_id: str = DEFAULT_USER_ID
+
+
+class ExplainTTSRequest(BaseModel):
+    skill_id: str = ""
+    skill_name: str = ""
+    explanation: str = ""
+    user_id: str = DEFAULT_USER_ID
+
+
+@router.post("/explain/for-error", tags=["explain"])
+def explain_for_error(req: ExplainForErrorRequest) -> dict:
+    """答错 → 搜索 B站/知乎/Youtube 讲解视频"""
+    from app.services.media_search import media_search
+
+    try:
+        import asyncio
+        results = asyncio.run(media_search.recommend_for_error(
+            req.skill_id, req.error_type,
+        ))
+        return {"skill_id": req.skill_id, "error_type": req.error_type, "results": results}
+    except Exception as e:
+        logger.warning("Explain search failed: %s", e)
+        return {"skill_id": req.skill_id, "error_type": req.error_type, "results": {}, "error": str(e)}
+
+
+@router.post("/explain/tts", tags=["explain"])
+async def explain_tts(req: ExplainTTSRequest) -> dict:
+    """知识点文本 → TTS 语音讲解"""
+    from infra.tts_client import EdgeTTSClient
+
+    try:
+        tts = EdgeTTSClient()
+        result = await tts.synthesize_knowledge(
+            skill_id=req.skill_id,
+            skill_name=req.skill_name,
+            explanation=req.explanation,
+        )
+        return {"skill_id": req.skill_id, **result}
+    except Exception as e:
+        logger.error("TTS explain failed: %s", e)
+        return {"skill_id": req.skill_id, "error": str(e)}
+
+
+@router.post("/explain/card", tags=["explain"])
+def explain_card(
+    skill_id: str = "",
+    skill_name: str = "",
+    explanation: str = "",
+    formula: str = "",
+    user_id: str = DEFAULT_USER_ID,
+) -> dict:
+    """知识点 → 结构化图文卡片"""
+    label = skill_name or skill_id.split(".")[-1] if "." in skill_id else skill_id
+    return {
+        "skill_id": skill_id,
+        "skill_name": label,
+        "explanation": explanation,
+        "formula": formula,
+        "has_formula": bool(formula),
+        "media_urls": [],
+    }
+
+
+# ═══════════════════════════════════════════════
+# Phase 14: 心理陪伴 + 创造扩展
+# ═══════════════════════════════════════════════
+
+
+# ── 情绪分析 ──
+
+
+class EmotionAnalyzeRequest(BaseModel):
+    text: str
+    user_id: str = DEFAULT_USER_ID
+
+
+@router.post("/emotion/analyze", tags=["emotion"])
+async def analyze_emotion(req: EmotionAnalyzeRequest):
+    """分析一句话的情绪"""
+    from app.services.emotion_analyzer import emotion_analyzer
+
+    record = await emotion_analyzer.classify(req.text, req.user_id)
+    return {"category": record.category, "intensity": record.intensity, "summary": record.summary}
+
+
+@router.get("/emotion/trend/{user_id}", tags=["emotion"])
+async def emotion_trend(user_id: str = DEFAULT_USER_ID, window_hours: int = 72):
+    """情绪趋势分析"""
+    from app.services.emotion_analyzer import emotion_analyzer
+
+    trend = await emotion_analyzer.analyze_trend(user_id, window_hours=window_hours)
+    return trend.to_dict()
+
+
+# ── 智能创造扩展 ──
+
+
+class ExpandRequest(BaseModel):
+    skill_name: str
+    explanation: str = ""
+
+
+@router.post("/expand/knowledge", tags=["expand"])
+async def expand_knowledge(req: ExpandRequest):
+    """知识拓展：深入解释 + 前置 + 进阶 + 案例 + 误区 + 趣味"""
+    from app.services.knowledge_expander import knowledge_expander
+
+    result = await knowledge_expander.expand_knowledge(req.skill_name, req.explanation)
+    return result
+
+
+class VariantRequest(BaseModel):
+    question_text: str
+    correct_answer: str
+
+
+@router.post("/expand/variant", tags=["expand"])
+async def generate_variant(req: VariantRequest):
+    """变式题生成"""
+    from app.services.knowledge_expander import knowledge_expander
+
+    result = await knowledge_expander.generate_variant(req.question_text, req.correct_answer)
+    return result
+
+
+class DiscoverRequest(BaseModel):
+    skills: list[dict[str, str]]
+
+
+@router.post("/expand/discover", tags=["expand"])
+async def discover_relations(req: DiscoverRequest):
+    """知识点关联发现"""
+    from app.services.knowledge_expander import knowledge_expander
+
+    discoveries = await knowledge_expander.discover_relations(req.skills)
+    return {"discoveries": discoveries}
+
+
+# ═══════════════════════════════════════════════
+# Phase 15: 多模态输入 + 视觉理解
+# ═══════════════════════════════════════════════
+
+
+from fastapi import UploadFile, File as FastAPIFile
+
+
+@router.post("/vision/ocr", tags=["vision"])
+async def vision_ocr(file: UploadFile = FastAPIFile(...)):
+    """OCR 识别图片文字"""
+    from app.services.vision_service import vision_service
+
+    data = await file.read()
+    path = vision_service.save_upload(data, file.filename or "image.png")
+    try:
+        result = vision_service.ocr(path)
+        return result
+    finally:
+        import os
+        try:
+            os.remove(path)
+        except Exception:
+            pass
+
+
+@router.post("/vision/understand-problem", tags=["vision"])
+async def vision_understand_problem(file: UploadFile = FastAPIFile(...)):
+    """理解图片中的题目"""
+    from app.services.vision_service import vision_service
+
+    data = await file.read()
+    path = vision_service.save_upload(data, file.filename or "image.png")
+    try:
+        result = vision_service.understand_problem(path)
+        return result
+    finally:
+        import os
+        try:
+            os.remove(path)
+        except Exception:
+            pass
+
+
+@router.post("/vision/analyze", tags=["vision"])
+async def vision_analyze(file: UploadFile = FastAPIFile(...)):
+    """通用图片分析"""
+    from app.services.vision_service import vision_service
+
+    data = await file.read()
+    path = vision_service.save_upload(data, file.filename or "image.png")
+    try:
+        result = vision_service.analyze_image(path)
+        return result
+    finally:
+        import os
+        try:
+            os.remove(path)
+        except Exception:
+            pass
+
+
+@router.post("/vision/chat-image", tags=["vision"])
+async def vision_chat_image(file: UploadFile = FastAPIFile(...)):
+    """对话中发送图片 → 理解内容 + 生成回复"""
+    from app.services.vision_service import vision_service
+
+    data = await file.read()
+    path = vision_service.save_upload(data, file.filename or "image.png")
+    try:
+        # 先理解图片
+        ocr_result = vision_service.ocr(path)
+        problem = vision_service.understand_problem(path)
+
+        # 整合结果
+        text = ocr_result.get("text", "")
+        subject = problem.get("subject", "")
+        q_type = problem.get("question_type", "")
+        approach = problem.get("approach", "")
+        key_points = problem.get("key_points", [])
+        difficulty = problem.get("difficulty", "")
+
+        return {
+            "ocr_text": text,
+            "subject": subject,
+            "question_type": q_type,
+            "key_points": key_points,
+            "approach": approach,
+            "difficulty": difficulty,
+            "has_formula": ocr_result.get("has_formula", False),
+        }
+    finally:
+        import os
+        try:
+            os.remove(path)
+        except Exception:
+            pass

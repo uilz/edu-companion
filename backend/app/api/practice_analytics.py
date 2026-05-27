@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter
 
+from app.shared.constants import DEFAULT_USER_ID
 from app.db.database import get_db
 from app.core.knowledge_trace import bkt_engine
 from app.services.behavior_analyzer import behavior_analyzer
@@ -38,7 +39,7 @@ def _ds(v):
 async def get_stats(time_range: str = "week"):
     """获取练习统计"""
     db = get_db()
-    user_id = "default_user"
+    user_id = DEFAULT_USER_ID
     now = datetime.now()
 
     days_back = {"week": 7, "month": 30, "all": 365}.get(time_range, 7)
@@ -119,7 +120,7 @@ async def get_stats(time_range: str = "week"):
 @router.get("/behavior")
 async def get_behavior_report(time_range: str = "week"):
     """学习行为分析报告"""
-    user_id = "default_user"
+    user_id = DEFAULT_USER_ID
     now = datetime.now()
 
     days_back = {"week": 7, "month": 30, "all": 365}.get(time_range, 7)

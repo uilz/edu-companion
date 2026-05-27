@@ -1,6 +1,11 @@
 """
 学习进度 REST API 端点
 跟踪和查询学习进度、学习统计
+
+Data sources (Phase 16 S7):
+  - cognitive_nodes 表：掌握度、练习汇总、推荐 (Primary)
+  - attempts 表：每日统计、日历 (DB-backed via AttemptRepo)
+  - learner_engine：画像元数据写操作 (旧 JSON 备降)
 """
 
 from __future__ import annotations
@@ -19,18 +24,118 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/progress", tags=["学习进度"])
 
 
-def _count_cognitive_nodes(user_id: str) -> int:
-    """统计 CognitiveNode 数量（Phase 6 迁移辅助）"""
+# ═══════════════════════════════════════════════════
+# 源1: cognitive_nodes 表 (Primary)
+# ═══════════════════════════════════════════════════
+
+
+def _build_progress_from_cognitive(user_id: str) -> ProgressSummary | None:
+    """从 cognitive_nodes 表构建 ProgressSummary
+
+    返回 None 表示无数据，触发 learner_engine 备降。
+    """
     try:
-        from app.db.database import get_db
-        db = get_db()
-        row = db.fetchone(
-            "SELECT COUNT(*) as cnt FROM cognitive_nodes WHERE user_id = %s",
-            (user_id,)
+        from app.cognitive.storage import list_all_nodes
+        nodes = list_all_nodes(user_id)
+        if not nodes:
+            return None
+
+        total = 0
+        correct = 0
+        study_seconds = 0.0
+        mastered: list[str] = []
+        struggling: list[str] = []
+
+        for node in nodes:
+            ps = node.practice_summary
+            if ps:
+                total += ps.total_attempts
+                correct += ps.correct_attempts
+                study_seconds += ps.total_time_spent
+
+            # 掌握度判断
+            if node.belief and node.belief.proficiency_mean is not None:
+                mu = node.belief.proficiency_mean
+                label = node.label or node.id
+                if mu >= 0.8:
+                    mastered.append(label)
+                elif mu < 0.4:
+                    struggling.append(label)
+
+        accuracy = correct / total if total > 0 else 0.0
+        study_minutes = study_seconds / 60.0
+
+        # 生成建议
+        recommendations: list[str] = []
+        if struggling:
+            recommendations.append(f"建议重点复习: {', '.join(struggling[:3])}")
+        if accuracy < 0.6:
+            recommendations.append("正确率较低，建议降低难度巩固基础")
+        elif accuracy > 0.9:
+            recommendations.append("掌握不错！可以尝试更高难度的挑战")
+
+        return ProgressSummary(
+            user_id=user_id,
+            total_questions=total,
+            correct_answers=correct,
+            accuracy_rate=accuracy,
+            study_minutes=study_minutes,
+            mastered_skills=mastered,
+            struggling_skills=struggling,
+            recent_activity=[],
+            recommendations=recommendations,
         )
-        return row["cnt"] if row else 0
+    except Exception as e:
+        logger.warning("cognitive_nodes 聚合失败, fallback: %s", e)
+        return None
+
+
+def _list_cognitive_nodes(user_id: str) -> list[dict[str, Any]]:
+    """列出用户的所有 CognitiveNode，返回精简 dict 列表"""
+    try:
+        from app.cognitive.storage import list_all_nodes
+        nodes = list_all_nodes(user_id)
+        result = []
+        for n in nodes:
+            mu = n.belief.proficiency_mean if n.belief else 0.0
+            ps = n.practice_summary
+            result.append({
+                "id": n.id,
+                "label": n.label,
+                "level": n.level,
+                "proficiency": round(mu, 4),
+                "attempts": ps.total_attempts if ps else 0,
+                "correct": ps.correct_attempts if ps else 0,
+            })
+        return result
     except Exception:
-        return 0
+        return []
+
+
+def _get_weak_nodes(
+    user_id: str, top_n: int = 3,
+) -> list[dict[str, Any]]:
+    """获取最弱的 N 个节点（按 proficiency_mean 升序）"""
+    try:
+        from app.cognitive.storage import list_all_nodes
+        nodes = list_all_nodes(user_id)
+        rated = []
+        for n in nodes:
+            if n.belief and n.practice_summary and n.practice_summary.total_attempts > 0:
+                rated.append({
+                    "skill_id": n.id,
+                    "label": n.label or n.id,
+                    "mastery": round(n.belief.proficiency_mean * 100),
+                })
+        rated.sort(key=lambda x: x["mastery"])
+        return rated[:top_n]
+    except Exception:
+        return []
+
+
+# ═══════════════════════════════════════════════════
+# 端点
+# ═══════════════════════════════════════════════════
 
 
 @router.get("/{user_id}", response_model=ProgressSummary)
@@ -44,16 +149,14 @@ async def get_progress(user_id: str) -> ProgressSummary:
     - 学习时长
     - 已掌握的知识点
     - 薄弱的知识点
-    - 最近活动记录
     - 个性化建议
 
-    参数:
-        user_id: 用户ID
-
-    返回:
-        学习进度摘要
+    优先读取 cognitive_nodes 表，无数据时备降到 learner_engine (旧 JSON)。
     """
-    summary = learner_engine.get_progress_summary(user_id)
+    summary = _build_progress_from_cognitive(user_id)
+    if summary is None:
+        logger.info("progress fallback: learner_engine for user=%s", user_id)
+        summary = learner_engine.get_progress_summary(user_id)
     return summary
 
 
@@ -62,72 +165,64 @@ async def get_detailed_stats(user_id: str) -> dict[str, Any]:
     """
     获取详细的学习统计数据
 
-    包含更细粒度的统计信息，如按学科统计、按时间统计等
-
-    参数:
-        user_id: 用户ID
-
-    返回:
-        详细统计数据
+    包含更细粒度的统计信息，如按学科统计、按时间统计等。
+    来自 cognitive_nodes (掌握度) + attempts 表 (日维度)。
     """
-    profile = learner_engine.get_or_create_profile(user_id)
-    summary = learner_engine.get_progress_summary(user_id)
-    activities = learner_engine._activity_log.get(user_id, [])
+    # 从 cognitive_nodes 获取总体指标
+    nodes = _list_cognitive_nodes(user_id)
+    total_q = sum(n["attempts"] for n in nodes)
+    correct_q = sum(n["correct"] for n in nodes)
+    accuracy = correct_q / total_q if total_q > 0 else 0.0
 
-    # 按学科统计
+    mastered = [n for n in nodes if n["proficiency"] >= 0.8]
+    struggling = [n for n in nodes if n["proficiency"] < 0.4]
+
+    # 按学科归类（从 node 层级/前缀推断）
     subject_stats: dict[str, dict[str, Any]] = {}
-    for activity in activities:
-        if activity.get("type") == "practice":
-            skill_id = activity.get("skill_id", "unknown")
-            # 简单地将skill_id前缀作为学科
-            subject = skill_id.split("_")[0] if "_" in skill_id else "其他"
+    for n in nodes:
+        # 取 id 中点之前的部分作为学科名
+        subject = n["id"].split(".")[0] if "." in n["id"] else (n["level"] or "其他")
+        if subject not in subject_stats:
+            subject_stats[subject] = {"total": 0, "correct": 0}
+        subject_stats[subject]["total"] += n["attempts"]
+        subject_stats[subject]["correct"] += n["correct"]
+    for subj, stats in subject_stats.items():
+        t = stats["total"]
+        stats["accuracy"] = round(stats["correct"] / t, 3) if t > 0 else 0.0
 
-            if subject not in subject_stats:
-                subject_stats[subject] = {
-                    "total": 0,
-                    "correct": 0,
-                    "total_time": 0.0,
-                }
-            subject_stats[subject]["total"] += 1
-            if activity.get("is_correct"):
-                subject_stats[subject]["correct"] += 1
-            subject_stats[subject]["total_time"] += activity.get("time_spent", 0)
-
-    # 计算各学科正确率
-    for subject, stats in subject_stats.items():
-        total = stats["total"]
-        stats["accuracy"] = stats["correct"] / total if total > 0 else 0.0
-
-    # 按日期统计（最近7天）
+    # 从 attempts 表获取最近 7 天
     from datetime import datetime, timedelta
     daily_stats: dict[str, dict[str, int]] = {}
     for i in range(7):
         date_str = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
         daily_stats[date_str] = {"total": 0, "correct": 0}
 
-    for activity in activities:
-        if activity.get("type") == "practice":
-            ts = activity.get("timestamp", "")
+    try:
+        attempts = await AttemptRepo.list_all(user_id)
+        for a in attempts:
+            ts = a.get("submitted_at", "")
             if ts:
-                date_str = ts[:10]  # 取日期部分
+                date_str = ts[:10]
                 if date_str in daily_stats:
                     daily_stats[date_str]["total"] += 1
-                    if activity.get("is_correct"):
+                    if a.get("is_correct"):
                         daily_stats[date_str]["correct"] += 1
+    except Exception:
+        pass
 
     return {
         "user_id": user_id,
         "overall": {
-            "total_questions": summary.total_questions,
-            "correct_answers": summary.correct_answers,
-            "accuracy_rate": summary.accuracy_rate,
-            "study_minutes": summary.study_minutes,
+            "total_questions": total_q,
+            "correct_answers": correct_q,
+            "accuracy_rate": round(accuracy, 3),
+            "study_minutes": round(total_q * 2.5, 1),  # 估算
         },
         "by_subject": subject_stats,
         "daily": daily_stats,
-        "mastered_count": len(summary.mastered_skills),
-        "struggling_count": len(summary.struggling_skills),
-        "recommendations": summary.recommendations,
+        "mastered_count": len(mastered),
+        "struggling_count": len(struggling),
+        "cognitive_nodes_count": len(nodes),
     }
 
 
@@ -146,6 +241,7 @@ async def start_study_session(
     返回:
         会话信息
     """
+    from app.shared.constants import DEFAULT_USER_ID
     session_id = learner_engine.create_session(user_id, subject)
     return {
         "session_id": session_id,
@@ -203,13 +299,13 @@ async def get_profile(user_id: str) -> dict[str, Any]:
     """
     获取学习者画像
 
-    参数:
-        user_id: 用户ID
-
-    返回:
-        学习者画像信息
+    元数据从 learner_engine (昵称/学科等)，指标从 cognitive_nodes 表。
     """
     profile = learner_engine.get_or_create_profile(user_id)
+    nodes = _list_cognitive_nodes(user_id)
+
+    mastered = sum(1 for n in nodes if n["proficiency"] >= 0.8)
+
     return {
         "user_id": profile.user_id,
         "nickname": profile.nickname,
@@ -217,7 +313,8 @@ async def get_profile(user_id: str) -> dict[str, Any]:
         "grade_level": profile.grade_level,
         "learning_style": profile.learning_style,
         "knowledge_skills_count": len(profile.knowledge_states),
-        "cognitive_nodes_count": _count_cognitive_nodes(user_id),
+        "cognitive_nodes_count": len(nodes),
+        "mastered_nodes_count": mastered,
         "total_study_minutes": profile.total_study_minutes,
         "streak_days": profile.streak_days,
         "created_at": profile.created_at.isoformat(),
@@ -327,12 +424,12 @@ async def get_daily_summary(user_id: str) -> dict[str, Any]:
     每日摘要 — 昨日总结 + 今日推荐，用于前端卡片展示。
 
     返回空对象 {} 表示昨天无学习记录。
+    今日推荐来自 cognitive_nodes 表。
     """
     from datetime import datetime, timedelta, date
 
     now = datetime.now()
     yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
-    day_before = (now - timedelta(days=2)).strftime("%Y-%m-%d")
 
     # 查昨日 attempts
     try:
@@ -354,37 +451,12 @@ async def get_daily_summary(user_id: str) -> dict[str, Any]:
 
     accuracy = yesterday_correct / yesterday_total
 
-    # 前日对比
-    prev_total = 0
-    try:
-        prev_attempts = await AttemptRepo.list_all(user_id, since=day_before)
-        for a in prev_attempts:
-            ts = a.get("submitted_at", "")
-            if ts and ts[:10] == day_before:
-                prev_total += 1
-    except Exception:
-        pass
-
-    delta = yesterday_total - prev_total
-
     # streak
     profile = learner_engine.get_or_create_profile(user_id)
     streak = profile.streak_days if hasattr(profile, "streak_days") else 0
 
-    # 今日推荐：最弱的 3 个可练习技能
-    recommendations = []
-    try:
-        from domain.knowledge.prerequisites import ALL_PREREQUISITES
-        from app.core.knowledge_trace import bkt_engine as _bkt
-        skills = []
-        for sid in ALL_PREREQUISITES:
-            state = _bkt.load_or_create(user_id, sid)
-            skills.append((sid, state.p_known))
-        skills.sort(key=lambda x: x[1])  # mastery 低优先
-        for sid, pk in skills[:3]:
-            recommendations.append({"skill_id": sid, "mastery": round(pk * 100)})
-    except Exception:
-        pass
+    # 今日推荐：从 cognitive_nodes 获取最弱的 3 个
+    recommendations = _get_weak_nodes(user_id, top_n=3)
 
     # 随机鼓励语
     import random
@@ -402,8 +474,10 @@ async def get_daily_summary(user_id: str) -> dict[str, Any]:
             "correct": yesterday_correct,
             "accuracy": round(accuracy, 3),
         },
-        "vs_previous": {"total": prev_total, "delta": delta},
         "streak": streak,
-        "recommendations": recommendations,
+        "recommendations": [
+            {"skill_id": r["skill_id"], "label": r.get("label", r["skill_id"]), "mastery": r["mastery"]}
+            for r in recommendations
+        ],
         "encourage": random.choice(encourages),
     }

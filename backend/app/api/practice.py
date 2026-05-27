@@ -13,6 +13,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.shared.constants import DEFAULT_USER_ID
 from app.config import settings
 from app.core.knowledge_trace import bkt_engine
 
@@ -201,7 +202,7 @@ async def get_questions(
 @router.post("/sessions")
 async def create_session(req: CreateSessionRequest):
     """创建练习会话（含前置知识卡控）"""
-    user_id = "default_user"
+    user_id = DEFAULT_USER_ID
 
     # 从数据库选题
     skill_ids = req.skill_ids or []
@@ -302,7 +303,7 @@ async def create_session(req: CreateSessionRequest):
 
 
 @router.get("/sessions")
-async def list_sessions(user_id: str = "default_user", limit: int = 20):
+async def list_sessions(user_id: str = DEFAULT_USER_ID, limit: int = 20):
     """列出用户的所有会话"""
     db = get_db()
     rows = db.fetchall(
@@ -325,7 +326,7 @@ async def get_session(session_id: str):
 @router.post("/sessions/{session_id}/complete")
 async def complete_session(
     session_id: str,
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     partition_id: str | None = None,
     branch_id: str | None = None,
 ):
@@ -390,7 +391,7 @@ async def complete_session(
 
     # Phase 4C: 发布 SessionCompleted 事件
     try:
-        from app.shared.events import SessionCompleted
+        from shared.events import SessionCompleted
         from app.application.di import container
         import asyncio
         event = SessionCompleted(
@@ -561,8 +562,8 @@ async def submit_answer(req: SubmitAnswerRequest):
     new_mastery = bkt_engine.get_mastery_level(updated_state)
 
     try:
-        from app.shared.events import AnswerSubmitted as AnswerSubmittedEvent
-        from app.infra.event_bus import EventBus
+        from shared.events import AnswerSubmitted as AnswerSubmittedEvent
+        from infra.event_bus import EventBus
         try:
             from app.application.di import container
             bus = container.event_bus
@@ -589,7 +590,7 @@ async def submit_answer(req: SubmitAnswerRequest):
         SIGNIFICANT = {("初学","发展中"),("发展中","接近掌握"),("接近掌握","已掌握"),
                        ("未接触","初学"),("初学","接近掌握")}
         if (old_mastery, new_mastery) in SIGNIFICANT:
-            from app.shared.events import KnowledgeStateUpdated
+            from shared.events import KnowledgeStateUpdated
             ks_event = KnowledgeStateUpdated(
                 user_id=session["user_id"],
                 skill_id=question["skill_id"],
@@ -602,6 +603,23 @@ async def submit_answer(req: SubmitAnswerRequest):
             asyncio.create_task(bus.publish(ks_event))
     except Exception:
         logger.debug("事件发布失败（不影响答题流）", exc_info=True)
+
+    # Phase 10: 答题结束后更新间隔重复调度
+    try:
+        from app.cognitive.storage import find_node_by_label, upsert_node
+        from app.services.spaced_repetition import spaced_repetition
+        sr_node = find_node_by_label(question["skill_id"], session["user_id"])
+        if sr_node:
+            _ = spaced_repetition.update_node_scheduling(
+                sr_node, is_correct, hints_used=req.hints_used,
+            )
+            upsert_node(sr_node, session["user_id"])
+            logger.debug(
+                "Phase10: Scheduling updated for %s (correct=%s, urgency=%.3f)",
+                question["skill_id"], is_correct, sr_node.scheduling.urgency,
+            )
+    except Exception:
+        logger.debug("Phase10: Scheduling 更新失败（不影响答题流）", exc_info=True)
 
     return feedback
 
@@ -660,7 +678,7 @@ async def inline_answer(req: InlineAnswerRequest):
     """对话内联练习 — 提交答案，读取 response_block 内容校验"""
     from app.services.storage import storage
 
-    data = storage.load("default_user")
+    data = storage.load(DEFAULT_USER_ID)
     block = data.response_blocks.get(req.block_id)
     if not block:
         raise HTTPException(404, "Practice block not found")
@@ -675,13 +693,13 @@ async def inline_answer(req: InlineAnswerRequest):
 
     # 更新知识状态
     if skill_id:
-        state = bkt_engine.load_or_create("default_user", skill_id)
+        state = bkt_engine.load_or_create(DEFAULT_USER_ID, skill_id)
         updated_state = bkt_engine.update(state, is_correct)
-        bkt_engine.save_state("default_user", updated_state)
+        bkt_engine.save_state(DEFAULT_USER_ID, updated_state)
         # CognitiveNode
         try:
             from app.cognitive.events import submit_practice
-            submit_practice(user_id="default_user", node_id=skill_id, success=is_correct, latency_ms=0, consecutive=True)
+            submit_practice(user_id=DEFAULT_USER_ID, node_id=skill_id, success=is_correct, latency_ms=0, consecutive=True)
         except Exception:
             pass
         knowledge_update = {
@@ -689,7 +707,7 @@ async def inline_answer(req: InlineAnswerRequest):
             "p_known_before": state.p_known,
             "p_known_after": updated_state.p_known,
             "mastery_level": bkt_engine.get_mastery_level(updated_state),
-            "cognitive_proficiency": _get_cognitive_proficiency("default_user", skill_id),
+            "cognitive_proficiency": _get_cognitive_proficiency(DEFAULT_USER_ID, skill_id),
         }
     else:
         knowledge_update = {}
@@ -713,7 +731,7 @@ async def inline_hint(req: InlineHintRequest):
     """对话内联练习 — 获取提示"""
     from app.services.storage import storage
 
-    data = storage.load("default_user")
+    data = storage.load(DEFAULT_USER_ID)
     block = data.response_blocks.get(req.block_id)
     if not block:
         raise HTTPException(404, "Practice block not found")

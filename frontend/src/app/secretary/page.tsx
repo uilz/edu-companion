@@ -14,6 +14,14 @@ interface ProposalItem {
   created_at?: string;
 }
 
+/** History record shape from /api/secretary/proposals/history */
+interface HistoryRecord {
+  id: string;
+  proposal: Omit<ProposalItem, "id" | "status" | "created_at">;
+  status: string;
+  created_at: string;
+}
+
 interface SnapshotData {
   cognitive_load: number;
   weak_count: number;
@@ -92,14 +100,16 @@ export default function SecretaryPage() {
       if (res.ok) {
         const data = await res.json();
         // Convert history format to ProposalItem[]
-        return data.map((h: any) => ({
+        return data.map((h: HistoryRecord) => ({
           id: h.id,
           ...h.proposal,
           status: h.status,
           created_at: h.created_at,
         }));
       }
-    } catch { }
+    } catch {
+      console.error("加载历史提案失败");
+    }
     return [];
   };
 
@@ -110,7 +120,9 @@ export default function SecretaryPage() {
         const data = await res.json();
         setProposals(data);
       }
-    } catch { }
+    } catch {
+      console.error("加载待处理提案失败");
+    }
   };
 
   // ── 冷启动提示 ──

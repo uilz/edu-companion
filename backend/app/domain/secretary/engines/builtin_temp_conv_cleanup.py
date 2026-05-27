@@ -1,14 +1,12 @@
+from app.shared.constants import DEFAULT_USER_ID
 """内置模块: 临时会话清理 (TempConversationCleanup)
 
 功能: 定期清理 48h 过期的临时会话
 行为: 静默任务，不产生用户可见提案
 """
 from __future__ import annotations
-
 import logging
 import time
-from typing import Any
-
 from ..models import Proposal
 from .context_engine import SessionContext
 from .module_registry import SecretaryModule, ModuleMeta
@@ -80,4 +78,4 @@ class TempConversationCleanupModule(SecretaryModule):
         base = Path(os.path.expanduser("~/.companion/data"))
         if base.exists():
             return [d.name for d in base.iterdir() if d.is_dir()]
-        return ["default_user"]
+        return [DEFAULT_USER_ID]

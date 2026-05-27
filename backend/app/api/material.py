@@ -20,12 +20,13 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query
 from pydantic import BaseModel
 
+from app.shared.constants import DEFAULT_USER_ID
 from app.services.materials_meta import materials_meta, UNCATEGORIZED_PARTITION_ID
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/materials", tags=["materials"])
 
-USER_ID = "default_user"
+USER_ID = DEFAULT_USER_ID
 UPLOAD_DIR = os.path.expanduser("~/.companion/uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 

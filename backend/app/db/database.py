@@ -246,6 +246,12 @@ class Database:
                 with open(cog_sql_path) as f:
                     cur.execute(f.read())
 
+            # Phase 8/16: 补全列、表、索引 (幂等)
+            p8_sql_path = Path(__file__).parent / "phase8_schema.sql"
+            if p8_sql_path.exists():
+                with open(p8_sql_path) as f:
+                    cur.execute(f.read())
+
             conn.commit()
             cur.close()
             self.put_conn(conn)

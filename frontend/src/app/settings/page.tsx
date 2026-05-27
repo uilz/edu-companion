@@ -38,7 +38,7 @@ export default function SettingsPage() {
       try {
         const parsed = JSON.parse(saved);
         setSettings((s) => ({ ...s, ...parsed }));
-      } catch {}
+      } catch { console.error("解析本地设置失败"); }
     }
   }, []);
 

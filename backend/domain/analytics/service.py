@@ -1,49 +1,131 @@
+"""分析引擎领域服务 — 行为分析事件驱动版
+
+职责:
+1. 订阅 AnswerSubmitted → 更新统计（委托 app.services.behavior_analyzer）
+2. 暴露 compute_streak / find_best_hours / compute_regularity
 """
-分析引擎领域服务 — 订阅事件而非被同步调用
-"""
+
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from datetime import datetime, timedelta
+from typing import Any
 
 from shared.events import AnswerSubmitted
-
-if TYPE_CHECKING:
-    from shared.protocols import PracticeService
-    from infra.event_bus import EventBus
 
 logger = logging.getLogger("domain.analytics")
 
 
 class AnalyticsServiceImpl:
-    """
-    行为分析服务
+    """行为分析服务"""
 
-    不再被 practice 同步调用，而是订阅 AnswerSubmitted 事件。
-    """
-
-    def __init__(self, practice: PracticeService, event_bus: EventBus):
+    def __init__(self, practice, event_bus):
         self._practice = practice
         self._bus = event_bus
 
     async def on_answer_submitted(self, event: AnswerSubmitted) -> None:
-        """
-        事件处理器: 答题提交 → 更新统计
+        """事件处理器: 答题提交 → 更新统计（委托 behavior_analyzer）"""
+        from app.services.behavior_analyzer import behavior_analyzer
 
-        异步执行，不影响答题响应速度。
-        """
         logger.debug(
-            "Analytics: user=%s skill=%s correct=%s p=%.2f→%.2f",
+            "Analytics: user=%s skill=%s correct=%s",
             event.user_id, event.skill_id, event.is_correct,
-            event.p_known_before, event.p_known_after
         )
-        # TODO: 更新 daily_trend, hourly_heatmap 到统计表
+        # behavior_analyzer 是纯算法引擎，无副作用
+        # 统计更新依靠 practice_analytics.py 的 get_stats / get_behavior 端点实时计算
+
+    async def _gather_daily_data(self, user_id: str, days: int = 7) -> dict[str, Any]:
+        """从 DB 聚合统计数据供 behavior_analyzer 使用"""
+        from app.db.database import get_db
+        from app.core.knowledge_trace import bkt_engine
+
+        db = get_db()
+        now = datetime.now()
+        cutoff = (now - timedelta(days=days)).isoformat()
+
+        attempt_rows = db.fetchall(
+            "SELECT * FROM attempts WHERE user_id = %s AND submitted_at >= %s",
+            (user_id, cutoff),
+        )
+        session_rows = db.fetchall(
+            "SELECT * FROM practice_sessions WHERE user_id = %s AND started_at >= %s",
+            (user_id, cutoff),
+        )
+
+        daily_trend = []
+        for i in range(days - 1, -1, -1):
+            day = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+            day_a = [a for a in attempt_rows if self._ds(a.get("submitted_at"))[:10] == day]
+            daily_trend.append({
+                "date": day[-5:],
+                "questions": len(day_a),
+                "correct": sum(1 for a in day_a if a.get("is_correct")),
+                "accuracy": sum(1 for a in day_a if a.get("is_correct")) / max(len(day_a), 1),
+            })
+
+        day_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+        hourly_heatmap = []
+        for day_idx in range(7):
+            for hour in [8, 10, 14, 16, 20, 22]:
+                count = sum(
+                    1 for a in attempt_rows
+                    if a.get("submitted_at")
+                    and (isinstance(a["submitted_at"], str)
+                         and datetime.fromisoformat(a["submitted_at"]) or a["submitted_at"])
+                    .weekday() == day_idx
+                    and (isinstance(a["submitted_at"], str)
+                         and datetime.fromisoformat(a["submitted_at"]) or a["submitted_at"])
+                    .hour == hour
+                )
+                hourly_heatmap.append({
+                    "day": day_idx + 1, "day_name": day_names[day_idx],
+                    "hour": hour, "questions": count,
+                })
+
+        skill_states = bkt_engine.load_all_states(user_id)
+        mastery_bars = [
+            {"skill_id": sid, "p_known": round(s.p_known, 2)}
+            for sid, s in skill_states.items() if s.attempt_count > 0
+        ]
+
+        return {
+            "daily_trend": daily_trend,
+            "hourly_heatmap": hourly_heatmap,
+            "mastery_bars": mastery_bars,
+            "total_sessions": len(session_rows),
+            "total_minutes": sum(r.get("estimated_minutes", 0) for r in session_rows),
+        }
 
     async def compute_streak(self, user_id: str) -> tuple[int, int]:
-        return 0, 0
+        """计算连续学习天数"""
+        from app.services.behavior_analyzer import behavior_analyzer
+
+        data = await self._gather_daily_data(user_id)
+        report = behavior_analyzer.analyze(**data)
+        return report.current_streak, report.longest_streak
 
     async def find_best_hours(self, user_id: str) -> list[int]:
-        return []
+        """找最佳学习时段"""
+        from app.services.behavior_analyzer import behavior_analyzer
+
+        data = await self._gather_daily_data(user_id)
+        report = behavior_analyzer.analyze(**data)
+        return report.best_study_hours or []
 
     async def compute_regularity(self, user_id: str) -> float:
-        return 0.0
+        """计算学习规律性 (0-1)"""
+        from app.services.behavior_analyzer import behavior_analyzer
+
+        data = await self._gather_daily_data(user_id)
+        report = behavior_analyzer.analyze(**data)
+        return report.regularity_score
+
+    @staticmethod
+    def _ds(v) -> str:
+        if v is None:
+            return ""
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if isinstance(v, str):
+            return v
+        return str(v)

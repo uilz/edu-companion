@@ -8,6 +8,7 @@
 - 不依赖 presentation 层
 """
 from __future__ import annotations
+from app.shared.constants import DEFAULT_USER_ID
 
 import logging
 from typing import TYPE_CHECKING
@@ -120,7 +121,7 @@ class PracticeServiceImpl:
             is_correct = answer.strip().upper() == question["correct_answer"].strip().upper()
 
             # 3. BKT 更新知识状态
-            old_state = await self._ks.load("default_user", question["skill_id"])
+            old_state = await self._ks.load(DEFAULT_USER_ID, question["skill_id"])
             old_p = old_state["p_known"] if old_state else 0.3
             old_mastery = self._bkt.get_mastery(old_p)
 
@@ -134,7 +135,7 @@ class PracticeServiceImpl:
             new_mastery = self._bkt.get_mastery(new_p)
 
             # 4. 保存知识状态（同步，需确认持久化）
-            await self._ks.save("default_user", question["skill_id"], {
+            await self._ks.save(DEFAULT_USER_ID, question["skill_id"], {
                 "p_known": new_p,
                 "p_learned": old_state.get("p_learned", 0.3) if old_state else 0.3,
                 "p_guess": old_state.get("p_guess", 0.25) if old_state else 0.25,
@@ -153,7 +154,7 @@ class PracticeServiceImpl:
 
             # 6. 发布领域事件（fire-and-forget）
             await self._bus.publish(AnswerSubmitted(
-                user_id="default_user",
+                user_id=DEFAULT_USER_ID,
                 session_id=session_id,
                 question_id=question_id,
                 skill_id=question["skill_id"],
@@ -169,7 +170,7 @@ class PracticeServiceImpl:
             # 答错 → 错题事件
             if not is_correct:
                 await self._bus.publish(ErrorRecorded(
-                    user_id="default_user",
+                    user_id=DEFAULT_USER_ID,
                     question_id=question_id,
                     skill_id=question["skill_id"],
                     error_type="careless",
@@ -180,7 +181,7 @@ class PracticeServiceImpl:
             # 掌握度升级 → 知识状态事件
             if old_mastery != new_mastery:
                 await self._bus.publish(KnowledgeStateUpdated(
-                    user_id="default_user",
+                    user_id=DEFAULT_USER_ID,
                     skill_id=question["skill_id"],
                     old_mastery=old_mastery,
                     new_mastery=new_mastery,
@@ -198,9 +199,24 @@ class PracticeServiceImpl:
     async def generate_questions(
         self, subject: str, topic: str, level: str, count: int
     ) -> list:
-        """LLM 生成题目"""
-        # TODO: 调用 LLM via question_generator
-        return []
+        """从题库查询题目（按学科/难度筛选）"""
+        try:
+            results = []
+            # 遍历所有 skill 查找匹配的题目
+            all_qs = await self._questions.find_by_skill(topic, count * 3)
+            for q in all_qs:
+                if len(results) >= count:
+                    break
+                q_level = q.get("difficulty", "").lower()
+                if level and q_level and q_level != level.lower():
+                    continue
+                if subject and q.get("subject", "").lower() != subject.lower():
+                    continue
+                results.append(q)
+            return results[:count]
+        except Exception as e:
+            logger.warning("generate_questions failed: %s", e)
+            return []
 
     async def create_session(
         self, user_id: str, question_ids: list[str], mode: str = "adaptive"
@@ -216,9 +232,112 @@ class PracticeServiceImpl:
         return {"entries": entries, "total": len(entries)}
 
     async def get_stats(self, user_id: str, time_range: str = "week") -> dict:
-        # TODO: 从 attempts 表聚合
-        return {"overview": {}}
+        """从 attempts 表聚合练习统计"""
+        from datetime import datetime, timedelta
+        from app.db.database import get_db
+
+        try:
+            db = get_db()
+            now = datetime.now()
+            days = {"week": 7, "month": 30, "all": 365}.get(time_range, 7)
+            cutoff = (now - timedelta(days=days)).isoformat()
+            prev_cutoff = (now - timedelta(days=days * 2)).isoformat()
+
+            # 当前周期
+            rows = db.fetchall(
+                "SELECT * FROM attempts WHERE user_id = %s AND submitted_at >= %s",
+                (user_id, cutoff))
+            total = len(rows)
+            correct = sum(1 for r in rows if r.get("is_correct"))
+
+            # 上一周期（环比）
+            prev_rows = db.fetchall(
+                "SELECT * FROM attempts WHERE user_id = %s "
+                "AND submitted_at >= %s AND submitted_at < %s",
+                (user_id, prev_cutoff, cutoff))
+            prev_total = len(prev_rows)
+            prev_correct = sum(1 for r in prev_rows if r.get("is_correct"))
+
+            # 每日趋势
+            daily = {}
+            for r in rows:
+                day = _ds(r.get("submitted_at"))[:10]
+                daily.setdefault(day, {"total": 0, "correct": 0})
+                daily[day]["total"] += 1
+                if r.get("is_correct"):
+                    daily[day]["correct"] += 1
+
+            return {
+                "overview": {
+                    "total_questions": total,
+                    "correct_answers": correct,
+                    "accuracy": round(correct / total, 3) if total > 0 else 0.0,
+                    "prev_week": {
+                        "total_questions": prev_total,
+                        "correct_answers": prev_correct,
+                        "accuracy": round(prev_correct / prev_total, 3) if prev_total > 0 else 0.0,
+                    },
+                },
+                "daily_trend": [
+                    {"date": d, **s}
+                    for d, s in sorted(daily.items())
+                ],
+            }
+        except Exception as e:
+            logger.warning("get_stats aggregation failed: %s", e)
+            return {"overview": {}}
 
     async def get_behavior_report(self, user_id: str, time_range: str = "week") -> dict:
-        # TODO: 调用 analytics service
-        return {}
+        """调用 analytics service 生成行为分析报告"""
+        from datetime import datetime, timedelta
+        from app.db.database import get_db
+        from app.services.behavior_analyzer import behavior_analyzer
+
+        try:
+            db = get_db()
+            now = datetime.now()
+            days = {"week": 7, "month": 30, "all": 365}.get(time_range, 7)
+            cutoff = (now - timedelta(days=days)).isoformat()
+
+            rows = db.fetchall(
+                "SELECT * FROM attempts WHERE user_id = %s AND submitted_at >= %s",
+                (user_id, cutoff))
+            sess_rows = db.fetchall(
+                "SELECT * FROM practice_sessions WHERE user_id = %s AND started_at >= %s",
+                (user_id, cutoff))
+
+            total_sessions = len(sess_rows)
+            total_minutes = sum(r.get("estimated_minutes", 0) for r in sess_rows)
+
+            # 聚合每日数据
+            daily_trend = {}
+            for r in rows:
+                day = str(r.get("submitted_at", ""))[:10]
+                daily_trend.setdefault(day, {"questions": 0, "correct": 0})
+                daily_trend[day]["questions"] += 1
+                if r.get("is_correct"):
+                    daily_trend[day]["correct"] += 1
+
+            data = {
+                "daily_trend": [
+                    {"date": d, **s} for d, s in sorted(daily_trend.items())
+                ],
+                "total_sessions": total_sessions,
+                "total_minutes": total_minutes,
+            }
+
+            report = behavior_analyzer.analyze(**data)
+            return {
+                "behavior": {
+                    "current_streak": getattr(report, "current_streak", 0),
+                    "longest_streak": getattr(report, "longest_streak", 0),
+                    "best_study_hours": getattr(report, "best_study_hours", []),
+                    "regularity_score": getattr(report, "regularity_score", 0.0),
+                    "recommendations": getattr(report, "recommendations", []),
+                },
+                "total_sessions": total_sessions,
+                "total_minutes": total_minutes,
+            }
+        except Exception as e:
+            logger.warning("get_behavior_report failed: %s", e)
+            return {}

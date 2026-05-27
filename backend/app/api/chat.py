@@ -20,6 +20,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 from app.core.learner_model import learner_engine
+from app.shared.constants import DEFAULT_USER_ID
 from app.core.orchestrator import orchestrator
 
 logger = logging.getLogger(__name__)
@@ -93,7 +94,7 @@ async def websocket_chat(websocket: WebSocket) -> None:
         {"type": "error", "payload": {"message": "出错了"}, "request_id": "xxx"}
     """
     # 使用默认 user_id（MVP 单用户模式）
-    user_id = "default_user"
+    user_id = DEFAULT_USER_ID
     session_id = await manager.connect(websocket, user_id)
 
     try:
@@ -164,7 +165,7 @@ async def http_chat(body: ChatRequestBody) -> dict[str, Any]:
     """
     HTTP 方式的聊天接口（备用，非流式）
     """
-    user_id = "default_user"
+    user_id = DEFAULT_USER_ID
     session_id = learner_engine.create_session(user_id, body.subject)
 
     result = await orchestrator.process_message(

@@ -1,84 +1,144 @@
 # 🎓 智能伴学系统 (Edu-Companion)
 
-> AI 驱动的个性化学习伴侣 —— 自适应学习规划、知识点讲解、智能练习、学情追踪
+> AI 驱动的个性化学习伴侣 —— 全链路覆盖：自适应练习、知识追踪、多模态讲解、心理陪伴、习惯养成
 
 ---
 
 ## 📋 目录
 
 - [项目简介](#项目简介)
+- [完整功能矩阵](#完整功能矩阵)
 - [架构概览](#架构概览)
+- [16 个 Phase 交付总览](#16-个-phase-交付总览)
 - [技术栈](#技术栈)
 - [项目结构](#项目结构)
-- [对话系统（核心）](#对话系统核心)
+- [核心数据流](#核心数据流)
 - [快速开始](#快速开始)
-- [开发指南](#开发指南)
-- [近期重构](#近期重构)
+- [近期里程碑](#近期里程碑)
 
 ---
 
 ## 📖 项目简介
 
-智能伴学系统是一个面向学生的 AI 辅助学习平台，覆盖**课前→课中→课后**全链路：
+智能伴学系统是面向学生的 AI 学习伴侣，覆盖**学习全生命周期**：
 
-| 模块 | 功能 |
-|------|------|
-| 🤖 **AI 伴学对话** | 多轮启发式对话，支持知识点讲解、答疑、苏格拉底式追问 |
-| 📚 **自适应练习** | 按知识点出题，BKT 知识追踪，动态调整难度 |
-| 🧠 **知识图谱** | 知识点关联推理，技能前提链检测，薄弱环节定位 |
-| 📊 **学情分析** | 学习进度可视化（雷达图/趋势图），错题归因分析 |
-| 📝 **智能规划** | 基于掌握度的自适应学习路径推荐 |
-| 🎯 **错题本** | 自动整理错题，遗忘曲线驱动的复习计划 |
-| 🔊 **多模态交互** | 语音问答、图文讲解、视频检索（B站等） |
+| 阶段 | 功能 | 技术 |
+|:-----|:-----|:-----|
+| 📖 **课前** | 知识图谱导航、学习规划、前置诊断 | CognitiveNode 5 层级、秘书系统 |
+| ✍️ **课中** | 多模态对话、自适应练习、苏格拉底追问 | LLM + WS 流式、SM-2 间隔重复 |
+| 📊 **课后** | 学情追踪、行为分析、复习提醒 | 15 子系统认知模型、BKT |
+| ❤️ **全程** | 心理陪伴、习惯养成、创造扩展 | 情绪分析、成就系统、知识发散 |
+
+---
+
+## 🎯 完整功能矩阵
+
+| 模块 | 功能 | 状态 |
+|:-----|:-----|:----:|
+| 🤖 **AI 伴学对话** | 多轮启发式对话，知识点讲解、答疑、苏格拉底追问 | ✅ v0.3 |
+| 📚 **自适应练习** | SM-2 间隔重复 + Beta 信念 + 三级优先级队列 | ✅ v0.5 |
+| 🧠 **知识图谱树** | 5 层级（partition→domain→topic→concept→atom），向量分类自动生长 | ✅ v0.5 |
+| 🗺️ **力导向图谱** | 独立 `/graph` 路由，节点颜色按掌握度，交互展开 | ✅ v0.6 |
+| 📊 **学情看板** | 雷达图/趋势图/热力图/遗忘曲线/错误分布 | ✅ v0.5 |
+| 🔔 **智能秘书** | 7 模块：复习提醒/疲劳管理/学习简报/备考/回归/元认知/静默 | ✅ v0.4 |
+| 🧠 **认知追踪** | 15 子系统 + 22 方程：Beta 信念/ACT-R 激活/EWMA 趋势/认知负荷 | ✅ v0.3 |
+| 🎯 **错题本** | 自动整理 + 错误簇分析 + 复习调度 | ✅ v0.2 |
+| 🔊 **多模态输出** | Edge-TTS 语音讲解 / B站视频检索 / 结构化图文卡片 | ✅ v0.5 |
+| 📷 **多模态输入** | 图片上传 + OCR / 拍题理解 / 视觉分析 | ✅ v0.6 |
+| 🎤 **语音输入** | 语音录制 + Whisper 转文字 | ✅ v0.3 |
+| ❤️ **心理陪伴** | 情绪检测（11 类）+ 趋势分析 + 对话注入 + 看板卡片 | ✅ v0.6 |
+| 🔥 **习惯养成** | 连续学习 streak / 每日目标 / 番茄钟 / 微习惯 / 12 成就 | ✅ v0.6 |
+| ✨ **智能创造** | 知识拓展（6 维度）/ 变式题生成 / 关联发现 | ✅ v0.6 |
+| 📝 **自适应规划** | 复习紧迫度 ×2 / ZPD 甜点 ×1.5 / 探索 ×0.5 三级权重 | ✅ v0.5 |
+| 🧹 **系统治理** | 48h 临时对话清理 cron / Classify 确认 UI | ✅ v0.6 |
 
 ---
 
 ## 🏗️ 架构概览
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        前端 (Next.js 14)                      │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐   │
-│  │ AI 对话   │ │ 练习中心  │ │ 学习报告  │ │ 知识图谱     │   │
-│  │ (WS流式)  │ │ (BKT追踪) │ │ (CRUD)   │ │ (可视化)     │   │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────────┘   │
-└──────────────────────────┬──────────────────────────────────┘
-                           │ REST + WebSocket
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   后端 (FastAPI + Python 3.11)                │
-│                                                                │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐   │
-│  │ 对话系统  │ │ 练习引擎  │ │ 知识追踪  │ │ 学习分析     │   │
-│  │(分层路由) │ │(自适应出题)│ │(BKT+知识桥)│ │(事件驱动)    │   │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────────┘   │
-│                                                                │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐   │
-│  │ 分类器    │ │ 规划器   │ │ 多模态   │ │ 认知节点     │   │
-│  │(意图路由) │ │(学习计划) │ │(搜索/语音)│ │(CognitiveNode)│  │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────────┘   │
-└──────┬──────────┬──────────┬──────────────────────┬────────┘
-       │          │          │                      │
-       ▼          ▼          ▼                      ▼
-┌──────────┐ ┌──────────┐ ┌──────────┐  ┌──────────────────┐
-│PostgreSQL│ │  Redis   │ │  向量    │  │  外部 AI API     │
-│  14/16   │ │   7      │ │ pgvector │  │  (Deepseek等)    │
-│ +对话持久 │ │ +缓存    │ │ +语义检索 │  │                  │
-└──────────┘ └──────────┘ └──────────┘  └──────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                         前端 (Next.js 14)                             │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │
+│  │ AI 对话  │ │ 练习中心 │ │ 学习报告 │ │ 知识图谱 │ │ 智能秘书 │  │
+│  │ (WS流式) │ │(自适应)  │ │(CRUD)    │ │(力导向)  │ │(诊断)    │  │
+│  │ 情绪注入 │ │ SM-2队列 │ │ 遗忘曲线 │ │ /graph   │ │ 7模块    │  │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘  │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐                              │
+│  │ 行为分析 │ │ 心理陪伴 │ │ 创造扩展 │                              │
+│  │ streak   │ │ Emotion  │ │ 变式题   │                              │
+│  │ 习惯养成 │ │ 趋势看板 │ │ 关联发现 │                              │
+│  └──────────┘ └──────────┘ └──────────┘                              │
+└────────────────────────────────┬─────────────────────────────────────┘
+                                 │ REST + WebSocket
+                                 ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                     后端 (FastAPI + Python 3.11)                      │
+│                                                                      │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │
+│  │ 对话系统 │ │ 练习引擎 │ │ 知识追踪 │ │ 秘书系统 │ │ 分类器   │  │
+│  │ 分层路由 │ │ 自适应   │ │Cognitive │ │ 诊断/提  │ │ 向量检索 │  │
+│  │ 流式/非  │ │ SM-2+Beta│ │22方程15  │ │ 案/策略  │ │ 3模式    │  │
+│  │ 流式双路 │ │ 三级队列 │ │ 子系统   │ │ 7内置模块│ │ 关键词   │  │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘  │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │
+│  │ 心理陪伴 │ │ 行为分析 │ │ 创造扩展 │ │ 视觉理解 │ │ 多模态   │  │
+│  │ 情绪分类 │ │ streak   │ │ 知识发散 │ │ OCR/拍题 │ │ TTS/视频 │  │
+│  │ 趋势分析 │ │ 规律性   │ │ 变式题   │ │ 通用分析 │ │ 图文卡片 │  │
+│  │ 对话注入 │ │ 疲劳估计 │ │ 关联发现 │ │ 对话图片 │ │ 语音输入 │  │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘  │
+└──────┬──────────┬──────────┬───────────────────────────┬─────────────┘
+       │          │          │                           │
+       ▼          ▼          ▼                           ▼
+┌──────────┐ ┌──────────┐ ┌──────────┐   ┌────────────────────────────┐
+│PostgreSQL│ │  Redis   │ │  向量    │   │  外部 AI API               │
+│  14/16   │ │   7      │ │ pgvector │   │  (DeepSeek / OpenAI 兼容)  │
+│ +认知节点 │ │ +缓存    │ │ +语义检索 │   │  LiteLLM 路由 + 多模型策略 │
+│ +对话持久 │ │          │ │          │   │  gpt-4o 视觉模型            │
+└──────────┘ └──────────┘ └──────────┘   └────────────────────────────┘
 ```
+
+---
+
+## 📦 16 个 Phase 交付总览
+
+```
+Phase 1 MVP:     █████████████████████  完成 ✅
+Phase 2 画像:    █████████████████████  完成 ✅
+Phase 3 路由:    █████████████████████  完成 ✅
+Phase 4 对话:    █████████████████████  完成 ✅
+Phase 5 事件:    █████████████████████  完成 ✅
+Phase 6 认知:    █████████████████████  完成 ✅
+Phase 7 秘书:    █████████████████████  完成 ✅
+Phase 8 图谱:    █████████████████████  完成 ✅
+Phase 9 同步:    █████████████████████  完成 ✅
+Phase 10 调度:   █████████████████████  完成 ✅
+Phase 11 填充:   █████████████████████  完成 ✅
+Phase 12 看板:   █████████████████████  完成 ✅
+Phase 13 讲解:   █████████████████████  完成 ✅
+Phase 14 心智:   █████████████████████  完成 ✅
+Phase 15 多模态:  █████████████████████  完成 ✅
+Phase 16 整合:   █████████████████████  完成 ✅
+```
+
+详情见 [docs/PROGRESS.md](docs/PROGRESS.md) 和 [CHANGELOG.md](CHANGELOG.md)。
 
 ---
 
 ## 🛠️ 技术栈
 
 | 层级 | 技术 | 说明 |
-|------|------|------|
-| **前端** | Next.js 14 (App Router) | React 18 + TypeScript, shadcn/ui |
-| **后端** | FastAPI + Python 3.11 | 异步 REST + WebSocket |
-| **数据库** | PostgreSQL 14/16 | 对话数据(PG)、JSONB 元数据、pgvector |
+|:-----|:-----|:-----|
+| **前端** | Next.js 14 (App Router) | React 18 + TypeScript, shadcn/ui, Tailwind CSS |
+| **后端** | FastAPI + Python 3.11 | 异步 REST + WebSocket, LiteLLM |
+| **数据库** | PostgreSQL 14/16 + pgvector | CognitiveNode 统一存储, 向量检索 |
 | **AI** | DeepSeek / OpenAI 兼容 API | LiteLLM 路由, 多模型策略 |
-| **语音** | Edge-TTS / Whisper | 语音合成+识别 |
-| **部署** | Nginx + systemd / Docker | 双机部署（编辑机+运行机） |
+| **视觉** | GPT-4o / 视觉模型 | OCR / 拍题理解 / 通用图片分析 |
+| **语音** | Edge-TTS / Whisper | 语音合成 + 语音识别 |
+| **认知引擎** | Beta 信念 + SM-2 + ACT-R | 15 子系统 + 22 方程 |
+| **秘书引擎** | 诊断+提案+策略 | 7 个内置主动服务模块 |
+| **调度** | SM-2 间隔重复 + 三级队列 | 复习×2 / ZPD×1.5 / 探索×0.5 |
+| **部署** | systemd + nginx | 双机部署（编辑机+运行机） |
 
 ---
 
@@ -86,127 +146,100 @@
 
 ```
 edu-companion/
-├── backend/                   # Python 后端
+├── backend/
 │   ├── app/
-│   │   ├── api/               # REST API 路由
-│   │   │   ├── conversation.py    # 对话系统 CRUD (分区/领域/专题/对话/消息)
-│   │   │   ├── practice.py        # 练习系统
-│   │   │   ├── knowledge.py       # 知识图谱 API
-│   │   │   ├── progress.py        # 学习进度
-│   │   │   ├── partition_progress.py # 分区进度
-│   │   │   ├── chat.py            # WebSocket 聊天
-│   │   │   └── ...                # 其他路由
-│   │   ├── services/           # 业务逻辑层
-│   │   │   ├── conversation_llm.py # 🌟 AI 对话主逻辑 (845行)
-│   │   │   ├── prompts.py          # 系统提示词 (从 conversation_llm 拆分)
-│   │   │   ├── context_builder.py  # 对话上下文构建 (从 conversation_llm 拆分)
-│   │   │   ├── pg_storage.py       # PostgreSQL 存储引擎
-│   │   │   ├── tree_ops.py         # 侧栏树结构操作 (CRUD)
-│   │   │   ├── classifier.py       # 意图分类/路由
-│   │   │   ├── llm_service.py      # LLM 调用封装
-│   │   │   └── ...                 # 其他服务
-│   │   ├── schemas/             # Pydantic 数据模型
-│   │   │   └── conversation.py     # 对话系统模型 (UserData/TreeNode/Partition...)
-│   │   ├── core/                # 核心引擎
-│   │   │   ├── orchestrator.py     # 事件编排器
-│   │   │   ├── learner_model.py    # 学习者模型
-│   │   │   └── knowledge_trace.py  # BKT 知识追踪
-│   │   ├── cognitive/           # 认知节点系统 (Phase 6)
-│   │   │   ├── models.py           # CognitiveNode 模型
-│   │   │   ├── events.py           # 认知事件
-│   │   │   └── storage.py          # 认知数据存储
-│   │   ├── application/         # DI 容器
-│   │   │   └── di.py               # 依赖注入容器
-│   │   ├── db/                  # 数据库层
-│   │   │   ├── database.py         # 连接池管理
-│   │   │   └── conversation_schema.sql # 对话表 Schema
-│   │   ├── shared/              # 共享类型
-│   │   │   └── events.py           # 事件定义
-│   │   ├── infra/               # 基础设施
-│   │   │   ├── event_bus.py        # 事件总线
-│   │   │   ├── circuit_breaker.py  # 熔断器
-│   │   │   ├── resilience.py       # 重试/超时
-│   │   │   └── tracing.py          # 链路追踪
-│   │   └── main.py              # 入口 + lifespan
-│   ├── domain/                 # 领域层
-│   │   ├── conversation/          # 对话领域
-│   │   ├── practice/              # 练习领域
-│   │   ├── analytics/             # 分析领域
-│   │   └── ...                    # 其他领域
-│   ├── infra/                  # 顶层基础设施（供 domain/ 使用）
-│   │   ├── event_bus.py
-│   │   ├── resilience.py
-│   │   ├── tracing.py
-│   │   ├── database.py
-│   │   ├── llm.py
-│   │   └── tts_client.py
-│   └── shared/                 # 顶层共享协议
-│       ├── events.py
-│       └── protocols/
-├── frontend/                   # Next.js 前端
+│   │   ├── api/                      # REST API 端点
+│   │   │   ├── conversation.py       # 对话系统 (WS+SSE)
+│   │   │   ├── phase8.py             # v2 API: 图谱/分类/队列/看板/讲解/情绪/扩展/视觉
+│   │   │   ├── practice.py           # 练习系统 (SM-2 调度)
+│   │   │   ├── practice_analytics.py # 行为分析 + 统计
+│   │   │   ├── secretary.py          # 秘书系统
+│   │   │   ├── achievements.py       # 成就系统
+│   │   │   └── ...                   # chat, knowledge, progress, study...
+│   │   ├── services/
+│   │   │   ├── conversation_llm.py   # AI 对话主逻辑（非流式+流式）
+│   │   │   ├── context_builder.py    # 上下文构建（含情绪注入）
+│   │   │   ├── emotion_analyzer.py   # 情绪分析引擎
+│   │   │   ├── behavior_analyzer.py  # 行为分析引擎
+│   │   │   ├── habit_formation.py    # 习惯养成引擎
+│   │   │   ├── achievement_engine.py # 成就引擎（12成就×3级）
+│   │   │   ├── knowledge_expander.py # 智能创造扩展
+│   │   │   ├── vision_service.py     # 视觉理解服务
+│   │   │   ├── spaced_repetition.py  # SM-2 间隔重复
+│   │   │   ├── adaptive_selector.py  # 自适应选题队列
+│   │   │   └── secretary/            # 秘书系统逻辑
+│   │   ├── cognitive/                # CognitiveNode 认知系统
+│   │   │   ├── models.py             # 15 子系统模型
+│   │   │   ├── storage.py            # PG 存储 CRUD
+│   │   │   ├── growth_engine.py      # 全方向生长引擎
+│   │   │   └── equations.py          # 22 个数学方程
+│   │   ├── domain/                   # 领域层（7 个模块）
+│   │   │   ├── secretary/            # 秘书系统引擎
+│   │   │   ├── habits/               # 习惯养成事件驱动
+│   │   │   └── analytics/            # 行为分析事件驱动
+│   │   ├── application/di.py         # DI 容器（9 服务+8 订阅）
+│   │   └── main.py                   # FastAPI 入口
+│   ├── domain/                       # 领域层 handler
+│   ├── scripts/
+│   │   └── cleanup_temp_convs.py     # 48h 临时对话清理
+│   └── tests/                        # 165 项测试
+├── frontend/
 │   └── src/
-│       ├── app/learn/             # 学习主页（对话界面）
-│       ├── components/
-│       │   └── conversation/      # 对话组件
-│       │       ├── PartitionSidebar.tsx  # 侧栏树
-│       │       ├── MessageList.tsx        # 消息列表
-│       │       └── ...                    # 其他组件
-│       └── ...
-├── docs/                       # 设计文档
-│   ├── phase1/ ~ phase6/         # 分阶段设计文档
-│   └── architecture-v3.md       # 架构设计 v3
-├── models/                      # 模型下载说明（模型文件被 gitignore）
-├── backend/models/              # 后端模型文件（含 granite-embedding-97m，被 gitignore）
-├── PROGRESS.md                  # 开发进度
-├── CHANGELOG.md                 # 版本更新日志
+│       ├── app/                      # 17 个路由页面
+│       │   ├── learn/                # AI 对话
+│       │   ├── practice/             # 练习中心
+│       │   ├── dashboard/            # 学情看板
+│       │   ├── analytics/            # 学习分析（含情绪卡片）
+│       │   ├── graph/                # 力导向知识图谱
+│       │   ├── secretary/            # 智能秘书
+│       │   ├── achievements/         # 成就系统
+│       │   └── ...                   # errors, stats, calendar, study...
+│       └── components/
+│           ├── conversation/         # 对话组件（输入/列表/侧栏/语音/分类浮窗）
+│           ├── dashboard/            # 看板组件（Overview/GraphTab）
+│           ├── analytics/            # 分析组件（RadarChart/EmotionCard）
+│           ├── explain/              # 讲解组件（ExplainPanel/ExpandPanel）
+│           └── secretary/            # 秘书组件
+├── docs/                             # 完整文档
+│   ├── architecture-v3.md            # 系统架构 v3.0
+│   ├── PROGRESS.md                   # 开发进度跟踪
+│   └── phase1/ ~ phase8/             # 分阶段设计文档（已归档）
+├── PROGRESS.md                       # 进度总览
+├── CHANGELOG.md                      # 版本更新日志
 └── README.md
 ```
 
 ---
 
-## 💬 对话系统（核心）
-
-对话系统采用 **4 层分层结构**：
-
-```
-分区 (Partition)        ← 最高层级，按学科/方向划分
-  └── 领域 (Domain)     ← 学科子领域
-        └── 专题 (Topic) ← 具体知识点专题
-              └── 对话 (Conversation)  ← 多轮对话会话
-```
-
-### 数据流
+## 🔄 核心数据流
 
 ```
 用户消息
-  → classifier.auto_resolve()    # 意图分类 + 分区路由
-    → conversation_llm.send_and_reply()
-      → _build_context_messages()  # 构建 9 层上下文（情绪/知识桥/图谱...）
-        → llm_service.chat()       # LLM 推理
-          → 工具调用（搜索/出题/绘图）
-            → 流式返回 + response_block 渲染
-              → 异步: 知识证据分析 + CognitiveNode 联动
+  → [情绪检测] emotion_analyzer.quick_detect()       # Phase 14
+  → [分类] POST /api/v2/classify                      # Phase 8
+  → [对话] conversation_llm.send_and_reply()           # Phase 4/5
+      ├─ 普通回复 → response_block 渲染
+      ├─ 练习相关 → practice.submit_answer()           # Phase 10
+      │     └─ SM-2 scheduling update
+      │     └─ sync_from_practice_event() → CognitiveNode  # Phase 9
+      │     └─ 行为分析 / 习惯记录 / 成就检测          # Phase 14
+      └─ 图片消息 → vision_service 视觉理解             # Phase 15
+
+CognitiveNode 更新
+  → [秘书系统] 诊断/提案 (复习提醒/疲劳/简报等)          # Phase 7
+  → [调度] 自适应队列 next_review / urgency 计算        # Phase 10
+  → [扩展] 知识拓展 / 变式题 / 关联发现                 # Phase 14
+  → [讲解] 视频检索 / TTS / 图文卡片 (答错时)           # Phase 13
+
+每日后台
+  → cleanup_temp_convs.py (48h 清理)                   # Phase 15
 ```
-
-### 关键 API
-
-| 端点 | 方法 | 用途 |
-|------|------|------|
-| `/partitions` | GET/POST/PATCH/DELETE | 分区 CRUD |
-| `/partitions/{id}/domains` | GET | 列出领域 |
-| `/domains/{id}/topics` | GET | 列出专题 |
-| `/topics/{id}/conversations` | GET/POST | 对话列表/创建 |
-| `/conversations/{id}/messages` | GET | 消息列表 |
-| `/message` | POST | 发送消息（REST） |
-| `/ws` | WebSocket | 流式对话 |
-| `/messages/{id}` | PUT/DELETE | 编辑/删除消息 |
 
 ---
 
 ## 🚀 快速开始
 
 ### 环境要求
-
 - Python 3.11+
 - Node.js 18+
 - PostgreSQL 14+（含 pgvector 扩展）
@@ -220,8 +253,8 @@ cd backend
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # 修改配置
-./venv/bin/uvicorn app.main:app --reload
+cp .env.example .env          # 修改配置
+./venv/bin/uvicorn app.main:app --reload --port 8000
 
 # 前端
 cd frontend
@@ -232,22 +265,61 @@ npm run dev
 ### 环境变量
 
 | 变量 | 说明 | 默认值 |
-|------|------|--------|
+|:-----|:-----|:-------|
 | `OPENAI_API_KEY` | AI API 密钥 | - |
 | `OPENAI_API_BASE` | API 端点 | https://api.deepseek.com/v1 |
 | `TEXT_MODEL` | 对话模型 | deepseek/deepseek-v4-flash |
+| `TEXT_REASONING_MODEL` | 推理+视觉模型 | openai/gpt-4o |
 | `DB_PASSWORD` | PostgreSQL 密码 | companion123 |
 | `DB_PORT` | PostgreSQL 端口 | 5433 |
 
+### 运行测试
+
+```bash
+cd backend
+pytest tests/ -q             # 165 项测试
+cd frontend
+npx tsc --noEmit              # TypeScript 编译检查
+```
+
 ---
 
-## 🧹 近期重构
+## 🧹 近期里程碑
 
-| 重构项 | 说明 |
-|--------|------|
-| **conversation_llm.py 拆分** | 1064 行→845 行，提取 `prompts.py` 和 `context_builder.py` |
-| **删除重复 `application/di.py`** | 顶层副本已删除，统一使用 `app.application.di` |
-| **修复 13 处 `except: pass`** | 改为带上下文日志的 `logger.debug/warning` |
-| **添加 ~55 条中文文档字符串** | 覆盖核心 4 文件（conversation.py, tree_ops.py, pg_storage.py, schemas） |
-| **PG 存储引擎修复** | save() 加清理逻辑 + `__uncategorized__` 白名单保护 |
-| **前端 404 自动清理** | loadChildren/loadMessages 遇到 404 自动移除僵尸节点 |
+### v0.6.0 — Phase 9-15 全线贯通 (2026-05-26)
+
+| Phase | 核心交付 |
+|:------|:---------|
+| ⑨ | 认知追踪同步 + 分类器降级 |
+| ⑩ | SM-2 间隔重复 + 自适应选题队列 |
+| ⑪ | 事件驱动 handler 填充 + 认知字段增强 |
+| ⑫ | 仪表盘 API + 前端学情看板 |
+| ⑬ | 多模态讲解助手（B站+TTS+图文卡片）|
+| ⑭ | 伴学心智（行为分析+心理陪伴+习惯养成+创造扩展）|
+| ⑮ | 多模态输入（视觉理解）+ 力导向图谱 + 系统治理 |
+
+**后端**: 134 源文件 • 31 个 v2 API 端点 • 165 项测试  
+**前端**: 17 路由页面 • 40+ 组件 • TypeScript 零错误  
+**数据库**: cognitive_nodes 31 列 JSONB • 15 子系统 • 22 方程
+
+### v0.5.0 — Phase 8 · 知识图谱树 + 分类器 (2026-05-26)
+
+- 知识图谱树侧栏 Phase8Sidebar 替换旧 PartitionSidebar
+- 向量分类器 `/api/v2/classify` 自动归类
+- 数据迁移 + 存储序列化修复
+
+### v0.4.0 — Phase 7 · 智能秘书系统 (2026-05-24)
+
+- 诊断+提案+策略三引擎
+- 7 个内置主动服务模块
+- 前端秘书 UI 套件
+
+### v0.3.0 — Phase 4-6 · 对话系统 + 认知节点 (2026-05-17)
+
+- 树结构会话 + 多模态消息
+- CognitiveNode 15 子系统 + 22 方程
+- 事件驱动 13 种学习事件
+
+---
+
+> 完整开发历程见 [CHANGELOG.md](CHANGELOG.md) | 系统架构细节见 [docs/architecture-v3.md](docs/architecture-v3.md)

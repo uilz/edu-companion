@@ -1,3 +1,4 @@
+from app.shared.constants import DEFAULT_USER_ID
 """
 学习事件记录与查询 API
 
@@ -27,17 +28,16 @@ _MAX_EVENTS = 500  # 最多保留 500 条（超出自动裁剪）
 
 def _get_user_data():
     from app.services.storage import storage
-    return storage.load("default_user")
-
+    return storage.load(DEFAULT_USER_ID)
 
 def _save_user_data(data):
     from app.services.storage import storage
-    storage.save("default_user", data)
+    storage.save(DEFAULT_USER_ID, data)
 
 
 def record_event(
     event_type: EventType,
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
     partition_id: str | None = None,
     branch_id: str | None = None,
     skill_ids: list[str] | None = None,

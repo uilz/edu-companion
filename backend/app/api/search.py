@@ -11,10 +11,12 @@ from typing import Optional
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
+from app.shared.constants import DEFAULT_USER_ID
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/search", tags=["搜索"])
 
-USER_ID = "default_user"
+USER_ID = DEFAULT_USER_ID
 
 
 class SearchResultItem(BaseModel):

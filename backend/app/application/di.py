@@ -5,12 +5,14 @@
 这是整个系统唯一的"胶水代码"。
 """
 from __future__ import annotations
+from app.shared.constants import DEFAULT_USER_ID
 
 import logging
 from typing import TYPE_CHECKING
 
 from infra.event_bus import EventBus
 from infra.resilience import CircuitBreaker
+from shared.events import DomainEvent
 
 if TYPE_CHECKING:
     from shared.protocols import (
@@ -147,10 +149,33 @@ class AppContainer:
     def _wire_events(self) -> None:
         bus = self.event_bus
 
-        # 答题 → 行为分析 + 习惯养成 + 对话记忆 + 知识图谱
+        # 答题 → 行为分析 + 习惯养成 + 知识图谱
         bus.subscribe("AnswerSubmitted", self.analytics_service.on_answer_submitted)
         bus.subscribe("AnswerSubmitted", self.habit_service.on_answer_submitted)
         bus.subscribe("AnswerSubmitted", self.knowledge_service.on_answer_submitted)
+
+        # Phase 9 精简: 不重复写 cognitive_nodes (已由 submit_practice 写入)
+        # 只发布 CognitiveNodeUpdated 事件通知下游 (ZPD, Dashboard 等)
+        async def _on_answer_to_cognitive(event: DomainEvent) -> None:
+            from shared.events import AnswerSubmitted, CognitiveNodeUpdated
+            if not isinstance(event, AnswerSubmitted):
+                return
+            proficiency_before = event.p_known_before
+            # 获取 cognitive_nodes 中更新后的掌握度
+            from app.cognitive.storage import find_node_by_label
+            node = find_node_by_label(event.skill_id, event.user_id or DEFAULT_USER_ID)
+            proficiency_after = node.belief.proficiency_mean if node else event.p_known_after
+            await bus.publish(CognitiveNodeUpdated(
+                user_id=event.user_id or DEFAULT_USER_ID,
+                node_id=node.id if node else event.skill_id,
+                label=event.skill_id,
+                level="atom",
+                proficiency_before=proficiency_before,
+                proficiency_after=proficiency_after,
+                update_type="practice",
+            ))
+        bus.subscribe("AnswerSubmitted", _on_answer_to_cognitive)
+        logger.info("🧠 Phase 9: AnswerSubmitted → CognitiveNode sync + event published")
 
         # 错题 → 知识图谱 + 媒体推荐
         bus.subscribe("ErrorRecorded", self.knowledge_service.on_error_recorded)
@@ -163,6 +188,26 @@ class AppContainer:
         # 知识升级 → 计划重调 + 对话通知
         bus.subscribe("KnowledgeStateUpdated", self.planning_service.on_knowledge_updated)
         bus.subscribe("KnowledgeStateUpdated", self.conversation_service.on_knowledge_updated)
+
+        # Phase 9: CognitiveNode 更新 → ZPD 调度重计算
+        from app.cognitive.storage import get_node
+        async def _on_cognitive_updated(event: DomainEvent) -> None:
+            from shared.events import CognitiveNodeUpdated
+            if not isinstance(event, CognitiveNodeUpdated):
+                return
+            logger.debug(
+                "CognitiveNode updated: %s (%s) %.3f→%.3f",
+                event.label, event.level,
+                event.proficiency_before, event.proficiency_after,
+            )
+            # 触发 ZPD 调度器重算
+            try:
+                from app.services.zpd_scheduler import zpd_scheduler
+                zpd_scheduler.on_knowledge_change(event.user_id, event.node_id)
+            except Exception:
+                logger.debug("ZPD scheduler not available, skipping cognitive update reaction")
+        bus.subscribe("CognitiveNodeUpdated", _on_cognitive_updated)
+        logger.info("🧠 Phase 9: CognitiveNodeUpdated → ZPD reschedule handler registered")
 
         # 计划生成 → 对话推送
         bus.subscribe("StudyPlanGenerated", self.conversation_service.on_plan_generated)

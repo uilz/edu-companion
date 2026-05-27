@@ -43,7 +43,8 @@ class Phase8Classifier:
         }
         """
         if not query_embedding:
-            return {"mode": 3, "candidates": [], "should_switch": False}
+            # 无 embedding → 降级到 keyword + ILIKE
+            return self.classify_by_text(user_id, "", current_topic_id)
 
         # 1. 分层检索
         topic_candidates = self._search_topic(user_id, query_embedding)
@@ -63,6 +64,84 @@ class Phase8Classifier:
                 "path_id": result["candidates"][0].get("path_id", ""),
             }
         return result
+
+    def classify_by_text(
+        self,
+        user_id: str,
+        text: str,
+        current_topic_id: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        文本降级分类：keyword + ILIKE 检索，返回与 classify() 相同格式。
+
+        当无 embedding 可用时使用。
+        """
+        candidates = []
+
+        if text:
+            # 1. 关键词匹配 → partition 得分
+            matched_keywords = self._keyword_score(text)
+            if matched_keywords:
+                # 2. 对得分最高的 partition，用 ILIKE 找 topic 级节点
+                top_partition = matched_keywords[0]["partition"]
+                from app.cognitive.storage import search_nodes
+                nodes = search_nodes(top_partition, user_id, limit=10)
+                for n in nodes:
+                    if n.level == "topic":
+                        candidates.append({
+                            "id": n.id,
+                            "label": n.label,
+                            "path_id": n.path_id or "",
+                            "score": matched_keywords[0]["score"],
+                        })
+                        break
+
+            # 3. 如果关键词没匹配到，直接 ILIKE 搜索全部节点
+            if not candidates:
+                from app.cognitive.storage import search_nodes
+                nodes = search_nodes(text, user_id, limit=20)
+                for n in nodes:
+                    if n.level == "topic":
+                        candidates.append({
+                            "id": n.id,
+                            "label": n.label,
+                            "path_id": n.path_id or "",
+                            "score": 0.5,
+                        })
+
+        # 4. 去重 + 截断
+        seen = set()
+        unique = []
+        for c in candidates:
+            if c["id"] not in seen:
+                seen.add(c["id"])
+                unique.append(c)
+        candidates = unique[:5]
+
+        # 5. 用相同的模式决策逻辑
+        return self._decide_mode(candidates, current_topic_id)
+
+    @staticmethod
+    def _keyword_score(text: str) -> list[dict]:
+        """关键词匹配，复用 classifier.py 的 KEYWORD_WEIGHTS 表"""
+        try:
+            from app.services.classifier import KEYWORD_WEIGHTS
+        except ImportError:
+            return []
+
+        scores: list[dict] = []
+        for partition, keywords in KEYWORD_WEIGHTS.items():
+            total = 0.0
+            for keyword, weight in keywords.items():
+                if keyword in text:
+                    total += weight
+            if total > 0:
+                scores.append({
+                    "partition": partition,
+                    "score": min(total / 2.0, 0.95),
+                })
+        scores.sort(key=lambda x: -x["score"])
+        return scores
 
     def _search_topic(
         self, user_id: str, query_embedding: list[float], limit: int = 5,

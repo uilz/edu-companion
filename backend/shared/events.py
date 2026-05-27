@@ -220,6 +220,7 @@ class AssistantReplied(DomainEvent):
     user_id: str = ""
     partition_id: str = ""
     branch_id: str = ""
+    conversation_id: str = ""
     message_id: str = ""
     content: str = ""
     skill_ids: list[str] = field(default_factory=list)
@@ -266,6 +267,28 @@ class ImageRendered(DomainEvent):
 
 
 # ──────────────────────────────────────────────
+# 认知域事件 (Phase 9)
+# ──────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class CognitiveNodeUpdated(DomainEvent):
+    """CognitiveNode 更新事件 — 知识信念/掌握度变化后发布"""
+    user_id: str = ""
+    node_id: str = ""
+    label: str = ""
+    path_id: str = ""
+    level: str = "atom"
+    proficiency_before: float = 0.5
+    proficiency_after: float = 0.5
+    update_type: str = "practice"  # practice | secretary | auto_growth
+
+    @property
+    def event_type(self) -> str:
+        return "CognitiveNodeUpdated"
+
+
+# ──────────────────────────────────────────────
 # 事件类型注册表（用于 event_bus 订阅路由）
 # ──────────────────────────────────────────────
 
@@ -285,5 +308,6 @@ EVENT_TYPES: dict[str, type[DomainEvent]] = {
         AssistantReplied,
         AudioSynthesized,
         ImageRendered,
+        CognitiveNodeUpdated,
     ]
 }

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
+from app.shared.constants import DEFAULT_USER_ID
 from app.schemas.practice import (
     Question,
     PracticeSession,
@@ -26,7 +27,7 @@ class PracticeService(Protocol):
         topic: str = "",
         level: str = "medium",
         count: int = 5,
-        user_id: str = "default_user",
+        user_id: str = DEFAULT_USER_ID,
     ) -> list[Question]:
         """生成练习题目"""
         ...

@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from app.shared.constants import DEFAULT_USER_ID
 from ..models import (
     DiagnosisReport,
     Proposal,
@@ -32,7 +33,7 @@ from ..analysis import (
 
 logger = logging.getLogger(__name__)
 
-_USER_ID_DEFAULT = "default_user"
+_USER_ID_DEFAULT = DEFAULT_USER_ID
 
 
 class DiagnosisEngine:

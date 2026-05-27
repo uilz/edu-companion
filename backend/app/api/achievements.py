@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from app.shared.constants import DEFAULT_USER_ID
 from app.core.knowledge_trace import bkt_engine
 from app.core.learner_model import learner_engine
 from app.services.achievement_engine import achievement_engine
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/achievements", tags=["成就系统"])
 
-USER_ID = "default_user"
+USER_ID = DEFAULT_USER_ID
 
 
 def _collect_stats(user_id: str) -> dict[str, Any]:

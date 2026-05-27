@@ -1,3 +1,4 @@
+from app.shared.constants import DEFAULT_USER_ID
 """主动检查器 — 基于模块注册表的扩展式检查
 
 检查流程:
@@ -8,12 +9,9 @@
 """
 
 from __future__ import annotations
-
 import asyncio
 import logging
 import time
-from typing import Any
-
 from .context_engine import ContextEngine, SessionContext
 
 logger = logging.getLogger(__name__)
@@ -22,7 +20,7 @@ logger = logging.getLogger(__name__)
 class ActiveChecker:
     """主动检查器 — 基于模块注册表的周期性检查"""
 
-    def __init__(self, user_id: str = "default_user") -> None:
+    def __init__(self, user_id: str = DEFAULT_USER_ID) -> None:
         self._user_id = user_id
         self._running = False
         self._task: asyncio.Task | None = None

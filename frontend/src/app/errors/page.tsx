@@ -116,7 +116,7 @@ export default function ErrorBookPage() {
         const data = await res.json();
         setStats(data);
       }
-    } catch {}
+      } catch { console.error("获取错题统计失败"); }
   };
 
   // ── 初始化：数据加载 ──
