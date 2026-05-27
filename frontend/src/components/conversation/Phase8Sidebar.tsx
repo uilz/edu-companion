@@ -194,38 +194,38 @@ export default function Phase8Sidebar({
     return res.conversation.id;
   }, []);
 
-  /** 从 childMap 中沿 graph tree 找到 topic 节点 ID */
-  const findTopicInTree = useCallback((node: GraphNode): string | null => {
-    if (node.level === "topic") return node.id;
-    const children = childMapRef.current.get(node.id) || [];
-    for (const child of children) {
-      if (node.level === "partition" && child.level === "domain") {
-        const topics = childMapRef.current.get(child.id) || [];
-        if (topics.length > 0) return topics[0].id;
-      }
-      if (child.level === "topic") return child.id;
-    }
-    return null;
+  /** 在 graph tree 中创建新子级节点 */
+  const createGraphNode = useCallback(async (parentId: string, childLevel: GraphLevel, name: string, emoji: string) => {
+    const res = await v2<{ id: string }>(`/graph/nodes`, {
+      method: "POST",
+      body: JSON.stringify({ parent_id: parentId, level: childLevel, name, emoji }),
+    });
+    return res.id;
   }, []);
 
   /** 点击 💬 按钮 */
   const handleNewConvClick = useCallback(async (node: GraphNode, pid?: string) => {
     const partitionId = pid || node.id;
     try {
-      // 从已加载的 graph tree 中找到 topic 节点
-      let topicId = findTopicInTree(node);
-      if (!topicId) {
-        // graph tree 还没展开到 topic 级，先展开
-        await loadChildren(node);
-        const children = childMapRef.current.get(node.id) || [];
-        for (const child of children) {
-          topicId = findTopicInTree(child);
-          if (topicId) break;
-        }
+      let topicId: string;
+      if (node.level === "topic") {
+        topicId = node.id;
+      } else if (node.level === "domain") {
+        // 新建专题
+        topicId = await createGraphNode(node.id, "topic", "新专题", "📝");
+      } else {
+        // 新建领域 → 新建专题
+        const domainId = await createGraphNode(node.id, "domain", "新领域", "📚");
+        topicId = await createGraphNode(domainId, "topic", "新专题", "📝");
       }
-      if (!topicId) throw new Error("无法找到专题节点");
       const convId = await findOrCreateConv(topicId);
       await forceRefreshConvs(topicId!);
+      // 刷新 graph tree 子节点
+      await loadChildren(node);
+      if (node.level === "partition") {
+        const domains = childMapRef.current.get(node.id) || [];
+        for (const d of domains) if (d.level === "domain") await loadChildren(d);
+      }
       // 展开节点让用户看到会话
       setExpandedSet(prev => setAdd(prev, node.id));
       onConversationReady?.(partitionId, convId);
@@ -235,7 +235,8 @@ export default function Phase8Sidebar({
       onNewConversation?.(node.level, node.id, pid);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [findTopicInTree, findOrCreateConv, forceRefreshConvs, onConversationReady, onNewConversation]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createGraphNode, findOrCreateConv, forceRefreshConvs, onConversationReady, onNewConversation]);
 
   // ── 通用 loading 包装 ──
   const withLoading = useCallback(async <T,>(key: string, fn: () => Promise<T>): Promise<T | undefined> => {
