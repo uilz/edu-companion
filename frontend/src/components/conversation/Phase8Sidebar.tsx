@@ -183,6 +183,15 @@ export default function Phase8Sidebar({
       .catch(() => {});
   }, []);
 
+  // ── 无选中分区时自动选中第一个（触发自动展开） ──
+  useEffect(() => {
+    if (selectedNodeId) return;                    // 已有选中
+    const rootNodes = childMapRef.current.get(ROOT_KEY);
+    if (!rootNodes || rootNodes.length === 0) return;  // 还没加载
+    // 通知父组件选中第一个分区
+    onSelectConversation(rootNodes[0].id, "");
+  }, [selectedNodeId, childMap, onSelectConversation]);
+
   // ── 加载子节点（返回 children 供调用方使用，避免 stale ref） ──
   const loadChildren = useCallback(async (node: GraphNode): Promise<GraphNode[]> => {
     let result: GraphNode[] = [];
@@ -298,28 +307,25 @@ export default function Phase8Sidebar({
     autoExpandAttemptRef.current = 0;
     prevAutoExpandRef.current = expandKey;
 
-    const expandLevel = async (nodeId: string, depth: number) => {
+    const expandLevel = async (node: GraphNode, depth: number) => {
       if (depth > 5) return;
-      setExpandedSet(prev => setAdd(prev, nodeId));
+      setExpandedSet(prev => setAdd(prev, node.id));
 
-      // 加载子节点 — 使用返回值而非 stale ref
-      let children = childMapRef.current.get(nodeId) || [];
+      // 加载子节点 — 使用返回值，传递 node 对象避免 stale nodeById
+      let children = childMapRef.current.get(node.id) || [];
       if (children.length === 0) {
-        const node = depth === 0 ? rootNodes.find(n => n.id === nodeId) : nodeById.get(nodeId);
-        if (node) {
-          children = await loadChildren(node);
-        }
+        children = await loadChildren(node);
       }
 
       // topic 级加载会话
-      const info = nodeById.get(nodeId) || rootNodes.find(n => n.id === nodeId);
-      if (info?.level === "topic") loadConversations(nodeId);
+      if (node.level === "topic") loadConversations(node.id);
 
-      // 递归子节点（用 children 局部变量，不是 stale ref）
-      for (const child of children) await expandLevel(child.id, depth + 1);
+      // 递归子节点（直接传 child 对象，不依赖 nodeById）
+      for (const child of children) await expandLevel(child, depth + 1);
     };
-    expandLevel(selectedNodeId, 0);
-  }, [selectedNodeId, activeConversationId, initialConversationId, loadChildren, loadConversations, childMap, nodeById]);
+    const startNode = rootNodes.find(n => n.id === selectedNodeId);
+    if (startNode) expandLevel(startNode, 0);
+  }, [selectedNodeId, activeConversationId, initialConversationId, loadChildren, loadConversations, childMap]);
 
   // ── 层级图标 ──
   const levelIcon = (level: GraphLevel) => {
