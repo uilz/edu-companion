@@ -42,7 +42,7 @@ def _to_json(obj) -> str:
 def _from_json(cls, raw: str | dict | None):
     """JSON → Pydantic，接受字符串或已解析的 dict"""
     if raw is None:
-        return None
+        return cls()
     if isinstance(raw, str):
         if not raw or raw == "{}" or raw == "[]":
             return cls()
