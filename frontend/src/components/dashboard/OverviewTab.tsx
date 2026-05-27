@@ -90,7 +90,7 @@ export default function OverviewTab() {
     async function loadData() {
       try {
         const [progressRes, dashRes, achieveRes] = await Promise.all([
-          fetch(`${API_BASE}/api/progress/summary?user_id=default_user`),
+          fetch(`${API_BASE}/api/progress/default_user`),
           fetch(`${API_BASE}/api/v2/dashboard/overview?user_id=default_user`),
           fetch(`${API_BASE}/api/achievements/default_user`),
         ]);

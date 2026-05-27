@@ -85,7 +85,7 @@ export default function HomePage() {
     async function loadData() {
       try {
         const [progressRes, achieveRes] = await Promise.all([
-          fetch(`${API_BASE}/api/progress/summary?user_id=default_user`),
+          fetch(`${API_BASE}/api/progress/default_user`),
           fetch(`${API_BASE}/api/achievements/default_user`),
         ]);
         if (progressRes.ok) setProgress(await progressRes.json());

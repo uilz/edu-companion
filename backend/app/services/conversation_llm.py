@@ -616,7 +616,7 @@ async def send_and_reply(
                     storage.save(user_id, data)
                 logger.info(f"消息 {assistant_node.id[:8]} 标注知识点: {skill_ids}")
                 # v3.0: 记录事件
-                from app.api.learning_events import record_event
+                from app.services.learning_events import record_event
                 from app.schemas.learning_event import EventType
                 for sid in skill_ids:
                     record_event(

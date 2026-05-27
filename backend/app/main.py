@@ -24,13 +24,11 @@ from app.api.practice_errors import router as practice_errors_router
 from app.api.practice_analytics import router as practice_analytics_router
 from app.api.practice_quality import router as practice_quality_router
 from app.api.progress import router as progress_router
-from app.api.content import router as content_router
 from app.api.conversation import router as conversation_router
 from app.api.material import router as material_router
 from app.api.knowledge import router as knowledge_router
 from app.api.knowledge_graph import router as knowledge_graph_router
 from app.api.partition_progress import router as partition_progress_router
-from app.api.learning_events import router as learning_events_router
 from app.api.multimodal import router as multimodal_router
 from app.api.achievements import router as achievements_router
 from app.api.search import router as search_router
@@ -160,8 +158,6 @@ app.include_router(practice_analytics_router)
 app.include_router(practice_quality_router)
 # 学习进度
 app.include_router(progress_router)
-# 内容搜索
-app.include_router(content_router)
 # 对话系统（树结构）
 app.include_router(conversation_router, prefix="/api/conversations", tags=["conversations"])
 app.include_router(material_router)
@@ -170,8 +166,6 @@ app.include_router(knowledge_router)
 app.include_router(knowledge_graph_router)
 # 学习画像 (v3.0 PartitionProgress)
 app.include_router(partition_progress_router)
-# 学习事件记录 (v3.0)
-app.include_router(learning_events_router)
 # 多模态（STT 转写）
 app.include_router(multimodal_router)
 # 成就系统

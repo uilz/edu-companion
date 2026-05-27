@@ -135,7 +135,7 @@ def _save_user_data(data):
 # GET /{partition_id}
 # ═══════════════════════════════════════════════════════════
 
-@router.get("/{partition_id}")
+@router.get("/{partition_id}", deprecated=True)
 async def get_graph(partition_id: str):
     """获取指定分区的知识图谱。不存在则返回空。"""
     data = _get_user_data()
@@ -334,7 +334,7 @@ async def generate_graph_logic(
 # POST /{partition_id}/generate
 # ═══════════════════════════════════════════════════════════
 
-@router.post("/{partition_id}/generate")
+@router.post("/{partition_id}/generate", deprecated=True)
 async def generate_graph(partition_id: str, depth: int = 3):
     """
     AI 生成知识图谱。
@@ -362,7 +362,7 @@ async def generate_graph(partition_id: str, depth: int = 3):
 # PUT /{partition_id}/nodes
 # ═══════════════════════════════════════════════════════════
 
-@router.put("/{partition_id}/nodes")
+@router.put("/{partition_id}/nodes", deprecated=True)
 async def update_nodes(partition_id: str, payload: dict[str, Any]):
     """
     添加/修改/删除节点。
@@ -424,7 +424,7 @@ async def update_nodes(partition_id: str, payload: dict[str, Any]):
 # PUT /{partition_id}/edges
 # ═══════════════════════════════════════════════════════════
 
-@router.put("/{partition_id}/edges")
+@router.put("/{partition_id}/edges", deprecated=True)
 async def update_edges(partition_id: str, payload: dict[str, Any]):
     """
     添加/删除边。

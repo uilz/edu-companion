@@ -199,7 +199,7 @@ async def get_questions(
 
 # 练习会话
 
-@router.post("/sessions")
+@router.post("/sessions", deprecated=True)
 async def create_session(req: CreateSessionRequest):
     """创建练习会话（含前置知识卡控）"""
     user_id = DEFAULT_USER_ID
@@ -415,7 +415,7 @@ async def complete_session(
 
 # 答题与反馈
 
-@router.post("/submit")
+@router.post("/submit", deprecated=True)
 async def submit_answer(req: SubmitAnswerRequest):
     """提交答案"""
     db = get_db()
@@ -457,7 +457,7 @@ async def submit_answer(req: SubmitAnswerRequest):
 
     # v3.0: 记录练习事件
     try:
-        from app.api.learning_events import record_event
+        from app.services.learning_events import record_event
         from app.schemas.learning_event import EventType
         sid = question["skill_id"]
         record_event(
@@ -651,7 +651,7 @@ class InlineHintRequest(BaseModel):
     block_id: str
 
 
-@router.post("/inline/answer")
+@router.post("/inline/answer", deprecated=True)
 async def inline_answer(req: InlineAnswerRequest):
     """对话内联练习 — 提交答案，读取 response_block 内容校验"""
     from app.services.storage import storage

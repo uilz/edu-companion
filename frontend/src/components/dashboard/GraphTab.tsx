@@ -107,7 +107,7 @@ export function GraphTab() {
   const loadPartitions = useCallback(async () => {
     setLoadingParts(true);
     try {
-      const res = await fetch("/api/conversations/partitions");
+      const res = await fetch("/api/conversations/tree/partition");
       const data = await res.json();
       setPartitions(data.partitions || []);
     } catch { /* noop */ }
