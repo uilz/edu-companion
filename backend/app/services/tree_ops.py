@@ -222,7 +222,7 @@ class TreeOpsService:
         # ── 同步 CognitiveNode 到认知图谱 ──
         if level in ("partition", "domain", "topic"):
             cog_parent = None if level == "partition" else parent_id
-            # 构造 path_id
+            # 构造 path_id（追加 short uuid 确保唯一性，避免自动创建同名校节点冲突）
             path_id = name
             if cog_parent:
                 # 从 collection 中取父节点名称
@@ -231,6 +231,7 @@ class TreeOpsService:
                 parent_entity = parent_coll.get(cog_parent)
                 if parent_entity:
                     path_id = getattr(parent_entity, "name", name) + "." + name
+            path_id += "." + entity.id[:8]
             cog_node = CognitiveNode(
                 id=entity.id,
                 label=(emoji + " " + name) if emoji else name,
