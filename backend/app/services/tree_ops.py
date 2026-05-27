@@ -21,6 +21,10 @@ from app.schemas.conversation import (
 )
 from app.services.storage import storage
 
+# Cognitive 图谱同步导入
+from app.cognitive.models import CognitiveNode, MetaInfo
+from app.cognitive.storage import upsert_node, delete_node as cog_delete_node
+
 
 class TreeOpsService:
     """所有树形结构操作（归一化版本）"""
@@ -129,6 +133,13 @@ class TreeOpsService:
                 self._delete_node(user_id, child_id, next_level, data=data)
             collection.pop(node_id, None)
 
+        # 同步删除 CognitiveNode
+        if level in ("partition", "domain", "topic"):
+            try:
+                cog_delete_node(node_id, user_id)
+            except Exception:
+                logger.warning(f"Failed to delete cognitive node {node_id}", exc_info=True)
+
     def _rename_node(self, user_id: str, node_id: str, level: str, new_name: str):
         data = storage.load(user_id)
         collection = self._get_collection(data, level)
@@ -139,6 +150,17 @@ class TreeOpsService:
         node.updated_at = time.time()
         storage.save(user_id, data)
         logger.info(f"Renamed {level} {node_id} to {new_name}")
+        # 同步更新 CognitiveNode 的 label
+        if level in ("partition", "domain", "topic"):
+            try:
+                from app.cognitive.storage import get_node as cog_get_node
+                cog = cog_get_node(node_id, user_id)
+                if cog:
+                    old_emoji = cog.label.split(" ")[0] if cog.label and len(cog.label.split(" ")) > 1 else ""
+                    cog.label = (old_emoji + " " + new_name) if old_emoji else new_name
+                    upsert_node(cog, user_id)
+            except Exception:
+                logger.warning(f"Failed to rename cognitive node {node_id}", exc_info=True)
         return node
 
     def _create_node(
@@ -196,6 +218,30 @@ class TreeOpsService:
 
         if level == "partition":
             data.active_partition_id = entity.id
+
+        # ── 同步 CognitiveNode 到认知图谱 ──
+        if level in ("partition", "domain", "topic"):
+            cog_parent = None if level == "partition" else parent_id
+            # 构造 path_id
+            path_id = name
+            if cog_parent:
+                # 从 collection 中取父节点名称
+                parent_level = self.LEVELS[self.LEVELS.index(level) - 1]
+                parent_coll = self._get_collection(data, parent_level)
+                parent_entity = parent_coll.get(cog_parent)
+                if parent_entity:
+                    path_id = getattr(parent_entity, "name", name) + "." + name
+            cog_node = CognitiveNode(
+                id=entity.id,
+                label=(emoji + " " + name) if emoji else name,
+                level=level,
+                parent=cog_parent,
+                path_id=path_id,
+                node_type="explicit",
+                is_visible=True,
+                meta=MetaInfo(created_at=time.time()),
+            )
+            upsert_node(cog_node, user_id)
 
         return entity
 
