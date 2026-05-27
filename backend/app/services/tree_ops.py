@@ -163,6 +163,111 @@ class TreeOpsService:
                 logger.warning(f"Failed to rename cognitive node {node_id}", exc_info=True)
         return node
 
+    def _ensure_conversation_parent_path(
+        self, user_id: str, topic_id: str, data: UserData
+    ) -> None:
+        """When a topic_id (from cognitive_nodes) is not in data.topics,
+        walk the cognitive_nodes hierarchy and create missing tree nodes
+        (topic → domain → partition) as needed."""
+        from app.cognitive.storage import get_node as cog_get_node
+
+        cog = cog_get_node(topic_id, user_id)
+        if not cog:
+            return  # can't resolve, let caller raise
+
+        # Extract label from cognitive node (strip leading emoji if present)
+        label_parts = cog.label.split(" ", 1) if cog.label else [""]
+        emoji_char = ""
+        node_name = cog.label or ""
+        if len(label_parts) == 2 and label_parts[0] and all(
+            ord(c) > 0x1F000 for c in label_parts[0]
+        ):
+            emoji_char = label_parts[0]
+            node_name = label_parts[1]
+
+        # Build path from cognitive hierarchy (walk up parent chain)
+        cog_parent_id = cog.parent
+        parent_cog = None
+        parent_label = ""
+        parent_emoji = ""
+        if cog_parent_id:
+            parent_cog = cog_get_node(cog_parent_id, user_id)
+            if parent_cog:
+                pl = parent_cog.label.split(" ", 1) if parent_cog.label else [""]
+                parent_emoji = ""
+                parent_label = parent_cog.label or ""
+                if len(pl) == 2 and pl[0] and all(
+                    ord(c) > 0x1F000 for c in pl[0]
+                ):
+                    parent_emoji = pl[0]
+                    parent_label = pl[1]
+                # Recursively ensure grandparent exists
+                self._ensure_conversation_parent_path(
+                    user_id, cog_parent_id, data
+                )
+
+        # Create the topic if not present
+        if topic_id not in data.topics:
+            domain_id = parent_cog.parent if parent_cog else ""
+
+            # Ensure domain exists in tree
+            if domain_id and domain_id not in data.domains:
+                # Find or create partition
+                partition_id = ""
+                if parent_cog:
+                    pp_cog = cog_get_node(parent_cog.parent, user_id) if parent_cog.parent else None
+                    if pp_cog:
+                        partition_id = pp_cog.id
+                        # Create partition if missing
+                        if partition_id not in data.partitions:
+                            pp_name = pp_cog.label or "自动创建"
+                            pp_emoji = ""
+                            ppl = pp_cog.label.split(" ", 1) if pp_cog.label else [""]
+                            if len(ppl) == 2 and ppl[0] and all(
+                                ord(c) > 0x1F000 for c in ppl[0]
+                            ):
+                                pp_emoji = ppl[0]
+                                pp_name = ppl[1]
+                            partition = Partition(
+                                id=partition_id,
+                                name=pp_name,
+                                subject=pp_name,
+                                direction="subject",
+                                emoji=pp_emoji or "💬",
+                                root_id=str(uuid4()),
+                            )
+                            data.partitions[partition_id] = partition
+                            # Create virtual root node
+                            root_node = TreeNode(
+                                id=partition.root_id,
+                                parent_id=partition.root_id,
+                                partition_id=partition_id,
+                                conversation_id="",
+                                role="assistant",
+                                content_blocks=[],
+                                text_summary="[virtual_root]",
+                            )
+                            data.nodes[partition.root_id] = root_node
+
+                # Create domain if missing
+                domain_name = parent_label or "自动创建"
+                domain = Domain(
+                    id=domain_id,
+                    partition_id=partition_id,
+                    name=domain_name,
+                    emoji=parent_emoji or "📚",
+                )
+                data.domains[domain_id] = domain
+
+            # Create topic
+            topic = Topic(
+                id=topic_id,
+                domain_id=domain_id,
+                name=node_name or "自动创建",
+                emoji=emoji_char or "📝",
+            )
+            data.topics[topic_id] = topic
+
     def _create_node(
         self,
         user_id: str,
@@ -182,7 +287,14 @@ class TreeOpsService:
             parent_level = self.LEVELS[self.LEVELS.index(level) - 1]
             parent_collection = self._get_collection(data, parent_level)
             if parent_id not in parent_collection:
-                raise ValueError(f"Parent {parent_level} {parent_id} not found")
+                # For conversation level: auto-create missing parent path
+                # from cognitive_nodes hierarchy
+                if level == "conversation":
+                    self._ensure_conversation_parent_path(
+                        user_id, parent_id, data
+                    )
+                else:
+                    raise ValueError(f"Parent {parent_level} {parent_id} not found")
 
         kwargs = {}
         if parent_id is not None:
