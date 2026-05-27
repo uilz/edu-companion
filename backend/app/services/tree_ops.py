@@ -171,6 +171,7 @@ class TreeOpsService:
         name: str,
         emoji: str = "",
         data: UserData | None = None,
+        auto_created: bool = False,  # 是否由 auto_create_child 递归创建
     ):
         if data is None:
             data = storage.load(user_id)
@@ -211,7 +212,8 @@ class TreeOpsService:
             child_name = auto_config["name"].format(name=name, emoji=emoji)
             child_emoji = auto_config["emoji"].format(name=name, emoji=emoji)
             child = self._create_node(
-                user_id, child_level, entity.id, child_name, child_emoji, data=data
+                user_id, child_level, entity.id, child_name, child_emoji, data=data,
+                auto_created=True,
             )
             if level == "topic" and child_level == "conversation":
                 entity.active_conversation_id = child.id
@@ -222,6 +224,8 @@ class TreeOpsService:
         # ── 同步 CognitiveNode 到认知图谱 ──
         if level in ("partition", "domain", "topic"):
             cog_parent = None if level == "partition" else parent_id
+            # 判断是否为自动创建的临时节点
+            is_auto = auto_created
             # 构造 path_id（追加 short uuid 确保唯一性，避免自动创建同名校节点冲突）
             path_id = name
             if cog_parent:
@@ -238,7 +242,7 @@ class TreeOpsService:
                 level=level,
                 parent=cog_parent,
                 path_id=path_id,
-                node_type="explicit",
+                node_type="auto_generated" if is_auto else "explicit",
                 is_visible=True,
                 meta=MetaInfo(created_at=time.time()),
             )

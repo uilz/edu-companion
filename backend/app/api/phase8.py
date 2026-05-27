@@ -32,10 +32,40 @@ from app.cognitive.link_storage import (
 )
 from app.services.phase8_classifier import phase8_classifier
 from app.services.adaptive_selector import adaptive_selector
+from app.services.storage import storage
+from app.services.tree_ops import TreeOpsService
+from app.schemas.conversation import Partition, Domain, Topic
 
+tree_ops = TreeOpsService()
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v2")
+
+# ═══════════════════════════════════════════════
+# 辅助：将 UserData 实体转为 graph node dict
+# ═══════════════════════════════════════════════
+
+
+def _entity_to_node(
+    entity: Partition | Domain | Topic,
+    level: str,
+    user_id: str = DEFAULT_USER_ID,
+) -> dict:
+    """将 Partition/Domain/Topic 转为 frontend graph node 格式"""
+    label = (entity.emoji + " " + entity.name) if getattr(entity, "emoji", None) else entity.name
+    # 从认知图谱查询对应节点的分析指标
+    cog = get_node(entity.id, user_id)
+    suggested = get_suggested_count(entity.id, user_id) if cog else 0
+    return {
+        "id": entity.id,
+        "label": label,
+        "level": level,
+        "path_id": entity.name,
+        "is_visible": True,
+        "node_type": "explicit",
+        "suggested_count": suggested,
+        "created_at": getattr(entity, "created_at", 0),
+    }
 
 
 # ═══════════════════════════════════════════════
@@ -203,33 +233,98 @@ def get_graph_nodes(
     parent_id: str | None = None,
     level: str | None = None,
 ) -> list[dict]:
-    """获取可见子节点（含 suggested_count）
+    """获取可见子节点（统一数据源）
 
-    参数：
-        parent_id: 指定父节点下钻
-        level: 按层级过滤（如 topic、domain、partition）
+    对 partition/domain/topic → 从对话树 UserData 读取（唯一真实源）
+    对 concept/atom → 从认知图谱 cognitive_nodes 读取
+    含 suggested_count 等分析指标（若有对应 CognitiveNode）
     """
+    # ── 1. 指定层级：concept/atom 从认知图谱，其他从 UserData ──
     if level:
-        children = [n for n in get_nodes_by_level(level, user_id) if n.is_visible]
-    elif parent_id:
-        children = get_visible_children(parent_id, user_id)
-    else:
-        children = [n for n in get_nodes_by_level("partition", user_id) if n.is_visible]
-    result = []
-    for c in children:
-        suggested = get_suggested_count(c.id, user_id)
-        entry = {
-            "id": c.id,
-            "label": c.label,
-            "level": c.level,
-            "path_id": c.path_id,
-            "is_visible": c.is_visible,
-            "node_type": c.node_type,
-            "suggested_count": suggested,
-            "created_at": c.meta.created_at,
-        }
-        result.append(entry)
-    return result
+        if level in ("concept", "atom"):
+            children = [n for n in get_nodes_by_level(level, user_id) if n.is_visible]
+            result = []
+            for c in children:
+                suggested = get_suggested_count(c.id, user_id)
+                entry = {
+                    "id": c.id,
+                    "label": c.label,
+                    "level": c.level,
+                    "path_id": c.path_id,
+                    "is_visible": c.is_visible,
+                    "node_type": c.node_type,
+                    "suggested_count": suggested,
+                    "created_at": c.meta.created_at,
+                }
+                result.append(entry)
+            return result
+        # partition/domain/topic → 从 UserData 读取
+        data = storage.load(user_id)
+        if level == "partition":
+            return [_entity_to_node(e, "partition", user_id) for e in data.partitions.values()]
+        elif level == "domain":
+            return [_entity_to_node(e, "domain", user_id) for e in data.domains.values()]
+        elif level == "topic":
+            return [_entity_to_node(e, "topic", user_id) for e in data.topics.values()]
+        return []
+
+    # ── 2. 指定父节点：展开操作 ──
+    if parent_id:
+        # 确定父节点在哪个系统
+        data = storage.load(user_id)
+        if parent_id in data.partitions:
+            # 展开分区 → 返回该分区下的 domains
+            return [
+                _entity_to_node(d, "domain", user_id)
+                for d in data.domains.values()
+                if getattr(d, "partition_id", None) == parent_id
+            ]
+        elif parent_id in data.domains:
+            # 展开领域 → 返回该领域下的 topics
+            return [
+                _entity_to_node(t, "topic", user_id)
+                for t in data.topics.values()
+                if getattr(t, "domain_id", None) == parent_id
+            ]
+        elif parent_id in data.topics:
+            # 展开专题 → 从认知图谱取 concept 级节点
+            if is_visible := get_node(parent_id, user_id):
+                children = get_visible_children(parent_id, user_id)
+                result = []
+                for c in children:
+                    suggested = get_suggested_count(c.id, user_id)
+                    result.append({
+                        "id": c.id,
+                        "label": c.label,
+                        "level": c.level,
+                        "path_id": c.path_id,
+                        "is_visible": c.is_visible,
+                        "node_type": c.node_type,
+                        "suggested_count": suggested,
+                        "created_at": c.meta.created_at,
+                    })
+                return result
+            return []
+        # fallback: 认知图谱中查找
+        children = get_visible_children(parent_id, user_id) if get_node(parent_id, user_id) else []
+        result = []
+        for c in children:
+            suggested = get_suggested_count(c.id, user_id)
+            result.append({
+                "id": c.id,
+                "label": c.label,
+                "level": c.level,
+                "path_id": c.path_id,
+                "is_visible": c.is_visible,
+                "node_type": c.node_type,
+                "suggested_count": suggested,
+                "created_at": c.meta.created_at,
+            })
+        return result
+
+    # ── 3. 无参数：返回所有分区（根节点）──
+    data = storage.load(user_id)
+    return [_entity_to_node(e, "partition", user_id) for e in data.partitions.values()]
 
 
 @router.get("/graph/search")
@@ -283,24 +378,95 @@ def expand_node(
     return {"id": child.id, "label": label, "level": child_level, "path_id": new_path}
 
 
+@router.post("/graph/nodes")
+def create_graph_node(
+    level: str,
+    name: str,
+    parent_id: str | None = None,
+    emoji: str = "",
+    user_id: str = DEFAULT_USER_ID,
+) -> dict:
+    """创建 partition/domain/topic（统一入口）
+
+    内部调 tree_ops，自动同步到对话树 + 认知图谱
+    """
+    if level not in ("partition", "domain", "topic"):
+        raise HTTPException(400, f"Unsupported level: {level}")
+    try:
+        if level == "partition":
+            entity = tree_ops.create_partition(user_id, name, subject=name, emoji=emoji)
+        elif level == "domain":
+            if not parent_id:
+                raise HTTPException(400, "parent_id required for domain")
+            entity = tree_ops.create_domain(user_id, parent_id, name, emoji)
+        else:  # topic
+            if not parent_id:
+                raise HTTPException(400, "parent_id required for topic")
+            entity = tree_ops.create_topic(user_id, parent_id, name, emoji)
+        return {"node": _entity_to_node(entity, level, user_id), "id": entity.id}
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Failed to create {level}")
+        raise HTTPException(500, "Internal server error")
+
+
+@router.patch("/graph/nodes/{node_id}")
+def rename_graph_node(
+    node_id: str,
+    name: str,
+    user_id: str = DEFAULT_USER_ID,
+) -> dict:
+    """重命名 partition/domain/topic（统一入口）
+
+    内部调 tree_ops，自动同步到认知图谱 label
+    """
+    data = storage.load(user_id)
+    if node_id in data.partitions:
+        entity = tree_ops.rename_partition(user_id, node_id, name)
+        return {"node": _entity_to_node(entity, "partition", user_id)}
+    elif node_id in data.domains:
+        entity = tree_ops.rename_domain(user_id, node_id, name)
+        return {"node": _entity_to_node(entity, "domain", user_id)}
+    elif node_id in data.topics:
+        entity = tree_ops.rename_topic(user_id, node_id, name)
+        return {"node": _entity_to_node(entity, "topic", user_id)}
+    raise HTTPException(404, f"Node {node_id} not found")
+
+
 @router.delete("/graph/nodes/{node_id}")
 def remove_graph_node(
     node_id: str,
     recursive: bool = False,
     user_id: str = DEFAULT_USER_ID,
 ) -> dict:
-    """删除图谱节点（前端侧栏删除会话/主题时调用）"""
+    """删除图谱节点（统一入口）
+
+    partition/domain/topic → 走 tree_ops（同步删对话树 + 认知图谱）
+    concept/atom → 仅删认知图谱
+    """
+    data = storage.load(user_id)
+    # 判断层级：partition > domain > topic > cognitive-only
+    if node_id in data.partitions:
+        tree_ops.delete_partition(user_id, node_id)
+        return {"status": "ok", "deleted_id": node_id, "level": "partition"}
+    elif node_id in data.domains:
+        tree_ops.delete_domain(user_id, node_id)
+        return {"status": "ok", "deleted_id": node_id, "level": "domain"}
+    elif node_id in data.topics:
+        tree_ops.delete_topic(user_id, node_id)
+        return {"status": "ok", "deleted_id": node_id, "level": "topic"}
+
+    # concept/atom → 仅认知图谱
     node = get_node(node_id, user_id)
     if not node:
         raise HTTPException(404, f"Node {node_id} not found")
-
     if recursive:
-        # 级联删除所有子节点
-        from app.cognitive.storage import get_visible_children
         children = get_visible_children(node_id, user_id)
         for child in children:
             remove_graph_node(child.id, recursive=True, user_id=user_id)
-
     delete_node(node_id, user_id)
     return {"status": "ok", "deleted_id": node_id}
 
