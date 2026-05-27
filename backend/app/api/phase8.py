@@ -574,7 +574,6 @@ def practice_queue(req: QueueRequest) -> list[dict]:
         count=req.count,
         mode=req.mode,
         partition_id=req.partition_id,
-        include_cognitive_metrics=True,
     )
     return [
         {
@@ -641,7 +640,6 @@ def dashboard_overview(
     # 2. 练习队列
     results = adaptive_selector.get_queue(
         user_id, count=8,
-        include_cognitive_metrics=True,
     )
     queue = [
         {
