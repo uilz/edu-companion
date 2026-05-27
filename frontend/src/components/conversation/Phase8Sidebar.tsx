@@ -151,6 +151,7 @@ export default function Phase8Sidebar({
           next.set(ROOT_KEY, nodes);
           return next;
         });
+        rootLoadedRef.current = true;
       })
       .catch(() => { /* 忽略加载失败 */ });
   }, []);
@@ -168,19 +169,7 @@ export default function Phase8Sidebar({
         return next;
       });
     } catch {
-      // parent_id 检索不存在的 fallback: 通过 level 取下一级
-      const levelMap: Record<string, string> = { partition: "domain", domain: "topic" };
-      const nextLevel = levelMap[node.level];
-      if (nextLevel) {
-        try {
-          const children = await v2Fetch<GraphNode[]>(`/graph/nodes?level=${nextLevel}`);
-          setChildMap(prev => {
-            const next = new Map(prev);
-            next.set(id, children);
-            return next;
-          });
-        } catch { /* 忽略 */ }
-      }
+      // 静默失败，不 fallback 到 level 过滤（会显示所有同级节点）
     } finally {
       setLoadingSet(prev => { const next = new Set(prev); next.delete(id); return next; });
     }
@@ -233,16 +222,33 @@ export default function Phase8Sidebar({
     }
   }, [loadChildren, loadConversations]);
 
-  // ── 自动展开到当前对话（简化版）──
+  // ── 根节点加载完成的引用 ──
+  const rootLoadedRef = useRef(false);
+
+  // ── 自动展开到当前对话 ──
   const prevAutoExpandRef = useRef<string | null>(null);
+  const autoExpandAttemptRef = useRef(0);
   useEffect(() => {
     const convId = activeConversationId || initialConversationId || "";
     if (!selectedNodeId || !convId) return;
     if (prevAutoExpandRef.current === convId) return;
+
+    const rootNodes = childMapRef.current.get(ROOT_KEY);
+    if (!rootNodes || rootNodes.length === 0) {
+      // 根节点尚未加载，等 100ms 重试（最多 50 次 = 5s）
+      if (autoExpandAttemptRef.current < 50) {
+        autoExpandAttemptRef.current += 1;
+        const timer = setTimeout(() => setExpandedSet(prev => new Set(prev)), 100);
+        return () => clearTimeout(timer);
+      }
+      return;
+    }
+    autoExpandAttemptRef.current = 0;
     prevAutoExpandRef.current = convId;
+
     // 展开分区
     setExpandedSet(prev => { const next = new Set(prev); next.add(selectedNodeId); return next; });
-    const partition = childMapRef.current.get(ROOT_KEY)?.find(n => n.id === selectedNodeId);
+    const partition = rootNodes.find(n => n.id === selectedNodeId);
     if (partition && !childMapRef.current.has(partition.id)) {
       loadChildren(partition).then(() => {
         // 展开第一层 domain
@@ -252,7 +258,7 @@ export default function Phase8Sidebar({
         }
       });
     }
-  }, [selectedNodeId, activeConversationId, initialConversationId, loadChildren]);
+  }, [selectedNodeId, activeConversationId, initialConversationId, loadChildren, childMap]);
 
   // ── 编辑 ──
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -375,7 +381,7 @@ export default function Phase8Sidebar({
         {isExpanded && (
           <div>
             {children.filter(c => c.is_visible).map(child => renderNode(child, depth + 1))}
-            {convs.filter(c => c.id !== activeConversationId).map(conv => (
+            {convs.map(conv => (
               <div key={`conv:${conv.id}`}
                 className="flex items-center cursor-pointer transition-colors"
                 style={{
