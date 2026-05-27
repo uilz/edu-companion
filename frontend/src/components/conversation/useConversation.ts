@@ -35,7 +35,7 @@ export interface UseConversationReturn {
   wsConnected: boolean;
 
   handleSelectConversation: (pid: string, cid: string) => void;
-  handleNewConversation: (level: string, parentId: string) => Promise<void>;
+  handleNewConversation: (level: string, parentId: string, partitionId?: string) => Promise<void>;
   handleSend: (text: string, files?: { name: string; type: string; materialId?: string }[]) => Promise<void>;
   handleDeleteMessage: (messageId: string) => Promise<void>;
   handleEditMessage: (messageId: string, newText: string) => Promise<number>;

@@ -256,9 +256,9 @@ export default function ConversationPanel(props: UseConversationReturn) {
                 setShowNewPartition(true);
               }}
               loading={loadingPartitions}
-              onNewConversation={(level, parentId) => {
+              onNewConversation={(level, parentId, partitionId) => {
                 setShowPartitionSidebar(false);
-                handleNewConversation(level, parentId);
+                handleNewConversation(level, parentId, partitionId);
               }}
               onTreeChanged={loadPartitions}
             />
