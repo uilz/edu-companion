@@ -121,7 +121,7 @@ export default function ConversationChatInput({
   // ===== 渲染界面 =====
   return (
     <div className="border-t border-[var(--color-border)] bg-[var(--color-bg)]">
-      <div className="max-w-3xl mx-auto px-4 py-3">
+      <div className="max-w-xl mx-auto px-4 py-3">
         {/* 已上传文件预览区域 */}
         {uploadedFiles.length > 0 && (
           <div className="flex items-center gap-1.5 mb-2 flex-wrap">

@@ -456,6 +456,13 @@ class Classifier:
         # 6. 判断是否推荐切换
         should_recommend_switch = False
         switch_detail: dict = {}
+        # 检查当前对话是否已在目标专题下（避免已经在目标类别时仍推荐切换）
+        current_topic_id = ""
+        if current_conversation_id:
+            for conv in data.conversations.values():
+                if conv.id == current_conversation_id:
+                    current_topic_id = conv.topic_id
+                    break
 
         if current_partition_id and partition_id != current_partition_id:
             should_recommend_switch = True
@@ -464,7 +471,8 @@ class Classifier:
                 "to_partition": partition_id,
                 "reason": "消息内容更适合另一个分区",
             }
-        elif current_conversation_id and conversation_id != current_conversation_id and domain_name:
+        elif (current_conversation_id and conversation_id != current_conversation_id
+              and domain_name and current_topic_id and current_topic_id != topic_id):
             # 同一分区，但对话不同（需有有效领域检测结果）
             should_recommend_switch = True
             switch_detail = {
@@ -475,17 +483,33 @@ class Classifier:
 
         # 获取 partition_name
         partition_name = ""
+        partition_emoji = ""
         if partition_id:
             partition = data.partitions.get(partition_id)
             if partition:
                 partition_name = partition.name
+                partition_emoji = partition.emoji
 
+        # 获取 domain/topic emoji
+        domain_emoji = existing_domain.emoji if existing_domain else ""
+        topic_emoji = existing_topic.emoji if existing_topic else ""
+
+        # 构建带 emoji 的完整路径
+        path_parts = []
+        if partition_name:
+            path_parts.append(f"{partition_emoji} {partition_name}" if partition_emoji else partition_name)
+        if domain_name:
+            path_parts.append(f"{domain_emoji} {domain_name}" if domain_emoji else domain_name)
+        if topic_name:
+            path_parts.append(f"{topic_emoji} {topic_name}" if topic_emoji else topic_name)
+        full_path = " > ".join(path_parts)
         return {
             "partition_id": partition_id,
             "conversation_id": conversation_id,
             "domain_name": domain_name,
             "topic_name": topic_name,
             "partition_name": partition_name,
+            "full_path": full_path,
             "should_recommend_switch": should_recommend_switch,
             "switch_detail": switch_detail,
             "confidence": full.get("confidence", 0.0),

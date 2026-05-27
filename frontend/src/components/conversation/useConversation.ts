@@ -632,7 +632,7 @@ export function useConversation(): UseConversationReturn {
         }, 100);
       }
     }
-  }, [switchBanner, loadPartitions]);
+  }, [switchBanner, loadPartitions, loadMessages]);
 
   const handleSwitchDismiss = useCallback(() => setSwitchBanner(null), []);
 

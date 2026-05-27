@@ -214,7 +214,7 @@ export default function ConversationPanel(props: UseConversationReturn) {
             <SwitchBanner
               domainName={switchBanner.domainName}
               topicName={switchBanner.topicName}
-              fullPath={switchBanner.fullPath}
+              fullPath={switchBanner.fullPath || (() => { const p = partitions.find((pp: any) => pp.id === switchBanner.partitionId) as any; return p ? `${p.emoji || ""} ${p.name}` : ""; })()}
               onSwitch={handleSwitchConfirm}
               onDismiss={handleSwitchDismiss}
             />
@@ -339,6 +339,7 @@ export default function ConversationPanel(props: UseConversationReturn) {
             {/* 桌面端侧栏分区树组件 */}
             <div className="flex-1 overflow-hidden">
               <Phase8Sidebar
+                key={`sidebar-${selectedPartitionId}-${activeConversationId}`}
                 partitions={partitions}
                 selectedPartitionId={selectedPartitionId}
                 activeConversationId={activeConversationId}
@@ -387,7 +388,7 @@ export default function ConversationPanel(props: UseConversationReturn) {
           <SwitchBanner
             domainName={switchBanner.domainName}
             topicName={switchBanner.topicName}
-            fullPath={switchBanner.fullPath}
+            fullPath={switchBanner.fullPath || (() => { const p = partitions.find((pp: any) => pp.id === switchBanner.partitionId) as any; return p ? `${p.emoji || ""} ${p.name}` : ""; })()}
             onSwitch={handleSwitchConfirm}
             onDismiss={handleSwitchDismiss}
           />

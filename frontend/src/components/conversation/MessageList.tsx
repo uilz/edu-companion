@@ -164,7 +164,7 @@ export default function MessageList({
     <div className="flex-1 flex flex-col overflow-hidden">
       <div
         ref={containerRef}
-        className="flex-1 overflow-y-auto px-4 py-6 space-y-6"
+        className="flex-1 overflow-y-auto px-4 pt-6 pb-2 space-y-6"
         onScroll={handleScroll}
       >
         {dedupedMessages.map((message) => {
@@ -204,6 +204,7 @@ export default function MessageList({
               <div className={`flex-1 min-w-0 ${isUser ? "flex justify-end" : ""}`}>
                 <div className={`max-w-[85%] ${isUser ? "" : "space-y-0"}`}>
                   {isUser ? (
+                    <>
                     <div className="group bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-4 pb-2.5 pt-2.5 rounded-2xl rounded-tr-md">
                       {isEditing ? (
                         <div className="space-y-2 min-w-[200px]">
@@ -228,9 +229,10 @@ export default function MessageList({
                           <MessageContent text={displayText} />
                         </div>
                       )}
-                      {/* 用户消息操作按钮：编辑/删除/复制 */}
+                    </div>
+                      {/* 用户消息操作按钮：编辑/删除/复制 — 在气泡下方 */}
                       {!isEditing && (
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => handleStartEdit(message.id, displayText)} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]" title="编辑">
                             <Pencil size={12} />
                           </button>
@@ -242,8 +244,9 @@ export default function MessageList({
                           </button>
                         </div>
                       )}
-                    </div>
+                    </>
                   ) : (
+                    <>
                     <div className="group bg-[var(--color-surface)] text-[var(--color-text)] px-4 py-3 rounded-2xl rounded-tl-md">
                       {isEditing ? (
                         <div className="space-y-2 min-w-[200px]">
@@ -268,34 +271,6 @@ export default function MessageList({
                           <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
                             <MessageContent text={displayText} />
                           </div>
-                          {/* 版本切换导航 */}
-                          {vInfo.total > 0 && (
-                            <div className="flex items-center gap-2 mt-2 text-xs text-[var(--color-text-muted)]">
-                              <button
-                                onClick={() => handleVersionNav(message.id, "prev")}
-                                className="p-0.5 hover:text-[var(--color-text)]"
-                              >
-                                <ChevronLeft size={14} />
-                              </button>
-                              <span>{vInfo.index}/{vInfo.total}</span>
-                              <button
-                                onClick={() => handleVersionNav(message.id, "next")}
-                                className="p-0.5 hover:text-[var(--color-text)]"
-                              >
-                                <ChevronRight size={14} />
-                              </button>
-                            </div>
-                          )}
-                          {/* 消息操作按钮：删除/复制/语音（AI 消息不可编辑） */}
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => handleDeleteMessage(message.id)} className="p-1 text-[var(--color-text-muted)] hover:text-red-500" title="删除">
-                              <Trash2 size={12} />
-                            </button>
-                            <button onClick={() => handleCopyMessage(displayText)} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]" title="复制">
-                              <Copy size={12} />
-                            </button>
-                            <SpeakButton text={displayText} />
-                          </div>
                           {/* 响应块区域：思维链、工具调用结果等展示 */}
                           {messageBlocks.length > 0 && (
                             <div className="mt-3 border-t border-[var(--color-border)] pt-3 space-y-2">
@@ -307,6 +282,31 @@ export default function MessageList({
                         </>
                       )}
                     </div>
+                      {/* 消息操作按钮：删除/复制/语音 — 在气泡下方 */}
+                      {!isEditing && (
+                        <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {/* 版本切换导航 */}
+                          {vInfo.total > 0 && (
+                            <div className="flex items-center gap-1 text-xs text-[var(--color-text-muted)] mr-1">
+                              <button onClick={() => handleVersionNav(message.id, "prev")} className="p-0.5 hover:text-[var(--color-text)]">
+                                <ChevronLeft size={12} />
+                              </button>
+                              <span>{vInfo.index}/{vInfo.total}</span>
+                              <button onClick={() => handleVersionNav(message.id, "next")} className="p-0.5 hover:text-[var(--color-text)]">
+                                <ChevronRight size={12} />
+                              </button>
+                            </div>
+                          )}
+                          <button onClick={() => handleDeleteMessage(message.id)} className="p-1 text-[var(--color-text-muted)] hover:text-red-500" title="删除">
+                            <Trash2 size={12} />
+                          </button>
+                          <button onClick={() => handleCopyMessage(displayText)} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]" title="复制">
+                            <Copy size={12} />
+                          </button>
+                          <SpeakButton text={displayText} />
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -314,16 +314,19 @@ export default function MessageList({
           );
         })}
 
-        {/* 加载中动画：三点跳动 + 状态消息 */}
+        {/* 加载中动画 */}
         {isLoading && (
-          <div className="flex justify-center py-4">
-            <div className="flex items-center gap-2 text-[var(--color-text-muted)] text-sm">
-              <div className="flex gap-1">
-                <span className="w-2 h-2 bg-[var(--color-accent)] rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                <span className="w-2 h-2 bg-[var(--color-accent)] rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                <span className="w-2 h-2 bg-[var(--color-accent)] rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+          <div className="flex gap-4">
+            <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-[var(--color-surface)] text-[var(--color-accent)] border border-[var(--color-border)]">
+              <Bot size={16} />
+            </div>
+            <div className="flex items-center gap-2 px-4 py-2.5">
+              <div className="flex gap-1.5 items-center">
+                <span className="w-2 h-2 bg-[var(--color-accent)] rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
+                <span className="w-2 h-2 bg-[var(--color-accent)] rounded-full animate-pulse" style={{ animationDelay: "200ms" }} />
+                <span className="w-2 h-2 bg-[var(--color-accent)] rounded-full animate-pulse" style={{ animationDelay: "400ms" }} />
               </div>
-              {statusMessage && <span>{statusMessage}</span>}
+              {statusMessage && <span className="text-xs text-[var(--color-text-muted)] ml-1">{statusMessage}</span>}
             </div>
           </div>
         )}
