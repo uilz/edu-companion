@@ -186,9 +186,12 @@ export default function Phase8Sidebar({
         id: c.id, name: c.name,
         partition_id: parentId, is_active: c.is_active,
       }));
+      // 去重：按 id 去重
+      const seen = new Set<string>();
+      const uniqueConvs = convs.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
       setConvCache(prev => {
         const next = new Map(prev);
-        next.set(parentId, convs);
+        next.set(parentId, uniqueConvs);
         return next;
       });
     } catch {
@@ -230,8 +233,10 @@ export default function Phase8Sidebar({
   const autoExpandAttemptRef = useRef(0);
   useEffect(() => {
     const convId = activeConversationId || initialConversationId || "";
-    if (!selectedNodeId || !convId) return;
-    if (prevAutoExpandRef.current === convId) return;
+    // 没有会话ID时也允许展开分区
+    if (!selectedNodeId) return;
+    const expandKey = `${selectedNodeId}:${convId}`;
+    if (prevAutoExpandRef.current === expandKey) return;
 
     const rootNodes = childMapRef.current.get(ROOT_KEY);
     if (!rootNodes || rootNodes.length === 0) {
@@ -244,7 +249,7 @@ export default function Phase8Sidebar({
       return;
     }
     autoExpandAttemptRef.current = 0;
-    prevAutoExpandRef.current = convId;
+    prevAutoExpandRef.current = expandKey;
 
     // 展开分区
     setExpandedSet(prev => { const next = new Set(prev); next.add(selectedNodeId); return next; });
@@ -311,7 +316,7 @@ export default function Phase8Sidebar({
             paddingLeft: `${12 + depth * 16}px`, paddingRight: "8px",
             paddingTop: "6px", paddingBottom: "6px",
             backgroundColor: isActive ? "var(--color-surface)" : "transparent",
-            borderLeft: isActive ? "3px solid var(--color-accent)" : undefined,
+            borderLeft: isActive ? "3px solid var(--color-border)" : undefined,
           }}
           onClick={() => {
             toggleExpand(node);
@@ -350,10 +355,8 @@ export default function Phase8Sidebar({
 
           {/* 悬浮按钮 */}
           <div className="flex items-center gap-0.5 ml-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-            {onNewConversation && (
-              <button onClick={(e) => { e.stopPropagation(); onNewConversation(node.level, node.id); }}
-                className="p-1 text-[var(--color-text-muted)] hover:text-green-400" title="新建会话"><MessageSquare size={11} /></button>
-            )}
+            <button onClick={(e) => { e.stopPropagation(); onNewConversation?.(node.level, node.id); }}
+              className="p-1 text-[var(--color-text-muted)] hover:text-green-400" title="新建会话"><MessageSquare size={11} /></button>
             <button onClick={(e) => { e.stopPropagation(); setEditingId(node.id); setEditValue(node.label); }}
               className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)]" title="重命名"><Pencil size={11} /></button>
             <button onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: node.id, label: node.label }); }}
@@ -367,9 +370,32 @@ export default function Phase8Sidebar({
             <InlineEdit
               value={editValue}
               onConfirm={async (name) => {
-                if (onRenamePartition && node.level === "partition") {
-                  onRenamePartition(node.id, name);
-                }
+                try {
+                  await treeFetch(`/tree/${node.level}/${node.id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({ name }),
+                  });
+                  // 更新本地 childMap 中的 label
+                  setChildMap(prev => {
+                    const next = new Map(prev);
+                    next.forEach((children, key) => {
+                      const idx = children.findIndex(c => c.id === node.id);
+                      if (idx >= 0) {
+                        const updated = [...children];
+                        updated[idx] = { ...updated[idx], label: name };
+                        next.set(key, updated);
+                      }
+                    });
+                    return next;
+                  });
+                  // 清除该节点的会话缓存，下次展开重新加载
+                  setConvCache(prev => {
+                    const next = new Map(prev);
+                    next.delete(node.id);
+                    return next;
+                  });
+                  onTreeChanged?.();
+                } catch { /* 忽略 */ }
                 setEditingId(null);
               }}
               onCancel={() => setEditingId(null)}
