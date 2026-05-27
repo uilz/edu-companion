@@ -49,7 +49,7 @@ class TreeOpsService:
             ),
             "auto_create_child": {
                 "level": "domain",
-                "name": "临时领域",  # 固定名称
+                "name": "新领域",
                 "emoji": "{emoji}",  # 继承分区的 emoji
             },
         },
@@ -63,7 +63,7 @@ class TreeOpsService:
             ),
             "auto_create_child": {  # 新增：创建领域时自动创建临时专题
                 "level": "topic",
-                "name": "临时专题",
+                "name": "新专题",
                 "emoji": "📝",
             },
         },

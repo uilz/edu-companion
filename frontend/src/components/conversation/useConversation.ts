@@ -66,7 +66,7 @@ async function createConversationChain(
       } else {
         const newP = await apiFetch<{ partition: Partition; conversation_id?: string }>("/tree/partition", {
           method: "POST",
-          body: JSON.stringify({ name: "临时分区", emoji: "💬" }),
+          body: JSON.stringify({ name: "新分区", emoji: "💬" }),
         });
         pId = newP.partition.id;
       }
@@ -80,7 +80,7 @@ async function createConversationChain(
     } else {
       const newD = await apiFetch<{ domain: { id: string }; conversation_id?: string }>("/tree/domain", {
         method: "POST",
-        body: JSON.stringify({ parent_id: pId, name: "临时领域", emoji: "📚" }),
+        body: JSON.stringify({ parent_id: pId, name: "新领域", emoji: "📚" }),
       });
       domainId = newD.domain.id;
     }
@@ -93,7 +93,7 @@ async function createConversationChain(
     } else {
       const newT = await apiFetch<{ topic: { id: string }; conversation_id?: string }>("/tree/topic", {
         method: "POST",
-        body: JSON.stringify({ parent_id: domainId, name: "临时专题", emoji: "📝" }),
+        body: JSON.stringify({ parent_id: domainId, name: "新专题", emoji: "📝" }),
       });
       topicId = newT.topic.id;
     }
@@ -729,7 +729,7 @@ export function useConversation(): UseConversationReturn {
           else {
             const pData = await apiFetch<{ partition: Partition; conversation_id?: string }>("/tree/partition", {
               method: "POST",
-              body: JSON.stringify({ name: "临时分区", emoji: "💬" }),
+              body: JSON.stringify({ name: "新分区", emoji: "💬" }),
             });
             pId = pData.partition.id;
             if (pData.conversation_id) {
@@ -754,7 +754,7 @@ export function useConversation(): UseConversationReturn {
           } else {
             const newD = await apiFetch<{ domain: { id: string } }>(`/tree/domain`, {
               method: `POST`,
-              body: JSON.stringify({ parent_id: parentId, name: `临时领域`, emoji: `📚` }),
+              body: JSON.stringify({ parent_id: parentId, name: `新领域`, emoji: `📚` }),
             });
             domainId = newD.domain.id;
           }
@@ -767,7 +767,7 @@ export function useConversation(): UseConversationReturn {
           } else {
             const newT = await apiFetch<{ topic: { id: string } }>(`/tree/topic`, {
               method: `POST`,
-              body: JSON.stringify({ parent_id: domainId, name: `临时专题`, emoji: `📝` }),
+              body: JSON.stringify({ parent_id: domainId, name: `新专题`, emoji: `📝` }),
             });
             topicId = newT.topic.id;
           }
@@ -813,7 +813,7 @@ export function useConversation(): UseConversationReturn {
           } else {
             const newT = await apiFetch<{ topic: { id: string } }>(`/tree/topic`, {
               method: `POST`,
-              body: JSON.stringify({ parent_id: parentId, name: `临时专题`, emoji: `📝` }),
+              body: JSON.stringify({ parent_id: parentId, name: `新专题`, emoji: `📝` }),
             });
             topicId = newT.topic.id;
           }
