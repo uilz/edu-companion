@@ -283,6 +283,28 @@ def expand_node(
     return {"id": child.id, "label": label, "level": child_level, "path_id": new_path}
 
 
+@router.delete("/graph/nodes/{node_id}")
+def remove_graph_node(
+    node_id: str,
+    recursive: bool = False,
+    user_id: str = DEFAULT_USER_ID,
+) -> dict:
+    """删除图谱节点（前端侧栏删除会话/主题时调用）"""
+    node = get_node(node_id, user_id)
+    if not node:
+        raise HTTPException(404, f"Node {node_id} not found")
+
+    if recursive:
+        # 级联删除所有子节点
+        from app.cognitive.storage import get_visible_children
+        children = get_visible_children(node_id, user_id)
+        for child in children:
+            remove_graph_node(child.id, recursive=True, user_id=user_id)
+
+    delete_node(node_id, user_id)
+    return {"status": "ok", "deleted_id": node_id}
+
+
 # ═══════════════════════════════════════════════
 # 图谱边
 # ═══════════════════════════════════════════════
