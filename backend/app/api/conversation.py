@@ -144,6 +144,8 @@ async def create_node(level: str, body: dict):
             raise HTTPException(400, "Unsupported level")
         conv_id = _find_default_conversation(USER_ID, level, entity.id)
         return {level: entity, "conversation_id": conv_id}
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(404, str(e))
     except Exception as e:
@@ -167,6 +169,8 @@ async def rename_node(level: str, node_id: str, req: RenameRequest):
         else:
             raise HTTPException(400)
         return {level: entity.model_dump(mode="json")}
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(404, str(e))
     except Exception as e:
@@ -190,6 +194,8 @@ async def delete_node(level: str, node_id: str):
         else:
             raise HTTPException(400)
         return {"ok": True}
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(404, str(e))
     except Exception as e:

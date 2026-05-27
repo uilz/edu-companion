@@ -1,4 +1,3 @@
-from app.shared.constants import DEFAULT_USER_ID
 """策略引擎 — 提案过滤、去重、优先级衰减、打扰预算管理
 
 设计:
@@ -15,6 +14,7 @@ from app.shared.constants import DEFAULT_USER_ID
 
 from __future__ import annotations
 
+from app.shared.constants import DEFAULT_USER_ID
 import json
 import logging
 import os

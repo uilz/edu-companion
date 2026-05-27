@@ -1,4 +1,3 @@
-from app.shared.constants import DEFAULT_USER_ID
 """主动检查器 — 基于模块注册表的扩展式检查
 
 检查流程:
@@ -9,6 +8,7 @@ from app.shared.constants import DEFAULT_USER_ID
 """
 
 from __future__ import annotations
+from app.shared.constants import DEFAULT_USER_ID
 import asyncio
 import logging
 import time

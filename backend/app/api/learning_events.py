@@ -1,4 +1,3 @@
-from app.shared.constants import DEFAULT_USER_ID
 """
 学习事件记录与查询 API
 
@@ -6,6 +5,8 @@ from app.shared.constants import DEFAULT_USER_ID
 """
 
 from __future__ import annotations
+
+from app.shared.constants import DEFAULT_USER_ID
 
 import logging
 from datetime import datetime, timedelta, timezone

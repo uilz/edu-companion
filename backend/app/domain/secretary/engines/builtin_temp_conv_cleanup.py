@@ -1,10 +1,10 @@
-from app.shared.constants import DEFAULT_USER_ID
 """内置模块: 临时会话清理 (TempConversationCleanup)
 
 功能: 定期清理 48h 过期的临时会话
 行为: 静默任务，不产生用户可见提案
 """
 from __future__ import annotations
+from app.shared.constants import DEFAULT_USER_ID
 import logging
 import time
 from ..models import Proposal

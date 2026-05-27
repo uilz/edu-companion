@@ -1,4 +1,3 @@
-from app.shared.constants import DEFAULT_USER_ID
 """提案采纳行动引擎 — 采纳提案后自动触发对应系统动作
 
 工作机制:
@@ -15,6 +14,7 @@ from app.shared.constants import DEFAULT_USER_ID
 """
 
 from __future__ import annotations
+from app.shared.constants import DEFAULT_USER_ID
 import json
 import logging
 import time

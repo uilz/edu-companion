@@ -138,6 +138,7 @@ class Conversation(BaseModel):
     summary: str | None = None
     summary_dirty: bool = False
     created_at: float = Field(default_factory=time.time)
+    updated_at: float = Field(default_factory=time.time)
     last_message_at: float = Field(default_factory=time.time)
     practice_sessions: list[str] = Field(default_factory=list)
     practice_summary: str = ""

@@ -1,4 +1,3 @@
-from app.shared.constants import DEFAULT_USER_ID
 """秘书-计划桥接 — 将秘书分析结果转化为学习路径调整
 
 工作流程:
@@ -14,6 +13,7 @@ from app.shared.constants import DEFAULT_USER_ID
 """
 
 from __future__ import annotations
+from app.shared.constants import DEFAULT_USER_ID
 import logging
 from ..models import Proposal
 
