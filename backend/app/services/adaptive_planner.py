@@ -16,7 +16,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-from app.core.knowledge_trace import bkt_engine  # 向后兼容的默认值
+from app.cognitive.storage import list_all_nodes, get_node, find_node_by_label
 from domain.knowledge.checker import PrerequisiteChecker
 from domain.knowledge.prerequisites import (
     ALL_PREREQUISITES,
@@ -26,30 +26,48 @@ from app.db.database import get_db
 
 logger = logging.getLogger("adaptive_planner")
 
+# ── 掌握度阈值（与 BKT get_mastery_level 保持一致）──
+_MASTERY_THRESHOLD = 0.8
+
+
+def _proficiency_to_level(p: float) -> str:
+    """CognitiveNode proficiency_mean → 掌握等级字符串"""
+    if p < 0.3:
+        return "初学"
+    elif p < 0.6:
+        return "发展中"
+    elif p < _MASTERY_THRESHOLD:
+        return "接近掌握"
+    else:
+        return "已掌握"
+
 
 class AdaptivePlanGenerator:
 
-    def __init__(self, bkt_engine=None):
-        if bkt_engine is None:
-            from app.core.knowledge_trace import bkt_engine as _default_bkt
-            bkt_engine = _default_bkt
-        self._bkt = bkt_engine
+    def __init__(self):
+        # PrerequisiteChecker 需要一个 PracticeService-like adapter
+        # 现在从 CognitiveNode 读取 proficiency_mean
+        planner_self = self  # capture for closure
 
-        _bkt = bkt_engine  # capture for _Adapter closure
-
-        class _Adapter:
+        class _CognitiveAdapter:
             async def get_knowledge_state(self, uid, sid):
-                state = _bkt.load_or_create(uid, sid)
-                return state.model_dump()
+                node = find_node_by_label(sid, uid)
+                if node is None:
+                    return {"p_known": 0.0}
+                return {"p_known": node.belief.proficiency_mean}
 
-        self._checker = PrerequisiteChecker(_Adapter())
+        self._checker = PrerequisiteChecker(_CognitiveAdapter())
 
     async def generate(
         self, user_id: str, reason: str = "manual",
         subject: str | None = None,
     ) -> dict:
-        states = self._bkt.load_all_states(user_id)
-        recommendations = self._bkt.recommend_practice(states, top_n=10)
+        # ── 从 CognitiveNode 读取所有节点 ──
+        all_nodes = list_all_nodes(user_id)
+
+        # 按 proficiency_mean 降序排列，生成推荐列表
+        # 模拟原来 BKT recommend_practice 的输出格式
+        recommendations = self._build_recommendations(all_nodes, top_n=10)
 
         ready_skills, blocked_skills = [], []
         for rec in recommendations:
@@ -64,12 +82,12 @@ class AdaptivePlanGenerator:
                 })
 
         if len(ready_skills) < 3:
-            entry = self._find_entry_skills(states, subject)
+            entry = self._find_entry_skills(all_nodes, user_id, subject)
             for sid in entry:
                 if sid not in [r["skill_id"] for r in ready_skills]:
-                    st = states.get(sid)
-                    p = st.p_known if st else 0.0
-                    lv = self._bkt.get_mastery_level(st) if st else "未接触"
+                    node = find_node_by_label(sid, user_id)
+                    p = node.belief.proficiency_mean if node else 0.0
+                    lv = _proficiency_to_level(p) if node else "未接触"
                     ready_skills.append({"skill_id": sid, "level": lv, "p_known": p, "priority": 3})
 
         target = ready_skills[:5]
@@ -90,13 +108,27 @@ class AdaptivePlanGenerator:
             else:
                 est, diff = 15, max(0.4, 0.7 + diff_bias)
 
+            # 利用 CognitiveNode 的 trend/scheduling 信息增强优先级
+            node = find_node_by_label(sid, user_id)
+            priority = 10 - i
+            if node:
+                # 停滞 7 天以上 → 提升优先级
+                if node.trend.stagnation_days >= 7:
+                    priority += 2
+                # 下降趋势 → 提升优先级
+                if node.trend.direction == "descending":
+                    priority += 1
+                # urgency 字段（已由 scheduling 引擎计算）
+                if node.scheduling.urgency > 0.7:
+                    priority += 1
+
             items.append({
                 "task_id": f"plan_{user_id}_{i}_{int(datetime.now().timestamp())}",
                 "skill_id": sid, "title": f"练习: {self._checker._skill_display_name(sid)}",
                 "description": f"当前水平: {lv}，建议难度 {diff:.1f}",
                 "subject": SKILL_TO_SUBJECT.get(sid, "通用"),
                 "estimated_minutes": est, "difficulty": round(diff, 2),
-                "priority": 10 - i, "daily_questions": time_budget,
+                "priority": priority, "daily_questions": time_budget,
                 "completed": False, "level": lv,
             })
 
@@ -118,25 +150,77 @@ class AdaptivePlanGenerator:
             "blocked_skills": blocked_skills[:5],
         }
 
+    def _build_recommendations(self, nodes, top_n: int = 10) -> list[dict]:
+        """从 CognitiveNode 列表构建推荐列表（替代 BKT recommend_practice）"""
+        recs = []
+        for node in nodes:
+            p = node.belief.proficiency_mean
+            level = _proficiency_to_level(p)
+
+            # 已掌握的不推荐
+            if level == "已掌握":
+                continue
+
+            # 基于 urgency + stagnation 计算推荐优先级
+            urgency = node.scheduling.urgency
+            stagnation = node.trend.stagnation_days
+            # 停滞越久 + urgency 越高 → 优先级越高
+            priority = urgency * 0.6 + min(stagnation / 14.0, 1.0) * 0.4
+
+            # 未接触的优先级稍低（先让用户接触已开始的技能）
+            if p == 0.0:
+                priority -= 0.1
+
+            recs.append({
+                "skill_id": node.id,
+                "level": level,
+                "p_known": p,
+                "priority": priority,
+            })
+
+        recs.sort(key=lambda r: -r["priority"])
+        return recs[:top_n]
+
     async def on_knowledge_updated(self, event) -> dict | None:
-        SIG = {("初学","发展中"),("发展中","接近掌握"),("接近掌握","已掌握"),
-               ("未接触","初学"),("初学","接近掌握")}
-        if (event.old_mastery, event.new_mastery) not in SIG:
+        """处理 CognitiveNodeUpdated 事件"""
+        from shared.events import CognitiveNodeUpdated
+        if not isinstance(event, CognitiveNodeUpdated):
             return None
+
+        # 显著提升阈值：proficiency 提升超过 0.15 才触发重调
+        delta = event.proficiency_after - event.proficiency_before
+        if delta < 0.15:
+            return None
+
+        old_level = _proficiency_to_level(event.proficiency_before)
+        new_level = _proficiency_to_level(event.proficiency_after)
+        if old_level == new_level:
+            return None
+
         return await self.generate(
             event.user_id,
-            reason=f"knowledge_upgrade:{event.skill_id}:{event.old_mastery}→{event.new_mastery}",
+            reason=(
+                f"knowledge_upgrade:{event.node_id}:{event.label}"
+                f":{old_level}→{new_level}"
+                f"(Δ{delta:+.2f})"
+            ),
         )
 
-    def _find_entry_skills(self, states, subject=None):
+    def _find_entry_skills(self, nodes, user_id: str, subject=None):
+        """找到所有前置条件已满足的入口技能"""
+        node_map = {n.id: n for n in nodes}
         entry = []
         for sid, prereqs in ALL_PREREQUISITES.items():
             if subject and SKILL_TO_SUBJECT.get(sid) != subject:
                 continue
-            st = states.get(sid)
-            if st and st.p_known >= 0.7:
+            node = node_map.get(sid)
+            p = node.belief.proficiency_mean if node else 0.0
+            if p >= 0.7:
                 continue
-            if all((states.get(p) and states[p].p_known >= 0.7) for p in prereqs):
+            if all(
+                (node_map.get(prereq) and node_map[prereq].belief.proficiency_mean >= 0.7)
+                for prereq in prereqs
+            ):
                 entry.append(sid)
         return entry[:5]
 

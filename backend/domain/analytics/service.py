@@ -22,17 +22,35 @@ class AnalyticsServiceImpl:
     def __init__(self, practice, event_bus):
         self._practice = practice
         self._bus = event_bus
+        # In-memory daily behavior counters keyed by (user_id, date_str)
+        self._daily_stats: dict[tuple[str, str], dict[str, Any]] = {}
 
     async def on_answer_submitted(self, event: AnswerSubmitted) -> None:
-        """事件处理器: 答题提交 → 更新统计（委托 behavior_analyzer）"""
+        """事件处理器: 答题提交 → 更新统计 + 追加内部行为计数"""
         from app.services.behavior_analyzer import behavior_analyzer
 
         logger.debug(
             "Analytics: user=%s skill=%s correct=%s",
             event.user_id, event.skill_id, event.is_correct,
         )
-        # behavior_analyzer 是纯算法引擎，无副作用
-        # 统计更新依靠 practice_analytics.py 的 get_stats / get_behavior 端点实时计算
+        # 更新内部行为计数器（daily answer count, accuracy, session duration）
+        today = datetime.now().strftime("%Y-%m-%d")
+        key = (event.user_id, today)
+        stats = self._daily_stats.setdefault(key, {
+            "answer_count": 0,
+            "correct_count": 0,
+            "total_time_spent": 0.0,
+        })
+        stats["answer_count"] += 1
+        if event.is_correct:
+            stats["correct_count"] += 1
+        stats["total_time_spent"] += event.time_spent
+
+        logger.info(
+            "Analytics: daily counters user=%s date=%s count=%d correct=%d time=%.1fs",
+            event.user_id, today, stats["answer_count"],
+            stats["correct_count"], stats["total_time_spent"],
+        )
 
     async def _gather_daily_data(self, user_id: str, days: int = 7) -> dict[str, Any]:
         """从 DB 聚合统计数据供 behavior_analyzer 使用"""

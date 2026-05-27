@@ -19,9 +19,18 @@ class MaterialServiceImpl:
         return []
 
     async def on_indexed(self, event):
-        """事件: 索引完成 → 自动出题建议"""
+        """事件: 索引完成 → 记录 chunk 数量（placeholder for future auto-question generation）"""
+        user_id = getattr(event, "user_id", "?")
+        material_id = getattr(event, "material_id", "?")
+        chunk_count = getattr(event, "chunk_count", 0)
+
         logger.info(
-            "Material: indexed user=%s material=%s",
-            getattr(event, "user_id", "?"),
-            getattr(event, "material_id", "?"),
+            "Material: indexed user=%s material=%s chunks=%d",
+            user_id, material_id, chunk_count,
+        )
+
+        # Placeholder: log chunk count for future auto-question generation
+        logger.info(
+            "MATERIAL: Indexed %d chunks for material %s — ready for auto-question generation",
+            chunk_count, material_id,
         )

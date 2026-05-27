@@ -13,10 +13,18 @@ class MediaServiceImpl:
         return []
 
     async def on_error_recorded(self, event):
-        """事件: 错题 → 推荐相关视频"""
+        """事件: 错误 → 推荐相关视频（placeholder for future video recommendation）"""
+        user_id = getattr(event, "user_id", "?")
+        skill_id = getattr(event, "skill_id", "?")
+        error_type = getattr(event, "error_type", "unknown")
+
         logger.info(
             "Media: error recorded user=%s skill=%s type=%s",
-            getattr(event, "user_id", "?"),
-            getattr(event, "skill_id", "?"),
-            getattr(event, "error_type", "?"),
+            user_id, skill_id, error_type,
+        )
+
+        # Placeholder: log media recommendation suggestion for future video matching
+        logger.info(
+            "MEDIA: Would recommend video for skill %s, error_type %s",
+            skill_id, error_type,
         )

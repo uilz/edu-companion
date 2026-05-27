@@ -1,7 +1,7 @@
 """
 契约测试: Event Schema 验证
 
-验证所有 13 个领域事件:
+验证所有 6 个领域事件:
 - 字段类型正确
 - 默认值合理
 - event_type 属性返回正确字符串
@@ -19,14 +19,7 @@ from shared.events import (
     DomainEvent,
     AnswerSubmitted,
     SessionCompleted,
-    HintRequested,
     KnowledgeStateUpdated,
-    WeaknessDetected,
-    StudyPlanGenerated,
-    DailyGoalAchieved,
-    AchievementUnlocked,
-    MaterialIndexed,
-    MaterialUploaded,
     AssistantReplied,
     AudioSynthesized,
     ImageRendered,
@@ -39,14 +32,7 @@ from shared.events import (
 ALL_EVENTS = [
     AnswerSubmitted,
     SessionCompleted,
-    HintRequested,
     KnowledgeStateUpdated,
-    WeaknessDetected,
-    StudyPlanGenerated,
-    DailyGoalAchieved,
-    AchievementUnlocked,
-    MaterialIndexed,
-    MaterialUploaded,
     AssistantReplied,
     AudioSynthesized,
     ImageRendered,
@@ -59,7 +45,7 @@ ALL_EVENTS = [
 # ═══════════════════════════════════════════
 
 def test_event_types_registry_has_all_events():
-    """EVENT_TYPES 应包含全部 10 个事件类型"""
+    """EVENT_TYPES 应包含全部 6 个事件类型"""
     assert len(EVENT_TYPES) == len(ALL_EVENTS)
     for cls in ALL_EVENTS:
         instance = cls()
@@ -129,15 +115,6 @@ class TestSessionCompleted:
         assert e.accuracy == 0.0
 
 
-class TestHintRequested:
-    def test_event_type(self):
-        assert HintRequested().event_type == "HintRequested"
-
-    def test_defaults(self):
-        e = HintRequested()
-        assert e.hint_level == 1
-
-
 # ═══════════════════════════════════════════
 # 知识域事件
 # ═══════════════════════════════════════════
@@ -161,81 +138,6 @@ class TestKnowledgeStateUpdated:
         )
         assert e.old_mastery == "发展中"
         assert e.new_mastery == "已掌握"
-
-
-class TestWeaknessDetected:
-    def test_event_type(self):
-        assert WeaknessDetected().event_type == "WeaknessDetected"
-
-    def test_defaults(self):
-        e = WeaknessDetected()
-        assert e.error_count == 0
-        assert e.last_error_type == ""
-
-
-# ═══════════════════════════════════════════
-# 规划域事件
-# ═══════════════════════════════════════════
-
-class TestStudyPlanGenerated:
-    def test_event_type(self):
-        assert StudyPlanGenerated().event_type == "StudyPlanGenerated"
-
-    def test_defaults(self):
-        e = StudyPlanGenerated()
-        assert e.plan_items == 0
-        assert e.week_number == 0
-
-
-class TestDailyGoalAchieved:
-    def test_event_type(self):
-        assert DailyGoalAchieved().event_type == "DailyGoalAchieved"
-
-    def test_defaults(self):
-        e = DailyGoalAchieved()
-        assert e.level == "basic"
-        assert e.streak_days == 0
-
-
-# ═══════════════════════════════════════════
-# 成就 + 资料域事件
-# ═══════════════════════════════════════════
-
-class TestAchievementUnlocked:
-    def test_event_type(self):
-        assert AchievementUnlocked().event_type == "AchievementUnlocked"
-
-    def test_full(self):
-        e = AchievementUnlocked(
-            user_id="u1", achievement_id="first_blood",
-            name="First Blood", level=2,
-        )
-        assert e.name == "First Blood"
-        assert e.level == 2
-
-
-class TestMaterialIndexed:
-    def test_event_type(self):
-        assert MaterialIndexed().event_type == "MaterialIndexed"
-
-    def test_defaults(self):
-        e = MaterialIndexed()
-        assert e.chunk_count == 0
-
-
-class TestMaterialUploaded:
-    def test_event_type(self):
-        assert MaterialUploaded().event_type == "MaterialUploaded"
-
-    def test_full(self):
-        e = MaterialUploaded(
-            user_id="u1", material_id="m1",
-            file_name="calculus.pdf", file_size=1024000,
-            partition_id="p1",
-        )
-        assert e.file_name == "calculus.pdf"
-        assert e.file_size == 1024000
-
 
 # ═══════════════════════════════════════════
 # 序列化往返

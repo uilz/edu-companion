@@ -209,15 +209,6 @@ class AppContainer:
         bus.subscribe("CognitiveNodeUpdated", _on_cognitive_updated)
         logger.info("🧠 Phase 9: CognitiveNodeUpdated → ZPD reschedule handler registered")
 
-        # 计划生成 → 对话推送
-        bus.subscribe("StudyPlanGenerated", self.conversation_service.on_plan_generated)
-
-        # 每日目标达成 → 对话祝贺
-        bus.subscribe("DailyGoalAchieved", self.conversation_service.on_goal_achieved)
-
-        # 资料索引完成 → 后续出题
-        bus.subscribe("MaterialIndexed", self.material_service.on_indexed)
-
         # Phase 5: AI 回复 → 多媒体生成
         bus.subscribe("AssistantReplied", self.multimedia_service.on_assistant_replied)
 

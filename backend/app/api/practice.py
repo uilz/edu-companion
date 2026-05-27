@@ -561,31 +561,9 @@ async def submit_answer(req: SubmitAnswerRequest):
     old_mastery = bkt_engine.get_mastery_level(state)
     new_mastery = bkt_engine.get_mastery_level(updated_state)
 
+    # DEPRECATED (Phase B3): AnswerSubmitted already published by domain/practice/service.py
     try:
-        from shared.events import AnswerSubmitted as AnswerSubmittedEvent
-        from infra.event_bus import EventBus
-        try:
-            from app.application.di import container
-            bus = container.event_bus
-        except Exception:
-            bus = EventBus()
-
-        event = AnswerSubmittedEvent(
-            user_id=session["user_id"],
-            session_id=req.session_id,
-            question_id=req.question_id,
-            skill_id=question["skill_id"],
-            is_correct=is_correct,
-            answer=req.answer,
-            correct_answer=question["correct_answer"],
-            time_spent=req.time_spent_seconds,
-            hints_used=req.hints_used,
-            p_known_before=state.p_known,
-            p_known_after=updated_state.p_known,
-        )
-        # fire-and-forget
-        import asyncio
-        asyncio.create_task(bus.publish(event))
+        from shared.events import KnowledgeStateUpdated
 
         SIGNIFICANT = {("初学","发展中"),("发展中","接近掌握"),("接近掌握","已掌握"),
                        ("未接触","初学"),("初学","接近掌握")}

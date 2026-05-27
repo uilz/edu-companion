@@ -18,7 +18,6 @@ from shared.events import (
     AnswerSubmitted,
     SessionCompleted,
     KnowledgeStateUpdated,
-    DailyGoalAchieved,
 )
 from infra.event_bus import EventBus
 

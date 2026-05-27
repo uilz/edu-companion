@@ -23,12 +23,21 @@ class PlanningServiceImpl:
         )
 
     async def on_session_completed(self, event):
-        """事件: 会话完成 → 标记计划项完成"""
+        """事件: 会话完成 → 触发计划重新生成"""
+        user_id = getattr(event, "user_id", "?")
+        session_id = getattr(event, "session_id", "?")
+
         logger.info(
-            "Planning: session completed user=%s session=%s",
-            getattr(event, "user_id", "?"),
-            getattr(event, "session_id", "?"),
+            "Planning: session completed user=%s session=%s — triggering plan regeneration",
+            user_id, session_id,
         )
+
+        # Trigger plan regeneration asynchronously to avoid blocking
+        try:
+            import asyncio
+            asyncio.create_task(self.generate_plan(user_id))
+        except Exception as exc:
+            logger.warning("Planning: failed to schedule plan regeneration: %s", exc)
 
     async def on_knowledge_updated(self, event):
         """事件: 知识升级 → 重生成学习计划"""

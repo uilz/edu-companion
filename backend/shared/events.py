@@ -87,19 +87,6 @@ class SessionCompleted(DomainEvent):
         return "SessionCompleted"
 
 
-@dataclass(frozen=True)
-class HintRequested(DomainEvent):
-    """提示请求事件"""
-    user_id: str = ""
-    question_id: str = ""
-    skill_id: str = ""
-    hint_level: int = 1
-
-    @property
-    def event_type(self) -> str:
-        return "HintRequested"
-
-
 # ──────────────────────────────────────────────
 # 知识域事件
 # ──────────────────────────────────────────────
@@ -121,92 +108,14 @@ class KnowledgeStateUpdated(DomainEvent):
         return "KnowledgeStateUpdated"
 
 
-@dataclass(frozen=True)
-class WeaknessDetected(DomainEvent):
-    """薄弱点检测事件"""
-    user_id: str = ""
-    skill_id: str = ""
-    error_count: int = 0
-    last_error_type: str = ""
-
-    @property
-    def event_type(self) -> str:
-        return "WeaknessDetected"
-
-
 # ──────────────────────────────────────────────
 # 规划域事件
 # ──────────────────────────────────────────────
 
 
-@dataclass(frozen=True)
-class StudyPlanGenerated(DomainEvent):
-    """学习计划生成事件"""
-    user_id: str = ""
-    plan_items: int = 0
-    week_number: int = 0
-
-    @property
-    def event_type(self) -> str:
-        return "StudyPlanGenerated"
-
-
-@dataclass(frozen=True)
-class DailyGoalAchieved(DomainEvent):
-    """每日目标达成事件"""
-    user_id: str = ""
-    level: str = "basic"
-    streak_days: int = 0
-    questions_done: int = 0
-
-    @property
-    def event_type(self) -> str:
-        return "DailyGoalAchieved"
-
-
 # ──────────────────────────────────────────────
 # 成就 + 资料域事件
 # ──────────────────────────────────────────────
-
-
-@dataclass(frozen=True)
-class AchievementUnlocked(DomainEvent):
-    """成就解锁事件"""
-    user_id: str = ""
-    achievement_id: str = ""
-    name: str = ""
-    level: int = 1
-
-    @property
-    def event_type(self) -> str:
-        return "AchievementUnlocked"
-
-
-@dataclass(frozen=True)
-class MaterialIndexed(DomainEvent):
-    """资料索引完成事件"""
-    user_id: str = ""
-    material_id: str = ""
-    chunk_count: int = 0
-    partition_id: str = ""
-
-    @property
-    def event_type(self) -> str:
-        return "MaterialIndexed"
-
-
-@dataclass(frozen=True)
-class MaterialUploaded(DomainEvent):
-    """资料上传事件"""
-    user_id: str = ""
-    material_id: str = ""
-    file_name: str = ""
-    file_size: int = 0
-    partition_id: str = ""
-
-    @property
-    def event_type(self) -> str:
-        return "MaterialUploaded"
 
 
 # ──────────────────────────────────────────────
@@ -297,14 +206,7 @@ EVENT_TYPES: dict[str, type[DomainEvent]] = {
     for cls in [
         AnswerSubmitted,
         SessionCompleted,
-        HintRequested,
         KnowledgeStateUpdated,
-        WeaknessDetected,
-        StudyPlanGenerated,
-        DailyGoalAchieved,
-        AchievementUnlocked,
-        MaterialIndexed,
-        MaterialUploaded,
         AssistantReplied,
         AudioSynthesized,
         ImageRendered,
