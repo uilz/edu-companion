@@ -154,6 +154,97 @@ class InlinePracticeHandler:
             hint_level=hints_used,
         )
 
+        # ── Phase D1+D2: CognitiveNode update + events + error_book ──
+        try:
+            # 1. CognitiveNode 更新
+            from app.cognitive.events import submit_practice
+            p_before = ks.p_known if ks else 0.5
+            submit_practice(
+                user_id=user_id,
+                node_id=skill_id,
+                success=is_correct,
+                latency_ms=0,
+            )
+            p_after = ks.p_known if ks else 0.5
+        except Exception as exc:
+            logger.warning("inline_practice: CognitiveNode update failed: %s", exc)
+            p_before = p_before if 'p_before' in dir() else 0.5
+            p_after = p_after if 'p_after' in dir() else 0.5
+
+        try:
+            # 2. AnswerSubmitted 事件
+            from app.application.di import container
+            from shared.events import AnswerSubmitted, ErrorRecorded
+            import asyncio
+
+            bus = container.event_bus
+            answer_evt = AnswerSubmitted(
+                user_id=user_id,
+                session_id="",
+                question_id=question.question_id,
+                skill_id=skill_id,
+                is_correct=is_correct,
+                answer=student_answer,
+                correct_answer=question.correct_answer,
+                time_spent=0.0,
+                hints_used=hints_used,
+                p_known_before=p_before,
+                p_known_after=p_after,
+            )
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(bus.publish(answer_evt))
+            else:
+                loop.run_until_complete(bus.publish(answer_evt))
+        except Exception as exc:
+            logger.warning("inline_practice: AnswerSubmitted publish failed: %s", exc)
+
+        try:
+            # 3. ErrorRecorded 事件 + 错题本写入（答错时）
+            if not is_correct:
+                from app.application.di import container
+                from shared.events import ErrorRecorded
+                import asyncio
+
+                bus = container.event_bus
+                error_evt = ErrorRecorded(
+                    user_id=user_id,
+                    question_id=question.question_id,
+                    skill_id=skill_id,
+                    error_type="inline_practice",
+                    user_answer=student_answer,
+                    correct_answer=question.correct_answer,
+                )
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(bus.publish(error_evt))
+                else:
+                    loop.run_until_complete(bus.publish(error_evt))
+
+                # 写入 error_book 表
+                from app.db.database import get_db
+                import uuid as _uuid
+                db = get_db()
+                db.execute(
+                    "INSERT INTO error_book "
+                    "(entry_id, user_id, question_id, skill_id, error_type, "
+                    "user_answer, correct_answer, question_text) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) "
+                    "ON CONFLICT DO NOTHING",
+                    (
+                        str(_uuid.uuid4()),
+                        user_id,
+                        question.question_id,
+                        skill_id,
+                        "inline_practice",
+                        student_answer,
+                        question.correct_answer,
+                        question.text[:500],
+                    ),
+                )
+        except Exception as exc:
+            logger.warning("inline_practice: ErrorRecorded/error_book failed: %s", exc)
+
         # 生成对话回复
         if is_correct:
             reply = self._correct_reply(question)
