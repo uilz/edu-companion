@@ -228,19 +228,17 @@ export default function Phase8Sidebar({
   // ── 根节点加载完成的引用 ──
   const rootLoadedRef = useRef(false);
 
-  // ── 自动展开到当前对话 ──
+  // ── 自动展开到当前对话（递归展开每一层） ──
   const prevAutoExpandRef = useRef<string | null>(null);
   const autoExpandAttemptRef = useRef(0);
   useEffect(() => {
     const convId = activeConversationId || initialConversationId || "";
-    // 没有会话ID时也允许展开分区
     if (!selectedNodeId) return;
     const expandKey = `${selectedNodeId}:${convId}`;
     if (prevAutoExpandRef.current === expandKey) return;
 
     const rootNodes = childMapRef.current.get(ROOT_KEY);
     if (!rootNodes || rootNodes.length === 0) {
-      // 根节点尚未加载，等 100ms 重试（最多 50 次 = 5s）
       if (autoExpandAttemptRef.current < 50) {
         autoExpandAttemptRef.current += 1;
         const timer = setTimeout(() => setExpandedSet(prev => new Set(prev)), 100);
@@ -251,19 +249,42 @@ export default function Phase8Sidebar({
     autoExpandAttemptRef.current = 0;
     prevAutoExpandRef.current = expandKey;
 
-    // 展开分区
-    setExpandedSet(prev => { const next = new Set(prev); next.add(selectedNodeId); return next; });
-    const partition = rootNodes.find(n => n.id === selectedNodeId);
-    if (partition && !childMapRef.current.has(partition.id)) {
-      loadChildren(partition).then(() => {
-        // 展开第一层 domain
-        const domains = childMapRef.current.get(partition.id);
-        if (domains?.length) {
-          setExpandedSet(prev => { const next = new Set(prev); domains.forEach(d => next.add(d.id)); return next; });
+    // 递归展开：从分区开始，逐层加载子节点和会话
+    const expandLevel = async (nodeId: string, depth: number) => {
+      if (depth > 5) return; // 防止无限递归
+      setExpandedSet(prev => { const next = new Set(prev); next.add(nodeId); return next; });
+
+      // 加载子节点（如果尚未加载）
+      if (!childMapRef.current.has(nodeId)) {
+        const node: GraphNode | undefined = depth === 0
+          ? rootNodes.find(n => n.id === nodeId)
+          : undefined;
+        // 从 childMap 的父级查找节点信息
+        if (node) {
+          await loadChildren(node);
+        } else {
+          // 从已有 childMap 中查找
+          for (const [, children] of Array.from(childMapRef.current.entries())) {
+            const found = (children as GraphNode[]).find((c: GraphNode) => c.id === nodeId);
+            if (found) { await loadChildren(found); break; }
+          }
         }
-      });
-    }
-  }, [selectedNodeId, activeConversationId, initialConversationId, loadChildren, childMap]);
+      }
+
+      // 加载该层级的会话
+      loadConversations(nodeId);
+
+      // 递归展开子节点
+      const children = childMapRef.current.get(nodeId) || [];
+      for (const child of children) {
+        if (child.is_visible) {
+          await expandLevel(child.id, depth + 1);
+        }
+      }
+    };
+
+    expandLevel(selectedNodeId, 0);
+  }, [selectedNodeId, activeConversationId, initialConversationId, loadChildren, loadConversations, childMap]);
 
   // ── 编辑 ──
   const [editingId, setEditingId] = useState<string | null>(null);
