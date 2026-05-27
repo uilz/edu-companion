@@ -214,8 +214,10 @@ export default function Phase8Sidebar({
       if (!childMapRef.current.has(node.id)) {
         loadChildren(node);
       }
-      // 展开时同时加载会话
-      loadConversations(node.id);
+      // 只在 topic 级加载会话（会话挂在 topic 下）
+      if (node.level === "topic") {
+        loadConversations(node.id);
+      }
       setExpandedSet(prev => {
         if (prev.has(node.id)) return prev;
         const next = new Set(prev);
@@ -271,8 +273,10 @@ export default function Phase8Sidebar({
         }
       }
 
-      // 加载该层级的会话
-      loadConversations(nodeId);
+      // 加载该层级的会话（仅 topic 级）
+      if (depth >= 2) { // partition=0, domain=1, topic=2+
+        loadConversations(nodeId);
+      }
 
       // 递归展开子节点
       const children = childMapRef.current.get(nodeId) || [];
@@ -306,6 +310,17 @@ export default function Phase8Sidebar({
             return next;
           });
         }
+      });
+      // 清理该节点的会话缓存和子节点缓存
+      setConvCache(prev => {
+        const next = new Map(prev);
+        next.delete(deleteTarget.id);
+        return next;
+      });
+      setChildMap(prev => {
+        const next = new Map(prev);
+        next.delete(deleteTarget.id);
+        return next;
       });
       onTreeChanged?.();
     } catch { /* 忽略 */ }
@@ -439,7 +454,7 @@ export default function Phase8Sidebar({
                   borderLeft: activeConversationId === conv.id ? "3px solid var(--color-accent)" : undefined,
                   backgroundColor: activeConversationId === conv.id ? "var(--color-surface)" : "transparent",
                 }}
-                onClick={() => onSelectConversation(node.id, conv.id)}
+                onClick={() => onSelectConversation(currentPartitionId || node.id, conv.id)}
               >
                 <span className="w-4 flex-shrink-0 mr-1" />
                 <MessageSquare size={11} className="text-[var(--color-text-muted)] mr-1.5" />
