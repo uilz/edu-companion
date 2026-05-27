@@ -183,12 +183,15 @@ export default function Phase8Sidebar({
       .catch(() => {});
   }, []);
 
-  // ── 加载子节点 ──
-  const loadChildren = useCallback(async (node: GraphNode) => {
+  // ── 加载子节点（返回 children 供调用方使用，避免 stale ref） ──
+  const loadChildren = useCallback(async (node: GraphNode): Promise<GraphNode[]> => {
+    let result: GraphNode[] = [];
     await withLoading(node.id, async () => {
       const children = await v2<GraphNode[]>(`/graph/nodes?parent_id=${node.id}`);
       setChildMap(prev => mapSet(prev, node.id, children));
+      result = children;
     });
+    return result;
   }, [withLoading]);
 
   // ── 加载会话（仅 topic 级） ──
@@ -299,18 +302,20 @@ export default function Phase8Sidebar({
       if (depth > 5) return;
       setExpandedSet(prev => setAdd(prev, nodeId));
 
-      // 加载子节点
-      if (!childMapRef.current.has(nodeId)) {
+      // 加载子节点 — 使用返回值而非 stale ref
+      let children = childMapRef.current.get(nodeId) || [];
+      if (children.length === 0) {
         const node = depth === 0 ? rootNodes.find(n => n.id === nodeId) : nodeById.get(nodeId);
-        if (node) await loadChildren(node);
+        if (node) {
+          children = await loadChildren(node);
+        }
       }
 
       // topic 级加载会话
       const info = nodeById.get(nodeId) || rootNodes.find(n => n.id === nodeId);
       if (info?.level === "topic") loadConversations(nodeId);
 
-      // 递归子节点
-      const children = childMapRef.current.get(nodeId) || [];
+      // 递归子节点（用 children 局部变量，不是 stale ref）
       for (const child of children) await expandLevel(child.id, depth + 1);
     };
     expandLevel(selectedNodeId, 0);
