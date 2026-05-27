@@ -15,9 +15,9 @@ from app.shared.constants import DEFAULT_USER_ID
 from app.cognitive.models import (
     Activation, Belief, CognitiveEvent, CognitiveLoad, CognitiveNode,
     Composition, DeepLink, DeepProcessing, Diagnostic, DialogueContext,
-    Engagement, ErrorCluster, GoalAlignment, Metacognition, PracticeEvent,
-    PracticeSummary, Prediction, Prerequisite, Scheduling, Trend,
-    Unlock, Associate, UserCognitiveState,
+    Engagement, ErrorCluster, GoalAlignment, MetaInfo, Metacognition,
+    PracticeEvent, PracticeSummary, Prediction, Prerequisite, Scheduling,
+    Trend, Unlock, Associate, UserCognitiveState,
 )
 from app.db.database import Database, get_db
 
