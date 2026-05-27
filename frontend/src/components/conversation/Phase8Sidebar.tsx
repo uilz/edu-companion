@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   Plus, Hash, Pencil, Trash2, Check, X,
   ChevronRight, ChevronDown, MessageSquare, Sparkles, FolderOpen,
@@ -156,7 +156,7 @@ export default function Phase8Sidebar({
   const [loadingSet, setLoadingSet] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string; isConv?: boolean; topicId?: string } | null>(null);
 
   // ── Ref 同步 ──
   const childMapRef = useRef(childMap); childMapRef.current = childMap;
@@ -194,40 +194,38 @@ export default function Phase8Sidebar({
     return res.conversation.id;
   }, []);
 
-  /** 找或创建子级节点 */
-  const ensureChild = useCallback(async (
-    parentLevel: "partition" | "domain", parentId: string, childLevel: "domain" | "topic",
-  ) => {
-    const res = await tree<{ domains?: { id: string }[]; topics?: { id: string }[] }>(
-      `/tree/${childLevel}?parent_id=${parentId}`,
-    );
-    const list = (childLevel === "domain" ? res.domains : res.topics) || [];
-    if (list.length > 0) return list[0].id;
-    const emojis: Record<string, string> = { domain: "📚", topic: "📝" };
-    const names: Record<string, string> = { domain: "临时领域", topic: "临时专题" };
-    const created = await tree<{ domain?: { id: string }; topic?: { id: string } }>(
-      `/tree/${childLevel}`,
-      { method: "POST", body: JSON.stringify({ parent_id: parentId, name: names[childLevel], emoji: emojis[childLevel] }) },
-    );
-    return (created.domain || created.topic)!.id;
+  /** 从 childMap 中沿 graph tree 找到 topic 节点 ID */
+  const findTopicInTree = useCallback((node: GraphNode): string | null => {
+    if (node.level === "topic") return node.id;
+    const children = childMapRef.current.get(node.id) || [];
+    for (const child of children) {
+      if (node.level === "partition" && child.level === "domain") {
+        const topics = childMapRef.current.get(child.id) || [];
+        if (topics.length > 0) return topics[0].id;
+      }
+      if (child.level === "topic") return child.id;
+    }
+    return null;
   }, []);
 
-  /** 点击 💬 按钮：全部层级在 sidebar 内直接处理，不走异步回调 */
+  /** 点击 💬 按钮 */
   const handleNewConvClick = useCallback(async (node: GraphNode, pid?: string) => {
     const partitionId = pid || node.id;
     try {
-      let topicId: string;
-      if (node.level === "topic") {
-        topicId = node.id;
-      } else if (node.level === "domain") {
-        topicId = await ensureChild("domain", node.id, "topic");
-      } else {
-        // partition: domain → topic
-        const domainId = await ensureChild("partition", node.id, "domain");
-        topicId = await ensureChild("domain", domainId, "topic");
+      // 从已加载的 graph tree 中找到 topic 节点
+      let topicId = findTopicInTree(node);
+      if (!topicId) {
+        // graph tree 还没展开到 topic 级，先展开
+        await loadChildren(node);
+        const children = childMapRef.current.get(node.id) || [];
+        for (const child of children) {
+          topicId = findTopicInTree(child);
+          if (topicId) break;
+        }
       }
+      if (!topicId) throw new Error("无法找到专题节点");
       const convId = await findOrCreateConv(topicId);
-      await forceRefreshConvs(topicId);
+      await forceRefreshConvs(topicId!);
       // 展开节点让用户看到会话
       setExpandedSet(prev => setAdd(prev, node.id));
       onConversationReady?.(partitionId, convId);
@@ -236,7 +234,8 @@ export default function Phase8Sidebar({
       // 最终回退：委托父组件
       onNewConversation?.(node.level, node.id, pid);
     }
-  }, [ensureChild, findOrCreateConv, forceRefreshConvs, onConversationReady, onNewConversation]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [findTopicInTree, findOrCreateConv, forceRefreshConvs, onConversationReady, onNewConversation]);
 
   // ── 通用 loading 包装 ──
   const withLoading = useCallback(async <T,>(key: string, fn: () => Promise<T>): Promise<T | undefined> => {
@@ -335,23 +334,47 @@ export default function Phase8Sidebar({
     setEditingId(null);
   }, [onTreeChanged]);
 
+  // ── 重命名会话 ──
+  const handleRenameConv = useCallback(async (convId: string, name: string, topicId: string) => {
+    try {
+      await tree(`/tree/conversation/${convId}`, { method: "PATCH", body: JSON.stringify({ name }) });
+      setConvCache(prev => {
+        const cached = prev.get(topicId) || [];
+        return mapSet(prev, topicId, cached.map(c => c.id === convId ? { ...c, name } : c));
+      });
+    } catch { /* 忽略 */ }
+    setEditingId(null);
+  }, []);
+
   // ── 删除 ──
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
     try {
-      await v2(`/graph/nodes/${deleteTarget.id}?recursive=true`, { method: "DELETE" });
-      // 从所有父级的 childMap 中移除
-      setChildMap(prev => {
-        const next = new Map(prev);
-        next.forEach((children, key) => {
-          const filtered = children.filter(c => c.id !== deleteTarget.id);
-          if (filtered.length !== children.length) next.set(key, filtered);
+      if (deleteTarget.isConv) {
+        // 删除会话
+        await tree(`/tree/conversation/${deleteTarget.id}`, { method: "DELETE" });
+        // 从 convCache 中移除
+        if (deleteTarget.topicId) {
+          setConvCache(prev => {
+            const cached = prev.get(deleteTarget.topicId!) || [];
+            return mapSet(prev, deleteTarget.topicId!, cached.filter(c => c.id !== deleteTarget.id));
+          });
+        }
+      } else {
+        // 删除 graph 节点
+        await v2(`/graph/nodes/${deleteTarget.id}?recursive=true`, { method: "DELETE" });
+        setChildMap(prev => {
+          const next = new Map(prev);
+          next.forEach((children, key) => {
+            const filtered = children.filter(c => c.id !== deleteTarget.id);
+            if (filtered.length !== children.length) next.set(key, filtered);
+          });
+          next.delete(deleteTarget.id);
+          return next;
         });
-        next.delete(deleteTarget.id);
-        return next;
-      });
-      setConvCache(prev => mapDelete(prev, deleteTarget.id));
-      onTreeChanged?.();
+        setConvCache(prev => mapDelete(prev, deleteTarget.id));
+        onTreeChanged?.();
+      }
     } catch { /* 忽略 */ }
     setDeleteTarget(null);
   }, [deleteTarget, onTreeChanged]);
@@ -472,15 +495,27 @@ export default function Phase8Sidebar({
           <div>
             {children.filter(c => c.is_visible).map(child => renderNode(child, depth + 1, pid))}
             {convs.map(conv => (
-              <div key={`conv:${conv.id}`}
-                className="flex items-center cursor-pointer transition-colors"
-                style={{ paddingLeft: indent + 16, paddingRight: 8, paddingBlock: 4, borderLeft: activeConversationId === conv.id ? "3px solid var(--color-accent)" : undefined, backgroundColor: activeConversationId === conv.id ? "var(--color-surface)" : "transparent" }}
-                onClick={() => onSelectConversation(pid || node.id, conv.id)}
-              >
-                <span className="w-4 flex-shrink-0 mr-1" />
-                <MessageSquare size={11} className="text-[var(--color-text-muted)] mr-1.5" />
-                <span className="text-xs truncate text-[var(--color-text-muted)]">{conv.name}</span>
-              </div>
+              <React.Fragment key={`conv:${conv.id}`}>
+                <div
+                  className="flex items-center cursor-pointer transition-colors group/conv"
+                  style={{ paddingLeft: indent + 16, paddingRight: 4, paddingBlock: 4, borderLeft: activeConversationId === conv.id ? "3px solid var(--color-accent)" : undefined, backgroundColor: activeConversationId === conv.id ? "var(--color-surface)" : "transparent" }}
+                >
+                  <span className="w-4 flex-shrink-0 mr-1" onClick={() => onSelectConversation(pid || node.id, conv.id)} />
+                  <MessageSquare size={11} className="text-[var(--color-text-muted)] mr-1.5" onClick={() => onSelectConversation(pid || node.id, conv.id)} />
+                  <span className="flex-1 text-xs truncate text-[var(--color-text-muted)]" onClick={() => onSelectConversation(pid || node.id, conv.id)}>{conv.name}</span>
+                  <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover/conv:opacity-100 transition-opacity max-md:opacity-100">
+                    <button onClick={(e) => { e.stopPropagation(); setEditingId(conv.id); setEditValue(conv.name); }}
+                      className="p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)]" title="重命名"><Pencil size={10} /></button>
+                    <button onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: conv.id, label: conv.name, isConv: true, topicId: node.id } as any); }}
+                      className="p-0.5 text-[var(--color-text-muted)] hover:text-red-400" title="删除"><Trash2 size={10} /></button>
+                  </div>
+                </div>
+                {editingId === conv.id && (
+                  <div style={{ paddingLeft: indent + 16 }}>
+                    <InlineEdit value={editValue} onConfirm={(name) => handleRenameConv(conv.id, name, node.id)} onCancel={() => setEditingId(null)} />
+                  </div>
+                )}
+              </React.Fragment>
             ))}
           </div>
         )}
