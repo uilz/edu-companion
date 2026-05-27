@@ -250,40 +250,21 @@ class BKTEngine:
         p_known: float | None = None,
     ) -> KnowledgeState:
         """
-        从 UserData 加载已有知识状态，不存在则创建。
-        状态持久化在 UserData.knowledge_states[skill_id] 中。
+        DEPRECATED: BKT engine is superseded by CognitiveNode (Phase 6+).
+        Main path: CognitiveNode.storage.get_node() → belief.proficiency_mean.
+        This method now always creates fresh state (no DB persistence).
         """
-        try:
-            storage = self._get_storage()
-            data = storage.load(user_id)
-            if skill_id in data.knowledge_states:
-                state_dict = data.knowledge_states[skill_id]
-                return KnowledgeState(**state_dict)
-        except Exception:
-            pass  # 降级：创建新状态
+        # DEPRECATED: knowledge_states DB read removed in Phase A1.
+        # BKT state is no longer persisted — CognitiveNode is the authoritative source.
         return self.create_knowledge_state(skill_id, p_known=p_known)
 
     def save_state(self, user_id: str, state: KnowledgeState) -> None:
-        """将知识状态写入 UserData 并持久化到磁盘"""
-        try:
-            storage = self._get_storage()
-            data = storage.load(user_id)
-            data.knowledge_states[state.skill_id] = state.model_dump()
-            storage.save(user_id, data)
-        except Exception:
-            pass  # 写入失败静默降级，不影响答题流
+        """DEPRECATED: No-op. CognitiveNode is the authoritative knowledge store."""
+        pass  # DEPRECATED: Phase A1 — knowledge_states DB write removed
 
     def load_all_states(self, user_id: str) -> dict[str, KnowledgeState]:
-        """加载用户的所有知识状态"""
-        try:
-            storage = self._get_storage()
-            data = storage.load(user_id)
-            return {
-                skill_id: KnowledgeState(**state_dict)
-                for skill_id, state_dict in data.knowledge_states.items()
-            }
-        except Exception:
-            return {}
+        """DEPRECATED: Returns empty dict. Use CognitiveNode for knowledge state."""
+        return {}  # DEPRECATED: Phase A1 — knowledge_states DB read removed
 
 
 # 全局实例

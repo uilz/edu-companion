@@ -154,29 +154,16 @@ async def get_graph(partition_id: str):
             "generated": False,
         }
 
-    # 同步 CognitiveNode 掌握度 (优先) 或 BKT (备降)
+    # 同步 CognitiveNode 掌握度
     from app.cognitive.storage import get_node as get_cog_node
-    cog_fallback = True
     for node_id, node in graph.nodes.items():
         try:
             cog = get_cog_node(node_id)
             if cog and cog.belief:
                 node.mastery = round(cog.belief.proficiency_mean * 100, 1)
                 node.mastery_level = _classify_mastery_cognitive(cog.belief.proficiency_mean)
-                cog_fallback = False
         except Exception:
             pass
-
-    # 备降: BKT
-    if cog_fallback:
-        from app.core.knowledge_trace import bkt_engine
-        for node_id, node in graph.nodes.items():
-            try:
-                state = bkt_engine.load_or_create(DEFAULT_USER_ID, node_id)
-                node.mastery = round(state.p_known * 100, 1)
-                node.mastery_level = bkt_engine.get_mastery_level(state)
-            except Exception:
-                pass
 
     return {
         "partition_id": partition_id,

@@ -101,6 +101,8 @@ class PgStorageEngine:
         topics = {}
         files = {}
         background_jobs = {}
+        # DEPRECATED: knowledge_states now lives in CognitiveNode (Phase A1)
+        # Retained as empty dict for UserData schema compatibility
         knowledge_states = {}
         practice_sessions = {}
         error_book = {}
@@ -131,9 +133,12 @@ class PgStorageEngine:
             if isinstance(raw_jobs, dict):
                 background_jobs = {k: BackgroundJob(**v) for k, v in raw_jobs.items() if isinstance(v, dict)}
 
-            knowledge_states = self._parse_json(meta.get("knowledge_states", {}), {})
-            practice_sessions = self._parse_json(meta.get("practice_sessions", {}), {})
-            error_book = self._parse_json(meta.get("error_book", {}), {})
+            # DEPRECATED (Phase A1): knowledge_states now lives in CognitiveNode
+            # knowledge_states = self._parse_json(meta.get("knowledge_states", {}), {})
+            # DEPRECATED (Phase A2): practice_sessions now lives in separate table
+            # practice_sessions = self._parse_json(meta.get("practice_sessions", {}), {})
+            # DEPRECATED (Phase A2): error_book now lives in separate table
+            # error_book = self._parse_json(meta.get("error_book", {}), {})
             event_log = self._parse_json(meta.get("event_log", []), [])
 
             raw_kg = self._parse_json(meta.get("knowledge_graphs", {}))
@@ -256,18 +261,15 @@ class PgStorageEngine:
             """
             INSERT INTO conversation_user_meta
                 (user_id, role, org_id, active_partition_id,
-                 knowledge_graphs, knowledge_states, practice_sessions,
-                 error_book, event_log, domains, topics, files,
+                 knowledge_graphs,
+                 event_log, domains, topics, files,
                  background_jobs, created_at)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (user_id) DO UPDATE SET
                 role = EXCLUDED.role,
                 org_id = EXCLUDED.org_id,
                 active_partition_id = EXCLUDED.active_partition_id,
                 knowledge_graphs = EXCLUDED.knowledge_graphs,
-                knowledge_states = EXCLUDED.knowledge_states,
-                practice_sessions = EXCLUDED.practice_sessions,
-                error_book = EXCLUDED.error_book,
                 event_log = EXCLUDED.event_log,
                 domains = EXCLUDED.domains,
                 topics = EXCLUDED.topics,
@@ -280,9 +282,6 @@ class PgStorageEngine:
                 data.org_id,
                 data.active_partition_id,
                 self._j({k: v.model_dump() for k, v in data.knowledge_graphs.items()}),
-                self._j(data.knowledge_states),
-                self._j(data.practice_sessions),
-                self._j(data.error_book),
                 self._j(data.event_log),
                 self._j({k: v.model_dump() for k, v in data.domains.items()}),
                 self._j({k: v.model_dump() for k, v in data.topics.items()}),

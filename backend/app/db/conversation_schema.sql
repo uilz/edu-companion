@@ -105,9 +105,10 @@ CREATE TABLE IF NOT EXISTS conversation_user_meta (
 );
 
 -- Phase 6.5: 追加全字段列（幂等）
-ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS knowledge_states JSONB DEFAULT '{}';
-ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS practice_sessions JSONB DEFAULT '{}';
-ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS error_book JSONB DEFAULT '{}';
+-- DEPRECATED (Phase A2): practice_sessions now lives in separate practice_sessions table.
+-- ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS practice_sessions JSONB DEFAULT '{}';
+-- DEPRECATED (Phase A2): error_book now lives in separate error_book table.
+-- ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS error_book JSONB DEFAULT '{}';
 ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS event_log JSONB DEFAULT '[]';
 ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS domains JSONB DEFAULT '{}';
 ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS topics JSONB DEFAULT '{}';

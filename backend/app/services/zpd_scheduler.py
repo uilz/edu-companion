@@ -14,6 +14,7 @@ from app.schemas.practice import (
     PracticeSessionPlan,
     Question,
     ReviewTask,
+)
 logger = logging.getLogger(__name__)
 
 
@@ -105,16 +106,17 @@ class ZPDScheduler:
 
     def estimate_student_ability(
         self,
-        knowledge_states: dict[str, KnowledgeState],
+        knowledge_states: dict[str, KnowledgeState],  # DEPRECATED (Phase A1): use CognitiveNode instead
         skill_id: str,
         user_id: str = DEFAULT_USER_ID,
     ) -> float:
         """
         估计学生在某知识点的能力θ
         
-        Phase 6: 优先读 CognitiveNode，备降旧 knowledge_states
+        Phase A1: CognitiveNode is the sole source of truth for ability estimation.
+        knowledge_states parameter is deprecated and ignored.
         """
-        # Phase 6: CognitiveNode 主源
+        # CognitiveNode: primary source
         try:
             from app.cognitive.storage import get_node
             node = get_node(skill_id, user_id)
@@ -124,26 +126,12 @@ class ZPDScheduler:
         except Exception:
             pass
 
-        # 备降: 旧 knowledge_states
-        state = knowledge_states.get(skill_id)
-        if not state:
-            return 0.3  # 默认：低能力
-        
-        p_known = state.p_known
-        avg_dim = state.avg_dimension_p
-        
-        # 能力估计
-        ability = p_known * 0.6 + avg_dim * 0.4
-        
-        # 置信度调整：尝试次数少 → 能力估计保守
-        if state.attempt_count < 3:
-            ability = max(0.1, ability - 0.1)
-        
-        return ability
+        # CognitiveNode unavailable or has no data → return default ability
+        return 0.3
 
     def plan_session(
         self,
-        knowledge_states: dict[str, KnowledgeState],
+        knowledge_states: dict[str, KnowledgeState],  # DEPRECATED (Phase A1): use CognitiveNode instead
         question_pool: dict[str, list[Question]],
         target_skills: list[str],
         duration_minutes: int = 30,
@@ -247,27 +235,40 @@ class SpacedRepetitionScheduler:
     
     def get_review_tasks(
         self,
-        knowledge_states: dict[str, KnowledgeState],
-        now: float,
+        user_id: str = DEFAULT_USER_ID,
+        now: float | None = None,
     ) -> list[ReviewTask]:
-        """获取所有需要复习的知识点"""
+        """获取所有需要复习的知识点 — 从 CognitiveNode 读取"""
+        from app.cognitive.storage import list_all_nodes
+        import time as _time
+
+        if now is None:
+            now = _time.time()
+
+        nodes = list_all_nodes(user_id)
         tasks = []
-        
-        for skill_id, state in knowledge_states.items():
-            if state.attempt_count == 0:
+
+        for node in nodes:
+            belief = node.belief
+            trend = node.trend
+            if not belief or not trend:
                 continue
-            
-            days_since = 0  # 简化：假设刚练习
-            forgetting_prob = math.exp(-days_since / max(state.p_known + 0.1, 0.1))
-            
-            if forgetting_prob > 0.3 and state.p_known < 0.8:
+
+            last_practiced = node.practice_summary.last_practiced
+            if last_practiced is None:
+                continue  # 从未练习过
+
+            days_since = max((now - last_practiced) / 86400, 0)
+            forgetting_prob = math.exp(-days_since / max(belief.proficiency_mean + 0.1, 0.1))
+
+            if forgetting_prob > 0.3 and belief.proficiency_mean < 0.8:
                 tasks.append(ReviewTask(
                     type="knowledge_review",
-                    skill_id=skill_id,
+                    skill_id=node.id,
                     priority=forgetting_prob,
-                    instruction=f"复习{skill_id}",
+                    instruction=f"复习{node.label or node.id}",
                 ))
-        
+
         tasks.sort(key=lambda t: t.priority, reverse=True)
         return tasks[:10]
 

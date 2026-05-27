@@ -66,6 +66,7 @@ class LearnerProfile(BaseModel):
     subjects: list[str] = Field(default_factory=list)
     grade_level: Optional[int] = Field(default=None, ge=1, le=12)
     learning_style: LearningStyle = LearningStyle.READING
+    # DEPRECATED: use cognitive_nodes.belief instead
     knowledge_states: dict[str, KnowledgeState] = Field(default_factory=dict)
     total_study_minutes: float = 0.0
     streak_days: int = 0
@@ -73,6 +74,7 @@ class LearnerProfile(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.now)
     preferences: dict[str, Any] = Field(default_factory=dict)
 
+    # DEPRECATED: use CognitiveNode.belief instead of LearnerProfile.knowledge_states
     def get_knowledge_state(self, skill_id: str) -> KnowledgeState:
         """获取指定知识点的状态，不存在则创建默认状态"""
         if skill_id not in self.knowledge_states:

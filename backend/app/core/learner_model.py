@@ -227,13 +227,11 @@ class LearnerModelEngine:
             time_spent: 花费时间（秒）
         """
         profile = self.get_or_create_profile(user_id)
+
+        # DEPRECATED (Phase A1): BKT in-memory update. Authoritative path is CognitiveNode.
         state = profile.get_knowledge_state(skill_id)
-
-        # 使用BKT引擎更新
         updated_state = self.bkt.update(state, is_correct)
-
-        # 保存更新后的状态
-        profile.knowledge_states[skill_id] = updated_state
+        profile.knowledge_states[skill_id] = updated_state  # transient, not persisted
 
         # 记录活动
         self._log_activity(user_id, {
@@ -267,6 +265,7 @@ class LearnerModelEngine:
         profile = self.get_or_create_profile(user_id)
 
         # 获取推荐练习
+        # DEPRECATED (Phase A1): BKT recommend_practice. Use CognitiveNode scheduling instead.
         recommendations = self.bkt.recommend_practice(
             profile.knowledge_states, top_n=5
         )

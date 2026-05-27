@@ -69,11 +69,12 @@ class PracticeService(Protocol):
         """查询知识点掌握状态"""
         ...
 
+    # DEPRECATED: use CognitiveNode.belief instead of knowledge_states
     async def get_all_knowledge_states(
         self,
         user_id: str,
     ) -> dict[str, KnowledgeState]:
-        """获取用户所有知识点状态"""
+        """获取用户所有知识点状态 — DEPRECATED: use CognitiveNode.belief instead"""
         ...
 
     async def get_errors(

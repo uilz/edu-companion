@@ -188,33 +188,19 @@ async def _search_knowledge(q: str, limit: int) -> list[SearchResultItem]:
         except Exception:
             pass
 
-        from app.core.learner_model import learner_engine
-        # 遍历知识点存储
-        for skill_id, state in getattr(learner_engine, "_knowledge_states", {}).items():
-            if q_lower in skill_id.lower():
-                mastery = state.get("p_know", 0) if isinstance(state, dict) else 0.5
+        # CognitiveNode query — replaces legacy knowledge_states reads
+        from app.cognitive.storage import list_nodes
+        cog_nodes = list_nodes(user_id=USER_ID)
+        for node in cog_nodes:
+            if q_lower in (node.label or "").lower() or q_lower in node.id.lower():
+                mu = node.belief.proficiency_mean if node.belief else 0.0
                 results.append(SearchResultItem(
                     type="knowledge",
-                    title=skill_id.replace("_", " ").title(),
-                    subtitle=f"掌握 {mastery:.0%}",
-                    link=f"/graph?skill={skill_id}",
-                    score=mastery,
-                    meta={"skill_id": skill_id, "mastery": mastery},
-                ))
-
-        # 也检查 userData knowledge_states
-        from app.services.storage import storage
-        data = storage.load(USER_ID)
-        for skill_id, state in data.knowledge_states.items():
-            if q_lower in skill_id.lower():
-                mastery = state.get("p_know", state.get("mastery", 0.5))
-                results.append(SearchResultItem(
-                    type="knowledge",
-                    title=skill_id.replace("_", " ").title(),
-                    subtitle=f"掌握 {mastery:.0%}",
-                    link=f"/graph?skill={skill_id}",
-                    score=mastery,
-                    meta={"skill_id": skill_id, "mastery": mastery},
+                    title=node.label or node.id.replace("_", " ").title(),
+                    subtitle=f"掌握 {mu:.0%} (CognitiveNode)",
+                    link=f"/graph?skill={node.id}",
+                    score=mu,
+                    meta={"skill_id": node.id, "mastery": mu},
                 ))
 
         return results[:limit]
@@ -225,28 +211,41 @@ async def _search_knowledge(q: str, limit: int) -> list[SearchResultItem]:
 
 
 async def _search_errors(q: str, limit: int) -> list[SearchResultItem]:
-    """搜索错题"""
+    """搜索错题（从 error_book 表读取）"""
     results: list[SearchResultItem] = []
     q_lower = q.lower()
 
     try:
-        from app.services.storage import storage
-        data = storage.load(USER_ID)
+        # Phase A2: Read from error_book table instead of meta JSONB
+        from app.db.database import get_db
+        db = get_db()
+        rows = db.fetchall(
+            "SELECT skill_id, question_text, user_answer, correct_answer "
+            "FROM error_book WHERE user_id = %s",
+            (USER_ID,),
+        )
+        for row in rows:
+            if isinstance(row, (list, tuple)):
+                skill_id = row[0] if len(row) > 0 else ""
+                question_text = row[1] if len(row) > 1 else ""
+                user_answer = row[2] if len(row) > 2 else ""
+                correct_answer = row[3] if len(row) > 3 else ""
+            else:
+                skill_id = row.get("skill_id", "")
+                question_text = row.get("question_text", "")
+                user_answer = row.get("user_answer", "")
+                correct_answer = row.get("correct_answer", "")
 
-        for error_list in data.error_book.values():
-            for entry in error_list:
-                if not isinstance(entry, dict):
-                    continue
-                question = (entry.get("question_text") or entry.get("question_id") or "").lower()
-                if q_lower in question:
-                    results.append(SearchResultItem(
-                        type="error",
-                        title=(entry.get("question_text") or entry.get("question_id") or "错题")[:80],
-                        subtitle=f"错因: {entry.get('error_type', entry.get('attribution', '未知'))}",
-                        link="/errors",
-                        score=0.6,
-                        meta={"error_id": entry.get("id", ""), "skill_id": entry.get("skill_id", "")},
-                    ))
+            question_lower = (question_text or "").lower()
+            if q_lower in question_lower:
+                results.append(SearchResultItem(
+                    type="error",
+                    title=(question_text or "错题")[:80],
+                    subtitle=f"正确答案: {(correct_answer or '')[:40]}",
+                    link="/errors",
+                    score=0.6,
+                    meta={"skill_id": skill_id, "user_answer": user_answer},
+                ))
 
         return results[:limit]
 

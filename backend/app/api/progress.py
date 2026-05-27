@@ -5,7 +5,6 @@
 Data sources (Phase 16 S7):
   - cognitive_nodes 表：掌握度、练习汇总、推荐 (Primary)
   - attempts 表：每日统计、日历 (DB-backed via AttemptRepo)
-  - learner_engine：画像元数据写操作 (旧 JSON 备降)
 """
 
 from __future__ import annotations
@@ -32,7 +31,7 @@ router = APIRouter(prefix="/api/progress", tags=["学习进度"])
 def _build_progress_from_cognitive(user_id: str) -> ProgressSummary | None:
     """从 cognitive_nodes 表构建 ProgressSummary
 
-    返回 None 表示无数据，触发 learner_engine 备降。
+    返回 None 表示无认知节点数据。
     """
     try:
         from app.cognitive.storage import list_all_nodes
@@ -150,14 +149,23 @@ async def get_progress(user_id: str) -> ProgressSummary:
     - 已掌握的知识点
     - 薄弱的知识点
     - 个性化建议
-
-    优先读取 cognitive_nodes 表，无数据时备降到 learner_engine (旧 JSON)。
     """
     summary = _build_progress_from_cognitive(user_id)
-    if summary is None:
-        logger.info("progress fallback: learner_engine for user=%s", user_id)
-        summary = learner_engine.get_progress_summary(user_id)
-    return summary
+    if summary is not None:
+        return summary
+
+    # 无认知数据时返回空摘要
+    return ProgressSummary(
+        user_id=user_id,
+        total_questions=0,
+        correct_answers=0,
+        accuracy_rate=0.0,
+        study_minutes=0.0,
+        mastered_skills=[],
+        struggling_skills=[],
+        recent_activity=[],
+        recommendations=[],
+    )
 
 
 @router.get("/{user_id}/stats")
@@ -312,7 +320,7 @@ async def get_profile(user_id: str) -> dict[str, Any]:
         "subjects": profile.subjects,
         "grade_level": profile.grade_level,
         "learning_style": profile.learning_style,
-        "knowledge_skills_count": len(profile.knowledge_states),
+        "knowledge_skills_count": len(_list_cognitive_nodes(user_id)),
         "cognitive_nodes_count": len(nodes),
         "mastered_nodes_count": mastered,
         "total_study_minutes": profile.total_study_minutes,

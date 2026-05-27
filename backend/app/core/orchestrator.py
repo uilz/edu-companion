@@ -247,15 +247,6 @@ class Orchestrator:
                 "role": "system",
                 "content": f"学生的知识状态概览: {cog_summary}",
             })
-        elif profile.knowledge_states:
-            state_summary = ", ".join(
-                f"{sid}: 掌握度 {s.p_known:.2f}"
-                for sid, s in list(profile.knowledge_states.items())[:5]
-            )
-            context_messages.append({
-                "role": "system",
-                "content": f"学生的知识状态概览: {state_summary}",
-            })
 
         # 5. 检查黑板是否有秘书提案
         if session_id:
@@ -341,15 +332,6 @@ class Orchestrator:
             context_messages.append({
                 "role": "system",
                 "content": f"学生的知识状态概览: {cog_summary}",
-            })
-        elif profile.knowledge_states:
-            state_summary = ", ".join(
-                f"{sid}: 掌握度 {s.p_known:.2f}"
-                for sid, s in list(profile.knowledge_states.items())[:5]
-            )
-            context_messages.append({
-                "role": "system",
-                "content": f"学生的知识状态概览: {state_summary}",
             })
 
         # 5. 检查黑板是否有秘书提案
