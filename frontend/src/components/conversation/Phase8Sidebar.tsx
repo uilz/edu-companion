@@ -183,35 +183,60 @@ export default function Phase8Sidebar({
     } catch { /* 忽略 */ }
   }, []);
 
-  /** 点击 💬 按钮：直接在 sidebar 内创建/查找会话并选中 */
+  /** 在 topic 下查找空会话或创建新会话 */
+  const findOrCreateConv = useCallback(async (topicId: string) => {
+    const data = await tree<{ conversations: Conversation[] }>(`/tree/conversation?parent_id=${topicId}`);
+    const empty = (data.conversations || []).find(c => !c.message_count || c.message_count === 0);
+    if (empty) return empty.id;
+    const res = await tree<{ conversation: { id: string } }>("/tree/conversation", {
+      method: "POST", body: JSON.stringify({ parent_id: topicId, name: "" }),
+    });
+    return res.conversation.id;
+  }, []);
+
+  /** 找或创建子级节点 */
+  const ensureChild = useCallback(async (
+    parentLevel: "partition" | "domain", parentId: string, childLevel: "domain" | "topic",
+  ) => {
+    const res = await tree<{ domains?: { id: string }[]; topics?: { id: string }[] }>(
+      `/tree/${childLevel}?parent_id=${parentId}`,
+    );
+    const list = (childLevel === "domain" ? res.domains : res.topics) || [];
+    if (list.length > 0) return list[0].id;
+    const emojis: Record<string, string> = { domain: "📚", topic: "📝" };
+    const names: Record<string, string> = { domain: "临时领域", topic: "临时专题" };
+    const created = await tree<{ domain?: { id: string }; topic?: { id: string } }>(
+      `/tree/${childLevel}`,
+      { method: "POST", body: JSON.stringify({ parent_id: parentId, name: names[childLevel], emoji: emojis[childLevel] }) },
+    );
+    return (created.domain || created.topic)!.id;
+  }, []);
+
+  /** 点击 💬 按钮：全部层级在 sidebar 内直接处理，不走异步回调 */
   const handleNewConvClick = useCallback(async (node: GraphNode, pid?: string) => {
     const partitionId = pid || node.id;
     try {
+      let topicId: string;
       if (node.level === "topic") {
-        // 直接在该专题下查找已有空会话
-        const data = await tree<{ conversations: Conversation[] }>(`/tree/conversation?parent_id=${node.id}`);
-        const emptyConv = (data.conversations || []).find(c => !c.message_count || c.message_count === 0);
-        if (emptyConv) {
-          await forceRefreshConvs(node.id);
-          onConversationReady?.(partitionId, emptyConv.id);
-          return;
-        }
-        // 没有空会话，创建新会话
-        const created = await tree<{ conversation: { id: string } }>("/tree/conversation", {
-          method: "POST",
-          body: JSON.stringify({ parent_id: node.id, name: "" }),
-        });
-        await forceRefreshConvs(node.id);
-        onConversationReady?.(partitionId, created.conversation.id);
-        return;
+        topicId = node.id;
+      } else if (node.level === "domain") {
+        topicId = await ensureChild("domain", node.id, "topic");
+      } else {
+        // partition: domain → topic
+        const domainId = await ensureChild("partition", node.id, "domain");
+        topicId = await ensureChild("domain", domainId, "topic");
       }
-      // domain / partition 级：委托给父组件（需要创建 domain→topic 链）
-      onNewConversation?.(node.level, node.id, pid);
+      const convId = await findOrCreateConv(topicId);
+      await forceRefreshConvs(topicId);
+      // 展开节点让用户看到会话
+      setExpandedSet(prev => setAdd(prev, node.id));
+      onConversationReady?.(partitionId, convId);
     } catch (e) {
-      console.warn("sidebar 新建会话失败，回退:", e);
+      console.warn("sidebar 新建会话失败:", e);
+      // 最终回退：委托父组件
       onNewConversation?.(node.level, node.id, pid);
     }
-  }, [forceRefreshConvs, onConversationReady, onNewConversation]);
+  }, [ensureChild, findOrCreateConv, forceRefreshConvs, onConversationReady, onNewConversation]);
 
   // ── 通用 loading 包装 ──
   const withLoading = useCallback(async <T,>(key: string, fn: () => Promise<T>): Promise<T | undefined> => {
