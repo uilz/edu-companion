@@ -378,32 +378,35 @@ def expand_node(
     return {"id": child.id, "label": label, "level": child_level, "path_id": new_path}
 
 
+class CreateNodeRequest(BaseModel):
+    level: str
+    name: str
+    parent_id: str | None = None
+    emoji: str = ""
+    user_id: str = DEFAULT_USER_ID
+
+
 @router.post("/graph/nodes")
-def create_graph_node(
-    level: str,
-    name: str,
-    parent_id: str | None = None,
-    emoji: str = "",
-    user_id: str = DEFAULT_USER_ID,
-) -> dict:
+def create_graph_node(req: CreateNodeRequest) -> dict:
     """创建 partition/domain/topic（统一入口）
 
     内部调 tree_ops，自动同步到对话树 + 认知图谱
     """
+    level, name = req.level, req.name
     if level not in ("partition", "domain", "topic"):
         raise HTTPException(400, f"Unsupported level: {level}")
     try:
         if level == "partition":
-            entity = tree_ops.create_partition(user_id, name, subject=name, emoji=emoji)
+            entity = tree_ops.create_partition(req.user_id, name, subject=name, emoji=req.emoji)
         elif level == "domain":
-            if not parent_id:
+            if not req.parent_id:
                 raise HTTPException(400, "parent_id required for domain")
-            entity = tree_ops.create_domain(user_id, parent_id, name, emoji)
+            entity = tree_ops.create_domain(req.user_id, req.parent_id, name, req.emoji)
         else:  # topic
-            if not parent_id:
+            if not req.parent_id:
                 raise HTTPException(400, "parent_id required for topic")
-            entity = tree_ops.create_topic(user_id, parent_id, name, emoji)
-        return {"node": _entity_to_node(entity, level, user_id), "id": entity.id}
+            entity = tree_ops.create_topic(req.user_id, req.parent_id, name, req.emoji)
+        return {"node": _entity_to_node(entity, level, req.user_id), "id": entity.id}
     except ValueError as e:
         raise HTTPException(404, str(e))
     except HTTPException:
@@ -413,26 +416,30 @@ def create_graph_node(
         raise HTTPException(500, "Internal server error")
 
 
+class RenameNodeRequest(BaseModel):
+    name: str
+    user_id: str = DEFAULT_USER_ID
+
+
 @router.patch("/graph/nodes/{node_id}")
 def rename_graph_node(
     node_id: str,
-    name: str,
-    user_id: str = DEFAULT_USER_ID,
+    req: RenameNodeRequest,
 ) -> dict:
     """重命名 partition/domain/topic（统一入口）
 
     内部调 tree_ops，自动同步到认知图谱 label
     """
-    data = storage.load(user_id)
+    data = storage.load(req.user_id)
     if node_id in data.partitions:
-        entity = tree_ops.rename_partition(user_id, node_id, name)
-        return {"node": _entity_to_node(entity, "partition", user_id)}
+        entity = tree_ops.rename_partition(req.user_id, node_id, req.name)
+        return {"node": _entity_to_node(entity, "partition", req.user_id)}
     elif node_id in data.domains:
-        entity = tree_ops.rename_domain(user_id, node_id, name)
-        return {"node": _entity_to_node(entity, "domain", user_id)}
+        entity = tree_ops.rename_domain(req.user_id, node_id, req.name)
+        return {"node": _entity_to_node(entity, "domain", req.user_id)}
     elif node_id in data.topics:
-        entity = tree_ops.rename_topic(user_id, node_id, name)
-        return {"node": _entity_to_node(entity, "topic", user_id)}
+        entity = tree_ops.rename_topic(req.user_id, node_id, req.name)
+        return {"node": _entity_to_node(entity, "topic", req.user_id)}
     raise HTTPException(404, f"Node {node_id} not found")
 
 
