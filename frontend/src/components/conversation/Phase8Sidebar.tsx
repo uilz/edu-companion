@@ -261,7 +261,6 @@ export default function Phase8Sidebar({
         const node: GraphNode | undefined = depth === 0
           ? rootNodes.find(n => n.id === nodeId)
           : undefined;
-        // 从 childMap 的父级查找节点信息
         if (node) {
           await loadChildren(node);
         } else {
@@ -273,17 +272,17 @@ export default function Phase8Sidebar({
         }
       }
 
-      // 加载该层级的会话（仅 topic 级）
-      if (depth >= 2) { // partition=0, domain=1, topic=2+
+      // 加载该层级的会话（仅 topic 级，通过节点 level 判断而非 depth）
+      const nodeInfo = (childMapRef.current.get(ROOT_KEY) || []).find((n: GraphNode) => n.id === nodeId)
+        || Array.from(childMapRef.current.values()).flat().find((n: GraphNode) => n.id === nodeId);
+      if (nodeInfo?.level === "topic") {
         loadConversations(nodeId);
       }
 
-      // 递归展开子节点
+      // 递归展开子节点（不过滤 is_visible，确保目标路径可达）
       const children = childMapRef.current.get(nodeId) || [];
       for (const child of children) {
-        if (child.is_visible) {
-          await expandLevel(child.id, depth + 1);
-        }
+        await expandLevel(child.id, depth + 1);
       }
     };
 
@@ -358,10 +357,6 @@ export default function Phase8Sidebar({
           }}
           onClick={() => {
             toggleExpand(node);
-            // topic 节点视为可对话
-            if (node.level === "topic") {
-              onNewConversation?.(node.level, node.id, currentPartitionId);
-            }
           }}
         >
           {/* 展开图标 */}
@@ -391,8 +386,27 @@ export default function Phase8Sidebar({
             </span>
           )}
 
-          {/* 悬浮按钮 */}
-          <div className="flex items-center gap-0.5 ml-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+          {/* 操作按钮 */}
+          <div className="flex items-center gap-0.5 ml-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity max-md:opacity-100">
+            {/* 新建子级：partition→domain, domain→topic */}
+            {(node.level === "partition" || node.level === "domain") && (
+              <button onClick={async (e) => {
+                e.stopPropagation();
+                const childLevel = node.level === "partition" ? "domain" : "topic";
+                const childName = childLevel === "domain" ? "新领域" : "新专题";
+                try {
+                  await treeFetch(`/tree/${childLevel}`, {
+                    method: "POST",
+                    body: JSON.stringify({ parent_id: node.id, name: childName, emoji: childLevel === "domain" ? "📚" : "📝" }),
+                  });
+                  // 刷新子节点
+                  await loadChildren(node);
+                  setExpandedSet(prev => { const next = new Set(prev); next.add(node.id); return next; });
+                  onTreeChanged?.();
+                } catch { /* 忽略 */ }
+              }}
+                className="p-1 text-[var(--color-text-muted)] hover:text-green-400" title={`新建${node.level === "partition" ? "领域" : "专题"}`}><Plus size={11} /></button>
+            )}
             <button onClick={(e) => { e.stopPropagation(); onNewConversation?.(node.level, node.id, currentPartitionId); }}
               className="p-1 text-[var(--color-text-muted)] hover:text-green-400" title="新建会话"><MessageSquare size={11} /></button>
             <button onClick={(e) => { e.stopPropagation(); setEditingId(node.id); setEditValue(node.label); }}
