@@ -435,13 +435,23 @@ class Classifier:
 
         topic_id = existing_topic.id if existing_topic else None
 
-        # 5. 确认活跃对话
+        # 5. 确认活跃对话（含兜底）
         data = storage.load(user_id)
         conversation_id = ""
         if topic_id:
             topic = data.topics.get(topic_id)
             if topic and topic.active_conversation_id:
                 conversation_id = topic.active_conversation_id
+            # 兜底：active_conversation_id 为空时，查找 topic 下任意已有对话
+            if not conversation_id and topic_id:
+                for conv in data.conversations.values():
+                    if conv.topic_id == topic_id and conv.is_active:
+                        conversation_id = conv.id
+                        break
+            # 兜底：topic 下无任何对话，自动创建一个
+            if not conversation_id and topic_id:
+                new_conv = tree_ops.create_conversation(user_id, topic_id)
+                conversation_id = new_conv.id
 
         # 6. 判断是否推荐切换
         should_recommend_switch = False
@@ -463,16 +473,23 @@ class Classifier:
                 "reason": "消息内容属于不同专题",
             }
 
+        # 获取 partition_name
+        partition_name = ""
+        if partition_id:
+            partition = data.partitions.get(partition_id)
+            if partition:
+                partition_name = partition.name
+
         return {
             "partition_id": partition_id,
             "conversation_id": conversation_id,
             "domain_name": domain_name,
             "topic_name": topic_name,
+            "partition_name": partition_name,
             "should_recommend_switch": should_recommend_switch,
             "switch_detail": switch_detail,
             "confidence": full.get("confidence", 0.0),
         }
-
 
 # 全局单例
 classifier = Classifier()

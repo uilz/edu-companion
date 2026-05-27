@@ -11,6 +11,7 @@ export type WSCallbacks = {
   onContextSwitch: (data: {
     partition_id: string; conversation_id: string;
     domain_name: string; topic_name: string;
+    full_path?: string;
     switch_detail: Record<string, string>;
   }) => void;
   onConnect?: () => void;

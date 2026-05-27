@@ -22,6 +22,7 @@ export interface UseConversationReturn {
   switchBanner: {
     partitionId: string; conversationId: string;
     domainName: string; topicName: string;
+    fullPath: string;
   } | null;
   showPartitionSidebar: boolean;
   sidebarCollapsed: boolean;
@@ -127,6 +128,7 @@ export function useConversation(): UseConversationReturn {
   const [switchBanner, setSwitchBanner] = useState<{
     partitionId: string; conversationId: string;
     domainName: string; topicName: string;
+    fullPath: string;
   } | null>(null);
   const [showPartitionSidebar, setShowPartitionSidebar] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -468,6 +470,7 @@ export function useConversation(): UseConversationReturn {
           conversationId: data.conversation_id,
           domainName: data.domain_name || "",
           topicName: data.topic_name || "",
+          fullPath: data.full_path || "",
         });
       },
       onConnect: () => setWsConnected(true),
@@ -618,9 +621,16 @@ export function useConversation(): UseConversationReturn {
     if (switchBanner) {
       await loadPartitions();
       setSelectedPartitionId(switchBanner.partitionId);
-      setActiveConversationId(switchBanner.conversationId);
+      setActiveConversationId(switchBanner.conversationId || null);
+      setMessages([]);
+      setResponseBlocks([]);
       setConvError(null);
       setSwitchBanner(null);
+      if (switchBanner.conversationId) {
+        setTimeout(() => {
+          loadMessagesRef.current?.(switchBanner.conversationId);
+        }, 100);
+      }
     }
   }, [switchBanner, loadPartitions]);
 

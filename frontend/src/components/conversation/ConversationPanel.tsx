@@ -76,10 +76,11 @@ function NewPartitionDialog({
  * - onSwitch: 用户点击"切换"后的回调；onDismiss: 点击"留在此处"的回调
  */
 function SwitchBanner({
-  domainName, topicName, onSwitch, onDismiss,
+  domainName, topicName, fullPath, onSwitch, onDismiss,
 }: {
   domainName: string;
   topicName: string;
+  fullPath: string;
   onSwitch: () => void;
   onDismiss: () => void;
 }) {
@@ -89,7 +90,7 @@ function SwitchBanner({
         <span className="text-lg">🔀</span>
         <div className="flex-1 min-w-0">
           <p className="text-sm text-[var(--color-text)] leading-relaxed">
-            检测到你在聊 <strong>{domainName}{topicName ? ` → ${topicName}` : ""}</strong>，要切换到对应会话吗？
+            检测到你在聊 <strong>{fullPath || `${domainName}${topicName ? ` → ${topicName}` : ""}`}</strong>，要切换到对应会话吗？
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -213,6 +214,7 @@ export default function ConversationPanel(props: UseConversationReturn) {
             <SwitchBanner
               domainName={switchBanner.domainName}
               topicName={switchBanner.topicName}
+              fullPath={switchBanner.fullPath}
               onSwitch={handleSwitchConfirm}
               onDismiss={handleSwitchDismiss}
             />
@@ -380,6 +382,7 @@ export default function ConversationPanel(props: UseConversationReturn) {
           <SwitchBanner
             domainName={switchBanner.domainName}
             topicName={switchBanner.topicName}
+            fullPath={switchBanner.fullPath}
             onSwitch={handleSwitchConfirm}
             onDismiss={handleSwitchDismiss}
           />

@@ -691,6 +691,12 @@ async def send_and_reply_stream(
 
     # 检测到切换 → 发出推荐事件（前端展示切换提示）
     if route["should_recommend_switch"]:
+        partition_name = route.get("partition_name", "") or route.get("domain_name", "")
+        domain_name_val = route.get("domain_name", "")
+        topic_name_val = route.get("topic_name", "")
+        parts = [p for p in [partition_name, domain_name_val, topic_name_val] if p]
+        full_path = " > ".join(parts)
+
         yield {
             "type": "context_switch",
             "switch_detail": route["switch_detail"],
@@ -698,6 +704,7 @@ async def send_and_reply_stream(
             "conversation_id": resolved_conversation_id,
             "domain_name": route.get("domain_name", ""),
             "topic_name": route.get("topic_name", ""),
+            "full_path": full_path,
         }
 
     # 更新为解析后的 partition_id
