@@ -11,7 +11,11 @@
 #### Bug 修复
 - **context_builder.py:299** — `data` 变量 NameError 风险修复，添加 fallback 重新加载
 - **conversation_llm.py** — 6 处 `asyncio.get_event_loop()` → `asyncio.get_running_loop()`（Python 3.10+ 兼容）
-- **context_builder.py** — 5 处 `except Exception: pass` 添加 `logger.debug` 日志
+- **context_builder.py** — 9 处 `except Exception: pass` 添加 `logger.debug` 日志
+- **ResponseBlockRenderer.tsx** — PracticeBlock 交互化：选项可点击、提交后显示答案
+- **tool_executor.py** — Mindmap 从知识图谱获取真实子主题 + LLM fallback
+- **conversation_llm.py** — 流式探测消除双 LLM 调用，无工具时直接输出
+- **conversation_llm.py** — docstring SharedKnowledgeState → CognitiveNode
 
 #### 对话系统审计
 - 完成 15 个核心文件全面审计，识别 3 个 Critical + 6 个 High + 8 个 Medium 问题
