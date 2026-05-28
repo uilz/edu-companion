@@ -912,10 +912,11 @@ async def send_and_reply_stream(
         for block in response_blocks:
             yield {"type": "tool_block", "block": block.model_dump(mode="json")}
 
-    # 2b. LLM function-calling fallback（regex 未命中时）
-    llm_probe_reply = ""  # 若 LLM probe 直接返回文本（无 tool_calls），存于此处
+    # 2b. LLM function-calling 流式探测（regex 未命中时）
+    # 流式调用：无工具时直接输出，有工具时执行后二次调用
+    llm_probe_reply = ""
+    probe_had_tools = False
     if not detected_tools and not extra_tool_context:
-        # 构建上下文用于 LLM 探测
         probe_recent = []
         if conversation:
             for nid in conversation.path[-8:]:
@@ -927,20 +928,29 @@ async def send_and_reply_stream(
         )
         tools = tool_executor.get_tools_for_llm()
         try:
-            probe_result = await llm_service.generate(
+            # 流式探测：同时支持 tool_calls 和文本输出
+            probe_accumulated = ""
+            probe_tool_calls_raw: dict[int, dict] = {}  # index -> {id, name, arguments}
+            async for chunk in llm_service.generate_stream(
                 messages=probe_messages,
                 task_type="chat",
                 temperature=0.7,
                 max_tokens=2048,
                 tools=tools,
-            )
+            ):
+                probe_accumulated += chunk
+                # 如果有文本内容且未检测到工具调用，直接 yield
+                if not probe_had_tools:
+                    yield {"type": "token", "content": chunk}
         except Exception as e:
             logger.error("LLM function-calling probe failed: %s", e)
-            probe_result = ""
+            probe_accumulated = ""
 
-        probe_tool_calls = _parse_tool_calls_response(probe_result)
+        # 检查探测结果中是否有 tool_calls
+        probe_tool_calls = _parse_tool_calls_response(probe_accumulated)
         if probe_tool_calls:
-            # LLM 自主决定调用工具
+            probe_had_tools = True
+            llm_probe_reply = ""  # 清空，工具执行后会二次调用
             logger.info(
                 "Streaming LLM requested tool_calls: %s",
                 [tc["function"]["name"] for tc in probe_tool_calls],
@@ -979,12 +989,11 @@ async def send_and_reply_stream(
             if tool_results:
                 extra_tool_context = _build_tool_context(tool_results)
 
-            # yield 工具块
             for block in response_blocks:
                 yield {"type": "tool_block", "block": block.model_dump(mode="json")}
         else:
-            # LLM 直接返回文本（无需工具）→ 保存以跳过第二次 LLM 调用
-            llm_probe_reply = probe_result
+            # 无工具调用 → 流式文本已直接 yield，无需二次调用
+            llm_probe_reply = probe_accumulated
 
     # 3. 流式生成回复（LLM 现在能看到工具执行结果）
     # 先创建空助手节点（后续增量覆写，刷新不丢）
@@ -1005,16 +1014,8 @@ async def send_and_reply_stream(
         socratic_count = _meta_sq.get('socratic_question_count', 0)
     try:
         if llm_probe_reply:
-            # LLM probe 已返回文本（无 tool_calls）→ 模拟流式输出
-            chunk_size = 4
-            for i in range(0, len(llm_probe_reply), chunk_size):
-                chunk = llm_probe_reply[i:i + chunk_size]
-                full_reply += chunk
-                token_since_save += 1
-                yield {"type": "token", "content": chunk}
-                if token_since_save >= 20:
-                    tree_ops.update_message_content(user_id, asst_node_id, full_reply)
-                    token_since_save = 0
+            # 流式探测已直接 yield 文本 → 直接使用结果，无需二次调用
+            full_reply = llm_probe_reply
         else:
             async for chunk in generate_reply_stream(
                 user_id, partition_id, user_text,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Loader2, FileText, Image, GitBranch as MindMap, BookOpen, Volume2 } from "lucide-react";
 import MathContent from "@/components/ui/MathContent";
 import InlinePracticeBlock from "./InlinePracticeBlock";
@@ -206,6 +206,9 @@ function PracticeBlock({ content }: { content: Record<string, unknown> }) {
   const answer = (content.answer as string) || "";
   const explanation = (content.explanation as string) || "";
 
+  const [selectedAnswer, setSelectedAnswer] = useState<string>("");
+  const [submitted, setSubmitted] = useState(false);
+
   const questionHtml = useRenderedContent(question);
 
   const explanationHtml = useRenderedContent(explanation);
@@ -226,37 +229,66 @@ function PracticeBlock({ content }: { content: Record<string, unknown> }) {
         {options.length > 0 && (
           <div className="mt-3 space-y-1.5">
             {options.map((opt, i) => {
-              const letter = String.fromCharCode(65 + i);  // A, B, C, D...
-              const isCorrect = opt === answer || letter === answer;  // 判断该选项是否为正确答案
+              const letter = String.fromCharCode(65 + i);
+              const isCorrect = opt === answer || letter === answer;
+              const isSelected = selectedAnswer === letter;
               return (
-                <div
+                <button
                   key={i}
-                  className="flex items-start gap-2 text-sm px-3 py-2 border border-[var(--color-border)]"
+                  onClick={() => !submitted && setSelectedAnswer(letter)}
+                  className="w-full flex items-start gap-2 text-sm px-3 py-2 border transition-colors text-left"
                   style={{
-                    backgroundColor: isCorrect
+                    backgroundColor: submitted && isCorrect
                       ? "var(--color-success)/10"
-                      : "transparent",
-                    borderColor: isCorrect
+                      : isSelected
+                        ? "rgba(0, 102, 255, 0.08)"
+                        : "transparent",
+                    borderColor: submitted && isCorrect
                       ? "var(--color-success)"
-                      : "var(--color-border)",
+                      : isSelected
+                        ? "var(--color-accent)"
+                        : "var(--color-border)",
                   }}
                 >
-                  <span className="text-[var(--color-text-muted)] font-mono text-xs">
+                  <span className="text-[var(--color-text-muted)] font-mono text-xs w-5 flex-shrink-0">
                     {letter}.
                   </span>
                   <span className="text-[var(--color-text-secondary)]">{opt}</span>
-                </div>
+                </button>
               );
             })}
           </div>
         )}
-        {explanation && (
+        {options.length > 0 && !submitted && (
+          <button
+            onClick={() => selectedAnswer && setSubmitted(true)}
+            disabled={!selectedAnswer}
+            className="mt-2 px-4 py-2 bg-[var(--color-accent)] text-white text-sm disabled:opacity-30 hover:bg-[var(--color-accent-hover)] transition-colors"
+          >
+            提交答案
+          </button>
+        )}
+        {submitted && (() => {
+          const selectedIdx = selectedAnswer.charCodeAt(0) - 65;
+          const selectedText = options[selectedIdx] || "";
+          const isCorrect = selectedAnswer === answer || selectedText === answer;
+          return (
+            <div className="mt-2 text-sm" style={{
+              color: isCorrect ? "var(--color-success)" : "var(--color-error)"
+            }}>
+              {isCorrect
+                ? "✓ 回答正确!"
+                : `✗ 回答错误，正确答案: ${answer}`}
+            </div>
+          );
+        })()}
+        {submitted && explanation && (
           <div className="mt-3 px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)]">
             <div className="text-[10px] text-[var(--color-accent)] font-medium mb-1">
               解析
             </div>
             <div className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
-              {explanation}
+              {explanationHtml || explanation}
             </div>
           </div>
         )}

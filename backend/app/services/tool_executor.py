@@ -245,17 +245,68 @@ async def _handle_generate_image(params: dict) -> dict:
 
 
 async def _handle_generate_mindmap(params: dict) -> dict:
-    """生成思维导图 — Phase 5 MVP: 返回脑图描述（前端渲染）"""
+    """生成思维导图 — 从知识图谱获取真实子主题，fallback 到 LLM 生成"""
     topic = params.get("topic", "")
     depth = params.get("depth", 3)
+    user_id = params.get("user_id", "")
+    partition_id = params.get("partition_id", "")
 
-    # 简单生成脑图结构描述
     nodes = [{"id": "root", "label": topic, "level": 0}]
     edges = []
 
-    # 生成子节点（占位）
-    subtopics = ["定义", "核心概念", "应用", "练习"]
-    for i, st in enumerate(subtopics[:depth]):
+    # 尝试从知识图谱获取相关知识点
+    subtopics = []
+    if user_id and partition_id:
+        try:
+            from app.services.storage import storage as _mm_storage
+            _data = _mm_storage.load(user_id)
+            graph = _data.knowledge_graphs.get(partition_id)
+            if graph and graph.nodes:
+                # 找与 topic 相关的知识点
+                topic_lower = topic.lower()
+                for n in graph.nodes.values():
+                    if not n.is_deleted and (
+                        topic_lower in n.label.lower()
+                        or n.label.lower() in topic_lower
+                        or any(topic_lower in s.lower() for s in getattr(n, "tags", []) or [])
+                    ):
+                        subtopics.append(n.label)
+                # 如果匹配不够，补充 mastery 最低的薄弱知识点
+                if len(subtopics) < depth:
+                    weak = sorted(
+                        [n for n in graph.nodes.values() if not n.is_deleted and n.label not in subtopics],
+                        key=lambda n: n.mastery,
+                    )
+                    for n in weak:
+                        if len(subtopics) >= depth * 2:
+                            break
+                        subtopics.append(n.label)
+        except Exception as e:
+            logger.debug(f"知识图谱子主题获取失败: {e}")
+
+    # fallback: 用 LLM 生成子主题
+    if len(subtopics) < 2:
+        try:
+            from app.services.llm_service import llm_service
+            resp = await llm_service.generate(
+                messages=[
+                    {"role": "system", "content": "你是教育专家。给定主题，输出3-6个核心子主题，每行一个，不要编号。"},
+                    {"role": "user", "content": f"主题: {topic}"},
+                ],
+                task_type="chat",
+                temperature=0.5,
+                max_tokens=200,
+            )
+            llm_topics = [line.strip().lstrip("0123456789.-、）) ") for line in resp.strip().split("\n") if line.strip()]
+            subtopics = llm_topics[:depth * 2] if llm_topics else subtopics
+        except Exception as e:
+            logger.debug(f"LLM 子主题生成失败: {e}")
+
+    # 最终 fallback
+    if not subtopics:
+        subtopics = ["定义", "核心概念", "应用", "练习"]
+
+    for i, st in enumerate(subtopics[:depth * 2]):
         node_id = f"node_{i}"
         nodes.append({"id": node_id, "label": st, "level": 1})
         edges.append({"from": "root", "to": node_id})
