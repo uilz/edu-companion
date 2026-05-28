@@ -20,14 +20,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.chat import router as chat_router
 from app.api.study import router as study_router
 from app.api.practice import router as practice_router
-from app.api.practice_errors import router as practice_errors_router
-from app.api.practice_analytics import router as practice_analytics_router
-from app.api.practice_quality import router as practice_quality_router
 from app.api.progress import router as progress_router
 from app.api.conversation import router as conversation_router
 from app.api.material import router as material_router
 from app.api.knowledge import router as knowledge_router
-from app.api.knowledge_graph import router as knowledge_graph_router
 from app.api.partition_progress import router as partition_progress_router
 from app.api.multimodal import router as multimodal_router
 from app.api.achievements import router as achievements_router
@@ -152,10 +148,6 @@ app.include_router(chat_router)
 app.include_router(study_router)
 # 练习题
 app.include_router(practice_router)
-# 练习子模块 (Phase 4D 拆分)
-app.include_router(practice_errors_router)
-app.include_router(practice_analytics_router)
-app.include_router(practice_quality_router)
 # 学习进度
 app.include_router(progress_router)
 # 对话系统（树结构）
@@ -163,7 +155,6 @@ app.include_router(conversation_router, prefix="/api/conversations", tags=["conv
 app.include_router(material_router)
 # 知识图谱 + 前置卡控
 app.include_router(knowledge_router)
-app.include_router(knowledge_graph_router)
 # 学习画像 (v3.0 PartitionProgress)
 app.include_router(partition_progress_router)
 # 多模态（STT 转写）
