@@ -1,7 +1,10 @@
 """
-Agent 编排器（Orchestrator）
-根据用户意图和情绪，选择最合适的Agent来处理请求
-这是整个系统的"大脑"，协调各组件协同工作
+⚠️ DEPRECATED — 旧版 Agent 编排器
+
+此模块已被 conversation_llm.py 的 LLM function-calling 替代。
+仅保留供 /api/agents 静态返回使用，不参与实际对话处理。
+
+待移除：orchestrator.py + agents/ 目录
 """
 
 from __future__ import annotations

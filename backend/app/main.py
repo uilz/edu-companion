@@ -16,7 +16,7 @@ from typing import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.chat import router as chat_router
+# chat.py 已删除 — WS 端点在 conversation.py (/ws), WS 管理器在 ws_manager.py
 from app.api.study import router as study_router
 from app.api.practice import router as practice_router
 from app.api.progress import router as progress_router
@@ -70,10 +70,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Phase 5: 注入领域事件总线到 Orchestrator（多媒体生成触发）
     from app.application.di import container
-    from app.core.orchestrator import orchestrator
-    from app.api.chat import manager as ws_manager
-    orchestrator._bus = container.event_bus
-    logger.info("🎬 Orchestrator 已注入 EventBus (Phase 5)")
+    from app.api.ws_manager import manager as ws_manager
 
     # Phase 5: 注入 WebSocket 管理器到 ConversationService（block_update 推送）
     container.conversation_service.set_ws_manager(ws_manager)
@@ -142,7 +139,7 @@ app.add_middleware(
 
 # ── 注册路由 ──
 # WebSocket 和 HTTP 聊天
-app.include_router(chat_router)
+# chat_router 已删除 — WS 端点在 conversation.py
 # 学习计划
 app.include_router(study_router)
 # 练习题
@@ -195,11 +192,9 @@ async def root() -> dict[str, str]:
 
 @app.get("/api/agents", tags=["系统"])
 async def list_agents() -> list[dict[str, str]]:
-    """
-    列出所有可用的智能体
-
-    返回:
-        Agent列表及其描述
-    """
-    from app.core.orchestrator import orchestrator
-    return orchestrator.get_available_agents()
+    """列出所有可用的智能体"""
+    return [
+        {"name": "tutor", "description": "AI导师 — 解答问题、讲解知识、引导思考"},
+        {"name": "coach", "description": "学习教练 — 制定计划、追踪进度、习惯养成"},
+        {"name": "secretary", "description": "学习秘书 — 分析学情、主动提醒、任务管理"},
+    ]
