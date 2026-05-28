@@ -21,7 +21,7 @@
 
 ---
 
-## 二、已修复的关键问题
+## 二、已修复的问题
 
 ### 本次修复 (2026-05-28)
 
@@ -30,6 +30,11 @@
 | 1 | 🔴 Critical | `context_builder.py:299` | `data` 变量可能未定义(NameError) | 添加 fallback 重新加载 |
 | 2 | 🟡 High | `conversation_llm.py` (6处) | `asyncio.get_event_loop()` 已废弃(3.10+) | 替换为 `asyncio.get_running_loop()` |
 | 3 | 🟡 High | `context_builder.py` (5处) | `except Exception: pass` 吞掉所有异常 | 添加 `logger.debug` 记录 |
+| 4 | 🔴 Critical | `ResponseBlockRenderer.tsx` | PracticeBlock 立即显示正确答案 | 添加交互状态，提交后才显示 |
+| 5 | 🔴 Critical | `tool_executor.py:_handle_generate_mindmap` | 硬编码占位符子主题 | 从知识图谱获取+LLM fallback |
+| 6 | 🔴 Critical | `conversation_llm.py` 流式探测 | 双LLM调用（探测+正式） | 流式探测，无工具时直接输出 |
+| 7 | 🟡 High | `conversation_llm.py` (2处) | docstring 引用 SharedKnowledgeState | 改为 CognitiveNode |
+| 8 | 🟡 High | `context_builder.py` (4处) | `except Exception: pass` 无日志 | 添加 `logger.debug` |
 
 ---
 
@@ -39,18 +44,18 @@
 
 | # | 文件 | 问题 | 影响 |
 |---|------|------|------|
-| C1 | `ResponseBlockRenderer.tsx` | `onAnswer` 回调是空函数 `{}` | 练习答题功能完全失效 |
-| C2 | `tool_executor.py:_handle_generate_mindmap()` | 返回硬编码占位符 `["定义","核心概念","应用","练习"]` | 思维导图功能虚假 |
-| C3 | `conversation_llm.py:929-987` | 非工具消息触发双 LLM 调用(探测+正式) | 延迟和成本翻倍 |
+| ~~C1~~ | ~~`ResponseBlockRenderer.tsx`~~ | ~~`onAnswer` 回调是空函数~~ | ✅ 已修复: PracticeBlock 交互化 |
+| ~~C2~~ | ~~`tool_executor.py:_handle_generate_mindmap()`~~ | ~~硬编码占位符~~ | ✅ 已修复: 知识图谱+LLM |
+| ~~C3~~ | ~~`conversation_llm.py:929-987`~~ | ~~双 LLM 调用~~ | ✅ 已修复: 流式探测 |
 
 ### 🟡 High (代码质量/可观测性)
 
 | # | 文件 | 问题 |
 |---|------|------|
-| H1 | `context_builder.py` | 仍有 4 处 `except Exception: pass` 需添加日志 |
+| ~~H1~~ | ~~`context_builder.py`~~ | ~~4 处 `except Exception: pass`~~ | ✅ 已修复: 添加 logger.debug |
 | H2 | `chat.py` | 整个文件是遗留死代码(`/ws-legacy` + 旧 orchestrator) |
 | H3 | `conversation_llm.py` | 流式/非流式路径的工具执行逻辑重复(~150行) |
-| H4 | `conversation_llm.py:601,761` | docstring 仍引用 "SharedKnowledgeState"，应为 CognitiveNode |
+| ~~H4~~ | ~~`conversation_llm.py:601,761`~~ | ~~docstring 引用 SharedKnowledgeState~~ | ✅ 已修复: 改为 CognitiveNode |
 | H5 | `streaming.ts` | 无 WebSocket 心跳/ping 机制，断线检测延迟 30s+ |
 | H6 | `ws.ts:65` | 丢弃 `user_message` 事件，前端不处理服务端确认 |
 
