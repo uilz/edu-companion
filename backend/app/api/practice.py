@@ -232,24 +232,7 @@ async def complete_session(
         except Exception as e:
             logger.warning(f"练习结果写入branch失败: {e}")
 
-    # P0: 同步到统一知识状态
-    try:
-        from app.services.knowledge_bridge import knowledge_bridge
-        planned_skills = session.get("planned_skills", [])
-        correct_skills = [
-            a["skill_id"] for a in db.fetchall(
-                "SELECT DISTINCT skill_id FROM practice_attempts WHERE session_id = %s AND is_correct = true",
-                (session_id,)
-            )
-        ] if db else []
-        await knowledge_bridge.sync_from_practice_session(
-            skills_tested=planned_skills,
-            accuracy=accuracy,
-            correct_skills=correct_skills,
-            struggling_skills=struggling,
-        )
-    except Exception as e:
-        logger.warning(f"同步统一知识状态失败: {e}")
+    # CognitiveNode 已通过 cognitive/events.py 自动更新
 
     # Phase 4C: 发布 SessionCompleted 事件
     try:
@@ -776,16 +759,16 @@ async def get_distractor_analysis(question_id: str):
 
 @router.get("/knowledge/state")
 async def get_knowledge_state():
-    """获取统一知识状态（练习BKT + 对话证据融合）"""
-    from app.services.knowledge_bridge import knowledge_bridge
-    return knowledge_bridge.get_all_skills_summary()
+    """获取统一知识状态"""
+    from app.services.cognitive_queries import get_all_skills_summary
+    return get_all_skills_summary()
 
 
 @router.get("/knowledge/skill/{skill_id}")
 async def get_skill_knowledge(skill_id: str):
     """获取单个技能的详细知识状态"""
-    from app.services.knowledge_bridge import knowledge_bridge
-    detail = knowledge_bridge.get_skill_detail(skill_id)
+    from app.services.cognitive_queries import get_skill_detail
+    detail = get_skill_detail(skill_id)
     if not detail:
         raise HTTPException(status_code=404, detail=f"Skill '{skill_id}' not found in knowledge state")
     return detail
@@ -794,10 +777,10 @@ async def get_skill_knowledge(skill_id: str):
 @router.get("/knowledge/weak")
 async def get_weak_skills(limit: int = 5):
     """获取薄弱技能列表（用于针对性推荐）"""
-    from app.services.knowledge_bridge import knowledge_bridge
+    from app.services.cognitive_queries import get_weak_skills, get_mastered_skills
     return {
-        "weak_skills": knowledge_bridge.get_weak_skills(limit),
-        "mastered_skills": knowledge_bridge.get_mastered_skills(),
+        "weak_skills": get_weak_skills(limit),
+        "mastered_skills": get_mastered_skills(),
     }
 
 
@@ -811,20 +794,25 @@ class EvidenceRequest(BaseModel):
 
 @router.post("/knowledge/evidence")
 async def add_conversation_evidence(req: EvidenceRequest):
-    """手动添加对话知识证据（用于前端或 cron 任务）"""
-    from app.services.knowledge_bridge import knowledge_bridge
-    from app.domain.learning.shared_knowledge import EvidenceType
+    """手动添加对话知识证据（写入 CognitiveNode）"""
+    from app.cognitive.storage import get_node, upsert_node
+    from app.cognitive.models import CognitiveEvent
+    from app.cognitive.storage import append_event
 
-    try:
-        ev_type = EvidenceType(req.evidence_type)
-    except ValueError:
-        raise HTTPException(400, f"Invalid evidence_type: {req.evidence_type}")
+    node = get_node(req.skill_id)
+    if not node:
+        raise HTTPException(404, f"Skill '{req.skill_id}' not found")
 
-    knowledge_bridge.state.add_conversation_evidence(
-        skill_id=req.skill_id,
-        evidence_type=ev_type,
-        confidence=req.confidence,
-        source_text=req.source_text,
-        branch_id=req.branch_id,
+    # 记录证据事件
+    event = CognitiveEvent(
+        event_type="dialogue_evidence",
+        source="manual",
+        target_node_id=req.skill_id,
+        payload={
+            "evidence_type": req.evidence_type,
+            "confidence": req.confidence,
+            "source_text": req.source_text,
+        },
     )
+    append_event(event)
     return {"ok": True, "skill_id": req.skill_id, "evidence_type": req.evidence_type}

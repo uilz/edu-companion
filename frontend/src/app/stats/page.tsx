@@ -23,25 +23,21 @@ interface PracticeStats {
 }
 
 // ──────────────────────────────────────────
-// 单个技能知识状态接口 — 对应 BKT + 对话融合的知识追踪结果
+// 单个技能知识状态接口 — CognitiveNode 知识追踪
 // ──────────────────────────────────────────
 interface SkillState {
   skill_id: string;
-  bkt_p_known: number;
-  bkt_attempt_count: number;
-  conversation_mastery_score: number;
-  unified_mastery: number;
-  overall_confidence: number;
-  evidence_count: number;
-  is_mastered: boolean;
-  is_learning: boolean;
-  is_novice: boolean;
+  label: string;
+  mastery: number;
+  attempts: number;
+  trend: string;
 }
 
 // ──────────────────────────────────────────
 // 知识状态整体数据接口 — skills 为 skill_id → SkillState 的映射
 // ──────────────────────────────────────────
 interface KnowledgeStateData {
+  total_skills: number;
   skills: Record<string, SkillState>;
 }
 
@@ -67,9 +63,11 @@ export default function StatsPage() {
         setStats(statsData.overview || statsData);
         // 如果有知识状态数据，提取 skills 并按 unified_mastery 降序排列
         if (knowledgeData?.skills) {
-          const skills = Object.values(knowledgeData.skills) as SkillState[];
-          // Sort: mastered first, then learning, then novice
-          skills.sort((a, b) => b.unified_mastery - a.unified_mastery);
+          const skills = Object.entries(knowledgeData.skills).map(([id, s]) => ({
+            ...(s as SkillState),
+            skill_id: id,
+          }));
+          skills.sort((a, b) => b.mastery - a.mastery);
           setKnowledge(skills);
         }
         setLoading(false);
@@ -183,36 +181,40 @@ export default function StatsPage() {
           )}
         </div>
 
-        {/* 知识画像（共享知识状态）— BKT 练习数据 + 对话推断融合后的技能掌握情况 */}
+        {/* 知识画像 — CognitiveNode 技能掌握情况 */}
         {knowledge.length > 0 && (
           <div>
             <h2 className="text-lg font-semibold text-[var(--color-text)] mb-4 flex items-center gap-2">
               <MessageCircle size={16} className="text-[var(--color-accent)]" />
-              知识画像 · 练习+对话融合
+              知识画像
             </h2>
             <div className="space-y-2">
               {knowledge.map((sk) => {
-                const masteryPercent = (sk.unified_mastery * 100).toFixed(0);
-                const barColor = sk.is_mastered ? "bg-[#10b981]"
-                  : sk.is_learning ? "bg-[#3b82f6]" : "bg-[var(--color-text-muted)]";
-                const status = sk.is_mastered ? "已掌握"
-                  : sk.is_learning ? "学习中" : "初学";
+                const masteryPercent = (sk.mastery * 100).toFixed(0);
+                const isMastered = sk.mastery >= 0.8;
+                const isLearning = sk.mastery >= 0.4 && sk.mastery < 0.8;
+                const barColor = isMastered ? "bg-[#10b981]"
+                  : isLearning ? "bg-[#3b82f6]" : "bg-[var(--color-text-muted)]";
+                const status = isMastered ? "已掌握"
+                  : isLearning ? "学习中" : "初学";
+                const trendEmoji = sk.trend === "ascending" || sk.trend === "improving" ? "📈"
+                  : sk.trend === "descending" || sk.trend === "volatile" ? "📉" : "";
 
                 return (
                   <div key={sk.skill_id} className="p-3 bg-[var(--color-surface)]">
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-sm font-medium text-[var(--color-text)] truncate flex-1">
-                        {sk.skill_id}
+                        {sk.label || sk.skill_id}
                       </span>
                       <div className="flex items-center gap-2 flex-shrink-0 text-[10px]">
                         <span className={`px-1.5 py-0.5 ${
-                          sk.is_mastered ? "text-[#10b981] bg-[#10b981]/10"
-                          : sk.is_learning ? "text-[#3b82f6] bg-[#3b82f6]/10"
+                          isMastered ? "text-[#10b981] bg-[#10b981]/10"
+                          : isLearning ? "text-[#3b82f6] bg-[#3b82f6]/10"
                           : "text-[var(--color-text-muted)] bg-[var(--color-border)]"
                         }`}>
                           {status}
                         </span>
-                        <span className="text-[var(--color-text-muted)]">统一: {masteryPercent}%</span>
+                        <span className="text-[var(--color-text-muted)]">{masteryPercent}%</span>
                       </div>
                     </div>
                     <div className="w-full h-1.5 bg-[var(--color-border)] mb-1.5">
@@ -222,14 +224,8 @@ export default function StatsPage() {
                       />
                     </div>
                     <div className="flex items-center gap-4 text-[10px] text-[var(--color-text-muted)]">
-                      <span title="BKT练习数据">📝 练习: {(sk.bkt_p_known * 100).toFixed(0)}% · {sk.bkt_attempt_count}次</span>
-                      {sk.evidence_count > 0 && (
-                        <span title="对话推断">
-                          💬 对话证据: {sk.evidence_count}条
-                          {sk.conversation_mastery_score > 0 && ` · +${(sk.conversation_mastery_score * 100).toFixed(0)}%`}
-                        </span>
-                      )}
-                      <span title="综合置信度">🎯 置信度: {(sk.overall_confidence * 100).toFixed(0)}%</span>
+                      <span>📝 练习: {sk.attempts}次</span>
+                      {trendEmoji && <span>{trendEmoji} {sk.trend}</span>}
                     </div>
                   </div>
                 );

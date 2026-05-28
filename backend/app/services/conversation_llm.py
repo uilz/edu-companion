@@ -598,9 +598,9 @@ async def _analyze_conversation_evidence(
     assistant_reply: str,
     conversation_id: str = "",
 ):
-    """分析一轮对话，提取知识证据写入 SharedKnowledgeState"""
+    """分析一轮对话，提取知识证据（通过 CognitiveNode 事件系统）"""
     try:
-        from app.services.knowledge_bridge import knowledge_bridge
+        from app.services.cognitive_queries import analyze_dialogue_evidence
         from app.services.storage import storage as _st
 
         # 从 partition 推断涉及的技能（通过 CognitiveNode 查找实际 node_id）
@@ -621,12 +621,13 @@ async def _analyze_conversation_evidence(
                         skill_ids = [node.id]
 
         if skill_ids:
-            await knowledge_bridge.deep_evidence_analysis(
+            evidence = await analyze_dialogue_evidence(
                 user_text=user_text,
                 assistant_reply=assistant_reply,
                 skill_ids=skill_ids,
-                conversation_id=conversation.id if conversation else "", # type: ignore
             )
+            if evidence:
+                logger.debug(f"对话证据检测: {evidence}")
     except Exception as e:
         logger.debug(f"知识证据分析跳过: {e}")
 
@@ -1077,7 +1078,7 @@ async def send_and_reply_stream(
     # Phase 6: 流式路径 — 对话 → CognitiveNode 联动
     try:
         import asyncio as _cognitive_asyncio2
-_cognitive_asyncio.get_running_loop()
+        loop = _cognitive_asyncio2.get_running_loop()
         if loop.is_running():
             # 从上下文中找 skill_ids
             skill_ids = set()

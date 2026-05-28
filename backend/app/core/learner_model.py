@@ -18,7 +18,6 @@ from app.schemas.learner import (
     KnowledgeState,
     LearnerProfile,
     PracticeQuestion,
-    PracticeResult,
     ProgressSummary,
     StudyPlan,
     StudyPlanItem,
@@ -209,39 +208,6 @@ class LearnerModelEngine:
         profile = self.get_or_create_profile(user_id)
         return profile.get_knowledge_state(skill_id)
 
-    def record_practice(
-        self,
-        user_id: str,
-        skill_id: str,
-        is_correct: bool,
-        time_spent: float = 0.0,
-    ) -> KnowledgeState:
-        """
-        记录一次练习结果并更新知识状态
-
-        参数:
-            user_id: 用户ID
-            skill_id: 知识点ID
-            is_correct: 是否正确
-            time_spent: 花费时间（秒）
-        """
-        profile = self.get_or_create_profile(user_id)
-
-        # 记录活动
-        self._log_activity(user_id, {
-            "type": "practice",
-            "skill_id": skill_id,
-            "is_correct": is_correct,
-            "time_spent": time_spent,
-            "p_known_after": 0.0,
-            "timestamp": datetime.now().isoformat(),
-        })
-
-        logger.info(
-            "练习记录: user=%s skill=%s correct=%s",
-            user_id, skill_id, is_correct,
-        )
-
     # ──────────────────────────────────────────────
     # 学习计划
     # ──────────────────────────────────────────────
@@ -297,79 +263,6 @@ class LearnerModelEngine:
         self._study_plans[user_id] = plan
         logger.info("为用户 %s 生成学习计划，共 %d 项", user_id, len(items))
         return plan
-
-    def get_study_plan(self, user_id: str) -> Optional[StudyPlan]:
-        """获取用户的学习计划"""
-        return self._study_plans.get(user_id)
-
-    # ──────────────────────────────────────────────
-    # 练习题管理
-    # ──────────────────────────────────────────────
-
-    def get_questions(
-        self,
-        subject: Optional[str] = None,
-        skill_id: Optional[str] = None,
-        difficulty: Optional[str] = None,
-        limit: int = 5,
-    ) -> list[PracticeQuestion]:
-        """获取练习题"""
-        all_questions: list[PracticeQuestion] = []
-
-        if subject and subject in self._question_bank:
-            all_questions = self._question_bank[subject]
-        else:
-            for questions in self._question_bank.values():
-                all_questions.extend(questions)
-
-        # 筛选
-        if skill_id:
-            all_questions = [q for q in all_questions if q.skill_id == skill_id]
-        if difficulty:
-            all_questions = [q for q in all_questions if q.difficulty.value == difficulty]
-
-        return all_questions[:limit]
-
-    def submit_answer(
-        self,
-        user_id: str,
-        question_id: str,
-        answer: str,
-        time_spent: float = 0.0,
-    ) -> Optional[PracticeResult]:
-        """提交练习答案"""
-        # 查找题目
-        question = None
-        for questions in self._question_bank.values():
-            for q in questions:
-                if q.question_id == question_id:
-                    question = q
-                    break
-            if question:
-                break
-
-        if not question:
-            logger.warning("题目未找到: %s", question_id)
-            return None
-
-        is_correct = answer.strip() == question.correct_answer.strip()
-
-        # 更新知识状态
-        state = self.record_practice(
-            user_id, question.skill_id, is_correct, time_spent
-        )
-
-        return PracticeResult(
-            question_id=question_id,
-            user_answer=answer,
-            is_correct=is_correct,
-            time_spent_seconds=time_spent,
-            knowledge_update={
-                "skill_id": question.skill_id,
-                "p_known_after": state.p_known,
-                "mastery_level": get_mastery_label(state.p_known, state.attempt_count),
-            },
-        )
 
     # ──────────────────────────────────────────────
     # 进度统计
@@ -432,56 +325,6 @@ class LearnerModelEngine:
         )
 
     # ──────────────────────────────────────────────
-    # 内容搜索
-    # ──────────────────────────────────────────────
-
-    def search_content(
-        self,
-        query: str,
-        subject: Optional[str] = None,
-        content_type: Optional[str] = None,
-        limit: int = 10,
-    ) -> list[ContentItem]:
-        """搜索学习内容"""
-        results: list[ContentItem] = []
-
-        all_content: list[ContentItem] = []
-        if subject and subject in self._content_store:
-            all_content = self._content_store[subject]
-        else:
-            for items in self._content_store.values():
-                all_content.extend(items)
-
-        # 简单的关键词匹配（MVP）
-        query_lower = query.lower()
-        for item in all_content:
-            score = 0.0
-            # 标题匹配
-            if query_lower in item.title.lower():
-                score += 0.5
-            # 描述匹配
-            if query_lower in item.description.lower():
-                score += 0.3
-            # 标签匹配
-            for tag in item.tags:
-                if query_lower in tag.lower():
-                    score += 0.2
-
-            if score > 0:
-                item_copy = item.model_copy()
-                item_copy.relevance_score = score
-                results.append(item_copy)
-
-        # 按相关性排序
-        results.sort(key=lambda x: x.relevance_score, reverse=True)
-
-        # 如果没有匹配结果，返回该科目的所有内容
-        if not results and subject and subject in self._content_store:
-            results = self._content_store[subject][:limit]
-
-        return results[:limit]
-
-    # ──────────────────────────────────────────────
     # 会话管理
     # ──────────────────────────────────────────────
 
@@ -496,26 +339,6 @@ class LearnerModelEngine:
         }
         logger.info("创建会话: %s (用户: %s)", session_id, user_id)
         return session_id
-
-    def get_session(self, session_id: str) -> Optional[dict[str, Any]]:
-        """获取会话信息"""
-        return self._sessions.get(session_id)
-
-    def add_message_to_session(
-        self, session_id: str, role: str, content: str
-    ) -> None:
-        """向会话添加消息"""
-        session = self._sessions.get(session_id)
-        if session:
-            session["messages"].append({
-                "role": role,
-                "content": content,
-                "timestamp": datetime.now().isoformat(),
-            })
-            # 限制历史消息数量
-            max_messages = settings.max_history_messages
-            if len(session["messages"]) > max_messages:
-                session["messages"] = session["messages"][-max_messages:]
 
     def clean_expired_sessions(self) -> int:
         """清理过期会话"""

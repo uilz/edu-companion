@@ -67,9 +67,9 @@ def _build_context_messages(
 
     # ── 3. Global knowledge state ──
     try:
-        from app.services.knowledge_bridge import knowledge_bridge
-
-        knowledge_ctx = knowledge_bridge.get_knowledge_context(user_id)
+        from app.services.cognitive_queries import get_knowledge_context
+        
+        knowledge_ctx = get_knowledge_context(user_id)
         if knowledge_ctx:
             system_content += f"\n\n{knowledge_ctx}"
     except Exception:
