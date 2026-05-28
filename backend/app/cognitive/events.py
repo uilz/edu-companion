@@ -174,12 +174,19 @@ def handle_practice_response(event: CognitiveEvent) -> dict[str, Any]:
     else:
         mean_lat = latency_ms
 
+    correct_attempts = node.practice_summary.correct_attempts + (1 if success else 0)
+    total_time_spent = node.practice_summary.total_time_spent + latency_ms / 1000.0
+    last_practiced = now
+
     new_summary = PracticeSummary(
         total_attempts=total,
+        correct_attempts=correct_attempts,
+        total_time_spent=total_time_spent,
         recent_success_rate_7d=success_rate,
         mean_latency_7d=mean_lat,
         decayed_event_count=decayed_count,
         rapid_relearn_cooldown_until=node.practice_summary.rapid_relearn_cooldown_until,
+        last_practiced=last_practiced,
     )
 
     # ─── 7. 趋势 ───

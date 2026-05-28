@@ -17,7 +17,7 @@ from app.schemas.practice import (
     Question,
     AnswerType,
 )
-from app.services.shared_ks import shared_ks
+# CognitiveNode replaces shared_ks for practice state
 from app.services.llm_service import llm_service
 
 logger = logging.getLogger(__name__)
@@ -145,26 +145,30 @@ class InlinePracticeHandler:
 
         is_correct = self._check_answer(question, student_answer)
 
-        # 更新共享知识状态
-        ks = shared_ks.update_from_practice(
-            user_id=user_id,
-            skill_id=skill_id,
-            is_correct=is_correct,
-            hint_level=hints_used,
-        )
+        # ── Read p_before from CognitiveNode ──
+        p_before = 0.5
+        try:
+            from app.cognitive.storage import get_node
+            _node = get_node(skill_id, user_id)
+            if _node and _node.belief:
+                p_before = _node.belief.proficiency_mean
+        except Exception:
+            pass
 
         # ── Phase D1+D2: CognitiveNode update + events + error_book ──
         try:
             # 1. CognitiveNode 更新
             from app.cognitive.events import submit_practice
-            p_before = ks.p_known if ks else 0.5
             submit_practice(
                 user_id=user_id,
                 node_id=skill_id,
                 success=is_correct,
                 latency_ms=0,
             )
-            p_after = ks.p_known if ks else 0.5
+            # Re-read p_after from CognitiveNode after update
+            from app.cognitive.storage import get_node
+            _updated = get_node(skill_id, user_id)
+            p_after = _updated.belief.proficiency_mean if _updated and _updated.belief else p_before
         except Exception as exc:
             logger.warning("inline_practice: CognitiveNode update failed: %s", exc)
             p_before = p_before if 'p_before' in dir() else 0.5
@@ -258,7 +262,7 @@ class InlinePracticeHandler:
             "reply_text": reply,
             "knowledge_update": {
                 "skill_id": skill_id,
-                "p_known": ks.p_known if ks else 0,
+                "p_known": p_after,
             },
             "recommendation": None,
         }

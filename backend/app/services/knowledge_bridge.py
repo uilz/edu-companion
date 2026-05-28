@@ -202,27 +202,11 @@ class KnowledgeBridge:
             correct_skills: 答对了哪些技能
             struggling_skills: 薄弱技能
         """
-        for skill_id in skills_tested:
-            if skill_id in correct_skills:
-                # 答对 → p_known +=
-                current = self.state.get_skill(skill_id)
-                old_mastery = current.unified_mastery if current else 0.0
-                new_mastery = old_mastery + (1.0 - old_mastery) * 0.15 * accuracy
-                self.state.update_from_practice(
-                    skill_id, new_mastery, confidence=0.6, attempt_count=1,
-                )
-            elif skill_id in struggling_skills:
-                # 薄弱 → p_known -=
-                current = self.state.get_skill(skill_id)
-                old_mastery = current.unified_mastery if current else 0.5
-                new_mastery = old_mastery * 0.85
-                self.state.update_from_practice(
-                    skill_id, new_mastery, confidence=0.4, attempt_count=1,
-                )
-
+        # No-op: CognitiveNode now receives updates via cognitive/events.py
+        # Kept for backward compatibility
         logger.info(
-            f"KnowledgeBridge: synced {len(skills_tested)} skills from practice "
-            f"(correct={len(correct_skills)}, weak={len(struggling_skills)})"
+            f"KnowledgeBridge: sync_from_practice_session skipped (CognitiveNode handles updates). "
+            f"skills_tested={len(skills_tested)}, correct={len(correct_skills)}, weak={len(struggling_skills)}"
         )
 
     # ── Conversation → Shared State ──

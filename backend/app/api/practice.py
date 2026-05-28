@@ -345,15 +345,26 @@ async def inline_answer(req: InlineAnswerRequest):
     # 更新知识状态
     if skill_id:
         state = get_cognitive_state(DEFAULT_USER_ID, skill_id)
+        p_before = state.p_known
         # CognitiveNode
         try:
             from app.cognitive.events import submit_practice
             submit_practice(user_id=DEFAULT_USER_ID, node_id=skill_id, success=is_correct, latency_ms=0, consecutive=True)
         except Exception:
             pass
+        # Re-read p_after from CognitiveNode after update
+        p_after = p_before
+        try:
+            from app.cognitive.storage import get_node as _get_node
+            _updated = _get_node(skill_id, DEFAULT_USER_ID)
+            if _updated and _updated.belief:
+                p_after = _updated.belief.proficiency_mean
+        except Exception:
+            pass
         knowledge_update = {
             "skill_id": skill_id,
-            "p_known_before": state.p_known,
+            "p_known_before": p_before,
+            "p_known_after": p_after,
             "mastery_level": bkt_engine.get_mastery_level(state),
             "cognitive_proficiency": _get_cognitive_proficiency(DEFAULT_USER_ID, skill_id),
         }
