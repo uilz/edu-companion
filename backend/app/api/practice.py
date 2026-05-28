@@ -651,7 +651,7 @@ class InlineHintRequest(BaseModel):
     block_id: str
 
 
-@router.post("/inline/answer", deprecated=True)
+@router.post("/inline/answer")
 async def inline_answer(req: InlineAnswerRequest):
     """对话内联练习 — 提交答案，读取 response_block 内容校验"""
     from app.services.storage import storage
