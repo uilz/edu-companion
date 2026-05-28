@@ -86,3 +86,4 @@ backend/models/*
 # Jupyter
 .ipynb_checkpoints/
 tsconfig.tsbuildinfo
+design.md
