@@ -100,9 +100,7 @@ class PgStorageEngine:
         topics = {}
         files = {}
         background_jobs = {}
-        # DEPRECATED: knowledge_states now lives in CognitiveNode (Phase A1)
-        # Retained as empty dict for UserData schema compatibility
-        knowledge_states = {}
+
         practice_sessions = {}
         error_book = {}
         event_log = []
@@ -132,8 +130,7 @@ class PgStorageEngine:
             if isinstance(raw_jobs, dict):
                 background_jobs = {k: BackgroundJob(**v) for k, v in raw_jobs.items() if isinstance(v, dict)}
 
-            # DEPRECATED (Phase A1): knowledge_states now lives in CognitiveNode
-            # knowledge_states = self._parse_json(meta.get("knowledge_states", {}), {})
+
             # DEPRECATED (Phase A2): practice_sessions now lives in separate table
             # practice_sessions = self._parse_json(meta.get("practice_sessions", {}), {})
             # DEPRECATED (Phase A2): error_book now lives in separate table
@@ -241,7 +238,7 @@ class PgStorageEngine:
             active_partition_id=active_partition_id,
             response_blocks=response_blocks,
             background_jobs=background_jobs,
-            knowledge_states=knowledge_states,
+
             practice_sessions=practice_sessions,
             error_book=error_book,
             knowledge_graphs=knowledge_graphs,

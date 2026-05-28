@@ -228,26 +228,20 @@ class LearnerModelEngine:
         """
         profile = self.get_or_create_profile(user_id)
 
-        # DEPRECATED (Phase A1): BKT in-memory update. Authoritative path is CognitiveNode.
-        state = profile.get_knowledge_state(skill_id)
-        updated_state = self.bkt.update(state, is_correct)
-        profile.knowledge_states[skill_id] = updated_state  # transient, not persisted
-
         # 记录活动
         self._log_activity(user_id, {
             "type": "practice",
             "skill_id": skill_id,
             "is_correct": is_correct,
             "time_spent": time_spent,
-            "p_known_after": updated_state.p_known,
+            "p_known_after": 0.0,
             "timestamp": datetime.now().isoformat(),
         })
 
         logger.info(
-            "练习记录: user=%s skill=%s correct=%s p_known=%.4f",
-            user_id, skill_id, is_correct, updated_state.p_known,
+            "练习记录: user=%s skill=%s correct=%s",
+            user_id, skill_id, is_correct,
         )
-        return updated_state
 
     # ──────────────────────────────────────────────
     # 学习计划
@@ -264,11 +258,8 @@ class LearnerModelEngine:
         """
         profile = self.get_or_create_profile(user_id)
 
-        # 获取推荐练习
-        # DEPRECATED (Phase A1): BKT recommend_practice. Use CognitiveNode scheduling instead.
-        recommendations = self.bkt.recommend_practice(
-            profile.knowledge_states, top_n=5
-        )
+        # BKT knowledge_states removed — use CognitiveNode scheduling instead.
+        recommendations: list[dict] = []
 
         # 生成计划项目
         items: list[StudyPlanItem] = []

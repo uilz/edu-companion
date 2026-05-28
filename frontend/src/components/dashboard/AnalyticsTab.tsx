@@ -21,9 +21,7 @@ import { HeatmapGrid } from "@/components/dashboard/analytics/HeatmapGrid";
 import { HabitTab } from "@/components/dashboard/analytics/HabitTab";
 import { RetentionPanel } from "@/components/dashboard/analytics/RetentionPanel";
 import { DailySummaryCard } from "@/components/dashboard/analytics/DailySummaryCard";
-
-// ── API 地址：优先使用环境变量，否则回退到本地 8000 ──
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE } from "@/lib/api";
 
 // ═══════════════════════════════════════════════
 //  主导出组件 — AnalyticsTab（学情分析页面）

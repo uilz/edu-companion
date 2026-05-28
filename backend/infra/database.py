@@ -9,7 +9,6 @@ from typing import Any
 from uuid import uuid4
 
 from shared.protocols import (
-    KnowledgeStateRepository,
     QuestionRepository,
     SessionRepository,
     ErrorBookRepository,
@@ -44,32 +43,6 @@ class Database:
 
 
 _db = Database()
-
-
-# ═══════════════════════════════════════════════════════════
-# KnowledgeState 仓储
-# ═══════════════════════════════════════════════════════════
-
-class PostgresKnowledgeStateRepo(KnowledgeStateRepository):
-    """知识状态持久化 — PostgreSQL 实现"""
-
-    async def load(self, user_id: str, skill_id: str) -> dict | None:
-        row = _db.fetchone(
-            "SELECT * FROM knowledge_states WHERE user_id=%s AND skill_id=%s",
-            (user_id, skill_id)
-        )
-        return dict(row) if row else None
-
-    async def save(self, user_id: str, skill_id: str, state: dict) -> None:
-        state["user_id"] = user_id
-        state["skill_id"] = skill_id
-        _db.upsert("knowledge_states", state, "(user_id, skill_id)")
-
-    async def load_all(self, user_id: str) -> dict[str, dict]:
-        rows = _db.fetchall(
-            "SELECT * FROM knowledge_states WHERE user_id=%s", (user_id,)
-        )
-        return {r["skill_id"]: dict(r) for r in rows}
 
 
 # ═══════════════════════════════════════════════════════════

@@ -106,16 +106,13 @@ class ZPDScheduler:
 
     def estimate_student_ability(
         self,
-        knowledge_states: dict[str, KnowledgeState],  # DEPRECATED (Phase A1): use CognitiveNode instead
         skill_id: str,
         user_id: str = DEFAULT_USER_ID,
     ) -> float:
         """
         估计学生在某知识点的能力θ
-        
-        Phase A1: CognitiveNode is the sole source of truth for ability estimation.
-        knowledge_states parameter is deprecated and ignored.
         """
+
         # CognitiveNode: primary source
         try:
             from app.cognitive.storage import get_node
@@ -131,7 +128,6 @@ class ZPDScheduler:
 
     def plan_session(
         self,
-        knowledge_states: dict[str, KnowledgeState],  # DEPRECATED (Phase A1): use CognitiveNode instead
         question_pool: dict[str, list[Question]],
         target_skills: list[str],
         duration_minutes: int = 30,
@@ -152,7 +148,7 @@ class ZPDScheduler:
             if not pool:
                 continue
             
-            ability = self.estimate_student_ability(knowledge_states, skill_id)
+            ability = self.estimate_student_ability(skill_id)
             selected = self.select_questions(pool, ability, count=questions_per_skill)
             all_questions.extend(selected)
 

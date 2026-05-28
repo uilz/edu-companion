@@ -6,9 +6,7 @@ import {
   Shield, AlertTriangle, CheckCircle, XCircle, Loader2,
   ChevronDown, ChevronUp, Trash2, Zap, BarChart3,
 } from "lucide-react";
-
-// ── API 基础地址：优先使用环境变量，默认回退到本地 8000 端口 ──
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE } from "@/lib/api";
 
 // ── 类型定义 ──
 

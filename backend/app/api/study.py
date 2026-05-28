@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.shared.constants import DEFAULT_USER_ID
 from app.services.adaptive_planner import adaptive_planner
-from app.core.knowledge_trace import bkt_engine
+from app.core.knowledge_trace import bkt_engine, get_all_cognitive_states, get_cognitive_state
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +170,7 @@ async def get_learning_suggestions(
 
     综合: BKT薄弱点 + 前置依赖链 + 最近正确率
     """
-    states = bkt_engine.load_all_states(user_id)
+    states = get_all_cognitive_states(user_id)
     recs = bkt_engine.recommend_practice(states, top_n=10)
 
     # 分为三组
@@ -197,8 +197,8 @@ async def get_learning_suggestions(
                     }
             except Exception:
                 pass
-            # 备降: BKT
-            state = bkt_engine.load_or_create(uid, sid)
+            # 备降: CognitiveNode reader
+            state = get_cognitive_state(uid, sid)
             return state.model_dump()
 
     checker = PrerequisiteChecker(_Adapter())

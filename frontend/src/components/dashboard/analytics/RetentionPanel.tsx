@@ -5,9 +5,7 @@
 import { useState, useEffect } from "react";
 import Card from "@/components/ui/Card";
 import { RetentionData } from "@/components/dashboard/analytics/utils";
-
-// ── API 地址：优先使用环境变量，否则回退到本地 8000 ──
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE } from "@/lib/api";
 
 export function RetentionPanel() {
   const [data, setData] = useState<RetentionData | null>(null);

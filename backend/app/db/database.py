@@ -23,11 +23,6 @@ from typing import AsyncIterator
 
 logger = logging.getLogger(__name__)
 
-from psycopg2 import pool
-from psycopg2.extras import RealDictCursor
-
-logger = logging.getLogger(__name__)
-
 # ── 配置 ──
 
 DB_CONFIG = {
@@ -41,24 +36,7 @@ DB_CONFIG = {
 # ── 建表 SQL ──
 
 SCHEMA_SQL = """
--- DEPRECATED: knowledge_states table. Use cognitive_nodes.belief instead.
--- CREATE TABLE IF NOT EXISTS knowledge_states (
---     user_id     TEXT NOT NULL,
---     skill_id    TEXT NOT NULL,
---     p_known     DOUBLE PRECISION DEFAULT 0.0,
---     p_learned   DOUBLE PRECISION DEFAULT 0.0,
---     p_guess     DOUBLE PRECISION DEFAULT 0.25,
---     p_slip      DOUBLE PRECISION DEFAULT 0.1,
---     p_transit   DOUBLE PRECISION DEFAULT 0.3,
---     attempt_count INTEGER DEFAULT 0,
---     correct_count INTEGER DEFAULT 0,
---     mastery_level TEXT DEFAULT '未接触',
---     dimensions  JSONB DEFAULT '{}',
---     misconception_flags JSONB DEFAULT '[]',
---     pseudo_mastery_flags JSONB DEFAULT '[]',
---     last_updated TIMESTAMP,
---     PRIMARY KEY (user_id, skill_id)
--- );
+
 
 -- 题库
 CREATE TABLE IF NOT EXISTS questions (
@@ -180,8 +158,7 @@ CREATE TABLE IF NOT EXISTS material_chunks (
     indexing_status TEXT DEFAULT 'pending'
 );
 
--- DEPRECATED: knowledge_states index. Use cognitive_nodes indexes instead.
--- CREATE INDEX IF NOT EXISTS idx_ks_user ON knowledge_states(user_id);
+
 CREATE INDEX IF NOT EXISTS idx_questions_skill ON questions(skill_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON practice_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_started ON practice_sessions(started_at);

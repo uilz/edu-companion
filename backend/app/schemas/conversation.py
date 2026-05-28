@@ -282,8 +282,7 @@ class UserData(BaseModel):
     active_partition_id: str | None = None
     response_blocks: dict[str, 'ResponseBlock'] = Field(default_factory=dict)
     background_jobs: dict[str, 'BackgroundJob'] = Field(default_factory=dict)
-    # DEPRECATED: use cognitive_nodes.belief instead
-    knowledge_states: dict[str, dict] = Field(default_factory=dict)
+
     # DEPRECATED (Phase A2): practice_sessions now lives in separate table
     practice_sessions: dict[str, dict] = Field(default_factory=dict)
     # DEPRECATED (Phase A2): error_book now lives in separate table

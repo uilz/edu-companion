@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter
 
 from app.shared.constants import DEFAULT_USER_ID
-from app.core.knowledge_trace import bkt_engine
+from app.core.knowledge_trace import bkt_engine, get_all_cognitive_states
 from app.core.learner_model import learner_engine
 from app.services.achievement_engine import achievement_engine
 from app.services.storage import storage
@@ -40,7 +40,7 @@ def _collect_stats(user_id: str) -> dict[str, Any]:
     streak = profile.streak_days if hasattr(profile, "streak_days") else 0
 
     # 掌握技能数 (p_known >= 0.8)
-    states = bkt_engine.load_all_states(user_id)
+    states = get_all_cognitive_states(user_id)
     mastered_skills = sum(1 for s in states.values() if s.p_known >= 0.8)
 
     # 多学科覆盖

@@ -4,9 +4,7 @@
 
 import { useState, useEffect } from "react";
 import { DailySummary } from "@/components/dashboard/analytics/utils";
-
-// ── API 地址：优先使用环境变量，否则回退到本地 8000 ──
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE } from "@/lib/api";
 
 export function DailySummaryCard() {
   const [summary, setSummary] = useState<DailySummary | null>(null);

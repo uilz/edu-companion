@@ -19,7 +19,7 @@ import networkx as nx
 from fastapi import APIRouter, HTTPException, Query
 
 from app.shared.constants import DEFAULT_USER_ID
-from app.core.knowledge_trace import bkt_engine
+from app.core.knowledge_trace import bkt_engine, get_cognitive_state
 from domain.knowledge.checker import PrerequisiteChecker
 from domain.knowledge.prerequisites import (
     ALL_PREREQUISITES,
@@ -56,8 +56,8 @@ class _BKTKnowledgeAdapter:
         except Exception:
             pass
 
-        # 备降: 旧 BKT
-        state = bkt_engine.load_or_create(user_id, skill_id)
+        # 备降: 旧 BKT (via CognitiveNode reader)
+        state = get_cognitive_state(user_id, skill_id)
         return state.model_dump()
 
 
@@ -193,7 +193,7 @@ async def get_knowledge_graph(
     # 节点
     nodes = []
     for skill_id in skills:
-        state = bkt_engine.load_or_create(user_id, skill_id)
+        state = get_cognitive_state(user_id, skill_id)
         result = await checker.can_practice(user_id, skill_id)
 
         nodes.append({
@@ -339,7 +339,7 @@ async def get_learning_path(
     path = []
     missing: list[str] = []
     for skill_id in sorted(all_prereqs, key=lambda s: checker._compute_depth(s)):
-        state = bkt_engine.load_or_create(user_id, skill_id)
+        state = get_cognitive_state(user_id, skill_id)
         if state.p_known >= 0.7:
             path.append({"skill_id": skill_id, "status": "已掌握",
                          "mastery": round(state.p_known * 100)})
@@ -349,7 +349,7 @@ async def get_learning_path(
                          "mastery": round(state.p_known * 100)})
 
     # 目标技能本身
-    target_state = bkt_engine.load_or_create(user_id, target_skill)
+    target_state = get_cognitive_state(user_id, target_skill)
     path.append({"skill_id": target_skill, "status": "🎯 目标",
                  "mastery": round(target_state.p_known * 100)})
 
@@ -382,7 +382,7 @@ async def get_retention_curve(user_id: str = DEFAULT_USER_ID):
     datetime.now()
 
     for skill_id in prerequisites:
-        state = bkt_engine.load_or_create(user_id, skill_id)
+        state = get_cognitive_state(user_id, skill_id)
         if state.attempt_count == 0:
             continue  # 未练习过的技能跳过
 

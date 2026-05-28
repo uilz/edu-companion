@@ -11,8 +11,7 @@
 import { useState, useEffect } from "react";
 import { Heart, TrendingUp, TrendingDown, Minus, Loader2 } from "lucide-react";
 import Card from "@/components/ui/Card";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE } from "@/lib/api";
 
 // 情绪分类展示
 const EMOTION_DISPLAY: Record<string, { emoji: string; label: string; color: string }> = {

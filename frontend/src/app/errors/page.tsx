@@ -8,9 +8,7 @@ import {
 } from "lucide-react";
 import Card from "@/components/ui/Card";
 import MathContent from "@/components/ui/MathContent";
-
-// ── API 基础地址 ──
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE } from "@/lib/api";
 
 // ── Types ──
 // 错因归因数据（AI 分析结果）

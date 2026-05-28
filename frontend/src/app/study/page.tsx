@@ -10,9 +10,7 @@ import {
 } from "lucide-react";
 // 导入自定义卡片组件
 import Card from "@/components/ui/Card";
-
-// API 基础地址，优先使用环境变量，否则回退到本地后端
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE } from "@/lib/api";
 
 // ── 类型定义 ──
 

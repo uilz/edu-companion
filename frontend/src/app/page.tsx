@@ -28,9 +28,7 @@ import {
 // 内部组件
 import Card from "@/components/ui/Card";
 import UnifiedSearch from "@/components/search/UnifiedSearch";
-
-// API 基础地址，优先使用环境变量，否则回退到本地 8000 端口
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE } from "@/lib/api";
 
 // ---------- 类型定义 ----------
 

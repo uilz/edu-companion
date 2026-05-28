@@ -12,9 +12,7 @@ import {
 // 自定义 UI 组件导入
 import Card from '@/components/ui/Card';
 import UnifiedSearch from '@/components/search/UnifiedSearch';
-
-// 后端 API 基地址
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_BASE } from "@/lib/api";
 
 // 学习进度概览
 interface ProgressSummary {

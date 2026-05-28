@@ -14,9 +14,7 @@ import Card from "@/components/ui/Card";
 // 内部组件：能力雷达图
 import RadarChart from "@/components/analytics/RadarChart";
 import EmotionCard from "@/components/analytics/EmotionCard";
-
-// API 基础地址（默认 fallback 本地开发端口）
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE } from "@/lib/api";
 
 // ── 类型 ──
 

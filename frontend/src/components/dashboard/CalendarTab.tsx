@@ -4,9 +4,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight, Loader2, Flame, Target, Zap } from "lucide-react";
 import Link from "next/link";
-
-// ── API 基础地址（可配置） ──
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE } from "@/lib/api";
 
 // ── 类型定义 ──
 

@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.shared.constants import DEFAULT_USER_ID
-from app.core.knowledge_trace import bkt_engine
+from app.core.knowledge_trace import bkt_engine, get_cognitive_state, get_all_cognitive_states
 
 
 def _get_cognitive_proficiency(user_id: str, skill_id: str) -> float | None:
@@ -344,9 +344,7 @@ async def inline_answer(req: InlineAnswerRequest):
 
     # 更新知识状态
     if skill_id:
-        state = bkt_engine.load_or_create(DEFAULT_USER_ID, skill_id)
-        updated_state = bkt_engine.update(state, is_correct)
-        bkt_engine.save_state(DEFAULT_USER_ID, updated_state)
+        state = get_cognitive_state(DEFAULT_USER_ID, skill_id)
         # CognitiveNode
         try:
             from app.cognitive.events import submit_practice
@@ -356,8 +354,7 @@ async def inline_answer(req: InlineAnswerRequest):
         knowledge_update = {
             "skill_id": skill_id,
             "p_known_before": state.p_known,
-            "p_known_after": updated_state.p_known,
-            "mastery_level": bkt_engine.get_mastery_level(updated_state),
+            "mastery_level": bkt_engine.get_mastery_level(state),
             "cognitive_proficiency": _get_cognitive_proficiency(DEFAULT_USER_ID, skill_id),
         }
     else:
@@ -568,7 +565,7 @@ async def get_stats(time_range: str = "week"):
             et = r["error_type"]
             error_dist[et] = error_dist.get(et, 0) + 1
 
-    skill_states = bkt_engine.load_all_states(user_id)
+    skill_states = get_all_cognitive_states(user_id)
     mastery_bars = sorted(
         [{"skill_id": sid, "p_known": round(s.p_known, 2),
           "mastery_level": bkt_engine.get_mastery_level(s),
@@ -655,7 +652,7 @@ async def get_behavior_report(time_range: str = "week"):
                 "hour": hour, "questions": count,
             })
 
-    skill_states = bkt_engine.load_all_states(user_id)
+    skill_states = get_all_cognitive_states(user_id)
     mastery_bars = [
         {"skill_id": sid, "p_known": round(s.p_known, 2),
          "mastery_level": bkt_engine.get_mastery_level(s),

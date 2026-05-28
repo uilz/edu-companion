@@ -6,10 +6,7 @@ import { useState, useEffect } from "react";
 import { Loader2, AlertTriangle } from "lucide-react";
 // 加载动画与警告图标
 import Card from "@/components/ui/Card";
-// 自定义卡片 UI 组件
-
-// API 基础地址：优先使用环境变量，否则回退到本地 8000 端口
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE } from "@/lib/api";
 
 // ── Types ──
 // 学习进度概览数据，从后端 API /api/progress 获取

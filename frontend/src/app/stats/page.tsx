@@ -7,9 +7,7 @@ import { useState, useEffect } from "react";
 import { BarChart3, Target, Clock, TrendingUp, Loader2, Brain, MessageCircle } from "lucide-react";
 // 通用卡片组件
 import Card from "@/components/ui/Card";
-
-// 后端 API 基础地址 — 优先读取环境变量，否则回退到本地开发地址
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE } from "@/lib/api";
 
 // ──────────────────────────────────────────
 // 练习统计数据接口 — 对应后端 /api/practice/stats 的响应结构

@@ -239,30 +239,49 @@ class BKTEngine:
         stability = state.explanation_state.stability if state.explanation_state else 1.0
         return math.exp(-days_since / max(stability, 0.1))
 
-    # ── 持久化 ──
+# ── CognitiveNode 读取（替代旧 BKT 持久化）──
 
-    def load_or_create(
-        self,
-        user_id: str,
-        skill_id: str,
-        p_known: float | None = None,
-    ) -> KnowledgeState:
-        """
-        DEPRECATED: BKT engine is superseded by CognitiveNode (Phase 6+).
-        Main path: CognitiveNode.storage.get_node() → belief.proficiency_mean.
-        This method now always creates fresh state (no DB persistence).
-        """
-        # DEPRECATED: knowledge_states DB read removed in Phase A1.
-        # BKT state is no longer persisted — CognitiveNode is the authoritative source.
-        return self.create_knowledge_state(skill_id, p_known=p_known)
 
-    def save_state(self, user_id: str, state: KnowledgeState) -> None:
-        """DEPRECATED: No-op. CognitiveNode is the authoritative knowledge store."""
-        pass  # DEPRECATED: Phase A1 — knowledge_states DB write removed
+def get_cognitive_state(user_id: str, skill_id: str) -> KnowledgeState:
+    """从 CognitiveNode 读取知识状态（权威数据源）。
+    若节点不存在则返回默认初始状态。
+    """
+    try:
+        from app.cognitive.storage import get_node
+        node = get_node(skill_id, user_id)
+        if node and node.belief:
+            ks = KnowledgeState(
+                skill_id=skill_id,
+                p_known=node.belief.proficiency_mean,
+            )
+            if node.practice_summary:
+                ks.attempt_count = node.practice_summary.total_attempts
+                ks.correct_count = node.practice_summary.correct_attempts
+            return ks
+    except Exception:
+        pass
+    return KnowledgeState(skill_id=skill_id)
 
-    def load_all_states(self, user_id: str) -> dict[str, KnowledgeState]:
-        """DEPRECATED: Returns empty dict. Use CognitiveNode for knowledge state."""
-        return {}  # DEPRECATED: Phase A1 — knowledge_states DB read removed
+
+def get_all_cognitive_states(user_id: str) -> dict[str, KnowledgeState]:
+    """从 CognitiveNode 读取所有知识点的掌握状态。"""
+    try:
+        from app.cognitive.storage import list_all_nodes
+        nodes = list_all_nodes(user_id)
+        result: dict[str, KnowledgeState] = {}
+        for node in nodes:
+            if node.belief:
+                ks = KnowledgeState(
+                    skill_id=node.id,
+                    p_known=node.belief.proficiency_mean,
+                )
+                if node.practice_summary:
+                    ks.attempt_count = node.practice_summary.total_attempts
+                    ks.correct_count = node.practice_summary.correct_attempts
+                result[node.id] = ks
+        return result
+    except Exception:
+        return {}
 
 
 # 全局实例

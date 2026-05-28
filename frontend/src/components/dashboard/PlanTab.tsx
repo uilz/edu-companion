@@ -7,9 +7,7 @@ import {
   Clock, Target, TrendingUp, AlertCircle, ChevronRight, Zap,
 } from "lucide-react";
 import Card from "@/components/ui/Card";
-
-// ── 后端 API 基础地址，通过环境变量配置 ──
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE } from "@/lib/api";
 
 // ── 类型定义 ──
 

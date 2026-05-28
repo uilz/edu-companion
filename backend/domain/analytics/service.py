@@ -55,7 +55,7 @@ class AnalyticsServiceImpl:
     async def _gather_daily_data(self, user_id: str, days: int = 7) -> dict[str, Any]:
         """从 DB 聚合统计数据供 behavior_analyzer 使用"""
         from app.db.database import get_db
-        from app.core.knowledge_trace import bkt_engine
+        from app.core.knowledge_trace import get_all_cognitive_states
 
         db = get_db()
         now = datetime.now()
@@ -100,7 +100,7 @@ class AnalyticsServiceImpl:
                     "hour": hour, "questions": count,
                 })
 
-        skill_states = bkt_engine.load_all_states(user_id)
+        skill_states = get_all_cognitive_states(user_id)
         mastery_bars = [
             {"skill_id": sid, "p_known": round(s.p_known, 2)}
             for sid, s in skill_states.items() if s.attempt_count > 0

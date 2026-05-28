@@ -9,9 +9,7 @@ import {
 // ── 自定义 UI 组件 ──
 import Card from "@/components/ui/Card";
 import MathContent from "@/components/ui/MathContent";
-
-// ── API 基础地址，优先使用环境变量，否则回退到本地 ──
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE } from "@/lib/api";
 
 // ── 类型定义 ──
 

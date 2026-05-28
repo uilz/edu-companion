@@ -9,9 +9,7 @@ import {
   Shield, AlertTriangle, CheckCircle, XCircle, Loader2,
   ChevronDown, ChevronUp, Trash2, Zap, BarChart3,
 } from "lucide-react";
-
-// API 基础地址，优先从环境变量读取，否则回退到本地开发地址
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE } from "@/lib/api";
 
 /**
  * 质量分析摘要 —— 包含题目总数、各等级数量、平均分及最差题目列表

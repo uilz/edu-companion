@@ -1,11 +1,37 @@
 // ══════════════════════════════════════════════════════════════
 //  Zustand store — conversation system state management
 //  Replaces the monolithic 882-line useConversation hook.
+//
+//  Split into focused modules:
+//    - streaming.ts     — module-level refs, stream cache, WS init
+//    - tree-helpers.ts   — API fetch, ensureConversationAtLevel
 // ══════════════════════════════════════════════════════════════
 
 import { create } from "zustand";
 import type { Partition, TreeNode, ResponseBlock } from "@/types";
-import { ConversationWS } from "@/components/conversation/ws";
+
+// ── Imports from split modules ──
+import {
+  apiFetch,
+  fireClassify,
+  ensureConversationAtLevel,
+} from "./tree-helpers";
+
+import {
+  _activeConvId,
+  _activePartId,
+  _streamingMsgId,
+  _streamBuffer,
+  setActiveConvId,
+  setActivePartId,
+  setStreamingPartId,
+  setStreamingConvId,
+  setStreamingMsgId,
+  setStreamBuffer,
+  initWebSocket as _initWebSocketImpl,
+  subscribeToNavigation as _subscribeToNavigationImpl,
+  syncActiveRefs as _syncActiveRefsImpl,
+} from "./streaming";
 
 // ══════════════════════════════════════════════════════════════
 //  Types
@@ -104,211 +130,7 @@ interface ConversationState {
   handleNewConversation: (level: string, parentId: string, partitionId?: string) => Promise<void>;
 
   // ── Internal (used by WS) ──
-  _wsRef: ConversationWS | null;
-}
-
-// ══════════════════════════════════════════════════════════════
-//  Module-level streaming refs (NOT in store — avoid re-render spam)
-// ══════════════════════════════════════════════════════════════
-
-let _activeConvId: string | null = null;
-let _activePartId: string | null = null;
-let _streamingPartId: string | null = null;
-let _streamingConvId: string | null = null;
-let _streamingMsgId: string | null = null;
-let _streamBuffer = "";
-let _streamSaveTimer: ReturnType<typeof setTimeout> | null = null;
-let _isSending = false;
-
-// ══════════════════════════════════════════════════════════════
-//  Session-storage stream cache (refresh recovery)
-// ══════════════════════════════════════════════════════════════
-
-const STREAM_CACHE_KEY = "stream_cache";
-
-function getStreamCache(): Record<string, string> {
-  try {
-    return JSON.parse(sessionStorage.getItem(STREAM_CACHE_KEY) || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function setStreamCache(convId: string, text: string) {
-  try {
-    const cache = getStreamCache();
-    cache[convId] = text;
-    sessionStorage.setItem(STREAM_CACHE_KEY, JSON.stringify(cache));
-  } catch {
-    /* quota exceeded — ignore */
-  }
-}
-
-function clearStreamCache(convId?: string) {
-  try {
-    if (convId) {
-      const cache = getStreamCache();
-      delete cache[convId];
-      sessionStorage.setItem(STREAM_CACHE_KEY, JSON.stringify(cache));
-    } else {
-      sessionStorage.removeItem(STREAM_CACHE_KEY);
-    }
-  } catch {
-    /* ignore */
-  }
-}
-
-// ══════════════════════════════════════════════════════════════
-//  API helpers (duplicated from api.ts — cannot import "use client" file)
-// ══════════════════════════════════════════════════════════════
-
-async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`/api/conversations${path}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    cache: "no-store",
-    ...options,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API error ${res.status}: ${text}`);
-  }
-  return res.json();
-}
-
-async function v2Fetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`/api/v2${path}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    cache: "no-store",
-    ...options,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`v2 API error ${res.status}: ${text}`);
-  }
-  return res.json();
-}
-
-function fireClassify(convId: string, text: string) {
-  v2Fetch("/classify", {
-    method: "POST",
-    body: JSON.stringify({ conversation_id: convId, message: text }),
-  }).catch(() => {}); // fire-and-forget
-}
-
-// ══════════════════════════════════════════════════════════════
-//  Helper: ensure conversation exists at a given tree level
-// ══════════════════════════════════════════════════════════════
-
-async function ensureConversationAtLevel(
-  level: string,
-  parentId: string,
-  pId: string,
-): Promise<{ partitionId: string; conversationId: string } | null> {
-  try {
-    if (level === "partition") {
-      // Find or create domain under partition
-      const dData = await apiFetch<{ domains: { id: string }[] }>(
-        `/tree/domain?parent_id=${parentId}`,
-      );
-      const domainId =
-        dData.domains?.[0]?.id ||
-        (
-          await apiFetch<{ domain: { id: string } }>("/tree/domain", {
-            method: "POST",
-            body: JSON.stringify({ parent_id: parentId, name: "新领域", emoji: "📚" }),
-          })
-        ).domain.id;
-
-      // Find or create topic under domain
-      const tData = await apiFetch<{ topics: { id: string }[] }>(
-        `/tree/topic?parent_id=${domainId}`,
-      );
-      const topicId =
-        tData.topics?.[0]?.id ||
-        (
-          await apiFetch<{ topic: { id: string } }>("/tree/topic", {
-            method: "POST",
-            body: JSON.stringify({ parent_id: domainId, name: "新专题", emoji: "📝" }),
-          })
-        ).topic.id;
-
-      // Find or create conversation under topic
-      const cData = await apiFetch<{
-        conversations: { id: string; message_count?: number }[];
-      }>(`/tree/conversation?parent_id=${topicId}`);
-      const empty = (cData.conversations || []).find(
-        (c) => !c.message_count || c.message_count === 0,
-      );
-      const convId =
-        empty?.id ||
-        (
-          await apiFetch<{ conversation: { id: string } }>("/tree/conversation", {
-            method: "POST",
-            body: JSON.stringify({ parent_id: topicId, name: "" }),
-          })
-        ).conversation.id;
-
-      return { partitionId: pId, conversationId: convId };
-    }
-
-    if (level === "domain") {
-      // Find or create topic under domain
-      const tData = await apiFetch<{ topics: { id: string }[] }>(
-        `/tree/topic?parent_id=${parentId}`,
-      );
-      const topicId =
-        tData.topics?.[0]?.id ||
-        (
-          await apiFetch<{ topic: { id: string } }>("/tree/topic", {
-            method: "POST",
-            body: JSON.stringify({ parent_id: parentId, name: "新专题", emoji: "📝" }),
-          })
-        ).topic.id;
-
-      // Find or create conversation under topic
-      const cData = await apiFetch<{
-        conversations: { id: string; message_count?: number }[];
-      }>(`/tree/conversation?parent_id=${topicId}`);
-      const empty = (cData.conversations || []).find(
-        (c) => !c.message_count || c.message_count === 0,
-      );
-      const convId =
-        empty?.id ||
-        (
-          await apiFetch<{ conversation: { id: string } }>("/tree/conversation", {
-            method: "POST",
-            body: JSON.stringify({ parent_id: topicId, name: "" }),
-          })
-        ).conversation.id;
-
-      return { partitionId: pId, conversationId: convId };
-    }
-
-    if (level === "topic") {
-      // Find or create conversation under topic
-      const cData = await apiFetch<{
-        conversations: { id: string; message_count?: number }[];
-      }>(`/tree/conversation?parent_id=${parentId}`);
-      const empty = (cData.conversations || []).find(
-        (c) => !c.message_count || c.message_count === 0,
-      );
-      const convId =
-        empty?.id ||
-        (
-          await apiFetch<{ conversation: { id: string } }>("/tree/conversation", {
-            method: "POST",
-            body: JSON.stringify({ parent_id: parentId, name: "" }),
-          })
-        ).conversation.id;
-
-      return { partitionId: pId, conversationId: convId };
-    }
-
-    return null;
-  } catch (e) {
-    console.warn(`${level} 级别创建对话失败:`, e);
-    return null;
-  }
+  _wsRef: any;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -344,8 +166,8 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
   setUrlInitialized: (v) => set({ urlInitialized: v }),
 
   selectConversation: (partitionId, conversationId) => {
-    _activePartId = partitionId;
-    _activeConvId = conversationId;
+    setActivePartId(partitionId);
+    setActiveConvId(conversationId);
     set({
       selectedPartitionId: partitionId || null,
       activeConversationId: conversationId || null,
@@ -359,8 +181,8 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
     const banner = get().switchBanner;
     if (!banner) return;
     await get().loadPartitions();
-    _activePartId = banner.partitionId;
-    _activeConvId = banner.conversationId || null;
+    setActivePartId(banner.partitionId);
+    setActiveConvId(banner.conversationId || null);
     set({
       selectedPartitionId: banner.partitionId,
       activeConversationId: banner.conversationId || null,
@@ -552,9 +374,6 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
               },
             )
           ).conversation.id;
-        _isSending = true;
-        _activePartId = pId;
-        _activeConvId = cId;
         set({
           selectedPartitionId: pId,
           activeConversationId: cId,
@@ -621,10 +440,10 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
     // Assistant placeholder (waits for streaming or HTTP reply)
     const asstId =
       Date.now().toString(36) + "a" + Math.random().toString(36).substr(2, 9);
-    _streamingMsgId = asstId;
-    _streamBuffer = "";
-    _streamingPartId = pId;
-    _streamingConvId = cId;
+    setStreamingMsgId(asstId);
+    setStreamBuffer("");
+    setStreamingPartId(pId);
+    setStreamingConvId(cId);
 
     set((state) => ({
       messages: [
@@ -673,10 +492,10 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
             (b: { type: string }) => b.type === "text",
           )?.text ||
           "（回复获取成功但没有显示内容）";
-        _streamingMsgId = null;
-        _streamBuffer = "";
-        _streamingPartId = null;
-        _streamingConvId = null;
+        setStreamingMsgId(null);
+        setStreamBuffer("");
+        setStreamingPartId(null);
+        setStreamingConvId(null);
         set((state) => ({
           messages: state.messages.map((m) =>
             m.id === asstId
@@ -709,10 +528,10 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
               : m,
           ),
         }));
-        _streamingMsgId = null;
-        _streamBuffer = "";
-        _streamingPartId = null;
-        _streamingConvId = null;
+        setStreamingMsgId(null);
+        setStreamBuffer("");
+        setStreamingPartId(null);
+        setStreamingConvId(null);
         set({ isLoading: false, statusMessage: "" });
       }
     }
@@ -848,274 +667,26 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
 }));
 
 // ══════════════════════════════════════════════════════════════
-//  URL + localStorage sync (called from useConversation facade)
+//  Re-export facade helpers (bound to this store instance)
 // ══════════════════════════════════════════════════════════════
-
-let _prevUrlPartitionId: string | null = null;
-let _prevUrlConversationId: string | null = null;
 
 export function subscribeToNavigation(): () => void {
-  return useConversationStore.subscribe((state) => {
-    if (!state.urlInitialized) return;
-    if (
-      state.selectedPartitionId === _prevUrlPartitionId &&
-      state.activeConversationId === _prevUrlConversationId
-    )
-      return;
-    _prevUrlPartitionId = state.selectedPartitionId;
-    _prevUrlConversationId = state.activeConversationId;
-    try {
-      const params = new URLSearchParams();
-      if (state.selectedPartitionId)
-        params.set("p", state.selectedPartitionId);
-      if (state.activeConversationId)
-        params.set("c", state.activeConversationId);
-      const qs = params.toString();
-      window.history.replaceState(
-        null,
-        "",
-        qs
-          ? `${window.location.pathname}?${qs}`
-          : window.location.pathname,
-      );
-      localStorage.setItem(
-        "learn-page-state",
-        JSON.stringify({
-          partitionId: state.selectedPartitionId,
-          conversationId: state.activeConversationId,
-        }),
-      );
-    } catch {
-      /* ignore */
-    }
-  });
+  return _subscribeToNavigationImpl(useConversationStore);
 }
-
-// ══════════════════════════════════════════════════════════════
-//  WebSocket initialization (called from useConversation facade)
-// ══════════════════════════════════════════════════════════════
 
 export function initWebSocket(): () => void {
-  const wsClient = new ConversationWS();
-  useConversationStore.setState({ _wsRef: wsClient });
-
-  wsClient.connect({
-    // Streaming token callback: real-time message content update
-    onToken: (content) => {
-      if (!_streamingMsgId) return;
-      if (_streamingPartId !== _activePartId || _streamingConvId !== _activeConvId) return;
-
-      _streamBuffer += content;
-      const text = _streamBuffer;
-      const msgId = _streamingMsgId;
-
-      // Throttled session-storage write (every 300ms)
-      if (!_streamSaveTimer) {
-        _streamSaveTimer = setTimeout(() => {
-          _streamSaveTimer = null;
-          const cid = _streamingConvId;
-          if (cid && _streamBuffer) setStreamCache(cid, _streamBuffer);
-        }, 300);
-      }
-
-      useConversationStore.setState((state) => ({
-        messages: state.messages.map((m) =>
-          m.id === msgId
-            ? {
-                ...m,
-                content_blocks: [{ type: "text" as const, text }],
-                text_summary: text,
-              }
-            : m,
-        ),
-      }));
-    },
-
-    // AI reply complete callback
-    onDone: (_partId, assistantMessage, responseBlocks) => {
-      useConversationStore.setState({ isLoading: false, statusMessage: "" });
-
-      const streamPid = _streamingPartId;
-      const streamCid = _streamingConvId;
-      const streamMsgId = _streamingMsgId;
-      _streamingPartId = null;
-      _streamingConvId = null;
-      _streamingMsgId = null;
-      _streamBuffer = "";
-      if (_streamSaveTimer) {
-        clearTimeout(_streamSaveTimer);
-        _streamSaveTimer = null;
-      }
-      clearStreamCache(streamCid || undefined);
-
-      // If user switched conversation, discard stale streaming message
-      if (streamPid !== _activePartId || streamCid !== _activeConvId) {
-        if (streamMsgId) {
-          useConversationStore.setState((state) => ({
-            messages: state.messages.filter((m) => m.id !== streamMsgId),
-          }));
-        }
-        return;
-      }
-
-      // Replace placeholder with final message
-      if (assistantMessage) {
-        const textBlock = assistantMessage.content_blocks?.find(
-          (b: { type: string }) => b.type === "text",
-        );
-        const hasContent = textBlock?.text?.trim();
-        useConversationStore.setState((state) => {
-          const idx = state.messages.findIndex(
-            (m) => m.id === streamMsgId || m.id === assistantMessage.id,
-          );
-          if (idx >= 0) {
-            const updated = [...state.messages];
-            updated[idx] = hasContent
-              ? assistantMessage
-              : {
-                  ...assistantMessage,
-                  content_blocks: [
-                    { type: "text" as const, text: "（助手返回了空回复）" },
-                  ],
-                  text_summary: "（助手返回了空回复）",
-                };
-            return { messages: updated };
-          }
-          return {};
-        });
-      } else if (streamMsgId) {
-        useConversationStore.setState((state) => ({
-          messages: state.messages.filter((m) => m.id !== streamMsgId),
-        }));
-      }
-
-      // Add response blocks (video / practice / image, etc.)
-      if (responseBlocks?.length) {
-        useConversationStore.setState((state) => {
-          const existing = new Set(state.responseBlocks.map((b) => b.id));
-          const newBlocks = responseBlocks.filter((b) => !existing.has(b.id));
-          return newBlocks.length
-            ? { responseBlocks: [...state.responseBlocks, ...newBlocks] }
-            : {};
-        });
-      }
-
-      // Delayed refresh: sidebar + message list
-      setTimeout(() => useConversationStore.getState().loadPartitions(), 300);
-      setTimeout(() => {
-        const cid = _activeConvId;
-        if (cid && cid === streamCid)
-          useConversationStore.getState().loadMessages(cid);
-      }, 500);
-    },
-
-    // Error callback: show error message
-    onError: (msg) => {
-      useConversationStore.setState({ isLoading: false, statusMessage: "" });
-      const errorNode: TreeNode = {
-        id: "err-" + Date.now(),
-        parent_id: "",
-        children_ids: [],
-        partition_id: _activePartId || "",
-        conversation_id: _activeConvId || "",
-        content_blocks: [{ type: "text" as const, text: `❌ ${msg}` }],
-        text_summary: msg,
-        role: "assistant",
-        timestamp: Date.now(),
-        token_count: 0,
-        is_deleted: false,
-        is_archived: false,
-        has_modified_version: false,
-      };
-      if (_streamingMsgId) {
-        const msgId = _streamingMsgId;
-        useConversationStore.setState((state) => ({
-          messages: state.messages.map((m) =>
-            m.id === msgId ? errorNode : m,
-          ),
-        }));
-      } else {
-        useConversationStore.setState((state) => ({
-          messages: [...state.messages, errorNode],
-        }));
-      }
-      _streamingMsgId = null;
-      _streamBuffer = "";
-    },
-
-    // Block update callback (e.g. tool call completed)
-    onBlockUpdate: (block) => {
-      useConversationStore.setState((state) => {
-        const idx = state.responseBlocks.findIndex((b) => b.id === block.id);
-        if (idx >= 0) {
-          const updated = [...state.responseBlocks];
-          updated[idx] = block;
-          return { responseBlocks: updated };
-        }
-        return { responseBlocks: [...state.responseBlocks, block] };
-      });
-    },
-
-    // Context switch notification: AI suggests switching to a different partition/conversation
-    onContextSwitch: (data) => {
-      useConversationStore.setState({
-        switchBanner: {
-          partitionId: data.partition_id,
-          conversationId: data.conversation_id,
-          domainName: data.domain_name || "",
-          topicName: data.topic_name || "",
-          fullPath: data.full_path || "",
-        },
-      });
-    },
-
-    onConnect: () => useConversationStore.setState({ wsConnected: true }),
-    onDisconnect: () => useConversationStore.setState({ wsConnected: false }),
-  });
-
-  return () => {
-    wsClient.destroy();
-    useConversationStore.setState({ _wsRef: null });
-  };
+  return _initWebSocketImpl(useConversationStore);
 }
-
-// ══════════════════════════════════════════════════════════════
-//  Sync module-level active refs (called from useConversation facade)
-// ══════════════════════════════════════════════════════════════
 
 export function syncActiveRefs(): () => void {
-  return useConversationStore.subscribe((state) => {
-    _activeConvId = state.activeConversationId;
-    _activePartId = state.selectedPartitionId;
-  });
+  return _syncActiveRefsImpl(useConversationStore);
 }
 
-// ══════════════════════════════════════════════════════════════
-//  Exported helpers for the facade
-// ══════════════════════════════════════════════════════════════
-
-export function getStreamCacheData(): Record<string, string> {
-  return getStreamCache();
-}
-
-export function clearStreamCacheData(convId?: string) {
-  clearStreamCache(convId);
-}
-
-export function getActiveConvId(): string | null {
-  return _activeConvId;
-}
-
-export function isSending(): boolean {
-  return _isSending;
-}
-
-export function setIsSending(v: boolean) {
-  _isSending = v;
-}
-
-export function saveStreamCacheBeforeUnload() {
-  const cid = _streamingConvId;
-  const text = _streamBuffer;
-  if (cid && text) setStreamCache(cid, text);
-}
+// Re-export streaming helpers directly (no store binding needed)
+export {
+  getStreamCacheData,
+  clearStreamCacheData,
+  isSending,
+  setIsSending,
+  saveStreamCacheBeforeUnload,
+} from "./streaming";

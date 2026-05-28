@@ -19,8 +19,7 @@ import {
 } from "lucide-react";
 import Card from "@/components/ui/Card";
 import MathContent from "@/components/ui/MathContent";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE } from "@/lib/api";
 
 /**
  * 题目选项接口：字母标识 + 选项文本 + 是否正确

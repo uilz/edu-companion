@@ -71,13 +71,23 @@ class AppContainer:
         from infra.database import (
             PostgresQuestionRepo,
             PostgresSessionRepo,
-            PostgresKnowledgeStateRepo,
             PostgresErrorBookRepo,
         )
+
+        # Knowledge states table is deprecated (migrated to cognitive_nodes).
+        # Provide a no-op stub so PracticeServiceImpl's BKT path still works.
+        class _StubKSRepo:
+            async def load(self, user_id: str, skill_id: str):
+                return None
+            async def save(self, user_id: str, skill_id: str, state: dict) -> None:
+                pass
+            async def load_all(self, user_id: str):
+                return {}
+
         return PracticeServiceImpl(
             question_repo=PostgresQuestionRepo(),
             session_repo=PostgresSessionRepo(),
-            ks_repo=PostgresKnowledgeStateRepo(),
+            ks_repo=_StubKSRepo(),
             error_repo=PostgresErrorBookRepo(),
             event_bus=self.event_bus,
         )
