@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -14,7 +13,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.shared.constants import DEFAULT_USER_ID
-from app.config import settings
 from app.core.knowledge_trace import bkt_engine
 
 
@@ -40,7 +38,6 @@ from app.schemas.practice import (
     MaterialChunk,
     PracticeSession,
     PracticeStats,
-    PracticeSessionPlan,
     Question,
     QuestionOption,
     ReviewTask,
@@ -66,22 +63,6 @@ class GenerateQuestionRequest(BaseModel):
     count: int = 5
     content_type: str = "choice"
     material_ids: Optional[list[str]] = None  # 从用户资料生成
-
-
-class CreateSessionRequest(BaseModel):
-    subject: Optional[str] = None
-    skill_ids: Optional[list[str]] = None
-    duration_minutes: int = 30
-    mode: str = "adaptive"  # adaptive/targeted/review/challenge/contextual
-
-
-class SubmitAnswerRequest(BaseModel):
-    session_id: str
-    question_id: str
-    answer: str
-    time_spent_seconds: float = 0.0
-    hints_used: int = 0
-    explanation_text: Optional[str] = None
 
 
 class HintRequest(BaseModel):
@@ -197,111 +178,6 @@ async def get_questions(
     return {"questions": questions, "total": len(rows)}
 
 
-# 练习会话
-
-@router.post("/sessions", deprecated=True)
-async def create_session(req: CreateSessionRequest):
-    """创建练习会话（含前置知识卡控）"""
-    user_id = DEFAULT_USER_ID
-
-    # 从数据库选题
-    skill_ids = req.skill_ids or []
-    if not skill_ids:
-        db = get_db()
-        rows = db.fetchall("SELECT DISTINCT skill_id FROM questions WHERE status = 'active' LIMIT 4")
-        skill_ids = [r["skill_id"] for r in rows] if rows else []
-
-    # 前置知识卡控
-    from domain.knowledge.checker import PrerequisiteChecker
-    from domain.knowledge.prerequisites import ALL_PREREQUISITES
-    from app.core.knowledge_trace import bkt_engine
-    from app.services.storage import storage
-
-    # 构造简易 PracticeService adapter（现有架构过渡方案）
-    class _KnowledgeAdapter:
-        async def get_knowledge_state(self, uid: str, sid: str):
-            return bkt_engine.load_or_create(uid, sid).model_dump()
-
-    checker = PrerequisiteChecker(_KnowledgeAdapter())
-    blocked_skills: list[str] = []
-    prerequisites_info: list[dict] = []
-
-    for sid in skill_ids:
-        result = await checker.can_practice(user_id, sid)
-        if not result.can_practice:
-            blocked_skills.append(sid)
-            prerequisites_info.append({
-                "skill_id": sid,
-                "blocked_by": result.blocked,
-                "reason": result.reason,
-            })
-
-    # 过滤掉被卡控的技能
-    allowed_skills = [s for s in skill_ids if s not in blocked_skills]
-
-    # 如果所有技能都被卡控
-    if not allowed_skills and skill_ids:
-        return {
-            "blocked": True,
-            "message": "当前知识基础不足以练习所选内容，建议先完成前置知识",
-            "prerequisites": prerequisites_info,
-            "session": None,
-        }
-
-    questions = []
-    for sid in allowed_skills:
-        db = get_db()
-        rows = db.fetchall(
-            "SELECT * FROM questions WHERE skill_id = %s AND status = 'active' ORDER BY difficulty LIMIT 3",
-            (sid,),
-        )
-        questions.extend(dict(r) for r in rows)
-
-    import uuid
-    from datetime import datetime
-    session_id = str(uuid.uuid4())
-    now = datetime.now().isoformat()
-
-    db = get_db()
-    db.upsert("practice_sessions", {
-        "session_id": session_id,
-        "user_id": user_id,
-        "planned_skills_json": allowed_skills,
-        "question_ids_json": [q["question_id"] for q in questions],
-        "estimated_minutes": req.duration_minutes,
-        "mode": req.mode,
-        "status": "active",
-        "started_at": now,
-    }, "session_id")
-
-    response_data = {
-        "session": {"session_id": session_id, "question_ids": [q["question_id"] for q in questions],
-                     "planned_skills": allowed_skills, "mode": req.mode, "status": "active"},
-        "questions": [{"question_id": q["question_id"], "skill_id": q.get("skill_id",""),
-                      "subject": q.get("subject",""), "bloom_level": q.get("bloom_level",""),
-                      "text": q.get("text",""),
-                      "options": q.get("options_json") if isinstance(q.get("options_json"), list) else [],
-                      "correct_answer": q.get("correct_answer",""),
-                      "explanation": q.get("explanation",""),
-                      "hints": q.get("hints_json") if isinstance(q.get("hints_json"), list) else [],
-                      "difficulty": q.get("difficulty",0.5)} for q in questions],
-    }
-
-    # Phase 4: 写共享状态
-    try:
-        from app.shared.state import active_practice_sessions
-        active_practice_sessions[session_id] = response_data["session"]
-    except Exception:
-        logger.debug("共享状态写入失败（非关键路径）", exc_info=True)
-
-    # 附上卡控信息
-    if blocked_skills:
-        response_data["prerequisites_info"] = prerequisites_info
-        response_data["blocked_skills"] = blocked_skills
-
-    return response_data
-
-
 @router.get("/sessions")
 async def list_sessions(user_id: str = DEFAULT_USER_ID, limit: int = 20):
     """列出用户的所有会话"""
@@ -411,195 +287,6 @@ async def complete_session(
         "accuracy": accuracy,
         "struggling_skills": struggling,
     }
-
-
-# 答题与反馈
-
-@router.post("/submit", deprecated=True)
-async def submit_answer(req: SubmitAnswerRequest):
-    """提交答案"""
-    db = get_db()
-    session = db.fetchone("SELECT * FROM practice_sessions WHERE session_id = %s", (req.session_id,))
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    # 查找题目
-    question_row = db.fetchone("SELECT * FROM questions WHERE question_id = %s", (req.question_id,))
-    if not question_row:
-        raise HTTPException(status_code=404, detail="Question not found")
-
-    question = dict(question_row)
-
-    # 判对错
-    is_correct = req.answer.strip().upper() == question["correct_answer"].strip().upper()
-
-    # 记录答题
-    attempt_id = str(uuid.uuid4())
-    now = datetime.now().isoformat()
-
-    # 知识状态
-    state = bkt_engine.load_or_create(session["user_id"], question["skill_id"])
-    updated_state = bkt_engine.update(state, is_correct, hint_level=req.hints_used)
-    bkt_engine.save_state(session["user_id"], updated_state)
-
-    # Phase 6: 同步写入 CognitiveNode
-    try:
-        from app.cognitive.events import submit_practice
-        submit_practice(
-            user_id=session["user_id"],
-            node_id=question["skill_id"],
-            success=is_correct,
-            latency_ms=req.time_spent_seconds * 1000,
-            consecutive=req.hints_used == 0,
-        )
-    except Exception:
-        logger.debug("CognitiveNode 练习事件提交失败", exc_info=True)
-
-    # v3.0: 记录练习事件
-    try:
-        from app.services.learning_events import record_event
-        from app.schemas.learning_event import EventType
-        sid = question["skill_id"]
-        record_event(
-            EventType.PRACTICE_SUBMIT,
-            user_id=session["user_id"],
-            partition_id=session.get("partition_id"),
-            skill_ids=[sid],
-            data={"correct": is_correct, "time_spent": req.time_spent_seconds},
-        )
-        old_p = state.p_known
-        new_p = updated_state.p_known
-        if old_p and abs(new_p - old_p) > 0.05:
-            record_event(
-                EventType.SKILL_MASTERY_CHANGED,
-                user_id=session["user_id"],
-                partition_id=session.get("partition_id"),
-                skill_ids=[sid],
-                data={"before": old_p, "after": new_p},
-            )
-    except Exception:
-        logger.debug("学习事件记录失败", exc_info=True)
-
-    # 生成反馈
-    options_list = question.get("options_json")
-    if isinstance(options_list, str):
-        options_list = json.loads(options_list)
-    if not isinstance(options_list, list):
-        options_list = []
-
-    feedback = {
-        "is_correct": is_correct,
-        "correct_answer": question["correct_answer"],
-        "explanation": question["explanation"],
-        "knowledge_update": {
-            "skill_id": question["skill_id"],
-            "p_known_before": state.p_known,
-            "p_known_after": updated_state.p_known,
-            "mastery_level": bkt_engine.get_mastery_level(updated_state),
-            "cognitive_proficiency": _get_cognitive_proficiency(session["user_id"], question["skill_id"]),
-        },
-    }
-
-    # 错误时添加错因分析
-    if not is_correct and options_list:
-        chosen = next((o for o in options_list if o.get("letter", "").upper() == req.answer.upper()), None)
-        if chosen and chosen.get("distractor_type"):
-            feedback["error_analysis"] = {
-                "type": "misconception",
-                "distractor_type": chosen["distractor_type"],
-                "suggestion": f"你选择了{chosen['letter']}，可能的原因是{chosen['distractor_type']}",
-            }
-
-    # 存 attempt 到数据库
-    db.upsert("attempts", {
-        "attempt_id": attempt_id,
-        "user_id": session["user_id"],
-        "question_id": req.question_id,
-        "session_id": req.session_id,
-        "user_answer": req.answer,
-        "is_correct": is_correct,
-        "time_spent_seconds": req.time_spent_seconds,
-        "hints_used": req.hints_used,
-        "explanation_text": req.explanation_text,
-        "knowledge_before_json": {question["skill_id"]: state.p_known},
-        "knowledge_after_json": {question["skill_id"]: updated_state.p_known},
-        "started_at": now,
-        "submitted_at": now,
-    }, "attempt_id")
-
-    # 更新 session correct_count
-    if is_correct:
-        db.execute(
-            "UPDATE practice_sessions SET correct_count = correct_count + 1 WHERE session_id = %s",
-            (req.session_id,),
-        )
-    else:
-        # 记录到错题本（如果还没有）
-        existing = db.fetchone(
-            "SELECT entry_id FROM error_book WHERE user_id = %s AND question_id = %s AND is_resolved = FALSE",
-            (session["user_id"], req.question_id),
-        )
-        if not existing:
-            import uuid as _uuid
-            db.upsert("error_book", {
-                "entry_id": str(_uuid.uuid4()),
-                "user_id": session["user_id"],
-                "question_id": req.question_id,
-                "skill_id": question["skill_id"],
-                "error_type": feedback.get("error_analysis", {}).get("type", "careless"),
-                "misconception": feedback.get("error_analysis", {}).get("distractor_type", ""),
-                "user_answer": req.answer,
-                "correct_answer": question["correct_answer"],
-                "question_text": question["text"][:500],
-                "review_count": 0,
-                "is_resolved": False,
-                "created_at": now,
-            }, "entry_id")
-            feedback["error_entry"] = "created"
-
-    # Phase 4C: 事件驱动
-    old_mastery = bkt_engine.get_mastery_level(state)
-    new_mastery = bkt_engine.get_mastery_level(updated_state)
-
-    # DEPRECATED (Phase B3): AnswerSubmitted already published by domain/practice/service.py
-    try:
-        from shared.events import KnowledgeStateUpdated
-
-        SIGNIFICANT = {("初学","发展中"),("发展中","接近掌握"),("接近掌握","已掌握"),
-                       ("未接触","初学"),("初学","接近掌握")}
-        if (old_mastery, new_mastery) in SIGNIFICANT:
-            from shared.events import KnowledgeStateUpdated
-            ks_event = KnowledgeStateUpdated(
-                user_id=session["user_id"],
-                skill_id=question["skill_id"],
-                old_mastery=old_mastery,
-                new_mastery=new_mastery,
-                p_known_before=state.p_known,
-                p_known_after=updated_state.p_known,
-                attempt_count=updated_state.attempt_count,
-            )
-            asyncio.create_task(bus.publish(ks_event))
-    except Exception:
-        logger.debug("事件发布失败（不影响答题流）", exc_info=True)
-
-    # Phase 10: 答题结束后更新间隔重复调度
-    try:
-        from app.cognitive.storage import find_node_by_label, upsert_node
-        from app.services.spaced_repetition import spaced_repetition
-        sr_node = find_node_by_label(question["skill_id"], session["user_id"])
-        if sr_node:
-            _ = spaced_repetition.update_node_scheduling(
-                sr_node, is_correct, hints_used=req.hints_used,
-            )
-            upsert_node(sr_node, session["user_id"])
-            logger.debug(
-                "Phase10: Scheduling updated for %s (correct=%s, urgency=%.3f)",
-                question["skill_id"], is_correct, sr_node.scheduling.urgency,
-            )
-    except Exception:
-        logger.debug("Phase10: Scheduling 更新失败（不影响答题流）", exc_info=True)
-
-    return feedback
 
 
 @router.post("/hint")
