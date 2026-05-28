@@ -129,7 +129,7 @@ def get_node(node_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[Cognitive
     """通过 ID 获取 CognitiveNode"""
     db = get_db()
     row = db.fetchone(
-        "SELECT * FROM cognitive_nodes WHERE id = %s AND user_id = %s",
+        "SELECT * FROM cognitive_nodes WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
         (node_id, user_id),
     )
     if not row:
@@ -143,7 +143,7 @@ def get_nodes_by_level(
     """获取某一层级的所有节点"""
     db = get_db()
     rows = db.fetchall(
-        "SELECT * FROM cognitive_nodes WHERE level = %s AND user_id = %s ORDER BY id",
+        "SELECT * FROM cognitive_nodes WHERE level = %s AND user_id = %s AND deleted_at IS NULL ORDER BY id",
         (level, user_id),
     )
     return [_row_to_node(r) for r in rows]
@@ -153,7 +153,7 @@ def get_children(parent_id: str, user_id: str = DEFAULT_USER_ID) -> list[Cogniti
     """获取某节点的直接子节点"""
     db = get_db()
     rows = db.fetchall(
-        "SELECT * FROM cognitive_nodes WHERE parent = %s AND user_id = %s ORDER BY id",
+        "SELECT * FROM cognitive_nodes WHERE parent = %s AND user_id = %s AND deleted_at IS NULL ORDER BY id",
         (parent_id, user_id),
     )
     return [_row_to_node(r) for r in rows]
@@ -171,7 +171,7 @@ def get_subtree(root_id: str, user_id: str = DEFAULT_USER_ID) -> dict[str, Cogni
             UNION ALL
             SELECT cn.* FROM cognitive_nodes cn
             JOIN subtree ON cn.parent = subtree.id
-            WHERE cn.user_id = %s
+            WHERE cn.user_id = %s AND cn.deleted_at IS NULL
         )
         SELECT * FROM subtree
         """,
@@ -203,7 +203,7 @@ def search_nodes(
     db = get_db()
     pattern = f"%{query}%"
     rows = db.fetchall(
-        "SELECT * FROM cognitive_nodes WHERE user_id = %s "
+        "SELECT * FROM cognitive_nodes WHERE user_id = %s AND deleted_at IS NULL "
         "AND (label ILIKE %s OR id ILIKE %s) "
         "ORDER BY length(id) LIMIT %s",
         (user_id, pattern, pattern, limit),
@@ -215,7 +215,7 @@ def list_all_nodes(user_id: str = DEFAULT_USER_ID) -> list[CognitiveNode]:
     """获取用户所有节点"""
     db = get_db()
     rows = db.fetchall(
-        "SELECT * FROM cognitive_nodes WHERE user_id = %s ORDER BY id",
+        "SELECT * FROM cognitive_nodes WHERE user_id = %s AND deleted_at IS NULL ORDER BY id",
         (user_id,),
     )
     return [_row_to_node(r) for r in rows]
@@ -227,7 +227,7 @@ def get_urgent_nodes(
     """获取紧迫度最高的节点（用于调度）"""
     db = get_db()
     rows = db.fetchall(
-        "SELECT * FROM cognitive_nodes WHERE user_id = %s "
+        "SELECT * FROM cognitive_nodes WHERE user_id = %s AND deleted_at IS NULL "
         "AND scheduling->>'urgency' IS NOT NULL "
         "ORDER BY (scheduling->>'urgency')::float DESC LIMIT %s",
         (user_id, limit),

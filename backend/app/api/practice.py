@@ -337,7 +337,7 @@ async def inline_answer(req: InlineAnswerRequest):
     content = block.content or {}
     correct_answer = content.get("correct_answer", "").strip().upper()
     explanation = content.get("explanation") or content.get("reply_expected", "") or ""
-    content.get("question_id", "")
+
     skill_id = content.get("skill_id", "")
 
     is_correct = req.answer.strip().upper() == correct_answer

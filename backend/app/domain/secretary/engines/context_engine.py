@@ -66,7 +66,7 @@ class ContextEngine:
             # 认知负荷（取平均）
             loads = [n.cognitive_load.intrinsic for n in nodes if n.cognitive_load]
             if loads:
-                ctx.cognitive_load = sum(loads[:5]) / min(len(loads[:5]), 1)
+                ctx.cognitive_load = sum(loads[:5]) / min(len(loads[:5]), 5)
                 ctx.estimated_energy = "low" if ctx.cognitive_load > 0.7 else "normal"
 
             # 最近对话上下文

@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter
 
 from shared.constants import DEFAULT_USER_ID
-from app.core.knowledge_trace import bkt_engine, get_all_cognitive_states
+from app.core.knowledge_trace import bkt_engine
 from app.core.learner_model import learner_engine
 from app.services.achievement_engine import achievement_engine
 from app.services.storage import storage
@@ -39,16 +39,20 @@ def _collect_stats(user_id: str) -> dict[str, Any]:
     # Streak
     streak = profile.streak_days if hasattr(profile, "streak_days") else 0
 
-    # 掌握技能数 (p_known >= 0.8)
-    states = get_all_cognitive_states(user_id)
-    mastered_skills = sum(1 for s in states.values() if s.p_known >= 0.8)
+    # 掌握技能数 (proficiency_mean >= 0.8) — migrated from BKT to CognitiveNode
+    from app.cognitive.storage import list_all_nodes
+    cog_nodes = list_all_nodes(user_id)
+    mastered_skills = sum(
+        1 for n in cog_nodes
+        if n.belief and n.belief.proficiency_mean >= 0.8
+    )
 
     # 多学科覆盖
     from domain.knowledge.prerequisites import SKILL_TO_SUBJECT
     subject_mastered: set[str] = set()
-    for skill_id, state in states.items():
-        if state.p_known >= 0.8:
-            subj = SKILL_TO_SUBJECT.get(skill_id, "")
+    for node in cog_nodes:
+        if node.belief and node.belief.proficiency_mean >= 0.8:
+            subj = SKILL_TO_SUBJECT.get(node.id, "")
             if subj:
                 subject_mastered.add(subj)
 

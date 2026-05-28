@@ -138,7 +138,7 @@ def handle_practice_response(event: CognitiveEvent) -> dict[str, Any]:
     payload = event.payload or {}
     success = payload.get("success", True)
     latency_ms = payload.get("latency_ms", 5000.0)
-    payload.get("confidence", 0.5)
+
     consecutive = payload.get("consecutive", False)
 
     # Load node or create stub
@@ -241,6 +241,7 @@ def handle_practice_response(event: CognitiveEvent) -> dict[str, Any]:
     new_engagement = update_engagement(node.engagement, success, consecutive)
 
     # ─── 14. 写回节点 ───
+    proficiency_before = node.belief.proficiency_mean
     node.belief = new_belief
     node.practice_events = events
     node.practice_summary = new_summary
@@ -267,11 +268,11 @@ def handle_practice_response(event: CognitiveEvent) -> dict[str, Any]:
         "status": "ok",
         "event_type": "practice_response",
         "node_id": node_id,
-        "proficiency_before": node.belief.proficiency_mean,
+        "proficiency_before": proficiency_before,
         "proficiency_after": new_belief.proficiency_mean,
         "success": success,
         "activation": round(base_level, 3),
-        "urgency": round(new_scheduling.urgency, 3),
+        "urgency": round(node.scheduling.urgency, 3) if node.scheduling else 0.0,
         "fatigue": round(state.fatigue_level, 3),
         "xp": new_engagement.xp,
         "streak": new_engagement.streak_current,

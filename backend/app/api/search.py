@@ -187,20 +187,7 @@ async def _search_knowledge(q: str, limit: int) -> list[SearchResultItem]:
         except Exception:
             pass
 
-        # CognitiveNode query — replaces legacy knowledge_states reads
-        from app.cognitive.storage import list_nodes
-        cog_nodes = list_nodes(user_id=USER_ID)
-        for node in cog_nodes:
-            if q_lower in (node.label or "").lower() or q_lower in node.id.lower():
-                mu = node.belief.proficiency_mean if node.belief else 0.0
-                results.append(SearchResultItem(
-                    type="knowledge",
-                    title=node.label or node.id.replace("_", " ").title(),
-                    subtitle=f"掌握 {mu:.0%} (CognitiveNode)",
-                    link=f"/graph?skill={node.id}",
-                    score=mu,
-                    meta={"skill_id": node.id, "mastery": mu},
-                ))
+
 
         return results[:limit]
 
