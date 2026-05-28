@@ -177,45 +177,6 @@ async def get_snapshot(
     }
 
 
-@router.get("/daily-brief")
-async def get_daily_brief(
-    user_id: str = DEFAULT_USER_ID,
-    service: SecretaryService = Depends(_get_service),
-) -> dict:
-    """获取今日简报"""
-    report, proposals = await service.diagnose_and_suggest(
-        user_id=user_id, max_proposals=3,
-    )
-    return {
-        "report": {
-            "weak_count": len(report.weak_points),
-            "cognitive_load": report.cognitive_load,
-            "highlight": report.highlight,
-            "summary": report.summary,
-        },
-        "proposals": [p.model_dump() for p in proposals],
-    }
-
-
-@router.post("/diagnose")
-async def run_diagnosis(
-    user_id: str = DEFAULT_USER_ID,
-    scope_level: str = "user",
-    scope_node_id: str | None = None,
-    service: SecretaryService = Depends(_get_service),
-) -> dict:
-    """执行诊断"""
-    scope = ScopeSpec(level=scope_level, node_id=scope_node_id) if scope_level != "user" else None
-    report = await service.diagnose(user_id=user_id, scope=scope)
-    return {
-        "weak_points": [wp.model_dump() for wp in report.weak_points[:20]],
-        "cognitive_load": report.cognitive_load,
-        "highlight": report.highlight,
-        "summary": report.summary,
-        "source_findings": report.source_findings,
-    }
-
-
 @router.post("/suggest")
 async def get_suggestions(
     user_id: str = DEFAULT_USER_ID,
@@ -369,29 +330,6 @@ async def generate_llm_proposals(
         store.save_proposal(p, user_id=user_id, session_id="api")
 
     return [p.model_dump() for p in proposals]
-
-
-# ═══════════════════════════════════════════
-# 黑板推送
-# ═══════════════════════════════════════════
-
-
-@router.post("/push-to-blackboard")
-async def push_proposals_to_blackboard(
-    session_id: str,
-    user_id: str = DEFAULT_USER_ID,
-    service: SecretaryService = Depends(_get_service),
-) -> dict:
-    """运行诊断并将提案推送到黑板"""
-    report, proposals = await service.diagnose_and_suggest(
-        user_id=user_id, max_proposals=3,
-    )
-    ok = await service.push_to_blackboard(session_id, proposals, report)
-    return {
-        "success": ok,
-        "proposal_count": len(proposals),
-        "report_summary": report.summary,
-    }
 
 
 # ═══════════════════════════════════════════
