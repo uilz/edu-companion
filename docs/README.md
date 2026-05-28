@@ -5,7 +5,8 @@
 | 路径 | 内容 |
 |------|------|
 | `../README.md` | 项目总览、架构、快速开始 |
-| `architecture-v3.md` | 系统架构设计 v3（Phase 1-15） |
+| `architecture.md` | 当前系统架构设计 |
+| `archive/architecture-v3.md` | 系统架构设计 v3（Phase 1-15，已归档） |
 | `PROGRESS.md` | 开发进度追踪（含 Phase 1-15） |
 | `phase1/` | MVP 练习系统设计 (已归档) |
 | `phase2/` | 错题本、知识图谱、学习日历 (已归档) |
@@ -20,12 +21,12 @@
 
 | 重构项 | 说明 |
 |--------|------|
-| **Phase 8 ✅** | 知识图谱树侧栏、向量分类器、自动归类、存储序列化修复 |
-| **Phase 7 ✅** | 秘书系统：诊断引擎/提案生成/策略引擎/7 模块/前端铃铛+卡片 |
-| **Phase 9-15 ✅** | 认知追踪→SM-2调度→仪表盘→多模态讲解→伴学心智→视觉理解+图谱可视化 |
-| **conversation_llm.py 拆分** | 1064 行→845 行，提取 `prompts.py` 和 `context_builder.py` |
-| **存储引擎** | PG 为主，JSON 备降；CognitiveNode 统一数据源 |
-| **前端 404 自动清理** | loadChildren/loadMessages 遇到 404 自动移除僵尸节点 |
+| **Phase 1-16 ✅** | 全部功能阶段完成（MVP→认知追踪→系统整合） |
+| **Phase R1-R6 ✅** | 代码重构：数据层统一、模块合并、Zustand、死代码清理 |
+| **BKT 退役** | knowledge_trace.py 重写为 CognitiveNode 实现 |
+| **CognitiveNode 统一** | 数据源唯一存储，移除多数据源依赖 |
+| **前端 Zustand** | useConversation 993→243行(-72%)，引入 conversation-store |
+| **存储引擎** | PG 为主，JSON 备降；infra/database.py 已删除 |
 
 ## 💡 设计原则
 

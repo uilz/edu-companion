@@ -9,7 +9,7 @@
 - [项目简介](#项目简介)
 - [完整功能矩阵](#完整功能矩阵)
 - [架构概览](#架构概览)
-- [16 个 Phase 交付总览](#16-个-phase-交付总览)
+- [16 个 Phase + v4.0 重构交付总览](#16-个-phase--v40-重构交付总览)
 - [技术栈](#技术栈)
 - [项目结构](#项目结构)
 - [核心数据流](#核心数据流)
@@ -58,7 +58,7 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                         前端 (Next.js 14)                             │
+│                   前端 (Next.js 14 + Zustand)                        │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │
 │  │ AI 对话  │ │ 练习中心 │ │ 学习报告 │ │ 知识图谱 │ │ 智能秘书 │  │
 │  │ (WS流式) │ │(自适应)  │ │(CRUD)    │ │(力导向)  │ │(诊断)    │  │
@@ -69,6 +69,11 @@
 │  │ streak   │ │ Emotion  │ │ 变式题   │                              │
 │  │ 习惯养成 │ │ 趋势看板 │ │ 关联发现 │                              │
 │  └──────────┘ └──────────┘ └──────────┘                              │
+│                                                                      │
+│  ┌──────────────────────────────────────────────────────────────┐    │
+│  │  Zustand Store                                               │    │
+│  │  conversation-store (对话状态/WS连接) + streaming (流式数据)  │    │
+│  └──────────────────────────────────────────────────────────────┘    │
 └────────────────────────────────┬─────────────────────────────────────┘
                                  │ REST + WebSocket
                                  ▼
@@ -100,7 +105,7 @@
 
 ---
 
-## 📦 16 个 Phase 交付总览
+## 📦 16 个 Phase + v4.0 重构交付总览
 
 ```
 Phase 1 MVP:     █████████████████████  完成 ✅
@@ -119,7 +124,21 @@ Phase 13 讲解:   ████████████████████�
 Phase 14 心智:   █████████████████████  完成 ✅
 Phase 15 多模态:  █████████████████████  完成 ✅
 Phase 16 整合:   █████████████████████  完成 ✅
+v4.0 重构:       █████████████████████  完成 ✅  6 阶段 ~2,500 行精简
 ```
+
+### v4.0 重构详情
+
+6 个重构阶段，**净删除约 2,500 行代码**，全面瘦身提速：
+
+| 重构阶段 | 目标 | 效果 |
+|:---------|:-----|:-----|
+| ① 对话状态管理 | `useConversation` 882→243 行 | **-72%** |
+| ② 侧栏组件 | `Phase8Sidebar` 581→352 行 | **-39%** |
+| ③ 分析模块 | `analytics` 1072→171 行 | **-84%** |
+| ④ Zustand 状态迁移 | 对话/流式状态从组件迁移至 Zustand Store | 全局可访问 |
+| ⑤ UI 组件抽取 | 7 个通用 UI 组件（Card, ErrorBoundary, Skeleton 等） | 复用率 ↑ |
+| ⑥ 清理废弃代码 | 删除过期组件、简化模块边界 | 依赖 ↓ |
 
 详情见 [docs/PROGRESS.md](docs/PROGRESS.md) 和 [CHANGELOG.md](CHANGELOG.md)。
 
@@ -130,6 +149,7 @@ Phase 16 整合:   ████████████████████�
 | 层级 | 技术 | 说明 |
 |:-----|:-----|:-----|
 | **前端** | Next.js 14 (App Router) | React 18 + TypeScript, shadcn/ui, Tailwind CSS |
+| **前端状态** | Zustand | 轻量级全局状态管理（对话流/WS 连接/树节点） |
 | **后端** | FastAPI + Python 3.11 | 异步 REST + WebSocket, LiteLLM |
 | **数据库** | PostgreSQL 14/16 + pgvector | CognitiveNode 统一存储, 向量检索 |
 | **AI** | DeepSeek / OpenAI 兼容 API | LiteLLM 路由, 多模型策略 |
@@ -148,15 +168,17 @@ Phase 16 整合:   ████████████████████�
 edu-companion/
 ├── backend/
 │   ├── app/
-│   │   ├── api/                      # REST API 端点
+│   │   ├── api/                      # REST API 端点 (13 路由)
 │   │   │   ├── conversation.py       # 对话系统 (WS+SSE)
 │   │   │   ├── phase8.py             # v2 API: 图谱/分类/队列/看板/讲解/情绪/扩展/视觉
 │   │   │   ├── practice.py           # 练习系统 (SM-2 调度)
-│   │   │   ├── practice_analytics.py # 行为分析 + 统计
 │   │   │   ├── secretary.py          # 秘书系统
 │   │   │   ├── achievements.py       # 成就系统
+│   │   │   ├── knowledge_graph.py    # 知识图谱
+│   │   │   ├── multimodal.py         # 多模态 (TTS/视频/图片)
+│   │   │   ├── material.py           # 教材管理
 │   │   │   └── ...                   # chat, knowledge, progress, study...
-│   │   ├── services/
+│   │   ├── services/                 # 40+ 服务模块
 │   │   │   ├── conversation_llm.py   # AI 对话主逻辑（非流式+流式）
 │   │   │   ├── context_builder.py    # 上下文构建（含情绪注入）
 │   │   │   ├── emotion_analyzer.py   # 情绪分析引擎
@@ -179,13 +201,12 @@ edu-companion/
 │   │   │   └── analytics/            # 行为分析事件驱动
 │   │   ├── application/di.py         # DI 容器（9 服务+8 订阅）
 │   │   └── main.py                   # FastAPI 入口
-│   ├── domain/                       # 领域层 handler
 │   ├── scripts/
 │   │   └── cleanup_temp_convs.py     # 48h 临时对话清理
-│   └── tests/                        # 165 项测试
+│   └── tests/                        # 220 项测试
 ├── frontend/
 │   └── src/
-│       ├── app/                      # 17 个路由页面
+│       ├── app/                      # 16 个路由页面
 │       │   ├── learn/                # AI 对话
 │       │   ├── practice/             # 练习中心
 │       │   ├── dashboard/            # 学情看板
@@ -194,12 +215,25 @@ edu-companion/
 │       │   ├── secretary/            # 智能秘书
 │       │   ├── achievements/         # 成就系统
 │       │   └── ...                   # errors, stats, calendar, study...
+│       ├── store/                    # Zustand 全局状态
+│       │   ├── conversation-store.ts # 对话状态 + WS 连接管理
+│       │   ├── streaming.ts          # 流式数据接收与缓冲
+│       │   └── tree-helpers.ts       # 知识树节点操作辅助
 │       └── components/
+│           ├── ui/                   # 通用 UI 组件 (v4.0 抽取)
+│           │   ├── Card.tsx          # 通用卡片容器
+│           │   ├── ConfirmDialog.tsx # 确认对话框
+│           │   ├── EmptyState.tsx    # 空状态占位
+│           │   ├── ErrorBoundary.tsx # 错误边界
+│           │   ├── InlineEdit.tsx    # 行内编辑
+│           │   ├── MathContent.tsx   # 数学公式渲染
+│           │   └── Skeleton.tsx      # 加载骨架屏
 │           ├── conversation/         # 对话组件（输入/列表/侧栏/语音/分类浮窗）
-│           ├── dashboard/            # 看板组件（Overview/GraphTab）
+│           ├── dashboard/            # 看板组件（Overview/GraphTab 等）
 │           ├── analytics/            # 分析组件（RadarChart/EmotionCard）
-│           ├── explain/              # 讲解组件（ExplainPanel/ExpandPanel）
-│           └── secretary/            # 秘书组件
+│           ├── secretary/            # 秘书组件
+│           ├── layout/               # 布局（Sidebar/BottomNav/ClientProviders）
+│           └── search/               # 统一搜索
 ├── docs/                             # 完整文档
 │   ├── architecture-v3.md            # 系统架构 v3.0
 │   ├── PROGRESS.md                   # 开发进度跟踪
@@ -233,6 +267,11 @@ CognitiveNode 更新
 
 每日后台
   → cleanup_temp_convs.py (48h 清理)                   # Phase 15
+
+前端状态流 (v4.0)
+  → Zustand conversation-store 统一管理对话状态
+  → streaming store 接收 WS 流式数据并缓冲
+  → 组件通过 selector 按需订阅，避免不必要的重渲染
 ```
 
 ---
@@ -277,7 +316,7 @@ npm run dev
 
 ```bash
 cd backend
-pytest tests/ -q             # 165 项测试
+pytest tests/ -q             # 220 项测试
 cd frontend
 npx tsc --noEmit              # TypeScript 编译检查
 ```
@@ -285,6 +324,18 @@ npx tsc --noEmit              # TypeScript 编译检查
 ---
 
 ## 🧹 近期里程碑
+
+### v4.0 — 6 阶段前端重构 (2026-05-27)
+
+- Zustand 全局状态管理替换组件内状态
+- `useConversation` 882→243 行 (-72%)
+- `Phase8Sidebar` 581→352 行 (-39%)
+- `analytics` 模块 1072→171 行 (-84%)
+- 7 个通用 UI 组件抽取（Card/ErrorBoundary/Skeleton 等）
+- 清理废弃组件，净删除 ~2,500 行
+
+**后端**: 28,033 行 Python • 13 API 路由 • 220 项测试  
+**前端**: 15,565 行 TS/TSX • 16 路由页面 • Zustand 状态管理  
 
 ### v0.6.0 — Phase 9-15 全线贯通 (2026-05-26)
 

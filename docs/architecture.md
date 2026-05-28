@@ -1,8 +1,8 @@
 # 智能伴学系统架构文档 v4.0
 
 > 版本: v4.0
-> 最后更新: 2026-05-27
-> 状态: ✅ 全部 16 个 Phase 已交付
+> 最后更新: 2026-05-28
+> 状态: ✅ 全部 22 个 Phase 已交付（含 v4.0 重构 6 阶段）
 
 ---
 
@@ -15,11 +15,20 @@
 | 层级 | 技术 | 说明 |
 |------|------|------|
 | 前端 | Next.js 14 + shadcn/ui + Tailwind CSS | SSR/CSR 混合，CSS Variables 主题切换 |
+| 状态管理 | Zustand | 替代 monolithic useConversation hook，分模块 store |
 | 后端 | Python FastAPI | 异步高性能，OpenAPI 自动文档 |
 | 数据库 | PostgreSQL 14+ + pgvector | JSONB 灵活存储 + 向量检索 |
 | LLM | OpenAI 兼容 API | 通过 .env 配置模型名，禁止硬编码 |
 | 存储 | PG 主存 + JSON 备降 | `USE_PG_STORAGE=true` 默认开启 |
 | 部署 | Docker + Nginx | 双容器部署，前端 standalone 模式 |
+
+### 代码规模
+
+| 模块 | 行数 | 文件数 |
+|------|------|--------|
+| 后端 (Python) | ~28,033 | ~78 |
+| 前端 (TS/TSX) | ~15,565 | ~47 |
+| 合计 | ~43,598 | ~125 |
 
 ---
 
@@ -33,22 +42,28 @@
 │  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘          │
 │       │            │            │            │                  │
 │  ┌────┴────────────┴────────────┴────────────┴────┐            │
-│  │              API Layer (lib/api.ts)             │            │
-│  └────────────────────────┬───────────────────────┘            │
-└───────────────────────────┼────────────────────────────────────┘
-                            │ HTTP/WebSocket
-┌───────────────────────────┼────────────────────────────────────┐
+│  │         Zustand Store (状态管理层)               │            │
+│  │         conversation-store.ts                   │            │
+│  │         + streaming.ts / tree-helpers.ts        │            │
+│  └────────────────────┬───────────────────────────┘            │
+│       │               │                                        │
+│  ┌────┴───────────────┴───────────────────────┐                │
+│  │           API Layer (lib/api.ts)            │                │
+│  └────────────────────┬───────────────────────┘                │
+└───────────────────────┼────────────────────────────────────────┘
+                        │ HTTP/WebSocket
+┌───────────────────────┼────────────────────────────────────────┐
 │                        后端 (FastAPI)                           │
-│  ┌────────────────────────┴───────────────────────┐            │
-│  │              API Router (17 模块)               │            │
-│  └────┬────────────┬────────────┬────────────┬────┘            │
+│  ┌────────────────────┴───────────────────────┐                │
+│  │           API Router (13 模块)              │                │
+│  └────┬────────────┬────────────┬────────────┬┘                │
 │       │            │            │            │                  │
 │  ┌────┴────┐ ┌─────┴────┐ ┌────┴────┐ ┌────┴────┐            │
 │  │ 对话层  │ │ 练习层   │ │ 秘书层  │ │ 图谱层  │            │
 │  └────┬────┘ └─────┬────┘ └────┬────┘ └────┬────┘            │
 │       │            │            │            │                  │
 │  ┌────┴────────────┴────────────┴────────────┴────┐            │
-│  │           Service Layer (35+ 服务)              │            │
+│  │          Service Layer (35+ 服务)               │            │
 │  └────┬────────────┬────────────┬────────────┬────┘            │
 │       │            │            │            │                  │
 │  ┌────┴────┐ ┌─────┴────┐ ┌────┴────┐ ┌────┴────┐            │
@@ -154,54 +169,110 @@ class CognitiveNode(BaseModel):
 
 ## 五、API 端点清单
 
-### 对话系统
+> 共 13 个路由模块，~125 个端点
+
+### 对话系统 (conversation.py)
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
-| WS | `/api/chat/ws` | WebSocket 实时聊天 |
-| POST | `/api/chat/api/chat` | HTTP 聊天 |
+| WS | `/api/conversations/ws` | WebSocket 实时聊天 |
 | GET | `/api/conversations/tree/{level}` | 获取树节点 |
 | POST | `/api/conversations/tree/{level}` | 创建树节点 |
 | PATCH | `/api/conversations/tree/{level}/{node_id}` | 更新节点 |
 | DELETE | `/api/conversations/tree/{level}/{node_id}` | 删除节点 |
 | GET | `/api/conversations/tree/conversation/{conv_id}/messages` | 获取消息 |
+| GET | `/api/conversations/tree/conversation/{conv_id}/blocks` | 获取响应块 |
 | POST | `/api/conversations/tree/conversation/{conv_id}/message` | 发送消息 |
 | POST | `/api/conversations/tree/conversation/{conv_id}/switch` | 切换分支 |
+| GET | `/api/conversations/tree/message/{message_id}` | 获取消息详情 |
+| PUT | `/api/conversations/tree/message/{message_id}` | 更新消息 |
+| GET | `/api/conversations/tree/message/{message_id}/blocks` | 消息关联块 |
+| GET | `/api/conversations/tree/response-block/{block_id}` | 响应块详情 |
+| GET | `/api/conversations/tree/stream/active/{conversation_id}` | 活跃流 |
+| POST | `/api/conversations/tree/conversation/{conv_id}/message/persist` | 持久化消息 |
+| GET | `/api/conversations/tree/conversations/{conv_id}/materials` | 关联资料 |
+| GET | `/api/conversations/tree/conversations/{conv_id}/practice-suggestions` | 练习建议 |
+| POST | `/api/conversations/workspace/upload` | 工作区上传 |
+| GET | `/api/conversations/workspace/files` | 工作区文件列表 |
+| DELETE | `/api/conversations/workspace/files/{file_id}` | 删除工作区文件 |
+| GET | `/api/conversations/workspace/download/{file_id}` | 下载工作区文件 |
+| GET | `/api/conversations/emotion/trend` | 情绪趋势 |
+| GET | `/api/conversations/jobs/{job_id}` | 异步任务状态 |
+| POST | `/api/conversations/jobs/{job_id}/cancel` | 取消异步任务 |
+| GET | `/api/conversations/jobs/{job_id}/block` | 任务响应块 |
 
-### 练习系统
+### 聊天 (chat.py)
+
+| 方法 | 路径 | 功能 |
+|------|------|------|
+| WS | `/api/chat/ws` | WebSocket 聊天 |
+| POST | `/api/chat/api/chat` | HTTP 聊天 |
+
+### 练习系统 (practice.py)
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
 | POST | `/api/practice/questions/generate` | 生成题目 |
 | GET | `/api/practice/questions` | 获取题目列表 |
-| POST | `/api/practice/sessions` | 创建练习会话 |
-| POST | `/api/practice/sessions/{id}/complete` | 完成会话 |
-| POST | `/api/practice/submit` | 提交答案 |
+| GET | `/api/practice/sessions` | 会话列表 |
+| GET | `/api/practice/sessions/{session_id}` | 会话详情 |
+| POST | `/api/practice/sessions/{session_id}/complete` | 完成会话 |
 | POST | `/api/practice/hint` | 获取提示 |
 | POST | `/api/practice/inline/answer` | 内联答题 |
-
-### 错题与质量
-
-| 方法 | 路径 | 功能 |
-|------|------|------|
+| POST | `/api/practice/inline/hint` | 内联提示 |
 | GET | `/api/practice/errors` | 错题列表 |
-| POST | `/api/practice/errors/{id}/review` | 复习错题 |
+| POST | `/api/practice/errors/{entry_id}/review` | 复习错题 |
 | GET | `/api/practice/errors/due` | 待复习错题 |
+| POST | `/api/practice/errors/{entry_id}/analyze` | 错题分析 |
+| GET | `/api/practice/errors/stats` | 错题统计 |
+| GET | `/api/practice/stats` | 练习统计 |
+| GET | `/api/practice/behavior` | 练习行为分析 |
 | GET | `/api/practice/quality` | 质量分析 |
 | GET | `/api/practice/quality/worst` | 最差题目 |
-| GET | `/api/practice/quality/detail/{id}` | 题目详情 |
+| POST | `/api/practice/quality/apply` | 应用质量优化 |
+| GET | `/api/practice/quality/detail/{question_id}` | 题目详情 |
+| GET | `/api/practice/quality/{question_id}/distractors` | 干扰项分析 |
+| GET | `/api/practice/knowledge/state` | 知识状态 |
+| GET | `/api/practice/knowledge/skill/{skill_id}` | 技能详情 |
+| GET | `/api/practice/knowledge/weak` | 薄弱知识点 |
+| POST | `/api/practice/knowledge/evidence` | 知识证据 |
 
-### 知识图谱
+### 知识图谱 (knowledge.py)
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
 | GET | `/api/knowledge/graph` | 知识图谱 |
 | GET | `/api/knowledge/prerequisites` | 前置检查 |
+| POST | `/api/knowledge/check` | 前置校验 |
+| GET | `/api/knowledge/blocked` | 被卡控节点 |
 | GET | `/api/knowledge/ready` | 可学习节点 |
+| GET | `/api/knowledge/path` | 学习路径 |
 | GET | `/api/knowledge/retention` | 遗忘曲线 |
-| GET | `/api/v2/graph/nodes` | Phase8 图节点 |
-| GET | `/api/v2/graph/search` | 图谱搜索 |
+
+### Phase8 图谱 (phase8.py)
+
+| 方法 | 路径 | 功能 |
+|------|------|------|
 | POST | `/api/v2/classify` | 消息分类 |
+| POST | `/api/v2/classify/select` | 分类选择 |
+| POST | `/api/v2/classify/custom` | 自定义分类 |
+| PUT | `/api/v2/conversations/{conv_id}/save` | 保存对话分类 |
+| GET | `/api/v2/conversations/{conv_id}/links` | 获取链接 |
+| POST | `/api/v2/conversations/{conv_id}/links` | 创建链接 |
+| PATCH | `/api/v2/conversations/{conv_id}/links/{link_id}` | 更新链接 |
+| DELETE | `/api/v2/conversations/{conv_id}/links/{link_id}` | 删除链接 |
+| GET | `/api/v2/graph/nodes` | 图节点 |
+| GET | `/api/v2/graph/search` | 图谱搜索 |
+| POST | `/api/v2/graph/nodes/{node_id}/expand` | 展开节点 |
+| POST | `/api/v2/graph/nodes` | 创建图节点 |
+| PATCH | `/api/v2/graph/nodes/{node_id}` | 更新图节点 |
+| DELETE | `/api/v2/graph/nodes/{node_id}` | 删除图节点 |
+| GET | `/api/v2/graph/edges` | 图边列表 |
+| POST | `/api/v2/graph/edges/{edge_id}/accept` | 接受边 |
+| POST | `/api/v2/graph/edges/{edge_id}/reject` | 拒绝边 |
+| DELETE | `/api/v2/graph/edges/{edge_id}` | 删除边 |
+| GET | `/api/v2/graph/export` | 导出图谱 |
+| POST | `/api/v2/practice/queue` | 练习队列 |
 
 ### 学习计划与进度
 
@@ -210,11 +281,19 @@ class CognitiveNode(BaseModel):
 | POST | `/api/study/plan/generate` | 生成计划 |
 | GET | `/api/study/plan/{user_id}` | 获取计划 |
 | PUT | `/api/study/plan/{user_id}/{task_id}/complete` | 完成任务 |
+| GET | `/api/study/plan/{user_id}/progress` | 计划进度 |
+| GET | `/api/study/plan/{user_id}/history` | 历史计划 |
+| POST | `/api/study/plan/refresh` | 刷新计划 |
+| GET | `/api/study/suggestions` | 学习建议 |
 | GET | `/api/progress/{user_id}` | 学习进度 |
 | GET | `/api/progress/{user_id}/stats` | 统计数据 |
+| POST | `/api/progress/{user_id}/session/start` | 开始学习会话 |
+| POST | `/api/progress/{user_id}/profile/update` | 更新画像 |
+| GET | `/api/progress/{user_id}/profile` | 获取画像 |
 | GET | `/api/progress/{user_id}/calendar` | 学习日历 |
+| GET | `/api/progress/{user_id}/summary` | 进度摘要 |
 
-### 秘书系统
+### 秘书系统 (secretary.py)
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
@@ -223,8 +302,20 @@ class CognitiveNode(BaseModel):
 | POST | `/api/secretary/diagnose` | 诊断 |
 | POST | `/api/secretary/suggest` | 生成提案 |
 | GET | `/api/secretary/proposals/pending` | 待处理提案 |
-| POST | `/api/secretary/proposals/{id}/accept` | 采纳提案 |
+| GET | `/api/secretary/proposals/history` | 历史提案 |
+| POST | `/api/secretary/proposals/{proposal_id}/accept` | 采纳提案 |
+| POST | `/api/secretary/proposals/{proposal_id}/dismiss` | 拒绝提案 |
+| POST | `/api/secretary/proposals/{proposal_id}/snooze` | 推迟提案 |
+| POST | `/api/secretary/generate-llm-proposals` | LLM 生成提案 |
+| POST | `/api/secretary/push-to-blackboard` | 推送到黑板 |
+| GET | `/api/secretary/modules` | 模块列表 |
+| POST | `/api/secretary/modules/toggle` | 切换模块 |
 | GET | `/api/secretary/preferences` | 偏好设置 |
+| PATCH | `/api/secretary/preferences` | 更新偏好 |
+| GET | `/api/secretary/onboarding` | 引导流程 |
+| POST | `/api/secretary/onboarding/dialogue` | 引导对话 |
+| GET | `/api/secretary/data/export` | 数据导出 |
+| DELETE | `/api/secretary/data/delete` | 数据删除 |
 
 ### 多模态
 
@@ -232,10 +323,22 @@ class CognitiveNode(BaseModel):
 |------|------|------|
 | POST | `/api/multimodal/transcribe` | 语音转文字 |
 | GET | `/api/multimodal/audio/{filename}` | 音频文件 |
-| POST | `/api/v2/vision/ocr` | OCR 识别 |
-| POST | `/api/v2/vision/understand-problem` | 拍题理解 |
-| POST | `/api/v2/vision/analyze` | 图片分析 |
-| POST | `/api/v2/media/search` | 媒体搜索 |
+| GET | `/api/multimodal/images/{filename}` | 图片文件 |
+
+### 资料管理 (material.py)
+
+| 方法 | 路径 | 功能 |
+|------|------|------|
+| POST | `/api/materials/upload` | 资料上传 |
+| GET | `/api/materials` | 资料列表 |
+| PATCH | `/api/materials/{material_id}` | 更新资料 |
+| POST | `/api/materials/{material_id}/promote` | 提升资料 |
+| GET | `/api/materials/promote-suggestions` | 提升建议 |
+| POST | `/api/materials/search` | 资料搜索 |
+| GET | `/api/materials/{material_id}/chunks` | 资料分块 |
+| POST | `/api/materials/generate-questions` | 生成题目 |
+| DELETE | `/api/materials/{material_id}` | 删除资料 |
+| POST | `/api/materials/cleanup-sessions` | 清理会话 |
 
 ### 其他
 
@@ -243,11 +346,8 @@ class CognitiveNode(BaseModel):
 |------|------|------|
 | GET | `/api/search` | 全站搜索 |
 | GET | `/api/achievements/{user_id}` | 成就系统 |
-| GET | `/api/content/search` | 内容搜索 |
-| POST | `/api/material/upload` | 资料上传 |
-| POST | `/api/material/search` | 资料搜索 |
+| POST | `/api/achievements/{user_id}/check` | 检查成就 |
 | GET | `/api/partition-progress/{pid}` | 分区进度 |
-| GET | `/api/learning-events/stats/{pid}` | 事件统计 |
 
 ---
 
@@ -271,6 +371,7 @@ class CognitiveNode(BaseModel):
 | `conversation_nodes` | 消息节点 |
 | `conversation_response_blocks` | 响应块 |
 | `conversation_link_nodes` | 链接节点 |
+| `conversation_user_meta` | 用户元信息 |
 
 ### 练习表
 
@@ -280,7 +381,6 @@ class CognitiveNode(BaseModel):
 | `practice_sessions` | 练习会话 |
 | `attempts` | 答题记录 |
 | `error_book` | 错题本 |
-| `knowledge_states` | 知识状态（BKT 备降） |
 
 ### 其他表
 
@@ -326,21 +426,15 @@ CREATE TABLE cognitive_nodes (
     unlocks         JSONB DEFAULT '[]',
     associates      JSONB DEFAULT '[]',
 
-    -- Phase 8 扩展
-    path_id         VARCHAR(500),
-    node_type       VARCHAR(50) DEFAULT 'explicit',
-    is_visible      BOOLEAN DEFAULT false,
-    subsystems      JSONB DEFAULT '{}',
-    embedding       JSONB,
-    is_active       BOOLEAN DEFAULT true,
-    deleted_at      TIMESTAMPTZ,
+    -- 参数引用
+    param_refs      JSONB DEFAULT '{}',
 
     -- 元信息
     meta            JSONB DEFAULT '{}',
     created_at      TIMESTAMPTZ DEFAULT NOW(),
     updated_at      TIMESTAMPTZ DEFAULT NOW(),
 
-    PRIMARY KEY (id, user_id)
+    PRIMARY KEY (id)
 );
 ```
 
@@ -373,68 +467,74 @@ CREATE TABLE cognitive_nodes (
 ### 核心组件
 
 ```
-frontend/src/components/
-├── conversation/           # 对话系统
-│   ├── Phase8Sidebar.tsx   # 知识图谱树 + 会话混合展示
-│   ├── ChatInput.tsx       # 聊天输入（支持图片/语音）
-│   ├── MessageList.tsx     # 消息列表
-│   ├── ConversationPanel.tsx # 对话面板
-│   ├── ClassifyConfirmPopover.tsx # 分类确认浮窗
-│   ├── InlinePracticeBlock.tsx    # 内联练习块
-│   ├── MediaSearchBlock.tsx       # 媒体搜索块
-│   ├── SecretarySuggestionsBlock.tsx # 秘书提案卡片
-│   ├── SpeakButton.tsx     # 语音播放按钮
-│   ├── VideoEmbed.tsx      # 视频嵌入
-│   └── VoiceRecorder.tsx   # 语音录制
-├── dashboard/              # 仪表盘
-│   ├── DashboardShell.tsx  # 仪表盘外壳
-│   ├── OverviewTab.tsx     # 概览 Tab
-│   ├── AnalyticsTab.tsx    # 分析 Tab
-│   ├── CalendarTab.tsx     # 日历 Tab
-│   ├── ProgressTab.tsx     # 进度 Tab
-│   ├── ErrorsTab.tsx       # 错题 Tab
-│   ├── QualityTab.tsx      # 质量 Tab
-│   ├── StatsTab.tsx        # 统计 Tab
-│   ├── StudyTab.tsx        # 学习 Tab
-│   ├── PlanTab.tsx         # 计划 Tab
-│   ├── AchievementsTab.tsx # 成就 Tab
-│   └── GraphTab.tsx        # 图谱 Tab
-├── analytics/              # 分析组件
-│   ├── RadarChart.tsx      # 雷达图
-│   ├── EmotionCard.tsx     # 情绪卡片
-│   ├── TrendChart.tsx      # 趋势图
-│   ├── HeatmapGrid.tsx     # 热力图
-│   ├── HabitTab.tsx        # 习惯 Tab
-│   ├── RetentionPanel.tsx  # 遗忘曲线
-│   └── DailySummaryCard.tsx # 每日摘要
-├── layout/                 # 布局
-│   ├── AppShell.tsx        # 应用外壳
-│   ├── Sidebar.tsx         # 侧边栏
-│   ├── BottomNav.tsx       # 底部导航
-│   └── ClientProviders.tsx # 客户端 Provider
-├── materials/              # 资料
-│   ├── MaterialPanel.tsx   # 资料面板
-│   └── MaterialPicker.tsx  # 资料选择器
-├── search/                 # 搜索
-│   └── UnifiedSearch.tsx   # 统一搜索
-├── secretary/              # 秘书
-│   └── SecretaryBellBadge.tsx # 秘书铃铛
-├── explain/                # 讲解
-│   ├── ExplainPanel.tsx    # 讲解面板
-│   └── ExpandPanel.tsx     # 拓展面板
-├── graph/                  # 图谱
-│   └── GraphSidePanel.tsx  # 图谱侧边面板
-└── ui/                     # 通用 UI
-    ├── Card.tsx
-    ├── EmptyState.tsx
-    ├── ErrorBoundary.tsx
-    ├── MathContent.tsx     # 数学公式渲染
-    └── Skeleton.tsx
+frontend/src/
+├── store/                          # Zustand 状态管理
+│   ├── conversation-store.ts       # 对话系统 store (替代 useConversation hook)
+│   ├── streaming.ts                # 流式输出、WS 连接管理
+│   └── tree-helpers.ts             # 树操作、API fetch 封装
+├── components/
+│   ├── conversation/               # 对话系统
+│   │   ├── Phase8Sidebar.tsx       # 知识图谱树 + 会话混合展示
+│   │   ├── SidebarTreeNode.tsx     # 侧边栏树节点
+│   │   ├── ChatInput.tsx           # 聊天输入（支持图片/语音）
+│   │   ├── MessageList.tsx         # 消息列表
+│   │   ├── ConversationPanel.tsx   # 对话面板
+│   │   ├── ResponseBlockRenderer.tsx # 响应块渲染器
+│   │   ├── InlinePracticeBlock.tsx # 内联练习块
+│   │   ├── MediaSearchBlock.tsx    # 媒体搜索块
+│   │   ├── SecretarySuggestionsBlock.tsx # 秘书提案卡片
+│   │   ├── SpeakButton.tsx         # 语音播放按钮
+│   │   ├── VideoEmbed.tsx          # 视频嵌入
+│   │   └── VoiceRecorder.tsx       # 语音录制
+│   ├── dashboard/                  # 仪表盘
+│   │   ├── DashboardShell.tsx      # 仪表盘外壳
+│   │   ├── OverviewTab.tsx         # 概览 Tab
+│   │   ├── AnalyticsTab.tsx        # 分析 Tab
+│   │   ├── CalendarTab.tsx         # 日历 Tab
+│   │   ├── ProgressTab.tsx         # 进度 Tab
+│   │   ├── ErrorsTab.tsx           # 错题 Tab
+│   │   ├── QualityTab.tsx          # 质量 Tab
+│   │   ├── StatsTab.tsx            # 统计 Tab
+│   │   ├── StudyTab.tsx            # 学习 Tab
+│   │   ├── PlanTab.tsx             # 计划 Tab
+│   │   ├── AchievementsTab.tsx     # 成就 Tab
+│   │   ├── GraphTab.tsx            # 图谱 Tab
+│   │   └── analytics/              # 分析子组件
+│   │       ├── OverviewCards.tsx    # 概览卡片
+│   │       ├── MasteryErrorsCard.tsx # 掌握度+错题卡片
+│   │       ├── SuggestionsCard.tsx  # 建议卡片
+│   │       ├── RetentionPanel.tsx   # 遗忘曲线
+│   │       ├── DailySummaryCard.tsx # 每日摘要
+│   │       ├── HabitTab.tsx         # 习惯 Tab
+│   │       ├── HeatmapGrid.tsx      # 热力图
+│   │       └── TrendChart.tsx       # 趋势图
+│   ├── analytics/                  # 分析组件
+│   │   ├── RadarChart.tsx          # 雷达图
+│   │   └── EmotionCard.tsx         # 情绪卡片
+│   ├── layout/                     # 布局
+│   │   ├── AppShell.tsx            # 应用外壳
+│   │   ├── Sidebar.tsx             # 侧边栏
+│   │   ├── BottomNav.tsx           # 底部导航
+│   │   └── ClientProviders.tsx     # 客户端 Provider
+│   ├── search/                     # 搜索
+│   │   └── UnifiedSearch.tsx       # 统一搜索
+│   ├── secretary/                  # 秘书
+│   │   └── SecretaryBellBadge.tsx  # 秘书铃铛
+│   └── ui/                         # 通用 UI
+│       ├── Card.tsx
+│       ├── ConfirmDialog.tsx       # 确认对话框
+│       ├── EmptyState.tsx
+│       ├── ErrorBoundary.tsx
+│       ├── InlineEdit.tsx          # 内联编辑
+│       ├── MathContent.tsx         # 数学公式渲染
+│       └── Skeleton.tsx
 ```
 
 ---
 
 ## 八、Phase 完成状态
+
+### 功能开发阶段 (v0.1 — v0.6)
 
 | Phase | 模块 | 状态 | 版本 |
 |-------|------|:----:|:----:|
@@ -455,6 +555,17 @@ frontend/src/components/
 | ⑮ | 多模态输入 + 图谱可视化 | ✅ | v0.6 |
 | ⑯ | 系统整合与质量提升 | ✅ | v0.6 |
 
+### v4.0 重构阶段 (v4.0)
+
+| Phase | 模块 | 状态 | 说明 |
+|-------|------|:----:|------|
+| ⑰ | 前端状态管理重构 | ✅ | monolithic hook → Zustand 分模块 store |
+| ⑱ | 组件树精简 | ✅ | 删除 7 个废弃组件，新增 6 个功能组件 |
+| ⑲ | API 端点清理 | ✅ | 移除 practice/sessions、practice/submit 等废弃端点 |
+| ⑳ | 数据库表精简 | ✅ | 移除 knowledge_states 表，纯 CognitiveNode 模型 |
+| ㉑ | BKT 全量清除 | ✅ | 移除所有 BKT 引用，统一为 CognitiveNode.belief |
+| ㉒ | 架构文档 v4.0 | ✅ | 更新架构文档，反映全部重构变更 |
+
 ---
 
 ## 九、模块联动全景
@@ -462,14 +573,18 @@ frontend/src/components/
 ```
                   ┌─────────────────────────┐
                   │  练习提交 practice.py   │
-                  │  submit_answer()       │
-                  └──────┬──────────┬──────┘
-                         │          │
-                    CognitiveNode   BKT (备降)
-                  ┌─────┴─────┐
-                  │           │
-                  ▼           ▼
-    CognitiveNode.belief   old knowledge_states
+                  │  inline/answer()        │
+                  └──────────┬──────────────┘
+                             │
+                        CognitiveNode
+                  ┌─────────┴─────────┐
+                  │                   │
+                  ▼                   ▼
+    CognitiveNode.belief      CognitiveNode.practice_summary
+                  │                   │
+                  └─────────┬─────────┘
+                            │
+                   submit_practice_event()
 
                   ┌─────────────────────────────┐
                   │  对话系统 conversation_llm.py │
@@ -484,7 +599,7 @@ frontend/src/components/
 
                   ┌─────────────────────────────┐
                   │  图谱生成/编辑/删除           │
-                  │  knowledge_graph.py          │
+                  │  phase8.py / knowledge.py   │
                   │  Phase8Sidebar (前端)        │
                   └──────────────┬────────────────┘
                                  │
@@ -511,15 +626,14 @@ frontend/src/components/
                   │  zpd_scheduler.py           │
                   └──────────────┬────────────────┘
                          estimate_student_ability()
-                         CognitiveNode.belief 优先
-                            BKT 备降
+                         CognitiveNode.belief
 
                   ┌─────────────────────────────┐
                   │  知识 API + 学习计划          │
                   │  knowledge.py / study.py     │
                   └──────────────┬────────────────┘
                          get_knowledge_state()
-                         CognitiveNode 优先 → BKT 备降
+                         CognitiveNode.belief
 ```
 
 ---
@@ -580,8 +694,7 @@ DEBUG=false
 
 ```
 docs/
-├── architecture.md              ← 本文件（唯一最新架构设计）
-├── architecture-v3.md           ← 旧版架构（Phase 1-8）
+├── architecture.md              ← 本文件（唯一最新架构设计 v4.0）
 ├── PROGRESS.md                  ← 进度跟踪
 ├── README.md                    ← 文档总入口
 ├── phase1/                      ← MVP 设计 (已归档)

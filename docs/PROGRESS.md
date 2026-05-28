@@ -1,6 +1,6 @@
 # 智能伴学系统 — 项目进度
 
-> 最后更新: 2026-05-26 (Phase 16 S14-S17 完成)
+> 最后更新: 2026-05-28 (Phase R1-R6 重构完成)
 
 ---
 
@@ -23,6 +23,7 @@ Phase 13 讲解: █████████████████████
 Phase 14 心智: █████████████████████  完成 ✅
 Phase 15 多模态:█████████████████████  完成 ✅
 Phase 16 整合: █████████████████████  完成 ✅
+Phase R1-R6 重构:█████████████████████  完成 ✅
 ```
 
 ---
@@ -183,7 +184,9 @@ Phase 16 整合: █████████████████████
 
 ```
 docs/
-├── architecture-v3.md    ← 系统架构设计 v3
+├── architecture.md       ← 当前系统架构
+├── archive/              ← 已归档旧文档
+│   └── architecture-v3.md  ← 系统架构设计 v3 (已归档)
 ├── PROGRESS.md           ← 本文件
 ├── README.md             ← 文档总入口
 ├── phase1/               ← MVP 设计 (已归档)
@@ -197,3 +200,5 @@ docs/
 ```
 
 > 除 `architecture-v3.md`、`PROGRESS.md` 和 `README.md` 外，所有旧设计文档已按 Phase 归档。
+>
+> **注意:** `architecture-v3.md` 已归档至 `docs/archive/`，当前架构文档为 `docs/architecture.md`。

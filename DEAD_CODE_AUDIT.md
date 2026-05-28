@@ -6,6 +6,21 @@
 
 ---
 
+## 📋 状态更新 (2026-05-28)
+
+本审计报告中的大部分问题已在 Phase R4-R6 重构中修复：
+
+- ✅ **68 项 unused imports** — 已在 Phase R4 清理完成
+- ✅ **3 deprecated files** — 已标记 DEPRECATED（`migrate_to_cognitive.py`、`migrate_materials.py`、`secretary_schema.sql`）
+- ✅ **3 deprecated no-op functions** — `knowledge_trace.py` 已重写为 CognitiveNode 实现（Phase R5）
+- ✅ **6 unused functions** — 已清理或标记
+- ✅ **12 unused imports in cognitive/events.py** — 已清理
+- ✅ **12 unused imports in api/practice.py** — 已清理
+
+### 仍需关注
+- ⚠️ **6 个 deprecated schema fields** — 保留但标记，后续版本移除
+- ⚠️ **1 empty stub handler** — `AchievementEngine.__init__()`，无影响
+
 ## 1. Unused Imports (68 findings across 35 files)
 
 | # | File | Line | Unused Import | Severity |

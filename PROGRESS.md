@@ -1,6 +1,25 @@
 # 🚀 智能伴学系统 — 开发进度
 
-## 最新里程碑: v0.5.0 (Phase 8) ✅
+## 最新里程碑: v0.8.0 (Phase R1-R6 重构完成) ✅
+
+### 重构完成情况 (v0.8.0)
+
+| 项 | 状态 | 备注 |
+|----|------|------|
+| R1 数据层统一 | ✅ | sidebar 读 cognitive_nodes 唯一源 |
+| R2 模块合并 | ✅ | practice 4→1, 事件总线 8→6, knowledge_graph 470→174行 |
+| R3 Zustand 状态管理 | ✅ | useConversation 993→243行(-72%) |
+| R4 E2E + 死代码清理 | ✅ | DEAD_CODE_AUDIT.md + 68 项 unused import 修复 |
+| R5 前端拆分 + 后端清理 | ✅ | BKT退役, deprecated字段清理, infra/database.py删除 |
+| R6 模块合并 + deprecated清理 | ✅ | 12个API模块统一, 35文件dead import清理 |
+
+### 全部 Phase 完成情况
+
+```
+Phase 1-8:   █████████████████████  完成 ✅
+Phase 9-16:  █████████████████████  完成 ✅
+Phase R1-R6: █████████████████████  重构完成 ✅
+```
 
 ### Phase 8 完成情况
 

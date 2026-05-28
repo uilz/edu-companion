@@ -4,6 +4,50 @@
 
 ---
 
+## [0.8.0] - 2026-05-28
+
+### 代码重构 (6 Phase)
+
+#### Phase R1 · 数据层统一
+- Sidebar 读 cognitive_nodes 唯一源，移除多数据源依赖
+- 新增 `migrate_user_meta_to_cognitive.py` 迁移脚本
+- `useConversation.ts` 清理冗余数据获取逻辑
+
+#### Phase R2 · 模块合并 + 死代码清理
+- **R2a**: practice 4 模块→1（`practice_analytics.py` / `practice_errors.py` / `practice_quality.py` 合并），清理 main.py，-52 行
+- **R2b**: 清理死事件 AudioSynthesized/ImageRendered，事件总线 8→6，-91 行
+- **R2c**: `knowledge_graph.py` 瘦身 470→174 行，清理 dead deprecated 端点
+- **R2d**: 删除 practice 2 个 deprecated 端点，-313 行
+
+#### Phase R3 · Zustand 状态管理
+- 引入 `conversation-store.ts`（1121 行 Zustand store）
+- `useConversation.ts` 993→~243 行（-72%），职责下沉至 store
+
+#### Phase R4 · E2E 测试 + 死代码清理
+- 新增 DEAD_CODE_AUDIT.md 完整审计报告
+- 修复 35 个文件的 unused imports（68 项）
+- 修复路由、schema、di.py 多处 dead reference
+
+#### Phase R5 · 前端拆分 + 后端死代码清理
+- 后端: knowledge_trace.py 重写为 CognitiveNode 实现，移除 BKT no-op
+- 后端: learner_model.py / schemas / protocols 清理 deprecated 字段
+- 前端: achievements / analytics / knowledge 等页面优化
+- `infra/database.py` 删除（统一到 `db/database.py`）
+- `docs/archive/` 归档旧设计文档
+
+#### Phase R6 · 模块合并 + 分析页重构 + deprecated 清理
+- 12 个 API 模块统一错误处理 + response_model 清理
+- secretary / cognitive / db / domain 模块 deprecated import 清理
+- 前端 6+ 个组件 dead import / dead path 清理
+
+### 重构指标
+- **后端**: ~1,200 行代码移除，35 文件 unused import 修复
+- **前端**: `useConversation.ts` -72%，引入 Zustand store
+- **架构**: 数据源统一为 cognitive_nodes，BKT 系统退役
+- **文档**: DEAD_CODE_AUDIT.md 新建，旧设计文档归档
+
+---
+
 ## [0.7.0] - 2026-05-26
 
 ### Phase 16 · 系统整合与质量提升
