@@ -1,4 +1,10 @@
 """
+⚠️  DEPRECATED — 本模块已由 CognitiveNode 替代。
+
+SharedKnowledgeStateService 仅剩 knowledge_bridge.py 内部的
+SharedKnowledgeState (domain/learning/shared_knowledge.py) 作为 fallback。
+所有新代码应直接使用 app.cognitive.storage + CognitiveNode。
+
 共享知识状态服务
 统一管理对话和练习两个系统的知识状态
 

@@ -1,13 +1,14 @@
 """
 KnowledgeBridge — 统一知识状态桥接服务
 
-连接练习系统（BKT）和对话系统，维护 SharedKnowledgeState。
+连接练习系统和对话系统，提供知识上下文给 LLM。
 
 职责：
-1. 监听练习完成事件 → 同步 BKT 到共享状态
-2. 分析对话消息 → 提取知识证据
-3. 生成对话 LLM 可用的知识上下文
-4. 提供 API 可查询的统一状态视图
+1. 从 CognitiveNode 读取知识状态（主数据源）
+2. 生成对话 LLM 可用的知识上下文
+3. 提供 API 可查询的统一状态视图
+
+注意：SharedKnowledgeState fallback 为遗留路径，将逐步移除。
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from typing import Optional
 from shared.constants import DEFAULT_USER_ID
 from app.domain.learning.shared_knowledge import (
     EvidenceType,
-    shared_knowledge,
+    shared_knowledge,  # DEPRECATED fallback — 仅在 CognitiveNode 无数据时使用
 )
 from app.cognitive.storage import get_node, list_all_nodes, get_urgent_nodes
 from app.cognitive.models import CognitiveNode
@@ -42,7 +43,7 @@ class KnowledgeBridge:
         try:
             nodes = list_all_nodes(user_id)
             if not nodes:
-                # fallback to legacy
+                # DEPRECATED fallback — SharedKnowledgeState
                 return self.state.to_context_string()
 
             # Filter to nodes that have practice data
@@ -52,6 +53,7 @@ class KnowledgeBridge:
             ]
 
             if not practiced:
+                # DEPRECATED fallback — SharedKnowledgeState
                 return self.state.to_context_string()
 
             # Sort by proficiency
@@ -98,12 +100,13 @@ class KnowledgeBridge:
             return "\n".join(lines)
         except Exception as e:
             logger.warning(f"get_knowledge_context CognitiveNode failed: {e}, falling back")
+            # DEPRECATED fallback — SharedKnowledgeState
             return self.state.to_context_string()
 
     def get_skill_context(self, skill_ids: list[str], user_id: str = DEFAULT_USER_ID) -> str:
         """获取特定技能的知识上下文
 
-        优先从 CognitiveNode 读取，回退到 SharedKnowledgeState。
+        优先从 CognitiveNode 读取。回退到 SharedKnowledgeState（遗留路径）。
         """
         try:
             lines = []
@@ -122,7 +125,7 @@ class KnowledgeBridge:
                         f"7d_rate={recent_rate:.0%})"
                     )
                 else:
-                    # fallback to SharedKnowledgeState
+                    # DEPRECATED fallback — SharedKnowledgeState
                     skill = self.state.get_skill(sid)
                     if skill:
                         s = "✅" if skill.is_mastered else "📖" if skill.is_learning else "⚠️"
@@ -134,7 +137,7 @@ class KnowledgeBridge:
             return "\n".join(lines) if lines else ""
         except Exception as e:
             logger.warning(f"get_skill_context CognitiveNode failed: {e}, falling back")
-            # Full fallback
+            # DEPRECATED fallback — SharedKnowledgeState (full fallback)
             lines = []
             for sid in skill_ids:
                 skill = self.state.get_skill(sid)

@@ -18,8 +18,8 @@ from typing import Optional
 import networkx as nx
 from fastapi import APIRouter, HTTPException, Query
 
-from shared.constants import DEFAULT_USER_ID
-from app.core.knowledge_trace import bkt_engine, get_cognitive_state
+from shared.constants import DEFAULT_USER_ID, get_mastery_label
+from app.core.knowledge_trace import get_cognitive_state
 from domain.knowledge.checker import PrerequisiteChecker
 from domain.knowledge.prerequisites import (
     ALL_PREREQUISITES,
@@ -201,7 +201,7 @@ async def get_knowledge_graph(
             "label": checker._skill_display_name(skill_id),
             "subject": SKILL_TO_SUBJECT.get(skill_id, "未知"),
             "mastery": round(state.p_known * 100, 1),
-            "mastery_level": bkt_engine.get_mastery_level(state),
+            "mastery_level": get_mastery_label(state.p_known, state.attempt_count),
             "can_practice": result.can_practice,
             "blocked_by": result.blocked,
             "attempt_count": state.attempt_count,

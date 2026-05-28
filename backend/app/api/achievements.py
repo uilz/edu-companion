@@ -10,7 +10,6 @@ from typing import Any
 from fastapi import APIRouter
 
 from shared.constants import DEFAULT_USER_ID
-from app.core.knowledge_trace import bkt_engine
 from app.core.learner_model import learner_engine
 from app.services.achievement_engine import achievement_engine
 from app.services.storage import storage

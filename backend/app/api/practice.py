@@ -12,8 +12,8 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from shared.constants import DEFAULT_USER_ID
-from app.core.knowledge_trace import bkt_engine, get_cognitive_state, get_all_cognitive_states
+from shared.constants import DEFAULT_USER_ID, get_mastery_label
+from app.core.knowledge_trace import get_cognitive_state, get_all_cognitive_states
 
 
 def _get_cognitive_proficiency(user_id: str, skill_id: str) -> float | None:
@@ -365,7 +365,7 @@ async def inline_answer(req: InlineAnswerRequest):
             "skill_id": skill_id,
             "p_known_before": p_before,
             "p_known_after": p_after,
-            "mastery_level": bkt_engine.get_mastery_level(state),
+            "mastery_level": get_mastery_label(state.p_known, state.attempt_count),
             "cognitive_proficiency": _get_cognitive_proficiency(DEFAULT_USER_ID, skill_id),
         }
     else:
@@ -579,7 +579,7 @@ async def get_stats(time_range: str = "week"):
     skill_states = get_all_cognitive_states(user_id)
     mastery_bars = sorted(
         [{"skill_id": sid, "p_known": round(s.p_known, 2),
-          "mastery_level": bkt_engine.get_mastery_level(s),
+          "mastery_level": get_mastery_label(s.p_known, s.attempt_count),
           "attempt_count": s.attempt_count, "correct_count": s.correct_count}
          for sid, s in skill_states.items() if s.attempt_count > 0],
         key=lambda x: x["p_known"])
@@ -666,7 +666,7 @@ async def get_behavior_report(time_range: str = "week"):
     skill_states = get_all_cognitive_states(user_id)
     mastery_bars = [
         {"skill_id": sid, "p_known": round(s.p_known, 2),
-         "mastery_level": bkt_engine.get_mastery_level(s),
+         "mastery_level": get_mastery_label(s.p_known, s.attempt_count),
          "attempt_count": s.attempt_count, "correct_count": s.correct_count}
         for sid, s in skill_states.items() if s.attempt_count > 0
     ]

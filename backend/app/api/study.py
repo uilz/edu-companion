@@ -13,9 +13,9 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
 
-from shared.constants import DEFAULT_USER_ID
+from shared.constants import DEFAULT_USER_ID, recommend_practice_items
 from app.services.adaptive_planner import adaptive_planner
-from app.core.knowledge_trace import bkt_engine, get_all_cognitive_states, get_cognitive_state
+from app.core.knowledge_trace import get_all_cognitive_states, get_cognitive_state
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +171,7 @@ async def get_learning_suggestions(
     综合: BKT薄弱点 + 前置依赖链 + 最近正确率
     """
     states = get_all_cognitive_states(user_id)
-    recs = bkt_engine.recommend_practice(states, top_n=10)
+    recs = recommend_practice_items(states, top_n=10)
 
     # 分为三组
     urgent = []    # 接近掌握 → 差一点

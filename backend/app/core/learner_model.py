@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from app.config import settings
-from app.core.knowledge_trace import bkt_engine
+from shared.constants import get_mastery_label
 from app.schemas.learner import (
     ContentItem,
     KnowledgeState,
@@ -49,8 +49,7 @@ class LearnerModelEngine:
         self._question_bank: dict[str, list[PracticeQuestion]] = {}
         # 内容库（内存）: subject -> list[ContentItem]
         self._content_store: dict[str, list[ContentItem]] = {}
-        # BKT 引擎
-        self.bkt = bkt_engine
+        # 掌握度判定使用 shared.constants.get_mastery_label
 
         # 初始化示例数据
         self._init_sample_data()
@@ -368,7 +367,7 @@ class LearnerModelEngine:
             knowledge_update={
                 "skill_id": question.skill_id,
                 "p_known_after": state.p_known,
-                "mastery_level": self.bkt.get_mastery_level(state),
+                "mastery_level": get_mastery_label(state.p_known, state.attempt_count),
             },
         )
 
@@ -393,14 +392,23 @@ class LearnerModelEngine:
             correct_answers / total_questions if total_questions > 0 else 0.0
         )
 
-        # 找出已掌握和困难的知识点
+        # 找出已掌握和困难的知识点（从 CognitiveNode 读取）
         mastered: list[str] = []
         struggling: list[str] = []
-        for skill_id, state in profile.knowledge_states.items():
-            if self.bkt.get_mastery_level(state) == "已掌握":
-                mastered.append(skill_id)
-            elif state.p_known < 0.4:
-                struggling.append(skill_id)
+        try:
+            from app.cognitive.storage import list_all_nodes
+            nodes = list_all_nodes(user_id)
+            for node in nodes:
+                if not node.belief or not node.practice_summary:
+                    continue
+                p = node.belief.proficiency_mean
+                label = get_mastery_label(p, node.practice_summary.total_attempts)
+                if label == "已掌握":
+                    mastered.append(node.id)
+                elif p < 0.4:
+                    struggling.append(node.id)
+        except Exception:
+            pass
 
         # 生成建议
         recommendations: list[str] = []
