@@ -339,11 +339,10 @@ export default function ConversationPanel(props: UseConversationReturn) {
             {/* 桌面端侧栏分区树组件 */}
             <div className="flex-1 overflow-hidden">
               <Phase8Sidebar
-                key={`sidebar-${selectedPartitionId}-${activeConversationId}`}
+                key={`sidebar-${selectedPartitionId}`}
                 partitions={partitions}
                 selectedPartitionId={selectedPartitionId}
                 activeConversationId={activeConversationId}
-                initialConversationId={activeConversationId ?? undefined}
                 onSelectConversation={handleSelectConversation}
                 onCreatePartition={() => setShowNewPartition(true)}
                 onRenamePartition={handleRenamePartition}

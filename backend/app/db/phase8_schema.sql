@@ -12,6 +12,9 @@ ALTER TABLE cognitive_nodes ADD COLUMN IF NOT EXISTS subsystems JSONB DEFAULT '{
 ALTER TABLE cognitive_nodes ADD COLUMN IF NOT EXISTS embedding JSONB;
 ALTER TABLE cognitive_nodes ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
 ALTER TABLE cognitive_nodes ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE cognitive_nodes ADD COLUMN IF NOT EXISTS emoji TEXT DEFAULT '';
+ALTER TABLE cognitive_nodes ADD COLUMN IF NOT EXISTS color TEXT DEFAULT '';
+ALTER TABLE cognitive_nodes ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0;
 
 -- =============================================
 -- 2. 索引增强 (Phase 16 新增)

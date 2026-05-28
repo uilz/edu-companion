@@ -78,6 +78,8 @@ def upsert_node(node: CognitiveNode, user_id: str = DEFAULT_USER_ID) -> None:
         "param_refs", "meta", "updated_at",
         # Phase 8
         "path_id", "node_type", "is_visible", "subsystems", "embedding", "is_active",
+        # 结构字段
+        "emoji", "color", "sort_order",
     ]
     # 确保所有 JSONB 值为合法 JSON 字符串
     vals = {c: _to_json(getattr(node, c, None)) for c in columns}
@@ -95,6 +97,10 @@ def upsert_node(node: CognitiveNode, user_id: str = DEFAULT_USER_ID) -> None:
         "node_type": node.node_type or "explicit",
         "is_visible": node.is_visible,
         "is_active": node.is_active,
+        # 结构字段
+        "emoji": node.emoji or "",
+        "color": node.color or "",
+        "sort_order": node.sort_order or 0,
     })
 
     placeholders = ", ".join(f"%({k})s" for k in vals)
@@ -375,6 +381,10 @@ def _row_to_node(row: dict) -> CognitiveNode:
         subsystems=_parse_json_dict(raw.get("subsystems")),
         embedding=_parse_embedding(raw.get("embedding")),
         is_active=raw.get("is_active", True),
+        # 结构字段
+        emoji=raw.get("emoji") or "",
+        color=raw.get("color") or "",
+        sort_order=raw.get("sort_order") or 0,
     )
 
 

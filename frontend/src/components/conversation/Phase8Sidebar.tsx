@@ -203,40 +203,58 @@ export default function Phase8Sidebar({
     return res.id;
   }, []);
 
-  /** 点击 💬 按钮 */
+  /** 点击 💬 按钮 — 创建会话并完整展开 partition→domain→topic→conv 路径 */
   const handleNewConvClick = useCallback(async (node: GraphNode, pid?: string) => {
     const partitionId = pid || node.id;
     try {
       let topicId: string;
+      let domainNode: GraphNode | undefined;
       if (node.level === "topic") {
         topicId = node.id;
       } else if (node.level === "domain") {
-        // 新建专题
         topicId = await createGraphNode(node.id, "topic", "新专题", "📝");
+        domainNode = node;
       } else {
-        // 新建领域 → 新建专题
+        // partition → domain → topic
         const domainId = await createGraphNode(node.id, "domain", "新领域", "📚");
         topicId = await createGraphNode(domainId, "topic", "新专题", "📝");
       }
       const convId = await findOrCreateConv(topicId);
-      await forceRefreshConvs(topicId!);
-      // 刷新 graph tree 子节点
-      await loadChildren(node);
+      await forceRefreshConvs(topicId);
+
+      // 逐层加载子节点并展开（用返回值避免 stale childMapRef）
+      let domains: GraphNode[] = [];
       if (node.level === "partition") {
-        const domains = childMapRef.current.get(node.id) || [];
-        for (const d of domains) if (d.level === "domain") await loadChildren(d);
+        domains = await loadChildren(node);
+        setExpandedSet(prev => setAdd(prev, node.id));
+      } else if (domainNode) {
+        domains = [domainNode];
       }
-      // 展开节点让用户看到会话
-      setExpandedSet(prev => setAdd(prev, node.id));
+
+      for (const d of domains) {
+        if (d.level !== "domain") continue;
+        await loadChildren(d);
+        setExpandedSet(prev => setAdd(prev, d.id));
+      }
+
+      // 展开 topic 所在的 domain（如果不是 partition 直接子级）
+      if (node.level === "domain") {
+        setExpandedSet(prev => setAdd(prev, node.id));
+      }
+
+      // 展开 topic
+      setExpandedSet(prev => setAdd(prev, topicId));
+
       onConversationReady?.(partitionId, convId);
     } catch (e) {
       console.warn("sidebar 新建会话失败:", e);
-      // 最终回退：委托父组件
-      onNewConversation?.(node.level, node.id, pid);
+      try {
+        const fresh = await v2<GraphNode[]>("/graph/nodes");
+        setChildMap(prev => mapSet(prev, ROOT_KEY, fresh));
+      } catch { /* 忽略 */ }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [createGraphNode, findOrCreateConv, forceRefreshConvs, onConversationReady, onNewConversation]);
+  }, [createGraphNode, findOrCreateConv, forceRefreshConvs, onConversationReady]);
 
   // ── 通用 loading 包装 ──
   const withLoading = useCallback(async <T,>(key: string, fn: () => Promise<T>): Promise<T | undefined> => {

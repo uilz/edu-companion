@@ -51,66 +51,6 @@ export interface UseConversationReturn {
 }
 
 // ══════════════════════════════════════════════════════════════
-//
-// ══════════════════创建对话链 (归一化后)══════════════════
-async function createConversationChain(
-  partitionId?: string | null,
-): Promise<{ partitionId: string; conversationId: string } | null> {
-  try {
-    let pId = partitionId || undefined;
-    if (!pId) {
-      // 1. 获取分区列表，若无则创建默认分区
-      const pData = await apiFetch<{ partitions: Partition[] }>("/tree/partition");
-      if (pData.partitions?.length > 0) {
-        pId = pData.partitions[0].id;
-      } else {
-        const newP = await apiFetch<{ partition: Partition; conversation_id?: string }>("/tree/partition", {
-          method: "POST",
-          body: JSON.stringify({ name: "新分区", emoji: "💬" }),
-        });
-        pId = newP.partition.id;
-      }
-    }
-
-    // 2. 找或创建领域 domain
-    const domainData = await apiFetch<{ domains: { id: string }[] }>(`/tree/domain?parent_id=${pId}`);
-    let domainId: string;
-    if (domainData.domains?.length > 0) {
-      domainId = domainData.domains[0].id;
-    } else {
-      const newD = await apiFetch<{ domain: { id: string }; conversation_id?: string }>("/tree/domain", {
-        method: "POST",
-        body: JSON.stringify({ parent_id: pId, name: "新领域", emoji: "📚" }),
-      });
-      domainId = newD.domain.id;
-    }
-
-    // 3. 找或创建专题 topic
-    const topicData = await apiFetch<{ topics: { id: string }[] }>(`/tree/topic?parent_id=${domainId}`);
-    let topicId: string;
-    if (topicData.topics?.length > 0) {
-      topicId = topicData.topics[0].id;
-    } else {
-      const newT = await apiFetch<{ topic: { id: string }; conversation_id?: string }>("/tree/topic", {
-        method: "POST",
-        body: JSON.stringify({ parent_id: domainId, name: "新专题", emoji: "📝" }),
-      });
-      topicId = newT.topic.id;
-    }
-
-    // 4. 创建对话
-    const convData = await apiFetch<{ conversation: { id: string } }>("/tree/conversation", {
-      method: "POST",
-      body: JSON.stringify({ parent_id: topicId, name: "" }),
-    });
-    return { partitionId: pId, conversationId: convData.conversation.id };
-  } catch (e) {
-    console.error("[createConversationChain] 创建对话链失败:", e);
-    return null;
-  }
-}
-
-// ══════════════════════════════════════════════════════════════
 //  useConversation — 对话系统核心 Hook (归一化版)
 // ══════════════════════════════════════════════════════════════
 export function useConversation(): UseConversationReturn {
@@ -291,15 +231,26 @@ export function useConversation(): UseConversationReturn {
   useEffect(() => { document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = ""; }; }, []);
 
   // ── 加载分区列表 ──
+  const partitionsLoadedRef = useRef(false);
   const loadPartitions = useCallback(async () => {
     setLoadingPartitions(true);
     try {
       const data = await apiFetch<{ partitions: Partition[] }>("/tree/partition");
       setPartitions(data.partitions || []);
+      partitionsLoadedRef.current = true;
     } catch (e) { console.error(e); }
     finally { setLoadingPartitions(false); }
   }, []);
   loadPartitionsRef.current = loadPartitions;
+
+  // ── 分区列表变化后，清除已不存在的 selectedPartitionId（仅在首次加载完成后） ──
+  useEffect(() => {
+    if (partitionsLoadedRef.current && selectedPartitionId && !partitions.some(p => p.id === selectedPartitionId)) {
+      console.log("[useEffect] clearing stale selectedPartitionId:", selectedPartitionId?.slice(0,8), "partitions:", partitions.length);
+      setSelectedPartitionId(null);
+      setActiveConversationId(null);
+    }
+  }, [partitions, selectedPartitionId]);
 
   // ── 加载消息 (归一化路径) ──
   const loadMessages = useCallback(async (conversationId: string) => {
@@ -502,8 +453,48 @@ export function useConversation(): UseConversationReturn {
       let cId = activeConversationId;
 
       if (!pId || !cId) {
-        const chain = await createConversationChain(selectedPartitionId);
-        if (!chain) {
+        // 内联创建：找或创建分区/领域/专题/对话
+        try {
+          if (!pId) {
+            const pData = await apiFetch<{ partitions: Partition[] }>("/tree/partition");
+            if (pData.partitions?.length > 0) {
+              pId = pData.partitions[0].id;
+            } else {
+              const newP = await apiFetch<{ partition: Partition }>("/tree/partition", {
+                method: "POST", body: JSON.stringify({ name: "新分区", emoji: "💬" }),
+              });
+              pId = newP.partition.id;
+            }
+          }
+          // 找或创建领域
+          const dData = await apiFetch<{ domains: { id: string }[] }>(`/tree/domain?parent_id=${pId}`);
+          const domainId = dData.domains?.[0]?.id || (
+            await apiFetch<{ domain: { id: string } }>("/tree/domain", {
+              method: "POST", body: JSON.stringify({ parent_id: pId, name: "新领域", emoji: "📚" }),
+            })
+          ).domain.id;
+          // 找或创建专题
+          const tData = await apiFetch<{ topics: { id: string }[] }>(`/tree/topic?parent_id=${domainId}`);
+          const topicId = tData.topics?.[0]?.id || (
+            await apiFetch<{ topic: { id: string } }>("/tree/topic", {
+              method: "POST", body: JSON.stringify({ parent_id: domainId, name: "新专题", emoji: "📝" }),
+            })
+          ).topic.id;
+          // 找或创建对话
+          const cData = await apiFetch<{ conversations: { id: string; message_count?: number }[] }>(`/tree/conversation?parent_id=${topicId}`);
+          const empty = (cData.conversations || []).find(c => !c.message_count || c.message_count === 0);
+          cId = empty?.id || (
+            await apiFetch<{ conversation: { id: string } }>("/tree/conversation", {
+              method: "POST", body: JSON.stringify({ parent_id: topicId, name: "" }),
+            })
+          ).conversation.id;
+          isSendingRef.current = true;
+          setSelectedPartitionId(pId);
+          setActiveConversationId(cId);
+          setConvError(null);
+          await loadPartitions();
+        } catch (e) {
+          console.error("自动创建对话失败:", e);
           setMessages((prev) => [...prev, {
             id: "err-" + Date.now(), parent_id: "", children_ids: [],
             partition_id: "", conversation_id: "",
@@ -514,13 +505,6 @@ export function useConversation(): UseConversationReturn {
           }]);
           return;
         }
-        pId = chain.partitionId;
-        cId = chain.conversationId;
-        isSendingRef.current = true;  // 阻断 loadMessages 效果清空刚加的消息
-        setSelectedPartitionId(pId);
-        setActiveConversationId(cId);
-        setConvError(null);
-        await loadPartitions();
       }
 
       // 构建用户消息
@@ -608,6 +592,7 @@ export function useConversation(): UseConversationReturn {
   // ── 选中对话 ──
   const handleSelectConversation = useCallback(
     (partitionId: string, conversationId: string) => {
+      console.log("[selectConv]", partitionId?.slice(0,8), conversationId?.slice(0,8));
       setSelectedPartitionId(partitionId || null);
       setActiveConversationId(conversationId || null);
       setConvError(null);
@@ -793,12 +778,8 @@ export function useConversation(): UseConversationReturn {
           setShowPartitionSidebar(false);
           return;
         } catch (e) {
-          console.warn(`partition 级别创建对话失败，回退到 createConversationChain:`, e);
-          const chain = await createConversationChain(parentId);
-          if (!chain) return;
-          handleSelectConversation(chain.partitionId, chain.conversationId);
+          console.warn(`partition 级别创建对话失败:`, e);
           await loadPartitions();
-          setShowPartitionSidebar(false);
           return;
         }
       }
@@ -839,12 +820,8 @@ export function useConversation(): UseConversationReturn {
           setShowPartitionSidebar(false);
           return;
         } catch (e) {
-          console.warn(`domain 级别创建对话失败，回退到 createConversationChain:`, e);
-          const chain = await createConversationChain(pId || parentId);
-          if (!chain) return;
-          handleSelectConversation(chain.partitionId, chain.conversationId);
+          console.warn(`domain 级别创建对话失败:`, e);
           await loadPartitions();
-          setShowPartitionSidebar(false);
           return;
         }
       }
@@ -872,25 +849,18 @@ export function useConversation(): UseConversationReturn {
           setShowPartitionSidebar(false);
           return;
         } catch (e) {
-          console.warn(`topic 级别创建对话失败，回退到 createConversationChain:`, e);
-          const chain = await createConversationChain(pId || parentId);
-          if (!chain) return;
-          handleSelectConversation(chain.partitionId, chain.conversationId);
+          console.warn(`topic 级别创建对话失败:`, e);
           await loadPartitions();
-          setShowPartitionSidebar(false);
           return;
         }
       }
 
-      // fallback: 旧逻辑
-      const chain = await createConversationChain(level === "partition" ? parentId : pId);
-      if (!chain) return;
-
-      handleSelectConversation(chain.partitionId, chain.conversationId);
+      // fallback: 委托父组件（不应到达此处）
+      console.warn(`未知级别 ${level}，跳过创建对话`);
       await loadPartitions();
-      setShowPartitionSidebar(false);
     } catch (e) {
       console.error(`新建对话失败:`, e);
+      await loadPartitions();
     }
   }, [selectedPartitionId, partitions, loadPartitions, handleSelectConversation]);
 

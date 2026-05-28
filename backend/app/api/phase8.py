@@ -233,98 +233,35 @@ def get_graph_nodes(
     parent_id: str | None = None,
     level: str | None = None,
 ) -> list[dict]:
-    """获取可见子节点（统一数据源）
+    """获取可见子节点 — 唯一数据源: cognitive_nodes
 
-    对 partition/domain/topic → 从对话树 UserData 读取（唯一真实源）
-    对 concept/atom → 从认知图谱 cognitive_nodes 读取
-    含 suggested_count 等分析指标（若有对应 CognitiveNode）
+    所有层级 (partition/domain/topic/concept/atom) 统一从 cognitive_nodes 读取。
     """
-    # ── 1. 指定层级：concept/atom 从认知图谱，其他从 UserData ──
+    def _to_dict(n: CognitiveNode) -> dict:
+        return {
+            "id": n.id,
+            "label": n.label,
+            "level": n.level,
+            "path_id": n.path_id,
+            "is_visible": n.is_visible,
+            "node_type": n.node_type,
+            "suggested_count": get_suggested_count(n.id, user_id),
+            "created_at": n.meta.created_at,
+        }
+
+    # 1. 指定层级
     if level:
-        if level in ("concept", "atom"):
-            children = [n for n in get_nodes_by_level(level, user_id) if n.is_visible]
-            result = []
-            for c in children:
-                suggested = get_suggested_count(c.id, user_id)
-                entry = {
-                    "id": c.id,
-                    "label": c.label,
-                    "level": c.level,
-                    "path_id": c.path_id,
-                    "is_visible": c.is_visible,
-                    "node_type": c.node_type,
-                    "suggested_count": suggested,
-                    "created_at": c.meta.created_at,
-                }
-                result.append(entry)
-            return result
-        # partition/domain/topic → 从 UserData 读取
-        data = storage.load(user_id)
-        if level == "partition":
-            return [_entity_to_node(e, "partition", user_id) for e in data.partitions.values()]
-        elif level == "domain":
-            return [_entity_to_node(e, "domain", user_id) for e in data.domains.values()]
-        elif level == "topic":
-            return [_entity_to_node(e, "topic", user_id) for e in data.topics.values()]
-        return []
+        children = [n for n in get_nodes_by_level(level, user_id) if n.is_visible]
+        return [_to_dict(c) for c in children]
 
-    # ── 2. 指定父节点：展开操作 ──
+    # 2. 指定父节点
     if parent_id:
-        # 确定父节点在哪个系统
-        data = storage.load(user_id)
-        if parent_id in data.partitions:
-            # 展开分区 → 返回该分区下的 domains
-            return [
-                _entity_to_node(d, "domain", user_id)
-                for d in data.domains.values()
-                if getattr(d, "partition_id", None) == parent_id
-            ]
-        elif parent_id in data.domains:
-            # 展开领域 → 返回该领域下的 topics
-            return [
-                _entity_to_node(t, "topic", user_id)
-                for t in data.topics.values()
-                if getattr(t, "domain_id", None) == parent_id
-            ]
-        elif parent_id in data.topics:
-            # 展开专题 → 从认知图谱取 concept 级节点
-            if is_visible := get_node(parent_id, user_id):
-                children = get_visible_children(parent_id, user_id)
-                result = []
-                for c in children:
-                    suggested = get_suggested_count(c.id, user_id)
-                    result.append({
-                        "id": c.id,
-                        "label": c.label,
-                        "level": c.level,
-                        "path_id": c.path_id,
-                        "is_visible": c.is_visible,
-                        "node_type": c.node_type,
-                        "suggested_count": suggested,
-                        "created_at": c.meta.created_at,
-                    })
-                return result
-            return []
-        # fallback: 认知图谱中查找
-        children = get_visible_children(parent_id, user_id) if get_node(parent_id, user_id) else []
-        result = []
-        for c in children:
-            suggested = get_suggested_count(c.id, user_id)
-            result.append({
-                "id": c.id,
-                "label": c.label,
-                "level": c.level,
-                "path_id": c.path_id,
-                "is_visible": c.is_visible,
-                "node_type": c.node_type,
-                "suggested_count": suggested,
-                "created_at": c.meta.created_at,
-            })
-        return result
+        children = get_visible_children(parent_id, user_id)
+        return [_to_dict(c) for c in children]
 
-    # ── 3. 无参数：返回所有分区（根节点）──
-    data = storage.load(user_id)
-    return [_entity_to_node(e, "partition", user_id) for e in data.partitions.values()]
+    # 3. 无参数: 返回所有 partition
+    partitions = [n for n in get_nodes_by_level("partition", user_id) if n.is_visible]
+    return [_to_dict(p) for p in partitions]
 
 
 @router.get("/graph/search")
