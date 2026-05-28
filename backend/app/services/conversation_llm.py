@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Any, AsyncGenerator
@@ -16,7 +17,7 @@ from app.schemas.conversation import (
     TreeNode,
     ResponseBlock,
 )
-from app.services.llm_service import llm_service
+from app.services.llm_service import llm_service, _parse_tool_calls_response
 from app.services.storage import storage
 from app.services.tree_ops import tree_ops
 from app.services.classifier import classifier
@@ -395,27 +396,128 @@ async def generate_reply_with_tools(
         for i, b in enumerate(response_blocks):
             b.order = i
     else:
-        # 无工具调用，纯文本回复
+        # 无 regex 匹配 → LLM function-calling 路径
+        tools = tool_executor.get_tools_for_llm()
         try:
             reply = await llm_service.generate(
                 messages=llm_messages,
                 task_type="chat",
                 temperature=0.7,
                 max_tokens=2048,
+                tools=tools,
             )
         except Exception as e:
             logger.error("LLM generation failed: %s", e)
-            reply = "抱歉，生成回复时遇到了问题。"
+            reply = ""
 
-        cleaned_text, sources = parse_sources(reply)
-        text_block = ResponseBlock(
-            type="text",
-            status="ready",
-            content={"text": cleaned_text},
-            sources=sources,
-            order=0,
-        )
-        response_blocks.append(text_block)
+        # 检查 LLM 是否请求 tool_calls
+        tool_calls = _parse_tool_calls_response(reply)
+        if tool_calls:
+            # LLM 自主决定调用工具
+            logger.info(
+                "LLM requested tool_calls: %s",
+                [tc["function"]["name"] for tc in tool_calls],
+            )
+
+            # 添加 assistant 消息（含 tool_calls）到上下文
+            llm_messages.append({
+                "role": "assistant",
+                "content": None,
+                "tool_calls": tool_calls,
+            })
+
+            tool_results: list[dict] = []
+            for tc in tool_calls:
+                tool_name = tc["function"]["name"]
+                try:
+                    args = json.loads(tc["function"]["arguments"])
+                except (json.JSONDecodeError, KeyError):
+                    args = {}
+
+                try:
+                    # 使用 LLM 提供的参数执行工具
+                    tool_block = await tool_executor.execute(tool_name, args)
+                    tool_block.order = order
+                    response_blocks.append(tool_block)
+                    order += 1
+
+                    tool_results.append({
+                        "tool": tool_name,
+                        "summary": _summarize_tool_result(tool_name, tool_block),
+                    })
+
+                    # 慢任务：提交后台作业
+                    if tool_name in SLOW_TOOLS:
+                        from app.services.background_jobs import job_manager
+                        await job_manager.submit(
+                            user_id=user_id,
+                            tool_name=tool_name,
+                            params=args,
+                            block_id=tool_block.id,
+                            partition_id=partition_id,
+                            conversation_id=conversation.id if conversation else "",
+                        )
+                        data.response_blocks[tool_block.id] = tool_block
+                        storage.save(user_id, data)
+
+                    # 将工具结果作为 tool message 添加到上下文
+                    result_content = json.dumps(
+                        tool_block.content or {}, ensure_ascii=False,
+                    )
+                    llm_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": result_content,
+                    })
+                except Exception as e:
+                    logger.error("LLM tool %s failed: %s", tool_name, e)
+                    tool_results.append({"tool": tool_name, "error": str(e)})
+                    llm_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": json.dumps({"error": str(e)}),
+                    })
+
+            # 将工具结果摘要注入 LLM 上下文
+            if tool_results:
+                tool_context = _build_tool_context(tool_results)
+                llm_messages.append({"role": "system", "content": tool_context})
+
+            # 第二次调用 LLM：基于工具结果生成最终回复
+            try:
+                reply = await llm_service.generate(
+                    messages=llm_messages,
+                    task_type="chat",
+                    temperature=0.7,
+                    max_tokens=2048,
+                )
+            except Exception as e:
+                logger.error("LLM second call failed: %s", e)
+                reply = "我帮你准备了一些学习资料，请看上面的卡片 👆"
+
+            cleaned_text, sources = parse_sources(reply)
+            text_block = ResponseBlock(
+                type="text",
+                status="ready",
+                content={"text": cleaned_text},
+                sources=sources,
+                order=0,
+            )
+            response_blocks.insert(0, text_block)
+            # 重新编号
+            for i, b in enumerate(response_blocks):
+                b.order = i
+        else:
+            # LLM 没有请求工具 → 纯文本回复
+            cleaned_text, sources = parse_sources(reply)
+            text_block = ResponseBlock(
+                type="text",
+                status="ready",
+                content={"text": cleaned_text},
+                sources=sources,
+                order=0,
+            )
+            response_blocks.append(text_block)
 
     # 存储所有 ResponseBlocks
     data = storage.load(user_id)
@@ -463,6 +565,15 @@ async def generate_reply_stream(
     # 注入预执行的工具结果
     if extra_tool_context:
         llm_messages.append({"role": "system", "content": extra_tool_context})
+
+    # Socratic hint: if too many consecutive questions, suggest direct explanation
+    _conv_meta = getattr(conversation, 'metadata', None) or {}
+    _sq_ct = _conv_meta.get('socratic_question_count', 0)
+    if _sq_ct >= 3:
+        llm_messages.append({
+            "role": "system",
+            "content": "提示：你已经连续问了多个问题，学生可能感到困惑。请尝试直接解释知识点，减少提问，用陈述句帮助学生理解。",
+        })
 
     # 流式调用 LLM
     async for chunk in llm_service.generate_stream(
@@ -801,6 +912,80 @@ async def send_and_reply_stream(
         for block in response_blocks:
             yield {"type": "tool_block", "block": block.model_dump(mode="json")}
 
+    # 2b. LLM function-calling fallback（regex 未命中时）
+    llm_probe_reply = ""  # 若 LLM probe 直接返回文本（无 tool_calls），存于此处
+    if not detected_tools and not extra_tool_context:
+        # 构建上下文用于 LLM 探测
+        probe_recent = []
+        if conversation:
+            for nid in conversation.path[-8:]:
+                node = data.nodes.get(nid)
+                if node and not node.is_deleted:
+                    probe_recent.append(node)
+        probe_messages = _build_context_messages(
+            partition, conversation, probe_recent, user_text, user_id,
+        )
+        tools = tool_executor.get_tools_for_llm()
+        try:
+            probe_result = await llm_service.generate(
+                messages=probe_messages,
+                task_type="chat",
+                temperature=0.7,
+                max_tokens=2048,
+                tools=tools,
+            )
+        except Exception as e:
+            logger.error("LLM function-calling probe failed: %s", e)
+            probe_result = ""
+
+        probe_tool_calls = _parse_tool_calls_response(probe_result)
+        if probe_tool_calls:
+            # LLM 自主决定调用工具
+            logger.info(
+                "Streaming LLM requested tool_calls: %s",
+                [tc["function"]["name"] for tc in probe_tool_calls],
+            )
+            tool_results: list[dict] = []
+            for tc in probe_tool_calls:
+                tool_name = tc["function"]["name"]
+                try:
+                    args = json.loads(tc["function"]["arguments"])
+                except (json.JSONDecodeError, KeyError):
+                    args = {}
+                try:
+                    tool_block = await tool_executor.execute(tool_name, args)
+                    tool_block.order = order
+                    response_blocks.append(tool_block)
+                    order += 1
+                    tool_results.append({
+                        "tool": tool_name,
+                        "summary": _summarize_tool_result(tool_name, tool_block),
+                    })
+                    if tool_name in SLOW_TOOLS:
+                        from app.services.background_jobs import job_manager
+                        await job_manager.submit(
+                            user_id=user_id,
+                            tool_name=tool_name,
+                            params=args,
+                            block_id=tool_block.id,
+                            partition_id=partition_id,
+                            conversation_id=conversation.id if conversation else "",
+                        )
+                        data.response_blocks[tool_block.id] = tool_block
+                except Exception as e:
+                    logger.error("Streaming LLM tool %s failed: %s", tool_name, e)
+                    tool_results.append({"tool": tool_name, "error": str(e)})
+
+            if tool_results:
+                extra_tool_context = _build_tool_context(tool_results)
+
+            # yield 工具块
+            for block in response_blocks:
+                yield {"type": "tool_block", "block": block.model_dump(mode="json")}
+        else:
+            # LLM 直接返回文本（无需工具）→ 保存以跳过第二次 LLM 调用
+            llm_probe_reply = probe_result
+
     # 3. 流式生成回复（LLM 现在能看到工具执行结果）
     # 先创建空助手节点（后续增量覆写，刷新不丢）
     reply_blocks_placeholder = [TextBlock(text="")]
@@ -811,18 +996,37 @@ async def send_and_reply_stream(
     asst_node_id = assistant_node.id
     full_reply = ""
     token_since_save = 0
+    # Socratic questioning tracking: count consecutive questions
+    socratic_count = 0
+    _data_sq = storage.load(user_id)
+    _conv_sq = _data_sq.conversations.get(resolved_conversation_id)
+    if _conv_sq:
+        _meta_sq = getattr(_conv_sq, 'metadata', None) or {}
+        socratic_count = _meta_sq.get('socratic_question_count', 0)
     try:
-        async for chunk in generate_reply_stream(
-            user_id, partition_id, user_text,
-            extra_tool_context=extra_tool_context,
-        ):
-            full_reply += chunk
-            token_since_save += 1
-            yield {"type": "token", "content": chunk}
-            # 每 20 token 覆写一次 DB，刷新后 loadMessages 能拿到最新文本
-            if token_since_save >= 20:
-                tree_ops.update_message_content(user_id, asst_node_id, full_reply)
-                token_since_save = 0
+        if llm_probe_reply:
+            # LLM probe 已返回文本（无 tool_calls）→ 模拟流式输出
+            chunk_size = 4
+            for i in range(0, len(llm_probe_reply), chunk_size):
+                chunk = llm_probe_reply[i:i + chunk_size]
+                full_reply += chunk
+                token_since_save += 1
+                yield {"type": "token", "content": chunk}
+                if token_since_save >= 20:
+                    tree_ops.update_message_content(user_id, asst_node_id, full_reply)
+                    token_since_save = 0
+        else:
+            async for chunk in generate_reply_stream(
+                user_id, partition_id, user_text,
+                extra_tool_context=extra_tool_context,
+            ):
+                full_reply += chunk
+                token_since_save += 1
+                yield {"type": "token", "content": chunk}
+                # 每 20 token 覆写一次 DB，刷新后 loadMessages 能拿到最新文本
+                if token_since_save >= 20:
+                    tree_ops.update_message_content(user_id, asst_node_id, full_reply)
+                    token_since_save = 0
     except Exception as e:
         logger.error("generate_reply_stream 失败: %s", str(e))
         fallback = f"抱歉，生成回复时遇到了问题 😣\n\n错误信息：{str(e)[:200]}\n\n请稍后重试或检查系统配置。"
@@ -835,6 +1039,21 @@ async def send_and_reply_stream(
 
     # 4. 覆写最终版本到 DB（此时已完成）
     tree_ops.update_message_content(user_id, asst_node_id, full_reply)
+
+    # Socratic: detect question in reply and update counter
+    _stripped = full_reply.strip()
+    if _stripped and (_stripped.endswith('?') or _stripped.endswith('？')):
+        socratic_count += 1
+    else:
+        socratic_count = 0
+    _data_sq2 = storage.load(user_id)
+    _conv_sq2 = _data_sq2.conversations.get(resolved_conversation_id)
+    if _conv_sq2:
+        _conv_sq2.metadata = getattr(_conv_sq2, 'metadata', None) or {}
+        _conv_sq2.metadata['socratic_question_count'] = socratic_count
+        storage.save(user_id, _data_sq2)
+        if socratic_count >= 3:
+            logger.info("Socratic limit: %d consecutive questions in conv %s", socratic_count, resolved_conversation_id[:8])
     # 刷新 assistant_node 对象，用于后续 yield done
     data = storage.load(user_id)
     assistant_node = data.nodes.get(asst_node_id) or assistant_node

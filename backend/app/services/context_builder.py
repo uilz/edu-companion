@@ -53,6 +53,7 @@ def _build_context_messages(
         7.5. CognitiveNode cognitive profile (mastery, trend, load, errors)
         8. Partition summary & name
         9. Knowledge graph mastery overview
+        10. Tool availability hint (available tools for the LLM to suggest)
     """
     messages: list[dict[str, str]] = []
 
@@ -322,6 +323,29 @@ def _build_context_messages(
             system_content += "\n回答涉及这些知识点时，在末尾标注 [来源: 知识点名称]。"
     except Exception:
         pass
+
+    # ── 10. Tool availability hint ──
+    try:
+        from app.services.tool_executor import TOOL_DEFINITIONS
+
+        tool_hints = []
+        for tool_def in TOOL_DEFINITIONS:
+            name = tool_def["function"]["name"]
+            desc = tool_def["function"]["description"]
+            tool_hints.append(f"  - {name}: {desc}")
+
+        if tool_hints:
+            system_content += (
+                "\n\n🔧 你可以使用以下工具（在回复中自然地建议用户使用）:\n"
+                + "\n".join(tool_hints)
+                + "\n当用户需要视频讲解时，建议 search_media；"
+                "当需要练习时，建议 generate_practice；"
+                "当需要可视化时，建议 generate_image；"
+                "当需要整理知识时，建议 generate_mindmap；"
+                "当需要笔记时，建议 generate_document。"
+            )
+    except Exception:
+        logger.debug("Tool availability hint injection skipped", exc_info=True)
 
     messages.append({"role": "system", "content": system_content})
 

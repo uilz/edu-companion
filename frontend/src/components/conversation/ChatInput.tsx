@@ -38,6 +38,7 @@ export default function ConversationChatInput({
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]); // 已上传的文件列表
   const [uploading, setUploading] = useState(false);    // 是否正在上传
   const [uploadError, setUploadError] = useState("");   // 上传错误信息
+  const [voiceAutoSend, setVoiceAutoSend] = useState(false); // 语音录音后自动发送
   const textareaRef = useRef<HTMLTextAreaElement>(null); // 文本框 DOM 引用
   const imageInputRef = useRef<HTMLInputElement>(null);  // 图片选择 input 引用
   const fileInputRef = useRef<HTMLInputElement>(null);   // 文件选择 input 引用
@@ -159,9 +160,30 @@ export default function ConversationChatInput({
             <Paperclip size={16} />
           </button>
           <VoiceRecorder
-            onTranscription={(t) => setText((prev) => prev + t)}
+            onTranscription={(t) => {
+              const newText = t.trim();
+              if (voiceAutoSend && newText) {
+                // Voice auto-send: send immediately
+                onSend(newText, uploadedFiles.length > 0 ? uploadedFiles : undefined);
+                setText("");
+                setUploadedFiles([]);
+              } else {
+                setText((prev) => prev + t);
+              }
+            }}
             disabled={disabled}
           />
+          <button
+            onClick={() => setVoiceAutoSend(!voiceAutoSend)}
+            className={`p-1.5 text-[10px] transition-colors ${
+              voiceAutoSend
+                ? "text-[var(--color-accent)] bg-[var(--color-accent)]/10"
+                : "text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
+            }`}
+            title={voiceAutoSend ? "语音自动发送：开" : "语音自动发送：关"}
+          >
+            {voiceAutoSend ? "🚀" : "🎙️"}
+          </button>
         </div>
 
         {/* 上传错误提示 */}

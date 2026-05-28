@@ -7,6 +7,7 @@ import InlinePracticeBlock from "./InlinePracticeBlock";
 import MediaSearchBlock from "./MediaSearchBlock";
 import VideoEmbed from "./VideoEmbed";
 import SecretarySuggestionsBlock from "./SecretarySuggestionsBlock";
+import ExpandBlock from "./ExpandBlock";
 import { renderContent } from "@/lib/math";
 import { useRenderedContent } from "@/lib/useRenderedContent";
 import type { ResponseBlock } from "@/types";
@@ -57,6 +58,13 @@ export default function ResponseBlockRenderer({ block }: ResponseBlockRendererPr
       return <DocumentBlock content={content} />;
     case "secretary_suggestions":
       return <SecretarySuggestionsBlock content={content} />;
+    case "expand":
+      return (
+        <ExpandBlock
+          skillName={(content.skill_name as string) || ""}
+          explanation={(content.explanation as string) || ""}
+        />
+      );
     default:
       return null;
   }

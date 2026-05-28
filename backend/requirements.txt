@@ -40,3 +40,6 @@ sentence-transformers>=2.6.0
 
 # 日志
 loguru>=0.7.0
+
+# TTS
+edge-tts>=6.1.0

@@ -77,7 +77,7 @@ async def _send(websocket: WebSocket, msg_type: str, payload: dict, request_id: 
     await websocket.send_text(json.dumps(data, ensure_ascii=False))
 
 
-@router.websocket("/ws")
+@router.websocket("/ws-legacy")
 async def websocket_chat(websocket: WebSocket) -> None:
     """
     WebSocket 聊天端点

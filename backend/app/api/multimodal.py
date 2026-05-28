@@ -2,6 +2,7 @@
 多模态 REST API
 
 端点:
+  POST /api/multimodal/tts         — 文字 → 语音（Edge-TTS）
   POST /api/multimodal/transcribe  — 音频 → 文字（Whisper）
   GET  /api/multimodal/audio/{file} — 获取生成的 TTS 音频
   GET  /api/multimodal/images/{file} — 获取生成的配图
@@ -43,6 +44,61 @@ async def get_image(filename: str):
         raise HTTPException(404, f"配图文件不存在: {filename}")
     media_type = "image/svg+xml" if filename.endswith(".svg") else "image/png"
     return FileResponse(path, media_type=media_type)
+
+
+@router.post("/tts")
+async def text_to_speech(request: dict):
+    """
+    Edge-TTS 文字转语音
+
+    请求体: {"text": "要朗读的文本", "voice": "zh-CN-XiaoxiaoNeural"}
+    返回: MP3 音频文件
+    """
+    text = request.get("text", "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="文本不能为空")
+
+    voice = request.get("voice", "zh-CN-XiaoxiaoNeural")
+
+    # 清理文本（去除 Markdown 符号）
+    clean_text = (
+        text.replace("\n\n", "。")
+        .replace("\n", "，")
+        [:2000]  # 限制长度
+    )
+
+    try:
+        import edge_tts
+        import uuid
+
+        # 生成唯一文件名
+        filename = f"tts_{uuid.uuid4().hex[:12]}.mp3"
+        AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+        output_path = AUDIO_DIR / filename
+
+        # 使用 edge-tts 生成音频
+        communicate = edge_tts.Communicate(clean_text, voice)
+        await communicate.save(str(output_path))
+
+        logger.info(f"Edge-TTS generated: {filename} ({len(clean_text)} chars, voice={voice})")
+
+        return {
+            "audio_url": f"/api/multimodal/audio/{filename}",
+            "voice": voice,
+            "text_length": len(clean_text),
+        }
+
+    except ImportError:
+        raise HTTPException(
+            status_code=500,
+            detail="edge-tts 未安装，请运行: pip install edge-tts",
+        )
+    except Exception as e:
+        logger.error(f"Edge-TTS failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"语音合成失败: {str(e)}",
+        )
 
 
 @router.post("/transcribe")

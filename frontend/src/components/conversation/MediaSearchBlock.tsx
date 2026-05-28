@@ -3,6 +3,14 @@
 // ──── 导入依赖：lucide-react 图标库和类型定义 ────
 import { Loader2, ExternalLink } from "lucide-react";
 import type { ResponseBlock } from "@/types";
+import VideoEmbed from "./VideoEmbed";
+
+// ──── 检测 URL 是否为可嵌入的视频链接 ────
+function isEmbeddableVideoUrl(url: string): boolean {
+  return /bilibili\.com\/video\/BV/.test(url) ||
+    /(?:youtube\.com\/watch|youtu\.be\/|youtube\.com\/embed\/)/.test(url) ||
+    /\.(mp4|webm|mov|flv)(\?|$)/i.test(url);
+}
 
 // ──── 平台图标映射表 ────
 // 为每个支持的平台（B站、YouTube、知乎等）分配对应的 Emoji 图标
@@ -77,19 +85,23 @@ export default function MediaSearchBlock({ content }: { content: Record<string, 
               {/* ──── 搜索链接列表：每个链接跳转到对应平台的搜索结果页 ──── */}
               <div className="space-y-1">
                 {p.links.map((link, i) => (
-                  <a
-                    key={i}
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-2 py-1.5 text-xs text-[var(--color-accent)] hover:bg-[var(--color-bg)] transition-colors group"
-                  >
-                    <ExternalLink
-                      size={11}
-                      className="flex-shrink-0 opacity-50 group-hover:opacity-100 transition-opacity"
-                    />
-                    <span className="flex-1 truncate">{link.query}</span>
-                  </a>
+                  isEmbeddableVideoUrl(link.url) ? (
+                    <VideoEmbed key={i} url={link.url} title={link.query} />
+                  ) : (
+                    <a
+                      key={i}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 px-2 py-1.5 text-xs text-[var(--color-accent)] hover:bg-[var(--color-bg)] transition-colors group"
+                    >
+                      <ExternalLink
+                        size={11}
+                        className="flex-shrink-0 opacity-50 group-hover:opacity-100 transition-opacity"
+                      />
+                      <span className="flex-1 truncate">{link.query}</span>
+                    </a>
+                  )
                 ))}
               </div>
             </div>
