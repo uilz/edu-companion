@@ -13,7 +13,6 @@ from typing import Any
 from . import constants as C
 from .equations import (
     calc_base_level,
-    calc_dynamic_load,
     calc_latency_ms,
     calc_retrieval_prob,
     decay_belief,
@@ -29,26 +28,15 @@ from .models import (
     CognitiveEvent,
     CognitiveLoad,
     CognitiveNode,
-    Composition,
-    DeepProcessing,
     DialogueContext,
-    Diagnostic,
-    Engagement,
-    GoalAlignment,
-    Metacognition,
     PracticeEvent,
     PracticeSummary,
-    Prediction,
-    Scheduling,
-    Trend,
     UserCognitiveState,
 )
 from .storage import (
     append_event,
     get_node,
-    get_nodes_by_level,
     mark_event_processed,
-    search_nodes,
     upsert_node,
 )
 
@@ -150,7 +138,7 @@ def handle_practice_response(event: CognitiveEvent) -> dict[str, Any]:
     payload = event.payload or {}
     success = payload.get("success", True)
     latency_ms = payload.get("latency_ms", 5000.0)
-    confidence = payload.get("confidence", 0.5)
+    payload.get("confidence", 0.5)
     consecutive = payload.get("consecutive", False)
 
     # Load node or create stub

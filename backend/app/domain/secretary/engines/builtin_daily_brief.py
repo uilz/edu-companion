@@ -18,7 +18,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from ..models import Proposal, ScoredInsight
+from ..models import Proposal
 from .context_engine import SessionContext
 from .module_registry import SecretaryModule, ModuleMeta
 
@@ -114,7 +114,6 @@ class DailyBriefModule(SecretaryModule):
         """收集今日学习事件"""
         try:
             from app.cognitive.storage import list_all_nodes
-            import asyncio
 
             nodes = list_all_nodes(user_id)
             today_start = time.time() - 86400  # 过去 24 小时

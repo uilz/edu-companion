@@ -11,7 +11,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-from app.schemas.practice import PracticeSession, AttemptRecord
+from app.schemas.practice import PracticeSession
 
 logger = logging.getLogger(__name__)
 

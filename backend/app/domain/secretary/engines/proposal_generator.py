@@ -10,21 +10,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from app.shared.constants import DEFAULT_USER_ID
 from ..models import (
     DiagnosisReport,
     Proposal,
-    ScoredInsight,
-    ScopeSpec,
 )
 from ..analysis import (
-    find_weakness_clusters,
-    rank_forgetting_risk,
-    find_overdue_reviews,
     rank_recommendations,
-    analyze_error_patterns,
 )
 
 logger = logging.getLogger(__name__)

@@ -16,9 +16,9 @@ from __future__ import annotations
 
 import math
 import logging
-from collections import Counter, defaultdict
+from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Optional
 
 from app.db.database import get_db
 

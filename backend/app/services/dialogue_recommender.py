@@ -79,7 +79,7 @@ class PracticeToDialogueRecommendation:
         # 条件1: 同一知识点连续错 ≥2 次
         same_skill_errors = self._count_same_skill_consecutive_errors(attempts)
         if same_skill_errors >= 2:
-            skill_id = self._get_last_error_skill(attempts)
+            self._get_last_error_skill(attempts)
             return self.TEMPLATES["consecutive_same_skill"].format(
                 count=same_skill_errors
             )

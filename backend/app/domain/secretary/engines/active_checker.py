@@ -11,8 +11,7 @@ from __future__ import annotations
 from app.shared.constants import DEFAULT_USER_ID
 import asyncio
 import logging
-import time
-from .context_engine import ContextEngine, SessionContext
+from .context_engine import ContextEngine
 
 logger = logging.getLogger(__name__)
 

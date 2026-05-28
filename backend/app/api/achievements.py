@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
 from app.shared.constants import DEFAULT_USER_ID
 from app.core.knowledge_trace import bkt_engine

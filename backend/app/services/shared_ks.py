@@ -18,7 +18,6 @@ from typing import Optional
 from app.core.knowledge_trace import bkt_engine
 from app.schemas.practice import KnowledgeState
 from app.services.storage import storage
-from app.services.tree_ops import tree_ops
 
 logger = logging.getLogger(__name__)
 

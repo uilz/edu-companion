@@ -17,9 +17,9 @@ from app.cognitive.models import (
     Composition, DeepLink, DeepProcessing, Diagnostic, DialogueContext,
     Engagement, ErrorCluster, GoalAlignment, MetaInfo, Metacognition,
     PracticeEvent, PracticeSummary, Prediction, Prerequisite, Scheduling,
-    Trend, Unlock, Associate, UserCognitiveState,
+    Trend, Unlock, Associate,
 )
-from app.db.database import Database, get_db
+from app.db.database import get_db
 
 logger = logging.getLogger(__name__)
 

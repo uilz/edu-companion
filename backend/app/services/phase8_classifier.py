@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.cognitive.storage import vector_search, get_node
+from app.cognitive.storage import vector_search
 
 logger = logging.getLogger(__name__)
 

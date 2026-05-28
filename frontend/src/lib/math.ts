@@ -148,13 +148,6 @@ export function renderMath(text: string): string {
 }
 
 /**
- * 检查 KaTeX 是否已加载完毕
- */
-export function isKatexReady(): boolean {
-  return _katexReady;
-}
-
-/**
  * 订阅 KaTeX 加载完成事件；若已加载则立即执行回调
  * 返回取消订阅函数
  */

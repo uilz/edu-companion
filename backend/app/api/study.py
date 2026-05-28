@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 
 from app.shared.constants import DEFAULT_USER_ID
 from app.services.adaptive_planner import adaptive_planner

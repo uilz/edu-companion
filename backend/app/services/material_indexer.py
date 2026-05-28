@@ -4,12 +4,10 @@
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 import uuid
 from datetime import datetime
-from typing import Optional
 
 from app.services.material_parser import material_parser
 from app.services.classifier import compute_embedding

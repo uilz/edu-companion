@@ -5,8 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from uuid import uuid4
-from app.schemas.conversation import BackgroundJob, ResponseBlock
+from app.schemas.conversation import BackgroundJob
 from app.services.storage import storage
 
 logger = logging.getLogger(__name__)

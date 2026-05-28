@@ -10,9 +10,7 @@
 from __future__ import annotations
 
 from app.shared.constants import DEFAULT_USER_ID
-import json
 import logging
-import os
 import time
 from typing import Any
 
@@ -20,7 +18,6 @@ from .models import (
     DiagnosisReport,
     Proposal,
     ScopeSpec,
-    SecretaryPrefs,
 )
 from .engines.diagnosis import DiagnosisEngine
 from .engines.proposal_generator import ProposalGenerator

@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 
 from app.shared.constants import DEFAULT_USER_ID
@@ -253,7 +253,6 @@ async def promote_to_permanent(material_id: str):
 async def suggest_promotions(limit: int = 5):
     """智能推荐：哪些临时资料值得转为知识库。"""
     _ensure_indexed()
-    suggestions = []
     scored = []
 
     for mid, meta in materials_meta.get_all().items():

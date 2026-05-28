@@ -42,7 +42,7 @@ def _compute_partition_progress_cognitive(partition_id: str) -> PartitionProgres
     返回 None 表示无数据 (触发备降)。
     """
     try:
-        from app.cognitive.storage import get_node, get_children
+        from app.cognitive.storage import get_node
         from app.cognitive.models import CognitiveNode
 
         partition_node = get_node(partition_id)

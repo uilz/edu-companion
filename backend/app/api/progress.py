@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
 from app.core.learner_model import learner_engine
 from app.db.repository import AttemptRepo
@@ -249,7 +249,6 @@ async def start_study_session(
     返回:
         会话信息
     """
-    from app.shared.constants import DEFAULT_USER_ID
     session_id = learner_engine.create_session(user_id, subject)
     return {
         "session_id": session_id,
@@ -434,7 +433,7 @@ async def get_daily_summary(user_id: str) -> dict[str, Any]:
     返回空对象 {} 表示昨天无学习记录。
     今日推荐来自 cognitive_nodes 表。
     """
-    from datetime import datetime, timedelta, date
+    from datetime import datetime, timedelta
 
     now = datetime.now()
     yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")

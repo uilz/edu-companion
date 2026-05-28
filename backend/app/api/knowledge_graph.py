@@ -7,7 +7,6 @@ import json as _json
 import logging
 import time
 from typing import Any
-from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException
 

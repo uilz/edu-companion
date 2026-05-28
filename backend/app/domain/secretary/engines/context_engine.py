@@ -15,11 +15,8 @@
 from __future__ import annotations
 
 import logging
-import time
 from datetime import datetime, timezone
-from typing import Any
 
-from ..models import ScopeSpec
 
 logger = logging.getLogger(__name__)
 

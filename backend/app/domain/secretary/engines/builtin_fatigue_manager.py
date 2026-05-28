@@ -11,10 +11,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any
 
-from ..models import Proposal, ScoredInsight
+from ..models import Proposal
 from .context_engine import SessionContext
 from .module_registry import SecretaryModule, ModuleMeta
 

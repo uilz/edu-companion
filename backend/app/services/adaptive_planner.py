@@ -14,9 +14,8 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Optional
 
-from app.cognitive.storage import list_all_nodes, get_node, find_node_by_label
+from app.cognitive.storage import list_all_nodes, find_node_by_label
 from domain.knowledge.checker import PrerequisiteChecker
 from domain.knowledge.prerequisites import (
     ALL_PREREQUISITES,

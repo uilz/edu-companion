@@ -10,9 +10,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import time
-import uuid
-from datetime import datetime
 from typing import Any, Optional
 
 from dotenv import load_dotenv
@@ -22,12 +19,10 @@ load_dotenv()  # 从 .env 加载环境变量
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import AsyncIterator
 
 logger = logging.getLogger(__name__)
 
-import psycopg2
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 

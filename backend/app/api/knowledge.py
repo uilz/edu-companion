@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Optional
+from typing import Optional
 
 import networkx as nx
 from fastapi import APIRouter, HTTPException, Query
@@ -379,7 +379,7 @@ async def get_retention_curve(user_id: str = DEFAULT_USER_ID):
 
     prerequisites = ALL_PREREQUISITES
     skills = []
-    now = datetime.now()
+    datetime.now()
 
     for skill_id in prerequisites:
         state = bkt_engine.load_or_create(user_id, skill_id)

@@ -15,9 +15,7 @@ from typing import Any
 from app.shared.constants import DEFAULT_USER_ID
 from ..models import (
     DiagnosisReport,
-    Proposal,
     ScopeSpec,
-    SecretaryPrefs,
     WeakPoint,
 )
 from ..analysis import (
@@ -27,7 +25,6 @@ from ..analysis import (
     assess_current_burden,
     detect_calibration_mismatch,
     detect_prediction_divergence,
-    analyze_error_patterns,
     compute_progress_delta,
 )
 

@@ -15,8 +15,8 @@ import logging
 import time
 from app.shared.constants import DEFAULT_USER_ID
 from app.cognitive.models import CognitiveNode
-from app.cognitive.storage import get_nodes_by_level, list_all_nodes, upsert_node
-from app.services.spaced_repetition import ReviewResult, SpacedRepetition
+from app.cognitive.storage import list_all_nodes
+from app.services.spaced_repetition import ReviewResult
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +113,7 @@ class AdaptiveSelector:
             last_ts = node.practice_summary.last_practiced if node.practice_summary else None
             days_since = (now - last_ts) / 86400.0 if last_ts else 0.0
             urgency = node.scheduling.urgency if node.scheduling else 0.0
-            stagnation = node.trend.stagnation_days if node.trend else 0.0
+            node.trend.stagnation_days if node.trend else 0.0
 
             # ── 三级得分 ──
             if mode == "review":

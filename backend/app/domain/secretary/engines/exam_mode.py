@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 from ..models import Proposal
 from .module_registry import SecretaryModule, ModuleMeta

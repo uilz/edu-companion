@@ -11,10 +11,9 @@ import logging
 import uuid
 from typing import Optional
 
-from app.schemas.conversation import TextBlock, ResponseBlock
+from app.schemas.conversation import ResponseBlock
 from app.schemas.practice import (
     BloomLevel,
-    KnowledgeState,
     Question,
     AnswerType,
 )

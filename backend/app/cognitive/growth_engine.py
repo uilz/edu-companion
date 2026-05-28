@@ -13,8 +13,8 @@ from uuid import uuid4
 
 from app.cognitive.models import CognitiveNode
 from app.cognitive.storage import (
-    find_node_by_path, get_node, get_children, get_visible_children,
-    upsert_node, vector_search,
+    find_node_by_path, get_node, get_visible_children, upsert_node,
+    vector_search,
 )
 from app.cognitive.edge_models import KnowledgeEdge
 from app.cognitive.edge_storage import upsert_edge

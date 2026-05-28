@@ -7,7 +7,10 @@
 from __future__ import annotations
 
 import asyncio
-import json, logging, os, uuid, mimetypes
+import json
+import logging
+import uuid
+import mimetypes
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, Request, Response, UploadFile, File, Form, Query  # type: ignore
 from fastapi.responses import FileResponse  # type: ignore
@@ -17,7 +20,6 @@ from app.shared.constants import DEFAULT_USER_ID
 from app.schemas.conversation import TextBlock
 from app.services.storage import storage
 from app.services.tree_ops import tree_ops
-from app.services.classifier import classifier
 from app.services.active_stream import active_streams
 
 router = APIRouter()
@@ -148,7 +150,7 @@ async def create_node(level: str, body: dict):
         raise
     except ValueError as e:
         raise HTTPException(404, str(e))
-    except Exception as e:
+    except Exception:
         logger.exception(f"Failed to create {level}")
         raise HTTPException(500, "Internal server error")
 
@@ -173,13 +175,16 @@ async def rename_node(level: str, node_id: str, req: RenameRequest):
         raise
     except ValueError as e:
         raise HTTPException(404, str(e))
-    except Exception as e:
+    except Exception:
         logger.exception(f"Failed to rename {level}")
         raise HTTPException(500, "Internal server error")
 
 
 @router.delete("/tree/{level}/{node_id}")
 async def delete_node(level: str, node_id: str):
+    if level == "message":
+        tree_ops.delete_message(USER_ID, node_id)
+        return {"ok": True}
     if level not in tree_ops.LEVELS:
         raise HTTPException(400, f"Invalid level: {level}")
     try:
@@ -198,7 +203,7 @@ async def delete_node(level: str, node_id: str):
         raise
     except ValueError as e:
         raise HTTPException(404, str(e))
-    except Exception as e:
+    except Exception:
         logger.exception(f"Failed to delete {level}")
         raise HTTPException(500, "Internal server error")
 
@@ -279,7 +284,7 @@ async def switch_conversation(conv_id: str, topic_id: str = Query(...)):
         return {"conversation": c.model_dump(mode="json")}
     except ValueError as e:
         raise HTTPException(404, str(e))
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to switch conversation")
         raise HTTPException(500, "Internal server error")
 
@@ -325,10 +330,7 @@ async def modify_message(message_id: str, req: ModifyMessageRequest):
     return {"node": node, "version_count": version_count}
 
 
-@router.delete("/tree/message/{message_id}")
-async def delete_message(message_id: str):
-    tree_ops.delete_message(USER_ID, message_id)
-    return {"ok": True}
+
 
 
 @router.get("/tree/message/{message_id}/blocks")
@@ -464,7 +466,7 @@ async def websocket_conversation(websocket: WebSocket) -> None:
                             assistant_text, skill_ids, contains_math,
                         ))
 
-            bg_task = asyncio.create_task(_background_consume())
+            asyncio.create_task(_background_consume())
 
             # 从队列读取并转发到 WS
             try:

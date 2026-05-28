@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import logging
 import random
-from datetime import datetime, timezone
 
 from ..models import Proposal
 from .context_engine import SessionContext

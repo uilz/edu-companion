@@ -16,11 +16,8 @@ from app.shared.constants import DEFAULT_USER_ID
 import logging
 import time
 from collections import defaultdict
-from typing import Any
 
 from app.cognitive.storage import (
-    get_node,
-    get_nodes_by_level,
     get_subtree,
     list_all_nodes,
 )

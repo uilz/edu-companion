@@ -18,10 +18,10 @@ from __future__ import annotations
 import logging
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
-from ..models import Proposal, ScoredInsight
+from ..models import Proposal
 from .context_engine import SessionContext
 
 logger = logging.getLogger(__name__)
@@ -55,11 +55,9 @@ class SecretaryModule(ABC):
 
     async def on_activate(self) -> None:
         """模块激活时调用（可选覆写）"""
-        pass
 
     async def on_deactivate(self) -> None:
         """模块停用时调用（可选覆写）"""
-        pass
 
     @abstractmethod
     async def run_check(self, user_id: str, ctx: SessionContext | None = None) -> list[Proposal]:

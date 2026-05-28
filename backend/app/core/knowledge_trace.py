@@ -11,9 +11,7 @@ from typing import Optional
 
 from app.config import settings
 from app.schemas.practice import (
-    ErrorType,
     ExplanationState,
-    KnowledgeDimension,
     KnowledgeState,
 )
 

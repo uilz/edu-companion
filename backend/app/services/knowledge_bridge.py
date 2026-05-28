@@ -16,8 +16,6 @@ import logging
 from typing import Optional
 
 from app.domain.learning.shared_knowledge import (
-    SharedKnowledgeState,
-    SharedSkillState,
     EvidenceType,
     shared_knowledge,
 )

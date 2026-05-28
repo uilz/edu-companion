@@ -172,21 +172,6 @@
     transform: translateY(-1px);
   }
 
-  .swiss-card-interactive {
-    cursor: pointer;
-  }
-
-  .swiss-card-interactive:active {
-    transform: translateY(0);
-    box-shadow: var(--shadow-sm);
-  }
-
-  /* ── Accent card ── */
-  .swiss-card-accent {
-    border-color: var(--color-accent);
-    border-left: 3px solid var(--color-accent);
-  }
-
   /* ── Button ── */
   .swiss-btn {
     display: inline-flex;
@@ -258,12 +243,6 @@
     border: none;
     border-top: 1px solid var(--color-border);
     margin: 1.25rem 0;
-  }
-
-  .swiss-divider-soft {
-    border-color: var(--color-border);
-    opacity: 0.5;
-    margin: 0.75rem 0;
   }
 
   /* ── Nav item ── */
@@ -394,16 +373,6 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes slideInRight {
-  from { opacity: 0; transform: translateX(16px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
-@keyframes pageEnter {
-  from { opacity: 0; transform: translateY(8px) scale(0.99); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
@@ -412,14 +381,6 @@
 @keyframes pulse-glow {
   0%, 100% { box-shadow: 0 0 0 0 var(--color-accent-glow); }
   50% { box-shadow: 0 0 16px 4px var(--color-accent-glow); }
-}
-
-.page-transition {
-  animation: pageEnter 0.3s ease-out;
-}
-
-.message-enter {
-  animation: slideInRight 0.2s ease-out;
 }
 
 /* ── Skeleton loading shimmer ── */
@@ -443,19 +404,6 @@
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-text-secondary); }
-
-/* ── Safe area ── */
-@supports (padding-bottom: env(safe-area-inset-bottom)) {
-  .safe-bottom {
-    padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
-  }
-}
-
-/* ── Focus ring ── */
-.focus-ring:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--color-accent-glow);
-}
 
 /* ── Selection ── */
 ::selection {

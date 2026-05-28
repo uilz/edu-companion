@@ -21,10 +21,10 @@ from app.cognitive.models import CognitiveNode
 from app.cognitive.storage import (
     find_node_by_path, get_node, get_visible_children, get_suggested_count,
     get_nodes_by_level, list_all_nodes, delete_node,
-    set_node_visible, upsert_node, vector_search,
+    set_node_visible, upsert_node,
 )
 from app.cognitive.edge_storage import (
-    get_edge, get_edges_for_node, update_edge_status, delete_edge, upsert_edge,
+    get_edges_for_node, update_edge_status, delete_edge,
 )
 from app.cognitive.link_storage import (
     get_links_for_conversation, upsert_link, set_primary_link, remove_link,
@@ -206,7 +206,7 @@ def delete_conversation_link(
     link_id: str,
 ) -> dict:
     """移除关联（最后一条 link 将删除会话）"""
-    count_before = count_links_for_conversation(conv_id)
+    count_links_for_conversation(conv_id)
     remove_link(link_id)
     count_after = count_links_for_conversation(conv_id)
     if count_after == 0:
@@ -348,7 +348,7 @@ def create_graph_node(req: CreateNodeRequest) -> dict:
         raise HTTPException(404, str(e))
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception(f"Failed to create {level}")
         raise HTTPException(500, "Internal server error")
 

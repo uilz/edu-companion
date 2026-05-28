@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import math
-import time
 
 from . import constants as C
 from .models import (
@@ -373,7 +372,7 @@ def calc_scheduling(
     p = params or {}
     w_ret = p.get("sched_retention_weight", C.DEFAULT_PARAMS["student.sched_retention_weight"])
     w_mast = p.get("sched_mastery_push_weight", C.DEFAULT_PARAMS["student.sched_mastery_push_weight"])
-    w_inter = p.get("sched_interleaving_weight", C.DEFAULT_PARAMS["student.sched_interleaving_weight"])
+    p.get("sched_interleaving_weight", C.DEFAULT_PARAMS["student.sched_interleaving_weight"])
     w_core = p.get("sched_core_boost", C.DEFAULT_PARAMS["student.sched_core_boost"])
     w_stag = p.get("sched_stagnation_penalty", C.DEFAULT_PARAMS["student.sched_stagnation_penalty"])
 

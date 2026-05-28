@@ -71,7 +71,6 @@ class TempConversationCleanupModule(SecretaryModule):
 
     def _list_users(self) -> list[str]:
         """检测存在临时会话的用户列表"""
-        from app.services.storage import storage
         # 遍历 storage 数据目录
         import os
         from pathlib import Path

@@ -27,22 +27,8 @@ def _get_cognitive_proficiency(user_id: str, skill_id: str) -> float | None:
         logger.debug("CognitiveNode 掌握度查询失败，返回 None")
     return None
 from app.schemas.practice import (
-    AttemptRecord,
     BloomLevel,
-    CoverageGap,
-    DailyStat,
-    ErrorAnalysis,
-    ErrorBookEntry,
-    ErrorType,
-    Material,
-    MaterialChunk,
-    PracticeSession,
-    PracticeStats,
     Question,
-    QuestionOption,
-    ReviewTask,
-    SessionStatus,
-    SkillStat,
 )
 
 logger = logging.getLogger(__name__)
@@ -351,7 +337,7 @@ async def inline_answer(req: InlineAnswerRequest):
     content = block.content or {}
     correct_answer = content.get("correct_answer", "").strip().upper()
     explanation = content.get("explanation") or content.get("reply_expected", "") or ""
-    question_id = content.get("question_id", "")
+    content.get("question_id", "")
     skill_id = content.get("skill_id", "")
 
     is_correct = req.answer.strip().upper() == correct_answer

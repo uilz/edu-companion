@@ -4,9 +4,7 @@
 from __future__ import annotations
 import logging
 import re
-import time
-from uuid import uuid4
-from app.schemas.conversation import ResponseBlock, BackgroundJob
+from app.schemas.conversation import ResponseBlock
 
 from app.shared.constants import DEFAULT_USER_ID
 logger = logging.getLogger(__name__)

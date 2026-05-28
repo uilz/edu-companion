@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import logging
-from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from fastapi import FastAPI
@@ -61,7 +60,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # 初始化数据库
     from app.db.database import get_db
-    db = get_db()
+    get_db()
     logger.info("💾 PostgreSQL 已连接")
 
     # 初始化资料元数据索引
@@ -116,7 +115,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         from app.domain.secretary.engines.active_checker import active_checker
         await active_checker.stop()
         logger.info("🔍 秘书主动检查器已停止")
-    except Exception as e:
+    except Exception:
         pass
 
     logger.info("👋 应用关闭")

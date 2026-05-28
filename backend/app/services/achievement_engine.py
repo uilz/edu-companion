@@ -216,11 +216,9 @@ class AchievementEngine:
                 levels = ach_def["levels"]
                 # Find current level
                 current = existing.get("level", 0)
-                next_lv = None
                 next_threshold = None
                 for lv in sorted(levels.keys()):
                     if lv > current:
-                        next_lv = lv
                         next_threshold = levels[lv]
                         break
                 result.append({

@@ -13,7 +13,6 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -109,9 +108,9 @@ async def websocket_chat(websocket: WebSocket) -> None:
                 continue
 
             # 兼容前端格式：{ conversationId, message, settings }
-            conversation_id = data.get("conversationId", "")
+            data.get("conversationId", "")
             user_message = data.get("message", "")
-            settings = data.get("settings", {})
+            data.get("settings", {})
             request_id = data.get("request_id", str(uuid.uuid4())[:8])
 
             if not user_message or not user_message.strip():

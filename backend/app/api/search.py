@@ -6,7 +6,6 @@ P1: 全站统一搜索 API
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel

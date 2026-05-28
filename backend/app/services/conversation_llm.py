@@ -14,8 +14,6 @@ from app.schemas.conversation import (
     ContentBlock,
     TextBlock,
     TreeNode,
-    Partition,
-    Conversation,
     ResponseBlock,
 )
 from app.services.llm_service import llm_service
@@ -24,7 +22,6 @@ from app.services.tree_ops import tree_ops
 from app.services.classifier import classifier
 from app.services.tool_executor import tool_executor, predict_tools, SLOW_TOOLS
 
-from app.services.prompts import SYSTEM_PROMPT
 from app.services.emotion_analyzer import emotion_analyzer
 from app.services.context_builder import _build_context_messages
 
@@ -107,7 +104,7 @@ def _trigger_graph_update(user_id: str, conversation_id: str, new_branch_name: s
                 return
 
             # 已存在的图谱 → 增量合并；不存在 → 新建
-            graph = data.knowledge_graphs.get(partition_id)
+            data.knowledge_graphs.get(partition_id)
 
             from app.api.knowledge_graph import generate_graph_logic
             await generate_graph_logic(

@@ -15,9 +15,7 @@
 
 from __future__ import annotations
 from app.shared.constants import DEFAULT_USER_ID
-import json
 import logging
-import time
 from ..models import Proposal
 
 logger = logging.getLogger(__name__)

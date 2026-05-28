@@ -165,6 +165,3 @@ export type WSIncomingMessage =
   | { type: "pong" }                                                                                 // pong 心跳回复
   | { type: "secretary_update"; content: { reason: string[]; proposal_count: number } };  // 秘书系统更新通知
 
-// ── Legacy aliases (backward compat) ──
-/** @deprecated 请使用 Conversation 替代 */
-export type Branch = Conversation;

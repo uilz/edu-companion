@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Any
 
 from app.config import settings
-from app.services.llm_service import llm_service
 
 logger = logging.getLogger(__name__)
 

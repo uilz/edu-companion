@@ -25,7 +25,6 @@ if TYPE_CHECKING:
         KnowledgeGraphService,
         MediaService,
     )
-    from shared.protocols.multimedia import AudioSynthesizer, ImageRenderer
     from domain.multimedia.service import MultimediaService
 
 logger = logging.getLogger("di")
@@ -190,7 +189,6 @@ class AppContainer:
         bus.subscribe("KnowledgeStateUpdated", self.conversation_service.on_knowledge_updated)
 
         # Phase 9: CognitiveNode 更新 → ZPD 调度重计算
-        from app.cognitive.storage import get_node
         async def _on_cognitive_updated(event: DomainEvent) -> None:
             from shared.events import CognitiveNodeUpdated
             if not isinstance(event, CognitiveNodeUpdated):
