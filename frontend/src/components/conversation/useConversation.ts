@@ -1,882 +1,243 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import type { Partition, TreeNode, ResponseBlock } from "@/types";
-
 import { useMediaQuery } from "./useMediaQuery";
-import { apiFetch, fireClassify } from "./api";
-import { ConversationWS } from "./ws";
+import {
+  useConversationStore,
+  subscribeToNavigation,
+  initWebSocket,
+  syncActiveRefs,
+  getStreamCacheData,
+  clearStreamCacheData,
+  saveStreamCacheBeforeUnload,
+  isSending,
+  setIsSending,
+} from "@/store/conversation-store";
 
-// ══════════════════════════════════════════════════════════════
-//  Hook 返回值类型定义 (不变)
-// ══════════════════════════════════════════════════════════════
-export interface UseConversationReturn {
-  partitions: Partition[];
-  selectedPartitionId: string | null;
-  activeConversationId: string | null;
-  messages: TreeNode[];
-  responseBlocks: ResponseBlock[];
-  isLoading: boolean;
-  statusMessage: string;
-  switchBanner: {
-    partitionId: string; conversationId: string;
-    domainName: string; topicName: string;
-    fullPath: string;
-  } | null;
-  showPartitionSidebar: boolean;
-  sidebarCollapsed: boolean;
-  showNewPartition: boolean;
-  loadingPartitions: boolean;
-  loadingMessages: boolean;
-  convError: string | null;
-  isDesktop: boolean;
-  activePartition: Partition | undefined;
-  wsConnected: boolean;
+// Re-export the return type so ConversationPanel can import from here
+export type { UseConversationReturn } from "@/store/conversation-store";
 
-  handleSelectConversation: (pid: string, cid: string) => void;
-  handleNewConversation: (level: string, parentId: string, partitionId?: string) => Promise<void>;
-  handleSend: (text: string, files?: { name: string; type: string; materialId?: string }[]) => Promise<void>;
-  handleDeleteMessage: (messageId: string) => Promise<void>;
-  handleEditMessage: (messageId: string, newText: string) => Promise<number>;
-  handleVersionSwitch: (messageId: string, direction: "prev" | "next") => Promise<{ index: number; total: number } | null>;
-  handleCreatePartition: (name: string, emoji: string) => Promise<void>;
-  handleRenamePartition: (id: string, name: string) => Promise<void>;
-  handleSwitchConfirm: () => void;
-  handleSwitchDismiss: () => void;
-  setShowPartitionSidebar: (v: boolean) => void;
-  setShowNewPartition: (v: boolean) => void;
-  setSidebarCollapsed: (v: boolean) => void;
-  loadPartitions: () => Promise<void>;
-}
-
-// ══════════════════════════════════════════════════════════════
-//  useConversation — 对话系统核心 Hook (归一化版)
-// ══════════════════════════════════════════════════════════════
-export function useConversation(): UseConversationReturn {
+/**
+ * useConversation — thin facade over the Zustand store.
+ * Handles one-time side effects (URL restore, WS init, body scroll lock)
+ * and returns the store state mapped to the UseConversationReturn interface.
+ */
+export function useConversation() {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const router = useRouter();
 
-  // ── 状态 ──
-  const [partitions, setPartitions] = useState<Partition[]>([]);
-  const [selectedPartitionId, setSelectedPartitionId] = useState<string | null>(null);
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<TreeNode[]>([]);
-  const [responseBlocks, setResponseBlocks] = useState<ResponseBlock[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [statusMessage, setStatusMessage] = useState("");
-  const [switchBanner, setSwitchBanner] = useState<{
-    partitionId: string; conversationId: string;
-    domainName: string; topicName: string;
-    fullPath: string;
-  } | null>(null);
-  const [showPartitionSidebar, setShowPartitionSidebar] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [showNewPartition, setShowNewPartition] = useState(false);
-  const [loadingPartitions, setLoadingPartitions] = useState(true);
-  const [loadingMessages, setLoadingMessages] = useState(false);
-  const [convError, setConvError] = useState<string | null>(null);
-  const [wsConnected, setWsConnected] = useState(false);
-  const [urlInitialized, setUrlInitialized] = useState(false);
+  // ── Subscribe to store (single subscription for all state) ──
+  const store = useConversationStore();
 
-  // ── Refs ──
-  const wsRef = useRef<ConversationWS | null>(null);
-  const activeConvIdRef = useRef<string | null>(null);
-  const loadMessagesRef = useRef<((cid: string) => void) | null>(null);
-  const activePartIdRef = useRef<string | null>(null);
-  const streamingPartIdRef = useRef<string | null>(null);
-  const streamingConvIdRef = useRef<string | null>(null);
-  const streamingMsgIdRef = useRef<string | null>(null);
-  const streamBufferRef = useRef("");
-  const streamSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const loadPartitionsRef = useRef<() => Promise<void>>(() => Promise.resolve());
-  const isSendingRef = useRef(false);
-
-  // ── 流式缓存: sessionStorage 持久化（刷新恢复）──
-  const STREAM_CACHE_KEY = "stream_cache";
-
-  function getStreamCache(): Record<string, string> {
-    try { return JSON.parse(sessionStorage.getItem(STREAM_CACHE_KEY) || "{}"); } catch { return {}; }
-  }
-
-  function setStreamCache(convId: string, text: string) {
-    try {
-      const cache = getStreamCache();
-      cache[convId] = text;
-      sessionStorage.setItem(STREAM_CACHE_KEY, JSON.stringify(cache));
-    } catch { /* quota exceeded, 忽略 */ }
-  }
-
-  function clearStreamCache(convId?: string) {
-    try {
-      if (convId) {
-        const cache = getStreamCache();
-        delete cache[convId];
-        sessionStorage.setItem(STREAM_CACHE_KEY, JSON.stringify(cache));
-      } else {
-        sessionStorage.removeItem(STREAM_CACHE_KEY);
-      }
-    } catch { /* 忽略 */ }
-  }
-
-  // 页面关闭/刷新前保存当前流式状态
+  // ── One-time: URL restore + stream cache recovery + body scroll lock ──
   useEffect(() => {
-    const handler = () => {
-      const cid = streamingConvIdRef.current;
-      const text = streamBufferRef.current;
-      if (cid && text) setStreamCache(cid, text);
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, []);
-
-  // 如果 URL 有 ?panel=graph，跳转到仪表盘知识图谱页
-  useEffect(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("panel") === "graph") {
-        const pId = params.get("p") || params.get("partition_id");
-        router.replace(pId ? `/dashboard?tab=graph&partition_id=${pId}` : "/dashboard?tab=graph");
-      }
-    } catch { console.error("URL panel redirect failed"); }
-  }, [router]);
-
-  // URL / localStorage 恢复状态 (合并为一个 effect)
-  useEffect(() => {
+    // Restore selection from URL or localStorage
     const params = new URLSearchParams(window.location.search);
     const pId = params.get("p") || params.get("partition_id");
     const cId = params.get("c") || params.get("conversation_id");
     if (pId) {
-      setSelectedPartitionId(pId);
-      if (cId) setActiveConversationId(cId);
+      useConversationStore.setState({
+        selectedPartitionId: pId,
+        activeConversationId: cId || null,
+      });
     } else {
       try {
         const saved = localStorage.getItem("learn-page-state");
         if (saved) {
           const { partitionId, conversationId } = JSON.parse(saved);
-          if (partitionId) setSelectedPartitionId(partitionId);
-          if (conversationId) setActiveConversationId(conversationId);
+          if (partitionId || conversationId) {
+            useConversationStore.setState({
+              selectedPartitionId: partitionId || null,
+              activeConversationId: conversationId || null,
+            });
+          }
         }
-      } catch { }
+      } catch {
+        /* ignore */
+      }
     }
-    setUrlInitialized(true);
+    useConversationStore.setState({ urlInitialized: true });
 
-    // 恢复中断的流式缓存（刷新前 AI 还在回复中的消息）
-    // 服务端已增量写入 DB，刷新后 loadMessages 直接拿最新内容
+    // Recover interrupted stream cache (AI was generating before refresh)
     try {
-      const cache = getStreamCache();
-      const targetConv = cId || (() => {
-        try { return JSON.parse(localStorage.getItem("learn-page-state") || "{}").conversationId; } catch { return null; }
-      })();
+      const cache = getStreamCacheData();
+      const targetConv =
+        cId ||
+        (() => {
+          try {
+            return JSON.parse(
+              localStorage.getItem("learn-page-state") || "{}",
+            ).conversationId;
+          } catch {
+            return null;
+          }
+        })();
       if (targetConv && cache[targetConv]) {
-        setStatusMessage("正在加载已生成的内容...");
-        clearStreamCache(targetConv);
+        useConversationStore.setState({
+          statusMessage: "正在加载已生成的内容...",
+        });
+        clearStreamCacheData(targetConv);
 
-        // 轮询检测后台活跃流 → 有则持续刷新消息
+        // Poll for active backend stream → refresh messages while active
         const pollConvId = targetConv;
         let pollCount = 0;
         const pollInterval = setInterval(async () => {
           pollCount++;
           try {
-            const res = await fetch(`/api/conversations/tree/stream/active/${pollConvId}`);
+            const res = await fetch(
+              `/api/conversations/tree/stream/active/${pollConvId}`,
+            );
             const data = await res.json();
             if (data.active) {
-              if (activeConvIdRef.current === pollConvId && loadMessagesRef.current) {
-                loadMessagesRef.current(pollConvId);
+              if (
+                useConversationStore.getState().activeConversationId ===
+                pollConvId
+              ) {
+                useConversationStore.getState().loadMessages(pollConvId);
               }
             } else {
               clearInterval(pollInterval);
-              if (activeConvIdRef.current === pollConvId && loadMessagesRef.current) {
-                loadMessagesRef.current(pollConvId);
-                setIsLoading(false);
-                setStatusMessage("");
+              if (
+                useConversationStore.getState().activeConversationId ===
+                pollConvId
+              ) {
+                useConversationStore.getState().loadMessages(pollConvId);
+                useConversationStore.setState({
+                  isLoading: false,
+                  statusMessage: "",
+                });
               }
             }
-          } catch { /* 忽略 */ }
+          } catch {
+            /* ignore */
+          }
           if (pollCount > 60) {
             clearInterval(pollInterval);
-            setIsLoading(false);
-            setStatusMessage("");
+            useConversationStore.setState({
+              isLoading: false,
+              statusMessage: "",
+            });
           }
         }, 2000);
       }
-    } catch { /* 忽略 */ }
+    } catch {
+      /* ignore */
+    }
 
+    // Body scroll lock
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "";
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── 状态同步 → URL + localStorage ──
-  // 每次 selectedPartitionId / activeConversationId 变化时更新浏览器地址栏和本地存储
+  // ── Panel=graph redirect ──
   useEffect(() => {
-    if (!urlInitialized) return;
     try {
-      const params = new URLSearchParams();
-      if (selectedPartitionId) params.set("p", selectedPartitionId);
-      if (activeConversationId) params.set("c", activeConversationId);
-      const qs = params.toString();
-      window.history.replaceState(null, "", qs ? `${window.location.pathname}?${qs}` : window.location.pathname);
-      localStorage.setItem("learn-page-state", JSON.stringify({
-        partitionId: selectedPartitionId,
-        conversationId: activeConversationId,
-      }));
-    } catch { }
-  }, [selectedPartitionId, activeConversationId, urlInitialized]);
-
-  // ── ref 同步 ──
-  // 同步 ref
-  useEffect(() => { activeConvIdRef.current = activeConversationId; }, [activeConversationId]);
-  useEffect(() => { activePartIdRef.current = selectedPartitionId; }, [selectedPartitionId]);
-
-  // ── 锁定 body 滚动 ──
-  useEffect(() => { document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = ""; }; }, []);
-
-  // ── 加载分区列表 ──
-  const partitionsLoadedRef = useRef(false);
-  const loadPartitions = useCallback(async () => {
-    setLoadingPartitions(true);
-    try {
-      const data = await apiFetch<{ partitions: Partition[] }>("/tree/partition");
-      setPartitions(data.partitions || []);
-      partitionsLoadedRef.current = true;
-    } catch (e) { console.error(e); }
-    finally { setLoadingPartitions(false); }
-  }, []);
-  loadPartitionsRef.current = loadPartitions;
-
-  // ── 分区列表变化后，清除已不存在的 selectedPartitionId（仅在首次加载完成后） ──
-  useEffect(() => {
-    if (partitionsLoadedRef.current && selectedPartitionId && !partitions.some(p => p.id === selectedPartitionId)) {
-      console.log("[useEffect] clearing stale selectedPartitionId:", selectedPartitionId?.slice(0,8), "partitions:", partitions.length);
-      setSelectedPartitionId(null);
-      setActiveConversationId(null);
-    }
-  }, [partitions, selectedPartitionId]);
-
-  // ── 加载消息 (归一化路径) ──
-  const loadMessages = useCallback(async (conversationId: string) => {
-    setLoadingMessages(true);
-    setConvError(null);
-    try {
-      const [msgData, blocksData] = await Promise.all([
-        apiFetch<{ messages: TreeNode[]; total: number }>(`/tree/conversation/${conversationId}/messages?limit=50&offset=0`),
-        apiFetch<{ blocks: ResponseBlock[] }>(`/tree/conversation/${conversationId}/blocks?limit=100`).catch(() => ({ blocks: [] })),
-      ]);
-      setMessages(msgData.messages || []);
-      setResponseBlocks(blocksData.blocks || []);
-    } catch (e: unknown) {
-      if (e instanceof Error && e.message.includes("404")) {
-        setConvError("该对话已被删除");
-        setActiveConversationId(null);
-      } else {
-        setConvError("加载失败");
-      }
-      setMessages([]);
-      setResponseBlocks([]);
-    } finally { setLoadingMessages(false); }
-  }, []);
-
-  // 同步 loadMessagesRef
-  useEffect(() => { loadMessagesRef.current = loadMessages; }, [loadMessages]);
-
-  // ── 选中对话时加载消息 ──
-  useEffect(() => {
-    if (isSendingRef.current) { isSendingRef.current = false; return; }
-    if (activeConversationId) loadMessages(activeConversationId);
-    else { setMessages([]); setResponseBlocks([]); }
-  }, [activeConversationId, loadMessages]);
-
-  // ── WebSocket 初始化 ──
-  useEffect(() => {
-    const wsClient = new ConversationWS();
-    wsRef.current = wsClient;
-    wsClient.connect({
-      // 流式 token 回调: 实时更新消息内容
-      onToken: (content) => {
-        if (!streamingMsgIdRef.current) return;
-        if (streamingPartIdRef.current !== activePartIdRef.current ||
-          streamingConvIdRef.current !== activeConvIdRef.current) return;
-
-        streamBufferRef.current += content;
-        const text = streamBufferRef.current;
-        const msgId = streamingMsgIdRef.current;
-
-        // 每 300ms 节流写入 sessionStorage
-        if (!streamSaveTimerRef.current) {
-          streamSaveTimerRef.current = setTimeout(() => {
-            streamSaveTimerRef.current = null;
-            const cid = streamingConvIdRef.current;
-            if (cid && streamBufferRef.current) setStreamCache(cid, streamBufferRef.current);
-          }, 300);
-        }
-
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === msgId
-              ? { ...m, content_blocks: [{ type: "text" as const, text }], text_summary: text }
-              : m
-          )
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("panel") === "graph") {
+        const pId = params.get("p") || params.get("partition_id");
+        router.replace(
+          pId
+            ? `/dashboard?tab=graph&partition_id=${pId}`
+            : "/dashboard?tab=graph",
         );
-      },
-      // AI 回复完成回调
-      onDone: (_partId, assistantMessage, responseBlocks) => {
-        setIsLoading(false);
-        setStatusMessage("");
+      }
+    } catch {
+      console.error("URL panel redirect failed");
+    }
+  }, [router]);
 
-        const streamPid = streamingPartIdRef.current;
-        const streamCid = streamingConvIdRef.current;
-        const streamMsgId = streamingMsgIdRef.current;
-        streamingPartIdRef.current = null;
-        streamingConvIdRef.current = null;
-        streamingMsgIdRef.current = null;
-        streamBufferRef.current = "";
-        if (streamSaveTimerRef.current) { clearTimeout(streamSaveTimerRef.current); streamSaveTimerRef.current = null; }
-        // 清除流式缓存
-        clearStreamCache(streamCid || undefined);
+  // ── URL + localStorage sync subscription ──
+  useEffect(() => {
+    const unsub = subscribeToNavigation();
+    return unsub;
+  }, []);
 
-        // 如果用户已切换对话，丢弃这个过时的流式消息
-        if (streamPid !== activePartIdRef.current || streamCid !== activeConvIdRef.current) {
-          if (streamMsgId) {
-            setMessages((prev) => prev.filter((m) => m.id !== streamMsgId));
-          }
-          return;
-        }
+  // ── Sync module-level active refs with store state ──
+  useEffect(() => {
+    const unsub = syncActiveRefs();
+    return unsub;
+  }, []);
 
-        // 用最终消息替换占位符
-        if (assistantMessage) {
-          const textBlock = assistantMessage.content_blocks?.find((b: { type: string }) => b.type === "text");
-          const hasContent = textBlock?.text?.trim();
-          setMessages((prev) => {
-            const idx = prev.findIndex((m) => m.id === streamMsgId || m.id === assistantMessage.id);
-            if (idx >= 0) {
-              const updated = [...prev];
-              updated[idx] = hasContent ? assistantMessage : {
-                ...assistantMessage,
-                content_blocks: [{ type: "text" as const, text: "（助手返回了空回复）" }],
-                text_summary: "（助手返回了空回复）",
-              };
-              return updated;
-            }
-            return prev;
-          });
-        } else if (streamMsgId) {
-          setMessages((prev) => prev.filter((m) => m.id !== streamMsgId));
-        }
+  // ── WebSocket init (mount once, cleanup on unmount) ──
+  useEffect(() => {
+    const cleanup = initWebSocket();
+    return cleanup;
+  }, []);
 
-        // 添加回复块（视频/练习/图片等）
-        if (responseBlocks?.length) {
-          setResponseBlocks((prev) => {
-            const existing = new Set(prev.map((b) => b.id));
-            const newBlocks = responseBlocks.filter((b) => !existing.has(b.id));
-            return newBlocks.length ? [...prev, ...newBlocks] : prev;
-          });
-        }
-
-        // 延迟刷新侧栏 + 消息列表
-        setTimeout(() => loadPartitionsRef.current(), 300);
-        setTimeout(() => {
-          const cid = activeConvIdRef.current;
-          if (cid && cid === streamCid) loadMessages(cid);
-        }, 500);
-      },
-      // 错误回调: 显示错误消息
-      onError: (msg) => {
-        setIsLoading(false);
-        setStatusMessage("");
-        const errorNode: TreeNode = {
-          id: "err-" + Date.now(),
-          parent_id: "", children_ids: [],
-          partition_id: activePartIdRef.current || "",
-          conversation_id: activeConvIdRef.current || "",
-          content_blocks: [{ type: "text" as const, text: `❌ ${msg}` }],
-          text_summary: msg,
-          role: "assistant", timestamp: Date.now(),
-          token_count: 0, is_deleted: false, is_archived: false, has_modified_version: false,
-        };
-        if (streamingMsgIdRef.current) {
-          setMessages((prev) =>
-            prev.map((m) => m.id === streamingMsgIdRef.current ? errorNode : m)
-          );
-        } else {
-          setMessages((prev) => [...prev, errorNode]);
-        }
-        streamingMsgIdRef.current = null;
-        streamBufferRef.current = "";
-      },
-      // 回复块更新（如工具调用完成）
-      onBlockUpdate: (block) => {
-        setResponseBlocks((prev) => {
-          const idx = prev.findIndex((b) => b.id === block.id);
-          if (idx >= 0) {
-            const updated = [...prev];
-            updated[idx] = block;
-            return updated;
-          }
-          return [...prev, block];
-        });
-      },
-      // 上下文切换通知: AI 判断应切换到不同分区/对话
-      onContextSwitch: (data) => {
-        setSwitchBanner({
-          partitionId: data.partition_id,
-          conversationId: data.conversation_id,
-          domainName: data.domain_name || "",
-          topicName: data.topic_name || "",
-          fullPath: data.full_path || "",
-        });
-      },
-      onConnect: () => setWsConnected(true),
-      onDisconnect: () => setWsConnected(false),
-    });
-
-    return () => {
-      wsClient.destroy();
-      wsRef.current = null;
+  // ── Beforeunload: save stream cache ──
+  useEffect(() => {
+    const handler = () => {
+      saveStreamCacheBeforeUnload();
     };
-  }, []); // 只挂载/卸载一次 — WS 内部处理重连
-
-  // ── 初始加载 ──
-  useEffect(() => { loadPartitions(); }, [loadPartitions]);
-
-  // ── 定期轮询消息 ──
-  useEffect(() => { /* ... */ }, [activeConversationId, loadMessages]);
-
-  // ── 校验分区是否存在 ──
-  useEffect(() => { /* ... */ }, [urlInitialized, loadingPartitions, partitions, selectedPartitionId]);
-
-  // ── 发送消息 ──
-  const handleSend = useCallback(
-    async (text: string, files?: { name: string; type: string; materialId?: string }[]) => {
-      if (!text.trim() || isLoading) return;
-
-      // 确保有目标对话
-      let pId = selectedPartitionId;
-      let cId = activeConversationId;
-
-      if (!pId || !cId) {
-        // 内联创建：找或创建分区/领域/专题/对话
-        try {
-          if (!pId) {
-            const pData = await apiFetch<{ partitions: Partition[] }>("/tree/partition");
-            if (pData.partitions?.length > 0) {
-              pId = pData.partitions[0].id;
-            } else {
-              const newP = await apiFetch<{ partition: Partition }>("/tree/partition", {
-                method: "POST", body: JSON.stringify({ name: "新分区", emoji: "💬" }),
-              });
-              pId = newP.partition.id;
-            }
-          }
-          // 找或创建领域
-          const dData = await apiFetch<{ domains: { id: string }[] }>(`/tree/domain?parent_id=${pId}`);
-          const domainId = dData.domains?.[0]?.id || (
-            await apiFetch<{ domain: { id: string } }>("/tree/domain", {
-              method: "POST", body: JSON.stringify({ parent_id: pId, name: "新领域", emoji: "📚" }),
-            })
-          ).domain.id;
-          // 找或创建专题
-          const tData = await apiFetch<{ topics: { id: string }[] }>(`/tree/topic?parent_id=${domainId}`);
-          const topicId = tData.topics?.[0]?.id || (
-            await apiFetch<{ topic: { id: string } }>("/tree/topic", {
-              method: "POST", body: JSON.stringify({ parent_id: domainId, name: "新专题", emoji: "📝" }),
-            })
-          ).topic.id;
-          // 找或创建对话
-          const cData = await apiFetch<{ conversations: { id: string; message_count?: number }[] }>(`/tree/conversation?parent_id=${topicId}`);
-          const empty = (cData.conversations || []).find(c => !c.message_count || c.message_count === 0);
-          cId = empty?.id || (
-            await apiFetch<{ conversation: { id: string } }>("/tree/conversation", {
-              method: "POST", body: JSON.stringify({ parent_id: topicId, name: "" }),
-            })
-          ).conversation.id;
-          isSendingRef.current = true;
-          setSelectedPartitionId(pId);
-          setActiveConversationId(cId);
-          setConvError(null);
-          await loadPartitions();
-        } catch (e) {
-          console.error("自动创建对话失败:", e);
-          setMessages((prev) => [...prev, {
-            id: "err-" + Date.now(), parent_id: "", children_ids: [],
-            partition_id: "", conversation_id: "",
-            content_blocks: [{ type: "text" as const, text: "❌ 无法创建对话，请检查后端连接" }],
-            text_summary: "", role: "assistant" as const,
-            timestamp: Date.now(), token_count: 0,
-            is_deleted: false, is_archived: false, has_modified_version: false,
-          }]);
-          return;
-        }
-      }
-
-      // 构建用户消息
-      const userMsgId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
-      const userMsg: TreeNode = {
-        id: userMsgId, parent_id: pId || "virtual_root",
-        children_ids: [], partition_id: pId || "", conversation_id: cId || "",
-        content_blocks: [
-          { type: "text", text },
-          ...(files?.map((f) => ({ type: f.type === "image" ? "image" as const : "file" as const, name: f.name })) || []),
-        ] as TreeNode["content_blocks"],
-        text_summary: text, role: "user", timestamp: Date.now(),
-        token_count: 0, is_deleted: false, is_archived: false, has_modified_version: false,
-      };
-
-      // 助手占位消息（等待流式或 HTTP 回复）
-      const asstId = Date.now().toString(36) + "a" + Math.random().toString(36).substr(2, 9);
-      streamingMsgIdRef.current = asstId;
-      streamBufferRef.current = "";
-      streamingPartIdRef.current = pId;
-      streamingConvIdRef.current = cId;
-
-      setMessages((prev) => [...prev, userMsg, {
-        id: asstId, parent_id: userMsgId, children_ids: [],
-        partition_id: pId || "", conversation_id: cId || "",
-        content_blocks: [{ type: "text" as const, text: "" }],
-        text_summary: "", role: "assistant", timestamp: Date.now(),
-        token_count: 0, is_deleted: false, is_archived: false, has_modified_version: false,
-      }]);
-      fireClassify(cId || "", text);
-      setIsLoading(true);
-      setStatusMessage("正在思考...");
-
-      // 优先 WebSocket，失败则降级到 HTTP
-      const sent = wsRef.current?.send({
-        text, partition_id: pId, conversation_id: cId,
-      });
-      if (!sent) {
-        setStatusMessage("WebSocket 未连接，尝试 HTTP...");
-        try {
-          const data = await apiFetch<any>(`/tree/conversation/${cId}/message`, {
-            method: "POST",
-            body: JSON.stringify({ text, partition_id: pId }),
-          });
-          const replyText = data.assistant_message?.text_summary ||
-            data.assistant_message?.content_blocks?.find((b: { type: string }) => b.type === "text")?.text ||
-            "（回复获取成功但没有显示内容）";
-          streamingMsgIdRef.current = null;
-          streamBufferRef.current = "";
-          streamingPartIdRef.current = null;
-          streamingConvIdRef.current = null;
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === asstId
-                ? { ...m, content_blocks: [{ type: "text" as const, text: replyText }], text_summary: replyText }
-                : m
-            )
-          );
-          setIsLoading(false);
-          setStatusMessage("");
-          setTimeout(() => loadPartitionsRef.current(), 300);
-        } catch (httpErr: any) {
-          const errMsg = `无法连接服务器：${httpErr?.message || "未知错误"}`;
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === asstId
-                ? {
-                  ...m, id: "err-" + Date.now(),
-                  content_blocks: [{ type: "text" as const, text: `❌ ${errMsg}` }],
-                  text_summary: errMsg,
-                }
-                : m
-            )
-          );
-          streamingMsgIdRef.current = null;
-          streamBufferRef.current = "";
-          streamingPartIdRef.current = null;
-          streamingConvIdRef.current = null;
-          setIsLoading(false);
-          setStatusMessage("");
-        }
-      }
-    }, [isLoading, selectedPartitionId, activeConversationId, loadPartitions]);
-
-  // ── 选中对话 ──
-  const handleSelectConversation = useCallback(
-    (partitionId: string, conversationId: string) => {
-      console.log("[selectConv]", partitionId?.slice(0,8), conversationId?.slice(0,8));
-      setSelectedPartitionId(partitionId || null);
-      setActiveConversationId(conversationId || null);
-      setConvError(null);
-      setShowPartitionSidebar(false);
-      setSwitchBanner(null);
-    }, [],
-  );
-
-  // ── 上下文切换 ──
-  const handleSwitchConfirm = useCallback(async () => {
-    if (switchBanner) {
-      await loadPartitions();
-      setSelectedPartitionId(switchBanner.partitionId);
-      setActiveConversationId(switchBanner.conversationId || null);
-      setMessages([]);
-      setResponseBlocks([]);
-      setConvError(null);
-      setSwitchBanner(null);
-      if (switchBanner.conversationId) {
-        setTimeout(() => {
-          loadMessagesRef.current?.(switchBanner.conversationId);
-        }, 100);
-      }
-    }
-  }, [switchBanner, loadPartitions, loadMessages]);
-
-  const handleSwitchDismiss = useCallback(() => setSwitchBanner(null), []);
-
-  // ── 删除消息 ──
-  const handleDeleteMessage = useCallback(async (messageId: string) => {
-    try {
-      await apiFetch(`/tree/message/${messageId}`, { method: "DELETE" });
-      setMessages(prev => prev.filter(m => m.id !== messageId));
-      setResponseBlocks(prev => prev.filter(b => b.message_id !== messageId));
-    } catch (e) { console.error("删除消息失败:", e); }
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
   }, []);
 
-  // ── 编辑消息 ──
-  const handleEditMessage = useCallback(async (messageId: string, newText: string): Promise<number> => {
-    const data = await apiFetch<{ node: TreeNode; version_count: number }>(`/tree/message/${messageId}`, {
-      method: "PUT",
-      body: JSON.stringify({
-        content_blocks: [{ type: "text", text: newText }],
-        text_summary: newText,
-      }),
-    });
-    return data.version_count || 0;
+  // ── Load messages when activeConversationId changes ──
+  useEffect(() => {
+    if (isSending()) {
+      setIsSending(false);
+      return;
+    }
+    if (store.activeConversationId) {
+      store.loadMessages(store.activeConversationId);
+    } else {
+      useConversationStore.setState({ messages: [], responseBlocks: [] });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.activeConversationId]);
+
+  // ── Initial load ──
+  useEffect(() => {
+    store.loadPartitions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── 版本切换（< > 按钮）──
-  const handleVersionSwitch = useCallback(async (messageId: string, direction: "prev" | "next") => {
-    try {
-      const data = await apiFetch<{ versions: string[] }>(`/tree/message/${messageId}`);
-      const versions: string[] = data.versions || [];
-      if (versions.length <= 1) return { index: 1, total: 1 };
-
-      const curIdx = versions.indexOf(messageId);
-      if (curIdx === -1) return null;
-
-      const newIdx = direction === "prev"
-        ? (curIdx - 1 + versions.length) % versions.length
-        : (curIdx + 1) % versions.length;
-
-      const targetId = versions[newIdx];
-      const targetRes = await apiFetch<{ message: TreeNode }>(`/tree/message/${targetId}`);
-      const targetMsg = targetRes.message;
-      if (!targetMsg) return null;
-
-      const targetText = (targetMsg.content_blocks || [])
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .filter((b: any) => b.type === "text")
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .map((b: any) => b.text || "")
-        .join("\n\n");
-
-      setMessages(prev =>
-        prev.map(m =>
-          m.id === messageId
-            ? { ...targetMsg, id: messageId, content_blocks: [{ type: "text" as const, text: targetText || "(空)" }], text_summary: targetText }
-            : m
-        )
-      );
-      return { index: newIdx + 1, total: versions.length };
-    } catch (e) {
-      console.error("版本切换失败:", e);
-      return null;
-    }
-  }, []);
-
-  // ── 分区 CRUD (归一化) ──
-  const handleCreatePartition = useCallback(async (name: string, emoji: string) => {
-    try {
-      const res = await apiFetch<{ partition: Partition; conversation_id?: string }>("/tree/partition", {
-        method: "POST",
-        body: JSON.stringify({ name, emoji }),
-      });
-      // 创建成功后跳转到默认对话
-      if (res.conversation_id) {
-        handleSelectConversation(res.partition.id, res.conversation_id);
-      }
-      await loadPartitions();
-    } catch (e) { console.error("创建分区失败:", e); }
-  }, [loadPartitions, handleSelectConversation]);
-
-  const handleRenamePartition = useCallback(async (id: string, name: string) => {
-    try {
-      await apiFetch(`/tree/partition/${id}`, { method: "PATCH", body: JSON.stringify({ name }) });
-      await loadPartitions();
-    } catch (e) { console.error(e); }
-  }, [loadPartitions]);
-
-  // ── 新建对话 ──
-  const handleNewConversation = useCallback(async (level: string, parentId: string, partitionId?: string) => {
-    try {
-      let pId = partitionId || selectedPartitionId;
-      if (level === "default") {
-        if (!pId) {
-          if (partitions.length > 0) pId = partitions[0].id;
-          else {
-            const pData = await apiFetch<{ partition: Partition; conversation_id?: string }>("/tree/partition", {
-              method: "POST",
-              body: JSON.stringify({ name: "新分区", emoji: "💬" }),
-            });
-            pId = pData.partition.id;
-            if (pData.conversation_id) {
-              handleSelectConversation(pId, pData.conversation_id);
-            }
-            await loadPartitions();
-            return;
-          }
-          setSelectedPartitionId(pId);
-        }
-        return handleNewConversation("partition", pId);
-      }
-
-      if (level === "partition") {
-        // 先尝试在分区下查找已有空对话
-        try {
-          // 找或创建领域
-          const domainData = await apiFetch<{ domains: { id: string }[] }>(`/tree/domain?parent_id=${parentId}`);
-          let domainId: string;
-          if (domainData.domains?.length > 0) {
-            domainId = domainData.domains[0].id;
-          } else {
-            const newD = await apiFetch<{ domain: { id: string } }>(`/tree/domain`, {
-              method: `POST`,
-              body: JSON.stringify({ parent_id: parentId, name: `新领域`, emoji: `📚` }),
-            });
-            domainId = newD.domain.id;
-          }
-
-          // 找或创建专题
-          const topicData = await apiFetch<{ topics: { id: string }[] }>(`/tree/topic?parent_id=${domainId}`);
-          let topicId: string;
-          if (topicData.topics?.length > 0) {
-            topicId = topicData.topics[0].id;
-          } else {
-            const newT = await apiFetch<{ topic: { id: string } }>(`/tree/topic`, {
-              method: `POST`,
-              body: JSON.stringify({ parent_id: domainId, name: `新专题`, emoji: `📝` }),
-            });
-            topicId = newT.topic.id;
-          }
-
-          // 查找该专题下的空对话
-          const existingConvs = await apiFetch<{ conversations: { id: string; message_count?: number }[] }>(`/tree/conversation?parent_id=${topicId}`);
-          const emptyConv = (existingConvs.conversations || []).find(
-            (c) => !c.message_count || c.message_count === 0
-          );
-
-          if (emptyConv) {
-            handleSelectConversation(parentId, emptyConv.id);
-          } else {
-            // 没有空对话，创建新对话
-            const convData = await apiFetch<{ conversation: { id: string } }>(`/tree/conversation`, {
-              method: `POST`,
-              body: JSON.stringify({ parent_id: topicId, name: `` }),
-            });
-            handleSelectConversation(parentId, convData.conversation.id);
-          }
-
-          await loadPartitions();
-          setShowPartitionSidebar(false);
-          return;
-        } catch (e) {
-          console.warn(`partition 级别创建对话失败:`, e);
-          await loadPartitions();
-          return;
-        }
-      }
-
-      if (level === "domain") {
-        // 找或创建该领域下的专题
-        try {
-          const topicData = await apiFetch<{ topics: { id: string }[] }>(`/tree/topic?parent_id=${parentId}`);
-          let topicId: string;
-          if (topicData.topics?.length > 0) {
-            topicId = topicData.topics[0].id;
-          } else {
-            const newT = await apiFetch<{ topic: { id: string } }>(`/tree/topic`, {
-              method: `POST`,
-              body: JSON.stringify({ parent_id: parentId, name: `新专题`, emoji: `📝` }),
-            });
-            topicId = newT.topic.id;
-          }
-
-          // 查找该专题下的空对话
-          const existingConvs = await apiFetch<{ conversations: { id: string; message_count?: number }[] }>(`/tree/conversation?parent_id=${topicId}`);
-          const emptyConv = (existingConvs.conversations || []).find(
-            (c) => !c.message_count || c.message_count === 0
-          );
-
-          if (emptyConv) {
-            handleSelectConversation(pId || ``, emptyConv.id);
-          } else {
-            // 没有空对话，创建新对话
-            const convData = await apiFetch<{ conversation: { id: string } }>(`/tree/conversation`, {
-              method: `POST`,
-              body: JSON.stringify({ parent_id: topicId, name: `` }),
-            });
-            handleSelectConversation(pId || ``, convData.conversation.id);
-          }
-
-          await loadPartitions();
-          setShowPartitionSidebar(false);
-          return;
-        } catch (e) {
-          console.warn(`domain 级别创建对话失败:`, e);
-          await loadPartitions();
-          return;
-        }
-      }
-
-      if (level === "topic") {
-        // 先尝试查找该专题下的空对话
-        try {
-          const existingConvs = await apiFetch<{ conversations: { id: string; message_count?: number }[] }>(`/tree/conversation?parent_id=${parentId}`);
-          const emptyConv = (existingConvs.conversations || []).find(
-            (c) => !c.message_count || c.message_count === 0
-          );
-
-          if (emptyConv) {
-            handleSelectConversation(pId || ``, emptyConv.id);
-          } else {
-            // 没有空对话，创建新对话
-            const convData = await apiFetch<{ conversation: { id: string } }>(`/tree/conversation`, {
-              method: `POST`,
-              body: JSON.stringify({ parent_id: parentId, name: `` }),
-            });
-            handleSelectConversation(pId || ``, convData.conversation.id);
-          }
-
-          await loadPartitions();
-          setShowPartitionSidebar(false);
-          return;
-        } catch (e) {
-          console.warn(`topic 级别创建对话失败:`, e);
-          await loadPartitions();
-          return;
-        }
-      }
-
-      // fallback: 委托父组件（不应到达此处）
-      console.warn(`未知级别 ${level}，跳过创建对话`);
-      await loadPartitions();
-    } catch (e) {
-      console.error(`新建对话失败:`, e);
-      await loadPartitions();
-    }
-  }, [selectedPartitionId, partitions, loadPartitions, handleSelectConversation]);
-
-  const activePartition = partitions.find((p) => p.id === selectedPartitionId);
-
+  // ── Return mapped state (UseConversationReturn interface) ──
   return {
-    partitions, selectedPartitionId, activeConversationId,
-    messages, responseBlocks, isLoading, statusMessage,
-    switchBanner, showPartitionSidebar, sidebarCollapsed,
-    showNewPartition, loadingPartitions, loadingMessages,
-    convError, isDesktop, activePartition, wsConnected,
-    handleSelectConversation, handleNewConversation, handleSend,
-    handleDeleteMessage, handleEditMessage, handleVersionSwitch,
-    handleCreatePartition, handleRenamePartition,
-    handleSwitchConfirm, handleSwitchDismiss,
-    setShowPartitionSidebar, setShowNewPartition, setSidebarCollapsed,
-    loadPartitions,
+    // State
+    partitions: store.partitions,
+    selectedPartitionId: store.selectedPartitionId,
+    activeConversationId: store.activeConversationId,
+    messages: store.messages,
+    responseBlocks: store.responseBlocks,
+    isLoading: store.isLoading,
+    statusMessage: store.statusMessage,
+    switchBanner: store.switchBanner,
+    showPartitionSidebar: store.showPartitionSidebar,
+    sidebarCollapsed: store.sidebarCollapsed,
+    showNewPartition: store.showNewPartition,
+    loadingPartitions: store.loadingPartitions,
+    loadingMessages: store.loadingMessages,
+    convError: store.convError,
+    wsConnected: store.wsConnected,
+
+    // Computed
+    isDesktop,
+    activePartition: store.partitions.find(
+      (p) => p.id === store.selectedPartitionId,
+    ),
+
+    // Mapped handlers (store action name → UseConversationReturn name)
+    handleSelectConversation: store.selectConversation,
+    handleNewConversation: store.handleNewConversation,
+    handleSend: store.sendMessage,
+    handleDeleteMessage: store.deleteMessage,
+    handleEditMessage: store.editMessage,
+    handleVersionSwitch: store.versionSwitch,
+    handleCreatePartition: store.createPartition,
+    handleRenamePartition: store.renamePartition,
+    handleSwitchConfirm: store.switchConfirm,
+    handleSwitchDismiss: store.switchDismiss,
+
+    // Direct pass-through
+    setShowPartitionSidebar: store.setShowPartitionSidebar,
+    setShowNewPartition: store.setShowNewPartition,
+    setSidebarCollapsed: store.setSidebarCollapsed,
+    loadPartitions: store.loadPartitions,
   };
 }

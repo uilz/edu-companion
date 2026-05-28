@@ -10,9 +10,11 @@ START_TARGET="${1:-all}"
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 start_backend() {
-  if pgrep -f "uvicorn app.main" >/dev/null 2>&1; then
-    echo "🟢 后端已在运行"
-    return 0
+  # 先释放端口，防 EADDRINUSE
+  if lsof -ti:8000 >/dev/null 2>&1; then
+    echo "🟡 端口 8000 被占用，先释放..."
+    fuser -k 8000/tcp 2>/dev/null || true
+    sleep 1
   fi
   echo "🟡 启动后端 (uvicorn @ :8000)..."
   cd "$PROJECT_DIR/backend"
@@ -21,7 +23,7 @@ start_backend() {
     > /tmp/backend.log 2>&1 &
   local pid=$!
   sleep 3
-  if curl -s -o /dev/null -w "" http://127.0.0.1:8000/api/conversations/partitions 2>/dev/null; then
+  if curl -s -o /dev/null -w "" http://127.0.0.1:8000/docs 2>/dev/null; then
     echo "✅ 后端已就绪 (pid: $pid)"
   else
     echo "🔴 后端启动可能有问题，检查 /tmp/backend.log"
@@ -31,9 +33,11 @@ start_backend() {
 }
 
 start_frontend() {
-  if pgrep -f "next-server" >/dev/null 2>&1 || pgrep -f "next start" >/dev/null 2>&1; then
-    echo "🟢 前端已在运行"
-    return 0
+  # 先释放端口
+  if lsof -ti:3000 >/dev/null 2>&1; then
+    echo "🟡 端口 3000 被占用，先释放..."
+    fuser -k 3000/tcp 2>/dev/null || true
+    sleep 1
   fi
   echo "🟡 启动前端 (Next.js @ :3000)..."
   cd "$PROJECT_DIR/frontend"

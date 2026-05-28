@@ -15,14 +15,14 @@ kill_python_backend() {
     echo "🟡 关闭后端 (pid: $pids)..."
     kill "$pids" 2>/dev/null || true
     sleep 1
-    # 确认已关闭
     pids=$(pgrep -f "uvicorn app.main" 2>/dev/null || true)
     if [ -n "$pids" ]; then
       echo "🔴 后端未响应 SIGTERM，强制关闭..."
       kill -9 "$pids" 2>/dev/null || true
     fi
   fi
-  # 二次确认
+  # 兜底：用 fuser 杀端口残留
+  fuser -k 8000/tcp 2>/dev/null || true
   if pgrep -f "uvicorn app.main" >/dev/null 2>&1; then
     echo "🔴 后端仍活着!"
     return 1
@@ -49,6 +49,8 @@ kill_nextjs_frontend() {
       kill -9 "$pids" 2>/dev/null || true
     fi
   fi
+  # 兜底：用 fuser 杀端口残留
+  fuser -k 3000/tcp 2>/dev/null || true
   if pgrep -f "next-server" >/dev/null 2>&1 || pgrep -f "next start" >/dev/null 2>&1; then
     echo "🔴 前端仍活着!"
     return 1

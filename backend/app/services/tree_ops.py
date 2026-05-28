@@ -61,7 +61,7 @@ class TreeOpsService:
             "factory": lambda name, emoji, **kw: Domain(
                 partition_id=kw["parent_id"], name=name, emoji=emoji
             ),
-            "auto_create_child": {  # 新增：创建领域时自动创建临时专题
+            "auto_create_child": {  # 创建领域时自动创建新专题
                 "level": "topic",
                 "name": "新专题",
                 "emoji": "📝",
@@ -336,7 +336,7 @@ class TreeOpsService:
         # ── 同步 CognitiveNode 到认知图谱 ──
         if level in ("partition", "domain", "topic"):
             cog_parent = None if level == "partition" else parent_id
-            # 判断是否为自动创建的临时节点
+            # 判断是否为自动创建的新节点
             is_auto = auto_created
             # 构造 path_id（追加 short uuid 确保唯一性，避免自动创建同名校节点冲突）
             path_id = name
