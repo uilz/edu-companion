@@ -45,14 +45,6 @@ class SearchRequest(BaseModel):
     skill_id: Optional[str] = None
     top_k: int = 10
 
-class GenerateFromMaterialRequest(BaseModel):
-    material_ids: list[str]
-    skill_id: Optional[str] = None
-    bloom_level: str = "understand"
-    difficulty: float = 0.5
-    count: int = 3
-    content_type: str = "choice"
-
 class UpdateMaterialRequest(BaseModel):
     partition_id: Optional[str] = None
 
@@ -249,52 +241,6 @@ async def promote_to_permanent(material_id: str):
     }
 
 
-@router.get("/promote-suggestions")
-async def suggest_promotions(limit: int = 5):
-    """智能推荐：哪些临时资料值得转为知识库。"""
-    _ensure_indexed()
-    scored = []
-
-    for mid, meta in materials_meta.get_all().items():
-        name_lower = meta.get("file_name", "").lower()
-        file_type = meta.get("file_type", "")
-        file_size = meta.get("file_size", 0)
-
-        score = 0
-        reasons = []
-
-        if file_type == "pdf":
-            score += 3
-            reasons.append("PDF文档")
-
-        for kw in ["讲义", "笔记", "教材", "习题", "课本", "复习", "期末", "期中", "chapter", "lecture"]:
-            if kw in name_lower:
-                score += 2
-                reasons.append(f"含'{kw}'")
-                break
-
-        if file_size > 500 * 1024:
-            score += 2
-            reasons.append(f"文档较大({file_size // 1024}KB)")
-
-        if file_type in ("docx", "pptx"):
-            score += 1
-            reasons.append("文档格式")
-
-        if score >= 2:
-            scored.append({
-                "material_id": mid,
-                "file_name": meta.get("file_name"),
-                "file_type": file_type,
-                "file_size": file_size,
-                "score": score,
-                "reasons": reasons,
-            })
-
-    scored.sort(key=lambda x: x["score"], reverse=True)
-    return {"suggestions": scored[:limit]}
-
-
 @router.post("/search")
 async def search_materials(req: SearchRequest):
     """语义搜索知识库资料（仅 permanent）"""
@@ -326,25 +272,6 @@ async def get_material_chunks(material_id: str):
         return {"chunks": []}
 
 
-@router.post("/generate-questions")
-async def generate_from_materials(req: GenerateFromMaterialRequest):
-    """基于知识库资料生成练习题"""
-    from app.services.material_question_gen import material_question_gen
-    from app.schemas.practice import BloomLevel
-
-    bloom = BloomLevel(req.bloom_level) if req.bloom_level else BloomLevel.APPLY
-    questions, source_chunks = await material_question_gen.generate_from_materials(
-        user_id=USER_ID, material_ids=req.material_ids,
-        skill_id=req.skill_id, bloom_level=bloom,
-        difficulty=req.difficulty, count=req.count, content_type=req.content_type,
-    )
-    return {
-        "questions": [q.model_dump() for q in questions],
-        "source_chunks": source_chunks,
-        "count": len(questions),
-    }
-
-
 @router.delete("/{material_id}")
 async def delete_material(material_id: str):
     """删除资料。元数据 + 磁盘文件。"""
@@ -371,29 +298,6 @@ async def delete_material(material_id: str):
         pass
 
     return {"ok": True, "material_id": material_id, "files_deleted": deleted}
-
-
-@router.post("/cleanup-sessions")
-async def cleanup_session_materials():
-    """清理过期session资料（7天）。"""
-    deleted = 0
-    cutoff = datetime.now() - timedelta(days=7)
-
-    for mid, meta in list(materials_meta.get_all().items()):
-        try:
-            expires_str = meta.get("expires_at")
-            if expires_str:
-                expires = datetime.fromisoformat(expires_str)
-                if expires < cutoff:
-                    materials_meta.delete(mid)
-                    for f in os.listdir(UPLOAD_DIR):
-                        if f.startswith(mid):
-                            os.remove(os.path.join(UPLOAD_DIR, f))
-                            deleted += 1
-        except Exception:
-            pass
-
-    return {"ok": True, "deleted": deleted}
 
 
 # ── 数据库连接 helper ──
