@@ -141,41 +141,6 @@ class AssistantReplied(DomainEvent):
 
 
 # ──────────────────────────────────────────────
-# 多媒体域事件 (Phase 5)
-# ──────────────────────────────────────────────
-
-
-@dataclass(frozen=True)
-class AudioSynthesized(DomainEvent):
-    """TTS 音频合成完成事件"""
-    user_id: str = ""
-    skill_id: str = ""
-    message_id: str = ""
-    audio_url: str = ""
-    duration_ms: int = 0
-    format: str = "mp3"
-
-    @property
-    def event_type(self) -> str:
-        return "AudioSynthesized"
-
-
-@dataclass(frozen=True)
-class ImageRendered(DomainEvent):
-    """知识点配图渲染完成事件"""
-    user_id: str = ""
-    skill_id: str = ""
-    message_id: str = ""
-    image_url: str = ""
-    image_type: str = "svg"  # svg | png
-    prompt: str = ""
-
-    @property
-    def event_type(self) -> str:
-        return "ImageRendered"
-
-
-# ──────────────────────────────────────────────
 # 认知域事件 (Phase 9)
 # ──────────────────────────────────────────────
 
@@ -208,8 +173,6 @@ EVENT_TYPES: dict[str, type[DomainEvent]] = {
         SessionCompleted,
         KnowledgeStateUpdated,
         AssistantReplied,
-        AudioSynthesized,
-        ImageRendered,
         CognitiveNodeUpdated,
     ]
 }

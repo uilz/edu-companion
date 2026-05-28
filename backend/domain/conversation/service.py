@@ -10,8 +10,6 @@ if TYPE_CHECKING:
     from infra.event_bus import EventBus
     from infra.resilience import CircuitBreaker
     from shared.events import (
-        AudioSynthesized,
-        ImageRendered,
         SessionCompleted,
         KnowledgeStateUpdated,
         StudyPlanGenerated,
@@ -135,30 +133,6 @@ class ConversationServiceImpl:
             except Exception:
                 pass
 
-    async def on_audio_synthesized(self, event: AudioSynthesized) -> None:
-        """Phase 5: TTS 完成 → WebSocket 推送 AudioBlock"""
-        await self._push_block(
-            event.user_id,
-            event.message_id,
-            "audio",
-            {
-                "file_id": event.audio_url,
-                "duration_ms": event.duration_ms,
-                "format": event.format,
-            },
-        )
-
-    async def on_image_rendered(self, event: ImageRendered) -> None:
-        """Phase 5: 配图完成 → WebSocket 推送 ImageBlock"""
-        await self._push_block(
-            event.user_id,
-            event.message_id,
-            "image",
-            {
-                "file_id": event.image_url,
-                "format": event.image_type,
-            },
-        )
 
     async def push_response_block(
         self, user_id: str, message_id: str,

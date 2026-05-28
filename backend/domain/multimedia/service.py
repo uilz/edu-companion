@@ -3,7 +3,7 @@
 
 职责:
 1. 监听 AssistantReplied 事件 → 触发语音合成 + 配图生成
-2. 生成完成后发布 AudioSynthesized / ImageRendered 事件
+2. 生成完成后执行后续推送
 3. 异常隔离: 单个生成失败不影响对话主流程
 
 依赖规则:
@@ -21,8 +21,6 @@ from typing import TYPE_CHECKING
 
 from shared.events import (
     AssistantReplied,
-    AudioSynthesized,
-    ImageRendered,
 )
 
 if TYPE_CHECKING:
@@ -85,14 +83,6 @@ class MultimediaService:
                 skill_id=skill_id,
             )
 
-            await self._bus.publish(AudioSynthesized(
-                user_id=event.user_id,
-                skill_id=skill_id,
-                message_id=event.message_id,
-                audio_url=result["url"],
-                duration_ms=result.get("duration_ms", 0),
-                format=result.get("format", "mp3"),
-            ))
             logger.info("✅ TTS done: %s", result["url"])
         except Exception as e:
             logger.error("❌ TTS failed: %s", e)
@@ -110,14 +100,6 @@ class MultimediaService:
             )
 
             if result:
-                await self._bus.publish(ImageRendered(
-                    user_id=event.user_id,
-                    skill_id=skill_id,
-                    message_id=event.message_id,
-                    image_url=result["url"],
-                    image_type=result.get("format", "svg"),
-                    prompt=event.content[:100],
-                ))
                 logger.info("✅ Image rendered: %s", result["url"])
         except Exception as e:
             logger.error("❌ Image rendering failed: %s", e)

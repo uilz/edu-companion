@@ -212,9 +212,6 @@ class AppContainer:
         # Phase 5: AI 回复 → 多媒体生成
         bus.subscribe("AssistantReplied", self.multimedia_service.on_assistant_replied)
 
-        # Phase 5: 音频/配图完成 → 对话推送
-        bus.subscribe("AudioSynthesized", self.conversation_service.on_audio_synthesized)
-        bus.subscribe("ImageRendered", self.conversation_service.on_image_rendered)
 
         logger.info("🔗 注册 %d 个事件订阅", sum(len(v) for v in bus._handlers.values()))
 

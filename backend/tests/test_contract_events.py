@@ -1,7 +1,7 @@
 """
 契约测试: Event Schema 验证
 
-验证所有 6 个领域事件:
+验证所有 5 个领域事件:
 - 字段类型正确
 - 默认值合理
 - event_type 属性返回正确字符串
@@ -21,8 +21,6 @@ from shared.events import (
     SessionCompleted,
     KnowledgeStateUpdated,
     AssistantReplied,
-    AudioSynthesized,
-    ImageRendered,
     CognitiveNodeUpdated,
     EVENT_TYPES,
 )
@@ -34,8 +32,6 @@ ALL_EVENTS = [
     SessionCompleted,
     KnowledgeStateUpdated,
     AssistantReplied,
-    AudioSynthesized,
-    ImageRendered,
     CognitiveNodeUpdated,
 ]
 
@@ -45,7 +41,7 @@ ALL_EVENTS = [
 # ═══════════════════════════════════════════
 
 def test_event_types_registry_has_all_events():
-    """EVENT_TYPES 应包含全部 6 个事件类型"""
+    """EVENT_TYPES 应包含全部 5 个事件类型"""
     assert len(EVENT_TYPES) == len(ALL_EVENTS)
     for cls in ALL_EVENTS:
         instance = cls()
