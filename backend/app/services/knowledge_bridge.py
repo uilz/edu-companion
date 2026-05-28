@@ -15,10 +15,13 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
+from shared.constants import DEFAULT_USER_ID
 from app.domain.learning.shared_knowledge import (
     EvidenceType,
     shared_knowledge,
 )
+from app.cognitive.storage import get_node, list_all_nodes, get_urgent_nodes
+from app.cognitive.models import CognitiveNode
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +31,158 @@ class KnowledgeBridge:
 
     def __init__(self):
         self.state = shared_knowledge
+
+    # ── CognitiveNode context generation ──
+
+    def get_knowledge_context(self, user_id: str = DEFAULT_USER_ID) -> str:
+        """生成注入 LLM system prompt 的知识上下文
+
+        优先从 CognitiveNode 读取，如果无数据则回退到 SharedKnowledgeState。
+        """
+        try:
+            nodes = list_all_nodes(user_id)
+            if not nodes:
+                # fallback to legacy
+                return self.state.to_context_string()
+
+            # Filter to nodes that have practice data
+            practiced = [
+                n for n in nodes
+                if n.practice_summary and n.practice_summary.total_attempts > 0
+            ]
+
+            if not practiced:
+                return self.state.to_context_string()
+
+            # Sort by proficiency
+            practiced.sort(key=lambda n: n.belief.proficiency_mean)
+
+            # Weak nodes (proficiency < 0.4)
+            weak = [n for n in practiced if n.belief.proficiency_mean < 0.4]
+
+            # Mastered nodes (proficiency >= 0.8)
+            mastered = [n for n in practiced if n.belief.proficiency_mean >= 0.8]
+
+            # Urgent nodes for review
+            urgent = get_urgent_nodes(5, user_id)
+
+            lines = ["【学生知识状态】"]
+
+            if weak:
+                lines.append("薄弱知识点：")
+                for n in weak[:5]:
+                    trend = n.trend.direction if n.trend else "stable"
+                    emoji = "📉" if trend in ("descending", "volatile") else "⚠️"
+                    lines.append(
+                        f"  {emoji} {n.label or n.id}: "
+                        f"掌握度={n.belief.proficiency_mean:.0%}, "
+                        f"趋势={trend}, "
+                        f"练习次数={n.practice_summary.total_attempts}"
+                    )
+
+            if mastered:
+                lines.append("已掌握知识点：")
+                for n in mastered[:5]:
+                    lines.append(f"  ✅ {n.label or n.id}: 掌握度={n.belief.proficiency_mean:.0%}")
+
+            if urgent:
+                lines.append("待复习知识点：")
+                for n in urgent[:3]:
+                    lines.append(
+                        f"  🔄 {n.label or n.id}: "
+                        f"紧迫度={n.scheduling.urgency:.2f}"
+                    )
+
+            lines.append(f"共 {len(practiced)} 个知识点有练习数据")
+
+            return "\n".join(lines)
+        except Exception as e:
+            logger.warning(f"get_knowledge_context CognitiveNode failed: {e}, falling back")
+            return self.state.to_context_string()
+
+    def get_skill_context(self, skill_ids: list[str], user_id: str = DEFAULT_USER_ID) -> str:
+        """获取特定技能的知识上下文
+
+        优先从 CognitiveNode 读取，回退到 SharedKnowledgeState。
+        """
+        try:
+            lines = []
+            for sid in skill_ids:
+                node = get_node(sid, user_id)
+                if node:
+                    mastery = node.belief.proficiency_mean
+                    status = "✅" if mastery >= 0.8 else "📖" if mastery >= 0.4 else "⚠️"
+                    trend = node.trend.direction if node.trend else "stable"
+                    attempts = node.practice_summary.total_attempts if node.practice_summary else 0
+                    recent_rate = node.practice_summary.recent_success_rate_7d if node.practice_summary else 0.0
+                    lines.append(
+                        f"{status} {node.label or sid}: mastery={mastery:.0%} "
+                        f"(α={node.belief.alpha:.1f}, β={node.belief.beta:.1f}, "
+                        f"trend={trend}, n={attempts}, "
+                        f"7d_rate={recent_rate:.0%})"
+                    )
+                else:
+                    # fallback to SharedKnowledgeState
+                    skill = self.state.get_skill(sid)
+                    if skill:
+                        s = "✅" if skill.is_mastered else "📖" if skill.is_learning else "⚠️"
+                        lines.append(
+                            f"{s} {sid}: mastery={skill.unified_mastery:.0%} "
+                            f"(BKT={skill.bkt_p_known:.0%}, conv={skill.conversation_mastery_score:.0%}, "
+                            f"n={skill.evidence_count})"
+                        )
+            return "\n".join(lines) if lines else ""
+        except Exception as e:
+            logger.warning(f"get_skill_context CognitiveNode failed: {e}, falling back")
+            # Full fallback
+            lines = []
+            for sid in skill_ids:
+                skill = self.state.get_skill(sid)
+                if skill:
+                    status = "✅" if skill.is_mastered else "📖" if skill.is_learning else "⚠️"
+                    lines.append(
+                        f"{status} {sid}: mastery={skill.unified_mastery:.0%} "
+                        f"(BKT={skill.bkt_p_known:.0%}, conv={skill.conversation_mastery_score:.0%}, "
+                        f"n={skill.evidence_count})"
+                    )
+            return "\n".join(lines) if lines else ""
+
+    def get_cognitive_profile(self, user_id: str = DEFAULT_USER_ID) -> str:
+        """返回 CognitiveNode 的格式化画像摘要，供 LLM system prompt 注入"""
+        try:
+            nodes = list_all_nodes(user_id)
+            if not nodes:
+                return ""
+
+            practiced = [
+                n for n in nodes
+                if n.practice_summary and n.practice_summary.total_attempts > 0
+            ]
+
+            if not practiced:
+                return ""
+
+            total = len(practiced)
+            avg_mastery = sum(n.belief.proficiency_mean for n in practiced) / total
+            weak_count = sum(1 for n in practiced if n.belief.proficiency_mean < 0.4)
+            mastered_count = sum(1 for n in practiced if n.belief.proficiency_mean >= 0.8)
+            improving = sum(1 for n in practiced if n.trend and n.trend.direction in ("ascending", "improving"))
+            declining = sum(1 for n in practiced if n.trend and n.trend.direction in ("descending", "volatile"))
+
+            profile_lines = [
+                "【认知画像】",
+                f"  知识点总数: {total}",
+                f"  平均掌握度: {avg_mastery:.0%}",
+                f"  薄弱知识点: {weak_count}",
+                f"  已掌握知识点: {mastered_count}",
+                f"  进步中: {improving}",
+                f"  下降中: {declining}",
+            ]
+
+            return "\n".join(profile_lines)
+        except Exception as e:
+            logger.warning(f"get_cognitive_profile failed: {e}")
+            return ""
 
     # ── Practice → Shared State ──
 
@@ -177,24 +332,6 @@ class KnowledgeBridge:
         return evidence_list
 
     # ── 上下文生成 ──
-
-    def get_knowledge_context(self) -> str:
-        """生成注入 LLM system prompt 的知识上下文"""
-        return self.state.to_context_string()
-
-    def get_skill_context(self, skill_ids: list[str]) -> str:
-        """获取特定技能的知识上下文"""
-        lines = []
-        for sid in skill_ids:
-            skill = self.state.get_skill(sid)
-            if skill:
-                status = "✅" if skill.is_mastered else "📖" if skill.is_learning else "⚠️"
-                lines.append(
-                    f"{status} {sid}: mastery={skill.unified_mastery:.0%} "
-                    f"(BKT={skill.bkt_p_known:.0%}, conv={skill.conversation_mastery_score:.0%}, "
-                    f"n={skill.evidence_count})"
-                )
-        return "\n".join(lines) if lines else ""
 
     # ── 状态查询 ──
 

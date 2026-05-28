@@ -492,13 +492,22 @@ async def _analyze_conversation_evidence(
         from app.services.knowledge_bridge import knowledge_bridge
         from app.services.storage import storage as _st
 
-        # 从 partition 推断涉及的技能
+        # 从 partition 推断涉及的技能（通过 CognitiveNode 查找实际 node_id）
+        from app.cognitive.storage import find_node_by_label
         data = _st.load(user_id)
         conversation = data.conversations.get(conversation_id) if conversation_id else _find_active_conversation(data, partition_id)
         partition = data.partitions.get(partition_id)
         skill_ids = []
-        if partition and partition.subject:
-            skill_ids = [partition.subject]
+        if partition:
+            label_to_lookup = partition.name or partition.subject
+            if label_to_lookup:
+                node = find_node_by_label(label_to_lookup, user_id)
+                if node:
+                    skill_ids = [node.id]
+                elif partition.subject and partition.subject != label_to_lookup:
+                    node = find_node_by_label(partition.subject, user_id)
+                    if node:
+                        skill_ids = [node.id]
 
         if skill_ids:
             await knowledge_bridge.deep_evidence_analysis(

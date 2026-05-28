@@ -6,6 +6,7 @@
 - 统一知识状态
 - 练习上下文（进行中 + 回顾）
 - 知识图谱（已掌握/薄弱/未接触）
+- 认知画像（CognitiveNode 掌握度/趋势/负荷/错误模式）
 - 上下文感知选题建议
 """
 
@@ -49,6 +50,7 @@ def _build_context_messages(
         5. Practice context (current practice sessions)
         6. Practice recall data (if user asks about past practice)
         7. Context-aware practice suggestions (topic, Bloom level, difficulty)
+        7.5. CognitiveNode cognitive profile (mastery, trend, load, errors)
         8. Partition summary & name
         9. Knowledge graph mastery overview
     """
@@ -66,7 +68,7 @@ def _build_context_messages(
     try:
         from app.services.knowledge_bridge import knowledge_bridge
 
-        knowledge_ctx = knowledge_bridge.get_knowledge_context()
+        knowledge_ctx = knowledge_bridge.get_knowledge_context(user_id)
         if knowledge_ctx:
             system_content += f"\n\n{knowledge_ctx}"
     except Exception:
@@ -166,6 +168,125 @@ def _build_context_messages(
                 )
     except Exception:
         pass
+
+    # ── 7.5 CognitiveNode 认知画像注入 ──
+    try:
+        from app.cognitive.storage import get_node, find_node_by_label
+
+        cog_node = None
+        # 优先用 partition.id 直接查找
+        if partition.id:
+            cog_node = get_node(partition.id, user_id)
+        # 尝试用 subject (可能含 skill_id) 查找
+        if not cog_node and partition.subject:
+            cog_node = get_node(partition.subject, user_id)
+        if not cog_node and partition.subject:
+            cog_node = find_node_by_label(partition.subject, user_id)
+        # 最后用分区名查找
+        if not cog_node and partition.name:
+            cog_node = find_node_by_label(partition.name, user_id)
+
+        if cog_node:
+            prof = cog_node.belief.proficiency_mean
+            alpha = cog_node.belief.alpha
+            beta_val = cog_node.belief.beta
+            load = cog_node.cognitive_load.intrinsic
+            streak = cog_node.engagement.streak_current
+            xp = cog_node.engagement.xp
+            direction = cog_node.trend.direction
+            stagnation = cog_node.trend.stagnation_days
+            cal_err = cog_node.metacognition.calibration_error
+
+            # 掌握等级描述
+            if prof >= 0.85:
+                mastery_desc = "精通"
+            elif prof >= 0.65:
+                mastery_desc = "熟练"
+            elif prof >= 0.4:
+                mastery_desc = "学习中"
+            elif prof >= 0.2:
+                mastery_desc = "初学"
+            else:
+                mastery_desc = "未掌握"
+
+            # 认知负荷描述
+            if load >= 0.75:
+                load_desc = "高负荷"
+            elif load >= 0.45:
+                load_desc = "适中"
+            else:
+                load_desc = "低负荷"
+
+            # 趋势中文映射
+            trend_map = {
+                "ascending": "上升中 ↑",
+                "descending": "下降中 ↓",
+                "plateau": "平台期 →",
+                "volatile": "波动中 ↕",
+                "improving": "上升中 ↑",
+                "stable": "稳定 →",
+                "declining": "下降中 ↓",
+                "stagnant": "停滞 →",
+            }
+            trend_desc = trend_map.get(direction, direction)
+
+            # 元认知描述
+            if cal_err > 0.3:
+                cal_desc = "过度自信"
+            elif cal_err < -0.3:
+                cal_desc = "信心不足"
+            else:
+                cal_desc = "评估准确"
+
+            lines = [
+                f"\n\n[认知画像] {cog_node.label or partition.name}",
+                f"  掌握度: {prof:.0%} ({mastery_desc})",
+                f"  信念参数: α={alpha:.1f}, β={beta_val:.1f}",
+                f"  趋势: {trend_desc}",
+            ]
+            if stagnation > 3:
+                lines.append(f"  ⚠️ 已停滞 {stagnation:.0f} 天，需要关注")
+            lines.append(f"  认知负荷: {load_desc} ({load:.0%})")
+            lines.append(f"  元认知: {cal_desc}")
+            if streak > 0:
+                lines.append(f"  🔥 连续学习 {streak} 天 | XP: {xp:.0f}")
+
+            # 错误模式
+            if cog_node.error_clusters:
+                top_errors = cog_node.error_clusters[:3]
+                error_descs = [
+                    f"{ec.cluster_id}({ec.count}次)" for ec in top_errors
+                ]
+                lines.append(f"  常见错误: {', '.join(error_descs)}")
+
+            # 最近对话上下文
+            if cog_node.dialogue_contexts:
+                last_ctx = cog_node.dialogue_contexts[-1]
+                if last_ctx.summary_text:
+                    lines.append(
+                        f"  上次讨论: {last_ctx.summary_text[:80]}"
+                    )
+
+            # 教学建议
+            suggestions = []
+            if prof < 0.4:
+                suggestions.append("降低难度，多用具体例子")
+            elif prof >= 0.85:
+                suggestions.append("可适当拓展深度或交叉联系")
+            if load >= 0.75:
+                suggestions.append("认知负荷高，减少信息量，分步讲解")
+            if stagnation > 5:
+                suggestions.append("换角度或换题型突破平台期")
+            if cal_err > 0.3:
+                suggestions.append("学生过度自信，适当引入挑战性问题")
+            elif cal_err < -0.3:
+                suggestions.append("学生信心不足，多肯定进步")
+            if suggestions:
+                lines.append(f"  教学建议: {'; '.join(suggestions)}")
+
+            system_content += "\n".join(lines)
+    except Exception:
+        logger.debug("CognitiveNode 上下文注入跳过", exc_info=True)
 
     # ── 8. Partition summary ──
     if partition.context_summary:
