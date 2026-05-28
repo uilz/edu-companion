@@ -101,8 +101,6 @@ class PgStorageEngine:
         files = {}
         background_jobs = {}
 
-        practice_sessions = {}
-        error_book = {}
         event_log = []
         knowledge_graphs = {}
         active_partition_id = None
@@ -130,11 +128,6 @@ class PgStorageEngine:
             if isinstance(raw_jobs, dict):
                 background_jobs = {k: BackgroundJob(**v) for k, v in raw_jobs.items() if isinstance(v, dict)}
 
-
-            # DEPRECATED (Phase A2): practice_sessions now lives in separate table
-            # practice_sessions = self._parse_json(meta.get("practice_sessions", {}), {})
-            # DEPRECATED (Phase A2): error_book now lives in separate table
-            # error_book = self._parse_json(meta.get("error_book", {}), {})
             event_log = self._parse_json(meta.get("event_log", []), [])
 
             raw_kg = self._parse_json(meta.get("knowledge_graphs", {}))
@@ -239,8 +232,6 @@ class PgStorageEngine:
             response_blocks=response_blocks,
             background_jobs=background_jobs,
 
-            practice_sessions=practice_sessions,
-            error_book=error_book,
             knowledge_graphs=knowledge_graphs,
             event_log=event_log,
         )
@@ -307,9 +298,9 @@ class PgStorageEngine:
                 (
                     p.id, user_id, p.name, p.subject, p.direction,
                     p.emoji, p.color, p.root_id,
-                    "",  # active_branch_id (deprecated in v4)
+                    "",  # active_branch_id (legacy column, kept for DB compat)
                     p.context_summary,
-                    self._j({}),  # summary_branches (deprecated in v4)
+                    self._j({}),  # summary_branches (legacy column, kept for DB compat)
                     p.tags or [], p.created_at, p.updated_at, p.last_active_at,
                     p.message_count, p.total_tokens,
                 ),
@@ -345,7 +336,7 @@ class PgStorageEngine:
                 """,
                 (
                     b.id, partition_id_for_table, b.topic_id, b.name,
-                    "",  # fork_point_id (deprecated in v4)
+                    "",  # fork_point_id (legacy column, kept for DB compat)
                     b.path or [], b.is_active, b.is_archived,
                     b.summary, b.summary_dirty, b.practice_sessions or [],
                     b.practice_summary or "",

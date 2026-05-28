@@ -9,7 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from app.shared.constants import DEFAULT_USER_ID
+from shared.constants import DEFAULT_USER_ID
 from app.core.knowledge_trace import bkt_engine, get_all_cognitive_states
 from app.core.learner_model import learner_engine
 from app.services.achievement_engine import achievement_engine

@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from app.shared.constants import DEFAULT_USER_ID
+from shared.constants import DEFAULT_USER_ID
 from app.schemas.conversation import KnowledgeGraph, KGNode, KGEdge
 
 logger = logging.getLogger(__name__)

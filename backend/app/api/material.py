@@ -20,7 +20,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 
-from app.shared.constants import DEFAULT_USER_ID
+from shared.constants import DEFAULT_USER_ID
 from app.services.materials_meta import materials_meta, UNCATEGORIZED_PARTITION_ID
 
 logger = logging.getLogger(__name__)

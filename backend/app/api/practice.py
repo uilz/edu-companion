@@ -12,7 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.shared.constants import DEFAULT_USER_ID
+from shared.constants import DEFAULT_USER_ID
 from app.core.knowledge_trace import bkt_engine, get_cognitive_state, get_all_cognitive_states
 
 

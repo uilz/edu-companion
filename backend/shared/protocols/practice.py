@@ -1,6 +1,5 @@
 """
 Practice Service Protocol — 练习模块对外契约
-
 其他模块只能通过此接口调用练习功能。
 实现类: domain/practice/service_impl.py
 """
@@ -9,7 +8,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from app.shared.constants import DEFAULT_USER_ID
+from shared.constants import DEFAULT_USER_ID
 from app.schemas.practice import (
     Question,
     PracticeSession,
@@ -68,7 +67,6 @@ class PracticeService(Protocol):
     ) -> KnowledgeState | None:
         """查询知识点掌握状态"""
         ...
-
 
 
     async def get_errors(

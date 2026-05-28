@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..domain.secretary.secretary_service import SecretaryService
 from ..domain.secretary.models import Proposal, ScopeSpec, SecretaryPrefs
 from ..domain.secretary.proposal_store import ProposalStore
-from app.shared.constants import DEFAULT_USER_ID
+from shared.constants import DEFAULT_USER_ID
 
 logger = logging.getLogger(__name__)
 

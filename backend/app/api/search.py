@@ -10,7 +10,7 @@ import logging
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
-from app.shared.constants import DEFAULT_USER_ID
+from shared.constants import DEFAULT_USER_ID
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/search", tags=["搜索"])

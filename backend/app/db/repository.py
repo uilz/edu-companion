@@ -5,7 +5,7 @@
 """
 
 from __future__ import annotations
-from app.shared.constants import DEFAULT_USER_ID
+from shared.constants import DEFAULT_USER_ID
 import json
 import logging
 from datetime import datetime

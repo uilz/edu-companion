@@ -15,7 +15,7 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from app.shared.constants import DEFAULT_USER_ID
+from shared.constants import DEFAULT_USER_ID
 from app.cognitive.growth_engine import growth_engine
 from app.cognitive.models import CognitiveNode
 from app.cognitive.storage import (

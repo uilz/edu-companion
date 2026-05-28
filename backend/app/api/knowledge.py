@@ -18,7 +18,7 @@ from typing import Optional
 import networkx as nx
 from fastapi import APIRouter, HTTPException, Query
 
-from app.shared.constants import DEFAULT_USER_ID
+from shared.constants import DEFAULT_USER_ID
 from app.core.knowledge_trace import bkt_engine, get_cognitive_state
 from domain.knowledge.checker import PrerequisiteChecker
 from domain.knowledge.prerequisites import (

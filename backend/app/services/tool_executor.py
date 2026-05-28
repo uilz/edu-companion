@@ -6,7 +6,7 @@ import logging
 import re
 from app.schemas.conversation import ResponseBlock
 
-from app.shared.constants import DEFAULT_USER_ID
+from shared.constants import DEFAULT_USER_ID
 logger = logging.getLogger(__name__)
 
 # ── 意图预判规则 ──

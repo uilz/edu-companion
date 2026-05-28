@@ -13,7 +13,7 @@ AdaptiveSelector — 自适应练习队列生成器
 from __future__ import annotations
 import logging
 import time
-from app.shared.constants import DEFAULT_USER_ID
+from shared.constants import DEFAULT_USER_ID
 from app.cognitive.models import CognitiveNode
 from app.cognitive.storage import list_all_nodes
 from app.services.spaced_repetition import ReviewResult

@@ -13,7 +13,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
 
-from app.shared.constants import DEFAULT_USER_ID
+from shared.constants import DEFAULT_USER_ID
 from app.services.adaptive_planner import adaptive_planner
 from app.core.knowledge_trace import bkt_engine, get_all_cognitive_states, get_cognitive_state
 

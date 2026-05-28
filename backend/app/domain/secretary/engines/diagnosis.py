@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.shared.constants import DEFAULT_USER_ID
+from shared.constants import DEFAULT_USER_ID
 from ..models import (
     DiagnosisReport,
     ScopeSpec,

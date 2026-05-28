@@ -1,6 +1,5 @@
 """
 Persistence Repository Protocols — 仓储接口
-
 定义 core/domain 层对持久化基础设施的抽象依赖。
 基础设施层 (infra/) 实现这些接口。
 """

@@ -283,9 +283,9 @@ class UserData(BaseModel):
     response_blocks: dict[str, 'ResponseBlock'] = Field(default_factory=dict)
     background_jobs: dict[str, 'BackgroundJob'] = Field(default_factory=dict)
 
-    # DEPRECATED (Phase A2): practice_sessions now lives in separate table
+    # Legacy field kept for JSONB backward compatibility; data migrated to separate table.
     practice_sessions: dict[str, dict] = Field(default_factory=dict)
-    # DEPRECATED (Phase A2): error_book now lives in separate table
+    # Legacy field kept for JSONB backward compatibility; data migrated to separate table.
     error_book: dict[str, list[dict]] = Field(default_factory=dict)
     knowledge_graphs: dict[str, KnowledgeGraph] = Field(default_factory=dict)
     event_log: list[dict] = Field(default_factory=list)

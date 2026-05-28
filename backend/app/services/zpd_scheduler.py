@@ -3,7 +3,7 @@ ZPD自适应调度器
 基于最近发展区(Zone of Proximal Development)的题目调度
 """
 
-from app.shared.constants import DEFAULT_USER_ID
+from shared.constants import DEFAULT_USER_ID
 import math
 import logging
 from typing import Optional

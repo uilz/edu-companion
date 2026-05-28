@@ -8,7 +8,7 @@
 """
 
 from __future__ import annotations
-from app.shared.constants import DEFAULT_USER_ID
+from shared.constants import DEFAULT_USER_ID
 import asyncio
 import logging
 from .context_engine import ContextEngine

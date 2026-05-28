@@ -5,7 +5,7 @@
 这是整个系统唯一的"胶水代码"。
 """
 from __future__ import annotations
-from app.shared.constants import DEFAULT_USER_ID
+from shared.constants import DEFAULT_USER_ID
 
 import logging
 from typing import TYPE_CHECKING
@@ -74,8 +74,7 @@ class AppContainer:
             PostgresErrorBookRepo,
         )
 
-        # Knowledge states table is deprecated (migrated to cognitive_nodes).
-        # Provide a no-op stub so PracticeServiceImpl's BKT path still works.
+        # No-op stub for KnowledgeStatesRepo: data migrated to cognitive_nodes.
         class _StubKSRepo:
             async def load(self, user_id: str, skill_id: str):
                 return None

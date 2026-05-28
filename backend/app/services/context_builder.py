@@ -120,7 +120,7 @@ def _build_context_messages(
         from app.services.practice_recall import practice_recall
 
         if practice_recall.is_recall_query(user_text):
-            from app.shared.state import active_practice_sessions
+            from shared.state import active_practice_sessions
 
             recall_sessions = list(active_practice_sessions.values())
             if recall_sessions:

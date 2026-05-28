@@ -11,7 +11,7 @@ import logging
 import time
 from typing import Optional
 
-from app.shared.constants import DEFAULT_USER_ID
+from shared.constants import DEFAULT_USER_ID
 from app.cognitive.models import (
     Activation, Belief, CognitiveEvent, CognitiveLoad, CognitiveNode,
     Composition, DeepLink, DeepProcessing, Diagnostic, DialogueContext,
