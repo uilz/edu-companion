@@ -52,7 +52,7 @@ def _p0_post_message_hooks(user_id: str, partition_id: str, node: TreeNode) -> N
     """消息存储后的 P0 钩子：异步写元历史 + 触发分支命名/摘要"""
     import asyncio
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         if loop.is_running():
             from app.services.meta_history import write_to_meta_history
             loop.create_task(write_to_meta_history(user_id, node))
@@ -119,7 +119,7 @@ def _trigger_graph_update(user_id: str, conversation_id: str, new_branch_name: s
 
     try:
         import asyncio
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         if loop.is_running():
             loop.create_task(_update())
     except Exception:
@@ -689,7 +689,7 @@ async def send_and_reply(
     # P0: 异步情绪追踪（LLM 分类 + 缓存）
     import asyncio
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         if loop.is_running():
             loop.create_task(emotion_analyzer.classify(user_text, user_id))
     except Exception:
@@ -746,7 +746,7 @@ async def send_and_reply(
                 # Phase 6: 对话 → CognitiveNode 对话上下文联动
                 import asyncio as _cognitive_asyncio
                 try:
-                    loop = _cognitive_asyncio.get_event_loop()
+                    loop = _cognitive_asyncio.get_running_loop()
                     if loop.is_running():
                         loop.create_task(_cognify_dialogue_context(
                             user_id, conversation, skill_ids,
@@ -761,7 +761,7 @@ async def send_and_reply(
     # P0: 异步知识证据分析（对话 → SharedKnowledgeState）
     import asyncio as _asyncio
     try:
-        loop = _asyncio.get_event_loop()
+        loop = _asyncio.get_running_loop()
         if loop.is_running():
             loop.create_task(_analyze_conversation_evidence(
                 user_id, partition_id, user_text, reply_text,
@@ -834,7 +834,7 @@ async def send_and_reply_stream(
 
     # P0: 异步情绪追踪
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         if loop.is_running():
             loop.create_task(emotion_analyzer.classify(user_text, user_id))
     except Exception:
@@ -1076,7 +1076,7 @@ async def send_and_reply_stream(
     # Phase 6: 流式路径 — 对话 → CognitiveNode 联动
     try:
         import asyncio as _cognitive_asyncio2
-        loop = _cognitive_asyncio2.get_event_loop()
+_cognitive_asyncio.get_running_loop()
         if loop.is_running():
             # 从上下文中找 skill_ids
             skill_ids = set()

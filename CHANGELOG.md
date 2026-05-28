@@ -4,7 +4,22 @@
 
 ---
 
-## [0.8.0] - 2026-05-28
+## [0.9.0] - 2026-05-28
+
+### 对话系统完善 + Bug 修复
+
+#### Bug 修复
+- **context_builder.py:299** — `data` 变量 NameError 风险修复，添加 fallback 重新加载
+- **conversation_llm.py** — 6 处 `asyncio.get_event_loop()` → `asyncio.get_running_loop()`（Python 3.10+ 兼容）
+- **context_builder.py** — 5 处 `except Exception: pass` 添加 `logger.debug` 日志
+
+#### 对话系统审计
+- 完成 15 个核心文件全面审计，识别 3 个 Critical + 6 个 High + 8 个 Medium 问题
+- 生成 `docs/conversation-system/audit-report.md` 完整审计报告
+- 综合完成度评估: **~74%**
+
+#### 新增组件
+- `ExpandBlock` 知识拓展前端组件（6 维度展示）
 
 ### 代码重构 (6 Phase)
 

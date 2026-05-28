@@ -136,8 +136,8 @@ def _build_context_messages(
                     f"\n\n[练习回顾]\n{recall_text}\n\n"
                     "请在回复中自然地引用这些练习数据来回答用户。"
                 )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"知识图谱概览注入跳过: {e}")
 
     # ── 7. Context-aware practice suggestion ──
     try:
@@ -296,6 +296,9 @@ def _build_context_messages(
 
     # ── 9. Knowledge graph mastery overview ──
     try:
+        if "data" not in dir():
+            from app.services.storage import storage as _s3
+            data = _s3.load(user_id)
         graph = data.knowledge_graphs.get(partition.id)
         if graph and graph.nodes:
             nodes_list = list(graph.nodes.values())
