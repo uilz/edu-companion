@@ -162,6 +162,10 @@ class AchievementEngine:
                 # 可升级成就
                 current_level = existing.get("level", 0)
                 levels = ach_def["levels"]
+                # Skip if already at max level
+                max_level = max(levels.keys()) if levels else 0
+                if current_level >= max_level:
+                    continue
                 for lv in sorted(levels.keys()):
                     if lv > current_level:
                         threshold = levels[lv]

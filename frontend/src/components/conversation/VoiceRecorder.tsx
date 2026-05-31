@@ -102,7 +102,6 @@ export default function VoiceRecorder({ onTranscription, disabled }: VoiceRecord
 
       // 语音识别错误回调
       recognition.onerror = (event: SpeechRecognitionError) => {
-        console.error("Speech recognition error:", event.error);
         setError(event.error === "no-speech" ? "未检测到语音" : `识别失败: ${event.error}`);
         setState("idle");
       };
@@ -119,7 +118,6 @@ export default function VoiceRecorder({ onTranscription, disabled }: VoiceRecord
       recognition.start();
       setState("recording");
     } catch (e) {
-      console.error("Failed to start speech recognition:", e);
       setError("语音识别启动失败");
       setState("idle");
     }
@@ -229,7 +227,6 @@ function MediaRecorderFallback({ onTranscription, disabled }: VoiceRecorderProps
       recorder.start();
       setState("recording");
     } catch (e) {
-      console.error("MediaRecorder error:", e);
       setError("无法访问麦克风");
     }
   }, []);

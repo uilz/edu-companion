@@ -5,10 +5,9 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Optional
 
-from app.services.classifier import compute_embedding
+from app.services.material_common import get_pool, compute_embedding
 
 logger = logging.getLogger(__name__)
 
@@ -23,19 +22,6 @@ class MaterialSearch:
     
     混合排序：向量分 × 0.7 + 文本分 × 0.3
     """
-
-    def __init__(self):
-        self._db_pool = None
-
-    async def _get_pool(self):
-        if self._db_pool is None:
-            import asyncpg
-            db_url = os.getenv("DATABASE_URL", "")
-            if db_url:
-                self._db_pool = await asyncpg.create_pool(db_url)
-            else:
-                raise RuntimeError("DATABASE_URL not set")
-        return self._db_pool
 
     async def search(
         self,
@@ -63,10 +49,10 @@ class MaterialSearch:
         try:
             query_embedding = compute_embedding(query[:2000])
         except Exception:
-            pass
+            logger.debug("Embedding 计算失败，降级使用全文搜索", exc_info=True)
 
         try:
-            pool = await self._get_pool()
+            pool = await get_pool()
             async with pool.acquire() as conn:
                 if query_embedding:
                     return await self._vector_search(
@@ -187,7 +173,7 @@ class MaterialSearch:
     ) -> list[dict]:
         """按知识点搜索资料片段（用于练习错误时关联资料）"""
         try:
-            pool = await self._get_pool()
+            pool = await get_pool()
             async with pool.acquire() as conn:
                 rows = await conn.fetch(
                     """SELECT chunk_id, text, source_file, page_number, material_id

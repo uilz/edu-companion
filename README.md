@@ -9,7 +9,7 @@
 - [项目简介](#项目简介)
 - [完整功能矩阵](#完整功能矩阵)
 - [架构概览](#架构概览)
-- [16 个 Phase + v4.0 重构交付总览](#16-个-phase--v40-重构交付总览)
+- [16 个 Phase + v4.0 重构 + v0.9.4 设计重构交付总览](#16-个-phase--v40-重构--v094-设计重构交付总览)
 - [技术栈](#技术栈)
 - [项目结构](#项目结构)
 - [核心数据流](#核心数据流)
@@ -38,7 +38,7 @@
 | 🤖 **AI 伴学对话** | 多轮启发式对话，知识点讲解、答疑、苏格拉底追问 | ✅ v0.3 |
 | 📚 **自适应练习** | SM-2 间隔重复 + Beta 信念 + 三级优先级队列 | ✅ v0.5 |
 | 🧠 **知识图谱树** | 5 层级（partition→domain→topic→concept→atom），向量分类自动生长 | ✅ v0.5 |
-| 🗺️ **力导向图谱** | 独立 `/graph` 路由，节点颜色按掌握度，交互展开 | ✅ v0.6 |
+| 🗺️ **力导向图谱** | 独立 `/graph` 路由，节点颜色按掌握度，交互展开，编辑模式 CRUD | ✅ v0.9.1 |
 | 📊 **学情看板** | 雷达图/趋势图/热力图/遗忘曲线/错误分布 | ✅ v0.5 |
 | 🔔 **智能秘书** | 7 模块：复习提醒/疲劳管理/学习简报/备考/回归/元认知/静默 | ✅ v0.4 |
 | 🧠 **认知追踪** | 15 子系统 + 22 方程：Beta 信念/ACT-R 激活/EWMA 趋势/认知负荷 | ✅ v0.3 |
@@ -50,7 +50,8 @@
 | 🔥 **习惯养成** | 连续学习 streak / 每日目标 / 番茄钟 / 微习惯 / 12 成就 | ✅ v0.6 |
 | ✨ **智能创造** | 知识拓展（6 维度）/ 变式题生成 / 关联发现 | ✅ v0.6 |
 | 📝 **自适应规划** | 复习紧迫度 ×2 / ZPD 甜点 ×1.5 / 探索 ×0.5 三级权重 | ✅ v0.5 |
-| 🧹 **系统治理** | 48h 临时对话清理 cron / Classify 确认 UI | ✅ v0.6 |
+| 🧹 **系统治理** | 48h 临时对话清理 cron / Classify 确认 UI / 熵值治理 -75% | ✅ v0.9.3 |
+| 🎨 **设计系统** | 纸墨质感 + 亮暗双主题 / 40+ CSS token / 排版合规 / 按钮反馈 | ✅ v0.9.4 |
 
 ---
 
@@ -105,7 +106,7 @@
 
 ---
 
-## 📦 16 个 Phase + v4.0 重构交付总览
+## 📦 16 个 Phase + v4.0 重构 + v0.9.4 设计重构交付总览
 
 ```
 Phase 1 MVP:     █████████████████████  完成 ✅
@@ -125,6 +126,8 @@ Phase 14 心智:   ████████████████████�
 Phase 15 多模态:  █████████████████████  完成 ✅
 Phase 16 整合:   █████████████████████  完成 ✅
 v4.0 重构:       █████████████████████  完成 ✅  6 阶段 ~2,500 行精简
+v0.9.3 治理:     █████████████████████  完成 ✅  熵值 800+ → ~200 (-75%)
+v5.0 设计:       █████████████████████  完成 ✅  纸墨质感 + 亮暗双主题 ~220处
 ```
 
 ### v4.0 重构详情
@@ -141,6 +144,20 @@ v4.0 重构:       ████████████████████�
 | ⑥ 清理废弃代码 | 删除过期组件、简化模块边界 | 依赖 ↓ |
 
 详情见 [docs/PROGRESS.md](docs/PROGRESS.md) 和 [CHANGELOG.md](CHANGELOG.md)。
+
+### v0.9.3 架构熵值治理
+
+12 项 Kanban 任务，熵值 800+ → ~200 (-75%)：
+
+| 维度 | 前 | 后 |
+|:-----|:---|:---|
+| 静默 except: pass | 31 | 0 |
+| 硬编码密码 | 1 | 0 |
+| 重复函数定义 | 8 模式 | 0 |
+| God File (>500行) | 8 | 4 |
+| 前端 console.* | 66 | 17 |
+
+新增 11 个聚焦模块，全部 facade 保持向后兼容。
 
 ---
 
@@ -168,8 +185,10 @@ v4.0 重构:       ████████████████████�
 edu-companion/
 ├── backend/
 │   ├── app/
-│   │   ├── api/                      # REST API 端点 (13 路由)
-│   │   │   ├── conversation.py       # 对话系统 (WS+SSE)
+│   │   ├── api/                     ## REST API 端点 (13 路由, ~82 端点)
+│   │   │   ├── conversation.py       # 对话系统 facade（→ routes + ws）
+│   │   │   ├── conversation_routes.py # 对话 REST 端点 (530 行)
+│   │   │   ├── conversation_ws.py    # WebSocket 流式处理 (160 行)
 │   │   │   ├── phase8.py             # v2 API: 图谱/分类/队列/看板/讲解/情绪/扩展/视觉
 │   │   │   ├── practice.py           # 练习系统 (SM-2 调度)
 │   │   │   ├── secretary.py          # 秘书系统
@@ -178,8 +197,16 @@ edu-companion/
 │   │   │   ├── multimodal.py         # 多模态 (TTS/视频/图片)
 │   │   │   ├── material.py           # 教材管理
 │   │   │   └── ...                   # chat, knowledge, progress, study...
-│   │   ├── services/                 # 40+ 服务模块
-│   │   │   ├── conversation_llm.py   # AI 对话主逻辑（非流式+流式）
+│   │   ├── services/                ## 40+ 服务模块（模块化拆分）
+│   │   │   ├── conversation_llm.py   # AI 对话 facade（→ llm_core + tool_dispatch + cognitive_sync）
+│   │   │   ├── llm_core.py           # LLM 调用 + 流式生成
+│   │   │   ├── tool_dispatch.py      # 工具/函数调用分发
+│   │   │   ├── cognitive_sync.py     # 认知节点同步
+│   │   │   ├── tree_ops.py           # 树操作 facade（→ tree_crud + tree_sync + tree_naming）
+│   │   │   ├── tree_crud.py          # 树 CRUD 操作 (560 行)
+│   │   │   ├── practice_service.py   # 练习业务逻辑 (615 行)
+│   │   │   ├── knowledge_state.py    # 知识状态查询（共享模块）
+│   │   │   ├── material_common.py    # 素材公共逻辑（共享模块）
 │   │   │   ├── context_builder.py    # 上下文构建（含情绪注入）
 │   │   │   ├── emotion_analyzer.py   # 情绪分析引擎
 │   │   │   ├── behavior_analyzer.py  # 行为分析引擎
@@ -190,12 +217,12 @@ edu-companion/
 │   │   │   ├── spaced_repetition.py  # SM-2 间隔重复
 │   │   │   ├── adaptive_selector.py  # 自适应选题队列
 │   │   │   └── secretary/            # 秘书系统逻辑
-│   │   ├── cognitive/                # CognitiveNode 认知系统
+│   │   ├── cognitive/               ## CognitiveNode 认知系统
 │   │   │   ├── models.py             # 15 子系统模型
 │   │   │   ├── storage.py            # PG 存储 CRUD
 │   │   │   ├── growth_engine.py      # 全方向生长引擎
 │   │   │   └── equations.py          # 22 个数学方程
-│   │   ├── domain/                   # 领域层（7 个模块）
+│   │   ├── domain/                  ## 领域层（7 个模块）
 │   │   │   ├── secretary/            # 秘书系统引擎
 │   │   │   ├── habits/               # 习惯养成事件驱动
 │   │   │   └── analytics/            # 行为分析事件驱动
@@ -206,7 +233,7 @@ edu-companion/
 │   └── tests/                        # 220 项测试
 ├── frontend/
 │   └── src/
-│       ├── app/                      # 16 个路由页面
+│       ├── app/                     ## 16 个路由页面
 │       │   ├── learn/                # AI 对话
 │       │   ├── practice/             # 练习中心
 │       │   ├── dashboard/            # 学情看板
@@ -215,12 +242,12 @@ edu-companion/
 │       │   ├── secretary/            # 智能秘书
 │       │   ├── achievements/         # 成就系统
 │       │   └── ...                   # errors, stats, calendar, study...
-│       ├── store/                    # Zustand 全局状态
+│       ├── store/                   ## Zustand 全局状态
 │       │   ├── conversation-store.ts # 对话状态 + WS 连接管理
 │       │   ├── streaming.ts          # 流式数据接收与缓冲
 │       │   └── tree-helpers.ts       # 知识树节点操作辅助
 │       └── components/
-│           ├── ui/                   # 通用 UI 组件 (v4.0 抽取)
+│           ├── ui/                  ## 通用 UI 组件 (v4.0 抽取)
 │           │   ├── Card.tsx          # 通用卡片容器
 │           │   ├── ConfirmDialog.tsx # 确认对话框
 │           │   ├── EmptyState.tsx    # 空状态占位
@@ -228,18 +255,18 @@ edu-companion/
 │           │   ├── InlineEdit.tsx    # 行内编辑
 │           │   ├── MathContent.tsx   # 数学公式渲染
 │           │   └── Skeleton.tsx      # 加载骨架屏
-│           ├── conversation/         # 对话组件（输入/列表/侧栏/语音/分类浮窗）
-│           ├── dashboard/            # 看板组件（Overview/GraphTab 等）
-│           ├── analytics/            # 分析组件（RadarChart/EmotionCard）
-│           ├── secretary/            # 秘书组件
-│           ├── layout/               # 布局（Sidebar/BottomNav/ClientProviders）
-│           └── search/               # 统一搜索
-├── docs/                             # 完整文档
-│   ├── architecture-v3.md            # 系统架构 v3.0
+│           ├── conversation/        ## 对话组件（输入/列表/侧栏/语音/分类浮窗）
+│           ├── dashboard/           ## 看板组件（Overview/GraphTab 等）
+│           ├── analytics/           ## 分析组件（RadarChart/EmotionCard）
+│           ├── secretary/           ## 秘书组件
+│           ├── layout/              ## 布局（Sidebar/BottomNav/ClientProviders）
+│           └── search/              ## 统一搜索
+├── docs/                            ## 完整文档
+│   ├── architecture.md               # 系统架构 v4.2（最新）
 │   ├── PROGRESS.md                   # 开发进度跟踪
 │   └── phase1/ ~ phase8/             # 分阶段设计文档（已归档）
-├── PROGRESS.md                       # 进度总览
-├── CHANGELOG.md                      # 版本更新日志
+├── PROGRESS.md                      ## 进度总览
+├── CHANGELOG.md                     ## 版本更新日志
 └── README.md
 ```
 
@@ -251,11 +278,12 @@ edu-companion/
 用户消息
   → [情绪检测] emotion_analyzer.quick_detect()       # Phase 14
   → [分类] POST /api/v2/classify                      # Phase 8
-  → [对话] conversation_llm.send_and_reply()           # Phase 4/5
+  → [对话] conversation_llm.send_and_reply()           # llm_core + tool_dispatch
       ├─ 普通回复 → response_block 渲染
-      ├─ 练习相关 → practice.submit_answer()           # Phase 10
+      ├─ 工具调用 → tool_dispatch.generate_reply_with_tools()
+      ├─ 练习相关 → practice.submit_answer()           # practice_service
       │     └─ SM-2 scheduling update
-      │     └─ sync_from_practice_event() → CognitiveNode  # Phase 9
+      │     └─ sync_from_practice_event() → CognitiveNode  # cognitive_sync
       │     └─ 行为分析 / 习惯记录 / 成就检测          # Phase 14
       └─ 图片消息 → vision_service 视觉理解             # Phase 15
 
@@ -309,8 +337,9 @@ npm run dev
 | `OPENAI_API_BASE` | API 端点 | https://api.deepseek.com/v1 |
 | `TEXT_MODEL` | 对话模型 | deepseek/deepseek-v4-flash |
 | `TEXT_REASONING_MODEL` | 推理+视觉模型 | openai/gpt-4o |
-| `DB_PASSWORD` | PostgreSQL 密码 | companion123 |
+| `DB_PASSWORD` | PostgreSQL 密码 | （从环境变量读取，禁止硬编码） |
 | `DB_PORT` | PostgreSQL 端口 | 5433 |
+| `COMPANION_HOME` | 数据目录 | ~/.companion |
 
 ### 运行测试
 
@@ -325,7 +354,59 @@ npx tsc --noEmit              # TypeScript 编译检查
 
 ## 🧹 近期里程碑
 
-### v4.0 — 6 阶段前端重构 (2026-05-27)
+### v0.9.4 — v5.0 设计重构 (2026-05-31)
+
+基于 `design.md` 设计规范，系统性前端视觉重构。~220 处修改，~40 文件。
+
+- 🎨 亮暗双主题：40+ CSS token，暖色调暗色 `#1a1816`，主题切换 bug 修复
+- 🫧 消息气泡重设计：用户白底+边框 / AI微暖底 / 14px圆角 / 入场动画150ms
+- 📐 排版合规：正文 16px / 行高 1.65 / 字重 600（37处）/ JetBrains Mono
+- 🎯 去阴影：仅浮层保留 shadow，卡片/气泡用边框+色差分层
+- 🎯 状态色 CSS 变量化：52 处硬编码→var(--color-*)，18 文件
+- 🎯 按钮按压反馈：active:scale-[0.97]，81 个按钮，36 文件
+- 🎯 圆角对齐：卡片 10px / 气泡 14px / pill 9999px
+
+详情见 [CHANGELOG.md](CHANGELOG.md) v0.9.4。
+
+### v0.9.3 — 架构熵值治理 (2026-05-30)
+
+12 项 Kanban 任务全量完成，熵值 800+ → ~200 (-75%)
+
+- 🔴 31 处静默异常全部修复（16 文件），统一 `logger.warning` 模式
+- 🔴 硬编码密码移除，改用 `DB_PASSWORD` 环境变量
+- 🔴 `Conversation.partition_id` 报错修复（链式查询 topic→domain→partition）
+- 🟡 4 个 God File 拆分为 11 个聚焦模块（facade 模式，向后兼容）
+  - `conversation_llm.py` 1135→529 行 → llm_core + tool_dispatch + cognitive_sync
+  - `tree_ops.py` 867→22 行 → tree_crud + tree_sync + tree_naming (mixin)
+  - `conversation.py` 790→22 行 → conversation_routes + conversation_ws
+  - `practice.py` 699→360 行 → practice_service
+- 🟡 4 处 `get_knowledge_state()` 合并为共享模块
+- 🟡 6 处 `~/.companion/` 路径集中化为 `COMPANION_HOME`
+- 🟡 前端 console.* 66→17 处，删除死组件
+
+详情见 [CHANGELOG.md](CHANGELOG.md) v0.9.3。
+
+### v0.9.2 — 引用系统修复 + 版本指示器修复 (2026-05-28)
+
+- 引用(Quote)全链路修复：pendingQuote 通过 WS/HTTP 传递至后端，LLM 回复含引用块
+- 引用样式增强：蓝色高亮背景 + 左侧蓝色边线 + 图标
+- 版本指示器修复：从助手消息块移至用户消息块，页面刷新后从后端恢复版本信息
+- 版本切换逻辑修复：基于 currentIndex 定位，替代错误的 indexOf
+- 编辑后 AI 自动重回复
+
+### v0.9.1 — 知识图谱编辑 + 数据清理 (2026-05-28)
+
+- 知识图谱 CRUD：5 个新端点（GET/POST/PATCH/DELETE 节点 + POST/DELETE 边）
+- GraphTab 双数据源合并：knowledge/graph 结构 + partition-progress 掌握度
+- 编辑模式 UI：节点增删改、连线交互、空图谱手动添加
+- 创建时同名防重：自动追加 (2)(3) 后缀
+- secretary/analysis.py：11 个分析函数（秘书引擎依赖）
+- 数据清理：162 个测试残留分区 + 2 个测试用户删除
+
+**后端**: 106 源文件 • ~24,628 行 • 220 项测试  
+**前端**: 84 源文件 • ~15,616 行 • TypeScript 零错误
+
+### v0.9.0 — 对话系统审计 + 修复 (2026-05-28)
 
 - Zustand 全局状态管理替换组件内状态
 - `useConversation` 882→243 行 (-72%)
@@ -334,8 +415,8 @@ npx tsc --noEmit              # TypeScript 编译检查
 - 7 个通用 UI 组件抽取（Card/ErrorBoundary/Skeleton 等）
 - 清理废弃组件，净删除 ~2,500 行
 
-**后端**: 28,033 行 Python • 13 API 路由 • 220 项测试  
-**前端**: 15,565 行 TS/TSX • 16 路由页面 • Zustand 状态管理  
+**后端**: 106 源文件 • ~24,628 行 Python • 220 项测试  
+**前端**: 84 源文件 • ~15,616 行 TS/TSX • Zustand 状态管理  
 
 ### v0.6.0 — Phase 9-15 全线贯通 (2026-05-26)
 
@@ -373,4 +454,4 @@ npx tsc --noEmit              # TypeScript 编译检查
 
 ---
 
-> 完整开发历程见 [CHANGELOG.md](CHANGELOG.md) | 系统架构细节见 [docs/architecture-v3.md](docs/architecture-v3.md)
+> 完整开发历程见 [CHANGELOG.md](CHANGELOG.md) | 系统架构细节见 [docs/architecture.md](docs/architecture.md)

@@ -37,11 +37,9 @@ class FatigueManagerModule(SecretaryModule):
         self, user_id: str, ctx: SessionContext | None = None,
     ) -> list[Proposal]:
         """检测疲劳信号"""
-        from ..analysis import predict_fatigue_risk
-        from ..models import ScopeSpec, AnalyzeOptions
+        from ..analysis import predict_fatigue_risk, _get_nodes
 
-        options = AnalyzeOptions(threshold=0.5, max_items=5)
-        scope = ScopeSpec(level="user")
+        nodes = _get_nodes(user_id)
 
         proposals: list[Proposal] = []
 
@@ -88,7 +86,7 @@ class FatigueManagerModule(SecretaryModule):
 
         # 2. 分析层疲劳风险
         try:
-            fatigue = predict_fatigue_risk(user_id, scope, options)
+            fatigue = predict_fatigue_risk(user_id, nodes=nodes)
             for item in fatigue.items[:2]:
                 if item.norm_urgency > 0.6:
                     proposals.append(Proposal(

@@ -73,6 +73,7 @@ interface SidebarTreeNodeProps {
   setDeleteTarget: (target: { id: string; label: string; isConv?: boolean; topicId?: string } | null) => void;
   handleRename: (node: GraphNode, name: string) => void;
   handleRenameConv: (convId: string, name: string, topicId: string) => void;
+  onSelectConv?: (partitionId: string, conversationId: string) => void;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -86,7 +87,7 @@ export function SidebarTreeNode({
   editingId, editValue,
   toggleExpand, handleCreateChild, handleNewConvClick,
   setEditingId, setEditValue, setDeleteTarget,
-  handleRename, handleRenameConv,
+  handleRename, handleRenameConv, onSelectConv,
 }: SidebarTreeNodeProps) {
   const isExpanded = expandedSet.has(node.id);
   const isLoading = loadingSet.has(node.id);
@@ -122,20 +123,20 @@ export function SidebarTreeNode({
         )}
 
         {/* 操作按钮 */}
-        <div className="flex items-center gap-0.5 ml-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity max-md:opacity-100">
+        <div className="flex items-center gap-0.5 ml-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity max-lg:opacity-100">
           {hasChildLevel && (
             <button onClick={(e) => { e.stopPropagation(); handleCreateChild(node); }}
-              className="p-1 text-[var(--color-text-muted)] hover:text-green-400" title={`新建${CHILD_LEVEL[node.level].name.slice(1)}`}><Plus size={11} /></button>
+              className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-success)]" title={`新建${CHILD_LEVEL[node.level].name.slice(1)}`}><Plus size={11} /></button>
           )}
           <button onClick={(e) => {
             e.stopPropagation();
             handleNewConvClick(node, pid);
           }}
-            className="p-1 text-[var(--color-text-muted)] hover:text-green-400" title="新建会话"><MessageSquare size={11} /></button>
+            className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-success)]" title="新建会话"><MessageSquare size={11} /></button>
           <button onClick={(e) => { e.stopPropagation(); setEditingId(node.id); setEditValue(node.label); }}
             className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)]" title="重命名"><Pencil size={11} /></button>
           <button onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: node.id, label: node.label }); }}
-            className="p-1 text-[var(--color-text-muted)] hover:text-red-400" title="删除"><Trash2 size={11} /></button>
+            className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-error)]" title="删除"><Trash2 size={11} /></button>
         </div>
       </div>
 
@@ -171,6 +172,7 @@ export function SidebarTreeNode({
               setDeleteTarget={setDeleteTarget}
               handleRename={handleRename}
               handleRenameConv={handleRenameConv}
+              onSelectConv={onSelectConv}
             />
           ))}
           {convs.map(conv => (
@@ -178,15 +180,16 @@ export function SidebarTreeNode({
               <div
                 className="flex items-center cursor-pointer transition-colors group/conv"
                 style={{ paddingLeft: indent + 16, paddingRight: 4, paddingBlock: 4, borderLeft: activeConversationId === conv.id ? "3px solid var(--color-accent)" : undefined, backgroundColor: activeConversationId === conv.id ? "var(--color-surface)" : "transparent" }}
+                onClick={() => onSelectConv?.(pid || "", conv.id)}
               >
                 <span className="w-4 flex-shrink-0 mr-1" onClick={() => {/* noop */}} />
                 <MessageSquare size={11} className="text-[var(--color-text-muted)] mr-1.5" onClick={() => {/* noop */}} />
                 <span className="flex-1 text-xs truncate text-[var(--color-text-muted)]">{conv.name}</span>
-                <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover/conv:opacity-100 transition-opacity max-md:opacity-100">
+                <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover/conv:opacity-100 transition-opacity max-lg:opacity-100">
                   <button onClick={(e) => { e.stopPropagation(); setEditingId(conv.id); setEditValue(conv.name); }}
                     className="p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)]" title="重命名"><Pencil size={10} /></button>
-                  <button onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: conv.id, label: conv.name, isConv: true, topicId: node.id } as any); }}
-                    className="p-0.5 text-[var(--color-text-muted)] hover:text-red-400" title="删除"><Trash2 size={10} /></button>
+                  <button onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: conv.id, label: conv.name, isConv: true, topicId: node.id }); }}
+                    className="p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-error)]" title="删除"><Trash2 size={10} /></button>
                 </div>
               </div>
               {editingId === conv.id && (

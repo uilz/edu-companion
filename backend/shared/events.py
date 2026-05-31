@@ -109,16 +109,6 @@ class KnowledgeStateUpdated(DomainEvent):
 
 
 # ──────────────────────────────────────────────
-# 规划域事件
-# ──────────────────────────────────────────────
-
-
-# ──────────────────────────────────────────────
-# 成就 + 资料域事件
-# ──────────────────────────────────────────────
-
-
-# ──────────────────────────────────────────────
 # 对话域事件 (Phase 5)
 # ──────────────────────────────────────────────
 
@@ -138,6 +128,66 @@ class AssistantReplied(DomainEvent):
     @property
     def event_type(self) -> str:
         return "AssistantReplied"
+
+
+# ──────────────────────────────────────────────
+# v6 Phase 4: 业务域事件
+# ──────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class MessageClassified(DomainEvent):
+    """消息分类确认事件 — 用户确认认知归属后发布"""
+    user_id: str = ""
+    message_id: str = ""
+    conversation_id: str = ""
+    topic_node_ids: list[str] = field(default_factory=list)
+    atom_node_ids: list[str] = field(default_factory=list)
+    mode: str = "confirm"
+
+    @property
+    def event_type(self) -> str:
+        return "MessageClassified"
+
+
+@dataclass(frozen=True)
+class PracticeSubmitted(DomainEvent):
+    """练习提交事件 — 驱动掌握度更新"""
+    user_id: str = ""
+    atom_node_ids: list[str] = field(default_factory=list)
+    correctness: float = 0.0
+    latency_ms: float = 0.0
+
+    @property
+    def event_type(self) -> str:
+        return "PracticeSubmitted"
+
+
+@dataclass(frozen=True)
+class NodeCreated(DomainEvent):
+    """知识点创建事件 — 触发秘书波纹扩展"""
+    user_id: str = ""
+    node_id: str = ""
+    parent_id: str = ""
+    level: str = "atom"
+    created_by: str = "user"
+
+    @property
+    def event_type(self) -> str:
+        return "NodeCreated"
+
+
+@dataclass(frozen=True)
+class ProposalAccepted(DomainEvent):
+    """秘书提案采纳事件 — 执行图谱操作"""
+    user_id: str = ""
+    proposal_id: str = ""
+    action_type: str = ""
+    target_node_id: str = ""
+
+    @property
+    def event_type(self) -> str:
+        return "ProposalAccepted"
 
 
 # ──────────────────────────────────────────────
@@ -170,9 +220,14 @@ EVENT_TYPES: dict[str, type[DomainEvent]] = {
     cls().event_type: cls  # type: ignore[misc]
     for cls in [
         AnswerSubmitted,
+        ErrorRecorded,
         SessionCompleted,
         KnowledgeStateUpdated,
         AssistantReplied,
         CognitiveNodeUpdated,
+        MessageClassified,
+        PracticeSubmitted,
+        NodeCreated,
+        ProposalAccepted,
     ]
 }

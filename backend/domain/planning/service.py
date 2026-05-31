@@ -40,13 +40,12 @@ class PlanningServiceImpl:
             logger.warning("Planning: failed to schedule plan regeneration: %s", exc)
 
     async def on_knowledge_updated(self, event):
-        """事件: 知识升级 → 重生成学习计划"""
+        """事件: 知识升级（CognitiveNodeUpdated） → 重生成学习计划"""
+        label = getattr(event, "label", "?") or getattr(event, "skill_id", "?")
+        prof_after = getattr(event, "proficiency_after", 0)
         logger.info(
-            "Planning: knowledge updated user=%s skill=%s %s→%s",
-            getattr(event, "user_id", "?"),
-            getattr(event, "skill_id", "?"),
-            getattr(event, "old_mastery", "?"),
-            getattr(event, "new_mastery", "?"),
+            "Planning: cognitive updated user=%s label=%s proficiency=%.3f",
+            getattr(event, "user_id", "?"), label, prof_after,
         )
-        if getattr(event, "new_mastery", "") == "已掌握":
+        if prof_after >= 0.95:
             await self.generate_plan(event.user_id)

@@ -16,9 +16,11 @@ import re
 import asyncio
 from pathlib import Path
 
+from app.config import COMPANION_HOME
+
 logger = logging.getLogger("infra.svg")
 
-CACHE_DIR = Path(os.path.expanduser("~/.companion/images"))
+CACHE_DIR = COMPANION_HOME / "images"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 STATIC_PREFIX = "/api/multimodal/images"

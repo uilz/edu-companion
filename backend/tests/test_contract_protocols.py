@@ -22,7 +22,6 @@ from shared.protocols import (
     ConversationService,
     AnalyticsService,
     MaterialService,
-    KnowledgeStateRepository,
 )
 # Note: AchievementService not yet extracted to a Protocol
 
@@ -34,7 +33,6 @@ ALL_PROTOCOLS = {
     "ConversationService": ConversationService,
     "AnalyticsService": AnalyticsService,
     "MaterialService": MaterialService,
-    "KnowledgeStateRepository": KnowledgeStateRepository,
 }
 
 

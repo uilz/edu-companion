@@ -66,8 +66,8 @@ const errorLabel: Record<string, string> = {
 
 const groupColors: Record<string, string> = {
   "概念": "#f97316",
-  "计算": "#ef4444",
-  "审题": "#f59e0b",
+  "计算": "var(--color-error)",
+  "审题": "var(--color-warning)",
   "方法": "#8b5cf6",
   "未分类": "#737373",
 };
@@ -102,10 +102,10 @@ export function ErrorsTab() {
       else if (status === "resolved") params.set("resolved", "true");
 
       const res = await fetch(`${API_BASE}/api/practice/errors?${params}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setEntries(data.entries || []);
     } catch (err) {
-      console.error("获取错题失败:", err);
     }
     setLoading(false);
   };
@@ -119,7 +119,6 @@ export function ErrorsTab() {
         setStats(data);
       }
     } catch (e) {
-      console.error("获取错题统计概览失败", e);
     }
   };
 
@@ -156,7 +155,6 @@ export function ErrorsTab() {
       setExpandedId(entryId);
       fetchStats();
     } catch (err) {
-      console.error("AI 分析失败:", err);
     }
     setAnalyzing(null);
   };
@@ -166,7 +164,7 @@ export function ErrorsTab() {
       <div className="max-w-3xl mx-auto px-6 py-16">
         {/* ── 顶部标题栏 + 筛选按钮 ── */}
         <div className="flex items-center justify-between mb-12">
-          <h1 className="text-4xl font-bold tracking-tight text-[var(--color-text)]">
+          <h1 className="text-2xl md:text-4xl font-semibold tracking-tight text-[var(--color-text)]">
             <BookOpen size={28} className="inline mr-3 text-[var(--color-accent)]" />
             错题本
           </h1>
@@ -214,7 +212,7 @@ export function ErrorsTab() {
                     }}
                   >
                     <span>{group}</span>
-                    <span className="font-bold">{count}</span>
+                    <span className="font-semibold">{count}</span>
                   </div>
                 ))}
             </div>
@@ -321,10 +319,10 @@ export function ErrorsTab() {
 
                   {/* ── AI 错因分析详情（展开态） ── */}
                   {isExpanded && attr && (
-                    <div className="mb-3 p-4 border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/5">
+                    <div className="mb-3 p-4 border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/5 active:scale-[0.97] transition-transform">
                       <div className="flex items-center gap-2 mb-2">
                         <Sparkles size={14} className="text-[var(--color-accent)]" />
-                        <span className="text-xs font-bold text-[var(--color-accent)]">AI 错因分析</span>
+                        <span className="text-xs font-semibold text-[var(--color-accent)]">AI 错因分析</span>
                       </div>
                       <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed mb-2">
                         {attr.analysis}

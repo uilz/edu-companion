@@ -81,7 +81,7 @@ function DayDetail({ day, onClose }: { day: DayEntry; onClose: () => void }) {
         className="bg-[var(--color-card)] border border-[var(--color-border)] w-full max-w-xs mx-4 p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-sm font-bold text-[var(--color-text)] mb-3">{label}</h3>
+        <h3 className="text-sm font-semibold text-[var(--color-text)] mb-3">{label}</h3>
 
         {day.total === 0 ? (
           <p className="text-xs text-[var(--color-text-muted)]">这天没有学习记录 🛌</p>
@@ -107,7 +107,7 @@ function DayDetail({ day, onClose }: { day: DayEntry; onClose: () => void }) {
         <div className="flex gap-2 mt-4">
           <Link
             href="/practice"
-            className="flex-1 text-center text-xs px-3 py-2 bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors"
+            className="flex-1 text-center text-xs px-3 py-2 bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] active:scale-[0.97] transition-colors"
           >
             去练习
           </Link>
@@ -155,7 +155,7 @@ export function CalendarTab() {
       if (!res.ok) throw new Error("Failed");
       const json: CalendarData = await res.json();
       setData(json);
-    } catch {
+    } catch (e) {
       setData(null);  // 请求失败时清空数据
     } finally {
       setLoading(false);
@@ -231,7 +231,7 @@ export function CalendarTab() {
         {/* ── 页面标题 ── */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-[var(--color-text)]">
+            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-[var(--color-text)]">
               <CalendarDays size={24} className="inline mr-2 text-[var(--color-accent)]" />
               学习日历
             </h1>
@@ -245,24 +245,24 @@ export function CalendarTab() {
         <div className="flex items-center justify-between mb-6">
           <button
             onClick={goPrev}
-            className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+            className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text)] active:scale-[0.97] transition-all"
           >
             <ChevronLeft size={18} />
           </button>
           <div className="flex items-center gap-3">
-            <h2 className="text-lg font-bold text-[var(--color-text)]">
+            <h2 className="text-lg font-semibold text-[var(--color-text)]">
               {year}年 {MONTH_NAMES[month - 1]}
             </h2>
             <button
               onClick={goToday}
-              className="text-[10px] px-2 py-0.5 border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+              className="text-[10px] px-2 py-0.5 border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] active:scale-[0.97] transition-all"
             >
               今天
             </button>
           </div>
           <button
             onClick={goNext}
-            className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+            className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text)] active:scale-[0.97] transition-all"
           >
             <ChevronRight size={18} />
           </button>
@@ -305,7 +305,7 @@ export function CalendarTab() {
                   }}
                   title={`${cell.date}: ${cell.total}题`}
                 >
-                  <span className={isToday ? "font-bold" : ""}>{cell.day}</span>
+                  <span className={isToday ? "font-semibold" : ""}>{cell.day}</span>
                   {cell.total > 0 && (
                     <span className="text-[8px] opacity-70">{cell.total}</span>
                   )}
@@ -332,24 +332,24 @@ export function CalendarTab() {
         {/* ── 本月统计概览（答题数、正确率、连续学习、学习天数） ── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           <div className="border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-center">
-            <div className="text-xl font-bold text-[var(--color-text)]">{data?.month_total || 0}</div>
+            <div className="text-xl font-semibold text-[var(--color-text)]">{data?.month_total || 0}</div>
             <div className="text-[10px] text-[var(--color-text-muted)] mt-1">本月答题</div>
           </div>
           <div className="border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-center">
-            <div className="text-xl font-bold text-[var(--color-text)]">
+            <div className="text-xl font-semibold text-[var(--color-text)]">
               {data?.month_accuracy != null ? `${(data.month_accuracy * 100).toFixed(0)}%` : "—"}
             </div>
             <div className="text-[10px] text-[var(--color-text-muted)] mt-1">正确率</div>
           </div>
           <div className="border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-center">
-            <div className="text-xl font-bold text-[var(--color-text)] flex items-center justify-center gap-1">
+            <div className="text-xl font-semibold text-[var(--color-text)] flex items-center justify-center gap-1">
               <Flame size={16} className="text-[var(--color-warning)]" />
               {data?.month_streak || 0}
             </div>
             <div className="text-[10px] text-[var(--color-text-muted)] mt-1">连续学习</div>
           </div>
           <div className="border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-center">
-            <div className="text-xl font-bold text-[var(--color-text)]">
+            <div className="text-xl font-semibold text-[var(--color-text)]">
               {data?.days?.filter(d => d.total > 0).length || 0}
             </div>
             <div className="text-[10px] text-[var(--color-text-muted)] mt-1">学习天数</div>
@@ -362,7 +362,7 @@ export function CalendarTab() {
             <Zap size={18} className="text-[var(--color-warning)] flex-shrink-0" />
             <div>
               <p className="text-xs text-[var(--color-text-secondary)]">
-                本月最佳：<span className="font-bold text-[var(--color-text)]">{data.best_day.date}</span>
+                本月最佳：<span className="font-semibold text-[var(--color-text)]">{data.best_day.date}</span>
                 {" "}· {data.best_day.total} 题
               </p>
               <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
@@ -376,7 +376,7 @@ export function CalendarTab() {
         <div className="flex gap-3 mt-6">
           <Link
             href="/practice"
-            className="flex items-center gap-1.5 px-4 py-2 bg-[var(--color-accent)] text-white text-xs hover:bg-[var(--color-accent-hover)] transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 bg-[var(--color-accent)] text-white text-xs hover:bg-[var(--color-accent-hover)] active:scale-[0.97] transition-colors"
           >
             <Target size={13} /> 开始练习
           </Link>

@@ -79,11 +79,11 @@ export function AnalyticsTab() {
       <div>
         <div className="max-w-3xl mx-auto px-6 py-16 text-center">
           <BarChart3 size={40} className="mx-auto mb-4 text-[var(--color-text-muted)]" />
-          <h1 className="text-3xl font-bold text-[var(--color-text)] mb-2">学情分析</h1>
+          <h1 className="text-3xl font-semibold text-[var(--color-text)] mb-2">学情分析</h1>
           <p className="text-[var(--color-text-muted)] mb-6">还没有练习数据</p>
           <Link
             href="/practice"
-            className="inline-block px-6 py-2.5 bg-[var(--color-accent)] text-white text-sm hover:bg-[var(--color-accent-hover)] transition-colors"
+            className="inline-block px-6 py-2.5 bg-[var(--color-accent)] text-white text-sm hover:bg-[var(--color-accent-hover)] active:scale-[0.97] transition-colors"
           >
             去练习
           </Link>
@@ -108,7 +108,7 @@ export function AnalyticsTab() {
         {/* ── 页面头部：标题 + Tab 切换 + 时间范围 + 错题本入口 ── */}
         <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
           <div className="flex items-center gap-4">
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-[var(--color-text)]">
+            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-[var(--color-text)]">
               <BarChart3 size={24} className="inline mr-2 text-[var(--color-accent)]" />
               学情分析
             </h1>
@@ -199,7 +199,7 @@ export function AnalyticsTab() {
           ].map((c, i) => (
             <Card key={i} className="!p-4">
               <div className="text-[var(--color-accent)] mb-1.5">{c.icon}</div>
-              <div className="text-xl md:text-2xl font-bold text-[var(--color-text)]">
+              <div className="text-xl md:text-2xl font-semibold text-[var(--color-text)]">
                 {c.fmt(c.val)}
               </div>
               <div className="text-[11px] text-[var(--color-text-muted)] mt-0.5">

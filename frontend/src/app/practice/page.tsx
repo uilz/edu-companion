@@ -136,7 +136,6 @@ function PracticeContent() {
       setHintLevel(0);
       setStartTime(Date.now());
     } catch (err) {
-      console.error("Failed to create session:", err);
     }
     setLoading(false);
   }, []);
@@ -171,7 +170,6 @@ function PracticeContent() {
       setSubmitResult(result);
       setSubmitted(true);
     } catch (err) {
-      console.error("Submit failed:", err);
     }
     setLoading(false);
   };
@@ -192,7 +190,6 @@ function PracticeContent() {
       setHint(data.hint);
       setHintLevel(data.hint.level);
     } catch (err) {
-      console.error("Hint failed:", err);
     }
   };
 
@@ -242,7 +239,6 @@ function PracticeContent() {
         { method: "POST" }
       );
     } catch (e) {
-      console.error("Complete failed:", e);
     }
   };
 
@@ -263,13 +259,13 @@ function PracticeContent() {
     return (
       <main className="min-h-screen bg-[var(--color-bg)]">
         <div className="max-w-3xl mx-auto px-6 py-16 text-center">
-          <h1 className="text-4xl font-bold tracking-tight text-[var(--color-text)] mb-4">
+          <h1 className="text-4xl font-semibold tracking-tight text-[var(--color-text)] mb-4">
             练习
           </h1>
           <p className="text-[var(--color-text-muted)] mb-8">暂无可用题目</p>
           <button
             onClick={handleRestart}
-            className="px-6 py-2.5 bg-[var(--color-accent)] text-[var(--color-text)] text-sm font-medium hover:bg-[var(--color-accent-hover)] transition-colors"
+            className="px-6 py-2.5 bg-[var(--color-accent)] text-[var(--color-text)] text-sm font-medium hover:bg-[var(--color-accent-hover)] active:scale-[0.97] transition-colors"
           >
             重新生成
           </button>
@@ -284,12 +280,12 @@ function PracticeContent() {
       <div className="max-w-3xl mx-auto px-6 py-16">
         {/* 顶栏：标题 + 重新开始按钮 */}
         <div className="flex items-center justify-between mb-12">
-          <h1 className="text-4xl font-bold tracking-tight text-[var(--color-text)]">
+          <h1 className="text-4xl font-semibold tracking-tight text-[var(--color-text)]">
             练习
           </h1>
           <button
             onClick={handleRestart}
-            className="flex items-center gap-1.5 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+            className="flex items-center gap-1.5 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] active:scale-[0.97] transition-all"
           >
             <RotateCcw size={14} />
             重新开始
@@ -308,7 +304,7 @@ function PracticeContent() {
           </div>
           <div className="w-full bg-[var(--color-surface)] h-1">
             <div
-              className="h-full bg-[var(--color-accent)] transition-all"
+              className="h-full bg-[var(--color-accent)] active:scale-[0.97] transition-all"
               style={{
                 width: `${((currentIndex + 1) / questions.length) * 100}%`,
               }}
@@ -359,7 +355,7 @@ function PracticeContent() {
 
           {/* 提示区域：显示分层提示内容 */}
           {hint && (
-            <div className="mt-4 p-4 border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/5 text-sm">
+            <div className="mt-4 p-4 border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/5 text-sm active:scale-[0.97] transition-transform">
               <div className="flex items-center gap-2 mb-1 text-[var(--color-accent)] font-semibold">
                 <Lightbulb size={14} />
                 提示 Level {hint.level}
@@ -377,7 +373,7 @@ function PracticeContent() {
                 <button
                   onClick={handleSubmit}
                   disabled={!selected || loading}
-                  className="px-6 py-2.5 bg-[var(--color-accent)] text-[var(--color-text)] text-sm font-medium disabled:opacity-30 hover:bg-[var(--color-accent-hover)] transition-colors"
+                  className="px-6 py-2.5 bg-[var(--color-accent)] text-[var(--color-text)] text-sm font-medium disabled:opacity-30 hover:bg-[var(--color-accent-hover)] active:scale-[0.97] transition-colors"
                 >
                   {loading ? (
                     <Loader2 className="animate-spin inline" size={14} />
@@ -387,7 +383,7 @@ function PracticeContent() {
                 </button>
                 <button
                   onClick={handleHint}
-                  className="flex items-center gap-1.5 px-4 py-2.5 border border-[var(--color-border)] text-[var(--color-text-secondary)] text-sm hover:border-[var(--color-border-hover)] transition-colors"
+                  className="flex items-center gap-1.5 px-4 py-2.5 border border-[var(--color-border)] text-[var(--color-text-secondary)] text-sm hover:border-[var(--color-border-hover)] active:scale-[0.97] transition-all"
                 >
                   <Lightbulb size={14} />
                   提示
@@ -396,7 +392,7 @@ function PracticeContent() {
             ) : (
               <button
                 onClick={handleRestart}
-                className="px-6 py-2.5 border border-[var(--color-border)] text-[var(--color-text-secondary)] text-sm hover:border-[var(--color-border-hover)] transition-colors"
+                className="px-6 py-2.5 border border-[var(--color-border)] text-[var(--color-text-secondary)] text-sm hover:border-[var(--color-border-hover)] active:scale-[0.97] transition-all"
               >
                 <RotateCcw size={14} className="inline mr-1.5" />
                 重新开始
@@ -480,7 +476,7 @@ function PracticeContent() {
           <div className="flex justify-center mb-4">
             <button
               onClick={handleComplete}
-              className="px-8 py-3 bg-[var(--color-accent)] text-[var(--color-text)] text-sm font-medium hover:bg-[var(--color-accent-hover)] transition-colors"
+              className="px-8 py-3 bg-[var(--color-accent)] text-[var(--color-text)] text-sm font-medium hover:bg-[var(--color-accent-hover)] active:scale-[0.97] transition-colors"
             >
               完成练习 ✓
             </button>
@@ -492,7 +488,7 @@ function PracticeContent() {
           <button
             onClick={handlePrev}
             disabled={currentIndex === 0}
-            className="flex items-center gap-1 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors disabled:opacity-30"
+            className="flex items-center gap-1 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] active:scale-[0.97] transition-all disabled:opacity-30"
           >
             <ChevronLeft size={16} />
             上一题

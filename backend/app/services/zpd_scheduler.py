@@ -120,8 +120,8 @@ class ZPDScheduler:
             if node and node.belief:
                 mu = node.belief.proficiency_mean
                 return mu * 0.6 + mu * 0.4  # simplified: θ = proficiency_mean
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to read CognitiveNode for %s: %s", skill_id, e)
 
         # CognitiveNode unavailable or has no data → return default ability
         return 0.3

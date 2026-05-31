@@ -5,6 +5,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Paperclip, Image, Loader2, X } from "lucide-react";
 import VoiceRecorder from "./VoiceRecorder";
+import QuotePreview from "./QuotePreview";
+import { useConversationStore } from "@/store/conversation-store";
 
 // --- 组件属性接口 ---
 interface ConversationChatInputProps {
@@ -109,6 +111,30 @@ export default function ConversationChatInput({
     onSend(trimmed, uploadedFiles.length > 0 ? uploadedFiles : undefined);
     setText("");
     setUploadedFiles([]);
+    // Clear pending quote after normal send
+    useConversationStore.getState().clearPendingQuote();
+  };
+
+  // --- 发送子支消息：创建子支并发送 ---
+  const handleSubBranchSend = async () => {
+    const trimmed = text.trim();
+    if (!trimmed || disabled) return;
+    const pq = useConversationStore.getState().pendingQuote;
+    if (!pq) return;
+    try {
+      await useConversationStore.getState().createSubBranch(
+        pq.sourceConversationId,
+        pq.sourceMessageId,
+        pq.charStart,
+        pq.charEnd,
+        pq.quotedText,
+        trimmed,
+      );
+      setText("");
+      setUploadedFiles([]);
+    } catch (e) {
+
+    }
   };
 
   // --- 键盘事件：Enter 直接发送，Shift+Enter 换行 ---
@@ -120,9 +146,20 @@ export default function ConversationChatInput({
   };
 
   // ===== 渲染界面 =====
+  const pendingQuote = useConversationStore((s) => s.pendingQuote);
+  const clearPendingQuote = useConversationStore((s) => s.clearPendingQuote);
+
   return (
     <div className="border-t border-[var(--color-border)] bg-[var(--color-bg)]">
       <div className="max-w-xl mx-auto px-4 py-3">
+        {/* QuotePreview: show when pendingQuote is set */}
+        {pendingQuote && (
+          <QuotePreview
+            quotedText={pendingQuote.quotedText}
+            onClear={clearPendingQuote}
+          />
+        )}
+
         {/* 已上传文件预览区域 */}
         {uploadedFiles.length > 0 && (
           <div className="flex items-center gap-1.5 mb-2 flex-wrap">
@@ -192,7 +229,7 @@ export default function ConversationChatInput({
         )}
 
         {/* 输入区域：文本框 + 发送按钮 */}
-        <div className="flex items-end gap-3">
+        <div className="flex items-center gap-3 bg-[var(--color-input)] border border-[var(--color-border)] rounded-full px-2 py-1.5 focus-within:border-[var(--color-accent)] transition-colors">
           <textarea
             ref={textareaRef}
             value={text}
@@ -201,15 +238,41 @@ export default function ConversationChatInput({
             disabled={disabled}
             placeholder="输入你的问题... (Shift+Enter 换行)"
             rows={1}
-            className="flex-1 resize-none bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] placeholder-[var(--color-text-muted)] px-4 py-3 text-sm focus:outline-none focus:border-[var(--color-border-hover)] disabled:opacity-50"
+            className="flex-1 resize-none bg-transparent text-[var(--color-text)] placeholder-[var(--color-text-muted)] px-4 py-2 text-sm focus:outline-none disabled:opacity-50 min-h-[40px] max-h-[160px] leading-relaxed"
           />
-          <button
-            onClick={handleSend}
-            disabled={(!text.trim() && uploadedFiles.length === 0)}
-            className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-[var(--color-accent)] text-white disabled:opacity-30 hover:bg-[var(--color-accent-hover)] transition-colors"
-          >
-            {disabled ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-          </button>
+          {pendingQuote ? (
+            /* Dual-button mode when pendingQuote is set */
+            <div className="flex flex-col gap-1 flex-shrink-0">
+              <button
+                onClick={handleSend}
+                disabled={(!text.trim() && uploadedFiles.length === 0)}
+                className="text-[10px] px-2 py-1 text-[var(--color-text-muted)] border border-[var(--color-border)]
+                           hover:bg-[var(--color-surface)] active:scale-[0.97] transition-all disabled:opacity-30 rounded-full"
+                title="普通发送（带引用块）"
+              >
+                普通发送
+              </button>
+              <button
+                onClick={handleSubBranchSend}
+                disabled={(!text.trim() && uploadedFiles.length === 0)}
+                className="flex-shrink-0 px-2 py-1.5 flex items-center justify-center gap-1
+                           bg-[var(--color-accent)] text-white text-xs font-medium disabled:opacity-30
+                           hover:bg-[var(--color-accent-hover)] active:scale-[0.97] transition-colors rounded-full"
+                title="创建子支对话"
+              >
+                📎子支
+              </button>
+            </div>
+          ) : (
+            /* Single send button (existing behavior) */
+            <button
+              onClick={handleSend}
+              disabled={(!text.trim() && uploadedFiles.length === 0)}
+              className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-[var(--color-accent)] text-white rounded-full disabled:opacity-30 hover:bg-[var(--color-accent-hover)] active:scale-[0.97] transition-colors"
+            >
+              {disabled ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+            </button>
+          )}
         </div>
       </div>
     </div>

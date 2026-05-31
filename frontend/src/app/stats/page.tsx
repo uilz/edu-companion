@@ -95,7 +95,7 @@ export default function StatsPage() {
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
-        <h1 className="text-2xl font-bold text-[var(--color-text)] mb-6 tracking-tight">
+        <h1 className="text-2xl font-semibold text-[var(--color-text)] mb-6 tracking-tight">
           学习统计
         </h1>
 
@@ -125,7 +125,7 @@ export default function StatsPage() {
           ].map((card, i) => (
             <Card key={i}>
               <div className="text-[var(--color-accent)] mb-2">{card.icon}</div>
-              <div className="text-2xl font-bold text-[var(--color-text)]">{card.value}</div>
+              <div className="text-2xl font-semibold text-[var(--color-text)]">{card.value}</div>
               <div className="text-xs text-[var(--color-text-muted)]">{card.label} · {card.sub}</div>
             </Card>
           ))}

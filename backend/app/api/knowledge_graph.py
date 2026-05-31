@@ -1,6 +1,4 @@
-"""
-知识图谱 API — 仅保留 AI 生成端点
-"""
+"""知识图谱 API — 生成 + CRUD 端点"""
 from __future__ import annotations
 
 import json as _json
@@ -9,12 +7,34 @@ import time
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 from shared.constants import DEFAULT_USER_ID
 from app.schemas.conversation import KnowledgeGraph, KGNode, KGEdge
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/knowledge/graph", tags=["知识图谱"])
+
+
+# ── 请求体模型 ──
+
+class NodeCreate(BaseModel):
+    label: str
+    description: str = ""
+    priority: int = 5
+    tags: list[str] = Field(default_factory=list)
+
+class NodePatch(BaseModel):
+    label: str | None = None
+    description: str | None = None
+    priority: int | None = None
+    tags: list[str] | None = None
+
+class EdgeCreate(BaseModel):
+    from_id: str
+    to_id: str
+    relation: str = "prerequisite"
+    label: str = ""
 
 
 def _get_user_data():
@@ -89,7 +109,10 @@ async def generate_graph_logic(
     if partition.domain_tags:
         context_parts.append(f"标签: {', '.join(partition.domain_tags)}")
 
-    branches = [b for b in data.conversations.values() if b.partition_id == partition_id and b.name]
+    # Conversation → Topic → Domain → Partition
+    partition_domain_ids = {d.id for d in data.domains.values() if d.partition_id == partition_id}
+    partition_topic_ids = {t.id for t in data.topics.values() if t.domain_id in partition_domain_ids}
+    branches = [b for b in data.conversations.values() if b.topic_id in partition_topic_ids and b.name]
     if branches:
         context_parts.append(f"细化方向: {', '.join(b.name for b in branches[:5])}")
     if branch_name:
@@ -176,7 +199,7 @@ async def generate_graph_logic(
         try:
             _sync_graph_to_cognitive(partition_id)
         except Exception:
-            pass
+            logger.debug("认知图谱同步跳过", exc_info=True)
 
         return {"ok": True, "total_nodes": len(nodes_dict), "total_edges": len(edges), "version": graph.version}
 
@@ -200,3 +223,163 @@ async def generate_graph(partition_id: str, depth: int = 3):
     if not result.get("ok"):
         raise HTTPException(status_code=500, detail=result.get("error", "生成失败"))
     return result
+
+
+# ═══════════════════════════════════════════════════════════
+# GET /{partition_id} — 获取图谱
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/{partition_id}")
+async def get_graph(partition_id: str):
+    """获取分区的知识图谱（节点 + 边）"""
+    data = _get_user_data()
+    graph = data.knowledge_graphs.get(partition_id)
+    if not graph:
+        return {"nodes": {}, "edges": [], "version": 0}
+    return {
+        "nodes": {nid: n.model_dump() for nid, n in graph.nodes.items()},
+        "edges": [e.model_dump() for e in graph.edges],
+        "version": graph.version,
+        "name": graph.name,
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+# POST /{partition_id}/node — 添加节点
+# ═══════════════════════════════════════════════════════════
+
+@router.post("/{partition_id}/node")
+async def add_node(partition_id: str, body: NodeCreate):
+    """添加一个知识节点"""
+    data = _get_user_data()
+    if partition_id not in data.partitions:
+        raise HTTPException(status_code=404, detail="分区不存在")
+
+    graph = data.knowledge_graphs.get(partition_id)
+    if not graph:
+        graph = KnowledgeGraph(partition_id=partition_id, name=f"{data.partitions[partition_id].name} 知识图谱")
+        data.knowledge_graphs[partition_id] = graph
+
+    node = KGNode(
+        label=body.label,
+        description=body.description,
+        priority=body.priority,
+        tags=body.tags,
+        created_by="user",
+    )
+    graph.nodes[node.id] = node
+    graph.updated_at = time.time()
+    graph.version += 1
+    _save_user_data(data)
+
+    try:
+        _sync_graph_to_cognitive(partition_id)
+    except Exception:
+        logger.debug("认知图谱同步跳过", exc_info=True)
+
+    return {"ok": True, "node_id": node.id, "node": node.model_dump()}
+
+
+# ═══════════════════════════════════════════════════════════
+# PATCH /{partition_id}/node/{node_id} — 编辑节点
+# ═══════════════════════════════════════════════════════════
+
+@router.patch("/{partition_id}/node/{node_id}")
+async def update_node(partition_id: str, node_id: str, body: NodePatch):
+    """编辑知识节点的标签、描述等"""
+    data = _get_user_data()
+    graph = data.knowledge_graphs.get(partition_id)
+    if not graph or node_id not in graph.nodes:
+        raise HTTPException(status_code=404, detail="节点不存在")
+
+    node = graph.nodes[node_id]
+    if body.label is not None:
+        node.label = body.label
+    if body.description is not None:
+        node.description = body.description
+    if body.priority is not None:
+        node.priority = body.priority
+    if body.tags is not None:
+        node.tags = body.tags
+
+    graph.updated_at = time.time()
+    graph.version += 1
+    _save_user_data(data)
+    return {"ok": True, "node": node.model_dump()}
+
+
+# ═══════════════════════════════════════════════════════════
+# DELETE /{partition_id}/node/{node_id} — 删除节点
+# ═══════════════════════════════════════════════════════════
+
+@router.delete("/{partition_id}/node/{node_id}")
+async def delete_node(partition_id: str, node_id: str):
+    """删除知识节点及其关联边"""
+    data = _get_user_data()
+    graph = data.knowledge_graphs.get(partition_id)
+    if not graph or node_id not in graph.nodes:
+        raise HTTPException(status_code=404, detail="节点不存在")
+
+    del graph.nodes[node_id]
+    graph.edges = [e for e in graph.edges if e.from_id != node_id and e.to_id != node_id]
+    graph.updated_at = time.time()
+    graph.version += 1
+    _save_user_data(data)
+    return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════
+# POST /{partition_id}/edge — 添加边
+# ═══════════════════════════════════════════════════════════
+
+@router.post("/{partition_id}/edge")
+async def add_edge(partition_id: str, body: EdgeCreate):
+    """添加一条依赖关系边"""
+    data = _get_user_data()
+    graph = data.knowledge_graphs.get(partition_id)
+    if not graph:
+        raise HTTPException(status_code=404, detail="图谱不存在")
+    if body.from_id not in graph.nodes:
+        raise HTTPException(status_code=400, detail="起始节点不存在")
+    if body.to_id not in graph.nodes:
+        raise HTTPException(status_code=400, detail="目标节点不存在")
+
+    # 检查重复
+    for e in graph.edges:
+        if e.from_id == body.from_id and e.to_id == body.to_id:
+            raise HTTPException(status_code=409, detail="边已存在")
+
+    edge = KGEdge(
+        from_id=body.from_id,
+        to_id=body.to_id,
+        relation=body.relation,
+        label=body.label,
+    )
+    graph.edges.append(edge)
+    graph.updated_at = time.time()
+    graph.version += 1
+    _save_user_data(data)
+    return {"ok": True, "edge_id": edge.id}
+
+
+# ═══════════════════════════════════════════════════════════
+# DELETE /{partition_id}/edge/{edge_id} — 删除边
+# ═══════════════════════════════════════════════════════════
+
+@router.delete("/{partition_id}/edge/{edge_id}")
+async def delete_edge(partition_id: str, edge_id: str):
+    """删除一条依赖关系边"""
+    data = _get_user_data()
+    graph = data.knowledge_graphs.get(partition_id)
+    if not graph:
+        raise HTTPException(status_code=404, detail="图谱不存在")
+
+    orig_len = len(graph.edges)
+    graph.edges = [e for e in graph.edges if e.id != edge_id]
+    if len(graph.edges) == orig_len:
+        raise HTTPException(status_code=404, detail="边不存在")
+
+    graph.updated_at = time.time()
+    graph.version += 1
+    _save_user_data(data)
+    return {"ok": True}

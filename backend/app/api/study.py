@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException
 
 from shared.constants import DEFAULT_USER_ID, recommend_practice_items
 from app.services.adaptive_planner import adaptive_planner
+from datetime import datetime
 from app.core.knowledge_trace import get_all_cognitive_states, get_cognitive_state
 
 logger = logging.getLogger(__name__)
@@ -58,11 +59,12 @@ async def get_study_plan(user_id: str):
 async def complete_task(user_id: str, task_id: str) -> dict[str, Any]:
     """标记任务完成"""
     # 标记完成（计划数据从plan_snapshots表读）
-    db = __import__("app.db.database", fromlist=["get_db"]).get_db()
+    from app.db.database import get_db
+    db = get_db()
     db.upsert("plan_task_completions", {
         "user_id": user_id,
         "task_id": task_id,
-        "completed_at": __import__("datetime").datetime.now().isoformat(),
+        "completed_at": datetime.now().isoformat(),
     }, "(user_id, task_id)")
     return {"message": "任务标记完成", "task_id": task_id}
 
@@ -74,7 +76,8 @@ async def get_plan_progress(user_id: str) -> dict[str, Any]:
     plan_data = plan.get("plan", {})
     items = plan_data.get("items", [])
 
-    db = __import__("app.db.database", fromlist=["get_db"]).get_db()
+    from app.db.database import get_db
+    db = get_db()
     rows = db.fetchall(
         "SELECT task_id FROM plan_task_completions WHERE user_id = %s",
         (user_id,),
@@ -92,69 +95,6 @@ async def get_plan_progress(user_id: str) -> dict[str, Any]:
         "estimated_total_minutes": plan_data.get("estimated_total_minutes", 0),
         "habit_level": plan_data.get("habit_level", "beginner"),
         "week_number": plan_data.get("week_number", 0),
-    }
-
-
-# ── 计划历史/快照 ──
-
-@router.get("/plan/{user_id}/history")
-async def get_plan_history(user_id: str, limit: int = 5):
-    """获取计划变更历史"""
-    db = __import__("app.db.database", fromlist=["get_db"]).get_db()
-    try:
-        rows = db.fetchall(
-            "SELECT * FROM plan_snapshots WHERE user_id = %s "
-            "ORDER BY created_at DESC LIMIT %s",
-            (user_id, limit),
-        )
-        return {
-            "history": [
-                {
-                    "id": r.get("id"),
-                    "reason": r.get("reason", ""),
-                    "changes": r.get("changes_json"),
-                    "plan": r.get("plan_json"),
-                    "created_at": str(r.get("created_at", "")),
-                }
-                for r in rows
-            ],
-            "total": len(rows),
-        }
-    except Exception:
-        return {"history": [], "total": 0, "message": "plan_snapshots 表不存在"}
-
-
-# ── 手动触发重调 ──
-
-@router.post("/plan/refresh")
-async def refresh_plan(
-    user_id: str = DEFAULT_USER_ID,
-    force: bool = False,
-):
-    """
-    手动刷新学习计划
-
-    force=true: 强制重生成（即使没有知识变化）
-    force=false: 仅在检测到变化时重生成
-    """
-    if not force:
-        # 检查是否有变化
-        old = adaptive_planner._get_last_plan(user_id)
-        if old:
-            latest = await adaptive_planner.generate(user_id, reason="refresh_check")
-            new_skills = [it["skill_id"] for it in latest.get("plan", {}).get("items", [])]
-            if set(old) == set(new_skills):
-                return {
-                    "refreshed": False,
-                    "message": "计划无需更新，知识状态无显著变化",
-                    "plan": latest.get("plan"),
-                }
-
-    result = await adaptive_planner.generate(user_id, reason="manual_refresh")
-    return {
-        "refreshed": True,
-        "message": "计划已刷新",
-        **result,
     }
 
 
@@ -181,25 +121,11 @@ async def get_learning_suggestions(
     from domain.knowledge.checker import PrerequisiteChecker
     from domain.knowledge.prerequisites import SKILL_TO_SUBJECT
 
+    from app.services.knowledge_state import get_knowledge_state as _canonical_get_ks
+
     class _Adapter:
         async def get_knowledge_state(self, uid, sid):
-            # Phase 6: 优先 CognitiveNode
-            try:
-                from app.cognitive.storage import get_node
-                node = get_node(sid, uid)
-                if node and node.belief:
-                    return {
-                        "skill_id": sid,
-                        "p_known": node.belief.proficiency_mean,
-                        "attempt_count": node.practice_summary.total_attempts if node.practice_summary else 0,
-                        "correct_count": node.practice_summary.correct_attempts if node.practice_summary else 0,
-                        "source": "cognitive_node",
-                    }
-            except Exception:
-                pass
-            # 备降: CognitiveNode reader
-            state = get_cognitive_state(uid, sid)
-            return state.model_dump()
+            return await _canonical_get_ks(uid, sid)
 
     checker = PrerequisiteChecker(_Adapter())
 

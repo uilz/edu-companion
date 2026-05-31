@@ -89,7 +89,7 @@ export default function VideoEmbed({ url, title, thumbnail }: VideoEmbedProps) {
             </div>
           )}
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-14 h-14 flex items-center justify-center bg-[var(--color-accent)]/90 group-hover:bg-[var(--color-accent)] transition-colors">
+            <div className="w-14 h-14 flex items-center justify-center bg-[var(--color-accent)]/90 group-hover:bg-[var(--color-accent)] active:scale-[0.97] transition-colors">
               <Play size={24} className="text-white ml-0.5" fill="white" />
             </div>
           </div>

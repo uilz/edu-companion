@@ -46,8 +46,8 @@ class RelationMemory:
             try:
                 with open(path) as f:
                     return json.load(f)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to load policy memory from %s: %s", path, e)
         return {"ignore_counts": {}, "accept_counts": {}, "updated_at": time.time()}
 
     def _save(self, user_id: str, data: dict) -> None:

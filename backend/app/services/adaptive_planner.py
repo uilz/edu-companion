@@ -48,12 +48,11 @@ class AdaptivePlanGenerator:
         # 现在从 CognitiveNode 读取 proficiency_mean
         planner_self = self  # capture for closure
 
+        from app.services.knowledge_state import get_knowledge_state as _canonical_get_ks
+
         class _CognitiveAdapter:
             async def get_knowledge_state(self, uid, sid):
-                node = find_node_by_label(sid, uid)
-                if node is None:
-                    return {"p_known": 0.0}
-                return {"p_known": node.belief.proficiency_mean}
+                return await _canonical_get_ks(uid, sid)
 
         self._checker = PrerequisiteChecker(_CognitiveAdapter())
 
@@ -253,7 +252,7 @@ class AdaptivePlanGenerator:
                     reason TEXT DEFAULT '', created_at TIMESTAMP DEFAULT NOW()
                 )""", ())
         except Exception:
-            pass
+            logger.debug("plan_snapshots 表创建跳过（可能已存在）", exc_info=True)
 
     def _get_last_plan(self, user_id):
         import json

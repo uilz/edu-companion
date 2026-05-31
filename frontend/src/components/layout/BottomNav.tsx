@@ -44,7 +44,7 @@ export default function BottomNav() {
   return (
     // 导航容器：固定在底部、全宽、响应安全区域、桌面端隐藏
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 bg-[var(--color-bg)] border-t border-[var(--color-border)] md:hidden"
+      className="fixed bottom-0 left-0 right-0 z-50 bg-[var(--color-bg)] border-t border-[var(--color-border)] lg:hidden"
       style={{
         height: 'var(--bottom-nav-height)',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
@@ -77,7 +77,7 @@ export default function BottomNav() {
               {/* 激活指示条：在顶部显示一条彩色细线 */}
               {active && (
                 <div
-                  className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[2px] bg-[var(--color-accent)]"
+                  className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[2px] bg-[var(--color-accent)] active:scale-[0.97] transition-transform"
                   style={{ borderRadius: '0 0 1px 1px' }}
                 />
               )}

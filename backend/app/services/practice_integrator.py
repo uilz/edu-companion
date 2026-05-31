@@ -103,8 +103,8 @@ async def integrate_practice_to_branch(
         if enriched:
             branch.practice_summary += " | 资料引用: " + "; ".join(enriched[:2])
             storage.save(user_id, data)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Failed to enrich practice summary with references: %s", e)
 
     return system_node
 

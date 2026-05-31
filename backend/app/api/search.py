@@ -184,8 +184,8 @@ async def _search_knowledge(q: str, limit: int) -> list[SearchResultItem]:
                     score=mu,
                     meta={"skill_id": r["id"], "mastery": mu},
                 ))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("CognitiveNode knowledge search failed: %s", e)
 
 
 

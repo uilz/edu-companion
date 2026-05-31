@@ -5,7 +5,6 @@
 这是整个系统唯一的"胶水代码"。
 """
 from __future__ import annotations
-from shared.constants import DEFAULT_USER_ID
 
 import logging
 from typing import TYPE_CHECKING
@@ -59,11 +58,18 @@ class AppContainer:
         # ── 注册事件处理器 ──
         self._wire_events()
 
+        # v6 Phase 4: 事件持久化桥接
+        try:
+            from app.services.event_service import event_service
+            event_service.subscribe_persist(self.event_bus)
+        except Exception:
+            logger.debug("EventService 持久化桥接失败", exc_info=True)
+
         logger.info("✅ AppContainer 初始化完成 (%d 个服务, %d 个事件订阅)",
                     9, len(self.event_bus._handlers))
 
     # ═══════════════════════════════════════════════════════
-    # 服务工厂方法（后续替换为真实实现）
+    # 服务工厂方法
     # ═══════════════════════════════════════════════════════
 
     def _create_practice(self) -> PracticeService:
@@ -74,19 +80,9 @@ class AppContainer:
             PostgresErrorBookRepo,
         )
 
-        # No-op stub for KnowledgeStatesRepo: data migrated to cognitive_nodes.
-        class _StubKSRepo:
-            async def load(self, user_id: str, skill_id: str):
-                return None
-            async def save(self, user_id: str, skill_id: str, state: dict) -> None:
-                pass
-            async def load_all(self, user_id: str):
-                return {}
-
         return PracticeServiceImpl(
             question_repo=PostgresQuestionRepo(),
             session_repo=PostgresSessionRepo(),
-            ks_repo=_StubKSRepo(),
             error_repo=PostgresErrorBookRepo(),
             event_bus=self.event_bus,
         )
@@ -162,29 +158,6 @@ class AppContainer:
         bus.subscribe("AnswerSubmitted", self.habit_service.on_answer_submitted)
         bus.subscribe("AnswerSubmitted", self.knowledge_service.on_answer_submitted)
 
-        # Phase 9 精简: 不重复写 cognitive_nodes (已由 submit_practice 写入)
-        # 只发布 CognitiveNodeUpdated 事件通知下游 (ZPD, Dashboard 等)
-        async def _on_answer_to_cognitive(event: DomainEvent) -> None:
-            from shared.events import AnswerSubmitted, CognitiveNodeUpdated
-            if not isinstance(event, AnswerSubmitted):
-                return
-            proficiency_before = event.p_known_before
-            # 获取 cognitive_nodes 中更新后的掌握度
-            from app.cognitive.storage import find_node_by_label
-            node = find_node_by_label(event.skill_id, event.user_id or DEFAULT_USER_ID)
-            proficiency_after = node.belief.proficiency_mean if node else event.p_known_after
-            await bus.publish(CognitiveNodeUpdated(
-                user_id=event.user_id or DEFAULT_USER_ID,
-                node_id=node.id if node else event.skill_id,
-                label=event.skill_id,
-                level="atom",
-                proficiency_before=proficiency_before,
-                proficiency_after=proficiency_after,
-                update_type="practice",
-            ))
-        bus.subscribe("AnswerSubmitted", _on_answer_to_cognitive)
-        logger.info("🧠 Phase 9: AnswerSubmitted → CognitiveNode sync + event published")
-
         # 错题 → 知识图谱 + 媒体推荐
         bus.subscribe("ErrorRecorded", self.knowledge_service.on_error_recorded)
         bus.subscribe("ErrorRecorded", self.media_service.on_error_recorded)
@@ -193,11 +166,7 @@ class AppContainer:
         bus.subscribe("SessionCompleted", self.conversation_service.on_session_completed)
         bus.subscribe("SessionCompleted", self.planning_service.on_session_completed)
 
-        # 知识升级 → 计划重调 + 对话通知
-        bus.subscribe("KnowledgeStateUpdated", self.planning_service.on_knowledge_updated)
-        bus.subscribe("KnowledgeStateUpdated", self.conversation_service.on_knowledge_updated)
-
-        # Phase 9: CognitiveNode 更新 → ZPD 调度重计算
+        # CognitiveNode 更新 → 计划重调 + ZPD 调度
         async def _on_cognitive_updated(event: DomainEvent) -> None:
             from shared.events import CognitiveNodeUpdated
             if not isinstance(event, CognitiveNodeUpdated):
@@ -207,18 +176,21 @@ class AppContainer:
                 event.label, event.level,
                 event.proficiency_before, event.proficiency_after,
             )
-            # 触发 ZPD 调度器重算
+            # 计划重调
+            try:
+                await self.planning_service.on_knowledge_updated(event)
+            except Exception:
+                logger.debug("Planning service failed to handle CognitiveNodeUpdated")
+            # ZPD 调度器重算
             try:
                 from app.services.zpd_scheduler import zpd_scheduler
                 zpd_scheduler.on_knowledge_change(event.user_id, event.node_id)
             except Exception:
-                logger.debug("ZPD scheduler not available, skipping cognitive update reaction")
+                logger.debug("ZPD scheduler not available, skipping")
         bus.subscribe("CognitiveNodeUpdated", _on_cognitive_updated)
-        logger.info("🧠 Phase 9: CognitiveNodeUpdated → ZPD reschedule handler registered")
 
-        # Phase 5: AI 回复 → 多媒体生成
+        # AI 回复 → 多媒体生成
         bus.subscribe("AssistantReplied", self.multimedia_service.on_assistant_replied)
-
 
         logger.info("🔗 注册 %d 个事件订阅", sum(len(v) for v in bus._handlers.values()))
 

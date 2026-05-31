@@ -714,6 +714,17 @@ def get_suggested_count(parent_id: str, user_id: str = DEFAULT_USER_ID) -> int:
     return row["cnt"] if row else 0
 
 
+def get_child_count(parent_id: str, user_id: str = DEFAULT_USER_ID) -> int:
+    """获取某节点下的可见子节点总数"""
+    db = get_db()
+    row = db.fetchone(
+        "SELECT COUNT(*) as cnt FROM cognitive_nodes "
+        "WHERE parent = %s AND user_id = %s AND is_visible = true AND deleted_at IS NULL",
+        (parent_id, user_id),
+    )
+    return row["cnt"] if row else 0
+
+
 def set_node_visible(node_id: str, user_id: str = DEFAULT_USER_ID) -> None:
     """设置节点可见，并级联设置所有祖先节点可见"""
     node = get_node(node_id, user_id)

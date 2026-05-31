@@ -85,8 +85,8 @@ def _save_achievements(user_id: str, achievements: dict[str, Any]) -> None:
         data = storage.load(user_id)
         data.achievements = achievements
         storage.save(user_id, data)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error("Failed to save achievements for %s: %s", user_id, e)
 
 
 @router.get("/{user_id}")
@@ -101,24 +101,3 @@ async def get_achievements(user_id: str = USER_ID):
         "unlocked_count": sum(1 for a in result if a["unlocked"]),
     }
 
-
-@router.post("/{user_id}/check")
-async def check_achievements(user_id: str = USER_ID):
-    """触发成就检测（答题后调用），返回新解锁的成就"""
-    stats = _collect_stats(user_id)
-    existing = _load_existing(user_id)
-    new_ones = achievement_engine.check_all(user_id, stats, existing)
-
-    # 保存新解锁的成就
-    if new_ones:
-        for a in new_ones:
-            existing[a["id"]] = {
-                "level": a["level"],
-                "unlocked_at": a["unlocked_at"],
-            }
-        _save_achievements(user_id, existing)
-
-    return {
-        "newly_unlocked": new_ones,
-        "total_unlocked": len(existing),
-    }

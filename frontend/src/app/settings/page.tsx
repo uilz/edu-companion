@@ -38,7 +38,7 @@ export default function SettingsPage() {
       try {
         const parsed = JSON.parse(saved);
         setSettings((s) => ({ ...s, ...parsed }));
-      } catch { console.error("解析本地设置失败"); }
+      } catch { ; }
     }
   }, []);
 
@@ -50,7 +50,7 @@ export default function SettingsPage() {
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
       <div className="max-w-3xl mx-auto px-6 py-16">
-        <h1 className="text-4xl font-bold tracking-tight text-[var(--color-text)] mb-12">
+        <h1 className="text-4xl font-semibold tracking-tight text-[var(--color-text)] mb-12">
           设置
         </h1>
 

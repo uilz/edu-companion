@@ -179,8 +179,8 @@ class ProposalActionHandler:
                     f"  • {k}: 正确率 {v['accuracy']:.0%} ({v['attempts']} 题)"
                     for k, v in list(subjects.items())[:5]
                 ]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to fetch cognitive node data for briefing: %s", e)
 
         context_parts = [f"📊 {date} 学习简报"]
         if details:

@@ -21,14 +21,15 @@ from app.api.study import router as study_router
 from app.api.practice import router as practice_router
 from app.api.progress import router as progress_router
 from app.api.conversation import router as conversation_router
-from app.api.material import router as material_router
 from app.api.knowledge import router as knowledge_router
 from app.api.partition_progress import router as partition_progress_router
 from app.api.multimodal import router as multimodal_router
 from app.api.achievements import router as achievements_router
 from app.api.search import router as search_router
 from app.api.secretary import router as secretary_router
-from app.api.phase8 import router as phase8_router
+from app.api.learning import router as learning_router
+from app.api.knowledge_graph import router as knowledge_graph_router
+from app.api.summaries import router as summaries_router
 from app.config import settings
 from app.core.learner_model import learner_engine
 
@@ -99,6 +100,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning("秘书事件处理器订阅失败: %s", e)
 
+    # v6 Phase 4: 启动事件消费者（轮询 cognitive_events）
+    try:
+        from app.services.event_service import event_service
+        event_service.start_consumer()
+    except Exception as e:
+        logger.warning("事件消费者启动失败: %s", e)
+
+    # Phase 8: 初始化对话摘要表
+    try:
+        from app.services.summary_service import ensure_summaries_table
+        ensure_summaries_table()
+        logger.info("📋 conversation_summaries 表已就绪 (Phase 8)")
+    except Exception as e:
+        logger.warning("对话摘要表初始化失败: %s", e)
+
     cleaned = learner_engine.clean_expired_sessions()
     if cleaned > 0:
         logger.info("🧹 清理了 %d 个过期会话", cleaned)
@@ -113,7 +129,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await active_checker.stop()
         logger.info("🔍 秘书主动检查器已停止")
     except Exception:
-        pass
+        logger.debug("秘书主动检查器停止失败", exc_info=True)
+
+    # v6 Phase 4: 停止事件消费者
+    try:
+        from app.services.event_service import event_service
+        await event_service.stop_consumer()
+        logger.info("🔄 事件消费者已停止")
+    except Exception:
+        logger.debug("事件消费者停止失败", exc_info=True)
 
     logger.info("👋 应用关闭")
 
@@ -137,6 +161,57 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── 全链路追踪中间件 (M4) ──
+@app.middleware("http")
+async def tracing_middleware(request, call_next):
+    from infra.tracing import TraceContext, trace_id
+    tid = request.headers.get("x-trace-id", TraceContext.new())
+    trace_id.set(tid)
+    response = await call_next(request)
+    response.headers["x-trace-id"] = tid
+    return response
+
+# ── 全局异常处理器 (M2) ──
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import HTTPException
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    # AppError 体系
+    from app.core.errors import AppError
+    if isinstance(exc, AppError):
+        logger.warning(
+            "AppError [%s] on %s %s: %s",
+            exc.code, request.method, request.url.path, exc.detail,
+            extra={"trace_id": request.headers.get("x-trace-id", "")},
+        )
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=exc.to_dict(),
+        )
+
+    # HTTPException (FastAPI 内置)
+    if isinstance(exc, HTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"error": "http_error", "detail": exc.detail},
+        )
+
+    # 未知异常
+    logger.error(
+        "Unhandled exception on %s %s: %s",
+        request.method, request.url.path, exc, exc_info=True,
+        extra={"trace_id": request.headers.get("x-trace-id", "")},
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "internal_error",
+            "detail": str(exc) if settings.debug else "Internal server error",
+        },
+    )
+
 # ── 注册路由 ──
 # WebSocket 和 HTTP 聊天
 # chat_router 已删除 — WS 端点在 conversation.py
@@ -148,7 +223,6 @@ app.include_router(practice_router)
 app.include_router(progress_router)
 # 对话系统（树结构）
 app.include_router(conversation_router, prefix="/api/conversations", tags=["conversations"])
-app.include_router(material_router)
 # 知识图谱 + 前置卡控
 app.include_router(knowledge_router)
 # 学习画像 (v3.0 PartitionProgress)
@@ -160,23 +234,42 @@ app.include_router(achievements_router)
 # P1 全站搜索
 app.include_router(search_router)
 app.include_router(secretary_router)
-# Phase 8 认知图驱动分类
-app.include_router(phase8_router)
+# 认知图驱动分类
+app.include_router(learning_router)
+app.include_router(knowledge_graph_router)
+app.include_router(summaries_router)
 
 
 # ── 健康检查 ──
 @app.get("/health", tags=["系统"])
-async def health_check() -> dict[str, str]:
+async def health_check() -> dict:
     """
-    健康检查端点
+    健康检查端点 — 检查 DB + 事件队列
+    """
+    checks: dict = {"status": "healthy", "service": settings.app_name, "version": settings.app_version}
+    try:
+        from app.db.database import get_db
+        db = get_db()
+        db.fetchone("SELECT 1")
+        checks["db"] = True
+    except Exception as e:
+        checks["db"] = False
+        checks["status"] = "degraded"
+        logger.warning("Health check DB failed: %s", e)
 
-    返回服务状态，用于负载均衡器和监控系统
-    """
-    return {
-        "status": "healthy",
-        "service": settings.app_name,
-        "version": settings.app_version,
-    }
+    # Phase 7: 事件队列监控
+    try:
+        event_count = db.fetchone(
+            "SELECT COUNT(*) as cnt FROM cognitive_events WHERE processed = false"
+        )
+        pending = event_count["cnt"] if event_count else 0
+        checks["event_queue_pending"] = pending
+        if pending > 50:
+            checks["status"] = "degraded"
+    except Exception:
+        checks["event_queue_pending"] = -1
+
+    return checks
 
 
 @app.get("/", tags=["系统"])

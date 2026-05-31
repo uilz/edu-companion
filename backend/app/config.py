@@ -12,8 +12,13 @@ import yaml
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+import os
+
 # 项目根目录
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# 全局数据根目录（可通过环境变量 COMPANION_HOME 覆盖）
+COMPANION_HOME = Path(os.environ.get("COMPANION_HOME", "~/.companion")).expanduser()
 
 
 def _load_yaml_config() -> dict[str, Any]:
@@ -84,15 +89,6 @@ class Settings(BaseSettings):
     litellm_model_list: list[dict[str, Any]] = Field(
         default_factory=list,
         description="LiteLLM模型列表配置",
-    )
-
-    # ── BKT 知识追踪参数 ──
-    bkt_default_p_know: float = Field(default=0.1, description="初始掌握概率")
-    bkt_default_p_learn: float = Field(default=0.3, description="初始学习概率")
-    bkt_default_p_guess: float = Field(default=0.25, description="猜测概率")
-    bkt_default_p_slip: float = Field(default=0.1, description="失误概率")
-    bkt_mastery_threshold: float = Field(
-        default=0.8, description="掌握判定阈值"
     )
 
     # ── 会话管理 ──

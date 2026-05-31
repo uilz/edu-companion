@@ -58,12 +58,6 @@ class PracticeService(Protocol):
         """
         ...
 
-    async def get_knowledge_state(
-        self, user_id: str, skill_id: str
-    ) -> dict | None:
-        """获取知识状态"""
-        ...
-
     async def get_errors(
         self, user_id: str, resolved: bool | None = None, limit: int = 20
     ) -> dict:  # → {entries, total, unresolved_count}
@@ -279,15 +273,6 @@ class MediaService(Protocol):
 # ═══════════════════════════════════════════════════════════
 # Repository 协议
 # ═══════════════════════════════════════════════════════════
-
-@runtime_checkable
-class KnowledgeStateRepository(Protocol):
-    """知识状态持久化契约"""
-
-    async def load(self, user_id: str, skill_id: str) -> dict | None: ...
-    async def save(self, user_id: str, skill_id: str, state: dict) -> None: ...
-    async def load_all(self, user_id: str) -> dict[str, dict]: ...
-
 
 @runtime_checkable
 class QuestionRepository(Protocol):

@@ -11,7 +11,6 @@ if TYPE_CHECKING:
     from infra.resilience import CircuitBreaker
     from shared.events import (
         SessionCompleted,
-        KnowledgeStateUpdated,
         StudyPlanGenerated,
         DailyGoalAchieved,
     )
@@ -88,14 +87,15 @@ class ConversationServiceImpl:
         except Exception as exc:
             logger.warning("Conversation: failed to update branch practice_summary: %s", exc)
 
-    async def on_knowledge_updated(self, event: KnowledgeStateUpdated) -> None:
-        """知识升级 → LLM 上下文感知"""
+    async def on_knowledge_updated(self, event) -> None:
+        """知识升级（CognitiveNodeUpdated） → LLM 上下文感知"""
+        label = getattr(event, "label", "?") or getattr(event, "skill_id", "?")
         logger.debug(
-            "Conversation: knowledge updated user=%s skill=%s %s→%s",
+            "Conversation: cognitive updated user=%s label=%s %.3f→%.3f",
             getattr(event, "user_id", "?"),
-            getattr(event, "skill_id", "?"),
-            getattr(event, "old_mastery", "?"),
-            getattr(event, "new_mastery", "?"),
+            label,
+            getattr(event, "proficiency_before", 0),
+            getattr(event, "proficiency_after", 0),
         )
 
     async def on_plan_generated(self, event: StudyPlanGenerated) -> None:

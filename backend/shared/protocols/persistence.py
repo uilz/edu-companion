@@ -9,34 +9,6 @@ from __future__ import annotations
 from typing import Protocol
 
 
-class KnowledgeStateRepository(Protocol):
-    """知识状态持久化仓储接口"""
-
-    async def load(
-        self,
-        user_id: str,
-        skill_id: str,
-    ) -> dict | None:
-        """加载单个知识点状态"""
-        ...
-
-    async def save(
-        self,
-        user_id: str,
-        skill_id: str,
-        state: dict,
-    ) -> None:
-        """保存知识点状态"""
-        ...
-
-    async def load_all(
-        self,
-        user_id: str,
-    ) -> dict[str, dict]:
-        """加载用户所有知识点状态"""
-        ...
-
-
 class AttemptRepository(Protocol):
     """答题记录仓储接口"""
 

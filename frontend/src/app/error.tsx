@@ -24,17 +24,17 @@ export default function Error({
   return (
     <div className="flex flex-col items-center justify-center min-h-[400px] p-8 text-center">
       <div className="text-5xl mb-4">💥</div>
-      <h2 className="text-xl font-semibold text-red-500 mb-2">
+      <h2 className="text-xl font-semibold text-[var(--color-error)] mb-2">
         页面出错了
       </h2>
       {/* 显示具体错误信息；如果 error.message 为空则展示默认文案 */}
-      <p className="text-gray-500 dark:text-gray-400 mb-4 max-w-md text-sm">
+      <p className="text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)] mb-4 max-w-md text-sm">
         {error.message || '发生了意外错误'}
       </p>
       {/* 点击按钮触发 reset，尝试重新加载页面 */}
       <button
         onClick={reset}
-        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        className="px-4 py-2 bg-[var(--color-accent)] text-white rounded-md hover:bg-[var(--color-accent-hover)] active:scale-[0.97] transition-colors"
       >
         再试一次
       </button>

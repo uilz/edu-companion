@@ -150,7 +150,7 @@ export async function ensureConversationAtLevel(
 
     return null;
   } catch (e) {
-    console.warn(`${level} 级别创建对话失败:`, e);
+
     return null;
   }
 }

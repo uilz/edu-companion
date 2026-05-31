@@ -3,7 +3,7 @@
 //  These live OUTSIDE the store to avoid re-render spam.
 // ══════════════════════════════════════════════════════════════
 
-import type { TreeNode } from "@/types";
+import type { TreeNode, ResponseBlock } from "@/types";
 import { ConversationWS } from "@/components/conversation/ws";
 
 // ══════════════════════════════════════════════════════════════
@@ -103,8 +103,8 @@ export function saveStreamCacheBeforeUnload() {
 let _prevUrlPartitionId: string | null = null;
 let _prevUrlConversationId: string | null = null;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function subscribeToNavigation(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   store: { subscribe: (fn: (state: any) => void) => () => void },
 ): () => void {
   return store.subscribe((state: {
@@ -151,8 +151,8 @@ export function subscribeToNavigation(
 //  Sync module-level active refs (called from useConversation facade)
 // ══════════════════════════════════════════════════════════════
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function syncActiveRefs(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   store: { subscribe: (fn: (state: any) => void) => () => void },
 ): () => void {
   return store.subscribe((state: {
@@ -169,10 +169,12 @@ export function syncActiveRefs(
 // ══════════════════════════════════════════════════════════════
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function initWebSocket(storeApi: {
+export interface StoreApi {
   setState: (partial: any) => void;
   getState: () => any;
-}): () => void {
+}
+
+export function initWebSocket(storeApi: StoreApi): () => void {
   const wsClient = new ConversationWS();
   storeApi.setState({ _wsRef: wsClient });
 
@@ -209,7 +211,7 @@ export function initWebSocket(storeApi: {
     },
 
     // AI reply complete callback
-    onDone: (_partId: string, assistantMessage: TreeNode, responseBlocks?: any[]) => {
+    onDone: (_partId: string, assistantMessage: TreeNode, responseBlocks?: ResponseBlock[]) => {
       storeApi.setState({ isLoading: false, statusMessage: "" });
 
       const streamPid = _streamingPartId;
@@ -225,12 +227,13 @@ export function initWebSocket(storeApi: {
       }
       clearStreamCache(streamCid || undefined);
 
-      // If user switched conversation, discard stale streaming message
+      // If user switched conversation, refresh current conversation to catch response blocks
       if (streamPid !== _activePartId || streamCid !== _activeConvId) {
-        if (streamMsgId) {
-          storeApi.setState((state: { messages: TreeNode[] }) => ({
-            messages: state.messages.filter((m) => m.id !== streamMsgId),
-          }));
+        // 不要过滤旧会话的消息（当前 messages 列表已经是新会话的了）
+        // 刷新当前会话以获取已存储的 response blocks
+        const currentConvId = _activeConvId;
+        if (currentConvId) {
+          setTimeout(() => storeApi.getState().loadMessages(currentConvId), 500);
         }
         return;
       }
@@ -268,7 +271,7 @@ export function initWebSocket(storeApi: {
 
       // Add response blocks (video / practice / image, etc.)
       if (responseBlocks?.length) {
-        storeApi.setState((state: { responseBlocks: any[] }) => {
+        storeApi.setState((state: { responseBlocks: ResponseBlock[] }) => {
           const existing = new Set(state.responseBlocks.map((b) => b.id));
           const newBlocks = responseBlocks.filter((b) => !existing.has(b.id));
           return newBlocks.length
@@ -277,13 +280,8 @@ export function initWebSocket(storeApi: {
         });
       }
 
-      // Delayed refresh: sidebar + message list
+      // Delayed refresh: sidebar only (message data already in onDone callback)
       setTimeout(() => storeApi.getState().loadPartitions(), 300);
-      setTimeout(() => {
-        const cid = _activeConvId;
-        if (cid && cid === streamCid)
-          storeApi.getState().loadMessages(cid);
-      }, 500);
     },
 
     // Error callback: show error message
@@ -321,8 +319,8 @@ export function initWebSocket(storeApi: {
     },
 
     // Block update callback (e.g. tool call completed)
-    onBlockUpdate: (block: any) => {
-      storeApi.setState((state: { responseBlocks: any[] }) => {
+    onBlockUpdate: (block: ResponseBlock) => {
+      storeApi.setState((state: { responseBlocks: ResponseBlock[] }) => {
         const idx = state.responseBlocks.findIndex((b) => b.id === block.id);
         if (idx >= 0) {
           const updated = [...state.responseBlocks];

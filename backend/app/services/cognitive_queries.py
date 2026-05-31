@@ -121,9 +121,18 @@ def get_cognitive_profile(user_id: str = DEFAULT_USER_ID) -> str:
         return ""
 
 
-# ═══════════════════════════════════════════
-# 状态查询（API 返回给前端）
-# ═══════════════════════════════════════════
+def get_event_queue_length(user_id: str = DEFAULT_USER_ID) -> int:
+    """获取未处理事件队列长度"""
+    try:
+        from app.db.database import get_db
+        db = get_db()
+        row = db.fetchone(
+            "SELECT COUNT(*) as cnt FROM cognitive_events WHERE user_id = %s AND processed = false",
+            (user_id,),
+        )
+        return row["cnt"] if row else 0
+    except Exception:
+        return -1
 
 
 def get_all_skills_summary(user_id: str = DEFAULT_USER_ID) -> dict:

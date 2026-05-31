@@ -9,15 +9,15 @@ def get_user_id(user_id: str | None = None) -> str:
     return user_id or DEFAULT_USER_ID
 
 
-# ── 掌握度判定（独立于 BKT 引擎）──
+# ── 掌握度判定 ──
 
-_MASTERY_THRESHOLD = 0.8  # 与 settings.bkt_mastery_threshold 默认值一致
+_MASTERY_THRESHOLD = 0.8
 
 
 def get_mastery_label(p_known: float, attempt_count: int = 0) -> str:
     """将掌握概率映射为中文掌握等级字符串。
 
-    从 BKTEngine.get_mastery_level 提取的纯函数，无引擎依赖。
+    纯函数：根据 proficiency 和 attempt_count 判定掌握等级。
     """
     if attempt_count == 0:
         return "未接触"
@@ -35,9 +35,9 @@ def recommend_practice_items(
     states: dict,
     top_n: int = 5,
 ) -> list[dict]:
-    """推荐需要练习的知识点（独立于 BKT 引擎）。
+    """推荐需要练习的知识点。
 
-    从 BKTEngine.recommend_practice 提取的纯函数。
+    纯函数：按掌握度和优先级排序。
     ``states`` 的值需提供 ``.p_known`` 和 ``.attempt_count`` 属性。
     """
     priority_map = {

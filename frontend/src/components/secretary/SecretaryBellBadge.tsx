@@ -26,8 +26,8 @@ export default function SecretaryBellBadge() {
         if (Array.isArray(data) && active) {
           setCount(data.length);
         }
-      } catch {
-        // silently fail — badge just won't show
+      } catch (e) {
+
       }
     };
 
@@ -43,7 +43,7 @@ export default function SecretaryBellBadge() {
   if (count === 0) return null;
 
   return (
-    <span className="absolute -top-1 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold leading-none px-1 shadow-sm">
+    <span className="absolute -top-1 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-[var(--color-error)] text-white text-[10px] font-semibold leading-none px-1">
       {count > 99 ? "99+" : count}
     </span>
   );

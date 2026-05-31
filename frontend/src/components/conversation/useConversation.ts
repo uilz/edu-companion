@@ -1,34 +1,78 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useMediaQuery } from "./useMediaQuery";
-import {
-  useConversationStore,
-  subscribeToNavigation,
-  initWebSocket,
-  syncActiveRefs,
-  getStreamCacheData,
-  clearStreamCacheData,
-  saveStreamCacheBeforeUnload,
-  isSending,
-  setIsSending,
-} from "@/store/conversation-store";
+import { useShallow } from "zustand/shallow";
+import { useConversationStore, type ConversationState, subscribeToNavigation, initWebSocket, syncActiveRefs, getStreamCacheData, clearStreamCacheData, saveStreamCacheBeforeUnload, isSending, setIsSending } from "@/store/conversation-store";
 
 // Re-export the return type so ConversationPanel can import from here
 export type { UseConversationReturn } from "@/store/conversation-store";
 
+// ── Individual selectors (each creates its own subscription) ──
+const selPartitions = (s: ConversationState) => s.partitions;
+const selSelectedPartitionId = (s: ConversationState) => s.selectedPartitionId;
+const selActiveConversationId = (s: ConversationState) => s.activeConversationId;
+const selMessages = (s: ConversationState) => s.messages;
+const selResponseBlocks = (s: ConversationState) => s.responseBlocks;
+const selIsLoading = (s: ConversationState) => s.isLoading;
+const selStatusMessage = (s: ConversationState) => s.statusMessage;
+const selReplyingToId = (s: ConversationState) => s.replyingToId;
+const selSwitchBanner = (s: ConversationState) => s.switchBanner;
+const selShowPartitionSidebar = (s: ConversationState) => s.showPartitionSidebar;
+const selSidebarCollapsed = (s: ConversationState) => s.sidebarCollapsed;
+const selShowNewPartition = (s: ConversationState) => s.showNewPartition;
+const selLoadingPartitions = (s: ConversationState) => s.loadingPartitions;
+const selLoadingMessages = (s: ConversationState) => s.loadingMessages;
+const selConvError = (s: ConversationState) => s.convError;
+const selWsConnected = (s: ConversationState) => s.wsConnected;
+
+// Actions (stable references — no re-render)
+const selActions = (s: ConversationState) => ({
+  selectConversation: s.selectConversation,
+  handleNewConversation: s.handleNewConversation,
+  sendMessage: s.sendMessage,
+  deleteMessage: s.deleteMessage,
+  editMessage: s.editMessage,
+  versionSwitch: s.versionSwitch,
+  createPartition: s.createPartition,
+  renamePartition: s.renamePartition,
+  switchConfirm: s.switchConfirm,
+  switchDismiss: s.switchDismiss,
+  setShowPartitionSidebar: s.setShowPartitionSidebar,
+  setShowNewPartition: s.setShowNewPartition,
+  setSidebarCollapsed: s.setSidebarCollapsed,
+  loadPartitions: s.loadPartitions,
+  loadMessages: s.loadMessages,
+});
+
 /**
  * useConversation — thin facade over the Zustand store.
- * Handles one-time side effects (URL restore, WS init, body scroll lock)
- * and returns the store state mapped to the UseConversationReturn interface.
+ * Uses individual selectors to avoid full-store subscription.
+ * Only the specific fields that change will trigger re-renders.
  */
 export function useConversation() {
-  const isDesktop = useMediaQuery("(min-width: 768px)");
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
   const router = useRouter();
 
-  // ── Subscribe to store (single subscription for all state) ──
-  const store = useConversationStore();
+  // ── Individual state subscriptions (each triggers re-render only when its value changes) ──
+  const partitions = useConversationStore(selPartitions);
+  const selectedPartitionId = useConversationStore(selSelectedPartitionId);
+  const activeConversationId = useConversationStore(selActiveConversationId);
+  const messages = useConversationStore(selMessages);
+  const responseBlocks = useConversationStore(selResponseBlocks);
+  const isLoading = useConversationStore(selIsLoading);
+  const statusMessage = useConversationStore(selStatusMessage);
+  const replyingToId = useConversationStore(selReplyingToId);
+  const switchBanner = useConversationStore(selSwitchBanner);
+  const showPartitionSidebar = useConversationStore(selShowPartitionSidebar);
+  const sidebarCollapsed = useConversationStore(selSidebarCollapsed);
+  const showNewPartition = useConversationStore(selShowNewPartition);
+  const loadingPartitions = useConversationStore(selLoadingPartitions);
+  const loadingMessages = useConversationStore(selLoadingMessages);
+  const convError = useConversationStore(selConvError);
+  const wsConnected = useConversationStore(selWsConnected);
+  const actions = useConversationStore(useShallow(selActions));
 
   // ── One-time: URL restore + stream cache recovery + body scroll lock ──
   useEffect(() => {
@@ -53,9 +97,7 @@ export function useConversation() {
             });
           }
         }
-      } catch {
-        /* ignore */
-      }
+      } catch { /* ignore parse errors */ }
     }
     useConversationStore.setState({ urlInitialized: true });
 
@@ -109,9 +151,7 @@ export function useConversation() {
                 });
               }
             }
-          } catch {
-            /* ignore */
-          }
+          } catch (e) { console.warn("流恢复轮询失败:", e); }
           if (pollCount > 60) {
             clearInterval(pollInterval);
             useConversationStore.setState({
@@ -121,9 +161,7 @@ export function useConversation() {
           }
         }, 2000);
       }
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
 
     // Body scroll lock
     document.body.style.overflow = "hidden";
@@ -146,7 +184,6 @@ export function useConversation() {
         );
       }
     } catch {
-      console.error("URL panel redirect failed");
     }
   }, [router]);
 
@@ -183,61 +220,66 @@ export function useConversation() {
       setIsSending(false);
       return;
     }
-    if (store.activeConversationId) {
-      store.loadMessages(store.activeConversationId);
+    if (activeConversationId) {
+      actions.loadMessages(activeConversationId);
     } else {
       useConversationStore.setState({ messages: [], responseBlocks: [] });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store.activeConversationId]);
+  }, [activeConversationId]);
 
   // ── Initial load ──
   useEffect(() => {
-    store.loadPartitions();
+    actions.loadPartitions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Computed: activePartition ──
+  const activePartition = useMemo(
+    () => partitions.find((p) => p.id === selectedPartitionId),
+    [partitions, selectedPartitionId],
+  );
 
   // ── Return mapped state (UseConversationReturn interface) ──
   return {
     // State
-    partitions: store.partitions,
-    selectedPartitionId: store.selectedPartitionId,
-    activeConversationId: store.activeConversationId,
-    messages: store.messages,
-    responseBlocks: store.responseBlocks,
-    isLoading: store.isLoading,
-    statusMessage: store.statusMessage,
-    switchBanner: store.switchBanner,
-    showPartitionSidebar: store.showPartitionSidebar,
-    sidebarCollapsed: store.sidebarCollapsed,
-    showNewPartition: store.showNewPartition,
-    loadingPartitions: store.loadingPartitions,
-    loadingMessages: store.loadingMessages,
-    convError: store.convError,
-    wsConnected: store.wsConnected,
+    partitions,
+    selectedPartitionId,
+    activeConversationId,
+    messages,
+    responseBlocks,
+    isLoading,
+    statusMessage,
+    replyingToId,
+    switchBanner,
+    showPartitionSidebar,
+    sidebarCollapsed,
+    showNewPartition,
+    loadingPartitions,
+    loadingMessages,
+    convError,
+    wsConnected,
 
     // Computed
     isDesktop,
-    activePartition: store.partitions.find(
-      (p) => p.id === store.selectedPartitionId,
-    ),
+    activePartition,
 
-    // Mapped handlers (store action name → UseConversationReturn name)
-    handleSelectConversation: store.selectConversation,
-    handleNewConversation: store.handleNewConversation,
-    handleSend: store.sendMessage,
-    handleDeleteMessage: store.deleteMessage,
-    handleEditMessage: store.editMessage,
-    handleVersionSwitch: store.versionSwitch,
-    handleCreatePartition: store.createPartition,
-    handleRenamePartition: store.renamePartition,
-    handleSwitchConfirm: store.switchConfirm,
-    handleSwitchDismiss: store.switchDismiss,
+    // Mapped handlers
+    handleSelectConversation: actions.selectConversation,
+    handleNewConversation: actions.handleNewConversation,
+    handleSend: actions.sendMessage,
+    handleDeleteMessage: actions.deleteMessage,
+    handleEditMessage: actions.editMessage,
+    handleVersionSwitch: actions.versionSwitch,
+    handleCreatePartition: actions.createPartition,
+    handleRenamePartition: actions.renamePartition,
+    handleSwitchConfirm: actions.switchConfirm,
+    handleSwitchDismiss: actions.switchDismiss,
 
     // Direct pass-through
-    setShowPartitionSidebar: store.setShowPartitionSidebar,
-    setShowNewPartition: store.setShowNewPartition,
-    setSidebarCollapsed: store.setSidebarCollapsed,
-    loadPartitions: store.loadPartitions,
+    setShowPartitionSidebar: actions.setShowPartitionSidebar,
+    setShowNewPartition: actions.setShowNewPartition,
+    setSidebarCollapsed: actions.setSidebarCollapsed,
+    loadPartitions: actions.loadPartitions,
   };
 }

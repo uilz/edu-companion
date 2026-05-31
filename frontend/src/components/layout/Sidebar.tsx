@@ -37,16 +37,16 @@ export default function Sidebar() {
 
   return (
     <aside
-      className="hidden md:flex flex-col fixed left-0 top-0 bottom-0 z-40 bg-[var(--color-bg)] border-r border-[var(--color-border)]"
+      className="hidden lg:flex flex-col fixed left-0 top-0 bottom-0 z-40 bg-[var(--color-bg)] border-r border-[var(--color-border)]"
       style={{ width: 'var(--sidebar-width)' }}
     >
       {/* ── 品牌 Logo 与标题 ── */}
       <div className="px-5 py-5 border-b border-[var(--color-border)]">
         <Link href="/" className="flex items-center gap-3 group">
-          <div className="w-8 h-8 bg-[var(--color-accent)] flex items-center justify-center rounded transition-transform group-hover:scale-105">
-            <span className="text-white font-bold text-sm">学</span>
+          <div className="w-8 h-8 bg-[var(--color-accent)] flex items-center justify-center rounded active:scale-[0.97] transition-transform group-hover:scale-105">
+            <span className="text-white font-semibold text-sm">学</span>
           </div>
-          <span className="font-bold text-[var(--color-text)] tracking-tight text-lg">
+          <span className="font-semibold text-[var(--color-text)] tracking-tight text-lg">
             智学伴
           </span>
         </Link>
@@ -77,7 +77,7 @@ export default function Sidebar() {
                 {item.label === '秘书' && <SecretaryBellBadge />}
                 {/* 激活指示器小圆点 */}
                 {active && (
-                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[var(--color-accent)]" />
+                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[var(--color-accent)] active:scale-[0.97] transition-transform" />
                 )}
               </Link>
             );
@@ -103,7 +103,7 @@ export default function Sidebar() {
         {/* 深色/浅色主题切换按钮 */}
         <button
           onClick={toggleTheme}
-          className="w-full flex items-center gap-2.5 px-5 py-3 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
+          className="w-full flex items-center gap-2.5 px-5 py-3 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] active:scale-[0.97] transition-all"
         >
           {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
           <span>{theme === 'dark' ? '浅色模式' : '深色模式'}</span>

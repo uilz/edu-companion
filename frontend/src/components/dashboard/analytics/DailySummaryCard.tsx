@@ -28,9 +28,9 @@ export function DailySummaryCard() {
     : "→";
 
   return (
-    <div className="mb-8 p-5 border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/5">
+    <div className="mb-8 p-5 border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/5 active:scale-[0.97] transition-transform">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-bold text-[var(--color-text)]">
+        <h3 className="text-sm font-semibold text-[var(--color-text)]">
           📊 昨日回顾 · {summary.yesterday.date}
         </h3>
         {/* 连续学习天数 */}
@@ -43,7 +43,7 @@ export function DailySummaryCard() {
       {/* 三列摘要统计 */}
       <div className="grid grid-cols-3 gap-3 mb-3">
         <div>
-          <div className="text-lg font-bold text-[var(--color-text)]">
+          <div className="text-lg font-semibold text-[var(--color-text)]">
             {summary.yesterday.total}<span className="text-xs text-[var(--color-text-muted)]">题</span>
           </div>
           <div className="text-[10px] text-[var(--color-text-muted)]">
@@ -51,13 +51,13 @@ export function DailySummaryCard() {
           </div>
         </div>
         <div>
-          <div className="text-lg font-bold text-[var(--color-text)]">
+          <div className="text-lg font-semibold text-[var(--color-text)]">
             {(summary.yesterday.accuracy * 100).toFixed(0)}<span className="text-xs text-[var(--color-text-muted)]">%</span>
           </div>
           <div className="text-[10px] text-[var(--color-text-muted)]">正确率</div>
         </div>
         <div>
-          <div className="text-lg font-bold text-[var(--color-text)]">
+          <div className="text-lg font-semibold text-[var(--color-text)]">
             {summary.yesterday.correct}/{summary.yesterday.total}
           </div>
           <div className="text-[10px] text-[var(--color-text-muted)]">正确/总题</div>

@@ -9,7 +9,7 @@ export function ConfirmDialog({ children, onConfirm, onCancel }: {
         <div className="text-sm text-[var(--color-text)] mb-4 whitespace-pre-line">{children}</div>
         <div className="flex justify-end gap-2">
           <button onClick={onCancel} className="px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)]">取消</button>
-          <button onClick={onConfirm} className="px-3 py-1.5 text-xs bg-red-500 text-white hover:bg-red-600">删除</button>
+          <button onClick={onConfirm} className="px-3 py-1.5 text-xs bg-[var(--color-error)] text-white hover:bg-[var(--color-error)]/90">删除</button>
         </div>
       </div>
     </div>

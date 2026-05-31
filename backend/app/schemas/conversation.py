@@ -49,7 +49,16 @@ class DocumentBlock(BaseModel):
     text_content: str | None = None
     preview_text: str | None = None
 
-ContentBlock = TextBlock | ImageBlock | AudioBlock | VideoBlock | DocumentBlock
+class QuoteBlock(BaseModel):
+    """引用内容块 — 类似文件附件，展示引用的原文"""
+    type: Literal["quote"] = "quote"
+    source_message_id: str           # 被引用消息 ID
+    source_conversation_id: str      # 被引用消息所在会话 ID
+    char_start: int = 0              # 选中文本起始偏移
+    char_end: int = 0                # 选中文本结束偏移
+    quoted_text: str                 # 引用的原文
+
+ContentBlock = TextBlock | ImageBlock | AudioBlock | VideoBlock | DocumentBlock | QuoteBlock
 
 
 # ── File Record（不变） ──
@@ -84,6 +93,19 @@ class CrossPartitionMark(BaseModel):
     linked_partitions: list[str] = Field(default_factory=list)
 
 
+# ── SubBranchRef（子支引用锚点） ──
+
+class SubBranchRef(BaseModel):
+    """子支引用锚点 — 记录子支是从父会话的哪条消息、哪个文本范围创建的"""
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    source_message_id: str           # 父会话中被引用的消息 ID
+    char_start: int = 0              # 选中文本在消息纯文本中的起始偏移
+    char_end: int = 0                # 选中文本的结束偏移
+    quoted_text: str = ""            # 引用的原文（冗余存储，方便展示）
+    child_conversation_id: str = ""  # 子支会话 ID
+    created_at: float = Field(default_factory=time.time)
+
+
 # ── TreeNode（核心消息节点，branch_id → conversation_id） ──
 
 class TreeNode(BaseModel):
@@ -107,6 +129,11 @@ class TreeNode(BaseModel):
     linked_from: list[str] = Field(default_factory=list)
     discussed_skill_ids: list[str] = Field(default_factory=list)
     metadata: dict = Field(default_factory=dict)
+    # ── 子支相关 ──
+    has_sub_branches: bool = False
+    sub_branch_ids: list[str] = Field(default_factory=list)
+    sub_branch_summaries: list[dict] = Field(default_factory=list)
+    # 每个 summary: {"conversation_id": str, "quoted_text": str, "summary": str}
 
 
 # ── Link Node（不变，branch_id → conversation_id） ──
@@ -146,6 +173,12 @@ class Conversation(BaseModel):
     # ── Phase 8 融合会话 ──
     primary_node_id: str | None = None  # 关联 cognitive_nodes.id (topic 级)
     is_temporary: bool = False          # 临时会话标记
+    # ── 子支相关 ──
+    parent_conversation_id: str = ""           # 父会话 ID（空=顶层会话）
+    parent_sub_branch_ref: SubBranchRef | None = None  # 作为子支时的引用锚点
+    sub_branch_ids: list[str] = Field(default_factory=list)  # 直接子支会话 ID 列表
+    depth: int = 0                             # 子支深度（0=顶层，1=一级子支...）
+    metadata: dict = Field(default_factory=dict)  # 通用元数据（如 socratic_question_count）
 
 
 # ── Topic（v4 新增） ──

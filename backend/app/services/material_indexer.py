@@ -5,12 +5,11 @@
 from __future__ import annotations
 
 import logging
-import os
 import uuid
 from datetime import datetime
 
 from app.services.material_parser import material_parser
-from app.services.classifier import compute_embedding
+from app.services.material_common import get_pool, compute_embedding
 
 logger = logging.getLogger(__name__)
 
@@ -21,19 +20,6 @@ class MaterialIndexer:
     
     流程: 解析 → 分块 → 知识点标注 → Embedding → 存储
     """
-
-    def __init__(self):
-        self._db_pool = None
-
-    async def _get_pool(self):
-        if self._db_pool is None:
-            import asyncpg
-            db_url = os.getenv("DATABASE_URL", "")
-            if db_url:
-                self._db_pool = await asyncpg.create_pool(db_url)
-            else:
-                raise RuntimeError("DATABASE_URL not set")
-        return self._db_pool
 
     async def index_file(
         self,
@@ -57,7 +43,7 @@ class MaterialIndexer:
         # Step 2: 创建 Material 记录
         material_id = str(uuid.uuid4())
         try:
-            pool = await self._get_pool()
+            pool = await get_pool()
             async with pool.acquire() as conn:
                 await conn.execute(
                     """INSERT INTO materials (material_id, user_id, file_name, file_type, 

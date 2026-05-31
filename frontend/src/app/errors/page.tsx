@@ -64,8 +64,8 @@ const errorLabel: Record<string, string> = {
 
 const groupColors: Record<string, string> = {
   "概念": "#f97316",
-  "计算": "#ef4444",
-  "审题": "#f59e0b",
+  "计算": "var(--color-error)",
+  "审题": "var(--color-warning)",
   "方法": "#8b5cf6",
   "未分类": "#737373",
 };
@@ -101,7 +101,6 @@ export default function ErrorBookPage() {
       const data = await res.json();
       setEntries(data.entries || []);
     } catch (err) {
-      console.error("Failed to fetch errors:", err);
     }
     setLoading(false);
   };
@@ -114,7 +113,7 @@ export default function ErrorBookPage() {
         const data = await res.json();
         setStats(data);
       }
-      } catch { console.error("获取错题统计失败"); }
+      } catch { ; }
   };
 
   // ── 初始化：数据加载 ──
@@ -149,7 +148,6 @@ export default function ErrorBookPage() {
       setExpandedId(entryId);
       fetchStats();
     } catch (err) {
-      console.error("Analysis failed:", err);
     }
     setAnalyzing(null);
   };
@@ -158,7 +156,7 @@ export default function ErrorBookPage() {
     <main className="min-h-screen bg-[var(--color-bg)]">
       <div className="max-w-3xl mx-auto px-6 py-16">
         <div className="flex items-center justify-between mb-12">
-          <h1 className="text-4xl font-bold tracking-tight text-[var(--color-text)]">
+          <h1 className="text-4xl font-semibold tracking-tight text-[var(--color-text)]">
             <BookOpen size={28} className="inline mr-3 text-[var(--color-accent)]" />
             错题本
           </h1>
@@ -204,7 +202,7 @@ export default function ErrorBookPage() {
                     }}
                   >
                     <span>{group}</span>
-                    <span className="font-bold">{count}</span>
+                    <span className="font-semibold">{count}</span>
                   </div>
                 ))}
             </div>
@@ -301,10 +299,10 @@ export default function ErrorBookPage() {
 
                   {/* ── AI Attribution (expanded) ── */}
                   {isExpanded && attr && (
-                    <div className="mb-3 p-4 border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/5">
+                    <div className="mb-3 p-4 border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/5 active:scale-[0.97] transition-transform">
                       <div className="flex items-center gap-2 mb-2">
                         <Sparkles size={14} className="text-[var(--color-accent)]" />
-                        <span className="text-xs font-bold text-[var(--color-accent)]">AI 错因分析</span>
+                        <span className="text-xs font-semibold text-[var(--color-accent)]">AI 错因分析</span>
                       </div>
                       <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed mb-2">
                         {attr.analysis}

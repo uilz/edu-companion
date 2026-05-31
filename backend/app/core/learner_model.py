@@ -15,7 +15,6 @@ from app.config import settings
 from shared.constants import get_mastery_label
 from app.schemas.learner import (
     ContentItem,
-    KnowledgeState,
     LearnerProfile,
     PracticeQuestion,
     ProgressSummary,
@@ -203,10 +202,9 @@ class LearnerModelEngine:
 
     def get_knowledge_state(
         self, user_id: str, skill_id: str
-    ) -> KnowledgeState:
-        """获取用户在某个知识点的状态"""
-        profile = self.get_or_create_profile(user_id)
-        return profile.get_knowledge_state(skill_id)
+    ) -> dict:
+        """获取用户在某个知识点的状态（已迁移至 CognitiveNode）"""
+        return {"skill_id": skill_id, "mastery": 0.0, "status": "use_cognitive_node"}
 
     # ──────────────────────────────────────────────
     # 学习计划
@@ -300,8 +298,8 @@ class LearnerModelEngine:
                     mastered.append(node.id)
                 elif p < 0.4:
                     struggling.append(node.id)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to read CognitiveNode mastery data: %s", e)
 
         # 生成建议
         recommendations: list[str] = []

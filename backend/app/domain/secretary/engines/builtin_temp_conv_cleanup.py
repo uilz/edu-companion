@@ -31,12 +31,35 @@ class TempConversationCleanupModule(SecretaryModule):
     async def run_check(
         self, user_id: str, ctx: SessionContext | None = None,
     ) -> list[Proposal]:
-        """清理所有用户 48h 过期的临时会话"""
+        """清理所有用户 48h 过期的临时会话（PG + JSON 双后端）"""
         from app.services.storage import storage
         from app.cognitive.link_storage import get_links_for_conversation, remove_link
 
         cutoff = time.time() - 48 * 3600  # 48 小时前
         cleaned = 0
+
+        # PG 后端：直接查询 conversations 表
+        try:
+            from app.db.database import get_db
+            db = get_db()
+            rows = db.fetchall(
+                "SELECT id FROM conversations "
+                "WHERE is_temporary = true AND updated_at < to_timestamp(%s)",
+                (cutoff,),
+            )
+            for row in rows:
+                cid = row["id"]
+                try:
+                    links = get_links_for_conversation(cid)
+                    for link in links:
+                        remove_link(link["id"])
+                except Exception:
+                    pass
+                db.execute("DELETE FROM messages WHERE conversation_id = %s", (cid,))
+                db.execute("DELETE FROM conversations WHERE id = %s", (cid,))
+                cleaned += 1
+        except Exception as e:
+            logger.debug("PG 清理失败: %s", e)
 
         # JSON 存储后端：遍历用户数据文件
         # PG 存储后端同样通过 storage.load 统一接口
@@ -54,8 +77,8 @@ class TempConversationCleanupModule(SecretaryModule):
                         links = get_links_for_conversation(cid)
                         for link in links:
                             remove_link(link["id"])
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("Failed to clean conversation links for %s: %s", cid, e)
                     # 标记删除
                     data.conversations.pop(cid, None)
                     cleaned += 1
@@ -74,7 +97,8 @@ class TempConversationCleanupModule(SecretaryModule):
         # 遍历 storage 数据目录
         import os
         from pathlib import Path
-        base = Path(os.path.expanduser("~/.companion/data"))
+        from app.config import COMPANION_HOME
+        base = COMPANION_HOME / "data"
         if base.exists():
             return [d.name for d in base.iterdir() if d.is_dir()]
         return [DEFAULT_USER_ID]

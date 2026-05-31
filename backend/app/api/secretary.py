@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -39,8 +40,8 @@ def _load_prefs(user_id: str) -> dict:
         try:
             with open(path) as f:
                 return json.load(f)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to load user prefs for %s: %s", user_id, e)
     return {
         "enabled_extensions": [],
         "quiet_hours_start": "22:00",
@@ -146,16 +147,6 @@ async def get_preferences(
     }
 
 
-@router.patch("/preferences")
-async def update_preferences(
-    prefs: SecretaryPrefs,
-    user_id: str = DEFAULT_USER_ID,
-) -> dict:
-    """更新用户秘书偏好"""
-    _save_prefs(user_id, prefs.model_dump())
-    return {"status": "ok", "updated": prefs.model_dump()}
-
-
 # ═══════════════════════════════════════════
 # 诊断与快照
 # ═══════════════════════════════════════════
@@ -175,16 +166,6 @@ async def get_snapshot(
         "streak_days": assess.get("streak_days", 0),
         "summary": assess.get("summary", ""),
     }
-
-
-@router.post("/suggest")
-async def get_suggestions(
-    user_id: str = DEFAULT_USER_ID,
-    service: SecretaryService = Depends(_get_service),
-) -> list[dict]:
-    """获取学习建议"""
-    proposals = service.suggest(user_id=user_id, max_proposals=5)
-    return [p.model_dump() for p in proposals]
 
 
 # ═══════════════════════════════════════════
@@ -231,7 +212,7 @@ async def accept_proposal(
         logger.warning("获取提案详情失败: %s", e)
         proposal = None
 
-    ok = store.update_status(proposal_id, "accepted", user_id, {"action": "user_accepted", "timestamp": __import__('time').time()})
+    ok = store.update_status(proposal_id, "accepted", user_id, {"action": "user_accepted", "timestamp": time.time()})
     if not ok:
         raise HTTPException(404, "提案不存在或已处理")
 
@@ -279,26 +260,10 @@ async def dismiss_proposal(
             from app.domain.secretary.engines.policy_engine import policy_engine
             result = policy_engine.record_interaction(user_id, proposal, "dismissed")
             return {"status": "dismissed", "policy": result}
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Policy record_interaction failed on dismiss: %s", e)
 
     return {"status": "dismissed"}
-
-
-@router.post("/proposals/{proposal_id}/snooze")
-async def snooze_proposal(
-    proposal_id: str,
-    user_id: str = DEFAULT_USER_ID,
-    minutes: int = 60,
-    store: ProposalStore = Depends(_get_store),
-) -> dict:
-    """暂缓提案"""
-    from datetime import datetime, timezone, timedelta
-    store._get_db().execute(
-        "UPDATE secretary_proposals SET status = 'snoozed', snoozed_until = %s WHERE id = %s AND user_id = %s",
-        (datetime.now(timezone.utc) + timedelta(minutes=minutes), proposal_id, user_id),
-    )
-    return {"status": "snoozed", "snoozed_until_minutes": minutes}
 
 
 # ═══════════════════════════════════════════
@@ -320,8 +285,8 @@ async def generate_llm_proposals(
     try:
         from app.services.llm_service import llm_service
         llm = llm_service
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("LLM service unavailable, proceeding without LLM: %s", e)
 
     gen = LLMProposalGenerator(llm_service=llm)
     proposals = await gen.generate_suggestion(report, max_proposals=3)
@@ -352,8 +317,8 @@ async def list_modules(
         if prefs.get("enabled_extensions"):
             module_registry.apply_prefs(prefs["enabled_extensions"])
             modules = module_registry.list_modules()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Failed to load/apply user prefs for %s: %s", user_id, e)
     return modules
 
 
@@ -477,8 +442,8 @@ async def delete_secretary_data(user_id: str = DEFAULT_USER_ID) -> dict:
         store = ProposalStore()
         store._get_db().execute("DELETE FROM secretary_proposals WHERE user_id = %s", (user_id,))
         deleted["proposals"] = True
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error("Failed to delete proposals for user %s: %s", user_id, e)
 
     # 删除偏好
     prefs_path = os.path.join(_PREFS_DIR, f"{user_id}.json")
@@ -495,47 +460,3 @@ async def delete_secretary_data(user_id: str = DEFAULT_USER_ID) -> dict:
     return {"status": "deleted", "details": deleted}
 
 
-# ═══════════════════════════════════════════
-# 冷启动对话交互
-# ═══════════════════════════════════════════
-
-
-@router.post("/onboarding/dialogue")
-async def onboarding_dialogue(
-    user_id: str = DEFAULT_USER_ID,
-    message: str = "",
-    step: int = 1,
-) -> dict:
-    """冷启动对话交互 — 学习风格初探"""
-    style_map = {
-        "看不懂": {"style": "visual", "suggestion": "推荐从图文结合的资料开始"},
-        "太难": {"style": "scaffolded", "suggestion": "可以尝试分解为小目标，一步步来"},
-        "简单": {"style": "fast_track", "suggestion": "已掌握的内容可以跳过，聚焦薄弱处"},
-        "不想学": {"style": "encourage", "suggestion": "今天先学一小块，10分钟就好"},
-    }
-
-    detected_style = None
-    for keyword, info in style_map.items():
-        if keyword in message:
-            detected_style = info
-            break
-
-    if step == 1:
-        response = ("欢迎开始学习之旅！🎉 这个系统会根据你的学习情况，"
-                    "自动推荐最适合你的学习内容。\n\n"
-                    "📖 想现在就开始学习，还是先了解怎么用？")
-        if detected_style:
-            response += f"\n\n💡 注意到你说「{message}」，{detected_style['suggestion']}。"
-    elif step == 2:
-        response = ("好的！你可以试着做几道练习题，系统会根据错题"
-                    "分析你的薄弱点。\n\n"
-                    "✏️ 去练习之前，有什么想先了解的吗？")
-    else:
-        response = "随时回来看看秘书的建议！我会根据你的进步调整推荐 🍎"
-
-    return {
-        "step": step,
-        "response": response,
-        "detected_style": detected_style,
-        "next_step": min(step + 1, 3),
-    }

@@ -2,10 +2,10 @@
 多模态 REST API
 
 端点:
-  POST /api/multimodal/tts         — 文字 → 语音（Edge-TTS）
+  POST /api/multimodal/tts         — 文字 → 语音（Edge-TTS，非流式）
+  GET  /api/multimodal/tts          — 文字 → 语音（Edge-TTS，流式，直接返回音频）
   POST /api/multimodal/transcribe  — 音频 → 文字（Whisper）
   GET  /api/multimodal/audio/{file} — 获取生成的 TTS 音频
-  GET  /api/multimodal/images/{file} — 获取生成的配图
 """
 
 from __future__ import annotations
@@ -14,17 +14,32 @@ import logging
 import tempfile
 import os
 from pathlib import Path
+from urllib.parse import unquote
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, UploadFile, File, HTTPException, Query
+from fastapi.responses import FileResponse, StreamingResponse
+
+from app.config import COMPANION_HOME
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/multimodal", tags=["多模态"])
 
 # 多媒体文件根目录
-AUDIO_DIR = Path(os.path.expanduser("~/.companion/audio"))
-IMAGE_DIR = Path(os.path.expanduser("~/.companion/images"))
+AUDIO_DIR = COMPANION_HOME / "audio"
+IMAGE_DIR = COMPANION_HOME / "images"
+
+
+def _clean_text(text: str) -> str:
+    """清理 Markdown 文本，去除格式符号"""
+    try:
+        from infra.tts_text_cleaner import strip_markdown_for_tts
+        return strip_markdown_for_tts(text, max_chars=400)
+    except ImportError:
+        return (
+            text.replace("\n\n", "。")
+            .replace("\n", "，")[:400]
+        )
 
 
 @router.get("/audio/{filename}")
@@ -36,57 +51,74 @@ async def get_audio(filename: str):
     return FileResponse(path, media_type="audio/mpeg")
 
 
-@router.get("/images/{filename}")
-async def get_image(filename: str):
-    """获取生成的配图文件"""
-    path = IMAGE_DIR / filename
-    if not path.exists():
-        raise HTTPException(404, f"配图文件不存在: {filename}")
-    media_type = "image/svg+xml" if filename.endswith(".svg") else "image/png"
-    return FileResponse(path, media_type=media_type)
+@router.get("/tts")
+async def text_to_speech_stream(
+    text: str = Query(..., description="要朗读的文本"),
+    voice: str = Query("zh-CN-XiaoxiaoNeural", description="语音名称"),
+):
+    """
+    Edge-TTS 流式语音合成（GET）
+
+    浏览器可直接用 <audio src="..."> 播放，支持流式播放。
+    """
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="文本不能为空")
+
+    clean_text = _clean_text(text)
+
+    try:
+        import edge_tts
+
+        communicate = edge_tts.Communicate(clean_text, voice)
+
+        async def generate():
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    yield chunk["data"]
+
+        logger.info(f"Edge-TTS streaming: {len(clean_text)} chars, voice={voice}")
+        return StreamingResponse(generate(), media_type="audio/mpeg")
+
+    except ImportError:
+        raise HTTPException(
+            status_code=500,
+            detail="edge-tts 未安装，请运行: pip install edge-tts",
+        )
+    except Exception as e:
+        logger.error(f"Edge-TTS streaming failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"语音合成失败: {str(e)}",
+        )
 
 
 @router.post("/tts")
 async def text_to_speech(request: dict):
     """
-    Edge-TTS 文字转语音
+    Edge-TTS POST 流式语音合成
 
-    请求体: {"text": "要朗读的文本", "voice": "zh-CN-XiaoxiaoNeural"}
-    返回: MP3 音频文件
+    请求体: {"text": "原始 Markdown 文本（含公式）", "voice": "zh-CN-XiaoxiaoNeural"}
+    返回: audio/mpeg 流式音频（后端统一清洗 Markdown + 转换公式）
     """
     text = request.get("text", "").strip()
     if not text:
         raise HTTPException(status_code=400, detail="文本不能为空")
 
     voice = request.get("voice", "zh-CN-XiaoxiaoNeural")
-
-    # 清理文本（去除 Markdown 符号）
-    clean_text = (
-        text.replace("\n\n", "。")
-        .replace("\n", "，")
-        [:2000]  # 限制长度
-    )
+    clean_text = _clean_text(text)
 
     try:
         import edge_tts
-        import uuid
 
-        # 生成唯一文件名
-        filename = f"tts_{uuid.uuid4().hex[:12]}.mp3"
-        AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-        output_path = AUDIO_DIR / filename
-
-        # 使用 edge-tts 生成音频
         communicate = edge_tts.Communicate(clean_text, voice)
-        await communicate.save(str(output_path))
 
-        logger.info(f"Edge-TTS generated: {filename} ({len(clean_text)} chars, voice={voice})")
+        async def generate():
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    yield chunk["data"]
 
-        return {
-            "audio_url": f"/api/multimodal/audio/{filename}",
-            "voice": voice,
-            "text_length": len(clean_text),
-        }
+        logger.info(f"Edge-TTS streaming POST: {len(clean_text)} chars, voice={voice}")
+        return StreamingResponse(generate(), media_type="audio/mpeg")
 
     except ImportError:
         raise HTTPException(
@@ -160,5 +192,5 @@ async def transcribe_audio(audio_file: UploadFile = File(...)):
         # 清理临时文件
         try:
             os.unlink(tmp_path)
-        except OSError:
-            pass
+        except OSError as e:
+            logger.warning("Failed to clean up temp file %s: %s", tmp_path, e)

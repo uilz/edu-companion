@@ -2,7 +2,7 @@
 // 引入主题上下文 Provider，用于全局主题管理
 import { ThemeProvider } from '@/contexts/ThemeContext';
 // 引入错误边界组件，用于捕获子组件渲染时的异常
-import ErrorBoundary from '@/components/ui/ErrorBoundary';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 
 /**
  * ClientProviders — 客户端全局 Providers 封装组件

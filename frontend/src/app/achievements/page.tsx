@@ -25,7 +25,7 @@ interface Achievement {
 const TIER_COLORS: Record<string, { bg: string; border: string; text: string }> = {
   bronze: { bg: "#92400e20", border: "#92400e", text: "#d97706" },
   silver: { bg: "#64748b20", border: "#64748b", text: "#94a3b8" },
-  gold: { bg: "#b4530920", border: "#b45309", text: "#f59e0b" },
+  gold: { bg: "#b4530920", border: "#b45309", text: "var(--color-warning)" },
 };
 
 // ===== 成就页面组件 =====
@@ -63,7 +63,7 @@ export default function AchievementsPage() {
         <div className="flex items-center gap-3 mb-8">
           <Award size={28} className="text-[#f59e0b]" />
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-[var(--color-text)]">
+            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-[var(--color-text)]">
               成就墙
             </h1>
             <p className="text-xs text-[var(--color-text-muted)] mt-1">
@@ -90,7 +90,7 @@ export default function AchievementsPage() {
             <div key={tier} className="mb-8">
               {/* ===== 阶标题 ===== */}
               <h2
-                className="text-sm font-bold mb-4 px-1"
+                className="text-sm font-semibold mb-4 px-1"
                 style={{ color: colors.text }}
               >
                 {tierLabel}
@@ -114,11 +114,11 @@ export default function AchievementsPage() {
                       <div className="flex-1 min-w-0">
                         {/* ===== 成就名称与等级 ===== */}
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-sm font-bold text-[var(--color-text)]">
+                          <span className="text-sm font-semibold text-[var(--color-text)]">
                             {ach.name}
                           </span>
                           {ach.max_level > 1 && ach.unlocked && (
-                            <span className="text-[10px] px-1.5 py-0.5 bg-[var(--color-accent)]/10 text-[var(--color-accent)]">
+                            <span className="text-[10px] px-1.5 py-0.5 bg-[var(--color-accent)]/10 text-[var(--color-accent)] active:scale-[0.97] transition-transform">
                               Lv{ach.level}
                             </span>
                           )}

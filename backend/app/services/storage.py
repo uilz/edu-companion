@@ -14,14 +14,15 @@ import os
 from pathlib import Path
 from threading import Lock
 
+from app.config import COMPANION_HOME
 from app.schemas.conversation import UserData
 
 
 class JsonStorageEngine:
     """JSON 文件存储引擎，线程安全的用户数据持久化"""
 
-    def __init__(self, base_dir: str = "~/.companion/data") -> None:
-        self.base_dir = Path(os.path.expanduser(base_dir))
+    def __init__(self, base_dir: str | None = None) -> None:
+        self.base_dir = Path(base_dir) if base_dir else COMPANION_HOME / "data"
         self._locks: dict[str, Lock] = {}
         self._cache: dict[str, UserData] = {}
         self._versions: dict[str, int] = {}  # ETag version counters

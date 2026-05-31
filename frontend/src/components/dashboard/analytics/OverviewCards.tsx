@@ -47,7 +47,7 @@ export function OverviewCards({ overview }: { overview: Overview }) {
       {cards.map((c, i) => (
         <Card key={i} className="!p-4">
           <div className="text-[var(--color-accent)] mb-1.5">{c.icon}</div>
-          <div className="text-xl md:text-2xl font-bold text-[var(--color-text)]">
+          <div className="text-xl md:text-2xl font-semibold text-[var(--color-text)]">
             {c.fmt(c.val)}
           </div>
           <div className="text-[11px] text-[var(--color-text-muted)] mt-0.5">

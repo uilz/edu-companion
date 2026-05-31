@@ -25,10 +25,10 @@ interface SearchResponse {
 
 // 分类配置：标签、图标、颜色
 const CATEGORY_CONFIG = {
-  conversation: { label: "对话", icon: MessageSquare, color: "text-blue-400" },
-  material: { label: "资料", icon: FileText, color: "text-green-400" },
-  knowledge: { label: "知识点", icon: Brain, color: "text-purple-400" },
-  error: { label: "错题", icon: AlertTriangle, color: "text-red-400" },
+  conversation: { label: "对话", icon: MessageSquare, color: "text-[var(--color-info)]" },
+  material: { label: "资料", icon: FileText, color: "text-[var(--color-success)]" },
+  knowledge: { label: "知识点", icon: Brain, color: "text-[var(--color-accent)]" },
+  error: { label: "错题", icon: AlertTriangle, color: "text-[var(--color-error)]" },
 };
 
 // 统一搜索组件：搜索对话、资料、知识点、错题
@@ -60,7 +60,7 @@ export default function UnifiedSearch() {
         setResults(data);
       }
     } catch (e) {
-      console.error("搜索失败:", e);
+
     } finally {
       setLoading(false);
     }
@@ -182,7 +182,7 @@ export default function UnifiedSearch() {
 
       {/* 下拉结果面板 */}
       {showDropdown && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--color-bg)] border border-[var(--color-border)] shadow-xl max-h-[420px] overflow-y-auto z-50">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--color-bg)] border border-[var(--color-border)] max-h-[420px] overflow-y-auto z-50">
           {/* 无结果提示 */}
           {results && results.total === 0 ? (
             <div className="px-4 py-6 text-center">

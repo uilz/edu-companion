@@ -214,7 +214,7 @@ Bloom认知层次：{bloom_level.value}
             # 直接解析
             return json.loads(response)
         except json.JSONDecodeError:
-            pass
+            logger.debug("Direct JSON parse failed, trying code block extraction")
 
         # 尝试从markdown代码块中提取
         import re
@@ -223,7 +223,7 @@ Bloom认知层次：{bloom_level.value}
             try:
                 return json.loads(json_match.group(1))
             except json.JSONDecodeError:
-                pass
+                logger.debug("Code block JSON parse failed, trying array extraction")
 
         # 尝试找数组
         array_match = re.search(r'\[\s*\{[\s\S]*?\}\s*\]', response)
@@ -231,7 +231,7 @@ Bloom认知层次：{bloom_level.value}
             try:
                 return json.loads(array_match.group(0))
             except json.JSONDecodeError:
-                pass
+                logger.debug("Array regex JSON parse failed, giving up")
 
         logger.warning(f"无法解析LLM响应为JSON: {response[:200]}")
         return []

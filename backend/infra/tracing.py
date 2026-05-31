@@ -60,7 +60,7 @@ async def span(name: str) -> AsyncIterator[str]:
 
     Usage:
       async with span("submit_answer") as sid:
-          result = await bkt_engine.update(state)
+          result = await some_engine.process(state)
           # → [trace=abc] [span=submit_answer] [dur=28ms] OK
     """
     sid = str(uuid.uuid4())[:6]

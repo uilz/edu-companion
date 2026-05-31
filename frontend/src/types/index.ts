@@ -59,7 +59,7 @@ export interface Conversation {
 
 /** 内容块（ContentBlock）：消息中的单一内容单元，支持多种媒体类型 */
 export interface ContentBlock {
-  type: "text" | "image" | "audio" | "video" | "document";  // 内容块类型
+  type: "text" | "image" | "audio" | "video" | "document" | "quote";  // 内容块类型
   text?: string;                                              // 文本内容（仅 text 类型）
   file_id?: string;                                           // 文件 ID（图片/音频/视频/文档类型）
   duration_ms?: number;                                       // 媒体时长（毫秒，音频/视频类型）
@@ -69,6 +69,32 @@ export interface ContentBlock {
   page_count?: number;                                        // 文档页数
   text_content?: string;                                      // 提取的文本内容（文档类型）
   preview_text?: string;                                      // 预览文本（文档类型）
+  // QuoteBlock 字段
+  source_message_id?: string;                                 // 被引用消息 ID（quote 类型）
+  source_conversation_id?: string;                            // 被引用消息所在会话 ID（quote 类型）
+  char_start?: number;                                        // 选中文本起始偏移（quote 类型）
+  char_end?: number;                                          // 选中文本结束偏移（quote 类型）
+  quoted_text?: string;                                       // 引用的原文（quote 类型）
+}
+
+/** 子支引用锚点 */
+export interface SubBranchRef {
+  id: string;
+  source_message_id: string;
+  char_start: number;
+  char_end: number;
+  quoted_text: string;
+  child_conversation_id: string;
+  created_at: number;
+}
+
+/** 子支信息 */
+export interface SubBranchInfo {
+  conversation_id: string;
+  quoted_text: string;
+  message_count: number;
+  summary: string;
+  name: string;
 }
 
 /** 树节点（TreeNode）：知识树中的单个节点，对应一条消息及其变体 */
@@ -90,6 +116,16 @@ export interface TreeNode {
   links_to?: string[];                       // 指向的其他节点 ID 列表（可选）
   linked_from?: string[];                    // 被哪些节点引用（可选）
   discussed_skill_ids?: string[];            // 涉及的能力/技能 ID 列表（可选）
+  // 子支相关
+  has_sub_branches?: boolean;                // 是否有子支
+  sub_branch_ids?: string[];                 // 子支会话 ID 列表
+  sub_branch_summaries?: {                   // 子支摘要列表
+    conversation_id: string;
+    quoted_text: string;
+    summary: string;
+  }[];
+  // 认知分类关联
+  cognitive_node_ids?: string[];              // 关联的 cognitive node IDs
 }
 
 /** 响应块（ResponseBlock）：AI 返回消息中的独立功能块，支持多种展示类型 */

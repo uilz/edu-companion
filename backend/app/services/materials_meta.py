@@ -2,7 +2,7 @@
 资料元数据管理服务
 P5: 资料→分区归属→分支引用
 
-数据存储: ~/.companion/uploads/materials_meta.json
+数据存储: COMPANION_HOME/uploads/materials_meta.json
 结构: {material_id: {partition_id, file_name, file_type, ...}}
 """
 
@@ -14,9 +14,11 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+from app.config import COMPANION_HOME
+
 logger = logging.getLogger(__name__)
 
-META_DIR = Path.home() / ".companion" / "uploads"
+META_DIR = COMPANION_HOME / "uploads"
 META_FILE = META_DIR / "materials_meta.json"
 
 # 默认未分类分区 ID

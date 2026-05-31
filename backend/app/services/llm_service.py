@@ -117,6 +117,7 @@ class LLMService:
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                timeout=60,  # 60s LLM 超时 (M3)
                 **extra,
             )
             msg = response.choices[0].message
@@ -193,6 +194,7 @@ class LLMService:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 stream=True,
+                timeout=120,  # 流式超时更长 (M3)
                 **kwargs,
             )
             async for chunk in response:
@@ -306,7 +308,7 @@ class LLMService:
 llm_service = LLMService()
 
 
-async def _parse_tool_calls_response(result_text: str) -> list[dict] | None:
+def _parse_tool_calls_response(result_text: str) -> list[dict] | None:
     """解析 LLM 返回的 tool_calls JSON"""
     import json
     if not result_text.startswith("{"):

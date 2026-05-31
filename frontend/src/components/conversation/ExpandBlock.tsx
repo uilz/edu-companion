@@ -46,7 +46,7 @@ export default function ExpandBlock({ skillName, explanation }: Props) {
                    bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)]
                    transition-colors"
       >
-        <Sparkles size={14} className="text-amber-500" />
+        <Sparkles size={14} className="text-[var(--color-warning)]" />
         <span>知识拓展：{skillName}</span>
         <span className="ml-auto">
           {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -61,44 +61,44 @@ export default function ExpandBlock({ skillName, explanation }: Props) {
               正在生成知识拓展...
             </div>
           )}
-          {error && <div className="text-red-500">❌ {error}</div>}
+          {error && <div className="text-[var(--color-error)]">❌ {error}</div>}
           {data && (
             <>
               {data.deeper_explanation && (
-                <Section icon={<Lightbulb size={14} />} title="深入解释" color="text-blue-500">
+                <Section icon={<Lightbulb size={14} />} title="深入解释" color="text-[var(--color-info)]">
                   {data.deeper_explanation}
                 </Section>
               )}
               {data.prerequisites && data.prerequisites.length > 0 && (
-                <Section icon={<BookOpen size={14} />} title="前置知识" color="text-green-500">
+                <Section icon={<BookOpen size={14} />} title="前置知识" color="text-[var(--color-success)]">
                   <ul className="list-disc list-inside space-y-1">
                     {data.prerequisites.map((p, i) => <li key={i}>{p}</li>)}
                   </ul>
                 </Section>
               )}
               {data.advanced_topics && data.advanced_topics.length > 0 && (
-                <Section icon={<ChevronUp size={14} />} title="进阶方向" color="text-purple-500">
+                <Section icon={<ChevronUp size={14} />} title="进阶方向" color="text-[var(--color-accent)]">
                   <ul className="list-disc list-inside space-y-1">
                     {data.advanced_topics.map((t, i) => <li key={i}>{t}</li>)}
                   </ul>
                 </Section>
               )}
               {data.real_world_examples && data.real_world_examples.length > 0 && (
-                <Section icon={<Sparkles size={14} />} title="实际应用" color="text-amber-500">
+                <Section icon={<Sparkles size={14} />} title="实际应用" color="text-[var(--color-warning)]">
                   <ul className="list-disc list-inside space-y-1">
                     {data.real_world_examples.map((e, i) => <li key={i}>{e}</li>)}
                   </ul>
                 </Section>
               )}
               {data.common_misconceptions && data.common_misconceptions.length > 0 && (
-                <Section icon={<AlertTriangle size={14} />} title="常见误区" color="text-red-500">
+                <Section icon={<AlertTriangle size={14} />} title="常见误区" color="text-[var(--color-error)]">
                   <ul className="list-disc list-inside space-y-1">
                     {data.common_misconceptions.map((m, i) => <li key={i}>{m}</li>)}
                   </ul>
                 </Section>
               )}
               {data.fun_fact && (
-                <div className="bg-amber-50 dark:bg-amber-900/20 rounded p-2 text-xs">
+                <div className="bg-[var(--color-warning)]/5 rounded p-2 text-xs">
                   💡 {data.fun_fact}
                 </div>
               )}

@@ -76,7 +76,7 @@ def _compute_partition_progress_cognitive(partition_id: str) -> PartitionProgres
             ) if prereqs_have_data else True
 
             trend_dir = n.trend.direction if n.trend else "stable"
-            urgency = n.scheduling.review_urgency if n.scheduling else 0.0
+            urgency = n.scheduling.urgency if n.scheduling else 0.0
 
             skills[nid] = SkillNodeState(
                 skill_id=nid,
@@ -250,7 +250,7 @@ def _compute_temporal_cognitive(skill_nodes: dict) -> TemporalMetrics:
 
     backlog = sum(
         1 for n in skill_nodes.values()
-        if n.scheduling and n.scheduling.review_urgency > 0.5
+        if n.scheduling and n.scheduling.urgency > 0.5
     )
 
     return TemporalMetrics(

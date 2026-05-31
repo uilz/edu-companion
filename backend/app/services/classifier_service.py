@@ -1,5 +1,5 @@
 """
-Phase8Classifier — 认知图驱动的多路径分类器
+ClassifierService — 认知图驱动的多路径分类器
 
 替换旧的 classifier.py 中的 classify_partition / classify_full / auto_resolve。
 
@@ -7,6 +7,7 @@ Phase8Classifier — 认知图驱动的多路径分类器
 1. 分层向量检索（先 topic 级再 concept/atom 级）
 2. 候选 topic 生成与打分
 3. 三种模式决策（跨主题/切换/继续）
+4. 沉浸抑制（>16轮深度沉浸不弹出模式1）
 """
 from __future__ import annotations
 
@@ -17,9 +18,41 @@ from app.cognitive.storage import vector_search
 
 logger = logging.getLogger(__name__)
 
+# 沉浸深度阈值
+_DEEP_IMMERSION_THRESHOLD = 16
 
-class Phase8Classifier:
-    """认知图驱动的多路径分类器"""
+
+class ClassifierService:
+    """认知图驱动的多路径分类器，支持沉浸追踪"""
+
+    def __init__(self):
+        # 沉浸深度：{(user_id, topic_id): consecutive_rounds}
+        self._immersion: dict[tuple[str, str], int] = {}
+
+    # ─── 沉浸追踪 ──────────────────────────────
+
+    def get_immersion_depth(self, user_id: str, topic_id: str) -> int:
+        """获取当前 topic 的沉浸深度（连续轮数）"""
+        return self._immersion.get((user_id, topic_id), 0)
+
+    def increment_immersion(self, user_id: str, topic_id: str) -> int:
+        """增加沉浸深度，返回新值"""
+        key = (user_id, topic_id)
+        depth = self._immersion.get(key, 0) + 1
+        self._immersion[key] = depth
+        return depth
+
+    def reset_immersion(self, user_id: str, topic_id: str | None = None) -> None:
+        """重置指定 topic 的沉浸（切换主题时），topic_id=None 清空全部"""
+        if topic_id:
+            self._immersion.pop((user_id, topic_id), None)
+        else:
+            # 清空该用户所有沉浸
+            keys = [k for k in self._immersion if k[0] == user_id]
+            for k in keys:
+                self._immersion.pop(k, None)
+
+    # ─── 主入口 ────────────────────────────────
 
     def classify(
         self,
@@ -37,9 +70,11 @@ class Phase8Classifier:
         返回：
         {
             "mode": 1 | 2 | 3,
-            "candidates": [{ "id": str, "label": str, "path_id": str, "score": float }, ...],
+            "candidates": [...],
             "should_switch": bool,
-            "switch_detail": { ... } | None,
+            "switch_detail": {...} | None,
+            "immersion_depth": int,
+            "immersion_suppressed": bool,
         }
         """
         if not query_embedding:
@@ -53,16 +88,30 @@ class Phase8Classifier:
         # 2. 合并打分
         seeds = self._merge_score(topic_candidates, child_candidates)
 
-        # 3. 模式决策
-        result = self._decide_mode(seeds, current_topic_id)
+        # 3. 模式决策（含沉浸感知）
+        immersion_depth = self.get_immersion_depth(user_id, current_topic_id or "")
+        result = self._decide_mode(seeds, current_topic_id, immersion_depth)
 
-        # 4. 补充 switch_detail
+        # 4. 沉浸抑制标记
+        result["immersion_depth"] = immersion_depth
+        is_suppressed = (
+            immersion_depth >= _DEEP_IMMERSION_THRESHOLD
+            and result["mode"] == 1
+        )
+        result["immersion_suppressed"] = is_suppressed
+
+        # 5. 补充 switch_detail
         if result["should_switch"] and result["candidates"]:
             result["switch_detail"] = {
                 "domain_name": self._get_domain_label(result["candidates"][0]),
                 "topic_name": result["candidates"][0]["label"],
                 "path_id": result["candidates"][0].get("path_id", ""),
             }
+
+        # 6. 沉浸抑制下隐藏候选（不泄露给前端）
+        if is_suppressed:
+            result["candidates"] = []
+
         return result
 
     def classify_by_text(
@@ -119,7 +168,16 @@ class Phase8Classifier:
         candidates = unique[:5]
 
         # 5. 用相同的模式决策逻辑
-        return self._decide_mode(candidates, current_topic_id)
+        immersion_depth = self.get_immersion_depth(user_id, current_topic_id or "")
+        result = self._decide_mode(candidates, current_topic_id, immersion_depth)
+        result["immersion_depth"] = immersion_depth
+        result["immersion_suppressed"] = (
+            immersion_depth >= _DEEP_IMMERSION_THRESHOLD
+            and result["mode"] == 1
+        )
+        return result
+
+    # ─── 关键词匹配 ────────────────────────────
 
     @staticmethod
     def _keyword_score(text: str) -> list[dict]:
@@ -143,6 +201,8 @@ class Phase8Classifier:
         scores.sort(key=lambda x: -x["score"])
         return scores
 
+    # ─── 分层向量检索 ──────────────────────────
+
     def _search_topic(
         self, user_id: str, query_embedding: list[float], limit: int = 5,
     ) -> list[dict]:
@@ -162,7 +222,6 @@ class Phase8Classifier:
             path_prefix = t.get("path_id", "")
             if not path_prefix:
                 continue
-            # 用 path_id 前缀过滤
             rows = vector_search(
                 query_embedding, user_id,
                 level=None, limit=limit, min_similarity=0.05,
@@ -170,7 +229,6 @@ class Phase8Classifier:
             for r in rows:
                 rp = r.get("path_id", "")
                 if rp.startswith(path_prefix + ".") and r["level"] in ("concept", "atom"):
-                    # 将这个子节点映射回它的 topic 祖先
                     results.append({
                         "id": t["id"],
                         "label": t["label"],
@@ -180,13 +238,14 @@ class Phase8Classifier:
                     })
         return results
 
+    # ─── 合并打分 ────────────────────────────
+
     def _merge_score(
         self, topic_candidates: list[dict], child_candidates: list[dict],
     ) -> list[dict]:
         """合并 topic 候选与子节点候选，按相似度重排序，过滤低分"""
         scores: dict[str, dict] = {}
 
-        # 每个 topic 候选得分 = 自身相似度 × 1.0
         for t in topic_candidates:
             scores[t["id"]] = {
                 "id": t["id"],
@@ -195,7 +254,6 @@ class Phase8Classifier:
                 "score": t.get("similarity", 0) * 1.0,
             }
 
-        # child candidate 映射回 topic 祖先的加分
         for c in child_candidates:
             tid = c["id"]
             if tid in scores:
@@ -204,30 +262,45 @@ class Phase8Classifier:
                     c.get("score", 0),
                 )
 
-        # 过滤低分 (< 0.1)
         result = [s for s in scores.values() if s["score"] > 0.1]
-
-        # 按分数降序
         result.sort(key=lambda x: -x["score"])
         return result
 
+    # ─── 三模式决策（含沉浸抑制）───────────────
+
     def _decide_mode(
-        self, candidates: list[dict], current_topic_id: str | None = None,
+        self,
+        candidates: list[dict],
+        current_topic_id: str | None = None,
+        immersion_depth: int = 0,
     ) -> dict[str, Any]:
         """
         模式决策：
         - 模式1（跨主题）：多候选接近，无 >1.5× 领先
         - 模式2（切换）：单一候选 > 第二名×1.5，且与当前不同
         - 模式3（继续）：else
+
+        沉浸抑制：depth > 16 时模式1不弹出，降级为模式3。
         """
         if not candidates:
             return {"mode": 3, "candidates": [], "should_switch": False}
 
         top = candidates[0]
-        # 候选数量 >= 2 且前两名分数接近
+
+        # 候选数量 >= 2 且前两名分数接近 → 模式1（跨主题）
         if len(candidates) >= 2:
             second = candidates[1]
             if second["score"] * 1.5 > top["score"]:
+                # 深度沉浸抑制
+                if immersion_depth >= _DEEP_IMMERSION_THRESHOLD:
+                    # 不弹出，但记录到 cognitive_events 供秘书延后处理
+                    self._queue_pending_cross_topic(candidates)
+                    return {
+                        "mode": 3,
+                        "candidates": [top],
+                        "should_switch": False,
+                        "_suppressed_candidates": candidates[:3],
+                    }
                 return {
                     "mode": 1,
                     "candidates": candidates[:3],
@@ -249,7 +322,32 @@ class Phase8Classifier:
             "should_switch": False,
         }
 
-    def _get_domain_label(self, candidate: dict) -> str:
+    # ─── 待处理跨主题队列 ──────────────────────
+
+    @staticmethod
+    def _queue_pending_cross_topic(candidates: list[dict]) -> None:
+        """深度沉浸下将跨主题候选写入 cognitive_events，供秘书延后处理"""
+        try:
+            from app.services.event_service import event_service
+            from shared.constants import DEFAULT_USER_ID
+            event_service.emit_v6_event(
+                event_type="PendingCrossTopic",
+                user_id=DEFAULT_USER_ID,
+                payload={
+                    "candidates": [
+                        {"id": c["id"], "label": c["label"], "score": c.get("score", 0)}
+                        for c in candidates[:3]
+                    ],
+                    "suppressed_at_depth": _DEEP_IMMERSION_THRESHOLD,
+                },
+            )
+        except Exception:
+            logger.debug("PendingCrossTopic 事件写入失败", exc_info=True)
+
+    # ─── 辅助 ────────────────────────────────
+
+    @staticmethod
+    def _get_domain_label(candidate: dict) -> str:
         """从 path_id 提取 domain 层级标签"""
         path = candidate.get("path_id", "")
         segments = path.split(".")
@@ -259,4 +357,4 @@ class Phase8Classifier:
 
 
 # 全局实例
-phase8_classifier = Phase8Classifier()
+classifier_service = ClassifierService()

@@ -87,21 +87,21 @@ class DailyBriefModule(SecretaryModule):
 
         # 如果有薄弱点，加一条明日规划
         try:
-            from ..analysis import find_weakness_clusters
-            from ..models import ScopeSpec, AnalyzeOptions
+            from ..analysis import find_weakness_clusters, _get_nodes
 
-            weakness = find_weakness_clusters(user_id, ScopeSpec(level="user"), AnalyzeOptions(max_items=1, threshold=0.3))
-            if weakness.items:
-                top = weakness.items[0]
+            nodes = _get_nodes(user_id)
+            weakness = find_weakness_clusters(user_id, limit=1, nodes=nodes)
+            if weakness:
+                top = weakness[0]
                 proposals.append(Proposal(
                     emoji="🎯",
                     title="明日建议",
-                    description=f"薄弱点「{top.label}」(掌握度 {1 - top.norm_urgency:.0%})，建议优先安排专项练习",
+                    description=f"薄弱点「{top['label']}」(掌握度 {top['mastery']:.0f}%)，建议优先安排专项练习",
                     action_type="brief",
                     priority=3,
                     payload={
-                        "kp_id": top.node_id,
-                        "mastery": 1 - top.norm_urgency,
+                        "kp_id": top["node_id"],
+                        "mastery": top["mastery"],
                     },
                     insight_source="daily_brief_weakness",
                 ))
@@ -113,9 +113,9 @@ class DailyBriefModule(SecretaryModule):
     def _collect_today_events(self, user_id: str) -> dict[str, Any]:
         """收集今日学习事件"""
         try:
-            from app.cognitive.storage import list_all_nodes
+            from ..analysis import _get_nodes
 
-            nodes = list_all_nodes(user_id)
+            nodes = _get_nodes(user_id)
             today_start = time.time() - 86400  # 过去 24 小时
 
             result = {

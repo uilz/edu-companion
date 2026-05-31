@@ -4,6 +4,169 @@
 
 ---
 
+## [0.9.4] - 2026-05-31
+
+### v5.0 设计重构 — 纸墨质感 + 亮暗双主题
+
+> 基于 `design.md` 设计规范，对前端进行系统性视觉重构。核心理念："让思考成为焦点，让界面成为陪伴"。
+
+#### 🎨 亮暗双主题系统
+- **CSS Variables 全量重写** — 40+ token 覆盖 Surface/Ink/Accent/Status/Graph/Shadow/Divider
+- **主题切换修复** — CSS 源码顺序 bug：`:root, [data-theme="dark"]` 在 `[data-theme="light"]` 之后导致暗色永远覆盖亮色，交换顺序修复
+- **暖色调暗色模式** — `#1a1816` 暖黑底 + `#f5f3ef` 暖白文字，非冷灰
+
+#### 🫧 消息气泡重设计
+- **用户气泡** — 白底 `surface-card` + 暖色边框 `divider`，14px 圆角，右下直角
+- **AI 气泡** — 微暖底 `surface-card-alt` (#faf9f5)，无边框，左下直角
+- **入场动画** — `translateY(8px→0)` + `opacity(0→1)`，150ms ease-out
+- **Typing dots** — `ink-muted` 灰色，非蓝色
+
+#### 📐 排版合规
+- **正文 16px** — 消息内容 `text-sm`(14px) → `text-base`(16px)，行高 1.65
+- **字重统一** — `font-bold`(700) → `font-semibold`(600)，37 处，13 个文件
+- **JetBrains Mono** — 代码块/数据指标使用等宽字体
+
+#### 🎯 全局组件适配
+- **去阴影** — 卡片/气泡/徽章移除 shadow，仅保留浮层（modal/dropdown/tooltip）
+- **状态色 CSS 变量化** — 52 处硬编码 Tailwind 色替换为 `var(--color-*)`，18 个文件
+- **按钮按压反馈** — `active:scale-[0.97]`，81 个按钮，36 个文件
+- **圆角对齐** — 卡片/按钮 `rounded-md`(10px)，气泡 `rounded-lg`(14px)，pill `rounded-full`
+
+#### 📱 响应式 + 输入框
+- **断点统一** — 768px → 1024px，6 个文件
+- **输入框药丸形** — `rounded-full`，`divider` 边框
+- **侧边栏** — 280px 宽度，`page-secondary` 暖底
+
+#### 本轮指标
+
+| 维度 | 改动量 | 涉及文件 |
+|------|--------|----------|
+| CSS token 重写 | 40+ token | globals.css |
+| 硬编码颜色替换 | 52 处 | 18 文件 |
+| 字重修正 | 37 处 | 13 文件 |
+| 按钮按压反馈 | 81 个按钮 | 36 文件 |
+| 排版合规 | 6 处 | 3 文件 |
+| 圆角对齐 | 4 处 | 3 文件 |
+| **合计** | **~220 处** | **~40 文件** |
+
+---
+
+## [0.9.3] - 2026-05-30
+
+### 架构熵值治理（12 项 Kanban 任务全量完成）
+
+> 熵值审计发现 800+ 问题，本轮修复 ~75%，聚焦代码正确性 + 结构治理。
+
+#### 🔴 止血 — 代码正确性
+- **31 处静默 `except: pass` 全部修复** — 16 个文件，统一为 `logger.warning/descriptive: %s", e)` 模式
+- **移除硬编码密码** — `database.py` 中 `"companion123"` → `DB_PASSWORD` 环境变量，`.env` 同步
+- **修复 `Conversation.partition_id` 报错** — `knowledge_graph.py` + `branch_summarizer.py` 改用 topic→domain→partition 链式查询
+
+#### 🟡 结构治理 — 模块拆分
+- **`conversation_llm.py`** 1135→529 行 — 拆为 `llm_core.py`(198) + `tool_dispatch.py`(328) + `cognitive_sync.py`(180)，facade 保持向后兼容
+- **`tree_ops.py`** 867→22 行 — 拆为 `tree_crud.py`(560) + `tree_sync.py`(85) + `tree_naming.py`(48)，Mixin 模式组合
+- **`conversation.py`** 790→22 行 — 拆为 `conversation_routes.py`(530) + `conversation_ws.py`(160)
+- **`practice.py`** 699→360 行 — 业务逻辑提取到 `practice_service.py`(615)
+
+#### 🟡 结构治理 — 重复代码消除
+- **`get_knowledge_state()` 4 处合并** — 新建 `knowledge_state.py`，3 处改为 import
+- **`_get_pool()` 2 处合并** — 新建 `material_common.py`，消除 byte-for-byte 重复
+- **`~/.companion/` 路径 6 处集中化** — 统一到 `app/config.py` 的 `COMPANION_HOME` 常量（7 文件更新）
+
+#### 🟡 前端清理
+- **console.log/warn/error 66→17 处** — 49 处清理，保留 17 处合法用途（ErrorBoundary/catch 块）
+- **删除死组件 `MessageContent.tsx`** — 已被 `highlight-utils.tsx` 取代
+
+#### 本轮指标
+
+| 维度 | 前 | 后 | 变化 |
+|------|----|----|------|
+| 静默异常 | 31 | 0 | -100% |
+| 硬编码密码 | 1 | 0 | -100% |
+| 重复函数定义 | 8 模式 | 0 | -100% |
+| God File (>500行) | 8 | 4 | -50% |
+| 前端 console.* | 66 | 17 | -74% |
+| 后端路由数 | ~72 | ~82 | facade 路由合并 |
+
+#### 新增文件
+```
+backend/app/services/llm_core.py           (198 行)
+backend/app/services/tool_dispatch.py      (328 行)
+backend/app/services/cognitive_sync.py     (180 行)
+backend/app/services/tree_crud.py          (560 行)
+backend/app/services/tree_sync.py          (85 行)
+backend/app/services/tree_naming.py        (48 行)
+backend/app/services/practice_service.py   (615 行)
+backend/app/services/knowledge_state.py    (共享)
+backend/app/services/material_common.py    (共享)
+backend/app/api/conversation_routes.py     (530 行)
+backend/app/api/conversation_ws.py         (160 行)
+```
+
+---
+
+## [0.9.2] - 2026-05-28
+
+### 消息引用系统修复 + 版本指示器修复
+
+#### 修复 — 引用(Quote)前端没效果
+- **conversation-store.ts** — `sendMessage` 中将 `pendingQuote` 插入 `content_blocks` 首位（之前被静默丢弃）
+- **conversation-store.ts** — WebSocket 和 HTTP fallback 发送时附带 `pending_quote` 字段
+- **conversation.py** — WS handler 和 HTTP POST 端点提取 `pending_quote` 并传递
+- **conversation_llm.py** — `send_and_reply` / `send_and_reply_stream` 新增 `pending_quote` 参数，构建 `QuoteBlock` 插入内容
+
+#### 修复 — 引用样式不明显
+- **QuotePreview.tsx** — 蓝色高亮背景 `bg-blue-50/dark:bg-blue-950/30` + 左侧 `border-l-[3px] border-l-blue-500` + 蓝色 Quote 图标
+- **QuoteBlockRenderer.tsx** — 同上，文字颜色改为 `text-blue-700/dark:text-blue-300`，标注改为"引用自上文"
+
+#### 修复 — 版本指示器(1/2)不显示
+- **MessageList.tsx** — 版本指示器从助手消息操作栏移至**用户消息操作栏**（根因：指示器放在了错误的消息类型块里）
+- **MessageList.tsx** — 改为 `vInfo.total > 1`（至少2个版本才显示）
+- **MessageList.tsx** — 新增 `useEffect`：页面刷新后对 `has_modified_version` 的用户消息调用后端 API 恢复 `versionMap`
+
+#### 修复 — 版本切换导航逻辑错误
+- **conversation-store.ts** — `versionSwitch` 新增 `currentIndex?` 参数，由前端 `versionMap` 传入当前版本号，替代错误的 `versions.indexOf(messageId)`
+- **MessageList.tsx** — `handleVersionNav` 传入 `versionMap[messageId].index`
+- **conversation-store.ts** — 修复 `pq` 变量重复声明导致 build 失败
+
+#### 修改文件清单
+```
+frontend/src/store/conversation-store.ts
+frontend/src/components/conversation/MessageList.tsx
+frontend/src/components/conversation/QuotePreview.tsx
+frontend/src/components/conversation/QuoteBlockRenderer.tsx
+backend/app/api/conversation.py
+backend/app/services/conversation_llm.py
+```
+
+---
+
+## [0.9.1] - 2026-05-28
+
+### 知识图谱编辑 + 数据清理
+
+#### 新增
+- **knowledge_graph.py** — 5 个 CRUD 端点：GET 图谱、POST/PATCH/DELETE 节点、POST/DELETE 边
+- **GraphTab.tsx 重写** — 双数据源合并（knowledge/graph + partition-progress），编辑模式 UI（添加/删除/编辑节点，添加/删除边）
+- **secretary/analysis.py** — 11 个分析函数（秘书引擎依赖，基于 CognitiveNode）
+- **tree_ops.py** — 创建时同名检测，自动追加 `(2)`、`(3)` 后缀
+
+#### 修复
+- **learner_model.py** — 删除 `KnowledgeState` 废弃导入（v4.0 清理残留）
+- **main.py** — 注册 `knowledge_graph_router`（之前未注册导致 404）
+
+#### 数据清理
+- 删除 162 个测试残留分区（default_user），保留「高等数学」
+- 删除 test_user、test_dedup 两个纯测试用户
+- 清理 4 个孤儿 cognitive_nodes
+
+#### 指标
+- 后端 220/220 测试通过
+- 前端 TypeScript 编译通过
+- 净增 ~380 行（后端 CRUD + analysis.py + 前端编辑 UI）
+
+---
+
 ## [0.9.0] - 2026-05-28
 
 ### 对话系统完善 + Bug 修复

@@ -95,6 +95,51 @@ def get_lazy_trust(edge_id: str) -> float:
     return max(0.0, min(1.0, new_score))
 
 
+def boost_trust_on_activity(
+    source_node_id: str,
+    target_node_id: str,
+    user_id: str,
+    evidence: float = 0.1,
+) -> float:
+    """
+    Phase 8.1: 学习活动触发边信任度证据增强
+
+    当用户学习了 source → target 的关联知识时，增强 trust_score：
+        trust_score += (1 - trust_score) * evidence
+
+    返回更新后的 trust_score。
+    """
+    db = get_db()
+    from datetime import datetime, timezone
+
+    row = db.fetchone(
+        "SELECT id, trust_score FROM knowledge_edges "
+        "WHERE source_node_id = %s AND target_node_id = %s AND user_id = %s",
+        (source_node_id, target_node_id, user_id),
+    )
+    if not row:
+        # 如果边不存在，尝试反向
+        row = db.fetchone(
+            "SELECT id, trust_score FROM knowledge_edges "
+            "WHERE source_node_id = %s AND target_node_id = %s AND user_id = %s",
+            (target_node_id, source_node_id, user_id),
+        )
+    if not row:
+        return 0.0
+
+    old_score = float(row["trust_score"])
+    new_score = old_score + (1.0 - old_score) * min(evidence, 1.0)
+    new_score = max(0.0, min(1.0, new_score))
+
+    if abs(new_score - old_score) >= 0.01:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        db.execute(
+            "UPDATE knowledge_edges SET trust_score = %s, last_evaluated_at = %s WHERE id = %s",
+            (new_score, now_iso, row["id"]),
+        )
+    return new_score
+
+
 def update_edge_status(edge_id: str, new_status: str) -> None:
     """更新边状态（确认/拒绝/重置）"""
     db = get_db()

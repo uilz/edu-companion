@@ -1,6 +1,6 @@
 -- Phase 8 数据库迁移脚本
 -- 逐条执行（幂等）：
---     psql -h localhost -p 5433 -U companion -d edu_companion -f migrate_phase8.sql
+--     psql -h localhost -p 5433 -U companion -d edu_companion -f migrate_learning.sql
 
 -- =============================================
 -- 1. cognitive_nodes 加列

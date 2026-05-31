@@ -93,14 +93,14 @@ export default function SecretarySettingsPage() {
       {/* ── 页面标题 ── */}
       <div className="flex items-center gap-2">
         <Settings size={16} className="text-[var(--color-text-muted)]" />
-        <h1 className="text-lg font-bold text-[var(--color-text)]">秘书设置</h1>
+        <h1 className="text-lg font-semibold text-[var(--color-text)]">秘书设置</h1>
       </div>
 
       {/* ── 冷启动引导 ── */}
       {isColdStart && onboarding && (
-        <div className="p-4 rounded-lg border border-blue-500/20 bg-blue-500/5">
+        <div className="p-4 rounded-lg border border-[var(--color-accent)]/20 bg-[var(--color-accent)]/5 active:scale-[0.97] transition-transform">
           <div className="flex items-center gap-2 mb-3">
-            <BookOpen size={16} className="text-blue-400" />
+            <BookOpen size={16} className="text-[var(--color-info)]" />
             <span className="text-sm font-semibold text-[var(--color-text)]">{onboarding.message}</span>
           </div>
           <div className="space-y-2">
@@ -109,13 +109,13 @@ export default function SecretarySettingsPage() {
                 key={step.step}
                 className={`flex items-center gap-2 text-xs p-2 rounded ${
                   step.done
-                    ? "bg-green-500/10 text-green-400"
+                    ? "bg-[var(--color-success)]/10 text-[var(--color-success)]"
                     : step.step === onboarding.current_step
-                    ? "bg-blue-500/10 text-[var(--color-text)]"
+                    ? "bg-[var(--color-accent)]/10 text-[var(--color-text)]"
                     : "text-[var(--color-text-muted)]"
                 }`}
               >
-                <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border border-current flex-shrink-0">
+                <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold border border-current flex-shrink-0">
                   {step.done ? <Check size={10} /> : step.step}
                 </div>
                 <div className="flex-1">{step.title}</div>
@@ -158,7 +158,7 @@ export default function SecretarySettingsPage() {
                   onClick={() => handleToggle(mod.name, !mod.enabled)}
                   disabled={saving === mod.name}
                   className={`relative w-10 h-5 rounded-full transition-colors ${
-                    saving === mod.name ? "opacity-50" : mod.enabled ? "bg-[var(--color-accent)]" : "bg-gray-500/30"
+                    saving === mod.name ? "opacity-50" : mod.enabled ? "bg-[var(--color-accent)]" : "bg-[var(--color-text-muted)]/30"
                   }`}
                 >
                   <div
@@ -174,7 +174,7 @@ export default function SecretarySettingsPage() {
                 <div className="mt-2 ml-8 flex gap-3 text-[10px] text-[var(--color-text-muted)]">
                   <span>运行 {mod.stats.total_runs} 次</span>
                   <span>提案 {mod.stats.total_proposals} 条</span>
-                  {mod.stats.errors > 0 && <span className="text-red-400">错误 {mod.stats.errors} 次</span>}
+                  {mod.stats.errors > 0 && <span className="text-[var(--color-error)]">错误 {mod.stats.errors} 次</span>}
                 </div>
               )}
             </div>
@@ -223,7 +223,7 @@ export default function SecretarySettingsPage() {
             onChange={(e) => setMaxProactive(Number(e.target.value))}
             className="flex-1 accent-[var(--color-accent)]"
           />
-          <span className="text-sm font-bold text-[var(--color-accent)] w-8 text-center">{maxProactive}</span>
+          <span className="text-sm font-semibold text-[var(--color-accent)] w-8 text-center">{maxProactive}</span>
           <span className="text-[10px] text-[var(--color-text-muted)]">条/天</span>
         </div>
       </div>
@@ -282,7 +282,7 @@ export default function SecretarySettingsPage() {
                 }
               });
             }}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-[var(--color-error)]/30 text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors"
           >
             <Trash2 size={14} />
             删除数据

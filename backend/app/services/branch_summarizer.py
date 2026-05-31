@@ -134,7 +134,10 @@ def update_partition_context(user_id: str, partition_id: str) -> str:
     if not partition:
         return ""
 
-    branches = [b for b in data.conversations.values() if b.partition_id == partition_id]
+    # Conversation → Topic → Domain → Partition
+    partition_domain_ids = {d.id for d in data.domains.values() if d.partition_id == partition_id}
+    partition_topic_ids = {t.id for t in data.topics.values() if t.domain_id in partition_domain_ids}
+    branches = [b for b in data.conversations.values() if b.topic_id in partition_topic_ids]
     active_branch = data.conversations.get(partition.active_conversation_id)
 
     # 构建分区摘要

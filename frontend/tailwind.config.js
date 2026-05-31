@@ -8,14 +8,17 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        accent: '#0066FF',
-        background: '#0a0a0a',
-        surface: '#262626',
+        accent: 'var(--color-accent)',
+        background: 'var(--color-bg)',
+        surface: 'var(--color-surface)',
       },
       fontFamily: {
-        sans: ['Inter', 'Noto Sans SC', 'sans-serif'],
-        english: ['Inter', 'sans-serif'],
-        chinese: ['Noto Sans SC', 'sans-serif'],
+        sans: ['Inter', 'Noto Sans SC', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'Fira Code', 'SF Mono', 'monospace'],
+      },
+      borderRadius: {
+        'card': '10px',    // var(--radius-md)
+        'bubble': '14px',  // var(--radius-lg)
       },
     },
   },

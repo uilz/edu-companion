@@ -8,6 +8,7 @@ import type { Conversation } from "@/types";
 import { v2, tree } from "@/lib/api";
 import { mapSet, mapDelete, setAdd, setDelete } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { NewNodeDialog } from "@/components/ui/NewNodeDialog";
 import {
   SidebarTreeNode, type GraphNode, type TreeConv, type GraphLevel,
   ROOT_KEY, CHILD_LEVEL,
@@ -27,6 +28,7 @@ interface Props {
   onNewConversation?: (level: string, parentId: string, partitionId?: string) => void;
   onConversationReady?: (partitionId: string, conversationId: string) => void;
   onTreeChanged?: () => void;
+  onSelectConv?: (partitionId: string, conversationId: string) => void;
 }
 
 export default function Phase8Sidebar({
@@ -38,6 +40,7 @@ export default function Phase8Sidebar({
   loading = false, compact = false,
   onConversationReady,
   onTreeChanged,
+  onSelectConv,
 }: Props) {
   const [childMap, setChildMap] = useState<Map<string, GraphNode[]>>(() => new Map());
   const [convCache, setConvCache] = useState<Map<string, TreeConv[]>>(() => new Map());
@@ -46,10 +49,12 @@ export default function Phase8Sidebar({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string; isConv?: boolean; topicId?: string } | null>(null);
+  const [newChildTarget, setNewChildTarget] = useState<{ parent: GraphNode; level: GraphLevel; defaultEmoji: string } | null>(null);
 
   const childMapRef = useRef(childMap); childMapRef.current = childMap;
   const expandedSetRef = useRef(expandedSet); expandedSetRef.current = expandedSet;
   const loadingSetRef = useRef(loadingSet); loadingSetRef.current = loadingSet;
+  const convCacheRef = useRef(convCache); convCacheRef.current = convCache;
   const rootLoadedRef = useRef(false);
 
   const forceRefreshConvs = useCallback(async (topicId: string) => {
@@ -81,29 +86,49 @@ export default function Phase8Sidebar({
     return res.id;
   }, []);
 
-  const handleNewConvClick = useCallback(async (node: GraphNode, pid?: string) => { // click 💬 — create conv & expand path
+  const handleNewConvClick = useCallback(async (node: GraphNode, pid?: string) => { // click 💬 — find-or-create conv & expand path
     const partitionId = pid || node.id;
     try {
       let topicId: string;
-      let domainNode: GraphNode | undefined;
+      let domainId: string | undefined;
+
       if (node.level === "topic") {
         topicId = node.id;
       } else if (node.level === "domain") {
-        topicId = await createGraphNode(node.id, "topic", "新专题", "📝");
-        domainNode = node;
+        // 领域级：查找已有子 topic，没有才新建
+        domainId = node.id;
+        const existingTopics = await v2<GraphNode[]>(`/graph/nodes?parent_id=${node.id}`);
+        const topic = existingTopics.find(n => n.level === "topic");
+        topicId = topic ? topic.id : await createGraphNode(node.id, "topic", "新专题", "📝");
       } else {
-        const domainId = await createGraphNode(node.id, "domain", "新领域", "📚");
-        topicId = await createGraphNode(domainId, "topic", "新专题", "📝");
+        // 分区级：查找已有 domain → topic，没有才新建
+        const existingDomains = await v2<GraphNode[]>(`/graph/nodes?parent_id=${node.id}`);
+        const domain = existingDomains.find(n => n.level === "domain");
+        if (domain) {
+          domainId = domain.id;
+          const existingTopics = await v2<GraphNode[]>(`/graph/nodes?parent_id=${domain.id}`);
+          const topic = existingTopics.find(n => n.level === "topic");
+          topicId = topic ? topic.id : await createGraphNode(domain.id, "topic", "新专题", "📝");
+        } else {
+          domainId = await createGraphNode(node.id, "domain", "新领域", "📚");
+          const children = await v2<GraphNode[]>(`/graph/nodes?parent_id=${domainId}`);
+          const autoTopic = children.find(n => n.level === "topic");
+          topicId = autoTopic ? autoTopic.id : await createGraphNode(domainId, "topic", "新专题", "📝");
+        }
       }
+
+      // 查找已有空会话，没有才新建
       const convId = await findOrCreateConv(topicId);
       await forceRefreshConvs(topicId);
 
+      // 展开路径
       let domains: GraphNode[] = [];
       if (node.level === "partition") {
         domains = await loadChildren(node);
         setExpandedSet(prev => setAdd(prev, node.id));
-      } else if (domainNode) {
-        domains = [domainNode];
+      } else if (domainId) {
+        const dn = (childMapRef.current.get(node.id) || []).find(n => n.id === domainId);
+        if (dn) domains = [dn];
       }
 
       for (const d of domains) {
@@ -123,7 +148,7 @@ export default function Phase8Sidebar({
       try {
         const fresh = await v2<GraphNode[]>("/graph/nodes");
         setChildMap(prev => mapSet(prev, ROOT_KEY, fresh));
-      } catch { /* ignore */ }
+      } catch (e) { console.warn("重置节点树失败:", e); }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createGraphNode, findOrCreateConv, forceRefreshConvs, onConversationReady]);
@@ -179,19 +204,25 @@ export default function Phase8Sidebar({
     }
   }, [loadChildren, loadConversations]);
 
-  const handleCreateChild = useCallback(async (node: GraphNode) => {
+  const handleCreateChild = useCallback((node: GraphNode) => {
     const cfg = CHILD_LEVEL[node.level];
     if (!cfg) return;
+    setNewChildTarget({ parent: node, level: cfg.level as GraphLevel, defaultEmoji: cfg.emoji });
+  }, []);
+
+  const confirmCreateChild = useCallback(async (name: string, emoji: string) => {
+    if (!newChildTarget) return;
     try {
-      await tree(`/tree/${cfg.level}`, {
+      await tree(`/tree/${newChildTarget.level}`, {
         method: "POST",
-        body: JSON.stringify({ parent_id: node.id, name: cfg.name, emoji: cfg.emoji }),
+        body: JSON.stringify({ parent_id: newChildTarget.parent.id, name, emoji }),
       });
-      await loadChildren(node);
-      setExpandedSet(prev => setAdd(prev, node.id));
+      await loadChildren(newChildTarget.parent);
+      setExpandedSet(prev => setAdd(prev, newChildTarget.parent.id));
       onTreeChanged?.();
     } catch { /* ignore */ }
-  }, [loadChildren, onTreeChanged]);
+    setNewChildTarget(null);
+  }, [newChildTarget, loadChildren, onTreeChanged]);
 
   const handleRename = useCallback(async (node: GraphNode, name: string) => {
     try {
@@ -238,6 +269,7 @@ export default function Phase8Sidebar({
             return mapSet(prev, deleteTarget.topicId!, cached.filter(c => c.id !== deleteTarget.id));
           });
         }
+        onTreeChanged?.();
       } else {
         await v2(`/graph/nodes/${deleteTarget.id}?recursive=true`, { method: "DELETE" });
         setChildMap(prev => {
@@ -276,6 +308,14 @@ export default function Phase8Sidebar({
     autoExpandAttemptRef.current = 0;
     prevAutoExpandRef.current = expandKey;
 
+    // 找到 activeConversationId 所属的 topic（只刷新该 topic）
+    let targetTopicId: string | null = null;
+    if (convId) {
+      Array.from(convCacheRef.current.entries()).forEach(([tid, convs]) => {
+        if (convs.some(c => c.id === convId)) { targetTopicId = tid; }
+      });
+    }
+
     const expandLevel = async (node: GraphNode, depth: number) => {
       if (depth > 5) return;
       setExpandedSet(prev => setAdd(prev, node.id));
@@ -283,17 +323,23 @@ export default function Phase8Sidebar({
       if (children.length === 0) {
         children = await loadChildren(node);
       }
-      if (node.level === "topic") loadConversations(node.id);
+      // 只对目标 topic 加载会话列表，其他 topic 保留缓存
+      if (node.level === "topic") {
+        if (targetTopicId === node.id || !convCacheRef.current.has(node.id)) {
+          loadConversations(node.id);
+        }
+      }
       for (const child of children) await expandLevel(child, depth + 1);
     };
     const startNode = rootNodes.find(n => n.id === selectedNodeId);
     if (startNode) expandLevel(startNode, 0);
-  }, [selectedNodeId, activeConversationId, initialConversationId, loadChildren, loadConversations, childMap]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNodeId, activeConversationId, initialConversationId, childMap]);
 
   const rootNodes = childMap.get(ROOT_KEY) || [];
 
   return (
-    <div className="flex flex-col h-full bg-[var(--color-bg)] border-r border-[var(--color-border)]">
+    <div className="flex flex-col h-full bg-[var(--color-page-secondary)] border-r border-[var(--color-border)] select-none">
       {!compact && (
         <div className="flex items-center justify-between px-3 py-2.5 border-b border-[var(--color-border)]">
           <div className="flex items-center gap-1.5">
@@ -301,7 +347,7 @@ export default function Phase8Sidebar({
             <span className="text-xs font-semibold text-[var(--color-text)]">学习空间</span>
           </div>
           <button onClick={onCreatePartition}
-            className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface)] transition-colors rounded" title="新建分区">
+            className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface)] active:scale-[0.97] transition-all rounded" title="新建分区">
             <Plus size={15} />
           </button>
         </div>
@@ -338,6 +384,7 @@ export default function Phase8Sidebar({
               setDeleteTarget={setDeleteTarget}
               handleRename={handleRename}
               handleRenameConv={handleRenameConv}
+              onSelectConv={onSelectConv}
             />
           ))
         )}
@@ -347,6 +394,15 @@ export default function Phase8Sidebar({
           确认删除「{deleteTarget.label}」及其所有子节点？此项操作不可恢复。
         </ConfirmDialog>
       )}
+      <NewNodeDialog
+        open={!!newChildTarget}
+        onClose={() => setNewChildTarget(null)}
+        onCreate={confirmCreateChild}
+        title={newChildTarget?.level === "domain" ? "新建领域" : newChildTarget?.level === "topic" ? "新建专题" : "新建"}
+        namePlaceholder={newChildTarget?.level === "domain" ? "例如: 分析" : newChildTarget?.level === "topic" ? "例如: 微积分" : "输入名称"}
+        defaultEmoji={newChildTarget?.defaultEmoji || "📚"}
+        nameLabel={newChildTarget?.level === "domain" ? "领域名称" : newChildTarget?.level === "topic" ? "专题名称" : "名称"}
+      />
     </div>
   );
 }

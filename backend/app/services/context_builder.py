@@ -73,7 +73,7 @@ def _build_context_messages(
         if knowledge_ctx:
             system_content += f"\n\n{knowledge_ctx}"
     except Exception:
-        pass
+        logger.debug("知识状态上下文注入跳过", exc_info=True)
 
     # ── 4. Instant emotion detection on current message ──
     try:
@@ -116,7 +116,7 @@ def _build_context_messages(
         if practice_ctx:
             system_content += f"\n\n{practice_ctx}"
     except Exception:
-        pass
+        logger.debug("练习上下文注入跳过", exc_info=True)
 
     # ── 6. Practice recall (when user asks about past practice) ──
     try:
@@ -168,7 +168,7 @@ def _build_context_messages(
                     "推荐生成多平台搜索链接(B站/YouTube/知乎)"
                 )
     except Exception:
-        pass
+        logger.debug("选题建议上下文注入跳过", exc_info=True)
 
     # ── 7.5 CognitiveNode 认知画像注入 ──
     try:
@@ -325,7 +325,7 @@ def _build_context_messages(
             system_content += f"\n\n可引用的知识点: {', '.join(all_labels)}"
             system_content += "\n回答涉及这些知识点时，在末尾标注 [来源: 知识点名称]。"
     except Exception:
-        pass
+        logger.debug("知识图谱概览注入跳过", exc_info=True)
 
     # ── 10. Tool availability hint ──
     try:

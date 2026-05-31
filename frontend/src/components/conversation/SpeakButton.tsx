@@ -1,222 +1,294 @@
 "use client";
 
-// React hooks
 import { useState, useCallback, useEffect, useRef } from "react";
-// 音量图标组件
-import { Volume2, VolumeX } from "lucide-react";
+import { Volume2, Pause, Play } from "lucide-react";
 
-/**
- * SpeakButton 组件的属性接口
- * @param text   - 要朗读的文本内容
- * @param minLength - 触发朗读的最小文本长度（默认 200 字符，防止过短文本触发朗读）
- */
+type PlayState = "idle" | "playing" | "paused";
+
+const PREFERRED_VOICES = [
+  "Microsoft Xiaoxiao", "Microsoft Yunxi", "Microsoft Xiaohan",
+  "Google 普通话", "Tingting", "Sin-Ji",
+];
+
+// ── 全局音频单例（冲突管理）──
+// 任意时刻只有一条消息在播放
+let _activeKey: string | null = null;
+let _activeStop: (() => void) | null = null;
+let _activeCleanup: (() => void) | null = null;
+
+function acquireAudio(key: string, stop: () => void) {
+  if (_activeKey !== null && _activeKey !== key) {
+    // 停掉上一条
+    _activeStop?.();
+    _activeCleanup?.();
+  }
+  _activeKey = key;
+  _activeStop = stop;
+}
+
+function releaseAudio(key: string) {
+  if (_activeKey === key) {
+    _activeKey = null;
+    _activeStop = null;
+    _activeCleanup = null;
+  }
+}
+
+function setAudioCleanup(key: string, cleanup: () => void) {
+  if (_activeKey === key) _activeCleanup = cleanup;
+}
+
+// ── 进度 Map ──
+const progressMap = new Map<string, number>();
+
+function textHash(text: string): string { return `tts_${text.length}_${text.slice(0, 20)}`; }
+
 interface SpeakButtonProps {
   text: string;
   minLength?: number;
 }
 
 /**
- * 首选中文语音列表（按发音质量从高到低排序）—— 浏览器 TTS 回退用
+ * SpeakButton 语音朗读按钮
+ *
+ * 单击 = 播放/暂停（进度保留）
+ * 双击 = 停止+重置
+ * 全局单例：新消息朗读时自动停掉上一条
  */
-const PREFERRED_VOICES = [
-  "Microsoft Xiaoxiao",
-  "Microsoft Yunxi",
-  "Microsoft Xiaohan",
-  "Google 普通话",
-  "Tingting",
-  "Sin-Ji",
-];
+export default function SpeakButton({ text, minLength = 50 }: SpeakButtonProps) {
+  const key = textHash(text);
+  const [playState, setPlayState] = useState<PlayState>("idle");
 
-/**
- * SpeakButton 语音朗读按钮组件
- *
- * 功能：
- * 1. 优先使用 Edge-TTS（服务端高质量语音合成）
- * 2. 如果 Edge-TTS 不可用，回退到浏览器内置 SpeechSynthesis API
- *
- * 仅当文本长度超过 minLength 时才会显示该按钮。
- */
-export default function SpeakButton({ text, minLength = 200 }: SpeakButtonProps) {
-  // 当前是否正在朗读
-  const [speaking, setSpeaking] = useState(false);
-  // 已选中的最佳中文语音对象（浏览器 TTS 回退用）
-  const [bestVoice, setBestVoice] = useState<SpeechSynthesisVoice | null>(null);
-  // 浏览器是否支持 SpeechSynthesis 接口
-  const isSupported = typeof window !== "undefined" && !!window.speechSynthesis;
-  // 防止重复加载语音列表
-  const voicesLoaded = useRef(false);
-  // 当前播放的 Audio 对象（Edge-TTS 模式）
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const blobUrlRef = useRef<string | null>(null);
+  const textRef = useRef(text);
+  const lastClickRef = useRef(0);
+  const isFetchingRef = useRef(false);
+  const mountedRef = useRef(true);
+  textRef.current = text;
 
-  /**
-   * 加载系统语音列表，自动选择最优质的中文语音（浏览器 TTS 回退用）
-   */
+  // ── 语音列表 ──
+  const [bestVoice, setBestVoice] = useState<SpeechSynthesisVoice | null>(null);
+  const isSupported = typeof window !== "undefined" && !!window.speechSynthesis;
+  const voicesLoaded = useRef(false);
+
   useEffect(() => {
     if (!isSupported || voicesLoaded.current) return;
-
-    const loadVoices = () => {
+    const load = () => {
       const voices = window.speechSynthesis.getVoices();
-      if (voices.length === 0) return;
+      if (!voices.length) return;
       voicesLoaded.current = true;
-
       for (const name of PREFERRED_VOICES) {
-        const found = voices.find(v => v.name.includes(name) && v.lang.startsWith("zh"));
-        if (found) {
-          setBestVoice(found);
-          return;
-        }
+        const f = voices.find(v => v.name.includes(name) && v.lang.startsWith("zh"));
+        if (f) { setBestVoice(f); return; }
       }
-      const anyChinese = voices.find(v => v.lang.startsWith("zh"));
-      if (anyChinese) setBestVoice(anyChinese);
+      const anyCn = voices.find(v => v.lang.startsWith("zh"));
+      if (anyCn) setBestVoice(anyCn);
     };
-
-    loadVoices();
-    window.speechSynthesis.onvoiceschanged = loadVoices;
+    load();
+    window.speechSynthesis.onvoiceschanged = load;
   }, [isSupported]);
 
-  /**
-   * 清理 Markdown 符号，使 TTS 朗读更自然
-   */
-  const cleanForTTS = useCallback((raw: string) => {
-    return raw
-      .replace(/[#*_~`>[\\]()]/g, "")
-      .replace(/\$\$[\s\S]*?\$\$/g, "")   // 移除行间数学公式
-      .replace(/\$[^$\n]+?\$/g, "")        // 移除行内数学公式
-      .replace(/\n{2,}/g, "。")
-      .replace(/\n/g, "，")
-      .substring(0, 500);
+  // ── 暂停当前音频（不重置进度）──
+  const pauseAudio = useCallback(() => {
+    if (audioRef.current) audioRef.current.pause();
+    if (isSupported) window.speechSynthesis.pause?.();
+  }, [isSupported]);
+
+  // ── 停止当前音频（重置进度到 0）──
+  const stopAudio = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      try { audioRef.current.currentTime = 0; } catch {}
+    }
+    if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
+    audioRef.current = null;
+    if (isSupported) window.speechSynthesis.cancel();
+    progressMap.delete(key);
+  }, [isSupported, key]);
+
+  // ── 清理辅助 ──
+  const cleanupUrl = useCallback(() => {
+    if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
+    audioRef.current = null;
   }, []);
 
-  /**
-   * 使用浏览器 SpeechSynthesis API 朗读（回退方案）
-   */
-  const speakWithBrowser = useCallback((cleanText: string) => {
-    if (!isSupported) return false;
+  // ── 拉取并播放 ──
+  const fetchAndPlay = useCallback(async (seekTo: number = 0) => {
+    if (isFetchingRef.current || !mountedRef.current) return;
+    isFetchingRef.current = true;
 
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = "zh-CN";
-    utterance.rate = 0.95;
-    utterance.pitch = 1.0;
-
-    if (bestVoice) {
-      utterance.voice = bestVoice;
-    }
-
-    utterance.onend = () => setSpeaking(false);
-    utterance.onerror = () => setSpeaking(false);
-
-    setSpeaking(true);
-    window.speechSynthesis.speak(utterance);
-    return true;
-  }, [isSupported, bestVoice]);
-
-  /**
-   * 使用 Edge-TTS 服务端语音合成
-   */
-  const speakWithEdgeTTS = useCallback(async (rawText: string) => {
     try {
-      setSpeaking(true);
-
-      const response = await fetch("/api/multimodal/tts", {
+      const res = await fetch("/api/multimodal/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: rawText,
-          voice: "zh-CN-XiaoxiaoNeural",
-        }),
+        body: JSON.stringify({ text: textRef.current, voice: "zh-CN-XiaoxiaoNeural" }),
       });
+      if (!res.ok) throw new Error("TTS failed");
+      if (!mountedRef.current) return;
 
-      if (!response.ok) {
-        // Edge-TTS 不可用，回退到浏览器 TTS
-        console.warn("Edge-TTS unavailable, falling back to browser TTS");
-        const cleanText = cleanForTTS(rawText);
-        speakWithBrowser(cleanText);
-        return;
-      }
+      const blob = await res.blob();
+      if (!mountedRef.current) return;
 
-      const data = await response.json();
-      const audioUrl = data.audio_url as string;
+      const url = URL.createObjectURL(blob);
+      cleanupUrl();
+      blobUrlRef.current = url;
 
-      // 播放音频
-      const audio = new Audio(audioUrl);
+      const audio = new Audio(url);
       audioRef.current = audio;
 
+      // seek（需等元数据）
+      if (seekTo > 0) {
+        await new Promise<void>((resolve) => {
+          audio.onloadedmetadata = () => resolve();
+          audio.onerror = () => resolve();
+          setTimeout(resolve, 1000);
+        });
+        if (!mountedRef.current) return;
+        try { audio.currentTime = seekTo; } catch {}
+      }
+
+      // 进度上报
+      audio.ontimeupdate = () => {
+        const a = audioRef.current;
+        if (a && a.duration && a.duration > 0 && a.duration < 3600) {
+          progressMap.set(key, a.currentTime);
+        }
+      };
+
       audio.onended = () => {
-        setSpeaking(false);
-        audioRef.current = null;
+        cleanupUrl();
+        progressMap.delete(key);
+        releaseAudio(key);
+        if (mountedRef.current) setPlayState("idle");
       };
+
       audio.onerror = () => {
-        setSpeaking(false);
-        audioRef.current = null;
-        // 播放出错也回退
-        const cleanText = cleanForTTS(rawText);
-        speakWithBrowser(cleanText);
+        cleanupUrl();
+        releaseAudio(key);
+        if (mountedRef.current) setPlayState("idle");
       };
 
+      // ── 注册到全局单例 ──
+      acquireAudio(key, stopAudio);
+      setAudioCleanup(key, () => {
+        cleanupUrl();
+        releaseAudio(key);
+        if (mountedRef.current) setPlayState("idle");
+      });
+
+      if (!mountedRef.current) return;
+      setPlayState("playing");
       await audio.play();
-    } catch (err) {
-      // 网络错误等，回退到浏览器 TTS
-      console.warn("Edge-TTS fetch failed, falling back to browser TTS:", err);
-      const cleanText = cleanForTTS(rawText);
-      speakWithBrowser(cleanText);
+    } catch {
+      cleanupUrl();
+      releaseAudio(key);
+      if (mountedRef.current) setPlayState("idle");
+    } finally {
+      isFetchingRef.current = false;
     }
-  }, [cleanForTTS, speakWithBrowser]);
+  }, [cleanupUrl, key, stopAudio]);
 
-  /**
-   * 朗读 / 停止朗读 的切换函数
-   */
-  const speak = useCallback(() => {
-    if (!text) return;
+  // ── 浏览器 TTS ──
+  const speakBrowser = useCallback(() => {
+    if (!isSupported) return;
+    // 停掉全局其他
+    acquireAudio(key, () => {
+      window.speechSynthesis.cancel();
+      if (mountedRef.current) setPlayState("idle");
+    });
 
-    // 切换停止
-    if (speaking) {
-      // 停止 Edge-TTS 音频
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-        audioRef.current = null;
-      }
-      // 停止浏览器 TTS
-      if (isSupported) {
-        window.speechSynthesis.cancel();
-      }
-      setSpeaking(false);
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(textRef.current);
+    u.lang = "zh-CN";
+    u.rate = 0.95;
+    if (bestVoice) u.voice = bestVoice;
+    u.onend = () => { releaseAudio(key); if (mountedRef.current) setPlayState("idle"); };
+    u.onerror = () => { releaseAudio(key); if (mountedRef.current) setPlayState("idle"); };
+    u.onpause = () => { if (mountedRef.current) setPlayState("paused"); };
+    u.onresume = () => { if (mountedRef.current) setPlayState("playing"); };
+    if (mountedRef.current) setPlayState("playing");
+    window.speechSynthesis.speak(u);
+  }, [isSupported, bestVoice, key]);
+
+  // ── 主点击 ──
+  const handleClick = useCallback(() => {
+    const now = Date.now();
+    const isDbl = now - lastClickRef.current < 350;
+    lastClickRef.current = now;
+
+    if (isDbl) {
+      // ══ 双击：停止+重置 ══
+      stopAudio();
+      releaseAudio(key);
+      setPlayState("idle");
       return;
     }
 
-    // 优先使用 Edge-TTS
-    speakWithEdgeTTS(text);
-  }, [text, speaking, isSupported, speakWithEdgeTTS]);
+    if (playState === "playing") {
+      pauseAudio();
+      setPlayState("paused");
+      return;
+    }
 
-  // 组件卸载时清理
-  useEffect(() => {
-    return () => {
+    if (playState === "paused") {
       if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
+        audioRef.current.play().then(() => setPlayState("playing")).catch(() => {
+          const saved = progressMap.get(key) || 0;
+          fetchAndPlay(saved);
+        });
+        return;
       }
-      if (isSupported) {
-        window.speechSynthesis.cancel();
-      }
-    };
-  }, [isSupported]);
+      const saved = progressMap.get(key) || 0;
+      fetchAndPlay(saved);
+      return;
+    }
 
-  // 如果浏览器不支持语音合成且 Edge-TTS 也可能不可用，仍然显示按钮（Edge-TTS 可用）
-  // 只有文本长度不足时不显示
+    // idle → 开始播放
+    fetchAndPlay(progressMap.get(key) || 0);
+  }, [playState, key, stopAudio, pauseAudio, fetchAndPlay]);
+
+  // ── 被全局冲突抢占时的回调 ──
+  // 因为是模块级变量，直接挂到全局
+  // 在 acquireAudio/fetchAndPlay 中已处理
+
+  // ── 卸载 ──
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      const a = audioRef.current;
+      if (a && a.duration && a.duration > 0 && a.duration < 3600) {
+        progressMap.set(key, a.currentTime);
+      }
+      stopAudio();
+      releaseAudio(key);
+    };
+  }, [key, stopAudio]);
+
   if (text.length < minLength) return null;
+
+  const icon = playState === "playing" ? <Pause size={12} /> :
+              playState === "paused"  ? <Play size={12} /> :
+              <Volume2 size={12} />;
+  const label = playState === "playing" ? "暂停" :
+               playState === "paused"  ? "续播" :
+               "朗读";
 
   return (
     <button
-      onClick={speak}
+      onClick={handleClick}
       className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] transition-colors ${
-        speaking
+        playState !== "idle"
           ? "text-[var(--color-accent)] bg-[var(--color-accent)]/10"
           : "text-[var(--color-text-muted)] hover:text-[var(--color-accent)]"
       }`}
-      title={speaking ? "停止朗读" : "朗读 (Edge-TTS)"}
+      title={playState === "playing" ? "单击暂停 · 双击停止" :
+             playState === "paused"  ? "单击续播 · 双击停止" :
+             "单击朗读 · 双击停止"}
     >
-      {speaking ? <VolumeX size={12} /> : <Volume2 size={12} />}
-      {speaking ? "停止" : "朗读"}
+      {icon}
+      {label}
     </button>
   );
 }

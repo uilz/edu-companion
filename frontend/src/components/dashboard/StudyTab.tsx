@@ -116,7 +116,7 @@ export function StudyTab() {
         </div>
 
         {/* 倒计时数字展示 */}
-        <div className="text-7xl font-bold text-[var(--color-text)] tabular-nums tracking-tight mb-8"
+        <div className="text-7xl font-semibold text-[var(--color-text)] tabular-nums tracking-tight mb-8"
           style={{ fontVariantNumeric: 'tabular-nums' }}>
           {timeStr}
         </div>
@@ -125,14 +125,14 @@ export function StudyTab() {
         <div className="flex items-center justify-center gap-3">
           <button
             onClick={toggleTimer}
-            className="inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity"
+            className="inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold bg-[var(--color-accent)] text-white hover:opacity-90 active:scale-[0.97] transition-opacity"
             style={{ borderRadius: '2px' }}
           >
             {isRunning ? <><Pause size={16} /> 暂停</> : <><Play size={16} /> 开始</>}
           </button>
           <button
             onClick={resetTimer}
-            className="inline-flex items-center gap-2 px-4 py-3 text-sm text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface)] transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-3 text-sm text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface)] active:scale-[0.97] transition-all"
             style={{ borderRadius: '2px' }}
           >
             <RotateCcw size={14} /> 重置
@@ -154,7 +154,7 @@ export function StudyTab() {
           <div className="flex items-center justify-center gap-2 mb-2">
             <Flame size={18} className="text-[var(--color-warning)]" />
           </div>
-          <div className="text-2xl font-bold text-[var(--color-text)]">{streak}</div>
+          <div className="text-2xl font-semibold text-[var(--color-text)]">{streak}</div>
           <div className="text-[10px] text-[var(--color-text-muted)] mt-1">连续天数</div>
         </Card>
 
@@ -163,7 +163,7 @@ export function StudyTab() {
           <div className="flex items-center justify-center gap-2 mb-2">
             <Timer size={18} className="text-[var(--color-accent)]" />
           </div>
-          <div className="text-2xl font-bold text-[var(--color-text)]">{todayMinutes}</div>
+          <div className="text-2xl font-semibold text-[var(--color-text)]">{todayMinutes}</div>
           <div className="text-[10px] text-[var(--color-text-muted)] mt-1">今日分钟</div>
         </Card>
 
@@ -172,7 +172,7 @@ export function StudyTab() {
           <div className="flex items-center justify-center gap-2 mb-2">
             <Target size={18} className="text-[var(--color-success)]" />
           </div>
-          <div className="text-2xl font-bold text-[var(--color-text)]">
+          <div className="text-2xl font-semibold text-[var(--color-text)]">
             {workSessions}<span className="text-sm text-[var(--color-text-muted)]">/{goalSessions}</span>
           </div>
           <div className="text-[10px] text-[var(--color-text-muted)] mt-1">完成番茄</div>
@@ -192,7 +192,7 @@ export function StudyTab() {
         {/* 进度条填充 */}
         <div className="h-2 bg-[var(--color-surface)] overflow-hidden">
           <div
-            className="h-full bg-[var(--color-accent)] transition-all duration-700"
+            className="h-full bg-[var(--color-accent)] active:scale-[0.97] transition-all duration-700"
             style={{ width: `${Math.min((workSessions / goalSessions) * 100, 100)}%` }}
           />
         </div>
@@ -210,7 +210,7 @@ export function StudyTab() {
               <div key={i} className="flex items-center justify-between text-sm py-1 border-b border-[var(--color-surface)] last:border-0">
                 <div className="flex items-center gap-2">
                   {/* 序号标识 */}
-                  <span className="w-6 h-6 rounded-full bg-[var(--color-accent-soft)] text-[var(--color-accent)] text-[10px] font-bold flex items-center justify-center">
+                  <span className="w-6 h-6 rounded-full bg-[var(--color-accent-soft)] text-[var(--color-accent)] text-[10px] font-semibold flex items-center justify-center">
                     {i + 1}
                   </span>
                   <span className="text-[var(--color-text-secondary)] text-xs">

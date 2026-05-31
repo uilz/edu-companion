@@ -21,7 +21,7 @@ export default function NotFound() {
         // 提供返回首页的导航按钮
         <Link
           href="/dashboard"
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors inline-block"
+          className="px-4 py-2 bg-[var(--color-accent)] text-white rounded-lg hover:bg-[var(--color-accent-hover)] active:scale-[0.97] transition-colors inline-block"
         >
           返回首页
         </Link>

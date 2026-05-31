@@ -99,7 +99,6 @@ export default function OverviewTab() {
           setAchievements(aData.achievements || []);
         }
       } catch (e) {
-        console.error('Failed to load dashboard data:', e);
       } finally {
         setLoading(false);
       }
@@ -125,7 +124,7 @@ export default function OverviewTab() {
     <div>
       {/* Header */}
       <header className="mb-8">
-        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-[var(--color-text)] mb-2">
+        <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-[var(--color-text)] mb-2">
           {greeting}
         </h1>
         <p className="text-sm sm:text-base text-[var(--color-text-muted)]">
@@ -142,10 +141,10 @@ export default function OverviewTab() {
               {dashboard && (
                 <>
                   {' · '}经验值{' '}
-                  <span className="text-yellow-400 font-semibold">{dashboard.engagement.xp}</span>
+                  <span className="text-[var(--color-warning)] font-semibold">{dashboard.engagement.xp}</span>
                   {' · '}连续
-                  <span className="text-orange-400 font-semibold"> {dashboard.engagement.streak} 天</span>
-                  <Flame size={14} className="inline ml-1 text-orange-400" />
+                  <span className="text-[var(--color-warning)] font-semibold"> {dashboard.engagement.streak} 天</span>
+                  <Flame size={14} className="inline ml-1 text-[var(--color-warning)]" />
                 </>
               )}
             </>
@@ -178,14 +177,14 @@ export default function OverviewTab() {
       {/* 统计卡片 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
         {[
-          { icon: <Dumbbell size={18} />, label: '今日练习', value: loading ? '—' : `${dashboard?.engagement.today_practiced || progress?.total_questions || 0} 题`, color: 'text-blue-400' },
-          { icon: <Target size={18} />, label: '今日正确率', value: loading ? '—' : accuracy, color: 'text-green-400' },
-          { icon: <Brain size={18} />, label: '已掌握', value: loading ? '—' : `${masteredCount} 个`, color: 'text-purple-400' },
-          { icon: <Trophy size={18} />, label: '成就', value: loading ? '—' : `${unlockedAchievements} 个`, color: 'text-yellow-400' },
+          { icon: <Dumbbell size={18} />, label: '今日练习', value: loading ? '—' : `${dashboard?.engagement.today_practiced || progress?.total_questions || 0} 题`, color: 'text-[var(--color-info)]' },
+          { icon: <Target size={18} />, label: '今日正确率', value: loading ? '—' : accuracy, color: 'text-[var(--color-success)]' },
+          { icon: <Brain size={18} />, label: '已掌握', value: loading ? '—' : `${masteredCount} 个`, color: 'text-[var(--color-accent)]' },
+          { icon: <Trophy size={18} />, label: '成就', value: loading ? '—' : `${unlockedAchievements} 个`, color: 'text-[var(--color-warning)]' },
         ].map((stat) => (
           <div key={stat.label} className="border border-[var(--color-border)] bg-[var(--color-card)] p-4 sm:p-5">
             <div className={`mb-2 ${stat.color}`}>{stat.icon}</div>
-            <div className="text-xl sm:text-2xl font-bold text-[var(--color-text)]">{stat.value}</div>
+            <div className="text-xl sm:text-2xl font-semibold text-[var(--color-text)]">{stat.value}</div>
             <div className="text-xs text-[var(--color-text-muted)] mt-1">{stat.label}</div>
           </div>
         ))}
@@ -205,9 +204,9 @@ export default function OverviewTab() {
                     <Link
                       key={item.node_id}
                       href={`/practice?skill=${encodeURIComponent(item.label)}`}
-                      className="flex items-center gap-2 px-3 py-2.5 bg-[var(--color-surface)] text-xs hover:bg-[var(--color-accent)]/10 transition-colors group"
+                      className="flex items-center gap-2 px-3 py-2.5 bg-[var(--color-surface)] text-xs hover:bg-[var(--color-accent)]/10 active:scale-[0.97] transition-colors group"
                     >
-                      <span className={`flex-shrink-0 ${isUrgent ? 'text-red-400' : 'text-blue-400'}`}>
+                      <span className={`flex-shrink-0 ${isUrgent ? 'text-[var(--color-error)]' : 'text-[var(--color-info)]'}`}>
                         {isUrgent ? <Clock size={13} /> : <BookOpen size={13} />}
                       </span>
                       <div className="flex-1 min-w-0">
@@ -218,7 +217,7 @@ export default function OverviewTab() {
                           掌握度 {Math.round(item.proficiency_mean * 100)}% · {item.reason}
                         </div>
                       </div>
-                      <div className={`text-[10px] font-semibold flex-shrink-0 ${isUrgent ? 'text-red-400' : 'text-gray-400'}`}>
+                      <div className={`text-[10px] font-semibold flex-shrink-0 ${isUrgent ? 'text-[var(--color-error)]' : 'text-[var(--color-text-muted)]'}`}>
                         {isUrgent ? '⚠ 复习' : '📖 练习'}
                       </div>
                     </Link>
@@ -233,7 +232,7 @@ export default function OverviewTab() {
               </div>
             ) : (
               <div className="py-4 text-center text-xs text-[var(--color-text-muted)]">
-                <CheckCircle2 size={16} className="mx-auto mb-1 text-green-400" />
+                <CheckCircle2 size={16} className="mx-auto mb-1 text-[var(--color-success)]" />
                 暂无待办练习，继续学习新知识吧！
               </div>
             )}
@@ -248,11 +247,11 @@ export default function OverviewTab() {
                 {Object.entries(dashboard.mastery).sort(([, a], [, b]) => a - b).map(([label, score]) => {
                   const pct = Math.round(score * 100);
                   let color: string;
-                  if (pct >= 80) color = 'bg-green-500';
-                  else if (pct >= 60) color = 'bg-emerald-400';
-                  else if (pct >= 40) color = 'bg-yellow-400';
-                  else if (pct >= 20) color = 'bg-orange-400';
-                  else color = 'bg-red-400';
+                  if (pct >= 80) color = 'bg-[var(--color-success)]';
+                  else if (pct >= 60) color = 'bg-[var(--color-success)]';
+                  else if (pct >= 40) color = 'bg-[var(--color-warning)]';
+                  else if (pct >= 20) color = 'bg-[var(--color-warning)]';
+                  else color = 'bg-[var(--color-error)]';
                   return (
                     <div key={label} className="flex items-center gap-2">
                       <span className="text-xs text-[var(--color-text-secondary)] w-20 truncate flex-shrink-0">{label}</span>
@@ -276,22 +275,22 @@ export default function OverviewTab() {
                 <Link
                   key={`dec-${item.label}`}
                   href={`/practice?skill=${encodeURIComponent(item.label)}`}
-                  className="flex items-center gap-2 px-3 py-2 bg-[var(--color-surface)] text-xs hover:bg-[var(--color-accent)]/10 transition-colors group mb-1"
+                  className="flex items-center gap-2 px-3 py-2 bg-[var(--color-surface)] text-xs hover:bg-[var(--color-accent)]/10 active:scale-[0.97] transition-colors group mb-1"
                 >
-                  <TrendingUp size={13} className="text-red-400 flex-shrink-0 rotate-180" />
+                  <TrendingUp size={13} className="text-[var(--color-error)] flex-shrink-0 rotate-180" />
                   <span className="text-[var(--color-text-secondary)] group-hover:text-[var(--color-accent)] flex-1">{item.label}</span>
-                  <span className="text-[10px] text-red-400">{Math.round(item.proficiency_mean * 100)}% ↓</span>
+                  <span className="text-[10px] text-[var(--color-error)]">{Math.round(item.proficiency_mean * 100)}% ↓</span>
                 </Link>
               ))}
               {dashboard.trends.stagnating.slice(0, 3).map((item) => (
                 <Link
                   key={`stg-${item.label}`}
                   href={`/practice?skill=${encodeURIComponent(item.label)}`}
-                  className="flex items-center gap-2 px-3 py-2 bg-[var(--color-surface)] text-xs hover:bg-[var(--color-accent)]/10 transition-colors group mb-1"
+                  className="flex items-center gap-2 px-3 py-2 bg-[var(--color-surface)] text-xs hover:bg-[var(--color-accent)]/10 active:scale-[0.97] transition-colors group mb-1"
                 >
-                  <AlertCircle size={13} className="text-yellow-400 flex-shrink-0" />
+                  <AlertCircle size={13} className="text-[var(--color-warning)] flex-shrink-0" />
                   <span className="text-[var(--color-text-secondary)] group-hover:text-[var(--color-accent)] flex-1">{item.label}</span>
-                  <span className="text-[10px] text-yellow-400">停滞 {Math.round(item.stagnation_days)}天</span>
+                  <span className="text-[10px] text-[var(--color-warning)]">停滞 {Math.round(item.stagnation_days)}天</span>
                 </Link>
               ))}
             </Card>
@@ -309,9 +308,9 @@ export default function OverviewTab() {
                   <Link
                     key={skill}
                     href={`/practice?skill=${encodeURIComponent(skill)}`}
-                    className="flex items-center gap-2 px-3 py-2 bg-[var(--color-surface)] text-xs hover:bg-[var(--color-accent)]/10 transition-colors group"
+                    className="flex items-center gap-2 px-3 py-2 bg-[var(--color-surface)] text-xs hover:bg-[var(--color-accent)]/10 active:scale-[0.97] transition-colors group"
                   >
-                    <AlertCircle size={13} className="text-orange-400 flex-shrink-0" />
+                    <AlertCircle size={13} className="text-[var(--color-warning)] flex-shrink-0" />
                     <span className="text-[var(--color-text-secondary)] group-hover:text-[var(--color-accent)]">
                       {skill.replace(/_/g, ' ')}
                     </span>
@@ -329,7 +328,7 @@ export default function OverviewTab() {
               </div>
             ) : (
               <div className="py-4 text-center text-xs text-[var(--color-text-muted)]">
-                <Sparkles size={16} className="mx-auto mb-1 text-yellow-400" />
+                <Sparkles size={16} className="mx-auto mb-1 text-[var(--color-warning)]" />
                 暂无薄弱项，继续保持！
               </div>
             )}
@@ -352,7 +351,7 @@ export default function OverviewTab() {
               </div>
             ) : (
               <div className="py-4 text-center text-xs text-[var(--color-text-muted)]">
-                <MessageCircle size={16} className="mx-auto mb-1 text-blue-400" />
+                <MessageCircle size={16} className="mx-auto mb-1 text-[var(--color-info)]" />
                 开始对话获取个性化建议
               </div>
             )}

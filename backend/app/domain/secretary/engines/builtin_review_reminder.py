@@ -36,29 +36,29 @@ class ReviewReminderModule(SecretaryModule):
         self, user_id: str, ctx: SessionContext | None = None,
     ) -> list[Proposal]:
         """检查是否需要复习提醒"""
-        from ..analysis import find_overdue_reviews, detect_stagnant_topics
-        from ..models import ScopeSpec, AnalyzeOptions
+        from ..analysis import _get_nodes, find_overdue_reviews, detect_stagnant_topics
 
-        options = AnalyzeOptions(threshold=0.4, max_items=5, sort_by="urgency")
-        scope = ScopeSpec(level="user")
-
+        nodes = _get_nodes(user_id)
         proposals: list[Proposal] = []
 
         # 1. 复习到期项
         try:
-            overdue = find_overdue_reviews(user_id, scope, options)
-            for item in overdue.items[:3]:
-                urgency = round(item.norm_urgency * 10, 1)
+            overdue = find_overdue_reviews(user_id, nodes=nodes)
+            for item in overdue[:3]:
+                urgency = item.get("urgency", 0)
+                mastery = item.get("mastery", 0)
+                urgency_score = round(urgency * 10, 1)
+                stale_days = round((1 - mastery / 100) * 30, 0) if mastery else 0
                 proposals.append(Proposal(
                     emoji="📖",
-                    title=f"复习提醒: {item.label}",
-                    description=f"已停滞 {item.primary_value:.0f} 天，紧迫度 {urgency}/10。建议安排 15 分钟快速回顾",
+                    title=f"复习提醒: {item.get('label', '')}",
+                    description=f"紧迫度 {urgency_score}/10，掌握度 {mastery}%。建议安排 15 分钟快速回顾",
                     action_type="review",
-                    priority=4 if item.norm_urgency > 0.7 else 3,
+                    priority=4 if urgency > 0.7 else 3,
                     payload={
-                        "kp_id": item.node_id,
-                        "urgency": item.norm_urgency,
-                        "stagnation_days": item.primary_value,
+                        "kp_id": item.get("node_id", ""),
+                        "urgency": urgency,
+                        "mastery": mastery,
                     },
                     insight_source="find_overdue_reviews",
                 ))
@@ -67,18 +67,19 @@ class ReviewReminderModule(SecretaryModule):
 
         # 2. 停滞知识点
         try:
-            stagnant = detect_stagnant_topics(user_id, scope, options)
-            for item in stagnant.items[:2]:
-                if item.norm_urgency > 0.5:
+            stagnant = detect_stagnant_topics(user_id, nodes=nodes)
+            for item in stagnant[:2]:
+                days_since = item.get("days_since", 0)
+                if days_since > 5:
                     proposals.append(Proposal(
                         emoji="⏰",
-                        title=f"停滞知识点: {item.label}",
-                        description="多天未练习，建议安排专题复习",
+                        title=f"停滞知识点: {item.get('label', '')}",
+                        description=f"已 {days_since:.0f} 天未练习，建议安排专题复习",
                         action_type="review",
                         priority=3,
                         payload={
-                            "kp_id": item.node_id,
-                            "stagnation_days": item.primary_value,
+                            "kp_id": item.get("node_id", ""),
+                            "stagnation_days": days_since,
                         },
                         insight_source="detect_stagnant_topics",
                     ))

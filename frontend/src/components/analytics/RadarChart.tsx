@@ -26,9 +26,9 @@ interface GraphData {
 // ── Mastery color ──
 function masteryColor(mastery: number): string {
   if (mastery >= 80) return "#22c55e";
-  if (mastery >= 50) return "#f59e0b";
+  if (mastery >= 50) return "var(--color-warning)";
   if (mastery >= 20) return "#f97316";
-  return "#ef4444";
+  return "var(--color-error)";
 }
 
 function masteryLevelLabel(mastery: number): string {
@@ -231,7 +231,8 @@ export default function RadarChart() {
       if (!res.ok) throw new Error("Failed");
       const json: GraphData = await res.json();
       setGraphData(json);
-    } catch {
+    } catch (e) {
+
       setGraphData(null);
     } finally {
       setLoading(false);
@@ -309,7 +310,7 @@ export default function RadarChart() {
       {selectedNode && (
         <div className="mt-4 pt-3 border-t border-[var(--color-surface)]">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-bold text-[var(--color-text)]">
+            <span className="text-sm font-semibold text-[var(--color-text)]">
               {selectedNode.label}
             </span>
             <span
@@ -356,7 +357,7 @@ export default function RadarChart() {
           已掌握 ≥80%
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-2 h-2" style={{ backgroundColor: "#f59e0b" }} />
+          <span className="w-2 h-2" style={{ backgroundColor: "var(--color-warning)" }} />
           发展中 ≥50%
         </span>
         <span className="flex items-center gap-1">
@@ -364,7 +365,7 @@ export default function RadarChart() {
           初学 ≥20%
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-2 h-2" style={{ backgroundColor: "#ef4444" }} />
+          <span className="w-2 h-2" style={{ backgroundColor: "var(--color-error)" }} />
           薄弱 &lt;20%
         </span>
       </div>

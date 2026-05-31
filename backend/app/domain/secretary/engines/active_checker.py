@@ -80,8 +80,8 @@ class ActiveChecker:
         for p in proposals:
             try:
                 store.save_proposal(p, user_id=self._user_id, session_id="_active_check")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Proposal save failed for active check: %s", e)
 
         # 推送到黑板
         try:
@@ -102,8 +102,8 @@ class ActiveChecker:
                         "proposal_count": len(proposals),
                     }
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("WS broadcast failed after active check: %s", e)
 
         logger.info("📋 秘书主动检查: %d 个模块执行，生成 %d 条提案", findings["modules_run"], findings["proposals_generated"])
         return findings

@@ -27,7 +27,7 @@ export default function SecretarySuggestionsBlock({
   if (proposals.length === 0) return null;
 
   return (
-    <div className="border border-[var(--color-accent)]/20 bg-[var(--color-accent)]/5 mt-2 overflow-hidden">
+    <div className="border border-[var(--color-accent)]/20 bg-[var(--color-accent)]/5 mt-2 overflow-hidden active:scale-[0.97] transition-transform">
       {/* Header */}
       <div className="px-3 py-2 border-b border-[var(--color-accent)]/10 flex items-center gap-2">
         <Bell size={14} className="text-[var(--color-accent)]" />
@@ -128,7 +128,7 @@ function ProposalCard({ proposal }: { proposal: SecretaryProposal }) {
         <button
           onClick={handleAccept}
           disabled={loading}
-          className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-[var(--color-accent)] text-white rounded hover:opacity-90 transition-opacity disabled:opacity-50"
+          className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-[var(--color-accent)] text-white rounded hover:opacity-90 active:scale-[0.97] transition-opacity disabled:opacity-50"
         >
           <Check size={10} />
           执行
@@ -136,7 +136,7 @@ function ProposalCard({ proposal }: { proposal: SecretaryProposal }) {
         <button
           onClick={handleDismiss}
           disabled={loading}
-          className="inline-flex items-center gap-1 px-2 py-1 text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] bg-[var(--color-surface)] rounded border border-[var(--color-border)] hover:border-[var(--color-text-muted)] transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-1 px-2 py-1 text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] bg-[var(--color-surface)] rounded border border-[var(--color-border)] hover:border-[var(--color-text-muted)] active:scale-[0.97] transition-all disabled:opacity-50"
         >
           <X size={10} />
           忽略

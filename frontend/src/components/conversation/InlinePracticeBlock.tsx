@@ -6,6 +6,7 @@ import { useState, useMemo, useCallback } from "react";
 import { BookOpen, Lightbulb, Check, X, Loader2 } from "lucide-react";
 import MathContent from "@/components/ui/MathContent";
 import { renderMath, renderMarkdown } from "@/lib/math";
+import { sanitizeHtml } from "@/lib/sanitize";
 
 // ===== 选项接口 =====
 interface Option {
@@ -84,7 +85,7 @@ export default function InlinePracticeBlock({
       setSubmitted(true);
       onAnswer(blockId, selectedAnswer);
     } catch (e) {
-      console.error("Failed to submit answer:", e);
+
     } finally {
       setIsSubmitting(false);
     }
@@ -104,7 +105,7 @@ export default function InlinePracticeBlock({
       setHintLevel(result.level);
       setShowHint(true);
     } catch (e) {
-      console.error("Failed to get hint:", e);
+
     }
   }, [blockId]);
 
@@ -129,9 +130,9 @@ export default function InlinePracticeBlock({
       <div className="border border-[var(--color-border)] bg-[var(--color-surface)] mt-2">
         <div className="px-3 py-2 border-b border-[var(--color-border)] flex items-center gap-2">
           {isCorrect ? (
-            <Check size={14} className="text-green-400" />
+            <Check size={14} className="text-[var(--color-success)]" />
           ) : (
-            <X size={14} className="text-red-400" />
+            <X size={14} className="text-[var(--color-error)]" />
           )}
           <span className="text-xs font-medium text-[var(--color-text)]">
             {isCorrect ? "回答正确!" : skipped ? "已跳过" : "回答错误"}
@@ -166,7 +167,7 @@ export default function InlinePracticeBlock({
       <div className="px-3 py-3">
         <div
           className="text-sm text-[var(--color-text)] leading-relaxed mb-3"
-          dangerouslySetInnerHTML={{ __html: stemHtml }}
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(stemHtml) }}
         />
 
         {/* Options - choice type */}
@@ -222,7 +223,7 @@ export default function InlinePracticeBlock({
         {showHint && (
           <div className="mb-3 px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-1.5 mb-1">
-              <Lightbulb size={12} className="text-yellow-400" />
+              <Lightbulb size={12} className="text-[var(--color-warning)]" />
               <span className="text-[10px] text-[var(--color-text-muted)]">
                 提示 {hintLevel}
               </span>
@@ -238,7 +239,7 @@ export default function InlinePracticeBlock({
           <button
             onClick={handleSubmit}
             disabled={!selectedAnswer.trim() || isSubmitting}
-            className="flex-1 px-4 py-2 bg-[var(--color-accent)] text-white text-sm disabled:opacity-30 hover:bg-[var(--color-accent-hover)] transition-colors flex items-center justify-center gap-1.5"
+            className="flex-1 px-4 py-2 bg-[var(--color-accent)] text-white text-sm disabled:opacity-30 hover:bg-[var(--color-accent-hover)] active:scale-[0.97] transition-colors flex items-center justify-center gap-1.5"
           >
             {isSubmitting ? (
               <>
@@ -252,7 +253,7 @@ export default function InlinePracticeBlock({
           <button
             onClick={handleGetHint}
             disabled={isSubmitting}
-            className="px-3 py-2 border border-[var(--color-border)] text-[var(--color-text-secondary)] text-sm hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-30 flex items-center gap-1"
+            className="px-3 py-2 border border-[var(--color-border)] text-[var(--color-text-secondary)] text-sm hover:bg-[var(--color-surface-hover)] active:scale-[0.97] transition-all disabled:opacity-30 flex items-center gap-1"
           >
             <Lightbulb size={14} />
             提示
@@ -260,7 +261,7 @@ export default function InlinePracticeBlock({
           <button
             onClick={handleSkip}
             disabled={isSubmitting}
-            className="px-3 py-2 border border-[var(--color-border)] text-[var(--color-text-muted)] text-sm hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-30"
+            className="px-3 py-2 border border-[var(--color-border)] text-[var(--color-text-muted)] text-sm hover:bg-[var(--color-surface-hover)] active:scale-[0.97] transition-all disabled:opacity-30"
           >
             跳过
           </button>

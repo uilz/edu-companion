@@ -88,7 +88,6 @@ export function PlanTab() {
       }
     } catch (e) {
       setError("加载失败，请检查后端服务");
-      console.error(e);
     } finally {
       setLoading(false);
     }
@@ -109,7 +108,6 @@ export function PlanTab() {
         await loadData();
       }
     } catch (e) {
-      console.error(e);
     } finally {
       setGenerating(false);
     }
@@ -128,7 +126,6 @@ export function PlanTab() {
         if (progRes.ok) setProgress(await progRes.json());
       }
     } catch (e) {
-      console.error(e);
     }
   };
 
@@ -153,7 +150,7 @@ export function PlanTab() {
         {/* ── 页面头部：标题 + 操作按钮 ── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-[var(--color-text)] tracking-tight">
+            <h1 className="text-2xl font-semibold text-[var(--color-text)] tracking-tight">
               学习规划
             </h1>
             <p className="text-sm text-[var(--color-text-muted)] mt-1">
@@ -165,7 +162,7 @@ export function PlanTab() {
           <button
             onClick={handleGenerate}
             disabled={generating}
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium bg-[var(--color-accent)] text-white hover:opacity-90 active:scale-[0.97] transition-opacity disabled:opacity-50"
           >
             {generating ? (
               <Loader2 size={15} className="animate-spin" />
@@ -198,7 +195,7 @@ export function PlanTab() {
             <button
               onClick={handleGenerate}
               disabled={generating}
-              className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity"
+              className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium bg-[var(--color-accent)] text-white hover:opacity-90 active:scale-[0.97] transition-opacity"
             >
               {generating ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
               生成我的学习计划
@@ -237,7 +234,7 @@ export function PlanTab() {
             <div className="mb-8">
               <div className="h-1.5 bg-[var(--color-surface)] overflow-hidden">
                 <div
-                  className="h-full bg-[var(--color-accent)] transition-all duration-500"
+                  className="h-full bg-[var(--color-accent)] active:scale-[0.97] transition-all duration-500"
                   style={{ width: `${Math.min(completionRate * 100, 100)}%` }}
                 />
               </div>
@@ -305,7 +302,7 @@ function OverviewCard({ icon, label, value }: {
         {icon}
         <span className="text-[10px] uppercase tracking-wider">{label}</span>
       </div>
-      <div className="text-lg font-bold text-[var(--color-text)]">{value}</div>
+      <div className="text-lg font-semibold text-[var(--color-text)]">{value}</div>
     </div>
   );
 }
@@ -324,7 +321,7 @@ function TaskCard({ item, index, onComplete }: {
     <div className="flex items-start gap-3 px-4 py-3.5 border border-[var(--color-border)] bg-[var(--color-bg)] hover:border-[var(--color-border-hover)] transition-colors group">
       <button
         onClick={onComplete}
-        className="flex-shrink-0 mt-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors"
+        className="flex-shrink-0 mt-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] active:scale-[0.97] transition-all"
         title="标记完成"
       >
         <Circle size={18} />

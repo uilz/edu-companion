@@ -136,7 +136,7 @@ export default function ProgressPage() {
   // 构建错误分布饼图的 conic-gradient 渐变字符串
   const totalErr = errorDist.reduce((s, c) => s + c.count, 0);
   let cumPct = 0;
-  const errorColors = ["#0066FF", "#737373", "#f59e0b", "#ef4444", "#a855f7", "#ec4899"];
+  const errorColors = ["#0066FF", "#737373", "var(--color-warning)", "var(--color-error)", "#a855f7", "#ec4899"];
   const gradientStops = errorDist.map((c, i) => {
     const start = cumPct;
     cumPct += totalErr > 0 ? (c.count / totalErr) * 100 : 0;
@@ -170,7 +170,7 @@ export default function ProgressPage() {
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
       <div className="max-w-5xl mx-auto px-6 py-10 sm:py-16">
-        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-[var(--color-text)] mb-10">
+        <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-[var(--color-text)] mb-10">
           学情
         </h1>
 
@@ -191,7 +191,7 @@ export default function ProgressPage() {
             { label: "已掌握技能", value: `${masteredCount} 个` },
           ].map((s) => (
             <div key={s.label} className="border border-[var(--color-border)] bg-[var(--color-card)] p-5">
-              <div className="text-2xl font-bold text-[var(--color-text)]">{s.value}</div>
+              <div className="text-2xl font-semibold text-[var(--color-text)]">{s.value}</div>
               <div className="text-xs text-[var(--color-text-muted)] mt-1">{s.label}</div>
             </div>
           ))}
@@ -249,7 +249,7 @@ export default function ProgressPage() {
                 {dailyTrend.map((d, i) => (
                   <div key={`${d.date}-${i}`} className="flex-1 flex flex-col items-center gap-1">
                     <div
-                      className="w-full bg-[var(--color-accent)]/80 hover:bg-[var(--color-accent)] transition-colors cursor-pointer group relative"
+                      className="w-full bg-[var(--color-accent)]/80 hover:bg-[var(--color-accent)] active:scale-[0.97] transition-colors cursor-pointer group relative"
                       style={{ height: `${Math.max((d.hours / maxHours) * 100, 3)}%` }}
                     >
                       <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] text-[var(--color-text-muted)] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">

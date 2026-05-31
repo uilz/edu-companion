@@ -158,7 +158,7 @@ export default function QualityPage() {
         {/* ── 页面标题栏 ── */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-[var(--color-text)] tracking-tight">
+            <h1 className="text-2xl font-semibold text-[var(--color-text)] tracking-tight">
               题库质量
             </h1>
             <p className="text-sm text-[var(--color-text-muted)] mt-1">
@@ -324,7 +324,7 @@ function QuestionDetailPanel({ detail }: { detail: QuestionDetail }) {
           <span className="text-[10px] font-mono text-[var(--color-text-muted)]">
             {detail.question_id}
           </span>
-          <span className={`text-[10px] font-bold px-2 py-0.5 ${GRADE_COLORS[detail.quality_grade] || ""}`}>
+          <span className={`text-[10px] font-semibold px-2 py-0.5 ${GRADE_COLORS[detail.quality_grade] || ""}`}>
             {detail.quality_grade.toUpperCase()} · {detail.quality_score.toFixed(2)}
           </span>
         </div>
@@ -379,7 +379,7 @@ function QuestionDetailPanel({ detail }: { detail: QuestionDetail }) {
                     : ""
                 }`}
               >
-                <span className={`font-bold w-5 text-center ${d.is_correct ? "text-[#10b981]" : "text-[var(--color-text-muted)]"}`}>
+                <span className={`font-semibold w-5 text-center ${d.is_correct ? "text-[#10b981]" : "text-[var(--color-text-muted)]"}`}>
                   {d.letter}
                 </span>
                 <span className="flex-1 truncate text-[var(--color-text)]">{d.text}</span>
@@ -414,7 +414,7 @@ function Metric({ label, value, hint }: { label: string; value: string; hint: st
   return (
     <div>
       <div className="text-[10px] text-[var(--color-text-muted)] uppercase mb-0.5">{label}</div>
-      <div className="text-lg font-bold text-[var(--color-text)]">{value}</div>
+      <div className="text-lg font-semibold text-[var(--color-text)]">{value}</div>
       <div className="text-[10px] text-[var(--color-text-muted)]">{hint}</div>
     </div>
   );

@@ -23,12 +23,12 @@ export default function EmptyState({ icon = '📭', title, description, action }
       {/* 图标区域：5xl 字号，降低不透明度以弱化视觉权重 */}
       <div className="text-5xl mb-4 opacity-60">{icon}</div>
       {/* 标题区域：lg 字号、半粗体，适配深色模式 */}
-      <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
+      <h3 className="text-lg font-semibold text-[var(--color-text)] dark:text-[var(--color-text)] mb-2">
         {title}
       </h3>
       {/* 描述区域：仅当 description 存在时渲染，限制最大宽度 */}
       {description && (
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 max-w-sm">
+        <p className="text-sm text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)] mb-6 max-w-sm">
           {description}
         </p>
       )}

@@ -92,7 +92,6 @@ export default function HomePage() {
           setAchievements(aData.achievements || []);
         }
       } catch (e) {
-        console.error("Failed to load dashboard data:", e);
       } finally {
         setLoading(false);
       }
@@ -119,7 +118,7 @@ export default function HomePage() {
           <div className="flex items-center gap-3 mb-3">
             <span className="text-3xl">{greeting.emoji}</span>
             <div>
-              <h1 className="text-3xl sm:text-4xl font-extrabold text-[var(--color-text)] tracking-tight">
+              <h1 className="text-3xl sm:text-4xl font-semibold text-[var(--color-text)] tracking-tight">
                 {greeting.text}
               </h1>
               <p className="text-sm text-[var(--color-text-muted)] mt-0.5">
@@ -201,10 +200,10 @@ export default function HomePage() {
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
-              { icon: Dumbbell, label: "完成题目", value: loading ? "—" : `${progress?.total_questions || 0} 道`, accent: "text-blue-400", bg: "bg-blue-500/5" },
-              { icon: Target, label: "正确率", value: loading ? "—" : accuracy, accent: "text-emerald-400", bg: "bg-emerald-500/5" },
+              { icon: Dumbbell, label: "完成题目", value: loading ? "—" : `${progress?.total_questions || 0} 道`, accent: "text-[var(--color-info)]", bg: "bg-[var(--color-accent)]/5" },
+              { icon: Target, label: "正确率", value: loading ? "—" : accuracy, accent: "text-[var(--color-success)]", bg: "bg-emerald-500/5" },
               { icon: Brain, label: "已掌握", value: loading ? "—" : `${masteredCount} 个`, accent: "text-violet-400", bg: "bg-violet-500/5" },
-              { icon: Trophy, label: "成就", value: loading ? "—" : `${unlockedAchievements} 个`, accent: "text-amber-400", bg: "bg-amber-500/5" },
+              { icon: Trophy, label: "成就", value: loading ? "—" : `${unlockedAchievements} 个`, accent: "text-[var(--color-warning)]", bg: "bg-amber-500/5" },
             ].map((stat) => (
               <div
                 key={stat.label}
@@ -214,7 +213,7 @@ export default function HomePage() {
                   <stat.icon size={17} />
                 </div>
                 <div>
-                  <div className="text-xl sm:text-2xl font-bold text-[var(--color-text)]">
+                  <div className="text-xl sm:text-2xl font-semibold text-[var(--color-text)]">
                     {stat.value}
                   </div>
                   <div className="text-xs text-[var(--color-text-muted)] mt-0.5">
@@ -241,7 +240,7 @@ export default function HomePage() {
                     key={skill}
                     className="flex items-center gap-2.5 px-3 py-2.5 rounded-md bg-[var(--color-surface)] text-sm group hover:bg-[var(--color-surface-hover)] transition-colors"
                   >
-                    <AlertCircle size={14} className="text-amber-400 flex-shrink-0" />
+                    <AlertCircle size={14} className="text-[var(--color-warning)] flex-shrink-0" />
                     <span className="text-[var(--color-text-secondary)] flex-1">
                       {skill.replace(/_/g, " ")}
                     </span>
@@ -257,7 +256,7 @@ export default function HomePage() {
               </div>
             ) : (
               <div className="py-6 text-center">
-                <Sparkles size={24} className="mx-auto mb-2 text-amber-400" />
+                <Sparkles size={24} className="mx-auto mb-2 text-[var(--color-warning)]" />
                 <p className="text-sm text-[var(--color-text-muted)]">暂无薄弱项，继续保持！</p>
               </div>
             )}
@@ -285,7 +284,7 @@ export default function HomePage() {
               </div>
             ) : (
               <div className="py-6 text-center">
-                <MessageCircle size={24} className="mx-auto mb-2 text-blue-400" />
+                <MessageCircle size={24} className="mx-auto mb-2 text-[var(--color-info)]" />
                 <p className="text-sm text-[var(--color-text-muted)]">
                   开始对话获取个性化学习建议
                 </p>
@@ -332,7 +331,7 @@ export default function HomePage() {
           <div className="swiss-divider" />
           <Link
             href="/learn"
-            className="inline-flex items-center gap-2 px-8 py-3.5 bg-[var(--color-accent)] text-white font-semibold rounded-lg hover:bg-[var(--color-accent-hover)] hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
+            className="inline-flex items-center gap-2 px-8 py-3.5 bg-[var(--color-accent)] text-white font-semibold rounded-lg hover:bg-[var(--color-accent-hover)] hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-200"
           >
             <Zap size={18} />
             开始学习

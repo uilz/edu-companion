@@ -16,7 +16,7 @@ interface SkeletonProps {
  */
 export function Skeleton({ className, variant = 'text' }: SkeletonProps) {
   // 基础样式：脉冲动画 + 灰色背景 + 圆角
-  const base = 'animate-pulse bg-gray-200 dark:bg-gray-700 rounded';
+  const base = 'animate-pulse bg-[var(--color-border)] dark:bg-[var(--color-surface-hover)] rounded';
 
   // 各变体对应的尺寸样式
   const variants = {

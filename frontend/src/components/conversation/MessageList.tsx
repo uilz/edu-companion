@@ -1,11 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useRef, useMemo, useState, useCallback } from "react";
 import { User, Bot, Trash2, Pencil, Check, X, ChevronDown, ChevronLeft, ChevronRight, Copy } from "lucide-react";
 import ResponseBlockRenderer from "./ResponseBlockRenderer";
+import QuoteBlockRenderer from "./QuoteBlockRenderer";
+import TextSelectionToolbar from "./TextSelectionToolbar";
+import SubBranchInline from "./SubBranchInline";
 import SpeakButton from "./SpeakButton";
-import { useRenderedContent } from "@/lib/useRenderedContent";
-import type { TreeNode, ResponseBlock } from "@/types";
+import MarkdownRenderer from "./MarkdownRenderer";
+import CognitiveTag from "./CognitiveTag";
+import { useTextSelection } from "./useTextSelection";
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
+import { useConversationStore } from "@/store/conversation-store";
+import type { TreeNode, ResponseBlock, SubBranchInfo } from "@/types";
 
 // MessageList 组件属性接口
 // messages: 消息树节点列表；responseBlocks: 响应块列表
@@ -15,9 +22,10 @@ interface MessageListProps {
   responseBlocks: ResponseBlock[];
   isLoading?: boolean;
   statusMessage?: string;
+  replyingToId?: string | null;  // 正在回复的消息 ID，loading 显示在该消息下方
   onDeleteMessage?: (messageId: string) => void;
   onEditMessage?: (messageId: string, newText: string) => Promise<number>;
-  onVersionSwitch?: (messageId: string, direction: "prev" | "next") => Promise<{ index: number; total: number } | null>;
+  onVersionSwitch?: (messageId: string, direction: "prev" | "next", currentIndex?: number) => Promise<{ index: number; total: number } | null>;
 }
 
 // 已编辑消息文本的映射表：messageId -> 新文本
@@ -29,6 +37,7 @@ export default function MessageList({
   responseBlocks,
   isLoading = false,
   statusMessage,
+  replyingToId,
   onDeleteMessage,
   onEditMessage,
   onVersionSwitch,
@@ -50,11 +59,84 @@ export default function MessageList({
   // 版本导航状态：记录每条消息当前的版本索引和总数
   const [versionMap, setVersionMap] = useState<Record<string, { index: number; total: number }>>({});
 
+  // Store actions
+  const setPendingQuote = useConversationStore((s) => s.setPendingQuote);
+  const enterSubBranch = useConversationStore((s) => s.enterSubBranch);
+  const loadSubBranches = useConversationStore((s) => s.loadSubBranches);
+
+  // Text selection (extracted to useTextSelection hook)
+  const {
+    selection,
+    handleTextMouseDown,
+    handleTextClick,
+    handleTextMouseUp,
+    handleTextContextMenu,
+    handleQuote,
+    handleSelectionCopy,
+  } = useTextSelection(setPendingQuote);
+
+  // Sub-branch data per message
+  const [subBranchData, setSubBranchData] = useState<Record<string, SubBranchInfo[]>>({});
+
+  // Load sub-branches for messages that have them
+  useEffect(() => {
+    for (const msg of messages) {
+      if (msg.has_sub_branches && !subBranchData[msg.id]) {
+        loadSubBranches(msg.id).then((branches) => {
+          if (branches.length > 0) {
+            setSubBranchData((prev) => ({ ...prev, [msg.id]: branches }));
+          }
+        });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.map((m) => m.id).join(",")]);
+
+  // 加载已修改消息的版本信息（页面刷新后恢复 versionMap）
+  useEffect(() => {
+    const modifiedIds = messages
+      .filter(m => m.role === "user" && m.has_modified_version && !versionMap[m.id])
+      .map(m => m.id);
+    if (modifiedIds.length === 0) return;
+
+    let cancelled = false;
+    Promise.all(
+      modifiedIds.map(async (msgId) => {
+        try {
+          const res = await fetch(`/api/conversations/tree/message/${msgId}`, { cache: "no-store" });
+          if (!res.ok) return { msgId, total: 0, index: 0 };
+          const data = await res.json();
+          const versions: string[] = data.versions || [];
+          const total = versions.length;
+          const idx = versions.indexOf(msgId);
+          return { msgId, total, index: idx >= 0 ? idx + 1 : total };
+        } catch (e) {
+
+          return { msgId, total: 0, index: 0 };
+        }
+      })
+    ).then(results => {
+      if (cancelled) return;
+      setVersionMap(prev => {
+        const next = { ...prev };
+        for (const r of results) {
+          if (r.total > 1 && !prev[r.msgId]) {
+            next[r.msgId] = { index: r.index, total: r.total };
+          }
+        }
+        return next;
+      });
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.map(m => m.id).join(",")]);
+
   // 复制消息文本到剪贴板（优先使用 Clipboard API，降级方案为 textarea + execCommand）
   const handleCopyMessage = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-    } catch {
+    } catch (e) {
+
       const ta = document.createElement("textarea");
       ta.value = text;
       ta.style.position = "fixed"; ta.style.opacity = "0";
@@ -65,12 +147,23 @@ export default function MessageList({
     }
   };
 
-  // 版本导航处理：切换到上/下一个版本，并更新版本映射状态
+  // 版本导航处理：切换到上/下一个版本
   const handleVersionNav = async (messageId: string, direction: "prev" | "next") => {
     if (!onVersionSwitch) return;
-    const result = await onVersionSwitch(messageId, direction);
+    const currentIdx = versionMap[messageId]?.index;
+    const result = await onVersionSwitch(messageId, direction, currentIdx);
     if (result) {
-      setVersionMap(prev => ({ ...prev, [messageId]: result }));
+      // Backend returns full new messages list — find the new user message and update versionMap
+      const newUserMsg = messages.find(
+        m => m.role === "user" && m.id !== messageId
+      );
+      const newMsgId = newUserMsg?.id || messageId;
+      setVersionMap(prev => {
+        const next = { ...prev };
+        next[newMsgId] = result;
+        if (newMsgId !== messageId) delete next[messageId];
+        return next;
+      });
     }
   };
 
@@ -96,12 +189,13 @@ export default function MessageList({
     if (onEditMessage) {
       try {
         const result = await onEditMessage(msgId, newText);
-        if (result > 0) {
-          setEditedTexts(prev => ({ ...prev, [msgId]: newText }));
-          setVersionMap(prev => ({ ...prev, [msgId]: { index: result, total: result } }));
-        }
+        // 始终记录编辑后的文本，确保 UI 显示最新内容
+        const verTotal = result > 0 ? result : 2; // 编辑后至少有原版+新版
+        setEditedTexts(prev => ({ ...prev, [msgId]: newText }));
+        // index=verTotal 表示当前显示的是最新版本
+        setVersionMap(prev => ({ ...prev, [msgId]: { index: verTotal, total: verTotal } }));
       } catch (e) {
-        console.error("Edit failed:", e);
+
       }
     }
     setEditingId(null);
@@ -127,7 +221,13 @@ export default function MessageList({
   }, []);
 
   // 消息去重：按 ID 去重，保留最后一条非空文本的消息（倒序遍历，优先保留有内容的消息）
+  const prevMsgsRef = useRef<{ len: number; lastId: string; result: TreeNode[] } | null>(null);
   const dedupedMessages = useMemo(() => {
+    const lastId = messages.length > 0 ? messages[messages.length - 1].id : "";
+    const prev = prevMsgsRef.current;
+    if (prev && prev.len === messages.length && prev.lastId === lastId) {
+      return prev.result;
+    }
     const seen = new Map<string, TreeNode>();
     // 倒序遍历，让后续（最终完成的）版本覆盖前面（流式中间态）的版本
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -145,7 +245,9 @@ export default function MessageList({
         }
       }
     }
-    return Array.from(seen.values()).reverse();
+    const result = Array.from(seen.values()).reverse();
+    prevMsgsRef.current = { len: messages.length, lastId, result };
+    return result;
   }, [messages]);
 
   // 按 message_id 将 responseBlocks 分组映射，便于在消息气泡下方展示
@@ -160,8 +262,26 @@ export default function MessageList({
   }, [responseBlocks]);
 
   // ==================== 渲染 JSX ====================
+  // Loading 动画组件（内联复用）
+  const loadingIndicator = statusMessage ? (
+    <div className="flex gap-4">
+      <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-[var(--color-surface)] text-[var(--color-accent)] border border-[var(--color-border)]">
+        <Bot size={16} />
+      </div>
+      <div className="flex items-center gap-2 px-4 py-2.5">
+        <div className="flex gap-1.5 items-center">
+          <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
+          <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "200ms" }} />
+          <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "400ms" }} />
+        </div>
+        {statusMessage && <span className="text-xs text-[var(--color-text-muted)] ml-1">{statusMessage}</span>}
+      </div>
+    </div>
+  ) : null;
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
+      <ErrorBoundary>
       <div
         ref={containerRef}
         className="flex-1 overflow-y-auto px-4 pt-6 pb-2 space-y-6"
@@ -188,12 +308,13 @@ export default function MessageList({
           const vInfo = versionMap[message.id] || { index: 1, total: hasVersions ? 1 : 0 };
 
           return (
-            <div key={message.id} className={`flex gap-4 ${isUser ? "flex-row-reverse" : ""}`}>
+            <>
+            <div key={message.id} className={`message-enter flex gap-4 ${isUser ? "flex-row-reverse" : ""}`}>
               {/* Avatar */}
               <div
                 className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
                   isUser
-                    ? "bg-blue-500 text-white"
+                    ? "bg-[var(--color-accent)] text-white"
                     : "bg-[var(--color-surface)] text-[var(--color-accent)] border border-[var(--color-border)]"
                 }`}
               >
@@ -202,16 +323,27 @@ export default function MessageList({
 
               {/* Content */}
               <div className={`flex-1 min-w-0 ${isUser ? "flex justify-end" : ""}`}>
-                <div className={`max-w-[85%] ${isUser ? "" : "space-y-0"}`}>
+                <div className={`relative max-w-[85%] pb-5 ${isUser ? "" : "space-y-0"}`}>
                   {isUser ? (
-                    <>
-                    <div className="group bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-4 pb-2.5 pt-2.5 rounded-2xl rounded-tr-md">
+                    <div className="group">
+                    {/* Render quote blocks from content_blocks */}
+                    {(message.content_blocks || [])
+                      .filter((b) => b.type === "quote")
+                      .map((b, qi) => (
+                        <QuoteBlockRenderer
+                          key={`quote-${qi}`}
+                          quotedText={b.quoted_text || ""}
+                          sourceConversationId={b.source_conversation_id}
+                          sourceMessageId={b.source_message_id}
+                        />
+                      ))}
+                    <div className="bg-[var(--color-surface)] border border-[var(--color-border)] px-4 pb-2.5 pt-2.5 rounded-[14px] rounded-tr-[14px] rounded-br-none">
                       {isEditing ? (
                         <div className="space-y-2 min-w-[200px]">
                           <textarea
                             value={editingText}
                             onChange={(e) => setEditingText(e.target.value)}
-                            className="w-full bg-white dark:bg-gray-900 border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 resize-none rounded-lg"
+                            className="w-full bg-white  border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 resize-none rounded-lg"
                             rows={3}
                             autoFocus
                           />
@@ -219,24 +351,58 @@ export default function MessageList({
                             <button onClick={handleCancelEdit} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
                               <X size={14} />
                             </button>
-                            <button onClick={handleSaveEdit} className="p-1 text-green-500 hover:text-green-600">
+                            <button onClick={handleSaveEdit} className="p-1 text-[var(--color-success)] hover:text-[var(--color-success)]">
                               <Check size={14} />
                             </button>
                           </div>
                         </div>
                       ) : (
-                        <div className="text-sm leading-relaxed text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words">
-                          <MessageContent text={displayText} />
+                        <div
+                          data-message-id={message.id}
+                          data-conversation-id={message.conversation_id}
+                          data-full-text={displayText}
+                          className="text-base leading-[1.65] text-[var(--color-text)] whitespace-pre-wrap break-words select-text"
+                          onMouseDown={handleTextMouseDown}
+                          onMouseUp={handleTextMouseUp}
+                          onContextMenu={handleTextContextMenu}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleTextClick(e, message.id, message.conversation_id, displayText);
+                          }}
+                        >
+                          <MarkdownRenderer content={displayText} />
                         </div>
                       )}
                     </div>
+                    {/* SubBranchInline for user messages */}
+                    {subBranchData[message.id] && subBranchData[message.id].length > 0 && (
+                      <div className="mt-1">
+                        <SubBranchInline
+                          messageId={message.id}
+                          subBranches={subBranchData[message.id]}
+                          onEnter={(convId) => enterSubBranch(convId)}
+                        />
+                      </div>
+                    )}
                       {/* 用户消息操作按钮：编辑/删除/复制 — 在气泡下方 */}
                       {!isEditing && (
-                        <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute bottom-0 right-0 flex items-center gap-1 bg-[var(--color-surface)] rounded-bl-md px-1 py-0.5 opacity-0 group-hover:opacity-100 max-lg:opacity-100 transition-opacity">
+                          {/* 版本切换导航 */}
+                          {vInfo.total > 1 && (
+                            <div className="flex items-center gap-0.5 text-xs text-[var(--color-text-muted)] mr-1 border-r border-[var(--color-border)] pr-1">
+                              <button onClick={() => handleVersionNav(message.id, "prev")} className="p-0.5 hover:text-[var(--color-text)]" title="上一版本">
+                                <ChevronLeft size={12} />
+                              </button>
+                              <span className="min-w-[2em] text-center font-mono">{vInfo.index}/{vInfo.total}</span>
+                              <button onClick={() => handleVersionNav(message.id, "next")} className="p-0.5 hover:text-[var(--color-text)]" title="下一版本">
+                                <ChevronRight size={12} />
+                              </button>
+                            </div>
+                          )}
                           <button onClick={() => handleStartEdit(message.id, displayText)} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]" title="编辑">
                             <Pencil size={12} />
                           </button>
-                          <button onClick={() => handleDeleteMessage(message.id)} className="p-1 text-[var(--color-text-muted)] hover:text-red-500" title="删除">
+                          <button onClick={() => handleDeleteMessage(message.id)} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-error)]" title="删除">
                             <Trash2 size={12} />
                           </button>
                           <button onClick={() => handleCopyMessage(displayText)} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]" title="复制">
@@ -244,10 +410,23 @@ export default function MessageList({
                           </button>
                         </div>
                       )}
-                    </>
-                  ) : (
-                    <>
-                    <div className="group bg-[var(--color-surface)] text-[var(--color-text)] px-4 py-3 rounded-2xl rounded-tl-md">
+                    {/* CognitiveTag for user messages */}
+                    <CognitiveTag messageId={message.id} messageText={displayText} initialNodeIds={message.cognitive_node_ids} />
+                  </div>
+                ) : (
+                  <div className="group">
+                    {/* Render quote blocks from content_blocks */}
+                    {(message.content_blocks || [])
+                      .filter((b) => b.type === "quote")
+                      .map((b, qi) => (
+                        <QuoteBlockRenderer
+                          key={`quote-${qi}`}
+                          quotedText={b.quoted_text || ""}
+                          sourceConversationId={b.source_conversation_id}
+                          sourceMessageId={b.source_message_id}
+                        />
+                      ))}
+                    <div className="bg-[var(--color-surface-alt)] text-[var(--color-text)] px-4 py-3 rounded-[14px] rounded-tl-[14px] rounded-bl-none">
                       {isEditing ? (
                         <div className="space-y-2 min-w-[200px]">
                           <textarea
@@ -261,15 +440,34 @@ export default function MessageList({
                             <button onClick={handleCancelEdit} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
                               <X size={14} />
                             </button>
-                            <button onClick={handleSaveEdit} className="p-1 text-green-500 hover:text-green-600">
+                            <button onClick={handleSaveEdit} className="p-1 text-[var(--color-success)] hover:text-[var(--color-success)]">
                               <Check size={14} />
                             </button>
                           </div>
                         </div>
+                      ) : !displayText.trim() && messageBlocks.length === 0 && isLoading ? (
+                        // 空占位消息 + 加载中 → 紧凑三点动画，不渲染空气泡
+                        <div className="flex gap-1.5 items-center py-1 px-1">
+                          <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
+                          <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "200ms" }} />
+                          <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "400ms" }} />
+                        </div>
                       ) : (
                         <>
-                          <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                            <MessageContent text={displayText} />
+                          <div
+                            data-message-id={message.id}
+                            data-conversation-id={message.conversation_id}
+                            data-full-text={displayText}
+                            className="text-base leading-[1.65] whitespace-pre-wrap break-words select-text"
+                            onMouseDown={handleTextMouseDown}
+                            onMouseUp={handleTextMouseUp}
+                            onContextMenu={handleTextContextMenu}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleTextClick(e, message.id, message.conversation_id, displayText);
+                            }}
+                          >
+                            <MarkdownRenderer content={displayText} />
                           </div>
                           {/* 响应块区域：思维链、工具调用结果等展示 */}
                           {messageBlocks.length > 0 && (
@@ -282,22 +480,20 @@ export default function MessageList({
                         </>
                       )}
                     </div>
+                    {/* SubBranchInline for assistant messages */}
+                    {subBranchData[message.id] && subBranchData[message.id].length > 0 && (
+                      <div className="mt-1">
+                        <SubBranchInline
+                          messageId={message.id}
+                          subBranches={subBranchData[message.id]}
+                          onEnter={(convId) => enterSubBranch(convId)}
+                        />
+                      </div>
+                    )}
                       {/* 消息操作按钮：删除/复制/语音 — 在气泡下方 */}
                       {!isEditing && (
-                        <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {/* 版本切换导航 */}
-                          {vInfo.total > 0 && (
-                            <div className="flex items-center gap-1 text-xs text-[var(--color-text-muted)] mr-1">
-                              <button onClick={() => handleVersionNav(message.id, "prev")} className="p-0.5 hover:text-[var(--color-text)]">
-                                <ChevronLeft size={12} />
-                              </button>
-                              <span>{vInfo.index}/{vInfo.total}</span>
-                              <button onClick={() => handleVersionNav(message.id, "next")} className="p-0.5 hover:text-[var(--color-text)]">
-                                <ChevronRight size={12} />
-                              </button>
-                            </div>
-                          )}
-                          <button onClick={() => handleDeleteMessage(message.id)} className="p-1 text-[var(--color-text-muted)] hover:text-red-500" title="删除">
+                        <div className="absolute bottom-0 left-0 flex items-center gap-1 bg-[var(--color-surface)] rounded-br-md px-1 py-0.5 opacity-0 group-hover:opacity-100 max-lg:opacity-100 transition-opacity">
+                          <button onClick={() => handleDeleteMessage(message.id)} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-error)]" title="删除">
                             <Trash2 size={12} />
                           </button>
                           <button onClick={() => handleCopyMessage(displayText)} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]" title="复制">
@@ -306,30 +502,21 @@ export default function MessageList({
                           <SpeakButton text={displayText} />
                         </div>
                       )}
-                    </>
-                  )}
+                    {/* CognitiveTag for assistant messages */}
+                    <CognitiveTag messageId={message.id} messageText={displayText} initialNodeIds={message.cognitive_node_ids} />
+                  </div>
+                )}
                 </div>
               </div>
             </div>
+            {/* 编辑后 AI 重新回复时，loading 显示在被编辑消息的下方 */}
+            {replyingToId === message.id && loadingIndicator}
+            </>
           );
         })}
 
-        {/* 加载中动画 */}
-        {isLoading && (
-          <div className="flex gap-4">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-[var(--color-surface)] text-[var(--color-accent)] border border-[var(--color-border)]">
-              <Bot size={16} />
-            </div>
-            <div className="flex items-center gap-2 px-4 py-2.5">
-              <div className="flex gap-1.5 items-center">
-                <span className="w-2 h-2 bg-[var(--color-accent)] rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
-                <span className="w-2 h-2 bg-[var(--color-accent)] rounded-full animate-pulse" style={{ animationDelay: "200ms" }} />
-                <span className="w-2 h-2 bg-[var(--color-accent)] rounded-full animate-pulse" style={{ animationDelay: "400ms" }} />
-              </div>
-              {statusMessage && <span className="text-xs text-[var(--color-text-muted)] ml-1">{statusMessage}</span>}
-            </div>
-          </div>
-        )}
+        {/* 加载中动画 — 发送新消息时（replyingToId 为空）显示在底部 */}
+        {isLoading && !replyingToId && !messages.some(m => m.role === "assistant" && !(m.content_blocks?.find(b => b.type === "text")?.text || "").trim()) && loadingIndicator}
 
         {/* 无消息但有响应块时，在底部内联展示 */}
         {responseBlocks.length > 0 && messages.length === 0 && (
@@ -342,13 +529,26 @@ export default function MessageList({
 
         <div ref={bottomRef} />
       </div>
+      </ErrorBoundary>
+
+      {/* Text Selection Toolbar */}
+      {selection && (
+        <TextSelectionToolbar
+          position={selection.position}
+          visible={true}
+          onQuote={handleQuote}
+          onCopy={handleSelectionCopy}
+          level={selection.level}
+          source={selection.source}
+        />
+      )}
 
       {/* 滚动到底部按钮：用户向上滚动时出现，点击回到最新消息 */}
       {showScrollButton && (
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2">
+        <div className="absolute bottom-20 right-4">
           <button
             onClick={() => bottomRef.current?.scrollIntoView({ behavior: "smooth" })}
-            className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-full p-2 shadow-lg hover:shadow-xl transition-shadow"
+            className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-full p-2 hover:bg-[var(--color-surface-hover)] transition-colors"
           >
             <ChevronDown size={20} />
           </button>
@@ -358,8 +558,4 @@ export default function MessageList({
   );
 }
 
-// 直接从 displayText 渲染，useRenderedContent 用于 MathJax
-const MessageContent = ({ text }: { text: string }) => {
-  const html = useRenderedContent(text);
-  return <div dangerouslySetInnerHTML={{ __html: html }} />;
-};
+// ══════════════════════════════════════════════════════════

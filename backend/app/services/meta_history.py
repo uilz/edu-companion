@@ -12,11 +12,12 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+from app.config import COMPANION_HOME
 from app.schemas.conversation import TreeNode
 
 logger = logging.getLogger(__name__)
 
-BASE_DIR = Path(os.path.expanduser("~/.companion/history"))
+BASE_DIR = COMPANION_HOME / "history"
 MAX_SHARD_SIZE = 100 * 1024 * 1024  # 100MB
 
 

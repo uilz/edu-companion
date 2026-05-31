@@ -21,7 +21,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
-  themeColor: '#09090b',
+  themeColor: '#fbfaf7',
 };
 
 // 根布局组件 —— 包裹所有页面，提供全局 HTML 结构与 Providers

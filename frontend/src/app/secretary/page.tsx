@@ -108,7 +108,6 @@ export default function SecretaryPage() {
         }));
       }
     } catch {
-      console.error("加载历史提案失败");
     }
     return [];
   };
@@ -121,7 +120,6 @@ export default function SecretaryPage() {
         setProposals(data);
       }
     } catch {
-      console.error("加载待处理提案失败");
     }
   };
 
@@ -133,13 +131,13 @@ export default function SecretaryPage() {
       {/* ── 页面标题 ── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-[var(--color-text)]">秘书系统</h1>
+          <h1 className="text-xl font-semibold text-[var(--color-text)]">秘书系统</h1>
           <p className="text-sm text-[var(--color-text-muted)] mt-0.5">智能学习助理，随时为你服务</p>
         </div>
         <button
           onClick={handleGenerate}
           disabled={generating}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[var(--color-accent)] text-white rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[var(--color-accent)] text-white rounded-md hover:opacity-90 active:scale-[0.97] transition-opacity disabled:opacity-50"
         >
           {generating ? "生成中…" : "生成建议"}
           <Bell size={12} />
@@ -160,16 +158,16 @@ export default function SecretaryPage() {
         <>
           <div className="grid grid-cols-4 gap-3">
             {[
-              { label: "薄弱点", value: snapshot?.weak_count ?? 0, icon: AlertTriangle, color: "text-red-400", bg: "bg-red-500/5" },
-              { label: "停滞项", value: snapshot?.stagnant_count ?? 0, icon: Clock, color: "text-yellow-400", bg: "bg-yellow-500/5" },
-              { label: "学习天数", value: snapshot?.streak_days ?? 0, icon: TrendingUp, color: "text-green-400", bg: "bg-green-500/5" },
-              { label: "认知负荷", value: snapshot?.cognitive_load != null ? `${Math.round(snapshot.cognitive_load * 100)}%` : "—", icon: Bell, color: "text-blue-400", bg: "bg-blue-500/5" },
+              { label: "薄弱点", value: snapshot?.weak_count ?? 0, icon: AlertTriangle, color: "text-[var(--color-error)]", bg: "bg-[var(--color-error)]/5" },
+              { label: "停滞项", value: snapshot?.stagnant_count ?? 0, icon: Clock, color: "text-[var(--color-warning)]", bg: "bg-yellow-500/5" },
+              { label: "学习天数", value: snapshot?.streak_days ?? 0, icon: TrendingUp, color: "text-[var(--color-success)]", bg: "bg-[var(--color-success)]/5" },
+              { label: "认知负荷", value: snapshot?.cognitive_load != null ? `${Math.round(snapshot.cognitive_load * 100)}%` : "—", icon: Bell, color: "text-[var(--color-info)]", bg: "bg-[var(--color-accent)]/5" },
             ].map((stat) => {
               const Icon = stat.icon;
               return (
                 <div key={stat.label} className={`p-3 rounded-lg ${stat.bg}`}>
                   <Icon size={14} className={stat.color} />
-                  <div className="text-lg font-bold text-[var(--color-text)] mt-1">{stat.value}</div>
+                  <div className="text-lg font-semibold text-[var(--color-text)] mt-1">{stat.value}</div>
                   <div className="text-[10px] text-[var(--color-text-muted)]">{stat.label}</div>
                 </div>
               );
@@ -178,16 +176,16 @@ export default function SecretaryPage() {
 
           {/* ── 冷启动提示 ── */}
           {isColdStart && (
-            <div className="p-4 rounded-lg border border-yellow-500/20 bg-yellow-500/5">
-              <p className="text-sm text-yellow-400">📊 学习数据不足，建议先进行一些练习，秘书系统才能提供个性化建议</p>
+            <div className="p-4 rounded-lg border border-[var(--color-warning)]/20 bg-yellow-500/5">
+              <p className="text-sm text-[var(--color-warning)]">📊 学习数据不足，建议先进行一些练习，秘书系统才能提供个性化建议</p>
             </div>
           )}
 
           {/* ── 动作反馈 ── */}
           {actionFeedback && actionFeedback.success && (
-            <div className="p-3 rounded-lg border border-green-500/20 bg-green-500/5 flex items-center gap-2">
-              <Check size={14} className="text-green-400 flex-shrink-0" />
-              <span className="text-sm text-green-400">{actionFeedback.message}</span>
+            <div className="p-3 rounded-lg border border-[var(--color-success)]/20 bg-[var(--color-success)]/5 flex items-center gap-2">
+              <Check size={14} className="text-[var(--color-success)] flex-shrink-0" />
+              <span className="text-sm text-[var(--color-success)]">{actionFeedback.message}</span>
             </div>
           )}
         </>
@@ -199,7 +197,7 @@ export default function SecretaryPage() {
           <Bell size={14} />
           待处理建议
           {proposals.length > 0 && (
-            <span className="text-[10px] bg-[var(--color-accent)] text-white px-1.5 py-0.5 rounded-full">
+            <span className="text-[10px] bg-[var(--color-accent)] text-white px-1.5 py-0.5 rounded-full active:scale-[0.97] transition-transform">
               {proposals.length}
             </span>
           )}
@@ -228,7 +226,7 @@ export default function SecretaryPage() {
                 <div className="flex gap-1.5 mt-2 ml-7">
                   <button
                     onClick={() => handleAccept(p.id)}
-                    className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-[var(--color-success)] text-white rounded hover:bg-[var(--color-success)] transition-colors"
                   >
                     <Check size={10} />采纳
                   </button>
@@ -240,7 +238,7 @@ export default function SecretaryPage() {
                   </button>
                   <a
                     href={`/learn?negotiate=${encodeURIComponent(p.title)}`}
-                    className="inline-flex items-center gap-1 px-2 py-1 text-[10px] text-blue-400 hover:text-blue-300 bg-[var(--color-surface)] rounded border border-blue-400/30 hover:border-blue-400/60 transition-colors"
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[10px] text-[var(--color-info)] hover:text-blue-300 bg-[var(--color-surface)] rounded border border-blue-400/30 hover:border-blue-400/60 transition-colors"
                   >
                     <MessageSquare size={10} />协商
                   </a>

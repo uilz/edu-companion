@@ -23,7 +23,7 @@ export function RetentionPanel() {
   if (loading) return null;
   if (!data || data.skills.length === 0) return null;
 
-  const colors = ["#0066FF", "#f59e0b", "#22c55e", "#a855f7", "#ec4899"];
+  const colors = ["#0066FF", "var(--color-warning)", "#22c55e", "#a855f7", "#ec4899"];
   const days = [0, 1, 3, 7, 14, 30, 60, 90];
   const w = 500, h = 220, pad = { l: 40, r: 20, t: 20, b: 30 };
   const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;

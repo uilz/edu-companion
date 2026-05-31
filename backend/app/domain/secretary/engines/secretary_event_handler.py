@@ -1,9 +1,8 @@
 """秘书事件处理器 — 订阅领域事件，驱动诊断与情境更新
 
 订阅事件:
-  - AnswerSubmitted     → 错题驱动诊断刷新
+  - CognitiveNodeUpdated → 触发学习路径调整
   - SessionCompleted    → 更新认知负荷统计 + 疲劳检查
-  - KnowledgeStateUpdated → 触发学习路径调整
 
 使用方式:
     from infra.event_bus import EventBus
@@ -17,9 +16,8 @@ import logging
 from typing import Any
 
 from shared.events import (
-    AnswerSubmitted,
+    CognitiveNodeUpdated,
     DomainEvent,
-    KnowledgeStateUpdated,
     SessionCompleted,
 )
 
@@ -45,54 +43,21 @@ class SecretaryEventHandler:
                            type(bus).__module__, EventBus.__module__)
             return
 
-        bus.subscribe("AnswerSubmitted", self._on_answer_submitted)
         bus.subscribe("SessionCompleted", self._on_session_completed)
-        bus.subscribe("KnowledgeStateUpdated", self._on_knowledge_updated)
+        bus.subscribe("CognitiveNodeUpdated", self._on_cognitive_updated)
         self._subscribed = True
-        logger.info("📡 秘书已订阅领域事件: AnswerSubmitted / SessionCompleted / KnowledgeStateUpdated")
+        logger.info("📡 秘书已订阅领域事件: SessionCompleted / CognitiveNodeUpdated")
 
     def unsubscribe(self) -> None:
         """取消订阅"""
         if not self._bus or not self._subscribed:
             return
-        self._bus.unsubscribe("AnswerSubmitted", self._on_answer_submitted)
         self._bus.unsubscribe("SessionCompleted", self._on_session_completed)
-        self._bus.unsubscribe("KnowledgeStateUpdated", self._on_knowledge_updated)
+        self._bus.unsubscribe("CognitiveNodeUpdated", self._on_cognitive_updated)
         self._subscribed = False
         logger.info("📡 秘书已取消事件订阅")
 
     # ── 事件处理器 ──
-
-    async def _on_answer_submitted(self, event: DomainEvent) -> None:
-        """答题提交事件 → 如果答错，触发诊断刷新 + 弱项检测"""
-        if not isinstance(event, AnswerSubmitted):
-            return
-        if event.is_correct:
-            return  # 答对不触发
-
-        logger.debug("答题错误触发诊断: user=%s skill=%s", event.user_id, event.skill_id)
-
-        try:
-            from ...secretary_service import SecretaryService
-            from ...proposal_store import ProposalStore
-
-            service = SecretaryService()
-            store = ProposalStore()
-
-            # 快速诊断
-            report = await service.diagnose(user_id=event.user_id)
-
-            if report.weak_points:
-                # 为前 2 个薄弱点生成提案
-                proposals = service.suggest(report=report, max_proposals=2)
-                for p in proposals:
-                    store.save_proposal(p, user_id=event.user_id, session_id=f"event:{event.event_id}")
-
-                # 黑板推送
-                await service.push_to_blackboard(f"event:{event.event_id}", proposals, report)
-                logger.info("错题诊断完成: user=%s 生成 %d 条提案", event.user_id, len(proposals))
-        except Exception as e:
-            logger.debug("错题诊断失败(可能是冷启动): %s", e)
 
     async def _on_session_completed(self, event: DomainEvent) -> None:
         """会话完成事件 → 更新认知负荷 + 检查疲劳信号"""
@@ -122,20 +87,20 @@ class SecretaryEventHandler:
         except Exception as e:
             logger.debug("会话完成处理失败: %s", e)
 
-    async def _on_knowledge_updated(self, event: DomainEvent) -> None:
-        """知识状态更新事件 → 触发学习路径调整"""
-        if not isinstance(event, KnowledgeStateUpdated):
+    async def _on_cognitive_updated(self, event: DomainEvent) -> None:
+        """CognitiveNode 更新事件 → 触发学习路径调整"""
+        if not isinstance(event, CognitiveNodeUpdated):
             return
 
-        logger.debug("知识状态更新: user=%s skill=%s %s→%s",
-                     event.user_id, event.skill_id,
-                     event.old_mastery, event.new_mastery)
+        logger.debug("CognitiveNode 更新: user=%s label=%s %.3f→%.3f",
+                     event.user_id, event.label,
+                     event.proficiency_before, event.proficiency_after)
 
         try:
             from .secretary_plan_bridge import plan_bridge
             await plan_bridge.planner.generate(
                 event.user_id,
-                reason=f"knowledge_upgrade:{event.skill_id}:{event.old_mastery}→{event.new_mastery}",
+                reason=f"cognitive_update:{event.label}:{event.proficiency_before:.2f}→{event.proficiency_after:.2f}",
             )
         except Exception as e:
             logger.debug("计划调整失败: %s", e)

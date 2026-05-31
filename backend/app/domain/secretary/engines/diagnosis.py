@@ -1,9 +1,9 @@
 """诊断引擎 — 基于分析层多函数结果融合的综合诊断
 
 工作流程:
-  1. 调用 6 个分析函数获取多维度洞察
-  2. 去重 + 归一化排序（使用 norm_urgency）
-  3. LLM 生成 highlight 和 summary
+  1. 一次加载 nodes 缓存
+  2. 调用 7 个分析函数（共享缓存）
+  3. 去重 + 归一化排序
   4. 组装 DiagnosisReport
 """
 
@@ -15,7 +15,6 @@ from typing import Any
 from shared.constants import DEFAULT_USER_ID
 from ..models import (
     DiagnosisReport,
-    ScopeSpec,
     WeakPoint,
 )
 from ..analysis import (
@@ -26,11 +25,10 @@ from ..analysis import (
     detect_calibration_mismatch,
     detect_prediction_divergence,
     compute_progress_delta,
+    _get_nodes,
 )
 
 logger = logging.getLogger(__name__)
-
-_USER_ID_DEFAULT = DEFAULT_USER_ID
 
 
 class DiagnosisEngine:
@@ -38,86 +36,97 @@ class DiagnosisEngine:
 
     async def diagnose(
         self,
-        user_id: str = _USER_ID_DEFAULT,
-        scope: ScopeSpec | None = None,
+        user_id: str = DEFAULT_USER_ID,
     ) -> DiagnosisReport:
-        """执行全量诊断"""
-        # 并行收集各项洞察
-        weakness = find_weakness_clusters(user_id=user_id, scope=scope)
-        stagnant = detect_stagnant_topics(user_id=user_id, scope=scope)
-        regression = trace_proficiency_regression(user_id=user_id, scope=scope)
-        burden = assess_current_burden(user_id=user_id, scope=scope)
-        calibration = detect_calibration_mismatch(user_id=user_id, scope=scope)
-        divergence = detect_prediction_divergence(user_id=user_id, scope=scope)
-        progress = compute_progress_delta(user_id=user_id, scope=scope)
+        """执行全量诊断 — 一次加载 nodes，共享给所有分析函数"""
+        # 一次加载，避免 7 次重复查询
+        nodes = _get_nodes(user_id)
+
+        # 并行收集各项洞察（共享 nodes 缓存）
+        weakness = find_weakness_clusters(user_id, nodes=nodes)
+        stagnant = detect_stagnant_topics(user_id, nodes=nodes)
+        regression = trace_proficiency_regression(user_id, nodes=nodes)
+        burden = assess_current_burden(user_id, nodes=nodes)
+        calibration = detect_calibration_mismatch(user_id, nodes=nodes)
+        divergence = detect_prediction_divergence(user_id, nodes=nodes)
+        progress = compute_progress_delta(user_id, nodes=nodes)
 
         # 融合 weak points
         seen_ids: set[str] = set()
         all_weak: list[WeakPoint] = []
-        for insight in weakness.items:
-            if insight.node_id not in seen_ids:
-                seen_ids.add(insight.node_id)
-                all_weak.append(WeakPoint.from_insight(insight))
-        for insight in stagnant.items:
-            if insight.node_id not in seen_ids:
-                seen_ids.add(insight.node_id)
-                all_weak.append(WeakPoint.from_insight(insight))
-        for insight in regression.items:
-            if insight.node_id not in seen_ids:
-                seen_ids.add(insight.node_id)
-                all_weak.append(WeakPoint.from_insight(insight))
+        for item in weakness:
+            if item["node_id"] not in seen_ids:
+                seen_ids.add(item["node_id"])
+                all_weak.append(WeakPoint(
+                    node_id=item["node_id"],
+                    label=item["label"],
+                    mastery=item["mastery"],
+                    source="weakness",
+                ))
+        for item in stagnant:
+            if item["node_id"] not in seen_ids:
+                seen_ids.add(item["node_id"])
+                all_weak.append(WeakPoint(
+                    node_id=item["node_id"],
+                    label=item["label"],
+                    mastery=0,
+                    source="stagnant",
+                    days_since=item.get("days_since", 0),
+                ))
+        for item in regression:
+            if item["node_id"] not in seen_ids:
+                seen_ids.add(item["node_id"])
+                all_weak.append(WeakPoint(
+                    node_id=item["node_id"],
+                    label=item["label"],
+                    mastery=0,
+                    source="regression",
+                ))
 
-        # 按 norm_urgency 排序
-        all_sorted = sorted(
-            weakness.items + stagnant.items + regression.items,
-            key=lambda x: x.norm_urgency,
-            reverse=True,
-        )
+        # 按 mastery 排序（低→高 = 紧急→不紧急）
+        all_weak.sort(key=lambda w: w.mastery)
 
         # 认知负荷
-        cognitive_load = 0.0
-        if burden.items:
-            cognitive_load = burden.items[0].primary_value
+        burden_level = burden.get("burden_level", "low")
+        cognitive_load = {"high": 0.8, "medium": 0.5, "low": 0.2}.get(burden_level, 0.2)
 
         # 收集诊断来源
         source_findings = []
-        if weakness.items:
-            source_findings.append(f"weakness({len(weakness.items)}簇)")
-        if stagnant.items:
-            source_findings.append(f"stagnant({len(stagnant.items)}个)")
-        if regression.items:
-            source_findings.append(f"regression({len(regression.items)}个)")
-        if calibration.items:
-            source_findings.append(f"calibration偏差({len(calibration.items)}个)")
-        if divergence.items:
-            source_findings.append(f"预测偏差({len(divergence.items)}个)")
+        if weakness:
+            source_findings.append(f"weakness({len(weakness)}簇)")
+        if stagnant:
+            source_findings.append(f"stagnant({len(stagnant)}个)")
+        if regression:
+            source_findings.append(f"regression({len(regression)}个)")
+        if calibration:
+            source_findings.append(f"calibration偏差({len(calibration)}个)")
+        if divergence:
+            source_findings.append(f"预测偏差({len(divergence)}个)")
 
-        # LLM 生成 highlight 和 summary（模板版，后续可升级为 LLM）
         highlight = self._generate_highlight(progress, all_weak)
         summary = self._generate_summary(all_weak, cognitive_load, calibration)
 
         return DiagnosisReport(
             user_id=user_id,
-            weak_points=all_weak[:20],  # 最多 20 个
+            weak_points=all_weak[:20],
             cognitive_load=cognitive_load,
             highlight=highlight,
             summary=summary,
             source_findings=source_findings,
         )
 
-    def _generate_highlight(self, progress_result, weak_list) -> str:
-        """生成进步亮点（基于 compute_progress_delta）"""
-        if progress_result.items:
-            top = progress_result.items[0]
-            if top.primary_value > 0:
-                return f"🎉 {top.label} 进步明显，继续保持！"
+    def _generate_highlight(self, progress: dict, weak_list: list) -> str:
+        """生成进步亮点"""
+        nodes_practiced = progress.get("nodes_practiced", 0)
+        if nodes_practiced > 0:
+            return f"🎉 最近 {progress.get('period_days', 7)} 天练习了 {nodes_practiced} 个知识点"
         if not weak_list:
             return "✅ 当前未发现薄弱知识点，保持节奏即可"
         if len(weak_list) <= 3:
             return f"📈 薄弱知识点数量较少({len(weak_list)}个)，针对性练习即可攻克"
         return f"📊 检测到 {len(weak_list)} 个知识点有待加强，按优先级逐个突破"
 
-    def _generate_summary(self, weak_list, cognitive_load, calibration) -> str:
+    def _generate_summary(self, weak_list: list, cognitive_load: float, calibration: list) -> str:
         """生成诊断摘要"""
         parts = [f"当前检测到 {len(weak_list)} 个薄弱知识点"]
         if cognitive_load > 0.7:
@@ -125,27 +134,28 @@ class DiagnosisEngine:
         elif cognitive_load < 0.3:
             parts.append("，认知负荷正常，适合学习")
 
-        if calibration.items:
-            cal = calibration.items[0]
-            if "overconfident" in cal.label:
-                parts.append("，部分知识点存在过度自信倾向，建议多做练习验证")
-            elif "underconfident" in cal.label:
-                parts.append("，部分知识点信心不足，实际上已掌握，大胆尝试")
+        if calibration:
+            cal = calibration[0]
+            if cal.get("issue") == "high_mastery_low_confidence":
+                parts.append("，部分知识点存在信心不足，建议多做练习巩固")
 
         return "。".join(parts) + "。"
 
     async def quick_assess(
         self,
-        user_id: str = _USER_ID_DEFAULT,
+        user_id: str = DEFAULT_USER_ID,
     ) -> dict[str, Any]:
         """快速评估 — 轻量版，只返回最关键的指标"""
-        burden = assess_current_burden(user_id=user_id)
-        progress = compute_progress_delta(user_id=user_id)
+        nodes = _get_nodes(user_id)
+        burden = assess_current_burden(user_id, nodes=nodes)
+        progress = compute_progress_delta(user_id, nodes=nodes)
+        weakness = find_weakness_clusters(user_id, nodes=nodes)
+        stagnant = detect_stagnant_topics(user_id, nodes=nodes)
 
         return {
-            "cognitive_load": burden.items[0].primary_value if burden.items else 0.0,
-            "weak_count": len(find_weakness_clusters(user_id=user_id).items),
-            "stagnant_count": len(detect_stagnant_topics(user_id=user_id).items),
-            "streak_days": int(progress.items[0].primary_value) if progress.items else 0,
-            "summary": progress.summary,
+            "cognitive_load": {"high": 0.8, "medium": 0.5, "low": 0.2}.get(burden.get("burden_level", "low"), 0.2),
+            "weak_count": len(weakness),
+            "stagnant_count": len(stagnant),
+            "streak_days": progress.get("nodes_practiced", 0),
+            "summary": f"薄弱{len(weakness)}个，停滞{len(stagnant)}个",
         }

@@ -28,10 +28,16 @@ logger = logging.getLogger(__name__)
 DB_CONFIG = {
     "dbname": os.environ.get("DB_NAME", "edu_companion"),
     "user": os.environ.get("DB_USER", "companion"),
-    "password": os.environ.get("DB_PASSWORD", "companion123"),
+    "password": os.environ.get("DB_PASSWORD", ""),
     "host": os.environ.get("DB_HOST", "localhost"),
     "port": int(os.environ.get("DB_PORT", "5432")),
 }
+
+if not DB_CONFIG["password"]:
+    logger.warning(
+        "⚠️  DB_PASSWORD 未设置！数据库连接可能失败。"
+        "请在 .env 或环境变量中设置 DB_PASSWORD。"
+    )
 
 # ── 建表 SQL ──
 
@@ -199,37 +205,51 @@ class Database:
         logger.info("PostgreSQL 连接池已创建 (min=2, max=10)")
 
     def _migrate(self) -> None:
-        """执行建表迁移"""
+        """通过 Alembic 执行数据库迁移"""
+        try:
+            from alembic.config import Config
+            from alembic import command
+            from pathlib import Path
+
+            alembic_cfg = Config(str(Path(__file__).resolve().parent.parent.parent / "alembic.ini"))
+            alembic_cfg.set_main_option("sqlalchemy.url", self._conn_str.replace(
+                "dbname=", "postgresql+psycopg2://localhost/?dbname="
+            ) if "postgresql+" not in self._conn_str else self._conn_str)
+
+            # 用 app.db.database 的实际连接参数
+            from app.db.database import DB_CONFIG
+            url = (
+                f"postgresql+psycopg2://{DB_CONFIG['user']}:{DB_CONFIG['password']}"
+                f"@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['dbname']}"
+            )
+            alembic_cfg.set_main_option("sqlalchemy.url", url)
+
+            command.upgrade(alembic_cfg, "head")
+            logger.info("✅ Alembic 迁移完成 (head)")
+        except Exception as e:
+            logger.warning("Alembic 迁移失败，回退到原始 SQL: %s", e)
+            self._migrate_raw()
+
+    def _migrate_raw(self) -> None:
+        """回退迁移 — 使用原始 SQL 建表"""
         try:
             conn = self.get_conn()
             cur = conn.cursor()
             cur.execute(SCHEMA_SQL)
 
-            # 对话系统表 (独立SQL文件)
             from pathlib import Path
-            conv_sql_path = Path(__file__).parent / "conversation_schema.sql"
-            if conv_sql_path.exists():
-                with open(conv_sql_path) as f:
-                    cur.execute(f.read())
-
-            # CognitiveNode 表 (Phase 6)
-            cog_sql_path = Path(__file__).parent / "cognitive_schema.sql"
-            if cog_sql_path.exists():
-                with open(cog_sql_path) as f:
-                    cur.execute(f.read())
-
-            # Phase 8/16: 补全列、表、索引 (幂等)
-            p8_sql_path = Path(__file__).parent / "phase8_schema.sql"
-            if p8_sql_path.exists():
-                with open(p8_sql_path) as f:
-                    cur.execute(f.read())
+            for sql_file in ["conversation_schema.sql", "cognitive_schema.sql", "learning_schema.sql"]:
+                sql_path = Path(__file__).parent / sql_file
+                if sql_path.exists():
+                    with open(sql_path) as f:
+                        cur.execute(f.read())
 
             conn.commit()
             cur.close()
             self.put_conn(conn)
-            logger.info("数据库表结构已确认")
+            logger.info("✅ 原始 SQL 迁移完成")
         except Exception as e:
-            logger.error(f"数据库迁移失败: {e}")
+            logger.error("原始 SQL 迁移失败: %s", e)
             raise
 
     def get_conn(self):
@@ -292,6 +312,33 @@ class Database:
         try:
             cur = conn.cursor()
             cur.execute(sql, params)
+            conn.commit()
+        finally:
+            cur.close()
+            self.put_conn(conn)
+
+    def executemany(self, sql: str, params_list: list[tuple]) -> None:
+        """批量执行同一 SQL — 单次往返 (H4 性能优化)"""
+        if not params_list:
+            return
+        conn = self.get_conn()
+        try:
+            cur = conn.cursor()
+            cur.executemany(sql, params_list)
+            conn.commit()
+        finally:
+            cur.close()
+            self.put_conn(conn)
+
+    def execute_batch(self, operations: list[tuple[str, tuple]]) -> None:
+        """事务内批量执行多条不同 SQL — 单次往返"""
+        if not operations:
+            return
+        conn = self.get_conn()
+        try:
+            cur = conn.cursor()
+            for sql, params in operations:
+                cur.execute(sql, params)
             conn.commit()
         finally:
             cur.close()

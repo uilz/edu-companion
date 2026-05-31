@@ -45,8 +45,8 @@ const FULLSCREEN_ROUTES = ['/learn'];
  * - 全屏路由：仅渲染子内容与移动端底部导航，无主体容器包裹
  */
 export default function AppShell({ children }: AppShellProps) {
-  // 判断是否为桌面端（视口宽度 >= 768px）
-  const isDesktop = useMediaQuery('(min-width: 768px)');
+  // 判断是否为桌面端（视口宽度 >= 1024px）
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
   const pathname = usePathname();
   // 判断当前路由是否为全屏模式
   const isFullscreen = FULLSCREEN_ROUTES.some((r) => pathname?.startsWith(r));

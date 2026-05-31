@@ -16,10 +16,12 @@ import os
 import tempfile
 from pathlib import Path
 
+from app.config import COMPANION_HOME
+
 logger = logging.getLogger("infra.tts")
 
 # 缓存目录
-CACHE_DIR = Path(os.path.expanduser("~/.companion/audio"))
+CACHE_DIR = COMPANION_HOME / "audio"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 # 静态文件 URL 前缀（由 multimodal API 提供）
@@ -47,11 +49,16 @@ class EdgeTTSClient:
         """将文本合成为语音"""
         import edge_tts
 
+        from infra.tts_text_cleaner import strip_markdown_for_tts
+
         voice_name = voice or self._voice
+
+        # 清洗 Markdown → 纯文本朗读
+        clean_text = strip_markdown_for_tts(text)
 
         # 缓存检查
         cache_key = hashlib.sha256(
-            f"{text[:200]}|{voice_name}".encode()
+            f"{clean_text[:200]}|{voice_name}".encode()
         ).hexdigest()[:16]
         cache_file = self._cache / f"{cache_key}.mp3"
 
@@ -66,8 +73,11 @@ class EdgeTTSClient:
 
         # 合成
         try:
-            communicate = edge_tts.Communicate(text, voice_name)
+            communicate = edge_tts.Communicate(clean_text, voice_name)
             await communicate.save(str(cache_file))
+
+            # ffmpeg 压缩：48kbps→24kbps，语音场景足够
+            await self._compress(cache_file)
 
             logger.info("TTS synthesized: %s → %s", cache_key, cache_file.name)
             return {
@@ -79,6 +89,29 @@ class EdgeTTSClient:
         except Exception as e:
             logger.error("TTS synthesize failed: %s", e)
             raise
+
+    @staticmethod
+    async def _compress(mp3_path: Path, target_bitrate: str = "24k") -> None:
+        """用 ffmpeg 压缩 MP3 码率（语音 24kbps 足够清晰）"""
+        import subprocess
+
+        tmp = mp3_path.with_suffix(".tmp.mp3")
+        try:
+            proc = subprocess.run(
+                ["ffmpeg", "-y", "-i", str(mp3_path),
+                 "-codec:a", "libmp3lame", "-b:a", target_bitrate,
+                 "-ar", "22050", "-ac", "1",
+                 str(tmp)],
+                capture_output=True, timeout=30,
+            )
+            if proc.returncode == 0 and tmp.stat().st_size < mp3_path.stat().st_size:
+                tmp.replace(mp3_path)
+                logger.debug("TTS compressed: %s → %dkbps", mp3_path.name, int(target_bitrate.rstrip("k")))
+            else:
+                tmp.unlink(missing_ok=True)
+        except Exception as e:
+            logger.warning("TTS compress failed (using original): %s", e)
+            tmp.unlink(missing_ok=True)
 
     async def synthesize_knowledge(
         self,
@@ -105,6 +138,8 @@ class EdgeTTSClient:
         try:
             communicate = edge_tts.Communicate(short_text, self._voice)
             await communicate.save(str(cache_file))
+
+            await self._compress(cache_file)
 
             logger.info("Knowledge TTS: %s → %s.mp3", skill_id, skill_id)
             return {

@@ -22,12 +22,35 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/progress", tags=["学习进度"])
 
+import time
+
+# Simple in-memory TTL cache for expensive queries
+_progress_cache: dict[str, tuple[float, Any]] = {}
+_CACHE_TTL = 60  # seconds
+
+def _cached(key: str, ttl: int = _CACHE_TTL):
+    """Decorator for caching function results with TTL."""
+    def decorator(fn):
+        def wrapper(*args, **kwargs):
+            cache_key = f"{key}:{':'.join(str(a) for a in args)}"
+            now = time.time()
+            if cache_key in _progress_cache:
+                ts, val = _progress_cache[cache_key]
+                if now - ts < ttl:
+                    return val
+            result = fn(*args, **kwargs)
+            _progress_cache[cache_key] = (now, result)
+            return result
+        return wrapper
+    return decorator
+
 
 # ═══════════════════════════════════════════════════
 # 源1: cognitive_nodes 表 (Primary)
 # ═══════════════════════════════════════════════════
 
 
+@_cached("progress")
 def _build_progress_from_cognitive(user_id: str) -> ProgressSummary | None:
     """从 cognitive_nodes 表构建 ProgressSummary
 
@@ -89,6 +112,7 @@ def _build_progress_from_cognitive(user_id: str) -> ProgressSummary | None:
         return None
 
 
+@_cached("cog_nodes")
 def _list_cognitive_nodes(user_id: str) -> list[dict[str, Any]]:
     """列出用户的所有 CognitiveNode，返回精简 dict 列表"""
     try:
@@ -111,6 +135,7 @@ def _list_cognitive_nodes(user_id: str) -> list[dict[str, Any]]:
         return []
 
 
+@_cached("weak_nodes")
 def _get_weak_nodes(
     user_id: str, top_n: int = 3,
 ) -> list[dict[str, Any]]:
@@ -215,8 +240,8 @@ async def get_detailed_stats(user_id: str) -> dict[str, Any]:
                     daily_stats[date_str]["total"] += 1
                     if a.get("is_correct"):
                         daily_stats[date_str]["correct"] += 1
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Failed to compute daily stats from attempts: %s", e)
 
     return {
         "user_id": user_id,
@@ -231,100 +256,6 @@ async def get_detailed_stats(user_id: str) -> dict[str, Any]:
         "mastered_count": len(mastered),
         "struggling_count": len(struggling),
         "cognitive_nodes_count": len(nodes),
-    }
-
-
-@router.post("/{user_id}/session/start")
-async def start_study_session(
-    user_id: str,
-    subject: str | None = None,
-) -> dict[str, Any]:
-    """
-    开始一个新的学习会话
-
-    参数:
-        user_id: 用户ID
-        subject: 学习学科
-
-    返回:
-        会话信息
-    """
-    session_id = learner_engine.create_session(user_id, subject)
-    return {
-        "session_id": session_id,
-        "user_id": user_id,
-        "subject": subject,
-        "message": "学习会话已开始，加油！💪",
-    }
-
-
-@router.post("/{user_id}/profile/update")
-async def update_profile(
-    user_id: str,
-    nickname: str | None = None,
-    subjects: list[str] | None = None,
-    grade_level: int | None = None,
-    learning_style: str | None = None,
-) -> dict[str, Any]:
-    """
-    更新学习者画像
-
-    参数:
-        user_id: 用户ID
-        nickname: 昵称
-        subjects: 学科列表
-        grade_level: 年级
-        learning_style: 学习风格
-
-    返回:
-        更新后的画像信息
-    """
-    updates: dict[str, Any] = {}
-    if nickname is not None:
-        updates["nickname"] = nickname
-    if subjects is not None:
-        updates["subjects"] = subjects
-    if grade_level is not None:
-        updates["grade_level"] = grade_level
-    if learning_style is not None:
-        updates["learning_style"] = learning_style
-
-    profile = learner_engine.update_profile(user_id, updates)
-
-    return {
-        "user_id": profile.user_id,
-        "nickname": profile.nickname,
-        "subjects": profile.subjects,
-        "grade_level": profile.grade_level,
-        "learning_style": profile.learning_style,
-        "message": "画像更新成功",
-    }
-
-
-@router.get("/{user_id}/profile")
-async def get_profile(user_id: str) -> dict[str, Any]:
-    """
-    获取学习者画像
-
-    元数据从 learner_engine (昵称/学科等)，指标从 cognitive_nodes 表。
-    """
-    profile = learner_engine.get_or_create_profile(user_id)
-    nodes = _list_cognitive_nodes(user_id)
-
-    mastered = sum(1 for n in nodes if n["proficiency"] >= 0.8)
-
-    return {
-        "user_id": profile.user_id,
-        "nickname": profile.nickname,
-        "subjects": profile.subjects,
-        "grade_level": profile.grade_level,
-        "learning_style": profile.learning_style,
-        "knowledge_skills_count": len(_list_cognitive_nodes(user_id)),
-        "cognitive_nodes_count": len(nodes),
-        "mastered_nodes_count": mastered,
-        "total_study_minutes": profile.total_study_minutes,
-        "streak_days": profile.streak_days,
-        "created_at": profile.created_at.isoformat(),
     }
 
 
@@ -400,12 +331,13 @@ async def get_calendar(
 
     # 计算当月 streak（连续学习天数，从昨天往前数）
     streak = 0
-    check = now.date() - __import__("datetime").timedelta(days=1)  # 从昨天开始
+    from datetime import timedelta
+    check = now.date() - timedelta(days=1)  # 从昨天开始
     for _ in range(32):
         date_str = check.isoformat()
         if date_str in daily and daily[date_str]["total"] > 0:
             streak += 1
-            check = check - __import__("datetime").timedelta(days=1)
+            check = check - timedelta(days=1)
         else:
             break
 

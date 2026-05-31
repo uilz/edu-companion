@@ -77,9 +77,12 @@ class MultimediaService:
     async def _synthesize_audio(self, event: AssistantReplied) -> None:
         """TTS 语音合成"""
         try:
+            from infra.tts_text_cleaner import strip_markdown_for_tts
+            clean_content = strip_markdown_for_tts(event.content[:1000])
+
             skill_id = event.skill_ids[0] if event.skill_ids else event.message_id[:12]
             result = await self._tts.synthesize(
-                text=event.content[:500],  # 取前500字符
+                text=clean_content,
                 skill_id=skill_id,
             )
 

@@ -284,8 +284,8 @@ def _get_ef(node) -> Optional[float]:
     if ig.startswith(_EF_PREFIX):
         try:
             return float(ig[len(_EF_PREFIX):])
-        except (ValueError, TypeError):
-            pass
+        except (ValueError, TypeError) as e:
+            logger.warning("Failed to parse EF value from interleaving_group '%s': %s", ig, e)
     # 方案 3：从 label 后缀读取（极简兼容）
     # 无持久化 → 用掌握度推断初始 EF
     return None

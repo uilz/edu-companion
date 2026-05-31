@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { renderContent, onKatexReady } from '@/lib/math';
+import { renderMarkdown, onKatexReady } from '@/lib/math';
 
 /**
  * Hook: renders markdown+math content.
@@ -18,5 +18,5 @@ export function useRenderedContent(text: string): string {
   }, []);
 
   // 仅当 text 或 katexReady 变化时重新渲染内容，避免不必要的计算
-  return useMemo(() => renderContent(text), [text, katexReady]);
+  return useMemo(() => renderMarkdown(text), [text, katexReady]);
 }

@@ -37,7 +37,7 @@ class AudioSynthesizer(Protocol):
         为知识点生成专属语音讲解。
 
         自动提取精华内容（≤200字口语化），
-        缓存到 ~/.companion/audio/{skill_id}.mp3
+        缓存到 COMPANION_HOME/audio/{skill_id}.mp3
 
         Returns:
             {"url": str, "duration_ms": int, "cache_hit": bool}

@@ -1,8 +1,8 @@
-# 智能伴学系统架构文档 v4.0
+# 智能伴学系统架构文档 v4.3
 
-> 版本: v4.0
-> 最后更新: 2026-05-28
-> 状态: ✅ 全部 22 个 Phase 已交付（含 v4.0 重构 6 阶段）
+> 版本: v4.3
+> 最后更新: 2026-05-31
+> 状态: ✅ 全部 22 个 Phase 已交付 + v4.2 架构熵值治理 + v5.0 设计重构
 
 ---
 
@@ -14,7 +14,8 @@
 
 | 层级 | 技术 | 说明 |
 |------|------|------|
-| 前端 | Next.js 14 + shadcn/ui + Tailwind CSS | SSR/CSR 混合，CSS Variables 主题切换 |
+| 前端 | Next.js 14 + Tailwind CSS | SSR/CSR 混合，CSS Variables 主题切换 |
+| 设计系统 | 纸墨质感 + 亮暗双主题 | 40+ CSS token，design.md 规范驱动 |
 | 状态管理 | Zustand | 替代 monolithic useConversation hook，分模块 store |
 | 后端 | Python FastAPI | 异步高性能，OpenAPI 自动文档 |
 | 数据库 | PostgreSQL 14+ + pgvector | JSONB 灵活存储 + 向量检索 |
@@ -22,13 +23,28 @@
 | 存储 | PG 主存 + JSON 备降 | `USE_PG_STORAGE=true` 默认开启 |
 | 部署 | Docker + Nginx | 双容器部署，前端 standalone 模式 |
 
+### 设计系统 (v5.0)
+
+> 核心理念："让思考成为焦点，让界面成为陪伴"
+> 详细规范：`design.md`
+
+| 维度 | 规范 |
+|------|------|
+| 色彩 | 暖白书页 `#fbfaf7` / 暖黑 `#1a1816`，40+ CSS token 亮暗双主题 |
+| 排版 | Inter 正文 16px / 行高 1.65 / 字重 400/600（非 700）/ JetBrains Mono 代码 |
+| 气泡 | 用户白底+边框 / AI微暖底无边框 / 14px圆角 / 入场动画150ms |
+| 卡片 | 10px 圆角 / 无阴影（用边框+色差分层） |
+| 按钮 | 10px 圆角 / active:scale-[0.97] / 药丸输入框 |
+| 浮层 | 仅 modal/dropdown/tooltip 保留 shadow |
+| 响应式 | 768px→1024px 断点 / 侧边栏 280px 可折叠 |
+
 ### 代码规模
 
 | 模块 | 行数 | 文件数 |
 |------|------|--------|
-| 后端 (Python) | ~28,033 | ~78 |
-| 前端 (TS/TSX) | ~15,565 | ~47 |
-| 合计 | ~43,598 | ~125 |
+| 后端 (Python) | ~28,000 | ~120 |
+| 前端 (TS/TSX) | ~15,500 | ~83 |
+| 合计 | ~43,500 | ~203 |
 
 ---
 
@@ -55,7 +71,7 @@
 ┌───────────────────────┼────────────────────────────────────────┐
 │                        后端 (FastAPI)                           │
 │  ┌────────────────────┴───────────────────────┐                │
-│  │           API Router (13 模块)              │                │
+│  │           API Router (13 模块, ~82 端点)    │                │
 │  └────┬────────────┬────────────┬────────────┬┘                │
 │       │            │            │            │                  │
 │  ┌────┴────┐ ┌─────┴────┐ ┌────┴────┐ ┌────┴────┐            │
@@ -63,7 +79,7 @@
 │  └────┬────┘ └─────┬────┘ └────┬────┘ └────┬────┘            │
 │       │            │            │            │                  │
 │  ┌────┴────────────┴────────────┴────────────┴────┐            │
-│  │          Service Layer (35+ 服务)               │            │
+│  │          Service Layer (40+ 服务, 模块化拆分)  │            │
 │  └────┬────────────┬────────────┬────────────┬────┘            │
 │       │            │            │            │                  │
 │  ┌────┴────┐ ┌─────┴────┐ ┌────┴────┐ ┌────┴────┐            │
@@ -169,7 +185,7 @@ class CognitiveNode(BaseModel):
 
 ## 五、API 端点清单
 
-> 共 13 个路由模块，~125 个端点
+> 共 13 个路由模块，~82 个端点
 
 ### 对话系统 (conversation.py)
 
@@ -248,6 +264,18 @@ class CognitiveNode(BaseModel):
 | GET | `/api/knowledge/ready` | 可学习节点 |
 | GET | `/api/knowledge/path` | 学习路径 |
 | GET | `/api/knowledge/retention` | 遗忘曲线 |
+
+### 知识图谱 CRUD (knowledge_graph.py)
+
+| 方法 | 路径 | 功能 |
+|------|------|------|
+| GET | `/api/knowledge/graph/{pid}` | 获取分区图谱（节点+边） |
+| POST | `/api/knowledge/graph/{pid}/generate` | AI 生成图谱 |
+| POST | `/api/knowledge/graph/{pid}/node` | 添加知识节点 |
+| PATCH | `/api/knowledge/graph/{pid}/node/{nid}` | 编辑节点（标签/描述/优先级） |
+| DELETE | `/api/knowledge/graph/{pid}/node/{nid}` | 删除节点 + 关联边 |
+| POST | `/api/knowledge/graph/{pid}/edge` | 添加依赖边 |
+| DELETE | `/api/knowledge/graph/{pid}/edge/{eid}` | 删除依赖边 |
 
 ### Phase8 图谱 (phase8.py)
 
@@ -498,7 +526,7 @@ frontend/src/
 │   │   ├── StudyTab.tsx            # 学习 Tab
 │   │   ├── PlanTab.tsx             # 计划 Tab
 │   │   ├── AchievementsTab.tsx     # 成就 Tab
-│   │   ├── GraphTab.tsx            # 图谱 Tab
+│   │   ├── GraphTab.tsx            # 图谱 Tab（双数据源合并 + 编辑模式）
 │   │   └── analytics/              # 分析子组件
 │   │       ├── OverviewCards.tsx    # 概览卡片
 │   │       ├── MasteryErrorsCard.tsx # 掌握度+错题卡片
@@ -587,7 +615,11 @@ frontend/src/
                    submit_practice_event()
 
                   ┌─────────────────────────────┐
-                  │  对话系统 conversation_llm.py │
+                  │  对话系统                     │
+                  │  conversation_llm.py (facade) │
+                  │  → llm_core.py                │
+                  │  → tool_dispatch.py           │
+                  │  → cognitive_sync.py          │
                   │  非流式 + 流式 双路径          │
                   │  Phase 8 classify 自动归类    │
                   └──────────────┬────────────────┘
@@ -631,6 +663,7 @@ frontend/src/
                   ┌─────────────────────────────┐
                   │  知识 API + 学习计划          │
                   │  knowledge.py / study.py     │
+                  │  → knowledge_state.py (共享)  │
                   └──────────────┬────────────────┘
                          get_knowledge_state()
                          CognitiveNode.belief
@@ -673,7 +706,7 @@ DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=edu_companion
 DB_USER=companion
-DB_PASSWORD=companion123
+DB_PASSWORD=        # 从环境变量读取，禁止硬编码
 
 # LLM
 TEXT_MODEL=gpt-4o
@@ -682,6 +715,7 @@ TEXT_FAST_MODEL=gpt-4o-mini
 
 # 存储
 USE_PG_STORAGE=true
+COMPANION_HOME=~/.companion  # 数据目录（集中化配置）
 # USE_JSON_STORAGE=true  # 回滚到 JSON 存储
 
 # 调试

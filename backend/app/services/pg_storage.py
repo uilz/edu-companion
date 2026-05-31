@@ -184,6 +184,7 @@ class PgStorageEngine:
                     adapter = TypeAdapter(list[ContentBlock])
                     r["content_blocks"] = adapter.validate_python(raw_cb)
                 except Exception:
+                    logger.debug("content_blocks 解析失败，重置为空列表", exc_info=True)
                     r["content_blocks"] = []
                 r["children_ids"] = r.get("children_ids") or []
                 r["links_to"] = r.get("links_to") or []
@@ -278,9 +279,21 @@ class PgStorageEngine:
             ),
         )
 
-        # ── 分区：逐条 upsert 到 conversation_partitions 表 ──
-        for p in data.partitions.values():
-            db.execute(
+        # ── 分区：批量 upsert 到 conversation_partitions 表 ──
+        partitions_params = [
+            (
+                p.id, user_id, p.name, p.subject, p.direction,
+                p.emoji, p.color, p.root_id,
+                "",  # active_branch_id (legacy column, kept for DB compat)
+                p.context_summary,
+                self._j({}),  # summary_branches (legacy column, kept for DB compat)
+                p.tags or [], p.created_at, p.updated_at, p.last_active_at,
+                p.message_count, p.total_tokens,
+            )
+            for p in data.partitions.values()
+        ]
+        if partitions_params:
+            db.executemany(
                 """
                 INSERT INTO conversation_partitions
                     (id, user_id, name, subject, direction, emoji, color, root_id,
@@ -295,18 +308,11 @@ class PgStorageEngine:
                     message_count=EXCLUDED.message_count,
                     total_tokens=EXCLUDED.total_tokens
                 """,
-                (
-                    p.id, user_id, p.name, p.subject, p.direction,
-                    p.emoji, p.color, p.root_id,
-                    "",  # active_branch_id (legacy column, kept for DB compat)
-                    p.context_summary,
-                    self._j({}),  # summary_branches (legacy column, kept for DB compat)
-                    p.tags or [], p.created_at, p.updated_at, p.last_active_at,
-                    p.message_count, p.total_tokens,
-                ),
+                partitions_params,
             )
 
-        # ── 对话 (v4 Conversation → conversation_branches 表)：通过 topic→domain 追溯真实的 partition_id ──
+        # ── 对话 (v4 Conversation → conversation_branches 表)：通过 topic→domain 追溯真实的 partition_id（批量）──
+        conversations_params = []
         for b in data.conversations.values():
             # 从 Topic → Domain → Partition 追溯真实的 partition_id (FK 约束)
             partition_id_for_table = None
@@ -319,7 +325,16 @@ class PgStorageEngine:
                 # fallback: 如果找不到，尝试用 b.topic_id 本身作为 partition_id
                 # （兼容旧数据或孤儿分支场景）
                 partition_id_for_table = b.topic_id
-            db.execute(
+            conversations_params.append((
+                b.id, partition_id_for_table, b.topic_id, b.name,
+                "",  # fork_point_id (legacy column, kept for DB compat)
+                b.path or [], b.is_active, b.is_archived,
+                b.summary, b.summary_dirty, b.practice_sessions or [],
+                b.practice_summary or "",
+                b.created_at, b.last_message_at,
+            ))
+        if conversations_params:
+            db.executemany(
                 """
                 INSERT INTO conversation_branches
                     (id, partition_id, topic_id, name, fork_point_id, path,
@@ -334,21 +349,25 @@ class PgStorageEngine:
                     practice_summary=EXCLUDED.practice_summary,
                     last_message_at=EXCLUDED.last_message_at
                 """,
-                (
-                    b.id, partition_id_for_table, b.topic_id, b.name,
-                    "",  # fork_point_id (legacy column, kept for DB compat)
-                    b.path or [], b.is_active, b.is_archived,
-                    b.summary, b.summary_dirty, b.practice_sessions or [],
-                    b.practice_summary or "",
-                    b.created_at, b.last_message_at,
-                ),
+                conversations_params,
             )
 
-        # ── 消息节点 ──
+        # ── 消息节点（批量）──
         type_adapter = TypeAdapter(list[ContentBlock])
-        for n in data.nodes.values():
-            cb_json = self._j(type_adapter.dump_python(n.content_blocks))
-            db.execute(
+        nodes_params = [
+            (
+                n.id, n.parent_id, n.children_ids or [], n.partition_id,
+                n.conversation_id, self._j(type_adapter.dump_python(n.content_blocks)),
+                n.text_summary, n.summary,
+                n.role, n.timestamp, n.token_count, n.is_deleted,
+                n.is_archived, n.has_modified_version,
+                n.links_to or [], n.linked_from or [],
+                self._j(getattr(n, 'metadata', {})),
+            )
+            for n in data.nodes.values()
+        ]
+        if nodes_params:
+            db.executemany(
                 """
                 INSERT INTO conversation_nodes
                     (id, parent_id, children_ids, partition_id, branch_id,
@@ -357,6 +376,8 @@ class PgStorageEngine:
                      links_to, linked_from, metadata)
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT (id) DO UPDATE SET
+                    parent_id=EXCLUDED.parent_id,
+                    children_ids=EXCLUDED.children_ids,
                     content_blocks=EXCLUDED.content_blocks,
                     text_summary=EXCLUDED.text_summary,
                     summary=EXCLUDED.summary,
@@ -364,19 +385,20 @@ class PgStorageEngine:
                     has_modified_version=EXCLUDED.has_modified_version,
                     metadata=EXCLUDED.metadata
                 """,
-                (
-                    n.id, n.parent_id, n.children_ids or [], n.partition_id,
-                    n.conversation_id, cb_json, n.text_summary, n.summary,
-                    n.role, n.timestamp, n.token_count, n.is_deleted,
-                    n.is_archived, n.has_modified_version,
-                    n.links_to or [], n.linked_from or [],
-                    self._j(getattr(n, 'metadata', {})),
-                ),
+                nodes_params,
             )
 
-        # ── 响应块 ──
-        for rb in data.response_blocks.values():
-            db.execute(
+        # ── 响应块（批量）──
+        response_blocks_params = [
+            (
+                rb.id, rb.message_id, rb.partition_id, rb.conversation_id,
+                rb.type, rb.status, self._j(rb.content), rb.order,
+                rb.sources or [], rb.created_at, rb.updated_at,
+            )
+            for rb in data.response_blocks.values()
+        ]
+        if response_blocks_params:
+            db.executemany(
                 """
                 INSERT INTO conversation_response_blocks
                     (id, message_id, partition_id, branch_id, type, status,
@@ -388,16 +410,20 @@ class PgStorageEngine:
                     sources=EXCLUDED.sources,
                     updated_at=EXCLUDED.updated_at
                 """,
-                (
-                    rb.id, rb.message_id, rb.partition_id, rb.conversation_id,
-                    rb.type, rb.status, self._j(rb.content), rb.order,
-                    rb.sources or [], rb.created_at, rb.updated_at,
-                ),
+                response_blocks_params,
             )
 
-        # ── 链接节点 ──
-        for ln in data.link_nodes.values():
-            db.execute(
+        # ── 链接节点（批量）──
+        link_nodes_params = [
+            (
+                ln.id, ln.target_message_id, ln.target_partition_id,
+                ln.target_conversation_id, ln.source_partition_id,
+                ln.source_conversation_id, ln.preview_summary, ln.timestamp,
+            )
+            for ln in data.link_nodes.values()
+        ]
+        if link_nodes_params:
+            db.executemany(
                 """
                 INSERT INTO conversation_link_nodes
                     (id, target_message_id, target_partition_id, target_branch_id,
@@ -405,11 +431,7 @@ class PgStorageEngine:
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT (id) DO NOTHING
                 """,
-                (
-                    ln.id, ln.target_message_id, ln.target_partition_id,
-                    ln.target_conversation_id, ln.source_partition_id,
-                    ln.source_conversation_id, ln.preview_summary, ln.timestamp,
-                ),
+                link_nodes_params,
             )
 
         # ── 清理已删除的记录（PG 只 upsert 不自动删除，需手动清理）──

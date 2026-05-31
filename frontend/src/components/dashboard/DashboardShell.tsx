@@ -75,7 +75,7 @@ export default function DashboardShell({ children, activeTab }: DashboardShellPr
                   <span className="hidden sm:inline">{tab.label}</span>
                   {/* 当前激活标签的底部指示条 */}
                   {isActive && (
-                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-[var(--color-accent)] rounded-full" />
+                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-[var(--color-accent)] rounded-full active:scale-[0.97] transition-transform" />
                   )}
                 </button>
               );
