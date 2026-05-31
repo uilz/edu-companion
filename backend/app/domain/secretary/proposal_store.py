@@ -30,10 +30,25 @@ class ProposalStore:
         return self._db
 
     def save_proposal(self, proposal: Proposal, user_id: str, session_id: str | None = None) -> str:
-        """保存提案到数据库"""
+        """保存提案到数据库（自动去重：同用户+同标题+同来源 的 pending 提案不重复插入）"""
         db = self._get_db()
         from datetime import datetime, timezone
         now = datetime.now(timezone.utc)
+
+        # 去重检查：已有同用户+同标题+同来源的 pending 提案 → 跳过
+        try:
+            existing = db.fetchone(
+                "SELECT id FROM secretary_proposals "
+                "WHERE user_id = %s AND title = %s "
+                "AND generated_by = %s AND status = 'pending' "
+                "LIMIT 1",
+                (user_id, proposal.title, proposal.generated_by or ""),
+            )
+            if existing:
+                logger.debug("跳过去重提案: [%s] %s", proposal.generated_by, proposal.title)
+                return existing["id"]
+        except Exception:
+            pass  # 查重失败不回退，继续写入
 
         # 生成决策链日志（存入 metadata JSONB）
         decision_log = {
@@ -42,6 +57,9 @@ class ProposalStore:
             "analysis_type": proposal.action_type,
             "generated_at": now.isoformat(),
         }
+        # 如果有指纹标记，也存入 metadata
+        if proposal.payload and "_fingerprint" in proposal.payload:
+            decision_log["fingerprint"] = proposal.payload.pop("_fingerprint")
 
         try:
             db.execute(

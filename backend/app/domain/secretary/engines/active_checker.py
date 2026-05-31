@@ -66,12 +66,35 @@ class ActiveChecker:
         for p in proposals:
             findings["reasons"].append(f"{p.emoji} {p.title}")
 
-        # 4. 去重 — 只推送新提案
-        has_new = len(proposals) != self._last_proposal_count
-        self._last_proposal_count = len(proposals)
+        # 4. 去重 — 基于内容哈希，只推送真正新增的提案
+        from hashlib import md5
+        new_proposals = []
+        for p in proposals:
+            # 用 title + insight_source + action_type 做指纹
+            fingerprint = md5(
+                f"{p.title}|{p.insight_source}|{p.action_type}".encode()
+            ).hexdigest()
+            # 检查是否已经存在相同指纹的 pending 提案
+            try:
+                existing = ProposalStore()._get_db().fetchone(
+                    "SELECT id FROM secretary_proposals "
+                    "WHERE user_id = %s AND status = 'pending' "
+                    "AND metadata->>'fingerprint' = %s "
+                    "LIMIT 1",
+                    (self._user_id, fingerprint),
+                )
+                if not existing:
+                    # 新提案：标记指纹
+                    p.payload = {**(p.payload or {}), "_fingerprint": fingerprint}
+                    new_proposals.append(p)
+            except Exception:
+                new_proposals.append(p)
 
-        if not has_new:
+        if not new_proposals:
             return findings
+
+        proposals = new_proposals
+        findings["proposals_generated"] = len(proposals)
 
         # 5. 持久化 + 推送黑板 + WS 通知
         store = ProposalStore()

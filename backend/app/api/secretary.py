@@ -233,6 +233,20 @@ async def accept_proposal(
             if action_result.get("success"):
                 from app.domain.secretary.engines.secretary_plan_bridge import plan_bridge
                 plan_adjustment = await plan_bridge.on_proposal_accepted(proposal, user_id)
+
+            # v6: 发射 ProposalAccepted 事件，触发 mark_expanded 等后续动作
+            try:
+                from app.services.event_service import EventService
+                target_node_id = (proposal.payload or {}).get("parent_id", "") or \
+                                 (proposal.payload or {}).get("target_node_id", "")
+                EventService.emit_proposal_accepted(
+                    user_id=user_id,
+                    proposal_id=proposal_id,
+                    action_type=proposal.action_type,
+                    target_node_id=target_node_id,
+                )
+            except Exception as e:
+                logger.debug("ProposalAccepted 事件发射失败: %s", e)
         except Exception as e:
             logger.warning("提案动作/计划调整失败: %s", e)
 

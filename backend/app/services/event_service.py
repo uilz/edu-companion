@@ -415,8 +415,27 @@ class EventService:
 
     @staticmethod
     async def _handle_ProposalAccepted(evt) -> None:
-        """proposal.accepted → 执行秘书提案（占位，未来实现）"""
-        pass
+        """
+        proposal.accepted → 执行秘书提案动作
+
+        支持的 action_type:
+        - explore + parent_id → mark_expanded（标记已扩展抑制重复）
+        - review / practice → （未来实现）
+        """
+        payload = evt.payload or {}
+        action_type = payload.get("action_type", "")
+        target_node_id = payload.get("target_node_id", "")
+        user_id = evt.user_id
+
+        if action_type == "explore" and target_node_id:
+            try:
+                from app.cognitive.growth_engine import growth_engine
+                growth_engine.mark_expanded(user_id, target_node_id)
+                logger.info("✅ 提案已执行: mark_expanded(user=%s, node=%s)", user_id, target_node_id)
+            except Exception as e:
+                logger.warning("mark_expanded 执行失败: %s", e)
+        elif action_type in ("review", "practice"):
+            logger.debug("提案 action_type=%s 暂未实现具体动作", action_type)
 
     @staticmethod
     async def _handle_PendingCrossTopic(evt) -> None:
