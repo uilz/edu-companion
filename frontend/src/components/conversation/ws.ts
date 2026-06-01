@@ -31,8 +31,10 @@ export class ConversationWS {
     this.callbacks = cbs;
     if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${protocol}//${window.location.host}/api/conversations/ws`;
+    // 使用与 HTTP API 相同的后端地址，协议换为 ws/wss
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const wsBase = apiBase.replace(/^http/, "ws");
+    const url = `${wsBase}/api/conversations/ws`;
 
     try {
       this.ws = new WebSocket(url);
