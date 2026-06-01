@@ -68,3 +68,20 @@ CREATE TABLE IF NOT EXISTS exploration_projects (
 CREATE INDEX IF NOT EXISTS idx_projects_user ON exploration_projects(user_id);
 CREATE INDEX IF NOT EXISTS idx_projects_status ON exploration_projects(status);
 CREATE INDEX IF NOT EXISTS idx_projects_node ON exploration_projects USING gin(node_ids);
+
+-- 4. 文件目录索引表（Phase 10.7+）
+-- 存储大文件的 Markdown 标题层级结构
+CREATE TABLE IF NOT EXISTS material_toc (
+    toc_id          TEXT PRIMARY KEY,
+    material_id     TEXT NOT NULL,
+    parent_toc_id   TEXT,
+    level           INTEGER NOT NULL DEFAULT 1,
+    heading         TEXT NOT NULL DEFAULT '',
+    chunk_start     INTEGER DEFAULT 0,
+    chunk_end       INTEGER DEFAULT 0,
+    page_start      INTEGER,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_toc_material ON material_toc(material_id);
+CREATE INDEX IF NOT EXISTS idx_toc_parent ON material_toc(parent_toc_id);

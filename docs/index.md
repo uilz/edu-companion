@@ -36,6 +36,7 @@
 | 子系统 | 路径 | 内容 |
 |--------|------|------|
 | 对话系统 | [subsystems/conversation/](subsystems/conversation/) | API/前端/后端对接/审计报告 |
+| 文件管理 | [file-management/](subsystems/file-management/) | 上传/解析/索引/TOC/RAG/练习生成 |
 
 ## 🗂️ 归档
 

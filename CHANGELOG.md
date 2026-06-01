@@ -4,6 +4,34 @@
 
 ---
 
+## [0.9.8] - 2026-06-27
+
+### 🧠 Phase 10.7 智能笔记（LLM整理） + 10.6 探索项目UI
+
+> 笔记整理接入真实LLM，新增探索项目面板，完成价值探索与智能笔记的完整闭环。
+
+#### 🤖 LLM 笔记整理
+- **/notes/aggregate 升级** — 从占位符改为真实 LLM 调用，按知识点分类、标注笔记类型、给出掌握度评价与复习建议
+- **AggregateNotesModal** — 前端模态框，支持时间范围筛选（本周/本月/全部），显示结构化 Markdown 复习文档
+
+#### 🚀 探索项目面板
+- **ProjectsPanel** — 展示所有探索项目，卡片式布局显示标题、描述、目标、难度、预估时长
+- **一键生成** — 基于当前选中知识点调用 LLM 生成探索项目，自动刷新列表
+- **状态管理** — 待开始/进行中/已完成/已归档四种状态标签
+
+#### 🔗 前端集成
+- **「整理」标签** — 左侧栏新增 Sparkles 图标标签，打开 LLM 笔记整理
+- **「项目」标签** — 左侧栏新增 Rocket 图标标签，打开探索项目面板
+- **全链路** — 选中节点→生成项目→保存到 DB→前端刷新
+
+#### 🏗️ 新增/修改文件
+- `frontend/src/components/graph/AggregateNotesModal.tsx` — LLM 笔记整理模态框（241行）
+- `frontend/src/components/graph/ProjectsPanel.tsx` — 探索项目面板（252行）
+- `backend/app/api/learning_enhance.py` — aggregate 接入真实 LLM（+65行）
+- `frontend/src/components/graph/GraphDialoguePage.tsx` — 标签栏扩展（+41行）
+
+---
+
 ## [0.9.7] - 2026-06-27
 
 ### 📝 Phase 10.6-10.7 · 价值探索 + 智能笔记系统

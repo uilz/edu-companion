@@ -34,6 +34,9 @@ from app.api.summaries import router as summaries_router
 # Phase 10: 笔记/目标/探索项目
 from app.api.learning_enhance import router as learning_enhance_router
 
+# Phase 10.7+: 文件管理
+from app.api.files_api import router as files_router
+
 # v6 Phase 4: 对话系统子路由
 from app.api.conversation_routes import router as conversation_tree_router
 from app.api.conversation_ws import router as conversation_ws_router
@@ -255,6 +258,9 @@ app.include_router(summaries_router)
 
 # Phase 10: 笔记/目标/探索项目
 app.include_router(learning_enhance_router)
+
+# Phase 10.7+: 文件管理
+app.include_router(files_router)
 
 
 # ── 健康检查 ──
