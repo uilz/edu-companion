@@ -4,6 +4,89 @@
 
 ---
 
+## [0.9.6] - 2026-06-27
+
+### 🌐 v6-Phase 10 · 认知可视化学习空间（完整版）
+
+> 完成全部 6 个模块：专注模式 + 双模式图谱 + 深度阅读 + 知识卡片 + 反思机制 + 笔记流。
+
+#### 🧘 10.1 专注模式（FocusMode）
+- **全屏极简界面** — 仅保留对话流 + 认知负荷指示器 + 当前目标，无侧边栏/导航干扰
+- **认知负荷指示器** — 4 段式负荷可视化（低/中/高/极高），颜色随负荷变化
+- **苏格拉底强调** — 顶部提示语引导自主思考
+- **目标提示条** — 可折叠的当前学习目标，可展开/收起
+- **半透明退出按钮** — 顶部保留退出入口，点击平滑退出
+
+#### 💡 10.4 右侧知识卡片（KnowledgeCardNode）
+- **节点身份** — emoji+标签+层级标签+掌握度进度条+趋势指示器
+- **操作按钮组** — 练习/讲解/已掌握/有疑问（有疑问展开输入框）
+- **关联对话列表** — 知识节点相关对话卡片，点击可跳转
+- **笔记与自我解释** — 显示该节点的所有注解，区分类型
+- **底部浮动** — 在正常模式下选中节点时，图谱底部弹出知识卡片
+
+#### 🧠 10.5 反思机制（ReflectionModal）
+- **四种触发场景** — 练习回顾/知识巩固/认知突破/周回顾，各自不同引导语
+- **三步流程** — 引导页 → 输入页（带情绪倾向分析） → 完成页
+- **情绪倾向分析** — 基于关键词的积极/中性/困惑自动检测
+- **关联知识点** — 反思自动关联到当前知识节点
+- **系统数据管理** — 保存反思内容到认知模型（后端待对接）
+
+#### 🔗 集成与联动
+- **左侧标签切换** — 学习对话/笔记流/反思三个标签页
+- **自动触发反思** — 掌握度≥0.8+上升趋势时自动弹出反思
+- **专注模式入口** — 全局「专注模式」浮动按钮，点击进入极简界面
+- **三方联动** — 选中节点 ↔ 知识卡片 ↔ 关联对话
+
+#### 🏗️ 新增文件
+- `frontend/src/components/graph/FocusMode.tsx` — 专注模式组件
+- `frontend/src/components/graph/KnowledgeCardNode.tsx` — 知识卡片详情面板
+- `frontend/src/components/graph/ReflectionModal.tsx` — 结构化反思模态框
+- `frontend/src/lib/graph-types.ts` — 新增 DialogueCardInfo 接口
+
+---
+
+## [0.9.5] - 2026-06-01
+
+### 📚 文档体系重组 — 按版本/阶段/子系统归档
+
+> 文档从原先平铺混乱的结构，整理为清晰的层级目录。同时打通 Phase 9 的核心事件链路：练习→ CognitiveNode 更新→ 事件通知。开始 v6-Phase 10 认知可视化实现。
+
+#### 🌐 v6-Phase 10 · 认知可视化学习空间
+- **10.2 双模式图谱组件** — ForceGraph（力导向d3-force） + MindMapGraph（思维导图树状布局），共享 cognitive_nodes 数据，一键切换，选中节点保留
+- **10.2 图谱-对话双栏页面** — `/learn/graph` 路由，左侧对话区/右侧图谱区，支持全屏图谱模式
+- **10.3 对话卡片 + 深度阅读工具** — DialogueCardList 结构化对话卡片（问题+摘要+知识标签）；DeepReadToolbar 浮动工具栏（高亮/引用/解释/笔记）；ExplainModal 自我解释弹窗；NoteSidebar 侧边笔记栏
+- **图谱样式切换器** — 顶部浮层式切换器（思维导图/力导向），覆盖层按钮，不影响图谱可视区域
+
+#### 🔗 Phase 9 数据通路打通
+- **A.1 练习→CognitiveNode 写入** — `knowledge/service.py` `on_answer_submitted` 从空日志改为调用 `sync_from_practice_event()`，Beta 后验更新 belief、practice_summary、trend、cognitive_load、error_clusters、engagement
+- **A.3 CognitiveNodeUpdated 事件发布** — `sync_from_practice_event` 末尾 fire-and-forget 发布 `CognitiveNodeUpdated`，携带 old/new proficiency，ZPD 调度器/规划器可消费
+- **B.1 learner_model 真实读取** — `get_knowledge_state()` 从返回固定 0.0 改为从 CognitiveNode 读取 proficiency、precision、attempts、trend
+- **find_node_by_label 增强** — 增加 id 降级匹配，支持 skill_id 全路径与 label 双模式查找
+- **C.1/C.2 测试安全网** — 创建 `factories.py` 测试数据工厂 + `test_cognitive_storage.py`(8用例)、`test_phase8_classifier.py`(6)、`test_secretary_service.py`(5)、`test_growth_engine.py`(6)，共 25 新增测试全部通过
+- **D.3 可观测性** — TraceMiddleware 请求追踪、健康端点增加 DB 连接池统计
+- **D.4 E2E 测试** — `test_e2e_phase9.py` 全链路 13 项测试（健康/classify/CognitiveNode/Secretary/事件总线）全部通过
+
+#### 🏗️ 新目录结构
+- **架构** — `docs/architecture/current.md`（v4.3 当前架构）
+- **阶段** — `docs/phases/01~09/`（Phase 1~9 开发文档，数字前缀自动排序）
+- **设计** — `docs/design/`（子分支设计 + 设计语言规范）
+- **子系统** — `docs/subsystems/conversation/`（对话系统 API/前端/后端/审计）
+- **归档** — `docs/archive/versions/`（旧版本：v6.md、v3 架构、05 数据架构等）
+
+#### 🧹 清理与归档
+- `docs/` 下重复的 `PROGRESS.md`/`CHANGELOG.md` → 归档（已被根目录更新版覆盖）
+- 根目录 `design.md` → `docs/design/design-language.md`
+- 根目录 `AUDIT-2026-05-30.md` → `docs/archive/`
+- `docs/v6.md`、`docs/05-data-architecture.md` → `docs/archive/versions/`
+- `docs/archive/architecture-v3.md` → `docs/archive/versions/`
+- `docs/README.md` 重写为精简导航页
+
+#### 📄 新建
+- `docs/index.md` — 总目录入口
+- `docs/archive/versions/README.md` — 归档索引
+
+---
+
 ## [0.9.4] - 2026-05-31
 
 ### v5.0 设计重构 — 纸墨质感 + 亮暗双主题

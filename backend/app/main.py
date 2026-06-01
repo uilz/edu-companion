@@ -30,8 +30,16 @@ from app.api.secretary import router as secretary_router
 from app.api.learning import router as learning_router
 from app.api.knowledge_graph import router as knowledge_graph_router
 from app.api.summaries import router as summaries_router
+
+# v6 Phase 4: 对话系统子路由
+from app.api.conversation_routes import router as conversation_tree_router
+from app.api.conversation_ws import router as conversation_ws_router
+
 from app.config import settings
 from app.core.learner_model import learner_engine
+
+# Phase 9 D.3: 请求追踪
+from app.middleware.trace import TraceMiddleware
 
 # 配置日志
 logging.basicConfig(
@@ -212,6 +220,9 @@ async def global_exception_handler(request: Request, exc: Exception):
         },
     )
 
+# ── 注册中间件 ──
+app.add_middleware(TraceMiddleware)
+
 # ── 注册路由 ──
 # WebSocket 和 HTTP 聊天
 # chat_router 已删除 — WS 端点在 conversation.py
@@ -268,6 +279,15 @@ async def health_check() -> dict:
             checks["status"] = "degraded"
     except Exception:
         checks["event_queue_pending"] = -1
+
+    # Phase 9 D.3: 连接池统计
+    try:
+        from app.db.database import get_db_pool_stats
+        pool_stats = get_db_pool_stats()
+        if pool_stats:
+            checks["db_pool"] = pool_stats
+    except Exception:
+        pass
 
     return checks
 

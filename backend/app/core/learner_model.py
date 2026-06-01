@@ -203,7 +203,22 @@ class LearnerModelEngine:
     def get_knowledge_state(
         self, user_id: str, skill_id: str
     ) -> dict:
-        """获取用户在某个知识点的状态（已迁移至 CognitiveNode）"""
+        """获取用户在某个知识点的状态（从 CognitiveNode 真实读取）"""
+        try:
+            from app.cognitive.storage import find_node_by_label
+            node = find_node_by_label(skill_id, user_id)
+            if node:
+                return {
+                    "skill_id": skill_id,
+                    "mastery": node.belief.proficiency_mean,
+                    "precision": node.belief.proficiency_precision,
+                    "total_attempts": node.practice_summary.total_attempts,
+                    "correct_attempts": node.practice_summary.correct_attempts,
+                    "trend": node.trend.direction,
+                    "status": "active",
+                }
+        except Exception:
+            logger.debug("CognitiveNode read failed, returning default", exc_info=True)
         return {"skill_id": skill_id, "mastery": 0.0, "status": "use_cognitive_node"}
 
     # ──────────────────────────────────────────────

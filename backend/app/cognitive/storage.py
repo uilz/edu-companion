@@ -558,6 +558,13 @@ def find_node_by_label(
     )
     if rows:
         return _row_to_node(rows[0])
+    # 终极降级：按 id 精确匹配
+    row = db.fetchone(
+        "SELECT * FROM cognitive_nodes WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
+        (label, user_id),
+    )
+    if row:
+        return _row_to_node(row)
     return None
 
 
@@ -575,7 +582,17 @@ def sync_from_practice_event(
     这是 Phase 9 的核心数据通路：将练习系统的 BKT 后验结果
     同步到 CognitiveNode 的 Beta 分布信念。
     """
+    # 先按 label 查找，再按 id 查找
     node = find_node_by_label(skill_id, user_id)
+    if not node:
+        db = get_db()
+        row = db.fetchone(
+            "SELECT * FROM cognitive_nodes WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
+            (skill_id, user_id),
+        )
+        if row:
+            from app.cognitive.models import CognitiveNode
+            node = _row_to_node(row)
     if not node:
         logger.info(
             "sync_from_practice: no node found for skill=%s, creating atom node",
@@ -598,6 +615,7 @@ def sync_from_practice_event(
 
     # Beta 分布后验更新
     is_correct_int = 1 if is_correct else 0
+    proficiency_before = node.belief.proficiency_mean
     old_alpha = node.belief.alpha
     old_beta = node.belief.beta
     node.belief.alpha = old_alpha + is_correct_int
@@ -693,6 +711,27 @@ def sync_from_practice_event(
         node.engagement.streak_current = 1
 
     upsert_node(node, user_id)
+
+    # 发布 CognitiveNodeUpdated 事件（fire-and-forget）
+    try:
+        import asyncio
+        from app.application.di import container
+        from shared.events import CognitiveNodeUpdated
+
+        event = CognitiveNodeUpdated(
+            user_id=user_id,
+            node_id=node.id,
+            label=node.label,
+            path_id=node.path_id,
+            level=node.level,
+            proficiency_before=proficiency_before,
+            proficiency_after=node.belief.proficiency_mean,
+            update_type="practice",
+        )
+        asyncio.create_task(container.event_bus.publish(event))
+    except Exception:
+        logger.debug("CognitiveNodeUpdated 事件发布失败", exc_info=True)
+
     logger.info(
         "✅ Practice synced to CognitiveNode: skill=%s correct=%s "
         "belief=%.3f→%.3f (α=%d β=%d)",

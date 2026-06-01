@@ -426,3 +426,18 @@ def get_db() -> Database:
     if _db is None:
         _db = Database.get()
     return _db
+
+
+def get_db_pool_stats() -> dict | None:
+    """获取连接池统计（用于健康检查）"""
+    global _db
+    if _db is None or _db._pool is None:
+        return None
+    try:
+        return {
+            "total": _db._pool._maxsize,
+            "available": _db._pool._pool.qsize(),
+            "used": _db._pool._maxsize - _db._pool._pool.qsize(),
+        }
+    except Exception:
+        return None

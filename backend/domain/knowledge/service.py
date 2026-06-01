@@ -11,13 +11,29 @@ class KnowledgeGraphServiceImpl:
         self._bus = event_bus
 
     async def on_answer_submitted(self, event):
-        """事件: 答题 → 图谱掌握度（由 CognitiveNode 实际处理）"""
-        logger.info(
-            "Knowledge: user=%s skill=%s correct=%s (tracked via CognitiveNode)",
-            getattr(event, "user_id", "?"),
-            getattr(event, "skill_id", "?"),
-            getattr(event, "is_correct", "?"),
-        )
+        """事件: 答题 → 同步 CognitiveNode belief + practice_summary"""
+        user_id = getattr(event, "user_id", "?")
+        skill_id = getattr(event, "skill_id", "?")
+        is_correct = getattr(event, "is_correct", False)
+        time_spent = getattr(event, "time_spent", 0.0)
+        hints_used = getattr(event, "hints_used", 0)
+
+        # 已经支持 CognitiveNode，通过 sync_from_practice_event 统一更新
+        try:
+            from app.cognitive.storage import sync_from_practice_event
+            sync_from_practice_event(
+                user_id=user_id,
+                skill_id=skill_id,
+                is_correct=bool(is_correct),
+                time_spent=time_spent,
+                hints_used=hints_used,
+            )
+            logger.info(
+                "Knowledge: synced practice to CognitiveNode user=%s skill=%s correct=%s",
+                user_id, skill_id, is_correct,
+            )
+        except Exception as exc:
+            logger.warning("Knowledge: failed to sync practice to CognitiveNode: %s", exc)
 
     async def on_error_recorded(self, event):
         """事件: 错误 → 标记薄弱知识点，更新 CognitiveNode 的 error_clusters"""
