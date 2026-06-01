@@ -4,6 +4,40 @@
 
 ---
 
+## [0.9.7] - 2026-06-27
+
+### 📝 Phase 10.6-10.7 · 价值探索 + 智能笔记系统
+
+> 打通笔记从创建→存储→展示的完整闭环，新增目标设定与探索项目功能。
+
+#### 🗄️ 后端基础设施
+- **user_notes 表** — 存储高亮/自我解释/反思/笔记四种类型，关联知识节点
+- **learning_goals 表** — 掌握度目标 + 预计达成日期 + 优先级管理
+- **exploration_projects 表** — 跨节点项目式学习任务
+- **notes CRUD API** — `POST/GET/DELETE /api/learning/notes` + 按节点/类型过滤
+- **goals API** — `POST/GET/PUT /api/learning/goals` + 状态管理
+- **projects API** — `POST /api/learning/projects/generate` 基于知识点生成探索项目
+
+#### 🖥️ 前端对接
+- **learning-api.ts** — 7 个 API 函数：createNote/listNotes/getNote/deleteNote/aggregateNotes/createGoal/updateGoal
+- **笔记流对接** — 选中节点时自动加载 notes，自我解释/反思/笔记全部持久化到 DB
+- **GoalSettingModal** — 掌握度滑动条 + 日期选择 + 四档优先级 + 每日进度估算
+
+#### 🔗 集成
+- **知识卡片** — 关联笔记来自真实 API（不再是 mock）
+- **笔记流标签页** — 显示自我解释、反思、笔记，区分图标
+- **目标设定入口** — 左侧节点信息卡新增「设定目标」按钮
+- **保存后刷新** — 笔记/目标保存后自动刷新关联数据
+
+#### 🏗️ 新增/修改文件
+- `backend/app/db/learning_schema.sql` — 三张新表
+- `backend/app/api/learning_enhance.py` — 笔记/目标/项目 API（368 行）
+- `frontend/src/lib/learning-api.ts` — API 客户端（210 行）
+- `frontend/src/components/graph/GoalSettingModal.tsx` — 目标设定模态框（255 行）
+- `frontend/src/components/graph/GraphDialoguePage.tsx` — API 对接（+88 行）
+
+---
+
 ## [0.9.6] - 2026-06-27
 
 ### 🌐 v6-Phase 10 · 认知可视化学习空间（完整版）

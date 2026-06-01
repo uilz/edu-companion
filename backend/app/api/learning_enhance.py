@@ -156,7 +156,7 @@ async def aggregate_notes(
 ):
     """
     将笔记汇聚为结构化复习文档。
-    当前返回原始列表，后续接入 LLM 整理。
+    使用 LLM 将原始笔记整理为分类、有逻辑的复习材料。
     """
     uid = get_user_id(user_id)
     from app.db.database import get_db
@@ -176,11 +176,64 @@ async def aggregate_notes(
     sql = f"SELECT * FROM user_notes WHERE {' AND '.join(conditions)} ORDER BY created_at DESC"
     rows = db.fetchall(sql, tuple(params))
 
-    return {
-        "total": len(rows),
-        "notes": [_note_row(r) for r in rows],
-        "message": "TODO: LLM 整理 (即将上线)",
-    }
+    if not rows:
+        return {"total": 0, "notes": [], "organized": "", "message": "暂无笔记可整理"}
+
+    notes = [_note_row(r) for r in rows]
+
+    # ── LLM 整理 ──
+    try:
+        from app.services.llm_service import llm_service
+
+        notes_text = "\n\n".join(
+            f"[{n['type']}] {n['content']}"
+            f"{' — 原文: ' + n['source_text'] if n['source_text'] else ''}"
+            for n in notes
+        )
+
+        time_label = {"week": "本周", "month": "本月", "all": "全部"}.get(time_range, time_range)
+
+        system_prompt = (
+            "你是一个学习整理助手。将用户的笔记整理为一份结构清晰的复习文档。\n\n"
+            "整理要求：\n"
+            "1. 按主题/知识点分类归纳\n"
+            "2. 每类用简短标题概括\n"
+            "3. 保留关键概念和核心理解\n"
+            "4. 标注笔记类型（自我解释/反思/笔记）\n"
+            "5. 对每类内容加一句[掌握程度]或[复习建议]\n"
+            "6. 使用中文，Markdown格式\n"
+            "7. 开头用一两句话总结整体学习状态\n"
+        )
+
+        user_prompt = (
+            f"请整理我{time_label}的学习笔记（共{len(notes)}条）：\n\n{notes_text}"
+        )
+
+        organized = await llm_service.generate(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            task_type="chat",
+            temperature=0.3,
+            max_tokens=2048,
+        )
+
+        return {
+            "total": len(notes),
+            "notes": notes,
+            "organized": organized,
+            "message": "LLM 整理完成",
+        }
+
+    except Exception as e:
+        logger.warning("LLM 整理失败，返回原始列表: %s", e)
+        return {
+            "total": len(notes),
+            "notes": notes,
+            "organized": "",
+            "message": f"LLM 整理暂不可用: {e}",
+        }
 
 
 # ════════════════════════════════════════

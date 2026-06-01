@@ -14,6 +14,8 @@ import FocusMode from "@/components/graph/FocusMode";
 import KnowledgeCardNode from "@/components/graph/KnowledgeCardNode";
 import ReflectionModal from "@/components/graph/ReflectionModal";
 import GoalSettingModal from "@/components/graph/GoalSettingModal";
+import AggregateNotesModal from "@/components/graph/AggregateNotesModal";
+import ProjectsPanel from "@/components/graph/ProjectsPanel";
 import { createNote, listNotes, createGoal, listGoals, generateProject } from "@/lib/learning-api";
 import type { Note as NoteType } from "@/lib/learning-api";
 import {
@@ -28,6 +30,8 @@ import {
   MessageSquare,
   FileText,
   Lightbulb,
+  Sparkles,
+  Rocket,
 } from "lucide-react";
 
 type GraphMode = "force" | "mindmap";
@@ -88,6 +92,12 @@ export default function GraphDialoguePage() {
 
   // Goal setting modal
   const [goalModalOpen, setGoalModalOpen] = useState(false);
+
+  // Aggregate notes modal
+  const [aggregateOpen, setAggregateOpen] = useState(false);
+
+  // Projects panel
+  const [projectsOpen, setProjectsOpen] = useState(false);
 
   // Deep reading state
   const [toolbar, setToolbar] = useState<{
@@ -417,6 +427,21 @@ useEffect(() => {
         />
       )}
 
+      {/* Aggregate Notes Modal */}
+      <AggregateNotesModal
+        open={aggregateOpen}
+        nodeIds={selectedNode ? [selectedNode.id] : undefined}
+        onClose={() => setAggregateOpen(false)}
+      />
+
+      {/* Projects Panel */}
+      <ProjectsPanel
+        open={projectsOpen}
+        selectedNodeId={selectedNode?.id}
+        selectedNodeLabel={selectedNode?.label}
+        onClose={() => setProjectsOpen(false)}
+      />
+
       {/* Left pane: Conversation dialogue */}
       <div className="flex-1 border-r border-[var(--color-border)] overflow-y-auto" onMouseUp={handleTextSelect}>
         <div className="p-4">
@@ -442,7 +467,7 @@ useEffect(() => {
               }`}
             >
               <FileText size={12} />
-              笔记流
+              笔记
             </button>
             <button
               onClick={() => setReflectionOpen(true)}
@@ -454,6 +479,20 @@ useEffect(() => {
             >
               <Brain size={12} />
               反思
+            </button>
+            <button
+              onClick={() => setAggregateOpen(true)}
+              className="flex items-center gap-1.5 pb-2 text-xs font-medium text-[var(--color-text-muted)] border-b-2 border-transparent hover:text-[var(--color-accent)] transition-colors"
+            >
+              <Sparkles size={12} />
+              整理
+            </button>
+            <button
+              onClick={() => setProjectsOpen(true)}
+              className="flex items-center gap-1.5 pb-2 text-xs font-medium text-[var(--color-text-muted)] border-b-2 border-transparent hover:text-[var(--color-accent)] transition-colors"
+            >
+              <Rocket size={12} />
+              项目
             </button>
           </div>
 
