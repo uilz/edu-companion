@@ -13,6 +13,9 @@ import NoteSidebar from "@/components/graph/NoteSidebar";
 import FocusMode from "@/components/graph/FocusMode";
 import KnowledgeCardNode from "@/components/graph/KnowledgeCardNode";
 import ReflectionModal from "@/components/graph/ReflectionModal";
+import GoalSettingModal from "@/components/graph/GoalSettingModal";
+import { createNote, listNotes, createGoal, listGoals, generateProject } from "@/lib/learning-api";
+import type { Note as NoteType } from "@/lib/learning-api";
 import {
   GitGraph,
   Network,
@@ -83,6 +86,9 @@ export default function GraphDialoguePage() {
   const [reflectionOpen, setReflectionOpen] = useState(false);
   const [reflectionTrigger, setReflectionTrigger] = useState<"practice_done" | "node_mastered" | "cognitive_conflict" | "weekly_review">("practice_done");
 
+  // Goal setting modal
+  const [goalModalOpen, setGoalModalOpen] = useState(false);
+
   // Deep reading state
   const [toolbar, setToolbar] = useState<{
     visible: boolean;
@@ -95,8 +101,22 @@ export default function GraphDialoguePage() {
   const [noteSidebar, setNoteSidebar] = useState(false);
   const [selectedText, setSelectedText] = useState("");
 
-  // Tabs for left pane
-  const [leftTab, setLeftTab] = useState<"dialogue" | "notes">("dialogue");
+// Tabs for left pane
+const [leftTab, setLeftTab] = useState<"dialogue" | "notes">("dialogue");
+
+// Real notes from API
+const [realNotes, setRealNotes] = useState<NoteType[]>([]);
+
+// Load notes when selectedNode changes
+useEffect(() => {
+  if (selectedNode?.id) {
+    listNotes({ node_id: selectedNode.id, limit: 20 })
+      .then(setRealNotes)
+      .catch(() => setRealNotes([]));
+  } else {
+    setRealNotes([]);
+  }
+}, [selectedNode]);
 
   // Fetch graph data
   useEffect(() => {
@@ -169,8 +189,19 @@ export default function GraphDialoguePage() {
   }, [selectedText]);
 
   const handleExplainSave = useCallback((explanation: string) => {
-    console.log("Self-explanation saved:", explanation);
-  }, []);
+    createNote({
+      content: explanation,
+      type: "explain",
+      source_text: selectedText,
+      node_ids: selectedNode ? [selectedNode.id] : [],
+    }).then(() => {
+      console.log("Self-explanation saved to API");
+      // Reload notes
+      if (selectedNode?.id) {
+        listNotes({ node_id: selectedNode.id, limit: 20 }).then(setRealNotes).catch(() => {});
+      }
+    }).catch((e) => console.error("Failed to save explanation:", e));
+  }, [selectedText, selectedNode]);
 
   // KnowledgeCard actions
   const handleStartPractice = useCallback((nodeId: string) => {
@@ -196,7 +227,17 @@ export default function GraphDialoguePage() {
   // Reflection save
   const handleReflectionSave = useCallback((reflection: any) => {
     console.log("Reflection saved:", reflection);
-  }, []);
+    createNote({
+      content: reflection.content,
+      type: "reflect",
+      node_ids: reflection.relatedNodes || (selectedNode ? [selectedNode.id] : []),
+      metadata: { trigger: reflection.trigger, sentiment: reflection.sentiment },
+    }).then(() => {
+      if (selectedNode?.id) {
+        listNotes({ node_id: selectedNode.id, limit: 20 }).then(setRealNotes).catch(() => {});
+      }
+    }).catch((e) => console.error("Failed to save reflection:", e));
+  }, [selectedNode]);
 
   if (loading) {
     return (
@@ -294,7 +335,7 @@ export default function GraphDialoguePage() {
                   selectedNode.label.includes(kn) || kn.includes(selectedNode.label)
                 )
               )}
-              relatedNotes={MOCK_NOTES}
+              relatedNotes={realNotes.map(n => ({ id: n.id, text: n.content, type: n.type }))}
               onClose={() => setSelectedNode(null)}
               onStartPractice={handleStartPractice}
               onRequestExplain={handleRequestExplain}
@@ -359,6 +400,23 @@ export default function GraphDialoguePage() {
         onSave={handleReflectionSave}
       />
 
+      {/* Goal Setting Modal */}
+      {selectedNode && (
+        <GoalSettingModal
+          open={goalModalOpen}
+          nodeId={selectedNode.id}
+          nodeLabel={selectedNode.label}
+          currentMastery={selectedNode.mastery}
+          onClose={() => setGoalModalOpen(false)}
+          onSaved={() => {
+            // Refresh graph data to reflect updated goals
+            fetchGraphData().then((data) => {
+              setGraphData(data);
+            }).catch(() => {});
+          }}
+        />
+      )}
+
       {/* Left pane: Conversation dialogue */}
       <div className="flex-1 border-r border-[var(--color-border)] overflow-y-auto" onMouseUp={handleTextSelect}>
         <div className="p-4">
@@ -419,8 +477,14 @@ export default function GraphDialoguePage() {
                     <span>掌握度: {Math.round(selectedNode.mastery * 100)}%</span>
                     <span>趋势: {getTrendIcon(selectedNode.trend)}</span>
                     <button
+                      onClick={() => setGoalModalOpen(true)}
+                      className="text-[var(--color-accent)] hover:underline"
+                    >
+                      设定目标 →
+                    </button>
+                    <button
                       onClick={handleRequestExplain.bind(null, selectedNode.id)}
-                      className="ml-auto text-[var(--color-accent)] hover:underline"
+                      className="text-[var(--color-accent)] hover:underline ml-auto"
                     >
                       请求讲解 →
                     </button>
@@ -442,12 +506,12 @@ export default function GraphDialoguePage() {
               <p className="text-xs text-[var(--color-text-muted)]">
                 所有高亮、自我解释、反思自动汇聚为个人笔记流
               </p>
-              {MOCK_NOTES.length === 0 ? (
+              {realNotes.length === 0 ? (
                 <p className="text-xs text-[var(--color-text-muted)] text-center py-6">
                   暂无笔记，选中文本后使用工具栏添加
                 </p>
               ) : (
-                MOCK_NOTES.map((note) => (
+                realNotes.map((note) => (
                   <div
                     key={note.id}
                     className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]"
@@ -455,15 +519,17 @@ export default function GraphDialoguePage() {
                     <div className="flex items-center gap-1 mb-1">
                       {note.type === "explain" ? (
                         <Lightbulb size={10} className="text-[var(--color-accent)]" />
+                      ) : note.type === "reflect" ? (
+                        <Brain size={10} className="text-[var(--color-accent)]" />
                       ) : (
                         <StickyNote size={10} className="text-[var(--color-success)]" />
                       )}
                       <span className="text-[9px] text-[var(--color-text-muted)]">
-                        {note.type === "explain" ? "自我解释" : "笔记"}
+                        {note.type === "explain" ? "自我解释" : note.type === "reflect" ? "反思" : "笔记"}
                       </span>
                     </div>
                     <p className="text-xs text-[var(--color-text)] leading-relaxed">
-                      {note.text}
+                      {note.content}
                     </p>
                   </div>
                 ))
