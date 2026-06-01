@@ -350,6 +350,25 @@ def _build_context_messages(
     except Exception:
         logger.debug("Tool availability hint injection skipped", exc_info=True)
 
+    # ── 11. File-based RAG context ──
+    try:
+        from app.services.material_search import material_search
+        rag_results = material_search.search_sync(
+            user_id=data.user_id,
+            query=user_text,
+            top_k=3,
+        )
+        if rag_results and material_search.should_inject_rag(rag_results):
+            rag_ctx = material_search.format_rag_context(rag_results)
+            system_content += (
+                "\n\n📚 以下是你可引用的资料内容（来自用户的知识库）：\n"
+                + rag_ctx
+                + "\n\n请基于以上资料回答。如果资料中没有相关信息，按自己的知识回答，不要编造。"
+                "引用资料时标注 [来源：文件名]。"
+            )
+    except Exception:
+        logger.debug("File-based RAG context injection skipped", exc_info=True)
+
     messages.append({"role": "system", "content": system_content})
 
     # ── Recent conversation history (last 8 messages) ──

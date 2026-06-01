@@ -139,6 +139,46 @@ class MaterialSearch:
         except Exception:
             return None
 
+    def search_sync(
+        self,
+        user_id: str,
+        query: str,
+        purpose: str | None = None,
+        top_k: int = 5,
+    ) -> list[dict]:
+        """同步版搜索（供非 async 上下文调用，如 context_builder）"""
+        try:
+            from app.db.database import get_db
+            db = get_db()
+
+            conditions = ["mc.user_id = %s", "m.status = 'indexed'", "m.purpose = %s"]
+            params: list = [user_id, purpose or "library"]
+
+            sql = f"""
+                SELECT mc.text, mc.material_id, m.file_name as material_name, mc.chunk_index
+                FROM material_chunks mc
+                JOIN materials m ON mc.material_id = m.material_id
+                WHERE {' AND '.join(conditions)}
+                  AND to_tsvector('simple', coalesce(mc.text, '')) @@ plainto_tsquery('simple', %s)
+                LIMIT %s
+            """
+            rows = db.fetchall(sql, tuple(params + [query[:500], top_k]))
+
+            results = []
+            for r in rows:
+                results.append({
+                    "text": r["text"][:2000] if r.get("text") else "",
+                    "heading_path": "",
+                    "material_id": r["material_id"],
+                    "material_name": r.get("material_name", ""),
+                    "chunk_index": r.get("chunk_index", 0),
+                    "score": 0.0,
+                })
+            return results
+        except Exception as e:
+            logger.debug("同步搜索失败: %s", e)
+            return []
+
 
 # 全局实例
 material_search = MaterialSearch()
