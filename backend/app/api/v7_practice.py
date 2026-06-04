@@ -313,6 +313,38 @@ async def api_generate_from_materials(body: dict, user_id: str = DEFAULT_USER_ID
     }
 
 
+@router.post("/generate-bulk")
+async def api_generate_bulk(body: dict, user_id: str = DEFAULT_USER_ID):
+    """批量出题：一次对多个知识点生成不同 Bloom 层次的题目"""
+    _ensure_tables()
+    bank_id = body.get("bank_id", "")
+    if not bank_id:
+        raise HTTPException(400, "bank_id 不能为空")
+    plans = body.get("plans", [])
+    if not plans:
+        raise HTTPException(400, "plans 不能为空，格式: [{skill_id, subject, bloom_level, count}]")
+    from app.services.practice_question_gen import bulk_generate
+    return await bulk_generate(bank_id=bank_id, plans=plans, user_id=user_id, material_ids=body.get("material_ids"))
+
+
+@router.post("/questions/{question_id}/similar")
+async def api_generate_similar(question_id: str, body: dict, user_id: str = DEFAULT_USER_ID):
+    """基于已有题目生成同类变体"""
+    _ensure_tables()
+    count = max(1, min(10, int(body.get("count", 3))))
+    from app.services.practice_question_gen import generate_similar
+    questions = await generate_similar(question_id, user_id, count)
+    return {"generated": len(questions), "questions": questions}
+
+
+@router.get("/questions/{question_id}/explain")
+async def api_explain_question(question_id: str, user_id: str = DEFAULT_USER_ID, style: str = "detailed"):
+    """AI 深入讲解某道题"""
+    _ensure_tables()
+    from app.services.practice_question_gen import explain_question
+    return await explain_question(question_id, user_id, style)
+
+
 @router.post("/generate-from-conversation")
 async def api_generate_from_conversation(body: dict, user_id: str = DEFAULT_USER_ID):
     """对话场景出题：自动识别对话内容并生成题目"""
