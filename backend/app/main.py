@@ -42,6 +42,7 @@ from app.api.explain_cards import router as explain_cards_router
 
 # v7.0 智能题库
 from app.api.v7_practice import router as v7_practice_router
+from app.api.v7_references import router as v7_references_router
 
 # v6 Phase 4: 对话系统子路由
 from app.api.conversation_routes import router as conversation_tree_router
@@ -272,6 +273,7 @@ app.include_router(files_router)
 
 # v7.0 智能题库
 app.include_router(v7_practice_router)
+app.include_router(v7_references_router)
 
 # 解释卡片 CRUD
 app.include_router(explain_cards_router)

@@ -302,6 +302,60 @@ export async function clearMasteredErrors(): Promise<{ cleared: number; message:
   return v7fetch("/error-book/clear-mastered", { method: "POST" });
 }
 
+// ── 参考资料 ──
+
+export interface ReferenceResult {
+  bvid: string;
+  title: string;
+  author: string;
+  cover: string;
+  link: string;
+  duration: string;
+  played: string;
+  danmaku: number;
+  description: string;
+}
+
+export interface ReferenceResponse {
+  results: ReferenceResult[];
+  total: number;
+  error?: string;
+  node_label?: string;
+  search_query?: string;
+}
+
+/** 搜索参考资料（B站视频） */
+export async function searchReferences(
+  query: string,
+  options?: { source?: string; page?: number; page_size?: number }
+): Promise<ReferenceResponse> {
+  const params = new URLSearchParams({ q: query });
+  if (options?.source) params.set("source", options.source);
+  if (options?.page) params.set("page", String(options.page));
+  if (options?.page_size) params.set("page_size", String(options.page_size));
+  return v7fetch(`/references/search?${params.toString()}`);
+}
+
+/** 根据知识点搜索参考资料 */
+export async function searchReferencesForNode(
+  nodeId: string,
+  source?: string
+): Promise<ReferenceResponse & { node_label?: string }> {
+  const params = new URLSearchParams({ node_id: nodeId });
+  if (source) params.set("source", source);
+  return v7fetch(`/references/for-node?${params.toString()}`);
+}
+
+/** 根据题目搜索参考资料 */
+export async function searchReferencesForQuestion(
+  questionId: string,
+  source?: string
+): Promise<ReferenceResponse & { search_query?: string }> {
+  const params = new URLSearchParams({ question_id: questionId });
+  if (source) params.set("source", source);
+  return v7fetch(`/references/for-question?${params.toString()}`);
+}
+
 // ── 复习调度 ──
 
 export interface DueQuestion {

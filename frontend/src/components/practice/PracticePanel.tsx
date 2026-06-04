@@ -17,6 +17,7 @@ import {
   type V7Question,
   type V7SubmitResult,
 } from "@/lib/practice-api";
+import ReferencePanel from "./ReferencePanel";
 
 // ── 状态机 ──
 type Phase = "idle" | "loading" | "answering" | "submitting" | "result" | "summary" | "error";
@@ -339,6 +340,16 @@ export default function PracticePanel({ nodeId, nodeLabel, onClose }: Props) {
                 <p className="text-[13px] text-[var(--color-text)] leading-relaxed whitespace-pre-wrap">
                   {lastResult.analysis}
                 </p>
+              </div>
+            )}
+
+            {/* 视频讲解 */}
+            {currentQuestion && (
+              <div className="mb-3">
+                <ReferencePanel
+                  query={currentQuestion.stem.slice(0, 40)}
+                  compact
+                />
               </div>
             )}
 
