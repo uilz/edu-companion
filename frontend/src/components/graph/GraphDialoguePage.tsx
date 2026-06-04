@@ -11,6 +11,7 @@ import { getMasteryColor, getTrendIcon } from "@/lib/graph-types";
 import { useGraphDialogue } from "@/hooks/useGraphDialogue";
 import type { UseGraphDialogueReturn } from "@/hooks/useGraphDialogue";
 import type { GraphData } from "@/lib/graph-types";
+import PracticePanel from "@/components/practice/PracticePanel";
 
 // ── 层级筛选：只显示 <= maxLevel 的节点及其关联边 ──
 const LEVEL_ORDER: Record<string, number> = {
@@ -223,27 +224,11 @@ function GraphDialogueLayout({ ctx }: { ctx: UseGraphDialogueReturn }) {
 
             {/* 练习 */}
             {ctx.leftTab === "practice" && (
-              <div className="space-y-3">
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { label: "总练习数", value: ctx.practiceStats.total, color: "text-[var(--color-text)]" },
-                    { label: "正确率", value: `${ctx.practiceStats.accuracy}%`, color: "text-[var(--color-success)]" },
-                    { label: "连续正确", value: ctx.practiceStats.streak, color: "text-[var(--color-accent)]" },
-                  ].map((s) => (
-                    <div key={s.label} className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-center">
-                      <span className={`text-xl font-bold ${s.color}`}>{s.value}</span>
-                      <p className="text-[10px] text-[var(--color-text-muted)] mt-1">{s.label}</p>
-                    </div>
-                  ))}
-                </div>
-                {ctx.selectedNode && (
-                  <button onClick={() => ctx.handleStartPractice(ctx.selectedNode!.id)}
-                    className="w-full flex items-center justify-center gap-1.5 px-4 py-3 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity">
-                    <Play size={14} />开始针对「{ctx.selectedNode.label}」的练习
-                  </button>
-                )}
-                <p className="text-[10px] text-[var(--color-text-muted)] text-center pt-2">练习系统正在对接，后续展示错题集和练习历史</p>
-              </div>
+              <PracticePanel
+                nodeId={ctx.selectedNode?.id}
+                nodeLabel={ctx.selectedNode?.label}
+                onClose={() => ctx.setLeftTab("dialogue")}
+              />
             )}
 
             {/* 笔记 */}
