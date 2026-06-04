@@ -23,7 +23,6 @@ const navItems = [
   { href: '/practice', label: '专注练习', icon: Dumbbell },
   { href: '/secretary', label: '秘书', icon: Bell },
 ];
-
 // ── 桌面端侧边栏导航组件 ──
 export default function Sidebar() {
   const pathname = usePathname();

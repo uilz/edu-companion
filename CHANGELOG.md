@@ -4,7 +4,65 @@
 
 ---
 
-## [0.9.8] - 2026-06-27
+## [0.9.12] - 2026-06-01
+
+### 🧘 专注模式 · 驾驶舱入口 + 学习空间集成
+
+> 专注模式从图谱页扩展到驾驶舱和学习空间，驾驶舱新增「专注」tab，学习空间支持 URL 参数自动进入。
+
+#### 驾驶舱
+- **FocusTab 组件** — 专注模式入口页，展示功能特点和分区列表
+- **「专注」Tab** — 驾驶舱 Tab 栏新增 🧘 专注标签
+- **一键开始** — 选择分区可跳转到 `/learn?focus=1&p=xxx` 自动进入专注学习
+
+#### 学习空间
+- **URL 参数驱动** — `/learn?focus=1` 自动激活 FocusMode，无需手动点击
+- **ConversationPanel 集成** — 桌面端主内容由 FocusMode 包裹，进入后全屏极简界面
+- **退出简洁** — 专注模式顶部「退出专注」按钮一键返回正常视图
+
+#### 文件变更
+| 文件 | 变更 |
+|------|------|
+| `frontend/src/components/dashboard/FocusTab.tsx` | **新** 专注模式入口页（150 行） |
+| `frontend/src/components/dashboard/DashboardShell.tsx` | +2 行（TabId + TABS） |
+| `frontend/src/app/dashboard/page.tsx` | +5 行（懒加载 + 映射） |
+| `frontend/src/components/conversation/ConversationPanel.tsx` | +5 行（initialFocus prop + FocusMode 包裹） |
+| `frontend/src/app/learn/page.tsx` | +4 行（读取 focus URL 参数） |
+
+---
+
+## [0.9.11] - 2026-06-01
+
+### 💡 追问功能（Follow-Up Questions）
+
+> AI 回复下方展示 3 个追问问题，点击即发送，引导深度学习。
+
+#### 后端
+- **prompts.py** — 新增追问生成指令，LLM 回复末尾以 `<!--FOLLOW_UP-->` 格式输出 3 个递进式追问
+- **`_parse_follow_up_questions()`** — 新增解析函数，提取追问问题并清理回复文本
+- **流式/非流式双路径** — 追问问题解析后存入 `TreeNode.metadata.follow_up_questions`
+- **智能跳过** — 不适合追问的场景（告别、情绪低落）LLM 自动不生成
+
+#### 前端
+- **FollowUpChips 组件** — 灯泡图标 + 3 个编号按钮，hover 时渐变色 + 消息图标提示
+- **MessageList 集成** — 最末 AI 消息下方渲染追问按钮，点击通过 `store.sendMessage()` 发送
+- **WS/HTTP 双通道** — `streaming.ts` 和 `conversation-store.ts` 均从 metadata 提取 `follow_up_questions`
+- **视觉设计** — 圆角按钮、active:scale 反馈、编号圆圈与主题色匹配
+
+#### 🏗️ 新增/修改文件
+| 文件 | 变更 |
+|------|------|
+| `backend/app/services/prompts.py` | +28 行追问指令 |
+| `backend/app/services/conversation_llm.py` | +48 行解析+存储逻辑 |
+| `frontend/src/components/conversation/FollowUpChips.tsx` | **新** 追问按钮组（120 行） |
+| `frontend/src/components/conversation/MessageList.tsx` | +18 行渲染追问 |
+| `frontend/src/types/index.ts` | +2 行类型定义 |
+| `frontend/src/store/streaming.ts` | +6 行 metadata 提取 |
+| `frontend/src/store/conversation-store.ts` | +8 行 metadata 提取 |
+
+---
+
+## [0.9.10] - 2026-06-01
 
 ### 🧠 Phase 10.7 智能笔记（LLM整理） + 10.6 探索项目UI
 

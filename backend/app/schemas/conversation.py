@@ -219,6 +219,7 @@ class Partition(BaseModel):
     root_id: str  # virtual root node id
     context_summary: str = ""
     tags: list[str] = Field(default_factory=list)
+    is_temp: bool = False  # True = 临时分区（不可重命名，不接入图谱）
     created_at: float = Field(default_factory=time.time)
     updated_at: float = Field(default_factory=time.time)
     last_active_at: float = Field(default_factory=time.time)

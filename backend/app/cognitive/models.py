@@ -298,6 +298,7 @@ class CognitiveNode(BaseModel):
     parent: str | None = None
     children: list[str] = Field(default_factory=list)
     is_core: bool = False
+    brief: str = ""  # 节点简介（由 AI 或用户维护的内容摘要）
 
     # ─── 图谱结构 ───
     prerequisites: list[Prerequisite] = Field(default_factory=list)

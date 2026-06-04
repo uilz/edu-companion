@@ -80,6 +80,8 @@ def upsert_node(node: CognitiveNode, user_id: str = DEFAULT_USER_ID) -> None:
         "path_id", "node_type", "is_visible", "subsystems", "embedding", "is_active",
         # 结构字段
         "emoji", "color", "sort_order",
+        # 简介
+        "brief",
     ]
     # 确保所有 JSONB 值为合法 JSON 字符串
     vals = {c: _to_json(getattr(node, c, None)) for c in columns}
@@ -385,6 +387,7 @@ def _row_to_node(row: dict) -> CognitiveNode:
         emoji=raw.get("emoji") or "",
         color=raw.get("color") or "",
         sort_order=raw.get("sort_order") or 0,
+        brief=raw.get("brief") or "",
     )
 
 

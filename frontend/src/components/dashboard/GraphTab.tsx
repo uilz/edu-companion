@@ -1,83 +1,15 @@
 // ── 客户端组件声明 ──
 'use client';
 
-// ── 导入依赖 ──
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { ZoomIn, ZoomOut, Maximize2, Info, Loader2, RefreshCw, ChevronDown, GitGraph, Plus, Trash2, Edit3, Link, X } from "lucide-react";
 import Card from "@/components/ui/Card";
+import NodeDetailCard from "./NodeDetailCard";
+import type { GraphNode, GraphEdge, Coverage } from "./graph-layout";
+import { computeLayout, masteryColor, subjectColors, fallbackColor } from "./graph-layout";
+import type { KGNode, KGEdge } from "./graph-layout";
 
-// ── 类型定义 ──
-interface KGNode { id: string; label: string; description?: string; mastery?: number; mastery_level?: string; priority?: number; tags?: string[]; created_by?: string; }
-interface KGEdge { id: string; from_id: string; to_id: string; relation?: string; label?: string; }
-interface GraphNode {
-  id: string; label: string; description: string; subject: string;
-  mastery: number; mastery_level: string; confidence: number;
-  blocked: boolean; blocked_by: string[]; attempt_count: number;
-  error_clusters: string[]; trend: string; review_urgency: number;
-  anomaly_type: string | null; anomaly_detail: string | null;
-  x?: number; y?: number;
-}
-interface GraphEdge { from: string; to: string; label: string; satisfied: boolean; edgeId?: string; }
-interface Coverage { total: number; mastered: number; learning: number; weak: number; untouched: number; }
-
-// ── 学科配色方案 ──
-const subjectColors: Record<string, string> = {
-  "高等数学": "#0066FF", "大学物理": "var(--color-warning)",
-  "计算机": "#22c55e", "线性代数": "#a855f7", "概率论": "#ec4899",
-};
-const fallbackColor = "#737373";
-
-// ── 拓扑布局算法 ──
-function computeLayout(nodes: GraphNode[], edges: GraphEdge[]): GraphNode[] {
-  if (nodes.length === 0) return nodes;
-  const inDegree = new Map<string, number>();
-  const outEdges = new Map<string, string[]>();
-  nodes.forEach((n) => { inDegree.set(n.id, 0); outEdges.set(n.id, []); });
-  edges.forEach((e) => {
-    inDegree.set(e.to, (inDegree.get(e.to) || 0) + 1);
-    outEdges.get(e.from)?.push(e.to);
-  });
-  const layers: string[][] = [];
-  const visited = new Set<string>();
-  let queue = nodes.filter((n) => (inDegree.get(n.id) || 0) === 0).map((n) => n.id);
-  while (queue.length > 0) {
-    layers.push([...queue]);
-    const next: string[] = [];
-    for (const id of queue) {
-      visited.add(id);
-      for (const child of outEdges.get(id) || []) {
-        const deg = (inDegree.get(child) || 1) - 1;
-        inDegree.set(child, deg);
-        if (deg === 0 && !visited.has(child)) next.push(child);
-      }
-    }
-    queue = next;
-  }
-  const remaining = nodes.filter((n) => !visited.has(n.id));
-  if (remaining.length > 0) layers.push(remaining.map((n) => n.id));
-  const layerHeight = Math.max(140, 700 / Math.max(layers.length, 1));
-  const nodeSpacing = Math.max(180, 900 / Math.max(Math.max(...layers.map(l => l.length)), 1));
-  const marginX = 100, marginY = 80;
-  const result = nodes.map((n) => ({ ...n }));
-  layers.forEach((layer, li) => {
-    const totalWidth = (layer.length - 1) * nodeSpacing;
-    const startX = marginX + Math.max(0, (600 - totalWidth) / 2);
-    layer.forEach((id, ni) => {
-      const node = result.find((n) => n.id === id);
-      if (node) { node.x = startX + ni * nodeSpacing; node.y = marginY + li * layerHeight; }
-    });
-  });
-  return result;
-}
-
-function masteryColor(m: number) {
-  if (m >= 95) return "#22c55e"; if (m >= 70) return "#84cc16";
-  if (m >= 40) return "var(--color-warning)"; if (m > 0) return "#f97316";
-  return "#525252";
-}
-
-// ── 主组件 ──
 export function GraphTab() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -103,11 +35,9 @@ export function GraphTab() {
   const svgRef = useRef<SVGSVGElement>(null);
   const zoomRef = useRef(1);
   const panRef = useRef({ x: 0, y: 0 });
-  // ── 同步 refs ──
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   useEffect(() => { panRef.current = pan; }, [pan]);
 
-  // ── 编辑状态 ──
   const [editMode, setEditMode] = useState(false);
   const [addNodeOpen, setAddNodeOpen] = useState(false);
   const [newNodeLabel, setNewNodeLabel] = useState("");
@@ -124,7 +54,7 @@ export function GraphTab() {
       const res = await fetch("/api/conversations/tree/partition");
       const data = await res.json();
       setPartitions(data.partitions || []);
-    } catch (e) {  }
+    } catch { /* ignore */ }
     finally { setLoadingParts(false); }
   }, []);
 
@@ -145,14 +75,12 @@ export function GraphTab() {
       const pp = ppRes.ok ? await ppRes.json() : {};
       setRawGraph({ nodes: kg.nodes || {}, edges: kg.edges || [] });
 
-      // 合并 mastery 数据
       const skills = pp.skills || {};
       const anomalies = pp.anomalies || [];
       const anomalyMap = new Map<string, any>();
-      anomalies.forEach((a: { skills?: string[]; [key: string]: unknown }) => { (a.skills || []).forEach((sid: string) => anomalyMap.set(sid, a)); });
+      anomalies.forEach((a: { skills?: string[]; [key: string]: unknown }) => (a.skills || []).forEach((sid: string) => anomalyMap.set(sid, a)));
 
       const nodeMap = new Map<string, GraphNode>();
-      // 1. knowledge/graph 节点 (结构)
       for (const [id, n] of Object.entries(kg.nodes || {}) as [string, KGNode][]) {
         const s = skills[id];
         nodeMap.set(id, {
@@ -166,7 +94,6 @@ export function GraphTab() {
           anomaly_detail: anomalyMap.has(id) ? anomalyMap.get(id).detail : null,
         });
       }
-      // 2. partition-progress 节点 (补充未在 kg 中的)
       for (const [id, s] of Object.entries(skills as Record<string, any>)) {
         if (!nodeMap.has(id)) {
           nodeMap.set(id, {
@@ -182,11 +109,9 @@ export function GraphTab() {
         }
       }
 
-      // 边合并
       const edgeList: GraphEdge[] = (kg.edges || []).map((e: KGEdge) => ({
         from: e.from_id, to: e.to_id, label: e.label || e.relation || "", satisfied: false, edgeId: e.id,
       }));
-      // 补充 partition-progress 的依赖边
       for (const d of (pp.dependencies || [])) {
         const exists = edgeList.some(e => e.from === d.from_skill && e.to === d.to_skill);
         if (!exists) edgeList.push({ from: d.from_skill, to: d.to_skill, label: d.relation === "prerequisite" ? "前置" : (d.relation || ""), satisfied: d.satisfied ?? false });
@@ -206,14 +131,13 @@ export function GraphTab() {
 
   useEffect(() => { fetchGraph(); }, [fetchGraph]);
 
-  // ── CRUD 操作 ──
+  // ── CRUD ──
   const api = (path: string, opts?: RequestInit) => fetch(`/api/knowledge/graph/${partitionId}${path}`, { headers: { "Content-Type": "application/json" }, ...opts });
 
   const handleAddNode = async () => {
     if (!newNodeLabel.trim()) return;
     await api("/node", { method: "POST", body: JSON.stringify({ label: newNodeLabel.trim() }) });
-    setNewNodeLabel(""); setAddNodeOpen(false);
-    await fetchGraph();
+    setNewNodeLabel(""); setAddNodeOpen(false); await fetchGraph();
   };
 
   const handleDeleteNode = async (nodeId: string) => {
@@ -226,15 +150,13 @@ export function GraphTab() {
   const handleEditNode = async () => {
     if (!editNodeId || !editNodeLabel.trim()) return;
     await api(`/node/${editNodeId}`, { method: "PATCH", body: JSON.stringify({ label: editNodeLabel.trim() }) });
-    setEditNodeId(null); setEditNodeLabel("");
-    await fetchGraph();
+    setEditNodeId(null); setEditNodeLabel(""); await fetchGraph();
   };
 
   const handleAddEdge = async (toId: string) => {
     if (!addEdgeFrom || addEdgeFrom === toId) { setAddEdgeFrom(null); return; }
     await api("/edge", { method: "POST", body: JSON.stringify({ from_id: addEdgeFrom, to_id: toId, relation: "prerequisite" }) });
-    setAddEdgeFrom(null);
-    await fetchGraph();
+    setAddEdgeFrom(null); await fetchGraph();
   };
 
   const handleDeleteEdge = async (edgeId: string) => {
@@ -248,7 +170,7 @@ export function GraphTab() {
       const res = await fetch(`/api/knowledge/graph/${partitionId}/generate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ depth: 3 }) });
       const json = await res.json();
       if (res.ok && json.ok) await fetchGraph();
-      else setGenerateError(json?.detail || json?.error || `生成失败`);
+      else setGenerateError(json?.detail || json?.error || "生成失败");
     } catch (e) { setGenerateError(e instanceof Error ? e.message : "网络异常"); }
     finally { setGenerating(false); }
   };
@@ -260,6 +182,7 @@ export function GraphTab() {
     router.replace(`/dashboard?${params.toString()}`, { scroll: false });
   };
 
+  // ── 交互事件 ──
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.target === svgRef.current || (e.target as Element).tagName === "rect") {
       setIsPanning(true); panStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
@@ -278,11 +201,8 @@ export function GraphTab() {
     const oldZoom = zoomRef.current;
     const newZoom = Math.min(2, Math.max(0.3, oldZoom + delta));
     const svgX = (mouseX - panRef.current.x) / oldZoom, svgY = (mouseY - panRef.current.y) / oldZoom;
-    const newPan = { x: mouseX - svgX * newZoom, y: mouseY - svgY * newZoom };
-    zoomRef.current = newZoom;
-    panRef.current = newPan;
-    setZoom(newZoom);
-    setPan(newPan);
+    panRef.current = { x: mouseX - svgX * newZoom, y: mouseY - svgY * newZoom };
+    zoomRef.current = newZoom; setZoom(newZoom); setPan(panRef.current);
   }, []);
   useEffect(() => {
     const svg = svgRef.current; if (!svg) return;
@@ -292,11 +212,10 @@ export function GraphTab() {
   const resetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
 
   const avgMastery = nodes.length > 0 ? Math.round(nodes.reduce((s, n) => s + n.mastery, 0) / nodes.length) : 0;
-  const unlockedCount = nodes.filter((n) => !n.blocked).length;
-  const blockedCount = nodes.filter((n) => n.blocked).length;
   const maxX = Math.max(700, ...nodes.map((n) => (n.x || 0) + 100));
   const maxY = Math.max(500, ...nodes.map((n) => (n.y || 0) + 100));
 
+  // ── 条件渲染 ──
   if (!partitionId) {
     return (
       <div className="text-center py-16">
@@ -307,18 +226,7 @@ export function GraphTab() {
           className="inline-flex items-center gap-2 px-5 py-2.5 bg-[var(--color-accent)] text-white text-sm hover:opacity-90 active:scale-[0.97] transition-transform">
           <GitGraph size={14} /> 选择分区
         </button>
-        {showPicker && (
-          <div className="relative inline-block">
-            <div className="fixed inset-0 z-10" onClick={() => setShowPicker(false)} />
-            <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 z-20 w-64 border border-[var(--color-border)] bg-[var(--color-bg)] shadow-lg text-left">
-              {loadingParts ? <div className="px-4 py-6 text-center"><Loader2 size={14} className="animate-spin mx-auto" /></div>
-              : partitions.length === 0 ? <div className="px-4 py-6 text-center text-xs text-[var(--color-text-muted)]">暂无分区</div>
-              : partitions.map((p) => (
-                <button key={p.id} onClick={() => switchPartition(p.id)} className="block w-full text-left px-4 py-2.5 text-sm hover:bg-[var(--color-surface)]"><span className="mr-2">{p.emoji || "📁"}</span>{p.name}</button>
-              ))}
-            </div>
-          </div>
-        )}
+        {showPicker && <PartitionPickerOverlay partitions={partitions} loading={loadingParts} onSelect={switchPartition} onClose={() => setShowPicker(false)} />}
       </div>
     );
   }
@@ -337,18 +245,7 @@ export function GraphTab() {
               <span>{partitions.find(p => p.id === partitionId)?.emoji || "📁"} {partitions.find(p => p.id === partitionId)?.name || partitionId}</span>
               <ChevronDown size={12} className={`transition-transform ${showPicker ? "rotate-180" : ""}`} />
             </button>
-            {showPicker && (<>
-              <div className="fixed inset-0 z-10" onClick={() => setShowPicker(false)} />
-              <div className="absolute top-full mt-1 left-0 z-20 w-64 max-h-64 overflow-y-auto border border-[var(--color-border)] bg-[var(--color-bg)] shadow-lg">
-                {loadingParts ? <div className="px-4 py-6 text-center"><Loader2 size={14} className="animate-spin mx-auto" /></div>
-                : partitions.map((p) => (
-                  <button key={p.id} onClick={() => switchPartition(p.id)}
-                    className={`block w-full text-left px-4 py-2.5 text-sm hover:bg-[var(--color-surface)] ${p.id === partitionId ? "text-[var(--color-accent)] bg-[var(--color-accent)]/5 font-medium" : "text-[var(--color-text-secondary)]"}`}>
-                    <span className="mr-2">{p.emoji || "📁"}</span>{p.name}
-                  </button>
-                ))}
-              </div>
-            </>)}
+            {showPicker && <PartitionPickerOverlay partitions={partitions} loading={loadingParts} onSelect={switchPartition} onClose={() => setShowPicker(false)} currentId={partitionId} />}
           </div>
           <span className="text-xs text-[var(--color-text-muted)]">
             {totalNodes} 知识点 · {totalEdges} 关联 · 掌握 {coverage.mastered} · 学习 {coverage.learning} · 薄弱 {coverage.weak} · 未接触 {coverage.untouched}
@@ -449,6 +346,7 @@ export function GraphTab() {
                 onMouseUp={() => setIsPanning(false)} onMouseLeave={() => setIsPanning(false)}
                 style={{ cursor: isPanning ? "grabbing" : addEdgeFrom ? "crosshair" : "grab", userSelect: "none" as React.CSSProperties["userSelect"] }}>
                 <g transform={`translate(${pan.x / 2},${pan.y / 2}) scale(${zoom})`}>
+                  {/* Edges */}
                   {edges.map((edge) => {
                     const fromNode = nodes.find((n) => n.id === edge.from);
                     const toNode = nodes.find((n) => n.id === edge.to);
@@ -474,12 +372,12 @@ export function GraphTab() {
                           <g onClick={() => handleDeleteEdge(edge.edgeId!)} style={{ cursor: "pointer", opacity: 0 }} className="hover:opacity-100">
                             <rect x={midX - 8} y={midY - 18} width={16} height={16} rx={2} fill="var(--color-error)" opacity={0.8} />
                             <text x={midX} y={midY - 7} textAnchor="middle" fill="white" fontSize={10} fontWeight="bold">×</text>
-                            <animate attributeName="opacity" from="0" to="1" dur="0.15s" fill="freeze" />
                           </g>
                         )}
                       </g>
                     );
                   })}
+                  {/* Nodes */}
                   {nodes.map((node) => {
                     if (!node.x || !node.y) return null;
                     const isSelected = selectedNode?.id === node.id;
@@ -557,62 +455,7 @@ export function GraphTab() {
           </Card>
 
           {selectedNode ? (
-            <Card title="知识点详情">
-              <div className="space-y-3">
-                <div>
-                  <div className="text-lg font-semibold text-[var(--color-text)]">{selectedNode.label}</div>
-                  {selectedNode.description && <div className="text-xs text-[var(--color-text-muted)] mt-0.5">{selectedNode.description}</div>}
-                </div>
-                <div>
-                  <div className="text-xs text-[var(--color-text-muted)] mb-1">
-                    掌握度 · {selectedNode.mastery_level}
-                    <span className="ml-2">{selectedNode.trend === "improving" ? "📈" : selectedNode.trend === "declining" ? "📉" : selectedNode.trend === "plateau" ? "→" : ""}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-[var(--color-surface)] h-2"><div className="h-full transition-all duration-500" style={{ width: `${selectedNode.mastery}%`, backgroundColor: masteryColor(selectedNode.mastery) }} /></div>
-                    <span className="text-sm text-[var(--color-text)] font-medium">{selectedNode.mastery}%</span>
-                  </div>
-                  {selectedNode.confidence > 0 && <div className="text-[10px] text-[var(--color-text-muted)] mt-1">信度 {Math.round(selectedNode.confidence * 100)}%</div>}
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs text-[var(--color-text-muted)]">状态:</span>
-                  {selectedNode.blocked ? <span className="text-xs px-2 py-0.5 border border-[#f97316] text-[#f97316]">前置未满足</span>
-                  : selectedNode.mastery >= 80 ? <span className="text-xs px-2 py-0.5 border border-[#22c55e] text-[#22c55e]">已掌握</span>
-                  : selectedNode.mastery > 0 ? <span className="text-xs px-2 py-0.5 border border-[#84cc16] text-[#84cc16]">学习中</span>
-                  : <span className="text-xs px-2 py-0.5 border border-[var(--color-border)] text-[var(--color-text-muted)]">未接触</span>}
-                  {selectedNode.attempt_count > 0 && <span className="text-[10px] text-[var(--color-text-muted)]">练 {selectedNode.attempt_count} 次</span>}
-                </div>
-                {selectedNode.anomaly_type && (
-                  <div className="p-2 border border-[#f59e0b] bg-[#f59e0b]/10 text-xs">
-                    <span className="text-[#f59e0b] font-medium">⚠️ {selectedNode.anomaly_type}</span>
-                    {selectedNode.anomaly_detail && <div className="text-[var(--color-text-muted)] mt-0.5">{selectedNode.anomaly_detail}</div>}
-                  </div>
-                )}
-                <div>
-                  <div className="text-xs text-[var(--color-text-muted)] mb-1">前置知识</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {edges.filter(e => e.to === selectedNode.id).map(e => {
-                      const fromNode = nodes.find(n => n.id === e.from);
-                      return (
-                        <button key={e.from} onClick={() => { const n = nodes.find(nn => nn.id === e.from); if (n) setSelectedNode(n); }}
-                          className={`text-xs px-2 py-1 border transition-colors cursor-pointer ${e.satisfied ? "border-[var(--color-border)] text-[var(--color-text-secondary)]" : "border-[#f97316]/30 text-[#f97316]"}`}>
-                          {fromNode?.label || e.from}
-                        </button>
-                      );
-                    })}
-                    {edges.filter(e => e.to === selectedNode.id).length === 0 && <span className="text-xs text-[var(--color-text-muted)]">无（入口知识点）</span>}
-                  </div>
-                </div>
-                {selectedNode.error_clusters.length > 0 && (
-                  <div>
-                    <div className="text-xs text-[var(--color-text-muted)] mb-1">常见错误</div>
-                    <div className="flex flex-wrap gap-1">
-                      {selectedNode.error_clusters.map((e, i) => <span key={i} className="text-[10px] px-1.5 py-0.5 bg-[var(--color-surface)] text-[var(--color-text-muted)]">{e}</span>)}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Card>
+            <NodeDetailCard selectedNode={selectedNode} edges={edges} nodes={nodes} onSelectNode={setSelectedNode} />
           ) : (
             <Card>
               <div className="text-center py-6">
@@ -624,5 +467,33 @@ export function GraphTab() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ── 分区选择器浮层（内联小型组件） ──
+function PartitionPickerOverlay({ partitions, loading, onSelect, onClose, currentId }: {
+  partitions: { id: string; name: string; emoji: string }[];
+  loading: boolean;
+  onSelect: (pid: string) => void;
+  onClose: () => void;
+  currentId?: string;
+}) {
+  return (
+    <>
+      <div className="fixed inset-0 z-10" onClick={onClose} />
+      <div className="absolute top-full mt-1 left-0 z-20 w-64 max-h-64 overflow-y-auto border border-[var(--color-border)] bg-[var(--color-bg)] shadow-lg">
+        {loading
+          ? <div className="px-4 py-6 text-center"><Loader2 size={14} className="animate-spin mx-auto" /></div>
+          : partitions.length === 0
+            ? <div className="px-4 py-6 text-center text-xs text-[var(--color-text-muted)]">暂无分区</div>
+            : partitions.map((p) => (
+                <button key={p.id} onClick={() => onSelect(p.id)}
+                  className={`block w-full text-left px-4 py-2.5 text-sm hover:bg-[var(--color-surface)] ${p.id === currentId ? "text-[var(--color-accent)] bg-[var(--color-accent)]/5 font-medium" : "text-[var(--color-text-secondary)]"}`}>
+                  <span className="mr-2">{p.emoji || "📁"}</span>{p.name}
+                </button>
+              ))
+        }
+      </div>
+    </>
   );
 }

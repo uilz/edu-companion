@@ -35,7 +35,7 @@ function useMediaQuery(query: string): boolean {
 }
 
 // 全屏路由列表：这些页面自己管理布局，不使用主外壳包裹
-const FULLSCREEN_ROUTES = ['/learn'];
+const FULLSCREEN_ROUTES = ['/learn', '/focus'];
 
 /**
  * AppShell — 应用外壳布局组件

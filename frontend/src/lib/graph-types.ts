@@ -12,6 +12,7 @@ export interface GraphNode {
   path_id: string;
   emoji?: string;
   color?: string;
+  brief?: string;
 }
 
 export interface GraphEdge {

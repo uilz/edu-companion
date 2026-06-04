@@ -187,9 +187,35 @@ WebSocket 收到 message
         → _build_context_messages()                # 4. 构建 9 层上下文
           → llm_service.chat(stream=True)          # 5. LLM 流式调用
             → token → response_blocks → done       # 6. 逐字返回
-              → _analyze_evidence()                # 7. 异步: 知识证据分析
-              → _trigger_cognitive_node_update()   # 8. 异步: CognitiveNode 更新
+              → _parse_follow_up_questions()       # 7. 追问问题解析（v0.9.11）
+              → _analyze_evidence()                # 8. 异步: 知识证据分析
+              → _trigger_cognitive_node_update()   # 9. 异步: CognitiveNode 更新
 ```
+
+### 3.4 追问问题协议（v0.9.11）
+
+LLM 回复末尾按约定输出 3 个追问问题，后端解析后从显示文本中摘除。
+
+**LLM 输出格式：**
+```
+...
+（回复正文）
+
+<!--FOLLOW_UP-->
+追问问题 1？
+追问问题 2？
+追问问题 3？
+<!--/FOLLOW_UP-->
+```
+
+**存储：** 追问问题存入 `TreeNode.metadata.follow_up_questions`
+
+**前端消费：**
+- `assistant_message.metadata.follow_up_questions` → 提取为 `follow_up_questions` 顶层字段
+- `FollowUpChips` 组件渲染 3 个编号按钮
+- 点击 → `store.sendMessage(question)` 发送
+
+**跳过规则：** 告别场景、情绪低落、纯隐私交流 — LLM 不输出标记块即可。
 
 ---
 

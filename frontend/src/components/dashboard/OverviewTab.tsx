@@ -70,7 +70,7 @@ const QUICK_ACTIONS = [
   { emoji: '🧠', title: '知识图谱', desc: '补充薄弱', href: '/dashboard?tab=graph' },
 ];
 
-export default function OverviewTab() {
+export function OverviewTab() {
   const greeting = useMemo(() => {
     const h = new Date().getHours();
     if (h < 6) return '夜深了，注意休息 🌙';

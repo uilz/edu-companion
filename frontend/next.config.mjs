@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  output: "standalone",
+  // output: "standalone",  // 临时注释，用 next start 正常启动
   async redirects() {
     return [
       // 旧首页 → 驾驶舱

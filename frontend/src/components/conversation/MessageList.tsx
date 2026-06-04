@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useRef, useMemo, useState, useCallback } from "react";
-import { User, Bot, Trash2, Pencil, Check, X, ChevronDown, ChevronLeft, ChevronRight, Copy } from "lucide-react";
+import React, { Fragment, useEffect, useRef, useMemo, useState, useCallback } from "react";
+import { User, Bot, ChevronDown } from "lucide-react";
 import ResponseBlockRenderer from "./ResponseBlockRenderer";
 import QuoteBlockRenderer from "./QuoteBlockRenderer";
 import TextSelectionToolbar from "./TextSelectionToolbar";
@@ -9,96 +9,236 @@ import SubBranchInline from "./SubBranchInline";
 import SpeakButton from "./SpeakButton";
 import MarkdownRenderer from "./MarkdownRenderer";
 import CognitiveTag from "./CognitiveTag";
+import MessageActions from "./MessageActions";
+import MessageEditArea from "./MessageEditArea";
 import { useTextSelection } from "./useTextSelection";
+import NoteCard from "./NoteCard";
+import KnowledgeExplainCard from "./KnowledgeExplainCard";
+import { useExplainStore, getCardsForMessage } from "@/store/explain-store";
+import type { ExplainCardData } from "@/store/explain-store";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { useConversationStore } from "@/store/conversation-store";
 import type { TreeNode, ResponseBlock, SubBranchInfo } from "@/types";
 
-// MessageList 组件属性接口
-// messages: 消息树节点列表；responseBlocks: 响应块列表
-// isLoading/statusMessage: 加载状态控制；onDeleteMessage/onEditMessage/onVersionSwitch: 消息增删改查回调
+// ── Inline explain markers — embeds badge(s) into rendered text via DOM injection ──
+function ExplainMarkers({ text, cards, messageId, onBadgeClick }: {
+  text: string;
+  cards: ExplainCardData[];
+  messageId: string;
+  onBadgeClick?: (cardId: string) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [badgePositions, setBadgePositions] = useState<Array<{id:string;x:number;y:number;depth:number}>>([]);
+  // 过滤有效卡片，减少循环
+  const validCards = useMemo(() => cards.filter(c => c.depth === 1 && !!c.selected_text), [cards]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || validCards.length === 0) return;
+    const posList: typeof badgePositions = [];
+    const fullText = container.textContent || '';
+    const containerRect = container.getBoundingClientRect(); // 只取一次容器坐标
+
+    for (const card of validCards) {
+      const selText = card.selected_text!;
+      const startIdx = fullText.indexOf(selText);
+      if (startIdx < 0) continue;
+      const endIdx = startIdx + selText.length;
+
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+      let node: Text | null = walker.firstChild() as Text | null;
+      let charCount = 0;
+      while (node) {
+        const nodeLen = node.textContent?.length || 0;
+        if (charCount + nodeLen >= endIdx) {
+          const offset = endIdx - charCount;
+          const range = document.createRange();
+          range.setStart(node, offset);
+          range.collapse(true);
+          const rect = range.getBoundingClientRect();
+          posList.push({
+            id: card.id,
+            x: rect.left - containerRect.left,
+            y: rect.top - containerRect.top,
+            depth: card.depth,
+          });
+          break;
+        }
+        charCount += nodeLen;
+        node = walker.nextSibling() as Text | null;
+      }
+    }
+    setBadgePositions(posList);
+  }, [validCards, messageId]); // 去掉text依赖
+
+  return (
+    <div ref={containerRef} className="relative">
+      <MarkdownRenderer content={text} />
+      {badgePositions.map(item => (
+        <sup
+          key={item.id}
+          className="explain-badge-sup absolute inline-flex items-center justify-center w-3 h-3 rounded-full bg-indigo-500 text-white text-[6px] font-bold cursor-pointer select-none hover:ring-1 hover:ring-white/60 transition-all z-[2]"
+          style={{ left: item.x, top: item.y - 4 }}
+          onClick={(e) => { e.stopPropagation(); onBadgeClick?.(item.id); }}
+        >
+          {item.depth}
+        </sup>
+      ))}
+    </div>
+  );
+}
+
+// ── Badge colors ──
+const BADGE_COLORS = [
+  "bg-indigo-500", "bg-emerald-500", "bg-amber-500",
+  "bg-rose-500", "bg-cyan-500", "bg-violet-500",
+];
+
+// ── Floating explain card — draggable, with anchor badge ──
+function FloatingExplainCard({ card }: { card: ExplainCardData }) {
+  const updateCard = useExplainStore((s) => s.updateCard);
+  const [renderPos, setRenderPos] = useState({ x: card.pos_x || 0, y: card.pos_y || 0 });
+  const [dragging, setDragging] = useState(false);
+  // Refs track the current drag state across renders (no closure issues)
+  const dragRef = useRef({ active: false, startX: 0, startY: 0, origX: 0, origY: 0 });
+  const posRef = useRef({ x: card.pos_x || 0, y: card.pos_y || 0 });
+
+  // Sync from store when not dragging
+  useEffect(() => {
+    if (!dragRef.current.active) {
+      posRef.current = { x: card.pos_x || 0, y: card.pos_y || 0 };
+      setRenderPos({ x: card.pos_x || 0, y: card.pos_y || 0 });
+    }
+  }, [card.pos_x, card.pos_y]);
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    // Only drag from data-drag-handle elements (the header)
+    const target = e.target as HTMLElement;
+    const handle = target.closest('[data-drag-handle="true"]');
+    if (!handle) return;
+    e.preventDefault();
+
+    // Capture start state
+    dragRef.current = {
+      active: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: posRef.current.x,
+      origY: posRef.current.y,
+    };
+    setDragging(true);
+
+    const onMove = (ev: MouseEvent) => {
+      if (!dragRef.current.active) return;
+      const dx = ev.clientX - dragRef.current.startX;
+      const dy = ev.clientY - dragRef.current.startY;
+      const newX = dragRef.current.origX + dx;
+      const newY = dragRef.current.origY + dy;
+      posRef.current = { x: newX, y: newY };
+      setRenderPos({ x: newX, y: newY });
+    };
+
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      dragRef.current.active = false;
+      setDragging(false);
+      // Commit final position to store
+      updateCard(card.id, {
+        pos_x: Math.round(posRef.current.x),
+        pos_y: Math.round(posRef.current.y),
+      });
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [card.id, updateCard]);
+
+  return (
+    <div
+      className="absolute z-10 select-none"
+      style={{ left: `${renderPos.x}px`, top: `${renderPos.y}px` }}
+    >
+      <div onMouseDown={onMouseDown}>
+        <KnowledgeExplainCard card={card} />
+      </div>
+    </div>
+  );
+}
+
 interface MessageListProps {
   messages: TreeNode[];
   responseBlocks: ResponseBlock[];
   isLoading?: boolean;
   statusMessage?: string;
-  replyingToId?: string | null;  // 正在回复的消息 ID，loading 显示在该消息下方
+  replyingToId?: string | null;
+  conversationId?: string | null;  // for explain cards loading
   onDeleteMessage?: (messageId: string) => void;
   onEditMessage?: (messageId: string, newText: string) => Promise<number>;
   onVersionSwitch?: (messageId: string, direction: "prev" | "next", currentIndex?: number) => Promise<{ index: number; total: number } | null>;
+  onSend?: (text: string) => void;
 }
 
-// 已编辑消息文本的映射表：messageId -> 新文本
 type EditedMap = Record<string, string>;
 
-// 消息列表主组件：渲染用户和助手消息气泡，支持编辑/删除/版本切换/复制/语音
 export default function MessageList({
   messages,
   responseBlocks,
   isLoading = false,
   statusMessage,
   replyingToId,
+  conversationId,
   onDeleteMessage,
   onEditMessage,
   onVersionSwitch,
+  onSend,
 }: MessageListProps) {
-  // 容器 ref，用于滚动监听和定位
   const containerRef = useRef<HTMLDivElement>(null);
-  // 底部锚点 ref，用于自动滚动到最新消息
   const bottomRef = useRef<HTMLDivElement>(null);
-
-  // 当前正在编辑的消息 ID（null 表示未编辑）
   const [editingId, setEditingId] = useState<string | null>(null);
-  // 编辑框中的当前文本
   const [editingText, setEditingText] = useState("");
-  // 是否显示"滚动到底部"按钮
   const [showScrollButton, setShowScrollButton] = useState(false);
-  // 已保存的编辑文本映射（持久化显示）
   const [editedTexts, setEditedTexts] = useState<EditedMap>({});
-
-  // 版本导航状态：记录每条消息当前的版本索引和总数
   const [versionMap, setVersionMap] = useState<Record<string, { index: number; total: number }>>({});
+  const [subBranchData, setSubBranchData] = useState<Record<string, SubBranchInfo[]>>({});
+  const [noteCard, setNoteCard] = useState<{ text: string; position: { x: number; y: number } } | null>(null);
 
-  // Store actions
   const setPendingQuote = useConversationStore((s) => s.setPendingQuote);
   const enterSubBranch = useConversationStore((s) => s.enterSubBranch);
   const loadSubBranches = useConversationStore((s) => s.loadSubBranches);
 
-  // Text selection (extracted to useTextSelection hook)
-  const {
-    selection,
-    handleTextMouseDown,
-    handleTextClick,
-    handleTextMouseUp,
-    handleTextContextMenu,
-    handleQuote,
-    handleSelectionCopy,
-  } = useTextSelection(setPendingQuote);
+  // ── Explain cards from store ──
+  const explainCards = useExplainStore((s) => s.cards);
+  const createCard = useExplainStore((s) => s.createCard);
+  const loadFromConversation = useExplainStore((s) => s.loadFromConversation);
 
-  // Sub-branch data per message
-  const [subBranchData, setSubBranchData] = useState<Record<string, SubBranchInfo[]>>({});
+  // Load explain cards when conversation changes
+  useEffect(() => {
+    if (conversationId) {
+      loadFromConversation(conversationId);
+    } else {
+      useExplainStore.getState().clearAll();
+    }
+  }, [conversationId, loadFromConversation]);
 
-  // Load sub-branches for messages that have them
+  const { selection, handleTextMouseDown, handleTextClick, handleTextMouseUp, handleTextContextMenu, handleQuote, handleSelectionCopy } = useTextSelection(setPendingQuote);
+
+  // Load sub-branches
   useEffect(() => {
     for (const msg of messages) {
       if (msg.has_sub_branches && !subBranchData[msg.id]) {
         loadSubBranches(msg.id).then((branches) => {
-          if (branches.length > 0) {
-            setSubBranchData((prev) => ({ ...prev, [msg.id]: branches }));
-          }
+          if (branches.length > 0) setSubBranchData((prev) => ({ ...prev, [msg.id]: branches }));
         });
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.map((m) => m.id).join(",")]);
 
-  // 加载已修改消息的版本信息（页面刷新后恢复 versionMap）
+  // Restore version map on refresh
   useEffect(() => {
-    const modifiedIds = messages
-      .filter(m => m.role === "user" && m.has_modified_version && !versionMap[m.id])
-      .map(m => m.id);
+    const modifiedIds = messages.filter(m => m.role === "user" && m.has_modified_version && !versionMap[m.id]).map(m => m.id);
     if (modifiedIds.length === 0) return;
-
     let cancelled = false;
     Promise.all(
       modifiedIds.map(async (msgId) => {
@@ -110,20 +250,13 @@ export default function MessageList({
           const total = versions.length;
           const idx = versions.indexOf(msgId);
           return { msgId, total, index: idx >= 0 ? idx + 1 : total };
-        } catch (e) {
-
-          return { msgId, total: 0, index: 0 };
-        }
+        } catch { return { msgId, total: 0, index: 0 }; }
       })
     ).then(results => {
       if (cancelled) return;
       setVersionMap(prev => {
         const next = { ...prev };
-        for (const r of results) {
-          if (r.total > 1 && !prev[r.msgId]) {
-            next[r.msgId] = { index: r.index, total: r.total };
-          }
-        }
+        for (const r of results) { if (r.total > 1 && !prev[r.msgId]) next[r.msgId] = { index: r.index, total: r.total }; }
         return next;
       });
     });
@@ -131,32 +264,21 @@ export default function MessageList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.map(m => m.id).join(",")]);
 
-  // 复制消息文本到剪贴板（优先使用 Clipboard API，降级方案为 textarea + execCommand）
   const handleCopyMessage = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch (e) {
-
+    try { await navigator.clipboard.writeText(text); }
+    catch {
       const ta = document.createElement("textarea");
-      ta.value = text;
-      ta.style.position = "fixed"; ta.style.opacity = "0";
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      document.body.removeChild(ta);
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta);
     }
   };
 
-  // 版本导航处理：切换到上/下一个版本
   const handleVersionNav = async (messageId: string, direction: "prev" | "next") => {
     if (!onVersionSwitch) return;
     const currentIdx = versionMap[messageId]?.index;
     const result = await onVersionSwitch(messageId, direction, currentIdx);
     if (result) {
-      // Backend returns full new messages list — find the new user message and update versionMap
-      const newUserMsg = messages.find(
-        m => m.role === "user" && m.id !== messageId
-      );
+      const newUserMsg = messages.find(m => m.role === "user" && m.id !== messageId);
       const newMsgId = newUserMsg?.id || messageId;
       setVersionMap(prev => {
         const next = { ...prev };
@@ -167,82 +289,52 @@ export default function MessageList({
     }
   };
 
-  // 删除消息（回调给父组件处理）
-  const handleDeleteMessage = (messageId: string) => {
-    if (onDeleteMessage) onDeleteMessage(messageId);
-  };
+  const handleDeleteMessage = (messageId: string) => onDeleteMessage?.(messageId);
+  const handleStartEdit = (msgId: string, currentText: string) => { setEditingId(msgId); setEditingText(currentText); };
 
-  // 开始编辑消息：设置编辑 ID 和当前文本到编辑框
-  const handleStartEdit = (msgId: string, currentText: string) => {
-    setEditingId(msgId);
-    setEditingText(currentText);
-  };
-
-  // 保存编辑：提交文本到父组件，成功后更新 editedTexts 和版本状态
   const handleSaveEdit = async () => {
-    const msgId = editingId;
-    const newText = editingText.trim();
-    if (!msgId || !newText) {
-      setEditingId(null);
-      return;
-    }
+    const msgId = editingId; const newText = editingText.trim();
+    if (!msgId || !newText) { setEditingId(null); return; }
     if (onEditMessage) {
       try {
         const result = await onEditMessage(msgId, newText);
-        // 始终记录编辑后的文本，确保 UI 显示最新内容
-        const verTotal = result > 0 ? result : 2; // 编辑后至少有原版+新版
+        const verTotal = result > 0 ? result : 2;
         setEditedTexts(prev => ({ ...prev, [msgId]: newText }));
-        // index=verTotal 表示当前显示的是最新版本
         setVersionMap(prev => ({ ...prev, [msgId]: { index: verTotal, total: verTotal } }));
-      } catch (e) {
-
-      }
+      } catch {}
     }
     setEditingId(null);
   };
 
-  // 取消编辑：重置编辑状态
-  const handleCancelEdit = () => {
-    setEditingId(null);
-  };
+  const handleCancelEdit = () => setEditingId(null);
 
-  // 自动滚动到底部：当新消息到达且用户未手动向上滚动时触发
+  // Auto-scroll
   useEffect(() => {
-    if (bottomRef.current && !showScrollButton) {
-      bottomRef.current.scrollIntoView({ behavior: "smooth" });
-    }
+    if (bottomRef.current && !showScrollButton) bottomRef.current.scrollIntoView({ behavior: "smooth" });
   }, [messages.length, messages[messages.length - 1]?.text_summary]);
 
-  // 滚动事件处理：计算距离底部是否超过 300px，从而控制"滚动到底部"按钮显隐
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
     setShowScrollButton(scrollHeight - scrollTop - clientHeight > 300);
   }, []);
 
-  // 消息去重：按 ID 去重，保留最后一条非空文本的消息（倒序遍历，优先保留有内容的消息）
+  // Deduplicate messages
   const prevMsgsRef = useRef<{ len: number; lastId: string; result: TreeNode[] } | null>(null);
   const dedupedMessages = useMemo(() => {
     const lastId = messages.length > 0 ? messages[messages.length - 1].id : "";
     const prev = prevMsgsRef.current;
-    if (prev && prev.len === messages.length && prev.lastId === lastId) {
-      return prev.result;
-    }
+    if (prev && prev.len === messages.length && prev.lastId === lastId) return prev.result;
     const seen = new Map<string, TreeNode>();
-    // 倒序遍历，让后续（最终完成的）版本覆盖前面（流式中间态）的版本
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
       if (m.is_deleted) continue;
       const existing = seen.get(m.id);
-      if (!existing) {
-        seen.set(m.id, m);
-      } else {
-        // 如果已有记录，优先保留有文本内容的那一条
+      if (!existing) { seen.set(m.id, m); }
+      else {
         const existingText = existing.content_blocks?.find(b => b.type === "text")?.text || "";
         const currentText = m.content_blocks?.find(b => b.type === "text")?.text || "";
-        if (currentText && !existingText) {
-          seen.set(m.id, m);
-        }
+        if (currentText && !existingText) seen.set(m.id, m);
       }
     }
     const result = Array.from(seen.values()).reverse();
@@ -250,7 +342,7 @@ export default function MessageList({
     return result;
   }, [messages]);
 
-  // 按 message_id 将 responseBlocks 分组映射，便于在消息气泡下方展示
+  // Group response blocks by message_id
   const blocksByMessage = useMemo(() => {
     const map = new Map<string, ResponseBlock[]>();
     for (const block of responseBlocks || []) {
@@ -261,8 +353,11 @@ export default function MessageList({
     return map;
   }, [responseBlocks]);
 
-  // ==================== 渲染 JSX ====================
-  // Loading 动画组件（内联复用）
+  // Get display text from a message
+  const getDisplayText = (msg: TreeNode) =>
+    editedTexts[msg.id] || msg.content_blocks?.filter(b => b.type === "text").map(b => b.text || "").join("\n\n") || "";
+
+  // Loading indicator
   const loadingIndicator = statusMessage ? (
     <div className="flex gap-4">
       <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-[var(--color-surface)] text-[var(--color-accent)] border border-[var(--color-border)]">
@@ -282,171 +377,67 @@ export default function MessageList({
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <ErrorBoundary>
-      <div
-        ref={containerRef}
-        className="flex-1 overflow-y-auto px-4 pt-6 pb-2 space-y-6"
-        onScroll={handleScroll}
-      >
+      <div ref={containerRef} className="flex-1 overflow-y-auto px-4 pt-6 pb-2 space-y-6" onScroll={handleScroll}>
         {dedupedMessages.map((message) => {
-          // 判断消息角色：用户消息靠右显示，助手消息靠左显示
           const isUser = message.role === "user";
-          // 判断当前消息是否处于编辑模式
           const isEditing = editingId === message.id;
-          // 获取当前消息关联的响应块（如思维链、工具调用等）
           const messageBlocks = blocksByMessage.get(message.id) || [];
-
-          // 获取展示文本：优先使用已编辑保存的文本，否则从 content_blocks 中拼接文本内容
-          const displayText = editedTexts[message.id]
-            || (message.content_blocks || [])
-                .filter((b) => b.type === "text")
-                .map((b) => b.text || "")
-                .join("\n\n");
-
-          // 判断是否有版本历史（已修改或已编辑）
+          const displayText = getDisplayText(message);
           const hasVersions = message.has_modified_version || !!editedTexts[message.id];
-          // 当前版本信息：index 当前版本号 / total 总版本数
           const vInfo = versionMap[message.id] || { index: 1, total: hasVersions ? 1 : 0 };
+          const cardsForMsg = getCardsForMessage(message.id, explainCards);
 
           return (
-            <>
-            <div key={message.id} className={`message-enter flex gap-4 ${isUser ? "flex-row-reverse" : ""}`}>
-              {/* Avatar */}
-              <div
-                className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                  isUser
-                    ? "bg-[var(--color-accent)] text-white"
-                    : "bg-[var(--color-surface)] text-[var(--color-accent)] border border-[var(--color-border)]"
-                }`}
-              >
-                {isUser ? <User size={16} /> : <Bot size={16} />}
+            <Fragment key={message.id}>
+              {/* AI Avatar + label — above the message for assistant */}
+              {!isUser && (
+                <div className="flex items-center gap-2 mb-1.5 px-1">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-[var(--color-surface)] text-[var(--color-accent)] border border-[var(--color-border)]">
+                    <Bot size={16} />
+                  </div>
+                  <span className="text-xs font-medium text-[var(--color-text-muted)]">AI</span>
+                </div>
+              )}
+              <div className={`message-enter ${isUser ? "flex gap-4 flex-row-reverse" : ""}`}>
+              {/* User avatar — same row for user */}
+              {isUser && (
+              <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-[var(--color-accent)] text-white`}>
+                <User size={16} />
               </div>
+              )}
 
               {/* Content */}
               <div className={`flex-1 min-w-0 ${isUser ? "flex justify-end" : ""}`}>
-                <div className={`relative max-w-[85%] pb-5 ${isUser ? "" : "space-y-0"}`}>
-                  {isUser ? (
-                    <div className="group">
-                    {/* Render quote blocks from content_blocks */}
-                    {(message.content_blocks || [])
-                      .filter((b) => b.type === "quote")
-                      .map((b, qi) => (
-                        <QuoteBlockRenderer
-                          key={`quote-${qi}`}
-                          quotedText={b.quoted_text || ""}
-                          sourceConversationId={b.source_conversation_id}
-                          sourceMessageId={b.source_message_id}
-                        />
-                      ))}
-                    <div className="bg-[var(--color-surface)] border border-[var(--color-border)] px-4 pb-2.5 pt-2.5 rounded-[14px] rounded-tr-[14px] rounded-br-none">
-                      {isEditing ? (
-                        <div className="space-y-2 min-w-[200px]">
-                          <textarea
-                            value={editingText}
-                            onChange={(e) => setEditingText(e.target.value)}
-                            className="w-full bg-white  border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 resize-none rounded-lg"
-                            rows={3}
-                            autoFocus
-                          />
-                          <div className="flex justify-end gap-2">
-                            <button onClick={handleCancelEdit} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
-                              <X size={14} />
-                            </button>
-                            <button onClick={handleSaveEdit} className="p-1 text-[var(--color-success)] hover:text-[var(--color-success)]">
-                              <Check size={14} />
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div
-                          data-message-id={message.id}
-                          data-conversation-id={message.conversation_id}
-                          data-full-text={displayText}
-                          className="text-base leading-[1.65] text-[var(--color-text)] whitespace-pre-wrap break-words select-text"
-                          onMouseDown={handleTextMouseDown}
-                          onMouseUp={handleTextMouseUp}
-                          onContextMenu={handleTextContextMenu}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleTextClick(e, message.id, message.conversation_id, displayText);
-                          }}
-                        >
-                          <MarkdownRenderer content={displayText} />
-                        </div>
-                      )}
-                    </div>
-                    {/* SubBranchInline for user messages */}
-                    {subBranchData[message.id] && subBranchData[message.id].length > 0 && (
-                      <div className="mt-1">
-                        <SubBranchInline
-                          messageId={message.id}
-                          subBranches={subBranchData[message.id]}
-                          onEnter={(convId) => enterSubBranch(convId)}
-                        />
-                      </div>
-                    )}
-                      {/* 用户消息操作按钮：编辑/删除/复制 — 在气泡下方 */}
-                      {!isEditing && (
-                        <div className="absolute bottom-0 right-0 flex items-center gap-1 bg-[var(--color-surface)] rounded-bl-md px-1 py-0.5 opacity-0 group-hover:opacity-100 max-lg:opacity-100 transition-opacity">
-                          {/* 版本切换导航 */}
-                          {vInfo.total > 1 && (
-                            <div className="flex items-center gap-0.5 text-xs text-[var(--color-text-muted)] mr-1 border-r border-[var(--color-border)] pr-1">
-                              <button onClick={() => handleVersionNav(message.id, "prev")} className="p-0.5 hover:text-[var(--color-text)]" title="上一版本">
-                                <ChevronLeft size={12} />
-                              </button>
-                              <span className="min-w-[2em] text-center font-mono">{vInfo.index}/{vInfo.total}</span>
-                              <button onClick={() => handleVersionNav(message.id, "next")} className="p-0.5 hover:text-[var(--color-text)]" title="下一版本">
-                                <ChevronRight size={12} />
-                              </button>
-                            </div>
-                          )}
-                          <button onClick={() => handleStartEdit(message.id, displayText)} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]" title="编辑">
-                            <Pencil size={12} />
-                          </button>
-                          <button onClick={() => handleDeleteMessage(message.id)} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-error)]" title="删除">
-                            <Trash2 size={12} />
-                          </button>
-                          <button onClick={() => handleCopyMessage(displayText)} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]" title="复制">
-                            <Copy size={12} />
-                          </button>
-                        </div>
-                      )}
-                    {/* CognitiveTag for user messages */}
-                    <CognitiveTag messageId={message.id} messageText={displayText} initialNodeIds={message.cognitive_node_ids} />
-                  </div>
-                ) : (
+                <div className={`relative pb-7 ${isUser ? "max-w-[85%]" : ""}`}
+                  style={{ overflow: 'visible', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                   <div className="group">
-                    {/* Render quote blocks from content_blocks */}
-                    {(message.content_blocks || [])
-                      .filter((b) => b.type === "quote")
-                      .map((b, qi) => (
-                        <QuoteBlockRenderer
-                          key={`quote-${qi}`}
-                          quotedText={b.quoted_text || ""}
-                          sourceConversationId={b.source_conversation_id}
-                          sourceMessageId={b.source_message_id}
-                        />
-                      ))}
-                    <div className="bg-[var(--color-surface-alt)] text-[var(--color-text)] px-4 py-3 rounded-[14px] rounded-tl-[14px] rounded-bl-none">
+                    {/* Quote blocks */}
+                    {(message.content_blocks || []).filter(b => b.type === "quote").map((b, qi) => (
+                      <QuoteBlockRenderer key={`quote-${qi}`} quotedText={b.quoted_text || ""}
+                        sourceConversationId={b.source_conversation_id} sourceMessageId={b.source_message_id} />
+                    ))}
+
+                    {/* Content bubble */}
+                    <div className={`relative ${isUser
+                      ? "bg-[var(--color-surface)] border border-[var(--color-border)] px-4 pb-2.5 pt-2.5 rounded-[14px] rounded-tr-[14px] rounded-br-none"
+                      : "bg-[var(--color-surface-alt)] text-[var(--color-text)] px-4 py-3 rounded-[14px] rounded-tl-[14px] rounded-bl-none"
+                    }`}>
                       {isEditing ? (
-                        <div className="space-y-2 min-w-[200px]">
-                          <textarea
-                            value={editingText}
-                            onChange={(e) => setEditingText(e.target.value)}
-                            className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 resize-none rounded-lg"
-                            rows={3}
-                            autoFocus
-                          />
-                          <div className="flex justify-end gap-2">
-                            <button onClick={handleCancelEdit} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
-                              <X size={14} />
-                            </button>
-                            <button onClick={handleSaveEdit} className="p-1 text-[var(--color-success)] hover:text-[var(--color-success)]">
-                              <Check size={14} />
-                            </button>
+                        <MessageEditArea text={editingText} onChange={setEditingText} onSave={handleSaveEdit} onCancel={handleCancelEdit} />
+                      ) : isUser ? (
+                        <>
+                          <div data-message-id={message.id} data-conversation-id={message.conversation_id} data-full-text={displayText}
+                            className="text-base leading-[1.65] text-[var(--color-text)] whitespace-pre-wrap break-words select-text"
+                            onMouseDown={handleTextMouseDown} onMouseUp={handleTextMouseUp} onContextMenu={handleTextContextMenu}
+                            onClick={(e) => { e.stopPropagation(); handleTextClick(e, message.id, message.conversation_id, displayText); }}
+                          >
+                            <ExplainMarkers text={displayText} cards={cardsForMsg} messageId={message.id} onBadgeClick={(id) => {
+                              const c = useExplainStore.getState().cards.find(c => c.id === id);
+                              if (c) useExplainStore.getState().toggleCollapse(id, !c.collapsed);
+                            }} />
                           </div>
-                        </div>
+                        </>
                       ) : !displayText.trim() && messageBlocks.length === 0 && isLoading ? (
-                        // 空占位消息 + 加载中 → 紧凑三点动画，不渲染空气泡
                         <div className="flex gap-1.5 items-center py-1 px-1">
                           <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
                           <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "200ms" }} />
@@ -454,77 +445,76 @@ export default function MessageList({
                         </div>
                       ) : (
                         <>
-                          <div
-                            data-message-id={message.id}
-                            data-conversation-id={message.conversation_id}
-                            data-full-text={displayText}
+                          <div data-message-id={message.id} data-conversation-id={message.conversation_id} data-full-text={displayText}
                             className="text-base leading-[1.65] whitespace-pre-wrap break-words select-text"
-                            onMouseDown={handleTextMouseDown}
-                            onMouseUp={handleTextMouseUp}
-                            onContextMenu={handleTextContextMenu}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleTextClick(e, message.id, message.conversation_id, displayText);
-                            }}
+                            onMouseDown={handleTextMouseDown} onMouseUp={handleTextMouseUp} onContextMenu={handleTextContextMenu}
+                            onClick={(e) => { e.stopPropagation(); handleTextClick(e, message.id, message.conversation_id, displayText); }}
                           >
-                            <MarkdownRenderer content={displayText} />
+                            <ExplainMarkers text={displayText} cards={cardsForMsg} messageId={message.id} onBadgeClick={(id) => {
+                              const c = useExplainStore.getState().cards.find(c => c.id === id);
+                              if (c) useExplainStore.getState().toggleCollapse(id, !c.collapsed);
+                            }} />
                           </div>
-                          {/* 响应块区域：思维链、工具调用结果等展示 */}
                           {messageBlocks.length > 0 && (
                             <div className="mt-3 border-t border-[var(--color-border)] pt-3 space-y-2">
-                              {messageBlocks.map(block => (
-                                <ResponseBlockRenderer key={block.id} block={block} />
-                              ))}
+                              {messageBlocks.map(block => <ResponseBlockRenderer key={block.id} block={block} />)}
                             </div>
                           )}
                         </>
                       )}
+
+                      {/* Floating explain cards — absolute positioned near selected text */}
+                      {cardsForMsg.filter(ec => ec.depth === 1).map((ec) => (
+                        <FloatingExplainCard key={ec.id} card={ec} />
+                      ))}
+                      {/* Child cards (depth 2+) stay in flow */}
+                      {cardsForMsg.filter(ec => ec.depth >= 2).map((ec) => (
+                        <KnowledgeExplainCard key={ec.id} card={ec} />
+                      ))}
+
+                      {/* Explain cards inline */}
+                      {/* Cognitive tag */}
+                      <div className="flex justify-end mt-1">
+                        <CognitiveTag messageId={message.id} messageText={displayText} initialNodeIds={message.cognitive_node_ids} />
+                      </div>
                     </div>
-                    {/* SubBranchInline for assistant messages */}
-                    {subBranchData[message.id] && subBranchData[message.id].length > 0 && (
+
+                    {/* Sub-branch inline */}
+                    {subBranchData[message.id]?.length > 0 && (
                       <div className="mt-1">
-                        <SubBranchInline
-                          messageId={message.id}
-                          subBranches={subBranchData[message.id]}
-                          onEnter={(convId) => enterSubBranch(convId)}
-                        />
+                        <SubBranchInline messageId={message.id} subBranches={subBranchData[message.id]} onEnter={(convId) => enterSubBranch(convId)} />
                       </div>
                     )}
-                      {/* 消息操作按钮：删除/复制/语音 — 在气泡下方 */}
-                      {!isEditing && (
-                        <div className="absolute bottom-0 left-0 flex items-center gap-1 bg-[var(--color-surface)] rounded-br-md px-1 py-0.5 opacity-0 group-hover:opacity-100 max-lg:opacity-100 transition-opacity">
-                          <button onClick={() => handleDeleteMessage(message.id)} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-error)]" title="删除">
-                            <Trash2 size={12} />
-                          </button>
-                          <button onClick={() => handleCopyMessage(displayText)} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]" title="复制">
-                            <Copy size={12} />
-                          </button>
-                          <SpeakButton text={displayText} />
-                        </div>
-                      )}
-                    {/* CognitiveTag for assistant messages */}
-                    <CognitiveTag messageId={message.id} messageText={displayText} initialNodeIds={message.cognitive_node_ids} />
+
+                    {/* Action buttons */}
+                    {!isEditing && (
+                      <MessageActions
+                        role={isUser ? "user" : "assistant"}
+                        vInfo={vInfo}
+                        hasVersions={hasVersions}
+                        text={displayText}
+                        onEdit={isUser ? () => handleStartEdit(message.id, displayText) : undefined}
+                        onDelete={() => handleDeleteMessage(message.id)}
+                        onCopy={() => handleCopyMessage(displayText)}
+                        onVersionNav={isUser ? (dir) => handleVersionNav(message.id, dir) : undefined}
+                      />
+                    )}
                   </div>
-                )}
                 </div>
               </div>
+              {/* Loading indicator below the message being edited */}
+              {replyingToId === message.id && loadingIndicator}
             </div>
-            {/* 编辑后 AI 重新回复时，loading 显示在被编辑消息的下方 */}
-            {replyingToId === message.id && loadingIndicator}
-            </>
+          </Fragment>
           );
         })}
 
-        {/* 加载中动画 — 发送新消息时（replyingToId 为空）显示在底部 */}
+        {/* Bottom loading indicator for new messages */}
         {isLoading && !replyingToId && !messages.some(m => m.role === "assistant" && !(m.content_blocks?.find(b => b.type === "text")?.text || "").trim()) && loadingIndicator}
 
-        {/* 无消息但有响应块时，在底部内联展示 */}
+        {/* Standalone response blocks when no messages */}
         {responseBlocks.length > 0 && messages.length === 0 && (
-          <div className="space-y-2">
-            {responseBlocks.map(block => (
-              <ResponseBlockRenderer key={block.id} block={block} />
-            ))}
-          </div>
+          <div className="space-y-2">{responseBlocks.map(block => <ResponseBlockRenderer key={block.id} block={block} />)}</div>
         )}
 
         <div ref={bottomRef} />
@@ -533,23 +523,113 @@ export default function MessageList({
 
       {/* Text Selection Toolbar */}
       {selection && (
-        <TextSelectionToolbar
-          position={selection.position}
-          visible={true}
-          onQuote={handleQuote}
-          onCopy={handleSelectionCopy}
-          level={selection.level}
-          source={selection.source}
+        <TextSelectionToolbar position={selection.position} visible={true} onQuote={handleQuote} onCopy={handleSelectionCopy}
+          level={selection.level} source={selection.source}
+          onExplain={() => {
+            if (!selection) return;
+            const text = selection.text;
+            if (!text) return;
+
+            // Helper: convert viewport coords to bubble-relative
+            const toBubblePos = (cx: number, cy: number) => {
+              if (!selection.messageId) return { x: 0, y: 0 };
+              const msgEl = document.querySelector(`[data-message-id="${selection.messageId}"]`);
+              if (!msgEl) return { x: 0, y: 0 };
+              const bubble = msgEl.closest('[class*="rounded-\\[14px\\]"]');
+              if (!bubble) return { x: 0, y: 0 };
+              const brect = bubble.getBoundingClientRect();
+              const cs = window.getComputedStyle(bubble);
+              const pl = parseFloat(cs.paddingLeft) || 0;
+              const pt = parseFloat(cs.paddingTop) || 0;
+              return {
+                x: Math.round(cx - brect.left - pl),
+                y: Math.round(cy - brect.top - pt),
+              };
+            };
+
+            // Card position: from mouse cursor (where user released)
+            const cardPos = toBubblePos(selection.position.x, selection.position.y);
+
+            // Badge position: find selected text in message DOM via TreeWalker
+            let badgePos = cardPos;
+            if (selection.messageId) {
+              const msgEl = document.querySelector(`[data-message-id="${selection.messageId}"]`);
+              if (msgEl) {
+                try {
+                  const walker = document.createTreeWalker(
+                    msgEl, NodeFilter.SHOW_TEXT, null
+                  );
+                  const fullText = msgEl.textContent || '';
+                  const startIdx = fullText.indexOf(text);
+                  if (startIdx >= 0) {
+                    const endIdx = startIdx + text.length;
+                    let node: Text | null = walker.firstChild() as Text | null;
+                    let charCount = 0;
+                    while (node) {
+                      const nodeLen = node.textContent?.length || 0;
+                      if (charCount + nodeLen >= endIdx) {
+                        const range = document.createRange();
+                        range.setStart(node, endIdx - charCount);
+                        range.collapse(true);
+                        const r = range.getBoundingClientRect();
+                        if (r && r.left > 0 && r.top > 0) {
+                          badgePos = toBubblePos(r.left, r.top);
+                        }
+                        break;
+                      }
+                      charCount += nodeLen;
+                      node = walker.nextSibling() as Text | null;
+                    }
+                  }
+                } catch { /* fallback to cardPos */ }
+              }
+            }
+
+            createCard({
+              conversation_id: selection.sourceConversationId,
+              message_id: selection.messageId,
+              depth: 1,
+              selected_text: text,
+              pos_x: cardPos.x,
+              pos_y: cardPos.y,
+              badge_x: badgePos.x,
+              badge_y: badgePos.y,
+            });
+
+            // Close selection toolbar
+            window.getSelection()?.removeAllRanges();
+          }}
+          onNote={() => {
+            const s = window.getSelection();
+            if (s && !s.isCollapsed) {
+              const r = s.getRangeAt(0);
+              const rect = r.getBoundingClientRect();
+              setNoteCard({ text: s.toString().trim(), position: { x: rect.left + rect.width / 2, y: rect.bottom } });
+            }
+          }}
         />
       )}
 
-      {/* 滚动到底部按钮：用户向上滚动时出现，点击回到最新消息 */}
+      {/* Note Card (笔记卡片) */}
+      <div data-selection-card>
+        <NoteCard
+          selectedText={noteCard?.text || ""}
+          position={noteCard?.position || { x: 0, y: 0 }}
+          visible={!!noteCard}
+          onClose={() => setNoteCard(null)}
+          onSaveNote={(note) => {
+            console.log("Note saved:", note);
+            // TODO: persist note to backend
+            setNoteCard(null);
+          }}
+        />
+      </div>
+
+      {/* Scroll-to-bottom button */}
       {showScrollButton && (
         <div className="absolute bottom-20 right-4">
-          <button
-            onClick={() => bottomRef.current?.scrollIntoView({ behavior: "smooth" })}
-            className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-full p-2 hover:bg-[var(--color-surface-hover)] transition-colors"
-          >
+          <button onClick={() => bottomRef.current?.scrollIntoView({ behavior: "smooth" })}
+            className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-full p-2 hover:bg-[var(--color-surface-hover)] transition-colors">
             <ChevronDown size={20} />
           </button>
         </div>
@@ -557,5 +637,3 @@ export default function MessageList({
     </div>
   );
 }
-
-// ══════════════════════════════════════════════════════════

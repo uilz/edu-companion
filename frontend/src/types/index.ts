@@ -126,6 +126,8 @@ export interface TreeNode {
   }[];
   // 认知分类关联
   cognitive_node_ids?: string[];              // 关联的 cognitive node IDs
+  // 追问问题
+  follow_up_questions?: string[];              // 3 个追问问题（最末 assistant 消息）
 }
 
 /** 响应块（ResponseBlock）：AI 返回消息中的独立功能块，支持多种展示类型 */

@@ -15,6 +15,7 @@ interface ConversationChatInputProps {
   branchId?: string | null;
   /** @alias branchId — preferred name */
   conversationId?: string | null;
+  placeholder?: string;
 }
 
 // --- 已上传文件类型定义 ---
@@ -32,6 +33,7 @@ export default function ConversationChatInput({
   disabled = false,
   branchId,
   conversationId,
+  placeholder,
 }: ConversationChatInputProps) {
   const _convId = conversationId ?? branchId;
 
@@ -236,7 +238,7 @@ export default function ConversationChatInput({
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={disabled}
-            placeholder="输入你的问题... (Shift+Enter 换行)"
+            placeholder={placeholder || "输入你的问题... (Shift+Enter 换行)"}
             rows={1}
             className="flex-1 resize-none bg-transparent text-[var(--color-text)] placeholder-[var(--color-text-muted)] px-4 py-2 text-sm focus:outline-none disabled:opacity-50 min-h-[40px] max-h-[160px] leading-relaxed"
           />

@@ -152,14 +152,30 @@ class TreeCrudMixin:
     ) -> None:
         """When a topic_id (from cognitive_nodes) is not in data.topics,
         walk the cognitive_nodes hierarchy and create missing tree nodes
-        (topic → domain → partition) as needed."""
+        (topic → domain → partition) as needed.
+
+        If the cognitive node is invisible/auto_created or doesn't exist,
+        route to the 临时 partition instead (no domain/topic in the graph)."""
         from app.cognitive.storage import get_node as cog_get_node
 
         cog = cog_get_node(topic_id, user_id)
-        if not cog:
-            return  # can't resolve, let caller raise
 
-        # Extract label from cognitive node (strip leading emoji if present)
+        # ── 不可见/不存在 → 接入临时分区 ──
+        if not cog or not cog.is_visible:
+            temp_partition, temp_domain = self._ensure_temp_partition(user_id, data)
+            # Create a flat topic under the temp domain for this conversation
+            if topic_id not in data.topics:
+                label = "新对话"
+                topic = Topic(
+                    id=topic_id if topic_id else str(uuid4()),
+                    domain_id=temp_domain.id,
+                    name=label,
+                    emoji="💬",
+                )
+                data.topics[topic.id] = topic
+            return
+
+        # ── 可见认知节点 → 沿层级创建分区/领域/专题 ──
         label_parts = cog.label.split(" ", 1) if cog.label else [""]
         emoji_char = ""
         node_name = cog.label or ""
@@ -849,3 +865,58 @@ class TreeCrudMixin:
 
         data.nodes[source_msg_id] = source_msg
         self._storage.save(user_id, data)
+
+    # ═══════════════════════════════════════════════════════
+    # 临时分区管理
+    # ═══════════════════════════════════════════════════════
+
+    TEMP_PARTITION_NAME = "💬 临时"
+
+    def _ensure_temp_partition(
+        self, user_id: str, data: UserData
+    ) -> tuple[Partition, Domain]:
+        """确保临时分区+占位领域存在，返回 (partition, domain)。"""
+        # Find existing temp partition
+        for p in data.partitions.values():
+            if getattr(p, "is_temp", False):
+                temp_partition = p
+                break
+        else:
+            # Create temp partition
+            temp_partition = Partition(
+                name=self.TEMP_PARTITION_NAME,
+                subject="",
+                direction="subject",
+                emoji="💬",
+                color="#888888",
+                root_id=str(uuid4()),
+                is_temp=True,
+            )
+            data.partitions[temp_partition.id] = temp_partition
+            # Create virtual root node
+            root_node = TreeNode(
+                id=temp_partition.root_id,
+                parent_id=temp_partition.root_id,
+                partition_id=temp_partition.id,
+                conversation_id="",
+                role="assistant",
+                content_blocks=[],
+                text_summary="[virtual_root]",
+            )
+            data.nodes[temp_partition.root_id] = root_node
+
+        # Find or create a single domain for the temp partition
+        temp_domain = None
+        for d in data.domains.values():
+            if d.partition_id == temp_partition.id:
+                temp_domain = d
+                break
+        if not temp_domain:
+            temp_domain = Domain(
+                partition_id=temp_partition.id,
+                name="💬 临时",
+                emoji="💬",
+            )
+            data.domains[temp_domain.id] = temp_domain
+
+        return temp_partition, temp_domain

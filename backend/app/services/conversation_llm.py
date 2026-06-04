@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import AsyncGenerator
 
 from app.schemas.conversation import (
@@ -115,6 +116,15 @@ async def send_and_reply(
             text_parts.append(block.content.get("text", ""))
     reply_text = "\n\n".join(text_parts) if text_parts else ""
 
+    # ── 追问问题解析：从回复中提取并清理 ──
+    cleaned_reply, follow_up_questions = _parse_follow_up_questions(reply_text)
+    if follow_up_questions:
+        reply_text = cleaned_reply
+        # 更新 response_blocks 中的文本内容
+        for block in response_blocks:
+            if block.type == "text":
+                block.content["text"] = cleaned_reply
+
     # 3. 存助手消息
     reply_blocks = [TextBlock(text=reply_text)] if reply_text else [TextBlock(text="[工具响应]")]
     assistant_node = tree_ops.add_message(
@@ -180,6 +190,14 @@ async def send_and_reply(
     except Exception:
         logger.debug("异步图谱更新事件循环获取失败", exc_info=True)
 
+    # ── 将追问问题写入 assistant node 的 metadata ──
+    if follow_up_questions:
+        data = storage.load(user_id)
+        if assistant_node.id in data.nodes:
+            data.nodes[assistant_node.id].metadata = data.nodes[assistant_node.id].metadata or {}
+            data.nodes[assistant_node.id].metadata["follow_up_questions"] = follow_up_questions
+            storage.save(user_id, data)
+
     return {
         "user_message": user_node,
         "assistant_message": assistant_node,
@@ -191,6 +209,32 @@ async def send_and_reply(
 # ═══════════════════════════════════════════════
 # 公开 API：send_and_reply_stream（流式完整流程）
 # ═══════════════════════════════════════════════
+
+# ── 追问问题解析 ──
+
+FOLLOW_UP_RE = re.compile(
+    r'<!--FOLLOW_UP-->\s*\n?(.*?)\n?<!--/FOLLOW_UP-->',
+    re.DOTALL,
+)
+
+
+def _parse_follow_up_questions(reply_text: str) -> tuple[str, list[str]]:
+    """从回复文本中解析追问问题，返回 (清理后的文本, 问题列表)。"""
+    match = FOLLOW_UP_RE.search(reply_text)
+    if not match:
+        return reply_text, []
+    raw = match.group(1).strip()
+    # 清理后的回复（去掉 FOLLOW_UP 块）
+    cleaned = FOLLOW_UP_RE.sub('', reply_text).strip()
+    # 按换行分割，过滤空行，去掉编号前缀
+    questions = [
+        q.strip().lstrip('0123456789.、）) ')
+        for q in raw.split('\n')
+        if q.strip()
+    ]
+    # 最多取 3 个
+    return cleaned, questions[:3]
+
 
 async def send_and_reply_stream(
     user_id: str,
@@ -490,9 +534,27 @@ async def send_and_reply_stream(
         storage.save(user_id, _data_sq2)
         if socratic_count >= 3:
             logger.info("Socratic limit: %d consecutive questions in conv %s", socratic_count, resolved_conversation_id[:8])
+
+    # ── 追问问题解析：从回复中提取并清理 ──
+    cleaned_reply, follow_up_questions = _parse_follow_up_questions(full_reply)
+    if follow_up_questions:
+        # 覆写清理后的文本（去掉 FOLLOW_UP 块）
+        tree_ops.update_message_content(user_id, asst_node_id, cleaned_reply)
+        full_reply = cleaned_reply
+        logger.info("Follow-up questions extracted from reply: %d questions", len(follow_up_questions))
+    else:
+        follow_up_questions = None
+
     # 刷新 assistant_node 对象，用于后续 yield done
     data = storage.load(user_id)
     assistant_node = data.nodes.get(asst_node_id) or assistant_node
+
+    # ── 将追问问题写入 assistant node 的 metadata ──
+    if follow_up_questions:
+        assistant_node.metadata = assistant_node.metadata or {}
+        assistant_node.metadata["follow_up_questions"] = follow_up_questions
+        data.nodes[assistant_node.id] = assistant_node
+        storage.save(user_id, data)
 
     # P0: async meta history for assistant
     _p0_post_message_hooks(user_id, partition_id, assistant_node)

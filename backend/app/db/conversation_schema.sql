@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS conversation_partitions (
     updated_at DOUBLE PRECISION DEFAULT 0,
     last_active_at DOUBLE PRECISION DEFAULT 0,
     message_count INTEGER DEFAULT 0,
-    total_tokens INTEGER DEFAULT 0
+    total_tokens INTEGER DEFAULT 0,
+    is_temp BOOLEAN NOT NULL DEFAULT false
 );
 
 -- 分支表

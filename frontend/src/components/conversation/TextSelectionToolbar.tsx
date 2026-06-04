@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Quote, Copy, Volume2 } from "lucide-react";
+import { Quote, Copy, Lightbulb, StickyNote } from "lucide-react";
 
 interface Props {
   position: { x: number; y: number };
   onQuote: () => void;
   onCopy: () => void;
-  onSpeak?: () => void;
+  onExplain?: () => void;
+  onNote?: () => void;
   visible: boolean;
   level?: "sentence" | "paragraph" | "all";
   source?: "click" | "drag";
@@ -20,13 +21,7 @@ const LEVEL_LABEL: Record<string, string> = {
 };
 
 export default function TextSelectionToolbar({
-  position,
-  onQuote,
-  onCopy,
-  onSpeak,
-  visible,
-  level,
-  source,
+  position, onQuote, onCopy, onExplain, onNote, visible, level, source,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [adjusted, setAdjusted] = useState({ x: 0, y: 0 });
@@ -59,7 +54,7 @@ export default function TextSelectionToolbar({
     <div
       ref={ref}
       data-selection-toolbar="true"
-      className="fixed z-50 flex items-center gap-1 px-2 py-1.5 rounded-full
+      className="fixed z-50 flex items-center gap-0.5 px-1.5 py-1 rounded-full
                  bg-[var(--color-surface-elevated)] border border-[var(--color-border)]
                  shadow-md"
       style={{ left: adjusted.x, top: adjusted.y }}
@@ -70,47 +65,40 @@ export default function TextSelectionToolbar({
         </span>
       )}
 
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onQuote();
-        }}
-        className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold
+      {/* 引用 */}
+      <button onClick={(e) => { e.stopPropagation(); onQuote(); }}
+        className="flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold
                    text-[var(--color-accent)] hover:bg-[var(--color-accent-soft)]
-                   active:scale-[0.97] transition-all select-none"
-      >
-        <Quote size={12} />
-        <span>引用</span>
+                   active:scale-[0.97] transition-all select-none">
+        <Quote size={11} /><span>引用</span>
       </button>
 
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onCopy();
-        }}
-        className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold
+      {/* 复制 */}
+      <button onClick={(e) => { e.stopPropagation(); onCopy(); }}
+        className="flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold
                    text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]
-                   active:scale-[0.97] transition-all select-none"
-      >
-        <Copy size={12} />
-        <span>复制</span>
+                   active:scale-[0.97] transition-all select-none">
+        <Copy size={11} /><span>复制</span>
       </button>
 
-      {onSpeak && (
-        <>
-          <div className="w-px h-4 bg-[var(--color-border-soft)]" />
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onSpeak();
-            }}
-            className="flex items-center gap-1 px-2 py-1 rounded-full text-xs
-                       text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]
-                       active:scale-[0.97] transition-all select-none"
-          >
-            <Volume2 size={12} />
-          </button>
-        </>
+      {/* 速览解释 */}
+      {onExplain && (
+        <button onClick={(e) => { e.stopPropagation(); onExplain(); }}
+          className="flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold
+                     text-[var(--color-accent)] hover:bg-[var(--color-accent-soft)]
+                     active:scale-[0.97] transition-all select-none">
+          <Lightbulb size={11} /><span>解释</span>
+        </button>
+      )}
+
+      {/* 做笔记 */}
+      {onNote && (
+        <button onClick={(e) => { e.stopPropagation(); onNote(); }}
+          className="flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold
+                     text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]
+                     active:scale-[0.97] transition-all select-none">
+          <StickyNote size={11} /><span>笔记</span>
+        </button>
       )}
     </div>
   );

@@ -104,6 +104,7 @@ def classify_message(req: ClassifyRequest) -> dict:
         result = classifier_service.classify(
             user_id, query_embedding,
             current_topic_id=req.current_topic_id,
+            text=text,  # 传递给对话树回退
         )
     else:
         result = classifier_service.classify_by_text(
@@ -184,36 +185,89 @@ def get_graph_nodes(
     parent_id: str | None = None,
     level: str | None = None,
 ) -> list[dict]:
-    """获取可见子节点 — 唯一数据源: cognitive_nodes
+    """获取图谱节点 — 合并对话树实体 + 认知学习指标
 
-    所有层级 (partition/domain/topic/concept/atom) 统一从 cognitive_nodes 读取。
+    主数据源：对话树 (partitions/domains/topics)
+    增强数据：cognitive_nodes（掌握度、趋势、子节点统计等）
     """
-    def _to_dict(n: CognitiveNode) -> dict:
+    data = storage.load(user_id)
+
+    def _enrich(
+        entity: Partition | Domain | Topic,
+        level_name: str,
+        parent: str | None,
+    ) -> dict:
+        cog = get_node(entity.id, user_id)
+        emoji = getattr(entity, "emoji", "") or (cog.emoji if cog else "")
+        raw_label = getattr(entity, "name", "")
+        label = f"{emoji} {raw_label}".strip() if emoji and not raw_label.startswith(emoji) else raw_label
+        mastery = float(cog.belief.proficiency_mean) if cog and cog.belief else 0.0
+        trend_dir = cog.trend.direction if cog and cog.trend else "stable"
+        child_cnt = get_child_count(entity.id, user_id) if cog else 0
+        node_type = cog.node_type if cog else "explicit"
+        path_id = cog.path_id if cog else entity.name
+        brief = cog.brief if cog else ""
         return {
-            "id": n.id,
-            "label": n.label,
-            "level": n.level,
-            "path_id": n.path_id,
-            "is_visible": n.is_visible,
-            "node_type": n.node_type,
-            "child_count": get_child_count(n.id, user_id),
-            "suggested_count": get_suggested_count(n.id, user_id),
-            "created_at": n.meta.created_at,
+            "id": entity.id,
+            "label": label,
+            "level": level_name,
+            "parent": parent,
+            "is_visible": True,
+            "emoji": emoji,
+            "node_type": node_type,
+            "mastery": mastery,
+            "trend": {"direction": trend_dir},
+            "child_count": child_cnt,
+            "children": cog.children if cog else [],
+            "path_id": path_id,
+            "brief": brief,
         }
+
+    result: list[dict] = []
 
     # 1. 指定层级
     if level:
-        children = [n for n in get_nodes_by_level(level, user_id) if n.is_visible]
-        return [_to_dict(c) for c in children]
+        if level == "partition":
+            for p in data.partitions.values():
+                result.append(_enrich(p, "partition", None))
+        elif level == "domain":
+            for d in data.domains.values():
+                pid = getattr(d, "partition_id", "")
+                if pid and not getattr(data.partitions.get(pid), "is_temp", False):
+                    result.append(_enrich(d, "domain", pid))
+        elif level == "topic":
+            for t in data.topics.values():
+                did = getattr(t, "domain_id", "")
+                if did:
+                    d = data.domains.get(did)
+                    p = data.partitions.get(getattr(d, "partition_id", "")) if d else None
+                    if p and not getattr(p, "is_temp", False):
+                        result.append(_enrich(t, "topic", did))
+        return result
 
     # 2. 指定父节点
     if parent_id:
-        children = get_visible_children(parent_id, user_id)
-        return [_to_dict(c) for c in children]
+        for d in data.domains.values():
+            if d.partition_id == parent_id:
+                result.append(_enrich(d, "domain", d.partition_id))
+        for t in data.topics.values():
+            if t.domain_id == parent_id:
+                result.append(_enrich(t, "topic", t.domain_id))
+        return result
 
-    # 3. 无参数: 返回所有 partition
-    partitions = [n for n in get_nodes_by_level("partition", user_id) if n.is_visible]
-    return [_to_dict(p) for p in partitions]
+    # 3. 无参数 → 返回完整树（包含 temp 分区，让前端决定过滤）
+    for p in data.partitions.values():
+        result.append(_enrich(p, "partition", None))
+    for d in data.domains.values():
+        p = data.partitions.get(getattr(d, "partition_id", ""))
+        if p:
+            result.append(_enrich(d, "domain", d.partition_id))
+    for t in data.topics.values():
+        d = data.domains.get(getattr(t, "domain_id", ""))
+        if d:
+            result.append(_enrich(t, "topic", t.domain_id))
+
+    return result
 
 
 class CreateNodeRequest(BaseModel):

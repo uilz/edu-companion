@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Loader2 } from 'lucide-react';
 import DashboardShell, { type TabId } from '@/components/dashboard/DashboardShell';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 
 /**
  * TabLoader - 标签页懒加载时的加载动画组件
@@ -21,7 +22,7 @@ function TabLoader() {
 
 // ----- 懒加载各标签页组件 -----
 // 使用 next/dynamic 按需加载，减少首屏包体积
-const OverviewTab = dynamic(() => import('@/components/dashboard/OverviewTab'), {
+const OverviewTab = dynamic(() => import('@/components/dashboard/OverviewTab').then(m => m.OverviewTab), {
   loading: () => <TabLoader />,
 });
 const AnalyticsTab = dynamic(() => import('@/components/dashboard/AnalyticsTab').then(m => m.AnalyticsTab), {
@@ -51,9 +52,6 @@ const ProgressTab = dynamic(() => import('@/components/dashboard/ProgressTab').t
 const StatsTab = dynamic(() => import('@/components/dashboard/StatsTab').then(m => m.StatsTab), {
   loading: () => <TabLoader />,
 });
-const StudyTab = dynamic(() => import('@/components/dashboard/StudyTab').then(m => m.StudyTab), {
-  loading: () => <TabLoader />,
-});
 
 /**
  * TAB_COMPONENTS - TabId 到组件实例的映射表
@@ -70,7 +68,6 @@ const TAB_COMPONENTS: Record<TabId, React.ComponentType> = {
   progress: ProgressTab,
   quality: QualityTab,
   stats: StatsTab,
-  study: StudyTab,
 };
 
 /**
@@ -87,7 +84,9 @@ function DashboardContent() {
 
   return (
     <DashboardShell activeTab={activeTab}>
-      <TabComponent />
+      <ErrorBoundary>
+        <TabComponent />
+      </ErrorBoundary>
     </DashboardShell>
   );
 }

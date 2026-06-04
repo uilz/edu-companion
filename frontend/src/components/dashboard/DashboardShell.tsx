@@ -2,10 +2,10 @@
 
 // 导入 React 类型与 Next.js 路由/搜索参数钩子
 import { ReactNode } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 
 // 标签页标识联合类型 —— 定义所有可用的仪表盘页面
-type TabId = 'overview' | 'analytics' | 'errors' | 'calendar' | 'achievements' | 'plan' | 'quality' | 'graph' | 'progress' | 'stats' | 'study';
+type TabId = 'overview' | 'analytics' | 'errors' | 'calendar' | 'achievements' | 'plan' | 'quality' | 'graph' | 'progress' | 'stats';
 
 // 标签页配置接口
 interface Tab {
@@ -26,7 +26,6 @@ const TABS: Tab[] = [
   { id: 'progress', label: '进度', icon: '📋' },
   { id: 'quality', label: '质量', icon: '🛡️' },
   { id: 'stats', label: '统计', icon: '📉' },
-  { id: 'study', label: '自习', icon: '📖' },
 ];
 
 // 仪表盘外壳组件属性接口

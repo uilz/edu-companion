@@ -1,7 +1,7 @@
 // Phase 10: 笔记/目标/探索项目 API 客户端
 // 对接后端 /api/learning/*
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 // ════════════════════════════════════════
 // Types

@@ -2,147 +2,39 @@
 
 import React from "react";
 import {
-  Menu, X, Bot, ChevronLeft, ChevronRight,
+  Menu, Bot, ChevronLeft, ChevronRight, BarChart3,
 } from "lucide-react";
-import type { Partition, TreeNode, ResponseBlock } from "@/types";
-import Phase8Sidebar from "@/components/conversation/Phase8Sidebar";
-import MessageList from "@/components/conversation/MessageList";
-import ConversationChatInput from "@/components/conversation/ChatInput";
+import type { Partition } from "@/types";
+import StudySidebar from "@/components/conversation/StudySidebar";
+import ConversationMessageArea from "@/components/conversation/ConversationMessageArea";
+import MobileBottomSheet from "@/components/conversation/MobileBottomSheet";
 import type { UseConversationReturn } from "@/components/conversation/useConversation";
 import { useConversationStore } from "@/store/conversation-store";
 import { NewNodeDialog } from "@/components/ui/NewNodeDialog";
 
 /**
- * 新建分区弹窗组件
- * - 显示一个模态对话框，让用户输入分区名称和选择 Emoji
- * - 通过 open 控制显隐，onCreate 回调将 name 和 emoji 传递出去
- */
-
-
-/**
- * 上下文切换横幅组件
- * - 当检测到用户正在讨论某个学科/知识点时，显示此横幅提示切换会话
- * - domainName: 学科名称；topicName: 知识点名称（可选）
- * - onSwitch: 用户点击"切换"后的回调；onDismiss: 点击"留在此处"的回调
- */
-function SwitchBanner({
-  domainName, topicName, fullPath, onSwitch, onDismiss,
-}: {
-  domainName: string;
-  topicName: string;
-  fullPath: string;
-  onSwitch: () => void;
-  onDismiss: () => void;
-}) {
-  return (
-    <div className="mx-4 mt-2 px-4 py-3 bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30 rounded-lg active:scale-[0.97] transition-transform">
-      <div className="flex items-start gap-3">
-        <span className="text-lg">🔀</span>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm text-[var(--color-text)] leading-relaxed">
-            检测到你在聊 <strong>{fullPath || `${domainName}${topicName ? ` → ${topicName}` : ""}`}</strong>，要切换到对应会话吗？
-          </p>
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button
-            onClick={onSwitch}
-            className="px-3 py-1.5 text-xs bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] rounded-md active:scale-[0.97] transition-colors"
-          >
-            切换
-          </button>
-          <button
-            onClick={onDismiss}
-            className="px-2 py-1.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-          >
-            留在此处
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * 移动端底部弹出侧栏组件
- * - 在移动端以底部 sheet 的形式展示分区导航
- * - 点击遮罩层或关闭按钮均可关闭
- */
-function MobileBottomSheet({
-  children,
-  onClose,
-}: {
-  children: React.ReactNode;
-  onClose: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-[var(--color-bg)] border-t border-[var(--color-border)] max-h-[70vh] flex flex-col rounded-t-xl">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
-          <span className="text-sm font-semibold text-[var(--color-text)]">导航</span>
-          <button onClick={onClose} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
-            <X size={18} />
-          </button>
-        </div>
-        <div className="flex-1 overflow-hidden">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * 子支横幅组件
- * - 当用户正在子支对话中时，显示此横幅提示可以退出子支
- */
-function SubBranchBanner({
-  quotedText,
-  onExit,
-}: {
-  quotedText: string;
-  onExit: () => void;
-}) {
-  const truncated = quotedText.length > 60 ? quotedText.slice(0, 60) + "…" : quotedText;
-
-  return (
-    <div className="mx-4 mt-2 px-4 py-3 bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30 rounded-lg active:scale-[0.97] transition-transform">
-      <div className="flex items-center gap-3">
-        <button
-          onClick={onExit}
-          className="flex-shrink-0 px-3 py-1.5 text-xs text-[var(--color-text-secondary)]
-                     hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]
-                     border border-[var(--color-border)] rounded-md active:scale-[0.97] transition-all"
-        >
-          ← 退出
-        </button>
-        <span className="text-sm text-[var(--color-text)] truncate">
-          💬 「{truncated}」
-        </span>
-      </div>
-    </div>
-  );
-}
-
-/**
  * ConversationPanel — 对话面板主布局组件
- * - 根据 isDesktop 值自适应渲染移动端或桌面端布局
- * - 接收 useConversation hook 返回的所有状态和回调，组合各子组件
+ *
+ * 侧栏模式（默认）：左 StudySidebar + 右 ConversationMessageArea。
+ * 桌面端支持侧栏折叠，移动端为全屏布局。
  */
-export default function ConversationPanel(props: UseConversationReturn) {
-  // Sub-branch state from store
+export default function ConversationPanel(
+  props: UseConversationReturn & { onEnterFocusMode?: () => void }
+) {
   const isInSubBranch = useConversationStore((s) => s.isInSubBranch);
   const exitSubBranch = useConversationStore((s) => s.exitSubBranch);
   const subBranchMessages = useConversationStore((s) => s.messages);
 
-  // Get the quoted text for the sub-branch banner
   const subBranchQuotedText = React.useMemo(() => {
     if (!isInSubBranch) return "";
     const q = subBranchMessages[0]?.content_blocks?.find((b) => b.type === "quote");
     return q?.quoted_text || "";
   }, [isInSubBranch, subBranchMessages]);
 
-  // 从 props 中解构所有状态变量
+  const activeDomainId = useConversationStore(s => s.activeDomainId);
+  const activeTopicId = useConversationStore(s => s.activeTopicId);
+
   const {
-    // State — 对话面板状态
     partitions,
     selectedPartitionId,
     activeConversationId,
@@ -159,8 +51,6 @@ export default function ConversationPanel(props: UseConversationReturn) {
     convError,
     isDesktop,
     activePartition,
-
-    // Handlers — 事件处理回调
     handleSelectConversation,
     handleNewConversation,
     handleSend,
@@ -177,22 +67,19 @@ export default function ConversationPanel(props: UseConversationReturn) {
     loadPartitions,
   } = props;
 
-  // Resolved partition name for switch banner (avoid inline lambda per render)
   const switchBannerPartitionName = React.useMemo(() => {
     if (!switchBanner?.partitionId) return "";
     const p = partitions.find((pp) => pp.id === switchBanner.partitionId);
-    return p ? `${(p as {emoji?: string}).emoji || ""} ${(p as {name: string}).name}` : "";
+    return p ? `${(p as { emoji?: string }).emoji || ""} ${(p as { name: string }).name}` : "";
   }, [partitions, switchBanner?.partitionId]);
 
-  // ── Mobile layout: 移动端竖屏布局 ──
-  // 以底部导航栏上方为容器，顶部显示标题栏和菜单按钮，底部是输入框
+  // ── Mobile layout ──
   if (!isDesktop) {
     return (
       <div
         className="fixed inset-0 bg-[var(--color-bg)] z-30 flex flex-col"
         style={{ bottom: "var(--bottom-nav-height)" }}
       >
-        {/* 移动端顶部标题栏：菜单按钮 + 当前分区名称 */}
         <div className="flex-shrink-0 border-b border-[var(--color-border)] px-4 py-3 flex items-center gap-3">
           <button
             onClick={() => setShowPartitionSidebar(true)}
@@ -209,57 +96,37 @@ export default function ConversationPanel(props: UseConversationReturn) {
           </div>
         </div>
 
-        {/* 移动端内容区域：切换横幅 + 错误提示 + 消息列表 + 输入框 */}
         <div className="flex-1 overflow-hidden flex flex-col">
-          {/* 移动端子支横幅 */}
-          {isInSubBranch && (
-            <SubBranchBanner
-              quotedText={subBranchQuotedText}
-              onExit={exitSubBranch}
-            />
-          )}
-          {/* 移动端切换横幅 */}
-          {switchBanner && (
-            <SwitchBanner
-              domainName={switchBanner.domainName}
-              topicName={switchBanner.topicName}
-              fullPath={switchBanner.fullPath || switchBannerPartitionName}
-              onSwitch={handleSwitchConfirm}
-              onDismiss={handleSwitchDismiss}
-            />
-          )}
-          {/* 移动端错误提示 */}
-          {convError && (
-            <div className="flex-shrink-0 mx-4 mt-2 px-4 py-3 bg-[var(--color-error)]/10 border border-[var(--color-error)]/30 rounded-lg text-sm text-[var(--color-error)]">
-              {convError}
-            </div>
-          )}
-          {/* 移动端消息列表 */}
-          <MessageList
+          <ConversationMessageArea
             messages={messages}
             responseBlocks={responseBlocks}
             isLoading={isLoading}
             statusMessage={statusMessage}
+            activeConversationId={activeConversationId}
             replyingToId={replyingToId}
+            onSend={handleSend}
             onDeleteMessage={handleDeleteMessage}
             onEditMessage={handleEditMessage}
             onVersionSwitch={handleVersionSwitch}
-          />
-          {/* 移动端聊天输入框 */}
-          <ConversationChatInput
-            onSend={handleSend}
-            disabled={isLoading}
-            conversationId={activeConversationId}
+            switchBanner={switchBanner}
+            switchBannerPartitionName={switchBannerPartitionName}
+            handleSwitchConfirm={handleSwitchConfirm}
+            handleSwitchDismiss={handleSwitchDismiss}
+            isInSubBranch={isInSubBranch}
+            subBranchQuotedText={subBranchQuotedText}
+            exitSubBranch={exitSubBranch}
+            convError={convError}
           />
         </div>
 
-        {/* 移动端底部弹出分区侧栏 */}
         {showPartitionSidebar && (
           <MobileBottomSheet onClose={() => setShowPartitionSidebar(false)}>
-            <Phase8Sidebar
+            <StudySidebar
               partitions={partitions}
               selectedPartitionId={selectedPartitionId}
               activeConversationId={activeConversationId}
+              activeDomainId={activeDomainId}
+              activeTopicId={activeTopicId}
               onSelectConversation={handleSelectConversation}
               onCreatePartition={() => {
                 setShowPartitionSidebar(false);
@@ -283,7 +150,6 @@ export default function ConversationPanel(props: UseConversationReturn) {
           </MobileBottomSheet>
         )}
 
-        {/* 移动端新建分区弹窗 */}
         <NewNodeDialog
           open={showNewPartition}
           onClose={() => setShowNewPartition(false)}
@@ -297,68 +163,71 @@ export default function ConversationPanel(props: UseConversationReturn) {
     );
   }
 
-  // ── Desktop layout: 桌面端合并侧栏布局 ──
-  // 侧栏宽度固定为 280px，可折叠收起；主聊天区占据剩余空间
+  // ── Desktop layout ──
   const SIDEBAR_WIDTH = 280;
 
   return (
     <div className="fixed inset-0 bg-[var(--color-bg)] z-30 flex">
-      {/* 桌面端左侧：集成导航链接和分区树的侧栏 */}
+      {/* Sidebar */}
       <div
-        className="flex-shrink-0 flex flex-col border-r border-[var(--color-border)] transition-all duration-200"
+        className="flex-shrink-0 flex flex-col border-r border-[var(--color-border)] transition-all duration-200 bg-[var(--color-page-secondary)]"
         style={{ width: sidebarCollapsed ? "0px" : `${SIDEBAR_WIDTH}px`, overflow: "hidden" }}
       >
         {!sidebarCollapsed && (
           <div className="flex flex-col h-full">
-            {/* 桌面端侧栏迷你标题栏：返回驾驶舱链接 + 新建会话/分区/收起按钮 */}
-            <div className="flex items-center justify-between px-3 py-2.5 border-b border-[var(--color-border)]">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
               <a
                 href="/dashboard"
-                className="flex items-center gap-1.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+                className="flex items-center gap-1.5 text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors font-medium"
               >
-                <ChevronLeft size={14} />
+                <ChevronLeft size={13} />
                 <span>驾驶舱</span>
               </a>
-              <div className="flex items-center gap-1">
-                {/* 新建会话按钮：有选中分区时在该分区下创建 */}
+              <div className="flex items-center gap-0.5">
                 <button
                   onClick={() => {
                     if (selectedPartitionId) {
                       handleNewConversation("partition", selectedPartitionId);
                     }
                   }}
-                  className={`p-1 rounded ${selectedPartitionId ? "text-[var(--color-text-muted)] hover:text-[var(--color-accent)]" : "text-[var(--color-text-muted)] opacity-40 cursor-not-allowed"}`}
+                  className={`p-1.5 rounded-md ${selectedPartitionId ? "text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]" : "text-[var(--color-text-muted)] opacity-40 cursor-not-allowed"}`}
                   title="新建会话"
                   disabled={!selectedPartitionId}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                 </button>
-                {/* 新建分区按钮 */}
                 <button
                   onClick={() => setShowNewPartition(true)}
-                  className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] rounded"
+                  className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
                   title="新建分区"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
                 </button>
-                {/* 收起侧栏按钮 */}
                 <button
                   onClick={() => setSidebarCollapsed(true)}
-                  className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] rounded"
+                  className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
                   title="收起侧栏"
                 >
                   <ChevronLeft size={14} />
                 </button>
+                <button
+                  onClick={props.onEnterFocusMode}
+                  className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent-soft)]"
+                  title="专注模式"
+                >
+                  <BarChart3 size={14} />
+                </button>
               </div>
             </div>
 
-            {/* 桌面端侧栏分区树组件 */}
             <div className="flex-1 overflow-hidden">
-              <Phase8Sidebar
-                key={`sidebar-${selectedPartitionId}-${useConversationStore.getState().treeRefreshKey}`}
+              <StudySidebar
+                key={`sidebar-${useConversationStore.getState().treeRefreshKey}`}
                 partitions={partitions}
                 selectedPartitionId={selectedPartitionId}
                 activeConversationId={activeConversationId}
+                activeDomainId={activeDomainId}
+                activeTopicId={activeTopicId}
                 onSelectConversation={handleSelectConversation}
                 onCreatePartition={() => setShowNewPartition(true)}
                 onRenamePartition={handleRenamePartition}
@@ -374,77 +243,54 @@ export default function ConversationPanel(props: UseConversationReturn) {
         )}
       </div>
 
-      {/* 桌面端侧栏折叠后显示的展开按钮 */}
+      {/* Collapsed sidebar toggle */}
       {sidebarCollapsed && (
         <button
           onClick={() => setSidebarCollapsed(false)}
-          className="flex-shrink-0 w-6 border-r border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
+          className="flex-shrink-0 w-7 border-r border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
           title="展开侧栏"
         >
           <ChevronRight size={14} />
         </button>
       )}
 
-      {/* 桌面端右侧主聊天区 */}
+      {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* 当前分区标题栏 */}
         {selectedPartitionId && activePartition && (
-          <div className="flex-shrink-0 border-b border-[var(--color-border)] px-6 py-3 flex items-center gap-3">
-            <Bot size={18} className="text-[var(--color-accent)]" />
-            <div>
-              <div className="text-sm font-semibold text-[var(--color-text)]">
-                {activePartition.emoji} {activePartition.name}
+          <div className="flex-shrink-0 border-b border-[var(--color-border)] bg-[var(--color-bg)]">
+            <div className="max-w-3xl mx-auto px-6 py-3 flex items-center gap-3">
+              <span className="text-lg">{activePartition.emoji}</span>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-[15px] font-semibold text-[var(--color-text)] truncate">
+                  {activePartition.name}
+                </h2>
               </div>
             </div>
           </div>
         )}
 
-        {/* 桌面端上下文切换横幅 */}
-        {switchBanner && (
-          <SwitchBanner
-            domainName={switchBanner.domainName}
-            topicName={switchBanner.topicName}
-            fullPath={switchBanner.fullPath || switchBannerPartitionName}
-            onSwitch={handleSwitchConfirm}
-            onDismiss={handleSwitchDismiss}
-          />
-        )}
-
-        {/* 桌面端子支横幅 */}
-        {isInSubBranch && (
-          <SubBranchBanner
-            quotedText={subBranchQuotedText}
-            onExit={exitSubBranch}
-          />
-        )}
-
-        {/* 桌面端对话错误提示 */}
-        {convError && (
-          <div className="flex-shrink-0 mx-6 mt-2 px-4 py-3 bg-[var(--color-error)]/10 border border-[var(--color-error)]/30 rounded-lg text-sm text-[var(--color-error)]">
-            {convError}
-          </div>
-        )}
-        {/* 桌面端消息列表 */}
-        <MessageList
+        <ConversationMessageArea
           messages={messages}
           responseBlocks={responseBlocks}
           isLoading={isLoading}
           statusMessage={statusMessage}
+          activeConversationId={activeConversationId}
           replyingToId={replyingToId}
+          onSend={handleSend}
           onDeleteMessage={handleDeleteMessage}
           onEditMessage={handleEditMessage}
           onVersionSwitch={handleVersionSwitch}
-        />
-
-        {/* 桌面端聊天输入框 */}
-        <ConversationChatInput
-          onSend={handleSend}
-          disabled={isLoading}
-          conversationId={activeConversationId}
+          switchBanner={switchBanner}
+          switchBannerPartitionName={switchBannerPartitionName}
+          handleSwitchConfirm={handleSwitchConfirm}
+          handleSwitchDismiss={handleSwitchDismiss}
+          isInSubBranch={isInSubBranch}
+          subBranchQuotedText={subBranchQuotedText}
+          exitSubBranch={exitSubBranch}
+          convError={convError}
         />
       </div>
 
-      {/* 桌面端新建分区弹窗 */}
       <NewNodeDialog
         open={showNewPartition}
         onClose={() => setShowNewPartition(false)}

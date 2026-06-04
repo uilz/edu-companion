@@ -113,6 +113,9 @@ async def list_nodes(level: str, request: Request, parent_id: str = Query(None))
     coll_name = tree_ops.LEVEL_CONFIG[level]["collection"]
     collection = getattr(data, coll_name)
     nodes = [n.model_dump(mode="json") for n in collection.values()]
+    # 对话按 last_active_at 降序排列
+    if level == "conversation":
+        nodes.sort(key=lambda n: n.get("last_active_at", 0) or 0, reverse=True)
     if parent_id:
         parent_key = tree_ops.LEVEL_CONFIG[level]["parent_key"]
         if parent_key:

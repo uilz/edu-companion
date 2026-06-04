@@ -287,7 +287,9 @@ class PgStorageEngine:
                 "",  # active_branch_id (legacy column, kept for DB compat)
                 p.context_summary,
                 self._j({}),  # summary_branches (legacy column, kept for DB compat)
-                p.tags or [], p.created_at, p.updated_at, p.last_active_at,
+                p.tags or [],
+                p.is_temp,
+                p.created_at, p.updated_at, p.last_active_at,
                 p.message_count, p.total_tokens,
             )
             for p in data.partitions.values()
@@ -298,11 +300,13 @@ class PgStorageEngine:
                 INSERT INTO conversation_partitions
                     (id, user_id, name, subject, direction, emoji, color, root_id,
                      active_branch_id, context_summary, summary_branches, tags,
+                     is_temp,
                      created_at, updated_at, last_active_at, message_count, total_tokens)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT (id) DO UPDATE SET
                     name=EXCLUDED.name, subject=EXCLUDED.subject,
                     context_summary=EXCLUDED.context_summary,
+                    is_temp=EXCLUDED.is_temp,
                     updated_at=EXCLUDED.updated_at,
                     last_active_at=EXCLUDED.last_active_at,
                     message_count=EXCLUDED.message_count,

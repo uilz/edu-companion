@@ -13,6 +13,7 @@ interface Settings {
   modelName: string;
   systemPrompt: string;
   socraticMode: boolean;
+  socraticFollowUpMode: "ask" | "answer";
 }
 
 // ===== 默认设置值 =====
@@ -22,6 +23,7 @@ const defaultSettings: Settings = {
   modelName: "gpt-4o",
   systemPrompt: "你是一个专业的学习助手，擅长解答各学科问题。",
   socraticMode: true,
+  socraticFollowUpMode: "ask",
 };
 
 // ===== 设置页面组件 =====
@@ -181,6 +183,26 @@ export default function SettingsPage() {
                   />
                 </button>
               </div>
+              {settings.socraticMode && (
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-xs text-[var(--color-text-muted)]">追问模式：</span>
+                  <button onClick={() => setSettings((s) => ({ ...s, socraticFollowUpMode: "ask" }))}
+                    className={`px-2.5 py-1 text-[10px] rounded-full transition-all ${
+                      settings.socraticFollowUpMode === "ask"
+                        ? "bg-[var(--color-accent)] text-white font-medium"
+                        : "text-[var(--color-text-muted)] border border-[var(--color-border)] hover:border-[var(--color-accent)]"
+                    }`}>追问AI</button>
+                  <button onClick={() => setSettings((s) => ({ ...s, socraticFollowUpMode: "answer" }))}
+                    className={`px-2.5 py-1 text-[10px] rounded-full transition-all ${
+                      settings.socraticFollowUpMode === "answer"
+                        ? "bg-amber-500 text-white font-medium"
+                        : "text-[var(--color-text-muted)] border border-[var(--color-border)] hover:border-amber-400"
+                    }`}>回答追问</button>
+                  <span className="text-[9px] text-[var(--color-text-muted)] ml-auto">
+                    {settings.socraticFollowUpMode === "ask" ? "AI回答后自动出追问选项" : "AI反问时自动切换为回答模式"}
+                  </span>
+                </div>
+              )}
             </div>
           </Card>
 

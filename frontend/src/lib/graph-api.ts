@@ -1,7 +1,7 @@
 // 知识图谱 API 工具
 import type { GraphData, GraphNode, GraphEdge } from "@/lib/graph-types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 export async function fetchGraphData(userId = "default_user"): Promise<GraphData> {
   const res = await fetch(`${API_BASE}/api/v2/graph/nodes?user_id=${userId}`);
@@ -12,8 +12,8 @@ export async function fetchGraphData(userId = "default_user"): Promise<GraphData
     id: n.id,
     label: n.label || n.id,
     level: n.level || "atom",
-    mastery: n.belief?.proficiency_mean ?? n.proficiency ?? 0,
-    trend: n.trend?.direction ?? "stable",
+    mastery: n.mastery ?? 0,
+    trend: (n.trend?.direction as "ascending" | "descending" | "stable") ?? "stable",
     children: n.children || [],
     parent: n.parent || undefined,
     is_visible: n.is_visible ?? true,
@@ -21,6 +21,7 @@ export async function fetchGraphData(userId = "default_user"): Promise<GraphData
     path_id: n.path_id || "",
     emoji: n.emoji || "",
     color: n.color || "",
+    brief: n.brief || "",
   }));
 
   // Generate edges from parent-child relationships

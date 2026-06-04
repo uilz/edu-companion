@@ -79,10 +79,14 @@ export function useConversation() {
     // Restore selection from URL or localStorage
     const params = new URLSearchParams(window.location.search);
     const pId = params.get("p") || params.get("partition_id");
+    const dId = params.get("d") || params.get("domain_id");
+    const tId = params.get("t") || params.get("topic_id");
     const cId = params.get("c") || params.get("conversation_id");
     if (pId) {
       useConversationStore.setState({
         selectedPartitionId: pId,
+        activeDomainId: dId || null,
+        activeTopicId: tId || null,
         activeConversationId: cId || null,
       });
     } else {
@@ -239,6 +243,22 @@ export function useConversation() {
     () => partitions.find((p) => p.id === selectedPartitionId),
     [partitions, selectedPartitionId],
   );
+
+  // ── Auto-redirect after first message ──
+  useEffect(() => {
+    const redirectId = useConversationStore.getState().postSendRedirect;
+    if (!redirectId) return;
+
+    const currentPath = window.location.pathname;
+    const targetPath = `/conversation/${redirectId}`;
+
+    if (currentPath !== targetPath) {
+      router.replace(targetPath);
+    }
+
+    // 消费掉跳转意图
+    useConversationStore.getState().setPostSendRedirect(null);
+  }, [router]); 
 
   // ── Return mapped state (UseConversationReturn interface) ──
   return {

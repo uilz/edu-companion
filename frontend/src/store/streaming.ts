@@ -4,7 +4,7 @@
 // ══════════════════════════════════════════════════════════════
 
 import type { TreeNode, ResponseBlock } from "@/types";
-import { ConversationWS } from "@/components/conversation/ws";
+import { ConversationWS } from "@/store/ws";
 
 // ══════════════════════════════════════════════════════════════
 //  Module-level streaming refs (NOT in store — avoid re-render spam)
@@ -101,6 +101,8 @@ export function saveStreamCacheBeforeUnload() {
 // ══════════════════════════════════════════════════════════════
 
 let _prevUrlPartitionId: string | null = null;
+let _prevUrlDomainId: string | null = null;
+let _prevUrlTopicId: string | null = null;
 let _prevUrlConversationId: string | null = null;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -110,20 +112,30 @@ export function subscribeToNavigation(
   return store.subscribe((state: {
     urlInitialized: boolean;
     selectedPartitionId: string | null;
+    activeDomainId: string | null;
+    activeTopicId: string | null;
     activeConversationId: string | null;
   }) => {
     if (!state.urlInitialized) return;
     if (
       state.selectedPartitionId === _prevUrlPartitionId &&
+      state.activeDomainId === _prevUrlDomainId &&
+      state.activeTopicId === _prevUrlTopicId &&
       state.activeConversationId === _prevUrlConversationId
     )
       return;
     _prevUrlPartitionId = state.selectedPartitionId;
+    _prevUrlDomainId = state.activeDomainId;
+    _prevUrlTopicId = state.activeTopicId;
     _prevUrlConversationId = state.activeConversationId;
     try {
       const params = new URLSearchParams();
       if (state.selectedPartitionId)
         params.set("p", state.selectedPartitionId);
+      if (state.activeDomainId)
+        params.set("d", state.activeDomainId);
+      if (state.activeTopicId)
+        params.set("t", state.activeTopicId);
       if (state.activeConversationId)
         params.set("c", state.activeConversationId);
       const qs = params.toString();
@@ -138,6 +150,8 @@ export function subscribeToNavigation(
         "learn-page-state",
         JSON.stringify({
           partitionId: state.selectedPartitionId,
+          domainId: state.activeDomainId,
+          topicId: state.activeTopicId,
           conversationId: state.activeConversationId,
         }),
       );
@@ -240,6 +254,12 @@ export function initWebSocket(storeApi: StoreApi): () => void {
 
       // Replace placeholder with final message
       if (assistantMessage) {
+        // ── 从 metadata 提取 follow_up_questions ──
+        const assistantMsgAny = assistantMessage as unknown as Record<string, unknown>;
+        const metadata = assistantMsgAny.metadata as Record<string, unknown> | undefined;
+        if (metadata?.follow_up_questions) {
+          assistantMsgAny.follow_up_questions = metadata.follow_up_questions;
+        }
         const textBlock = assistantMessage.content_blocks?.find(
           (b: { type: string }) => b.type === "text",
         );

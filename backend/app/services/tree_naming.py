@@ -23,6 +23,9 @@ class TreeNamingMixin:
         node = collection.get(node_id)
         if not node:
             raise ValueError(f"{level.capitalize()} {node_id} not found")
+        # 临时分区不可重命名
+        if level == "partition" and getattr(node, "is_temp", False):
+            raise ValueError("临时分区不可重命名")
         node.name = new_name
         node.updated_at = time.time()
         self._storage.save(user_id, data)

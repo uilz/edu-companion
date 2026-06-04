@@ -37,6 +37,9 @@ from app.api.learning_enhance import router as learning_enhance_router
 # Phase 10.7+: 文件管理
 from app.api.files_api import router as files_router
 
+# 解释卡片 CRUD
+from app.api.explain_cards import router as explain_cards_router
+
 # v6 Phase 4: 对话系统子路由
 from app.api.conversation_routes import router as conversation_tree_router
 from app.api.conversation_ws import router as conversation_ws_router
@@ -240,6 +243,8 @@ app.include_router(practice_router)
 app.include_router(progress_router)
 # 对话系统（树结构）
 app.include_router(conversation_router, prefix="/api/conversations", tags=["conversations"])
+# 对话系统 WebSocket 流式对话
+app.include_router(conversation_ws_router, prefix="/api/conversations", tags=["conversations"])
 # 知识图谱 + 前置卡控
 app.include_router(knowledge_router)
 # 学习画像 (v3.0 PartitionProgress)
@@ -261,6 +266,9 @@ app.include_router(learning_enhance_router)
 
 # Phase 10.7+: 文件管理
 app.include_router(files_router)
+
+# 解释卡片 CRUD
+app.include_router(explain_cards_router)
 
 
 # ── 健康检查 ──

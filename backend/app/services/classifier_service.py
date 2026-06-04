@@ -59,6 +59,7 @@ class ClassifierService:
         user_id: str,
         query_embedding: list[float],
         current_topic_id: str | None = None,
+        text: str = "",  # 用于向量检索无结果时的对话树回退
     ) -> dict[str, Any]:
         """
         主入口：对用户消息 embedding 进行分类
@@ -93,7 +94,6 @@ class ClassifierService:
         result = self._decide_mode(seeds, current_topic_id, immersion_depth)
 
         # 4. 沉浸抑制标记
-        result["immersion_depth"] = immersion_depth
         is_suppressed = (
             immersion_depth >= _DEEP_IMMERSION_THRESHOLD
             and result["mode"] == 1
@@ -111,6 +111,14 @@ class ClassifierService:
         # 6. 沉浸抑制下隐藏候选（不泄露给前端）
         if is_suppressed:
             result["candidates"] = []
+
+        # 7. 向量检索无候选 → 回退到对话树文本分类
+        if not result["candidates"] and text:
+            tree_result = self.classify_by_text(user_id, text, current_topic_id)
+            if tree_result.get("candidates"):
+                result["candidates"] = tree_result["candidates"]
+                result["mode"] = tree_result["mode"]
+                result["should_switch"] = tree_result["should_switch"]
 
         return result
 
@@ -157,6 +165,69 @@ class ClassifierService:
                             "path_id": n.path_id or "",
                             "score": 0.5,
                         })
+
+        # 3.5 ILIKE 也无结果 → 搜索对话树中的 domain/topic 名称
+        if not candidates and text:
+            try:
+                from app.cognitive.storage import storage
+                data = storage.load(user_id)
+                words = [w for w in text.replace("?", "").replace("?", "").replace("，", " ").replace(" ", " ").split() if len(w) >= 2]
+                # 按名称搜索 domain
+                for d in data.domains.values():
+                    if any(w in d.name for w in words):
+                        candidates.append({
+                            "id": d.id,
+                            "label": d.name,
+                            "path_id": d.name,
+                            "score": 0.5,
+                        })
+                # 按名称搜索 topic
+                for t in data.topics.values():
+                    if any(w in t.name for w in words):
+                        candidates.append({
+                            "id": t.id,
+                            "label": t.name,
+                            "path_id": t.name,
+                            "score": 0.5,
+                        })
+            except Exception:
+                pass
+
+        # 3.75 仍无候选 & 有关键词匹配 → 自动创建新节点
+        if not candidates and text:
+            try:
+                matched_keywords = self._keyword_score(text)
+                if matched_keywords:
+                    top = matched_keywords[0]
+                    partition_name = top["partition"]
+                    score = top["score"]
+                    from app.services.tree_ops import tree_ops
+                    from app.services.storage import storage
+                    data = storage.load(user_id)
+                    # 找或创建 partition
+                    pid = None
+                    for p in data.partitions.values():
+                        if p.name == partition_name:
+                            pid = p.id
+                            break
+                    if not pid:
+                        p = tree_ops.create_partition(user_id, partition_name, subject=partition_name, emoji="📖")
+                        pid = p.id
+                    # 创建 domain（从关键词提取，取第一个关键词作为 domain 名）
+                    words = [w for w in partition_name.replace(" ", "").split() if len(w) >= 2]
+                    domain_name = f"{partition_name}入门" if not words else partition_name
+                    d = tree_ops.create_domain(user_id, pid, domain_name)
+                    # 创建 topic（取消息的前几个字）
+                    topic_name = text[:12] + ("..." if len(text) > 12 else "")
+                    t = tree_ops.create_topic(user_id, d.id, topic_name)
+                    candidates.append({
+                        "id": t.id,
+                        "label": topic_name,
+                        "path_id": f"{partition_name}.{domain_name}.{topic_name}",
+                        "score": score,
+                    })
+            except Exception:
+                logger.debug("自动创建节点失败", exc_info=True)
 
         # 4. 去重 + 截断
         seen = set()
