@@ -27,6 +27,9 @@ from app.services.practice_question_bank import (
 from app.services.practice_question_gen import (
     generate_and_save, handle_question_generation, generate_for_conversation,
 )
+from app.services.practice_session import (
+    create_session, get_session, submit_answer, complete_session, list_sessions,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v7/practice", tags=["v7题库"])
@@ -253,6 +256,86 @@ async def api_generate_from_conversation(body: dict, user_id: str = DEFAULT_USER
         user_id=user_id,
         conversation_context=context,
     )
+    return result
+
+
+# ═══════════════════════════════════════════════
+# 练习会话
+# ═══════════════════════════════════════════════
+
+
+@router.post("/sessions")
+async def api_create_session(body: dict, user_id: str = DEFAULT_USER_ID):
+    """创建练习会话（含自适应选题）"""
+    _ensure_tables()
+    bank_id = body.get("bank_id", "")
+    if not bank_id:
+        raise HTTPException(400, "bank_id 不能为空")
+    return create_session(
+        bank_id=bank_id,
+        user_id=user_id,
+        session_type=body.get("session_type", "practice"),
+        mode=body.get("mode", "adaptive"),
+        question_count=body.get("count", 10),
+        config=body.get("config"),
+        exclude_ids=body.get("exclude_ids"),
+        cognitive_node_ids=body.get("cognitive_node_ids"),
+    )
+
+
+@router.get("/sessions")
+async def api_list_sessions(
+    user_id: str = DEFAULT_USER_ID,
+    bank_id: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 20,
+    offset: int = 0,
+):
+    """练习会话列表"""
+    _ensure_tables()
+    return list_sessions(
+        user_id=user_id, bank_id=bank_id, status=status,
+        limit=min(limit, 100), offset=max(offset, 0),
+    )
+
+
+@router.get("/sessions/{session_id}")
+async def api_get_session(session_id: str, user_id: str = DEFAULT_USER_ID):
+    """会话详情"""
+    _ensure_tables()
+    session = get_session(session_id, user_id)
+    if not session:
+        raise HTTPException(404, "会话不存在")
+    return session
+
+
+@router.post("/sessions/{session_id}/submit")
+async def api_submit_answer(session_id: str, body: dict, user_id: str = DEFAULT_USER_ID):
+    """提交答题"""
+    _ensure_tables()
+    question_id = body.get("question_id", "")
+    if not question_id:
+        raise HTTPException(400, "question_id 不能为空")
+    result = submit_answer(
+        session_id=session_id,
+        question_id=question_id,
+        user_id=user_id,
+        user_answer=body.get("answer"),
+        time_spent=body.get("time_spent", 0),
+        hints_used=body.get("hints_used", 0),
+    )
+    if "error" in result:
+        raise HTTPException(400, result["error"])
+    return result
+
+
+@router.post("/sessions/{session_id}/complete")
+async def api_complete_session(session_id: str, user_id: str = DEFAULT_USER_ID):
+    """完成会话"""
+    _ensure_tables()
+    result = complete_session(session_id, user_id)
+    if not result:
+        raise HTTPException(404, "会话不存在")
     return result
 
 
