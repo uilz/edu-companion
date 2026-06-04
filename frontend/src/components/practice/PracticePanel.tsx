@@ -19,6 +19,7 @@ import {
   type MaterialItem,
 } from "@/lib/practice-api";
 import ReferencePanel from "./ReferencePanel";
+import SecretaryProposals from "./SecretaryProposals";
 
 // ── 状态机 ──
 type Phase = "idle" | "loading" | "answering" | "submitting" | "result" | "summary" | "error";
@@ -712,6 +713,9 @@ function SummaryScreen({
           <p className="text-[10px] text-[var(--color-text-muted)]">用时</p>
         </div>
       </div>
+
+      {/* 秘书提案 — 错题诊断/反思引导 */}
+      <SecretaryProposals sessionId={session?.session_id} />
 
       {/* 错题回顾 */}
       {results.filter((r) => !r.is_correct).length > 0 && (

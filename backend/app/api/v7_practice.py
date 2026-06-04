@@ -675,7 +675,56 @@ async def api_import_confirm(body: dict, user_id: str = DEFAULT_USER_ID):
 
 
 # ═══════════════════════════════════════════════
-# 批量导入
+# 秘书联动提案
+# ═══════════════════════════════════════════════
+
+
+@router.get("/secretary/proposals")
+async def api_practice_secretary_proposals(
+    user_id: str = DEFAULT_USER_ID,
+    limit: int = 5,
+):
+    """获取练习相关的秘书提案"""
+    from app.domain.secretary.proposal_store import ProposalStore
+    store = ProposalStore()
+    proposals = store.get_pending_proposals(user_id, limit=limit)
+    practice_types = {"practice_error_alert", "practice_mastery_stuck", "practice_review_reminder", "practice_reflection"}
+    filtered = [p for p in proposals if p.action_type in practice_types]
+    result = []
+    for p in filtered:
+        result.append({
+            "id": p.id,
+            "emoji": p.emoji or "💡",
+            "title": p.title,
+            "description": p.description,
+            "action_type": p.action_type,
+            "payload": p.payload,
+            "priority": p.priority,
+            "created_at": p.created_at,
+        })
+    return {"proposals": result[:limit], "total": len(filtered)}
+
+
+@router.post("/secretary/proposals/{proposal_id}/accept")
+async def api_secretary_accept_proposal(proposal_id: str, body: dict = None, user_id: str = DEFAULT_USER_ID):
+    """接受秘书提案"""
+    from app.domain.secretary.proposal_store import ProposalStore
+    store = ProposalStore()
+    store.update_status(proposal_id, "accepted", user_id)
+    return {"status": "accepted"}
+
+
+@router.post("/secretary/proposals/{proposal_id}/dismiss")
+async def api_secretary_dismiss_proposal(proposal_id: str, user_id: str = DEFAULT_USER_ID):
+    """忽略秘书提案"""
+    from app.domain.secretary.proposal_store import ProposalStore
+    store = ProposalStore()
+    store.update_status(proposal_id, "dismissed", user_id)
+    return {"status": "dismissed"}
+
+
+# ═══════════════════════════════════════════════
+# 批量导入（JSON）
 # ═══════════════════════════════════════════════
 
 

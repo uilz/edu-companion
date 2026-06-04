@@ -278,6 +278,19 @@ def submit_all_exam(session_id: str, user_id: str = DEFAULT_USER_ID) -> dict:
     except Exception as e:
         logger.debug("成就检测失败: %s", e)
 
+    # 6. 触发秘书提案生成
+    try:
+        from app.services.practice_secretary_integration import check_and_generate_proposals
+        proposal_count = check_and_generate_proposals(
+            user_id=user_id,
+            session_id=session_id,
+            session_type="exam",
+        )
+        if proposal_count > 0:
+            logger.info("考试秘书提案: user=%s, count=%d", user_id, proposal_count)
+    except Exception as e:
+        logger.debug("考试秘书提案失败: %s", e)
+
     # 6. 触发认知模型同步
     for qr in question_results:
         if qr["is_correct"] is not None:
