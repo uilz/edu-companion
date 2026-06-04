@@ -673,3 +673,57 @@ async def get_sub_branch_parent(conv_id: str):
     if not result:
         raise HTTPException(404, "Not a sub-branch or parent not found")
     return result
+
+
+# ═══════════════════════════════════════════
+# 情绪分析
+# ═══════════════════════════════════════════
+
+
+@router.get("/emotion/trend")
+async def get_emotion_trend(window_hours: int = 72):
+    """获取用户情绪趋势分析"""
+    from app.services.emotion_analyzer import emotion_analyzer
+
+    trend = await emotion_analyzer.analyze_trend(USER_ID, window_hours=window_hours)
+    return trend.to_dict()
+
+
+@router.get("/emotion/recent")
+async def get_recent_emotions(limit: int = 10):
+    """获取最近N条情绪记录"""
+    from app.services.emotion_analyzer import emotion_analyzer
+
+    records = emotion_analyzer._cache.get(USER_ID, [])
+    return {
+        "records": [r.to_dict() for r in records[-min(limit, 50):]],
+        "total": len(records),
+    }
+
+
+@router.get("/emotion/stats")
+async def get_emotion_stats():
+    """情绪统计概览（用于首页卡片展示）"""
+    from app.services.emotion_analyzer import emotion_analyzer
+
+    records = emotion_analyzer._cache.get(USER_ID, [])
+    if not records:
+        return {"status": "insufficient_data", "message": "还没有足够的情绪数据"}
+
+    cat_counts = {}
+    for r in records:
+        cat_counts[r.category] = cat_counts.get(r.category, 0) + 1
+    dominant = max(cat_counts, key=cat_counts.get)
+
+    neg_count = sum(1 for r in records
+                    if emotion_analyzer.EMOTION_CATEGORIES.get(r.category, {}).get("severity") == "negative")
+    total = len(records)
+
+    return {
+        "status": "ready",
+        "total_records": total,
+        "dominant_emotion": dominant,
+        "dominant_emoji": emotion_analyzer.EMOTION_CATEGORIES.get(dominant, {}).get("emoji", ""),
+        "negative_ratio": round(neg_count / total, 2) if total > 0 else 0,
+        "categories": cat_counts,
+    }

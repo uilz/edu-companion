@@ -56,6 +56,17 @@ async def websocket_conversation(websocket: WebSocket) -> None:
                 )
                 continue
 
+            # ═══════════════════════════════════════════
+            # 情绪检测（后台异步，不影响主流程）
+            # ═══════════════════════════════════════════
+            try:
+                from app.services.emotion_analyzer import emotion_analyzer
+                quick_cat = emotion_analyzer.quick_detect(text)
+                if quick_cat:
+                    asyncio.ensure_future(emotion_analyzer.classify(text, user_id))
+            except Exception:
+                pass
+
             await websocket.send_text(
                 json.dumps({"type": "status", "message": "正在思考...", "request_id": request_id})
             )
