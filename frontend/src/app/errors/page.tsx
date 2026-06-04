@@ -1,360 +1,250 @@
 "use client";
 
-// ── 导入依赖 ──
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   RotateCcw, CheckCircle, XCircle, Loader2, BookOpen,
-  ChevronDown, ChevronUp, Brain, Sparkles,
+  ChevronDown, ChevronUp, Brain, Trash2, ChevronLeft, ChevronRight,
+  BarChart3, AlertTriangle, Filter,
 } from "lucide-react";
-import Card from "@/components/ui/Card";
-import MathContent from "@/components/ui/MathContent";
-import { API_BASE } from "@/lib/api";
-
-// ── Types ──
-// 错因归因数据（AI 分析结果）
-interface Attribution {
-  primary: string;
-  secondary: string | null;
-  primary_label: string;
-  group: string;
-  analysis: string;
-  recommendation: string;
-}
-
-// 错题条目结构
-interface ErrorEntry {
-  entry_id: string;
-  question_id: string;
-  skill_id: string;
-  error_type: string;
-  misconception?: string;
-  user_answer: string;
-  correct_answer: string;
-  question_text: string;
-  review_count: number;
-  is_resolved: boolean;
-  created_at: string;
-  attribution?: Attribution | string;
-  referenced_materials: Array<{
-    source_file: string;
-    page_number?: number;
-    preview: string;
-  }>;
-}
-
-// 错题统计信息
-interface ErrorStats {
-  total: number;
-  by_group: Record<string, number>;
-  by_category: Record<string, number>;
-  top_weak_skills: string[];
-}
-
-// ── 错误类型中文标签 ──
-
-const errorLabel: Record<string, string> = {
-  conceptual: "概念错误",
-  procedural: "程序错误",
-  computation: "计算错误",
-  reading: "审题错误",
-  transfer: "迁移错误",
-  meta: "元认知错误",
-  careless: "粗心大意",
-};
-
-const groupColors: Record<string, string> = {
-  "概念": "#f97316",
-  "计算": "var(--color-error)",
-  "审题": "var(--color-warning)",
-  "方法": "#8b5cf6",
-  "未分类": "#737373",
-};
-
-// ── 解析归因数据（可能是 JSON 字符串） ──
-function parseAttr(a: Attribution | string | undefined): Attribution | null {
-  if (!a) return null;
-  if (typeof a === "string") {
-    try { return JSON.parse(a); } catch { return null; }
-  }
-  return a;
-}
-
-// ── 主页面：错题本 ──
+import {
+  getErrorBook, getErrorBookStats, clearMasteredErrors,
+  createPracticeSession, resolveBankForNode,
+  type ErrorBookItem, type ErrorBookStats as EBStats,
+} from "@/lib/practice-api";
 
 export default function ErrorBookPage() {
-  const [entries, setEntries] = useState<ErrorEntry[]>([]);
-  const [stats, setStats] = useState<ErrorStats | null>(null);
-  const [filter, setFilter] = useState<"pending" | "resolved" | "all">("pending");
+  const [items, setItems] = useState<ErrorBookItem[]>([]);
+  const [stats, setStats] = useState<EBStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState("wrongs_desc");
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [analyzing, setAnalyzing] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
 
-  // ── 获取错题列表（按过滤状态） ──
-  const fetchErrors = async (status: string) => {
+  const loadData = useCallback(async (p: number) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (status === "pending") params.set("resolved", "false");
-      else if (status === "resolved") params.set("resolved", "true");
-
-      const res = await fetch(`${API_BASE}/api/practice/errors?${params}`);
-      const data = await res.json();
-      setEntries(data.entries || []);
-    } catch (err) {
-    }
+      const [book, bookStats] = await Promise.all([
+        getErrorBook({ page: p, page_size: 20, sort_by: sortBy }),
+        getErrorBookStats(),
+      ]);
+      setItems(book.items);
+      setTotal(book.total);
+      setTotalPages(book.total_pages);
+      setStats(bookStats);
+    } catch { /* ignore */ }
     setLoading(false);
-  };
+  }, [sortBy]);
 
-  // ── 获取错题统计 ──
-  const fetchStats = async () => {
+  useEffect(() => { loadData(page); }, [page, sortBy, loadData]);
+
+  const handleClearMastered = useCallback(async () => {
+    setClearing(true);
     try {
-      const res = await fetch(`${API_BASE}/api/practice/errors/stats`);
-      if (res.ok) {
-        const data = await res.json();
-        setStats(data);
+      await clearMasteredErrors();
+      loadData(page);
+    } catch { /* ignore */ }
+    setClearing(false);
+  }, [page, loadData]);
+
+  const handleCreateReviewSession = useCallback(async (item: ErrorBookItem) => {
+    try {
+      // 找到对应的 bank
+      const nodeId = item.cognitive_node_ids?.[0];
+      let bankId = item.bank_id;
+      if (nodeId) {
+        const resolved = await resolveBankForNode(nodeId);
+        bankId = resolved.bank_id;
       }
-      } catch { ; }
-  };
-
-  // ── 初始化：数据加载 ──
-  useEffect(() => {
-    fetchErrors(filter);
-    fetchStats();
-  }, [filter]);
-
-  // ── 标记错题为"已掌握" ──
-  const markResolved = async (entryId: string) => {
-    await fetch(`${API_BASE}/api/practice/errors/${entryId}/review?is_correct=true`, {
-      method: "POST",
-    });
-    fetchErrors(filter);
-    fetchStats();
-  };
-
-  // ── AI 分析错因 ──
-  const analyzeError = async (entryId: string) => {
-    setAnalyzing(entryId);
-    try {
-      const res = await fetch(`${API_BASE}/api/practice/errors/${entryId}/analyze`, {
-        method: "POST",
+      const sess = await createPracticeSession(bankId, {
+        mode: "review", count: 5,
+        cognitive_node_ids: nodeId ? [nodeId] : undefined,
       });
-      const data = await res.json();
-      // Update the entry with the attribution
-      setEntries((prev) =>
-        prev.map((e) =>
-          e.entry_id === entryId ? { ...e, attribution: data.attribution } : e
-        )
-      );
-      setExpandedId(entryId);
-      fetchStats();
-    } catch (err) {
-    }
-    setAnalyzing(null);
-  };
+      window.location.href = `/graph?session=${sess.session_id}`;
+    } catch { /* ignore */ }
+  }, []);
 
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
-      <div className="max-w-3xl mx-auto px-6 py-16">
-        <div className="flex items-center justify-between mb-12">
-          <h1 className="text-4xl font-semibold tracking-tight text-[var(--color-text)]">
-            <BookOpen size={28} className="inline mr-3 text-[var(--color-accent)]" />
-            错题本
-          </h1>
-          <div className="flex gap-1">
-            {[
-              ["pending", "未解决"],
-              ["resolved", "已解决"],
-              ["all", "全部"],
-            ].map(([k, label]) => (
-              <button
-                key={k}
-                onClick={() => setFilter(k as typeof filter)}
-                className={`text-xs px-3 py-1.5 border transition-colors ${
-                  filter === k
-                    ? "border-[var(--color-accent)] text-[var(--color-accent)] bg-[var(--color-accent)]/10"
-                    : "border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-border-hover)]"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+        <h1 className="text-2xl font-semibold text-[var(--color-text)] mb-6 tracking-tight">
+          错题本
+        </h1>
 
-        {/* ── Error Stats Bar ── */}
-        {stats && stats.total > 0 && (
-          <div className="mb-8 p-4 border border-[var(--color-border)] bg-[var(--color-card)]">
-            <div className="text-xs text-[var(--color-text-muted)] mb-3 flex items-center gap-2">
-              <Brain size={14} />
-              错因分布（未解决 {stats.total} 题）
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(stats.by_group)
-                .sort(([, a], [, b]) => b - a)
-                .map(([group, count]) => (
-                  <div
-                    key={group}
-                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs"
-                    style={{
-                      backgroundColor: `${groupColors[group] || "#737373"}15`,
-                      color: groupColors[group] || "#737373",
-                      border: `1px solid ${groupColors[group] || "#737373"}40`,
-                    }}
-                  >
-                    <span>{group}</span>
-                    <span className="font-semibold">{count}</span>
-                  </div>
-                ))}
-            </div>
+        {/* 统计卡片 */}
+        {stats && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            {[
+              { icon: <XCircle size={18} />, label: "错题", value: stats.unique_wrong_questions, color: "text-red-500" },
+              { icon: <RotateCcw size={18} />, label: "总错误次数", value: stats.total_wrong_attempts, color: "text-amber-500" },
+              { icon: <CheckCircle size={18} />, label: "已掌握", value: stats.mastered_from_errors, color: "text-green-500" },
+              { icon: <AlertTriangle size={18} />, label: "仍需巩固", value: stats.still_weak, color: "text-orange-500" },
+            ].map((c, i) => (
+              <div key={i} className="p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/60">
+                <div className={c.color}>{c.icon}</div>
+                <div className="text-xl font-bold text-[var(--color-text)] mt-1">{c.value}</div>
+                <div className="text-[10px] text-[var(--color-text-muted)]">{c.label}</div>
+              </div>
+            ))}
           </div>
         )}
 
+        {/* 工具栏 */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <select
+              value={sortBy}
+              onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
+              className="text-[11px] px-2 py-1.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]/60 text-[var(--color-text)]"
+            >
+              <option value="wrongs_desc">错误最多</option>
+              <option value="wrongs_asc">错误最少</option>
+              <option value="last_wrong_desc">最近错误</option>
+              <option value="difficulty_desc">难度最高</option>
+            </select>
+            <span className="text-[11px] text-[var(--color-text-muted)]">共 {total} 道</span>
+          </div>
+          <button
+            onClick={handleClearMastered}
+            disabled={clearing}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]/60 text-[11px] text-[var(--color-text-muted)] hover:text-red-500 transition-colors"
+          >
+            <Trash2 size={12} />{clearing ? "清理中..." : "清除已掌握"}
+          </button>
+        </div>
+
+        {/* 错题列表 */}
         {loading ? (
-          <div className="flex items-center justify-center py-20">
+          <div className="flex items-center justify-center py-16">
             <Loader2 className="animate-spin text-[var(--color-accent)]" size={24} />
           </div>
-        ) : entries.length === 0 ? (
-          <div className="text-center py-20">
-            <p className="text-[var(--color-text-muted)] text-lg mb-2">
-              {filter === "pending" ? "🎉 没有待解决的错题！" : "暂无错题记录"}
-            </p>
-            <p className="text-[var(--color-text-muted)] text-sm">
-              {filter === "pending" ? "继续保持！" : "去练习页开始做题吧"}
-            </p>
+        ) : items.length === 0 ? (
+          <div className="text-center py-16">
+            <CheckCircle size={32} className="text-green-500 mx-auto mb-3" />
+            <p className="text-sm text-[var(--color-text)] font-medium">没有错题！</p>
+            <p className="text-xs text-[var(--color-text-muted)] mt-1">继续保持</p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {entries.map((entry) => {
-              const isExpanded = expandedId === entry.entry_id;
-              const attr = parseAttr(entry.attribution);
+          <div className="space-y-2">
+            {items.map((item) => {
+              const isExpanded = expandedId === item.question_id;
               return (
-                <Card key={entry.entry_id || Math.random().toString(36)}>
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`text-xs px-2 py-0.5 ${
-                          entry.is_resolved
-                            ? "bg-[var(--color-success)]/10 text-[var(--color-success)]"
-                            : "bg-[var(--color-error)]/10 text-[var(--color-error)]"
-                        }`}
-                      >
-                        {errorLabel[entry.error_type] || entry.error_type || "未知错误"}
-                      </span>
-                      {attr && (
-                        <span
-                          className="text-xs px-2 py-0.5"
-                          style={{
-                            backgroundColor: `${groupColors[attr.group] || "#737373"}15`,
-                            color: groupColors[attr.group] || "#737373",
-                          }}
-                        >
-                          {attr.primary_label}
-                        </span>
-                      )}
-                      {entry.misconception && !attr && (
-                        <span className="text-xs text-[var(--color-text-muted)]">
-                          {entry.misconception}
-                        </span>
-                      )}
+                <div key={item.question_id}
+                  className={`rounded-xl border transition-all ${
+                    item.mastered
+                      ? "border-green-500/20 bg-green-500/5"
+                      : "border-[var(--color-border)]/60 bg-[var(--color-surface)]"
+                  }`}>
+                  {/* 折叠头 */}
+                  <button
+                    onClick={() => setExpandedId(isExpanded ? null : item.question_id)}
+                    className="w-full flex items-start gap-3 p-4 text-left"
+                  >
+                    <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
+                      item.mastered
+                        ? "bg-green-500/10 text-green-500"
+                        : "bg-red-500/10 text-red-500"
+                    }`}>
+                      {item.wrong_count}
                     </div>
-                    <span className="text-xs text-[var(--color-text-muted)]">
-                      {entry.created_at ? new Date(entry.created_at).toLocaleDateString() : ""}
-                    </span>
-                  </div>
-
-                  {entry.question_text ? (
-                    <p className="text-sm text-[var(--color-text)] mb-3 message-content">
-                      {entry.question_text.slice(0, 120)}
-                      {entry.question_text.length > 120 && "..."}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-[var(--color-text-muted)] mb-3 italic">
-                      题目数据丢失 — skill_id: {entry.skill_id || "未知"}
-                    </p>
-                  )}
-
-                  <div className="flex items-center gap-4 text-xs mb-3">
-                    <span className="text-[var(--color-error)]">
-                      ❌ 你的答案：{entry.user_answer}
-                    </span>
-                    <span className="text-[var(--color-success)]">
-                      ✅ 正确答案：{entry.correct_answer}
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      复习 {entry.review_count} 次
-                    </span>
-                  </div>
-
-                  {entry.referenced_materials && entry.referenced_materials.length > 0 && (
-                    <div className="mb-3 p-2 bg-[var(--color-surface)] text-xs text-[var(--color-text-muted)]">
-                      📚 资料引用：
-                      {entry.referenced_materials.map((m, i) => (
-                        <span key={i} className="ml-2">
-                          {m.source_file}
-                          {m.page_number ? ` 第${m.page_number}页` : ""}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* ── AI Attribution (expanded) ── */}
-                  {isExpanded && attr && (
-                    <div className="mb-3 p-4 border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/5 active:scale-[0.97] transition-transform">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Sparkles size={14} className="text-[var(--color-accent)]" />
-                        <span className="text-xs font-semibold text-[var(--color-accent)]">AI 错因分析</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-[var(--color-text)] leading-relaxed line-clamp-2">
+                        {item.stem}
+                      </p>
+                      <div className="flex items-center gap-3 mt-1.5 text-[10px] text-[var(--color-text-muted)]">
+                        <span>难度: {"★".repeat(item.difficulty).padEnd(5, "☆")}</span>
+                        <span>错 {item.wrong_count}/{item.total_attempts} 次</span>
+                        {item.mastered && <span className="text-green-500">✓ 已掌握</span>}
+                        {!item.mastered && <span className="text-red-500">⚡ 需巩固</span>}
                       </div>
-                      <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed mb-2">
-                        {attr.analysis}
-                      </p>
-                      <p className="text-xs text-[var(--color-text-muted)]">
-                        💡 {attr.recommendation}
-                      </p>
+                    </div>
+                    <div className="flex-shrink-0 flex items-center gap-2">
+                      <div
+                        onClick={(e) => { e.stopPropagation(); handleCreateReviewSession(item); }}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[var(--color-accent)] text-white text-[10px] font-medium hover:opacity-90 transition-opacity"
+                      >
+                        <RotateCcw size={10} />复习
+                      </div>
+                      {isExpanded ? <ChevronUp size={14} className="text-[var(--color-text-muted)]" /> : <ChevronDown size={14} className="text-[var(--color-text-muted)]" />}
+                    </div>
+                  </button>
+
+                  {/* 展开详情 */}
+                  {isExpanded && (
+                    <div className="px-4 pb-4 pt-0 border-t border-[var(--color-border)]/30 mt-0">
+                      {/* 选项回顾 */}
+                      {item.options?.length > 0 && (
+                        <div className="mt-3 space-y-1.5">
+                          {item.options.map((opt) => (
+                            <div key={opt.letter}
+                              className={`flex items-start gap-2 p-2 rounded-lg text-xs ${
+                                opt.is_correct
+                                  ? "bg-green-500/10 text-green-600"
+                                  : "bg-[var(--color-bg)] text-[var(--color-text-muted)]"
+                              }`}>
+                              <span className="flex-shrink-0 font-medium">{opt.letter}.</span>
+                              <span>{opt.text}</span>
+                              {opt.is_correct && <CheckCircle size={10} className="flex-shrink-0 mt-0.5" />}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* 解析 */}
+                      {item.analysis && (
+                        <div className="mt-3 p-3 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)]/30">
+                          <p className="text-[10px] font-medium text-[var(--color-text-muted)] mb-1">解析</p>
+                          <p className="text-xs text-[var(--color-text)] leading-relaxed">{item.analysis}</p>
+                        </div>
+                      )}
+
+                      {/* 统计信息 */}
+                      <div className="flex items-center gap-4 mt-3 text-[10px] text-[var(--color-text-muted)]">
+                        <span>难度: {item.difficulty}/5</span>
+                        <span>总尝试: {item.total_attempts}次</span>
+                        <span>错误率: {item.wrong_rate}%</span>
+                        {item.last_wrong && <span>最近错误: {item.last_wrong.slice(0, 10)}</span>}
+                      </div>
                     </div>
                   )}
-
-                  {/* ── Actions ── */}
-                  <div className="flex items-center gap-3">
-                    {!entry.is_resolved && (
-                      <button
-                        onClick={() => markResolved(entry.entry_id)}
-                        className="flex items-center gap-1.5 text-xs text-[var(--color-success)] hover:underline"
-                      >
-                        <CheckCircle size={12} />
-                        已掌握
-                      </button>
-                    )}
-
-                    {/* Analyze button */}
-                    {!attr && !entry.is_resolved && (
-                      <button
-                        onClick={() => analyzeError(entry.entry_id)}
-                        disabled={analyzing === entry.entry_id}
-                        className="flex items-center gap-1.5 text-xs text-[var(--color-accent)] hover:underline"
-                      >
-                        {analyzing === entry.entry_id ? (
-                          <Loader2 size={12} className="animate-spin" />
-                        ) : (
-                          <Brain size={12} />
-                        )}
-                        AI 分析错因
-                      </button>
-                    )}
-
-                    {/* Expand/collapse */}
-                    {attr && (
-                      <button
-                        onClick={() => setExpandedId(isExpanded ? null : entry.entry_id)}
-                        className="flex items-center gap-1 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
-                      >
-                        {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                        {isExpanded ? "收起分析" : "展开分析"}
-                      </button>
-                    )}
-                  </div>
-                </Card>
+                </div>
               );
             })}
+          </div>
+        )}
+
+        {/* 分页 */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 mt-6">
+            <button
+              onClick={() => setPage(Math.max(1, page - 1))}
+              disabled={page <= 1}
+              className="p-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]/60 disabled:opacity-30"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPage(p)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  p === page
+                    ? "bg-[var(--color-accent)] text-white"
+                    : "bg-[var(--color-surface)] border border-[var(--color-border)]/60 text-[var(--color-text-muted)]"
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+            <button
+              onClick={() => setPage(Math.min(totalPages, page + 1))}
+              disabled={page >= totalPages}
+              className="p-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]/60 disabled:opacity-30"
+            >
+              <ChevronRight size={14} />
+            </button>
           </div>
         )}
       </div>

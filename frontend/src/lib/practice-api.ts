@@ -237,6 +237,73 @@ export async function getWeakSkills(): Promise<{ skill_id: string; label: string
   return v7fetch("/stats/weak-skills");
 }
 
+// ── 错题本 ──
+
+export interface ErrorBookItem {
+  question_id: string;
+  bank_id: string;
+  stem: string;
+  options: V7Option[];
+  question_type: string;
+  difficulty: number;
+  cognitive_node_ids: string[];
+  analysis: string;
+  total_attempts: number;
+  wrong_count: number;
+  wrong_rate: number;
+  mastered: boolean;
+  last_wrong: string | null;
+  last_done: string | null;
+}
+
+export interface ErrorBookResult {
+  items: ErrorBookItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface ErrorBookStats {
+  unique_wrong_questions: number;
+  total_wrong_attempts: number;
+  mastered_from_errors: number;
+  still_weak: number;
+  related_nodes: number;
+}
+
+/** 获取错题本 */
+export async function getErrorBook(options?: {
+  bank_id?: string;
+  cognitive_node_id?: string;
+  min_wrongs?: number;
+  sort_by?: string;
+  page?: number;
+  page_size?: number;
+}): Promise<ErrorBookResult> {
+  const params = new URLSearchParams();
+  if (options?.bank_id) params.set("bank_id", options.bank_id);
+  if (options?.cognitive_node_id) params.set("cognitive_node_id", options.cognitive_node_id);
+  if (options?.min_wrongs) params.set("min_wrongs", String(options.min_wrongs));
+  if (options?.sort_by) params.set("sort_by", options.sort_by);
+  if (options?.page) params.set("page", String(options.page));
+  if (options?.page_size) params.set("page_size", String(options.page_size));
+  const qs = params.toString();
+  return v7fetch(`/error-book${qs ? `?${qs}` : ""}`);
+}
+
+/** 获取错题本概览 */
+export async function getErrorBookStats(): Promise<ErrorBookStats> {
+  return v7fetch("/error-book/stats");
+}
+
+/** 清除已掌握错题 */
+export async function clearMasteredErrors(): Promise<{ cleared: number; message: string }> {
+  return v7fetch("/error-book/clear-mastered", { method: "POST" });
+}
+
+// ── 复习调度 ──
+
 export interface DueQuestion {
   question: V7Question;
   due: boolean;

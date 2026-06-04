@@ -37,6 +37,9 @@ from app.services.practice_stats import (
     get_overview, get_daily_trend, get_session_history,
     get_error_distribution, get_weak_skills,
 )
+from app.services.practice_error_book import (
+    get_error_book, get_error_session_stats, clear_mastered_errors,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v7/practice", tags=["v7题库"])
@@ -416,6 +419,45 @@ async def api_stats_weak_skills(user_id: str = DEFAULT_USER_ID):
     """薄弱知识点"""
     _ensure_tables()
     return get_weak_skills(user_id)
+
+
+# ═══════════════════════════════════════════════
+# 错题本
+# ═══════════════════════════════════════════════
+
+
+@router.get("/error-book")
+async def api_error_book(
+    user_id: str = DEFAULT_USER_ID,
+    bank_id: Optional[str] = None,
+    cognitive_node_id: Optional[str] = None,
+    min_wrongs: int = 1,
+    sort_by: str = "wrongs_desc",
+    page: int = 1,
+    page_size: int = 20,
+):
+    """错题本列表"""
+    _ensure_tables()
+    return get_error_book(
+        user_id=user_id, bank_id=bank_id,
+        cognitive_node_id=cognitive_node_id,
+        min_wrongs=min_wrongs, sort_by=sort_by,
+        page=page, page_size=min(page_size, 100),
+    )
+
+
+@router.get("/error-book/stats")
+async def api_error_book_stats(user_id: str = DEFAULT_USER_ID):
+    """错题本概览"""
+    _ensure_tables()
+    return get_error_session_stats(user_id)
+
+
+@router.post("/error-book/clear-mastered")
+async def api_clear_mastered(user_id: str = DEFAULT_USER_ID):
+    """清除已掌握的错题记录"""
+    _ensure_tables()
+    return clear_mastered_errors(user_id)
 
 
 # ═══════════════════════════════════════════════
