@@ -24,6 +24,9 @@ from app.services.practice_question_bank import (
     _ensure_tables, list_banks, get_bank, create_bank, delete_bank,
     list_questions, get_question, resolve_bank_for_conversation, resolve_bank_for_node,
 )
+from app.services.practice_question_gen import (
+    generate_and_save, handle_question_generation, generate_for_conversation,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v7/practice", tags=["v7题库"])
@@ -204,6 +207,53 @@ async def api_resolve_node(body: dict, user_id: str = DEFAULT_USER_ID):
     bank_id = resolve_bank_for_node(node_id, user_id)
     bank = get_bank(bank_id, user_id)
     return {"bank_id": bank_id, "bank": bank}
+
+
+# ═══════════════════════════════════════════════
+# AI 出题
+# ═══════════════════════════════════════════════
+
+
+@router.post("/generate")
+async def api_generate(body: dict, user_id: str = DEFAULT_USER_ID):
+    """AI 出题（自然语言指定参数）"""
+    _ensure_tables()
+    user_message = body.get("message", "").strip()
+    if not user_message:
+        raise HTTPException(400, "请描述你想练习什么内容")
+    bank_id = body.get("bank_id")
+    conversation_id = body.get("conversation_id")
+    node_id = body.get("node_id")
+
+    result = await handle_question_generation(
+        user_message=user_message,
+        user_id=user_id,
+        bank_id=bank_id,
+        conversation_id=conversation_id,
+        node_id=node_id,
+    )
+    return result
+
+
+@router.post("/generate-from-conversation")
+async def api_generate_from_conversation(body: dict, user_id: str = DEFAULT_USER_ID):
+    """对话场景出题：自动识别对话内容并生成题目"""
+    _ensure_tables()
+    conversation_id = body.get("conversation_id", "")
+    if not conversation_id:
+        raise HTTPException(400, "conversation_id 不能为空")
+    user_message = body.get("message", "").strip()
+    if not user_message:
+        raise HTTPException(400, "请描述你想练习什么内容")
+    context = body.get("context")  # 可选：最近几条对话消息
+
+    result = await generate_for_conversation(
+        conversation_id=conversation_id,
+        user_message=user_message,
+        user_id=user_id,
+        conversation_context=context,
+    )
+    return result
 
 
 # ═══════════════════════════════════════════════
