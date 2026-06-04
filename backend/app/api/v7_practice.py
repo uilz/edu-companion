@@ -232,7 +232,11 @@ async def api_resolve_node(body: dict, user_id: str = DEFAULT_USER_ID):
 
 @router.post("/generate")
 async def api_generate(body: dict, user_id: str = DEFAULT_USER_ID):
-    """AI 出题（自然语言指定参数）"""
+    """AI 出题（自然语言指定参数）
+
+    可选参数：
+    - material_ids: list[str] — 指定参考已上传的资料出题
+    """
     _ensure_tables()
     user_message = body.get("message", "").strip()
     if not user_message:
@@ -240,6 +244,7 @@ async def api_generate(body: dict, user_id: str = DEFAULT_USER_ID):
     bank_id = body.get("bank_id")
     conversation_id = body.get("conversation_id")
     node_id = body.get("node_id")
+    material_ids = body.get("material_ids")
 
     result = await handle_question_generation(
         user_message=user_message,
@@ -247,8 +252,65 @@ async def api_generate(body: dict, user_id: str = DEFAULT_USER_ID):
         bank_id=bank_id,
         conversation_id=conversation_id,
         node_id=node_id,
+        material_ids=material_ids,
     )
     return result
+
+
+@router.post("/generate-from-materials")
+async def api_generate_from_materials(body: dict, user_id: str = DEFAULT_USER_ID):
+    """基于指定资料出题（显式参数，不通过自然语言提取）"""
+    _ensure_tables()
+    material_ids = body.get("material_ids", [])
+    if not material_ids:
+        raise HTTPException(400, "请指定至少一个资料")
+
+    subject = body.get("subject", "通用")
+    skill_id = body.get("skill_id", subject)
+    bloom_level = body.get("bloom_level", "apply")
+    difficulty = float(body.get("difficulty", 0.5))
+    count = max(1, min(10, int(body.get("count", 5))))
+    content_type = body.get("content_type", "choice")
+    bank_id = body.get("bank_id")
+
+    # 确定题库归属
+    if not bank_id:
+        bank_id = resolve_bank_for_conversation(f"materials_{hash(str(material_ids))}", user_id)
+
+    # 获取参考资料上下文
+    from app.services.practice_question_gen import get_material_context
+    material_context = await get_material_context(material_ids, user_id)
+
+    # 生成并保存
+    saved = await generate_and_save(
+        bank_id=bank_id,
+        user_id=user_id,
+        subject=subject,
+        skill_id=skill_id,
+        bloom_level=bloom_level,
+        difficulty=difficulty,
+        count=count,
+        content_type=content_type,
+        material_context=material_context,
+    )
+
+    bank = get_bank(bank_id, user_id)
+    return {
+        "bank_id": bank_id,
+        "bank_name": bank["name"] if bank else "",
+        "generated": len(saved),
+        "questions": saved,
+        "has_material_context": material_context is not None,
+        "material_count": len(material_ids),
+        "params": {
+            "subject": subject,
+            "skill_id": skill_id,
+            "bloom_level": bloom_level,
+            "difficulty": difficulty,
+            "count": count,
+            "content_type": content_type,
+        },
+    }
 
 
 @router.post("/generate-from-conversation")
@@ -268,6 +330,7 @@ async def api_generate_from_conversation(body: dict, user_id: str = DEFAULT_USER
         user_message=user_message,
         user_id=user_id,
         conversation_context=context,
+        material_ids=body.get("material_ids"),
     )
     return result
 

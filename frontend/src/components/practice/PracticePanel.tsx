@@ -16,6 +16,7 @@ import {
   type V7Session,
   type V7Question,
   type V7SubmitResult,
+  type MaterialItem,
 } from "@/lib/practice-api";
 import ReferencePanel from "./ReferencePanel";
 
@@ -38,6 +39,9 @@ export default function PracticePanel({ nodeId, nodeLabel, onClose }: Props) {
   const [mode, setMode] = useState<"adaptive" | "review" | "challenge">("adaptive");
   const [count, setCount] = useState(5);
   const [questionStart, setQuestionStart] = useState(0);
+
+  // 参考资料出题 — 选择的资料 ID 列表
+  const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([]);
 
   // 统计（在 summary 中展示）
   const [results, setResults] = useState<V7SubmitResult[]>([]);
@@ -80,7 +84,11 @@ export default function PracticePanel({ nodeId, nodeLabel, onClose }: Props) {
         try {
           const genResult = await generateQuestions(
             `关于${nodeLabel || "当前知识点"}的练习题`,
-            { bank_id: bankId, node_id: nodeId }
+            {
+              bank_id: bankId,
+              node_id: nodeId,
+              material_ids: selectedMaterialIds.length > 0 ? selectedMaterialIds : undefined,
+            }
           );
           if (genResult.generated > 0) {
             const sess2 = await createPracticeSession(bankId, {
@@ -105,7 +113,7 @@ export default function PracticePanel({ nodeId, nodeLabel, onClose }: Props) {
       setPhase("error");
       setError(e?.message || "创建练习失败，请检查后端服务");
     }
-  }, [nodeId, nodeLabel, mode, count]);
+  }, [nodeId, nodeLabel, mode, count, selectedMaterialIds]);
 
   // ── 选择答案 ──
   const toggleAnswer = useCallback((letter: string) => {
@@ -208,7 +216,8 @@ export default function PracticePanel({ nodeId, nodeLabel, onClose }: Props) {
 
   // ── 题号渲染 ──
   if (phase === "idle") {
-    return <IdleScreen mode={mode} setMode={setMode} count={count} setCount={setCount} onStart={handleStart} nodeLabel={nodeLabel} />;
+    return <IdleScreen mode={mode} setMode={setMode} count={count} setCount={setCount} onStart={handleStart} nodeLabel={nodeLabel}
+      selectedMaterialIds={selectedMaterialIds} setSelectedMaterialIds={setSelectedMaterialIds} />;
   }
 
   if (phase === "loading") {
@@ -390,18 +399,49 @@ export default function PracticePanel({ nodeId, nodeLabel, onClose }: Props) {
 
 function IdleScreen({
   mode, setMode, count, setCount, onStart, nodeLabel,
+  selectedMaterialIds, setSelectedMaterialIds,
 }: {
   mode: string; setMode: (m: "adaptive" | "review" | "challenge") => void;
   count: number; setCount: (n: number) => void;
   onStart: () => void; nodeLabel?: string;
+  selectedMaterialIds: string[]; setSelectedMaterialIds: (ids: string[]) => void;
 }) {
   const [reviewStats, setReviewStats] = useState<{ due_now: number; mastered: number; not_mastered: number } | null>(null);
+  const [materials, setMaterials] = useState<MaterialItem[]>([]);
+  const [showMaterialPicker, setShowMaterialPicker] = useState(false);
+  const [loadingMaterials, setLoadingMaterials] = useState(false);
 
   useEffect(() => {
     import("@/lib/practice-api").then(({ getReviewStats }) => {
       getReviewStats().then(setReviewStats).catch(() => {});
     });
   }, []);
+
+  // 加载用户的资料列表（初次显示或展开选择器时）
+  useEffect(() => {
+    if (showMaterialPicker && materials.length === 0) {
+      setLoadingMaterials(true);
+      import("@/lib/practice-api").then(({ listMaterials }) => {
+        listMaterials({ purpose: "library", status: "indexed", page_size: 50 })
+          .then((res) => setMaterials(res.items || []))
+          .catch(() => {})
+          .finally(() => setLoadingMaterials(false));
+      });
+    }
+  }, [showMaterialPicker, materials.length]);
+
+  const toggleMaterial = (id: string) => {
+    if (selectedMaterialIds.includes(id)) {
+      setSelectedMaterialIds(selectedMaterialIds.filter((x) => x !== id));
+    } else {
+      setSelectedMaterialIds([...selectedMaterialIds, id]);
+    }
+  };
+
+  const clearMaterials = () => {
+    setSelectedMaterialIds([]);
+    setShowMaterialPicker(false);
+  };
 
   return (
     <div className="flex flex-col items-center justify-center h-full px-6 py-8">
@@ -429,6 +469,107 @@ function IdleScreen({
             <span>·</span>
             <span>待掌握 {reviewStats.not_mastered}</span>
           </div>
+        </div>
+      )}
+
+      {/* 参考资料选择 */}
+      <div className="w-full mb-3">
+        <button
+          onClick={() => setShowMaterialPicker(!showMaterialPicker)}
+          className={`w-full flex items-center gap-2 p-2.5 rounded-lg border text-left transition-all ${
+            selectedMaterialIds.length > 0
+              ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10"
+              : "border-[var(--color-border)]/50 bg-[var(--color-surface)] hover:border-[var(--color-accent)]/30"
+          }`}
+        >
+          <BookOpen size={14} className={selectedMaterialIds.length > 0 ? "text-[var(--color-accent)]" : "text-[var(--color-text-muted)]"} />
+          <span className={`text-[11px] font-medium ${selectedMaterialIds.length > 0 ? "text-[var(--color-accent)]" : "text-[var(--color-text)]"}`}>
+            {selectedMaterialIds.length > 0
+              ? `参考资料 (${selectedMaterialIds.length} 份已选)`
+              : "参考资料（可选）"}
+          </span>
+          <span className="ml-auto text-[10px] text-[var(--color-text-muted)]">
+            {showMaterialPicker ? "收起" : "展开"}
+          </span>
+        </button>
+
+        {/* 资料选择面板 */}
+        {showMaterialPicker && (
+          <div className="mt-2 p-3 rounded-lg border border-[var(--color-border)]/50 bg-[var(--color-surface)] max-h-[200px] overflow-y-auto">
+            {loadingMaterials ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 size={14} className="animate-spin text-[var(--color-text-muted)]" />
+                <span className="ml-2 text-[10px] text-[var(--color-text-muted)]">加载资料中...</span>
+              </div>
+            ) : materials.length === 0 ? (
+              <div className="text-center py-4">
+                <p className="text-[10px] text-[var(--color-text-muted)] mb-2">暂无已索引的资料</p>
+                <p className="text-[9px] text-[var(--color-text-muted)]">请先上传文件到知识库</p>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {materials.map((m) => {
+                  const selected = selectedMaterialIds.includes(m.material_id);
+                  return (
+                    <label
+                      key={m.material_id}
+                      className={`flex items-center gap-2.5 p-2 rounded-md cursor-pointer transition-colors ${
+                        selected ? "bg-[var(--color-accent)]/10" : "hover:bg-[var(--color-bg)]"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => toggleMaterial(m.material_id)}
+                        className="accent-[var(--color-accent)]"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] text-[var(--color-text)] truncate">{m.file_name}</p>
+                        <p className="text-[9px] text-[var(--color-text-muted)]">
+                          {m.file_type} · {(m.file_size / 1024).toFixed(0)}KB · {m.chunk_count} 分块
+                        </p>
+                      </div>
+                      {selected && (
+                        <span className="text-[9px] text-[var(--color-accent)] font-medium">已选</span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* 操作按钮 */}
+            {selectedMaterialIds.length > 0 && (
+              <div className="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-[var(--color-border)]/30">
+                <button
+                  onClick={clearMaterials}
+                  className="text-[10px] text-[var(--color-text-muted)] hover:text-red-500 transition-colors"
+                >
+                  清空选择
+                </button>
+                <span className="text-[10px] text-[var(--color-text-muted)]">
+                  已选 {selectedMaterialIds.length} 份
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 已选资料标签（折叠时展示） */}
+      {selectedMaterialIds.length > 0 && !showMaterialPicker && (
+        <div className="w-full mb-3 flex flex-wrap gap-1.5">
+          {materials
+            .filter((m) => selectedMaterialIds.includes(m.material_id))
+            .map((m) => (
+              <span
+                key={m.material_id}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--color-accent)]/10 text-[9px] text-[var(--color-accent)] border border-[var(--color-accent)]/30"
+              >
+                <BookOpen size={8} />
+                {m.file_name.slice(0, 20)}{m.file_name.length > 20 ? "…" : ""}
+              </span>
+            ))}
         </div>
       )}
 
@@ -482,7 +623,8 @@ function IdleScreen({
         onClick={onStart}
         className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity"
       >
-        <Play size={14} />开始练习
+        <Play size={14} />
+        {selectedMaterialIds.length > 0 ? "基于资料出题" : "开始练习"}
       </button>
 
       <p className="mt-3 text-[9px] text-[var(--color-text-muted)]">支持键盘操作：1-4 选答案 · Enter 提交/下一题</p>

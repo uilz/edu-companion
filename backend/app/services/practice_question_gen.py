@@ -137,6 +137,49 @@ async def generate_and_save(
     return saved
 
 
+async def get_material_context(
+    material_ids: list[str] | None,
+    user_id: str = DEFAULT_USER_ID,
+    max_chunks: int = 10,
+) -> str | None:
+    """从已上传资料中检索内容块，拼接为出题上下文字符串。
+
+    流程：
+    1. 按 material_ids 从 material_chunks 表拉取文本
+    2. 拼接为 ``--- 资料：文件名\n内容`` 格式
+    3. 截断最多 max_chunks 个块
+    """
+    if not material_ids:
+        return None
+
+    from app.db.database import get_db
+    db = get_db()
+
+    placeholders = ",".join(["%s"] * len(material_ids))
+    rows = db.fetchall(
+        f"""SELECT mc.text, mc.material_id, m.file_name as material_name
+            FROM material_chunks mc
+            JOIN materials m ON mc.material_id = m.material_id
+            WHERE mc.material_id IN ({placeholders})
+              AND mc.user_id = %s
+              AND m.status = 'indexed'
+            ORDER BY mc.chunk_index
+            LIMIT %s""",
+        tuple(material_ids) + (user_id, max_chunks),
+    )
+
+    if not rows:
+        return None
+
+    parts = []
+    for r in rows:
+        text = (r["text"] or "")[:2000]
+        name = r.get("material_name", "未知资料")
+        parts.append(f"--- 资料：{name}\n{text}")
+
+    return "\n\n".join(parts)
+
+
 async def handle_question_generation(
     user_message: str,
     user_id: str = DEFAULT_USER_ID,
@@ -144,6 +187,7 @@ async def handle_question_generation(
     conversation_id: Optional[str] = None,
     node_id: Optional[str] = None,
     conversation_context: Optional[list[dict]] = None,
+    material_ids: Optional[list[str]] = None,
 ) -> dict:
     """
     高阶入口：自然语言 → 意图提取 → 出题 → 自动归属 → 返回结果。
@@ -152,6 +196,9 @@ async def handle_question_generation(
     1. bank_id 明确指定
     2. conversation_id 自动解析
     3. node_id 自动解析
+
+    支持指定参考资料出题（material_ids）：
+    从已上传资料中提取内容块，注入到 AI 出题的 material_context 中。
     """
     _ensure_tables()
 
@@ -175,16 +222,18 @@ async def handle_question_generation(
     if not resolved_bank_id:
         resolved_bank_id = resolve_bank_for_conversation("", user_id)  # 回退到默认题库
 
-    # 3. 获取 subject 上下文 — 从题库关联的认知节点
+    # 3. 获取 subject 上下文 — 从题库关联的认知节点（增强出题）
     bank_info = get_bank(resolved_bank_id, user_id)
-    if bank_info and bank_info.get("ref_node_id"):
-        from app.cognitive.storage import get_node
-        node = get_node(bank_info["ref_node_id"], user_id)
-        if node and node.label:
-            # 用知识点标签来增强出题质量
-            pass
 
-    # 4. 生成并保存
+    # 4. 获取参考资料上下文（新增）
+    material_context = None
+    if material_ids or (bank_info and bank_info.get("ref_material_ids")):
+        ids = material_ids or (bank_info.get("ref_material_ids") or [])
+        material_context = await get_material_context(ids, user_id)
+        if material_context:
+            logger.info("注入参考资料上下文: %d 个资料, %d 字符", len(ids), len(material_context))
+
+    # 5. 生成并保存（注入 material_context）
     saved = await generate_and_save(
         bank_id=resolved_bank_id,
         user_id=user_id,
@@ -194,16 +243,18 @@ async def handle_question_generation(
         difficulty=difficulty,
         count=count,
         content_type=content_type,
+        material_context=material_context,
         cognitive_node_ids=[skill_id] if skill_id and skill_id != subject else None,
     )
 
-    # 5. 返回友好结果
+    # 6. 返回友好结果
     bank = get_bank(resolved_bank_id, user_id)
     return {
         "bank_id": resolved_bank_id,
         "bank_name": bank["name"] if bank else "",
         "generated": len(saved),
         "questions": saved,
+        "has_material_context": material_context is not None,
         "params": {
             "subject": subject,
             "skill_id": skill_id,
@@ -220,6 +271,7 @@ async def generate_for_conversation(
     user_message: str,
     user_id: str = DEFAULT_USER_ID,
     conversation_context: Optional[list[dict]] = None,
+    material_ids: Optional[list[str]] = None,
 ) -> dict:
     """对话场景下出题：自动解析对话 → 归属题库 → 生成"""
     bank_id = resolve_bank_for_conversation(conversation_id, user_id)
@@ -229,6 +281,7 @@ async def generate_for_conversation(
         bank_id=bank_id,
         conversation_id=conversation_id,
         conversation_context=conversation_context,
+        material_ids=material_ids,
     )
 
 

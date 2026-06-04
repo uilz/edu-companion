@@ -171,15 +171,23 @@ export async function listSessions(options?: {
   return v7fetch(`/sessions${qs ? `?${qs}` : ""}`);
 }
 
-/** AI 出题 */
+/** AI 出题（支持指定参考资料） */
 export async function generateQuestions(
   message: string,
   options?: {
     bank_id?: string;
     conversation_id?: string;
     node_id?: string;
+    material_ids?: string[];
   }
-): Promise<{ bank_id: string; bank_name: string; generated: number; questions: V7Question[]; params: any }> {
+): Promise<{
+  bank_id: string;
+  bank_name: string;
+  generated: number;
+  questions: V7Question[];
+  has_material_context?: boolean;
+  params: any;
+}> {
   return v7fetch("/generate", {
     method: "POST",
     body: JSON.stringify({
@@ -187,6 +195,80 @@ export async function generateQuestions(
       ...options,
     }),
   });
+}
+
+/** 基于指定资料出题（显式参数） */
+export async function generateFromMaterials(
+  materialIds: string[],
+  options?: {
+    subject?: string;
+    skill_id?: string;
+    bloom_level?: string;
+    difficulty?: number;
+    count?: number;
+    content_type?: string;
+    bank_id?: string;
+  }
+): Promise<{
+  bank_id: string;
+  bank_name: string;
+  generated: number;
+  questions: V7Question[];
+  has_material_context: boolean;
+  material_count: number;
+  params: any;
+}> {
+  return v7fetch("/generate-from-materials", {
+    method: "POST",
+    body: JSON.stringify({
+      material_ids: materialIds,
+      ...options,
+    }),
+  });
+}
+
+// ── 资料 ──
+
+export interface MaterialItem {
+  material_id: string;
+  file_name: string;
+  file_type: string;
+  file_size: number;
+  purpose: string;
+  status: string;
+  chunk_count: number;
+  skills: string[];
+  created_at: string;
+  indexed_at: string | null;
+}
+
+export interface MaterialListResult {
+  total: number;
+  page: number;
+  page_size: number;
+  items: MaterialItem[];
+}
+
+/** 获取已上传资料列表 */
+export async function listMaterials(
+  options?: {
+    purpose?: string;
+    status?: string;
+    search?: string;
+    page?: number;
+    page_size?: number;
+  }
+): Promise<MaterialListResult> {
+  const params = new URLSearchParams();
+  if (options?.purpose) params.set("purpose", options.purpose);
+  if (options?.status) params.set("status", options.status);
+  if (options?.search) params.set("search", options.search);
+  if (options?.page) params.set("page", String(options.page));
+  if (options?.page_size) params.set("page_size", String(options.page_size));
+  const qs = params.toString();
+  const res = await fetch(`/api/files${qs ? `?${qs}` : ""}`);
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json();
 }
 
 /** 获取题库列表 */
