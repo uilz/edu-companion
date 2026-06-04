@@ -193,3 +193,48 @@ export async function generateQuestions(
 export async function listBanks(): Promise<V7Bank[]> {
   return v7fetch("/banks");
 }
+
+// ── 复习调度 ──
+
+export interface DueQuestion {
+  question: V7Question;
+  due: boolean;
+  days_overdue: number;
+  days_until_next_review: number;
+  priority_score: number;
+  consecutive_correct: number;
+  wrong_count: number;
+  mastered: boolean;
+  ef: number;
+  interval_days: number;
+}
+
+export interface ReviewStats {
+  total_questions_reviewed: number;
+  due_now: number;
+  mastered: number;
+  not_mastered: number;
+  due_in_1d: number;
+  due_in_7d: number;
+  average_ef: number;
+}
+
+/** 获取到期望习题 */
+export async function getDueQuestions(options?: {
+  bank_id?: string;
+  cognitive_node_id?: string;
+  limit?: number;
+}): Promise<DueQuestion[]> {
+  const params = new URLSearchParams();
+  if (options?.bank_id) params.set("bank_id", options.bank_id);
+  if (options?.cognitive_node_id) params.set("cognitive_node_id", options.cognitive_node_id);
+  if (options?.limit) params.set("limit", String(options.limit));
+  const qs = params.toString();
+  return v7fetch(`/review/due${qs ? `?${qs}` : ""}`);
+}
+
+/** 获取复习统计 */
+export async function getReviewStats(options?: { bank_id?: string }): Promise<ReviewStats> {
+  const qs = options?.bank_id ? `?bank_id=${options.bank_id}` : "";
+  return v7fetch(`/review/stats${qs}`);
+}

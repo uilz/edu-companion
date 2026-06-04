@@ -30,6 +30,9 @@ from app.services.practice_question_gen import (
 from app.services.practice_session import (
     create_session, get_session, submit_answer, complete_session, list_sessions,
 )
+from app.services.practice_scheduler import (
+    get_due_questions, get_review_stats,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v7/practice", tags=["v7题库"])
@@ -337,6 +340,38 @@ async def api_complete_session(session_id: str, user_id: str = DEFAULT_USER_ID):
     if not result:
         raise HTTPException(404, "会话不存在")
     return result
+
+
+# ═══════════════════════════════════════════════
+# 复习调度
+# ═══════════════════════════════════════════════
+
+
+@router.get("/review/due")
+async def api_review_due(
+    user_id: str = DEFAULT_USER_ID,
+    bank_id: Optional[str] = None,
+    cognitive_node_id: Optional[str] = None,
+    limit: int = 20,
+):
+    """获取到期望习题"""
+    _ensure_tables()
+    return get_due_questions(
+        user_id=user_id,
+        bank_id=bank_id,
+        cognitive_node_id=cognitive_node_id,
+        limit=min(limit, 100),
+    )
+
+
+@router.get("/review/stats")
+async def api_review_stats(
+    user_id: str = DEFAULT_USER_ID,
+    bank_id: Optional[str] = None,
+):
+    """复习统计概览"""
+    _ensure_tables()
+    return get_review_stats(user_id=user_id, bank_id=bank_id)
 
 
 # ═══════════════════════════════════════════════

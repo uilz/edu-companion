@@ -384,6 +384,14 @@ function IdleScreen({
   count: number; setCount: (n: number) => void;
   onStart: () => void; nodeLabel?: string;
 }) {
+  const [reviewStats, setReviewStats] = useState<{ due_now: number; mastered: number; not_mastered: number } | null>(null);
+
+  useEffect(() => {
+    import("@/lib/practice-api").then(({ getReviewStats }) => {
+      getReviewStats().then(setReviewStats).catch(() => {});
+    });
+  }, []);
+
   return (
     <div className="flex flex-col items-center justify-center h-full px-6 py-8">
       <div className="w-12 h-12 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center mb-4">
@@ -395,6 +403,23 @@ function IdleScreen({
       <p className="text-[11px] text-[var(--color-text-muted)] text-center mb-6 leading-relaxed">
         自适应出题 · 实时判题 · 知识点联动
       </p>
+
+      {/* 复习概览 */}
+      {reviewStats && reviewStats.due_now > 0 && (
+        <div className="w-full mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+          <div className="flex items-center gap-2">
+            <RotateCcw size={14} className="text-amber-500" />
+            <span className="text-[12px] font-medium text-amber-600">待复习</span>
+            <span className="ml-auto text-lg font-bold text-amber-500">{reviewStats.due_now}</span>
+            <span className="text-[10px] text-amber-500/70">题到期</span>
+          </div>
+          <div className="flex items-center gap-3 mt-1.5 text-[10px] text-[var(--color-text-muted)]">
+            <span>已掌握 {reviewStats.mastered}</span>
+            <span>·</span>
+            <span>待掌握 {reviewStats.not_mastered}</span>
+          </div>
+        </div>
+      )}
 
       {/* 模式选择 */}
       <div className="w-full mb-4">
