@@ -482,3 +482,134 @@ export async function getReviewStats(options?: { bank_id?: string }): Promise<Re
   const qs = options?.bank_id ? `?bank_id=${options.bank_id}` : "";
   return v7fetch(`/review/stats${qs}`);
 }
+
+// ── 考试模式 ──
+
+export interface ExamConfig {
+  mode: string;
+  duration_minutes: number;
+  deadline: string;
+  question_count: number;
+}
+
+export interface ExamQuestion {
+  id: string;
+  sort_order: number;
+  stem: string;
+  options: V7Option[];
+  question_type: string;
+  difficulty: number;
+  cognitive_node_ids: string[];
+  answered: boolean;
+  is_correct: boolean | null;
+}
+
+export interface ExamResult {
+  session_id: string;
+  status: string;
+  user_id: string;
+  score: number;
+  grade: string;
+  grade_color: string;
+  stats: {
+    total: number;
+    answered: number;
+    correct: number;
+    wrong: number;
+    unanswered: number;
+    score: number;
+    duration: number;
+    finished_at: string;
+  };
+  type_stats: Record<string, { total: number; correct: number; wrong: number }>;
+  question_results: ExamQuestionResult[];
+}
+
+export interface ExamQuestionResult {
+  sort_order: number;
+  question_id: string;
+  stem: string;
+  question_type: string;
+  user_answer: string[];
+  correct_answer: string[];
+  is_correct: boolean;
+  analysis: string;
+  time_spent: number;
+}
+
+export interface ExamTimeInfo {
+  valid: boolean;
+  status: string;
+  remaining_seconds: number;
+  elapsed_seconds?: number;
+  deadline?: string;
+  auto_submitted?: boolean;
+  message?: string;
+  error?: string;
+}
+
+export interface AnswerSheetItem {
+  index: number;
+  question_id: string;
+  answered: boolean;
+  is_correct: boolean | null;
+}
+
+export interface AnswerSheetResult {
+  session_id: string;
+  total: number;
+  answered: number;
+  unanswered: number;
+  items: AnswerSheetItem[];
+}
+
+/** 创建考试 */
+export async function createExam(
+  bankId: string,
+  options?: {
+    count?: number;
+    duration_minutes?: number;
+    cognitive_node_ids?: string[];
+    config?: Record<string, any>;
+  }
+): Promise<{
+  session_id: string;
+  bank_id: string;
+  mode: string;
+  session_type: string;
+  status: string;
+  total_count: number;
+  questions: ExamQuestion[];
+  config: ExamConfig;
+  deadline: string;
+  duration_minutes: number;
+  created_at: string;
+}> {
+  return v7fetch("/exam", {
+    method: "POST",
+    body: JSON.stringify({
+      bank_id: bankId,
+      ...options,
+    }),
+  });
+}
+
+/** 获取考试剩余时间 */
+export async function getExamTime(sessionId: string): Promise<ExamTimeInfo> {
+  return v7fetch(`/exam/${sessionId}/time`);
+}
+
+/** 提交考试所有答案 */
+export async function submitAllExam(sessionId: string): Promise<ExamResult> {
+  return v7fetch(`/exam/${sessionId}/submit-all`, { method: "POST" });
+}
+
+/** 获取考试成绩报告 */
+export async function getExamResult(sessionId: string): Promise<ExamResult> {
+  return v7fetch(`/exam/${sessionId}/result`);
+}
+
+/** 获取答题卡状态 */
+export async function getExamAnswerSheet(sessionId: string): Promise<AnswerSheetResult> {
+  return v7fetch(`/exam/${sessionId}/answer-sheet`);
+}

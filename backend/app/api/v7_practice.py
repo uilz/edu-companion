@@ -527,6 +527,64 @@ async def api_clear_mastered(user_id: str = DEFAULT_USER_ID):
 
 
 # ═══════════════════════════════════════════════
+# 考试模式
+# ═══════════════════════════════════════════════
+
+
+@router.post("/exam")
+async def api_create_exam(body: dict, user_id: str = DEFAULT_USER_ID):
+    """创建考试（全功能模式：计时+答题卡+自动交卷+成绩报告）"""
+    _ensure_tables()
+    bank_id = body.get("bank_id", "")
+    if not bank_id:
+        raise HTTPException(400, "bank_id 不能为空")
+    count = max(5, min(100, int(body.get("count", 20))))
+    duration = max(5, min(180, int(body.get("duration_minutes", 60))))
+    from app.services.practice_exam import create_exam
+    result = create_exam(
+        user_id=user_id,
+        bank_id=bank_id,
+        count=count,
+        duration_minutes=duration,
+        config=body.get("config"),
+        cognitive_node_ids=body.get("cognitive_node_ids"),
+    )
+    return result
+
+
+@router.get("/exam/{session_id}/time")
+async def api_exam_time(session_id: str, user_id: str = DEFAULT_USER_ID):
+    """获取考试剩余时间"""
+    from app.services.practice_exam import get_exam_time
+    return get_exam_time(session_id, user_id)
+
+
+@router.post("/exam/{session_id}/submit-all")
+async def api_exam_submit_all(session_id: str, user_id: str = DEFAULT_USER_ID):
+    """提交考试所有答案，生成成绩报告"""
+    _ensure_tables()
+    from app.services.practice_exam import submit_all_exam
+    result = submit_all_exam(session_id, user_id)
+    if "error" in result:
+        raise HTTPException(400, result["error"])
+    return result
+
+
+@router.get("/exam/{session_id}/result")
+async def api_exam_result(session_id: str, user_id: str = DEFAULT_USER_ID):
+    """获取考试成绩报告"""
+    from app.services.practice_exam import get_exam_result
+    return get_exam_result(session_id, user_id)
+
+
+@router.get("/exam/{session_id}/answer-sheet")
+async def api_exam_answer_sheet(session_id: str, user_id: str = DEFAULT_USER_ID):
+    """获取答题卡状态"""
+    from app.services.practice_exam import get_exam_answer_sheet
+    return get_exam_answer_sheet(session_id, user_id)
+
+
+# ═══════════════════════════════════════════════
 # 成就/徽章
 # ═══════════════════════════════════════════════
 
