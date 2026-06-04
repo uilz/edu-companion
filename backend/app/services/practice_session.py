@@ -38,7 +38,7 @@ def create_session(
     4. 返回会话信息（含题目列表，不含答案）
     """
     from app.db.database import get_db
-    from app.services.practice_adaptive import adaptive_select
+    from app.services.practice_adaptive import adaptive_select_v2
     db = get_db()
 
     cfg = {
@@ -48,8 +48,9 @@ def create_session(
         **(config or {}),
     }
 
-    # 1. 自适应选题
-    questions = adaptive_select(
+
+    # 1. 用 v2 自适应选题（6:3:1 分层 + AI fallback）
+    questions = adaptive_select_v2(
         bank_id=bank_id,
         user_id=user_id,
         count=question_count,
