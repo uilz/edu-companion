@@ -178,9 +178,11 @@ def submit_answer(
     3. 更新 v7_session_questions
     4. 写入 v7_practice_attempts
     5. 更新会话统计数据
-    6. 返回判题结果 + 解析
+    6. **认知节点联动** — 调用 sync_from_practice_event() 更新所有关联知识节点的 Belief/BKT
+    7. 返回判题结果 + 解析
     """
     from app.db.database import get_db
+    from app.cognitive.storage import sync_from_practice_event
     db = get_db()
 
     # 1. 验证会话题目关联
@@ -257,7 +259,23 @@ def submit_answer(
     # 6. 更新会话统计
     update_session_stats(db, session_id)
 
-    # 7. 判 mastery
+    # ═══════════════════════════════════════════
+    # 7. 认知节点联动：更新所有关联节点的 Belief + PracticeSummary + Trend
+    # ═══════════════════════════════════════════
+    for cid in node_ids:
+        try:
+            sync_from_practice_event(
+                user_id=user_id,
+                skill_id=cid,
+                is_correct=is_correct,
+                time_spent=float(time_spent),
+                hints_used=hints_used,
+            )
+            logger.debug("认知节点更新: skill=%s, correct=%s", cid, is_correct)
+        except Exception as e:
+            logger.warning("认知节点更新失败 skill=%s: %s", cid, e)
+
+    # 8. 判 mastery
     mastered = consecutive >= 3
 
     logger.info(
