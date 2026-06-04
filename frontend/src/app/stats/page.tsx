@@ -1,81 +1,41 @@
-// 客户端组件标记 — 使用 React hooks 需要在浏览器端渲染
 "use client";
 
-// React hooks
 import { useState, useEffect } from "react";
-// 图标库 — 用于统计页面的各种图标展示
-import { BarChart3, Target, Clock, TrendingUp, Loader2, Brain, MessageCircle } from "lucide-react";
-// 通用卡片组件
+import {
+  BarChart3, Target, Clock, TrendingUp, Loader2,
+  Brain, ChevronRight, RotateCcw, Zap, Calendar,
+} from "lucide-react";
 import Card from "@/components/ui/Card";
-import { API_BASE } from "@/lib/api";
+import {
+  getOverview, getDailyTrend, getSessionHistory,
+  getWeakSkills,
+  type V7Overview, type V7DailyPoint, type V7SessionListItem,
+} from "@/lib/practice-api";
 
-// ──────────────────────────────────────────
-// 练习统计数据接口 — 对应后端 /api/practice/stats 的响应结构
-// ──────────────────────────────────────────
-interface PracticeStats {
-  user_id: string;
-  total_questions: number;
-  total_correct: number;
-  accuracy: number;
-  study_minutes: number;
-  weak_skills: [string, number][];
-  strong_skills: [string, number][];
-}
-
-// ──────────────────────────────────────────
-// 单个技能知识状态接口 — CognitiveNode 知识追踪
-// ──────────────────────────────────────────
-interface SkillState {
-  skill_id: string;
-  label: string;
-  mastery: number;
-  attempts: number;
-  trend: string;
-}
-
-// ──────────────────────────────────────────
-// 知识状态整体数据接口 — skills 为 skill_id → SkillState 的映射
-// ──────────────────────────────────────────
-interface KnowledgeStateData {
-  total_skills: number;
-  skills: Record<string, SkillState>;
-}
-
-// ──────────────────────────────────────────
-// 主组件：学习统计页面
-// 展示练习概览卡片 + 薄弱/掌握知识点列表 + 知识画像（BKT+对话融合）
-// ──────────────────────────────────────────
 export default function StatsPage() {
-  // 练习统计数据（总答题数、正确率、时长等）
-  const [stats, setStats] = useState<PracticeStats | null>(null);
-  // 技能知识状态数组（按 mastery 排序）
-  const [knowledge, setKnowledge] = useState<SkillState[]>([]);
-  // 加载状态
+  const [overview, setOverview] = useState<V7Overview | null>(null);
+  const [trend, setTrend] = useState<V7DailyPoint[]>([]);
+  const [sessions, setSessions] = useState<V7SessionListItem[]>([]);
+  const [weakSkills, setWeakSkills] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 页面挂载时并发请求练习统计和知识状态数据
   useEffect(() => {
     Promise.all([
-      fetch(`${API_BASE}/api/practice/stats`).then((r) => r.json()),
-      fetch(`${API_BASE}/api/practice/knowledge/state`).then((r) => r.json()).catch(() => null),
+      getOverview(),
+      getDailyTrend(30),
+      getSessionHistory(10),
+      getWeakSkills(),
     ])
-      .then(([statsData, knowledgeData]) => {
-        setStats(statsData.overview || statsData);
-        // 如果有知识状态数据，提取 skills 并按 unified_mastery 降序排列
-        if (knowledgeData?.skills) {
-          const skills = Object.entries(knowledgeData.skills).map(([id, s]) => ({
-            ...(s as SkillState),
-            skill_id: id,
-          }));
-          skills.sort((a, b) => b.mastery - a.mastery);
-          setKnowledge(skills);
-        }
+      .then(([ov, tr, ses, wk]) => {
+        setOverview(ov);
+        setTrend(tr);
+        setSessions(ses);
+        setWeakSkills(wk);
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }, []);
 
-  // 加载中 — 显示旋转加载动画
   if (loading) {
     return (
       <main className="min-h-screen bg-[var(--color-bg)]">
@@ -86,11 +46,9 @@ export default function StatsPage() {
     );
   }
 
-  // 数据加载完成 — 计算展示用的格式化数据
-  // 正确率（百分比）、学习时长（小时+分钟）
-  const accuracyPercent = stats?.accuracy != null ? (stats.accuracy * 100).toFixed(1) : null;
-  const hours = stats?.study_minutes ? Math.floor(stats.study_minutes / 60) : 0;
-  const minutes = stats?.study_minutes ? stats.study_minutes % 60 : 0;
+  const hours = overview?.study_minutes ? Math.floor(overview.study_minutes / 60) : 0;
+  const minutes = overview?.study_minutes ? Math.round(overview.study_minutes % 60) : 0;
+  const maxCount = Math.max(...trend.map((d) => d.count), 1);
 
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
@@ -99,28 +57,29 @@ export default function StatsPage() {
           学习统计
         </h1>
 
-        {/* 统计概览卡片 — 总答题、正确率、学习时长、知识画像追踪数 */}
+        {/* 概览卡片 */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
           {[
             {
-              icon: <BarChart3 size={20} />, label: "总答题", value: `${stats?.total_questions ?? 0}`,
-              sub: stats?.total_correct != null ? `正确 ${stats.total_correct}` : "",
+              icon: <BarChart3 size={20} />, label: "总答题",
+              value: `${overview?.total_questions ?? 0}`,
+              sub: `正确 ${overview?.total_correct ?? 0} · 错误 ${overview?.total_wrong ?? 0}`,
             },
             {
               icon: <TrendingUp size={20} />, label: "正确率",
-              value: `${accuracyPercent ?? "?"}%`,
-              sub: accuracyPercent != null && parseInt(accuracyPercent) >= 80 ? "优秀"
-                : accuracyPercent != null && parseInt(accuracyPercent) >= 60 ? "良好" : "需努力",
+              value: `${overview?.accuracy ?? "?"}%`,
+              sub: (overview?.accuracy ?? 0) >= 80 ? "优秀 🎉"
+                : (overview?.accuracy ?? 0) >= 60 ? "良好 👍" : "需努力 💪",
             },
             {
               icon: <Clock size={20} />, label: "学习时长",
               value: hours > 0 ? `${hours}h${minutes}m` : `${minutes}m`,
-              sub: "累计时间",
+              sub: `${overview?.total_sessions ?? 0} 次练习`,
             },
             {
-              icon: <Brain size={20} />, label: "知识画像",
-              value: `${knowledge.length}`,
-              sub: "追踪技能",
+              icon: <Brain size={20} />, label: "知识掌握",
+              value: `${overview?.mastered_count ?? 0}`,
+              sub: `已掌握 · ${overview?.weak_count ?? 0} 薄弱`,
             },
           ].map((card, i) => (
             <Card key={i}>
@@ -131,118 +90,174 @@ export default function StatsPage() {
           ))}
         </div>
 
-        {/* 薄弱知识点 — 正确率较低的技能，按错误率排序展示 */}
-        <div className="mb-8">
-          <h2 className="text-lg font-semibold text-[var(--color-text)] mb-4">
-            🔴 薄弱知识点
-          </h2>
-          {stats?.weak_skills && stats.weak_skills.length > 0 ? (
-            <div className="space-y-2">
-              {stats.weak_skills.map(([skill, accuracy]) => (
-                <div key={skill} className="flex items-center justify-between p-3 bg-[var(--color-surface)]">
-                  <span className="text-sm text-[var(--color-text)]">{skill}</span>
-                  <div className="flex items-center gap-3">
-                    <div className="w-24 h-1.5 bg-[var(--color-border)]">
-                      <div className="h-full bg-[var(--color-error)] transition-all"
-                        style={{ width: `${(accuracy * 100).toFixed(0)}%` }} />
-                    </div>
-                    <span className="text-xs text-[var(--color-text-muted)]">{(accuracy * 100).toFixed(0)}%</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-[var(--color-text-muted)]">暂无薄弱点数据</p>
-          )}
-        </div>
-
-        {/* 掌握好的知识点 — 正确率较高的技能，绿色进度条展示 */}
-        <div className="mb-8">
-          <h2 className="text-lg font-semibold text-[var(--color-text)] mb-4">
-            🟢 掌握好的知识点
-          </h2>
-          {stats?.strong_skills && stats.strong_skills.length > 0 ? (
-            <div className="space-y-2">
-              {stats.strong_skills.map(([skill, accuracy]) => (
-                <div key={skill} className="flex items-center justify-between p-3 bg-[var(--color-surface)]">
-                  <span className="text-sm text-[var(--color-text)]">{skill}</span>
-                  <div className="flex items-center gap-3">
-                    <div className="w-24 h-1.5 bg-[var(--color-border)]">
-                      <div className="h-full bg-[var(--color-success)] transition-all"
-                        style={{ width: `${(accuracy * 100).toFixed(0)}%` }} />
-                    </div>
-                    <span className="text-xs text-[var(--color-text-muted)]">{(accuracy * 100).toFixed(0)}%</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-[var(--color-text-muted)]">多练几次就有了！</p>
-          )}
-        </div>
-
-        {/* 知识画像 — CognitiveNode 技能掌握情况 */}
-        {knowledge.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          {/* 每日趋势图 */}
           <div>
-            <h2 className="text-lg font-semibold text-[var(--color-text)] mb-4 flex items-center gap-2">
-              <MessageCircle size={16} className="text-[var(--color-accent)]" />
-              知识画像
+            <h2 className="text-base font-semibold text-[var(--color-text)] mb-3 flex items-center gap-2">
+              <Calendar size={14} className="text-[var(--color-accent)]" />
+              近 30 天练习趋势
             </h2>
-            <div className="space-y-2">
-              {knowledge.map((sk) => {
-                const masteryPercent = (sk.mastery * 100).toFixed(0);
-                const isMastered = sk.mastery >= 0.8;
-                const isLearning = sk.mastery >= 0.4 && sk.mastery < 0.8;
-                const barColor = isMastered ? "bg-[#10b981]"
-                  : isLearning ? "bg-[#3b82f6]" : "bg-[var(--color-text-muted)]";
-                const status = isMastered ? "已掌握"
-                  : isLearning ? "学习中" : "初学";
-                const trendEmoji = sk.trend === "ascending" || sk.trend === "improving" ? "📈"
-                  : sk.trend === "descending" || sk.trend === "volatile" ? "📉" : "";
+            <div className="bg-[var(--color-surface)] rounded-xl p-4 border border-[var(--color-border)]/60">
+              {/* 柱状图 */}
+              <div className="flex items-end gap-[3px] h-24 mb-2">
+                {trend.map((d) => {
+                  const height = maxCount > 0 ? (d.count / maxCount) * 100 : 0;
+                  return (
+                    <div key={d.date} className="flex-1 flex flex-col items-center justify-end h-full group relative">
+                      <div
+                        className="w-full rounded-t-sm transition-all hover:opacity-80 cursor-pointer"
+                        style={{
+                          height: `${Math.max(height, d.count > 0 ? 4 : 0)}%`,
+                          backgroundColor: d.correct > d.wrong
+                            ? "var(--color-success)"
+                            : d.wrong > 0
+                              ? "var(--color-error)"
+                              : "var(--color-border)",
+                          opacity: d.count > 0 ? 0.8 : 0.2,
+                        }}
+                        title={`${d.date}: ${d.count}题 (正确${d.correct}/错误${d.wrong})`}
+                      />
+                      {/* Tooltip on hover */}
+                      {d.count > 0 && (
+                        <div className="absolute bottom-full mb-1 hidden group-hover:block z-10">
+                          <div className="bg-[var(--color-text)] text-[var(--color-bg)] text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap">
+                            {d.date.slice(5)}: {d.count}题
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center justify-between text-[9px] text-[var(--color-text-muted)]">
+                <span>{trend[0]?.date?.slice(5) ?? ""}</span>
+                <span>{trend[Math.floor(trend.length / 2)]?.date?.slice(5) ?? ""}</span>
+                <span>{trend[trend.length - 1]?.date?.slice(5) ?? ""}</span>
+              </div>
+              <div className="flex items-center gap-3 mt-2 text-[9px] text-[var(--color-text-muted)]">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[var(--color-success)]" />正确</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[var(--color-error)]" />错误</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[var(--color-border)]" />无练习</span>
+              </div>
+            </div>
+          </div>
 
-                return (
-                  <div key={sk.skill_id} className="p-3 bg-[var(--color-surface)]">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-sm font-medium text-[var(--color-text)] truncate flex-1">
-                        {sk.label || sk.skill_id}
+          {/* 待复习 & 薄弱 */}
+          <div>
+            <h2 className="text-base font-semibold text-[var(--color-text)] mb-3 flex items-center gap-2">
+              <RotateCcw size={14} className="text-amber-500" />
+              待复习
+            </h2>
+            {overview && overview.due_review_count > 0 ? (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-2xl font-bold text-amber-500">{overview.due_review_count}</span>
+                    <span className="text-sm text-amber-500/80 ml-1">题到期</span>
+                  </div>
+                  <Zap size={20} className="text-amber-500" />
+                </div>
+                <p className="text-[11px] text-[var(--color-text-muted)] mt-1">
+                  今日已完成 {overview.today_questions} 题
+                </p>
+              </div>
+            ) : (
+              <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 mb-4">
+                <div className="flex items-center gap-2">
+                  <Target size={16} className="text-green-500" />
+                  <span className="text-sm text-green-600">所有题目已复习！</span>
+                </div>
+                <p className="text-[11px] text-[var(--color-text-muted)] mt-1">
+                  今日已完成 {overview?.today_questions ?? 0} 题
+                </p>
+              </div>
+            )}
+
+            {/* 薄弱知识点 */}
+            <h2 className="text-base font-semibold text-[var(--color-text)] mt-4 mb-3 flex items-center gap-2">
+              <Brain size={14} className="text-red-500" />
+              薄弱知识点
+            </h2>
+            {weakSkills.length > 0 ? (
+              <div className="space-y-2">
+                {weakSkills.slice(0, 5).map((sk) => (
+                  <div key={sk.skill_id} className="flex items-center justify-between p-2.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]/60">
+                    <div className="flex-1 min-w-0 mr-3">
+                      <p className="text-sm text-[var(--color-text)] truncate">{sk.label}</p>
+                      <p className="text-[10px] text-[var(--color-text-muted)]">
+                        {sk.attempts}次练习 · {sk.trend === "ascending" ? "📈" : sk.trend === "descending" ? "📉" : "➡️"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-16 h-1.5 bg-[var(--color-border)] rounded-full overflow-hidden">
+                        <div className="h-full bg-red-500 rounded-full transition-all"
+                          style={{ width: `${sk.mastery * 100}%` }} />
+                      </div>
+                      <span className="text-[11px] text-[var(--color-text-muted)] w-8 text-right">
+                        {Math.round(sk.mastery * 100)}%
                       </span>
-                      <div className="flex items-center gap-2 flex-shrink-0 text-[10px]">
-                        <span className={`px-1.5 py-0.5 ${
-                          isMastered ? "text-[#10b981] bg-[#10b981]/10"
-                          : isLearning ? "text-[#3b82f6] bg-[#3b82f6]/10"
-                          : "text-[var(--color-text-muted)] bg-[var(--color-border)]"
-                        }`}>
-                          {status}
-                        </span>
-                        <span className="text-[var(--color-text-muted)]">{masteryPercent}%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]/60 text-center">
+                <p className="text-xs text-[var(--color-text-muted)]">暂无薄弱点数据 · 多练习就会看到进步！</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 最近练习 */}
+        <div className="mb-8">
+          <h2 className="text-base font-semibold text-[var(--color-text)] mb-3 flex items-center gap-2">
+            <BarChart3 size={14} className="text-[var(--color-accent)]" />
+            最近练习
+          </h2>
+          {sessions.length > 0 ? (
+            <div className="space-y-2">
+              {sessions.map((s) => {
+                const scoreColor = s.score != null
+                  ? s.score >= 80 ? "text-green-500"
+                    : s.score >= 60 ? "text-yellow-500"
+                    : "text-red-500"
+                  : "text-[var(--color-text-muted)]";
+                const modeLabel = s.mode === "adaptive" ? "自适应"
+                  : s.mode === "review" ? "复习" : s.mode === "challenge" ? "挑战" : s.mode;
+                return (
+                  <div key={s.session_id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]/60">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
+                        s.score != null && s.score >= 80 ? "bg-green-500/10 text-green-500"
+                          : s.score != null && s.score >= 60 ? "bg-yellow-500/10 text-yellow-500"
+                          : "bg-[var(--color-border)]/50 text-[var(--color-text-muted)]"
+                      }`}>
+                        {s.score != null ? Math.round(s.score) : "?"}
+                      </div>
+                      <div>
+                        <p className="text-sm text-[var(--color-text)] font-medium">{modeLabel}</p>
+                        <p className="text-[10px] text-[var(--color-text-muted)]">
+                          {s.correct_count}/{s.total_count} 正确
+                          {s.duration_seconds != null && ` · ${Math.floor(s.duration_seconds / 60)}:${String(s.duration_seconds % 60).padStart(2, "0")}`}
+                        </p>
                       </div>
                     </div>
-                    <div className="w-full h-1.5 bg-[var(--color-border)] mb-1.5">
-                      <div
-                        className={`h-full ${barColor} transition-all`}
-                        style={{ width: `${masteryPercent}%` }}
-                      />
-                    </div>
-                    <div className="flex items-center gap-4 text-[10px] text-[var(--color-text-muted)]">
-                      <span>📝 练习: {sk.attempts}次</span>
-                      {trendEmoji && <span>{trendEmoji} {sk.trend}</span>}
-                    </div>
+                    <span className="text-[10px] text-[var(--color-text-muted)]">
+                      {s.created_at ? s.created_at.slice(0, 10) : ""}
+                    </span>
                   </div>
                 );
               })}
             </div>
-          </div>
-        )}
-
-        {/* 无知识画像数据时的占位提示 — 鼓励用户开始练习或对话 */}
-        {knowledge.length === 0 && (
-          <div className="text-center py-8 border border-[var(--color-border)]">
-            <Brain size={28} className="text-[var(--color-text-muted)] mx-auto mb-3" />
-            <p className="text-sm text-[var(--color-text-muted)]">
-              知识画像将在练习和对话后自动生成
-            </p>
-          </div>
-        )}
+          ) : (
+            <div className="p-6 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]/60 text-center">
+              <Brain size={24} className="text-[var(--color-text-muted)] mx-auto mb-2" />
+              <p className="text-sm text-[var(--color-text-muted)]">还没有练习记录</p>
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">进入知识点图谱开始首次练习</p>
+            </div>
+          )}
+        </div>
       </div>
     </main>
   );

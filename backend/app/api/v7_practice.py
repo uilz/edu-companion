@@ -33,6 +33,10 @@ from app.services.practice_session import (
 from app.services.practice_scheduler import (
     get_due_questions, get_review_stats,
 )
+from app.services.practice_stats import (
+    get_overview, get_daily_trend, get_session_history,
+    get_error_distribution, get_weak_skills,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v7/practice", tags=["v7题库"])
@@ -372,6 +376,46 @@ async def api_review_stats(
     """复习统计概览"""
     _ensure_tables()
     return get_review_stats(user_id=user_id, bank_id=bank_id)
+
+
+# ═══════════════════════════════════════════════
+# 统计
+# ═══════════════════════════════════════════════
+
+
+@router.get("/stats/overview")
+async def api_stats_overview(user_id: str = DEFAULT_USER_ID):
+    """总体概览统计"""
+    _ensure_tables()
+    return get_overview(user_id)
+
+
+@router.get("/stats/daily")
+async def api_stats_daily(user_id: str = DEFAULT_USER_ID, days: int = 30):
+    """每日练习趋势"""
+    _ensure_tables()
+    return get_daily_trend(user_id, days=min(days, 90))
+
+
+@router.get("/stats/sessions")
+async def api_stats_sessions(user_id: str = DEFAULT_USER_ID, limit: int = 10):
+    """最近会话历史"""
+    _ensure_tables()
+    return get_session_history(user_id, limit=min(limit, 50))
+
+
+@router.get("/stats/errors")
+async def api_stats_errors(user_id: str = DEFAULT_USER_ID):
+    """错题分布"""
+    _ensure_tables()
+    return get_error_distribution(user_id)
+
+
+@router.get("/stats/weak-skills")
+async def api_stats_weak_skills(user_id: str = DEFAULT_USER_ID):
+    """薄弱知识点"""
+    _ensure_tables()
+    return get_weak_skills(user_id)
 
 
 # ═══════════════════════════════════════════════

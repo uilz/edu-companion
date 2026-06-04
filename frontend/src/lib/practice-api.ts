@@ -194,7 +194,48 @@ export async function listBanks(): Promise<V7Bank[]> {
   return v7fetch("/banks");
 }
 
-// ── 复习调度 ──
+// ── 统计 ──
+
+export interface V7Overview {
+  total_questions: number;
+  total_correct: number;
+  total_wrong: number;
+  accuracy: number;
+  total_sessions: number;
+  study_minutes: number;
+  mastered_count: number;
+  weak_count: number;
+  due_review_count: number;
+  today_questions: number;
+}
+
+export interface V7DailyPoint {
+  date: string;
+  count: number;
+  correct: number;
+  wrong: number;
+  minutes: number;
+}
+
+/** 获取概览统计 */
+export async function getOverview(): Promise<V7Overview> {
+  return v7fetch("/stats/overview");
+}
+
+/** 获取每日趋势 */
+export async function getDailyTrend(days: number = 30): Promise<V7DailyPoint[]> {
+  return v7fetch(`/stats/daily?days=${days}`);
+}
+
+/** 获取会话历史 */
+export async function getSessionHistory(limit: number = 10): Promise<V7SessionListItem[]> {
+  return v7fetch(`/stats/sessions?limit=${limit}`);
+}
+
+/** 获取薄弱知识点 */
+export async function getWeakSkills(): Promise<{ skill_id: string; label: string; mastery: number; attempts: number; trend: string; load: number }[]> {
+  return v7fetch("/stats/weak-skills");
+}
 
 export interface DueQuestion {
   question: V7Question;
