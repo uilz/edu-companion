@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import {
   Brain, Trophy, BarChart3, RotateCcw, BookOpen, Play,
   Sparkles, Clock, Loader2, ChevronRight, Target, TrendingUp,
-  BookMarked, FileText, Star,
+  BookMarked, FileText, Star, Upload,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -115,22 +115,26 @@ export default function PracticeHomePage() {
           )}
 
           {/* Quick links */}
-          <div className="grid grid-cols-4 gap-2 mb-6">
-            <Link href="/exam" className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-red-500/5 border border-red-500/20 hover:border-red-500/40 transition-all">
-              <FileText size={16} className="text-red-500" />
-              <span className="text-[10px] font-medium text-red-600">模拟考试</span>
+          <div className="grid grid-cols-5 gap-1.5 mb-6">
+            <Link href="/exam" className="flex flex-col items-center gap-1 p-2.5 rounded-xl bg-red-500/5 border border-red-500/20 hover:border-red-500/40 transition-all">
+              <FileText size={14} className="text-red-500" />
+              <span className="text-[9px] font-medium text-red-600 leading-tight text-center">模拟<br/>考试</span>
             </Link>
-            <Link href="/errors" className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50 hover:border-[var(--color-accent)]/30 transition-all">
-              <FileText size={16} className="text-orange-500" />
-              <span className="text-[10px] font-medium text-[var(--color-text)]">错题本</span>
+            <Link href="/import" className="flex flex-col items-center gap-1 p-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50 hover:border-[var(--color-accent)]/30 transition-all">
+              <Upload size={14} className="text-[var(--color-accent)]" />
+              <span className="text-[9px] font-medium text-[var(--color-text)] leading-tight text-center">题库<br/>导入</span>
             </Link>
-            <Link href="/achievements" className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50 hover:border-[var(--color-accent)]/30 transition-all">
-              <Trophy size={16} className="text-yellow-500" />
-              <span className="text-[10px] font-medium text-[var(--color-text)]">成就墙</span>
+            <Link href="/errors" className="flex flex-col items-center gap-1 p-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50 hover:border-[var(--color-accent)]/30 transition-all">
+              <FileText size={14} className="text-orange-500" />
+              <span className="text-[9px] font-medium text-[var(--color-text)] leading-tight text-center">错题本</span>
             </Link>
-            <Link href="/stats" className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50 hover:border-[var(--color-accent)]/30 transition-all">
-              <BarChart3 size={16} className="text-blue-500" />
-              <span className="text-[10px] font-medium text-[var(--color-text)]">统计</span>
+            <Link href="/achievements" className="flex flex-col items-center gap-1 p-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50 hover:border-[var(--color-accent)]/30 transition-all">
+              <Trophy size={14} className="text-yellow-500" />
+              <span className="text-[9px] font-medium text-[var(--color-text)] leading-tight text-center">成就墙</span>
+            </Link>
+            <Link href="/stats" className="flex flex-col items-center gap-1 p-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50 hover:border-[var(--color-accent)]/30 transition-all">
+              <BarChart3 size={14} className="text-blue-500" />
+              <span className="text-[9px] font-medium text-[var(--color-text)] leading-tight text-center">统计</span>
             </Link>
           </div>
 

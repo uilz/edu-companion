@@ -619,6 +619,62 @@ async def api_check_achievements(user_id: str = DEFAULT_USER_ID):
 
 
 # ═══════════════════════════════════════════════
+# 题库导入（多格式）
+# ═══════════════════════════════════════════════
+
+
+@router.post("/import/upload")
+async def api_import_upload(body: dict, user_id: str = DEFAULT_USER_ID):
+    """上传文件并解析预览（支持 docx/xlsx/txt/json）"""
+    _ensure_tables()
+    file_path = body.get("file_path", "").strip()
+    if not file_path:
+        raise HTTPException(400, "file_path 不能为空")
+    file_type = body.get("file_type", "")
+    bank_id = body.get("bank_id", "")
+    from app.services.practice_import import preview_import
+    try:
+        return preview_import(file_path, file_type, user_id, bank_id)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.error("导入解析失败: %s", e)
+        raise HTTPException(500, f"解析失败: {e}")
+
+
+@router.post("/import/preview")
+async def api_import_preview(body: dict, user_id: str = DEFAULT_USER_ID):
+    """解析原始文本为题目预览（无需上传文件）"""
+    _ensure_tables()
+    text = body.get("text", "").strip()
+    if not text:
+        raise HTTPException(400, "text 不能为空")
+    from app.services.practice_import import parse_questions_from_text, ai_correct_question, match_cognitive_nodes
+    questions = parse_questions_from_text(text)
+    for q in questions:
+        q = ai_correct_question(q)
+        q["suggested_node_ids"] = match_cognitive_nodes(q, user_id)
+    high = sum(1 for q in questions if q.get("confidence", 0) >= 0.8)
+    return {"questions": questions, "stats": {"total": len(questions), "high_confidence": high, "low_confidence": len(questions) - high}}
+
+
+@router.post("/import/confirm")
+async def api_import_confirm(body: dict, user_id: str = DEFAULT_USER_ID):
+    """确认导入题目到题库"""
+    _ensure_tables()
+    bank_id = body.get("bank_id", "").strip()
+    if not bank_id:
+        raise HTTPException(400, "bank_id 不能为空")
+    questions = body.get("questions", [])
+    if not questions:
+        raise HTTPException(400, "questions 不能为空")
+    from app.services.practice_import import confirm_import
+    return confirm_import(questions, bank_id, user_id)
+
+
+# ═══════════════════════════════════════════════
 # 批量导入
 # ═══════════════════════════════════════════════
 
