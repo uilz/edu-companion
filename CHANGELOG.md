@@ -4,7 +4,78 @@
 
 ---
 
-## [0.9.12] - 2026-06-01
+## [7.0.14] - 2026-06-04
+
+### 📐 Phase 14.1 · 情绪分析与心理陪伴系统
+
+> 完整的情绪感知+心理陪伴管线：用户消息自动检测情绪（11类），LLM 根据情绪调整语气（挫败→共情，焦虑→安慰，进步→庆祝），前端情绪仪表盘。
+
+#### 后端
+- **3 条 emotion API** — `GET /emotion/trend`, `/emotion/recent`, `/emotion/stats`
+- **WebSocket 情绪检测** — 用户消息→quick_detect(0 token)→LLM classify→缓存→趋势
+- **context_builder 10层注入** — 情绪上下文注入 system prompt，AI 语气自适应
+- **EmotionAnalyzer** — 360行引擎，11类情绪，关键词+LLM双通道，趋势分析，洞察生成
+
+#### 前端
+- **`/emotion` 情绪仪表盘** — 主导情绪/趋势方向/负面占比/情绪分布条形图/最近记录列表/AI陪伴洞察
+- 情绪数据不足时友好引导
+
+#### 文件变更
+| 文件 | 变更 |
+|------|------|
+| `backend/app/api/conversation_routes.py` | +3 条情绪路由 |
+| `backend/app/api/conversation_ws.py` | + 实时情绪检测片段 |
+| `frontend/src/app/emotion/page.tsx` | **新** 情绪仪表盘 (280 行) |
+
+---
+
+## [7.0.13] - 2026-06-04
+
+### 🔧 v7 设计文档缺口全部填平 — 10 端点 + 2 页面
+
+> 系统比对 6 份设计文档(v7-practice-revamp/)与实际实现，填平全部缺口。
+
+#### 后端新增 10 个端点
+| 路由 | 功能 |
+|------|------|
+| `PATCH /banks/{id}` | 编辑题库 |
+| `PATCH /sessions/{id}/start` | 开始会话 (created→active) |
+| `PATCH /sessions/{id}/pause` | 暂停会话 (active→paused) |
+| `PATCH /sessions/{id}/resume` | 恢复会话 (paused→active) |
+| `DELETE /sessions/{id}` | 取消会话 |
+| `GET /sessions/{id}/result` | 会话结果报告 |
+| `POST /error-book/{id}/review` | 错题复习提交 (连续正确→掌握) |
+| `GET /error-book/{id}/materials` | 错题资料推荐 |
+| `GET /import/history` | 导入历史 |
+| `POST /adaptive/select` | 自适应组题独立端点 |
+
+#### 前端新增 2 个页面
+| 路由 | 功能 |
+|------|------|
+| `/practice/banks/{id}` | 题库详情 (题目列表/搜索/筛选/编辑/收藏/斩题) |
+| `/practice/sessions/{id}` | 练习中 (答题/反馈/计时器/答题卡/结果) |
+
+#### 会话状态机完整实现
+```
+created → active → paused → active → completed
+    ↓         ↓                 ↓        ↓
+  start    pause    resume    complete  cancel(timeout)
+```
+
+#### 文件变更
+| 文件 | 变更 |
+|------|------|
+| `backend/app/api/v7_practice.py` | 60 路由 (+10) |
+| `backend/app/services/practice_session.py` | +5 生命周期函数 |
+| `backend/app/services/practice_error_book.py` | +2 函数 (review + materials) |
+| `backend/app/services/practice_question_bank.py` | +1 函数 (update_bank) |
+| `backend/app/services/practice_import.py` | +1 函数 (import_history) |
+| `frontend/src/app/practice/banks/[id]/page.tsx` | **新** 题库详情页 |
+| `frontend/src/app/practice/sessions/[id]/page.tsx` | **新** 练习中页 |
+
+---
+
+## [7.0.12] - 2026-06-04
 
 ### 🧘 专注模式 · 驾驶舱入口 + 学习空间集成
 
