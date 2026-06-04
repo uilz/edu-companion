@@ -336,6 +336,15 @@ def complete_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optiona
         (correct_count, wrong_count, score, now, duration, session_id),
     )
 
+    # 触发成就检测
+    try:
+        from app.services.achievement_service import check_achievements
+        newly = check_achievements(user_id)
+        if newly:
+            logger.info("新成就解锁: user=%s, count=%d", user_id, len(newly))
+    except Exception as e:
+        logger.warning("成就检测失败: %s", e)
+
     logger.info("会话完成: %s, %d/%d, score=%.1f%%, duration=%ds",
                 session_id, correct_count, total, score, duration or 0)
 

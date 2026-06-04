@@ -1,17 +1,17 @@
 "use client";
 
-// ===== 导入依赖 =====
-import { useState, useEffect } from "react";
-import { Award, Loader2, Lock } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import {
+  Trophy, Loader2, RefreshCw, Sparkles,
+  ChevronRight,
+} from "lucide-react";
 import Card from "@/components/ui/Card";
-import { API_BASE } from "@/lib/api";
 
-// ===== 成就数据类型定义 =====
 interface Achievement {
   id: string;
   name: string;
   icon: string;
-  tier: "bronze" | "silver" | "gold";
+  tier: string;
   description: string;
   unlocked: boolean;
   level: number;
@@ -21,144 +21,182 @@ interface Achievement {
   unlocked_at: string | null;
 }
 
-// ===== 各阶成就的主题色 =====
-const TIER_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  bronze: { bg: "#92400e20", border: "#92400e", text: "#d97706" },
-  silver: { bg: "#64748b20", border: "#64748b", text: "#94a3b8" },
-  gold: { bg: "#b4530920", border: "#b45309", text: "var(--color-warning)" },
+interface BadgeStats {
+  total_unlocked: number;
+  total_possible: number;
+  bronze: number;
+  silver: number;
+  gold: number;
+}
+
+const TIER_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  bronze: { label: "青铜", color: "text-amber-700", bg: "bg-amber-50 dark:bg-amber-950/30", border: "border-amber-400/50" },
+  silver: { label: "白银", color: "text-slate-500", bg: "bg-slate-50 dark:bg-slate-900/50", border: "border-slate-300/50" },
+  gold: { label: "黄金", color: "text-yellow-600", bg: "bg-yellow-50 dark:bg-yellow-950/30", border: "border-yellow-400/50" },
 };
 
-// ===== 成就页面组件 =====
 export default function AchievementsPage() {
-  // ===== 状态管理：成就列表 & 加载状态 =====
   const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [stats, setStats] = useState<BadgeStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<string>("all");
 
-  // ===== 组件挂载时从后端获取成就数据 =====
-  useEffect(() => {
-    fetch(`${API_BASE}/api/achievements/default_user`)
-      .then((r) => r.json())
-      .then((d) => setAchievements(d.achievements || []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [ach, st] = await Promise.all([
+        fetch("/api/v7/practice/achievements").then(r => r.json()),
+        fetch("/api/v7/practice/achievements/stats").then(r => r.json()),
+      ]);
+      setAchievements(ach);
+      setStats(st);
+    } catch { /* ignore */ }
+    setLoading(false);
   }, []);
 
-  // ===== 计算已解锁成就数量 =====
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const filtered = filter === "all"
+    ? achievements
+    : achievements.filter((a) => a.tier === filter);
+
   const unlockedCount = achievements.filter((a) => a.unlocked).length;
 
-  // ===== 加载中：显示旋转加载图标 =====
-  if (loading) {
+  if (loading && achievements.length === 0) {
     return (
-      <main className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center">
-        <Loader2 size={24} className="animate-spin text-[var(--color-accent)]" />
+      <main className="min-h-screen bg-[var(--color-bg)]">
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="animate-spin text-[var(--color-accent)]" size={24} />
+        </div>
       </main>
     );
   }
 
-  // ===== 主内容渲染 =====
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
-      <div className="max-w-4xl mx-auto px-4 md:px-6 py-8 md:py-12">
-        {/* ===== 页面标题与统计 ===== */}
-        <div className="flex items-center gap-3 mb-8">
-          <Award size={28} className="text-[#f59e0b]" />
-          <div>
-            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-[var(--color-text)]">
-              成就墙
-            </h1>
-            <p className="text-xs text-[var(--color-text-muted)] mt-1">
-              {unlockedCount}/{achievements.length} 已解锁
-            </p>
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-semibold text-[var(--color-text)] tracking-tight flex items-center gap-2">
+            <Trophy size={22} className="text-yellow-500" />
+            成就墙
+          </h1>
+          <button onClick={loadData} className="p-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]/60 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors">
+            <RefreshCw size={14} />
+          </button>
+        </div>
+
+        {/* 概览 */}
+        {stats && (
+          <div className="grid grid-cols-4 gap-3 mb-6">
+            {[
+              { label: "已解锁", value: `${stats.total_unlocked}/${stats.total_possible}`, icon: <Trophy size={16} className="text-yellow-500" /> },
+              { label: "青铜", value: stats.bronze, icon: <span className="text-lg">🥉</span> },
+              { label: "白银", value: stats.silver, icon: <span className="text-lg">🥈</span> },
+              { label: "黄金", value: stats.gold, icon: <span className="text-lg">🥇</span> },
+            ].map((c, i) => (
+              <div key={i} className="p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/60 text-center">
+                <div className="mb-1">{c.icon}</div>
+                <div className="text-xl font-bold text-[var(--color-text)]">{c.value}</div>
+                <div className="text-[10px] text-[var(--color-text-muted)]">{c.label}</div>
+              </div>
+            ))}
           </div>
+        )}
+
+        {/* 筛选 */}
+        <div className="flex items-center gap-2 mb-4">
+          {[
+            { key: "all", label: `全部 (${achievements.length})` },
+            { key: "bronze", label: `青铜` },
+            { key: "silver", label: `白银` },
+            { key: "gold", label: `黄金` },
+          ].map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setFilter(t.key)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                filter === t.key
+                  ? "bg-[var(--color-accent)] text-white"
+                  : "bg-[var(--color-surface)] border border-[var(--color-border)]/60 text-[var(--color-text-muted)] hover:border-[var(--color-accent)]/30"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
 
-        {/* ===== 总体进度条 ===== */}
-        <div className="mb-8 w-full h-1.5 bg-[var(--color-surface)]">
-          <div
-            className="h-full bg-[#f59e0b] transition-all duration-700"
-            style={{ width: `${(unlockedCount / Math.max(achievements.length, 1)) * 100}%` }}
-          />
-        </div>
-
-        {/* ===== 按阶分组展示成就：青铜、白银、黄金 ===== */}
-        {(["bronze", "silver", "gold"] as const).map((tier) => {
-          const tierAchievements = achievements.filter((a) => a.tier === tier);
-          const tierLabel = { bronze: "🥉 青铜成就", silver: "🥈 白银成就", gold: "🥇 黄金成就" }[tier];
-          const colors = TIER_COLORS[tier];
-
-          return (
-            <div key={tier} className="mb-8">
-              {/* ===== 阶标题 ===== */}
-              <h2
-                className="text-sm font-semibold mb-4 px-1"
-                style={{ color: colors.text }}
+        {/* 成就网格 */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {filtered.map((ach) => {
+            const cfg = TIER_CONFIG[ach.tier] || TIER_CONFIG.bronze;
+            const isUnlocked = ach.unlocked;
+            return (
+              <div
+                key={`${ach.id}_${ach.level}`}
+                className={`rounded-xl border p-4 transition-all ${
+                  isUnlocked
+                    ? `${cfg.bg} ${cfg.border}`
+                    : "bg-[var(--color-surface)] border-[var(--color-border)]/40 opacity-60"
+                }`}
               >
-                {tierLabel}
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {/* ===== 单个成就卡片 ===== */}
-                {tierAchievements.map((ach) => (
-                  <div
-                    key={ach.id}
-                    className={`border p-4 transition-all ${
-                      ach.unlocked
-                        ? "bg-[var(--color-card)] border-[var(--color-border)]"
-                        : "bg-[var(--color-surface)] border-[var(--color-border)] opacity-60"
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      {/* ===== 成就图标（未解锁则显示锁图标） ===== */}
-                      <div className="text-3xl flex-shrink-0">
-                        {ach.unlocked ? ach.icon : <Lock size={20} className="text-[var(--color-text-muted)]" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        {/* ===== 成就名称与等级 ===== */}
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-sm font-semibold text-[var(--color-text)]">
-                            {ach.name}
-                          </span>
-                          {ach.max_level > 1 && ach.unlocked && (
-                            <span className="text-[10px] px-1.5 py-0.5 bg-[var(--color-accent)]/10 text-[var(--color-accent)] active:scale-[0.97] transition-transform">
-                              Lv{ach.level}
-                            </span>
-                          )}
-                        </div>
-                        {/* ===== 成就描述 ===== */}
-                        <p className="text-xs text-[var(--color-text-muted)] mb-2">
-                          {ach.description}
-                        </p>
+                <div className="flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl ${
+                    isUnlocked ? cfg.bg : "bg-[var(--color-bg)]"
+                  }`}>
+                    {isUnlocked ? ach.icon : "🔒"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-semibold ${
+                        isUnlocked ? "text-[var(--color-text)]" : "text-[var(--color-text-muted)]"
+                      }`}>
+                        {ach.name}
+                      </span>
+                      {ach.max_level > 1 && (
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
+                          isUnlocked ? `${cfg.bg} ${cfg.color}` : "bg-[var(--color-bg)] text-[var(--color-text-muted)]"
+                        }`}>
+                          Lv{ach.level}/{ach.max_level}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+                      {ach.description}
+                    </p>
 
-                        {/* ===== 单条成就进度条 ===== */}
-                        <div className="w-full h-1 bg-[var(--color-surface)] mb-1">
-                          <div
-                            className="h-full transition-all duration-500"
-                            style={{
-                              width: `${Math.min(ach.progress * 100, 100)}%`,
-                              backgroundColor: ach.unlocked ? "#22c55e" : colors.text,
-                            }}
-                          />
-                        </div>
-                        {/* ===== 进度文字 & 解锁时间 ===== */}
-                        <div className="flex justify-between text-[9px] text-[var(--color-text-muted)]">
-                          <span>{ach.unlocked ? "✅ 已解锁" : ach.progress_label}</span>
-                          {ach.unlocked_at && (
-                            <span>{new Date(ach.unlocked_at).toLocaleDateString()}</span>
-                          )}
-                        </div>
+                    {/* 进度条 */}
+                    <div className="mt-2">
+                      <div className="w-full h-1.5 bg-[var(--color-border)] rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            isUnlocked ? "bg-[var(--color-accent)]" : "bg-[var(--color-border)]"
+                          }`}
+                          style={{ width: `${Math.min(ach.progress * 100, 100)}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-[9px] text-[var(--color-text-muted)]">
+                          {ach.progress_label}
+                        </span>
+                        {isUnlocked && ach.unlocked_at && (
+                          <span className="text-[9px] text-[var(--color-text-muted)]">
+                            {ach.unlocked_at.slice(0, 10)}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
-                ))}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
 
-        {/* ===== 无成就时的空状态提示 ===== */}
-        {achievements.length === 0 && (
-          <p className="text-center text-sm text-[var(--color-text-muted)] py-16">
-            开始练习，解锁第一个成就吧！🎯
-          </p>
+        {filtered.length === 0 && (
+          <div className="text-center py-12">
+            <Trophy size={32} className="text-[var(--color-text-muted)] mx-auto mb-2" />
+            <p className="text-sm text-[var(--color-text-muted)]">暂无成就</p>
+          </div>
         )}
       </div>
     </main>

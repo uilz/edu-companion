@@ -40,6 +40,9 @@ from app.services.practice_stats import (
 from app.services.practice_error_book import (
     get_error_book, get_error_session_stats, clear_mastered_errors,
 )
+from app.services.achievement_service import (
+    check_achievements, get_all_achievements, get_recent_unlocks, get_badge_stats,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v7/practice", tags=["v7题库"])
@@ -458,6 +461,40 @@ async def api_clear_mastered(user_id: str = DEFAULT_USER_ID):
     """清除已掌握的错题记录"""
     _ensure_tables()
     return clear_mastered_errors(user_id)
+
+
+# ═══════════════════════════════════════════════
+# 成就/徽章
+# ═══════════════════════════════════════════════
+
+
+@router.get("/achievements")
+async def api_get_achievements(user_id: str = DEFAULT_USER_ID):
+    """获取所有成就及进度"""
+    _ensure_tables()
+    return get_all_achievements(user_id)
+
+
+@router.get("/achievements/recent")
+async def api_recent_achievements(user_id: str = DEFAULT_USER_ID, limit: int = 5):
+    """最近解锁成就"""
+    _ensure_tables()
+    return get_recent_unlocks(user_id, limit=min(limit, 20))
+
+
+@router.get("/achievements/stats")
+async def api_achievement_stats(user_id: str = DEFAULT_USER_ID):
+    """成就统计"""
+    _ensure_tables()
+    return get_badge_stats(user_id)
+
+
+@router.post("/achievements/check")
+async def api_check_achievements(user_id: str = DEFAULT_USER_ID):
+    """手动触发成就检测"""
+    _ensure_tables()
+    newly = check_achievements(user_id)
+    return {"newly_unlocked": newly, "count": len(newly)}
 
 
 # ═══════════════════════════════════════════════
