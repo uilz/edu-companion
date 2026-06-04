@@ -294,6 +294,147 @@ def submit_answer(
     }
 
 
+def start_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[dict]:
+    """开始会话：将状态从 created 变为 active"""
+    from app.db.database import get_db
+    db = get_db()
+    session = db.fetchone(
+        "SELECT * FROM v7_practice_sessions WHERE id = %s AND user_id = %s",
+        (session_id, user_id),
+    )
+    if not session:
+        return None
+    if session["status"] != "created":
+        return {"error": f"当前状态不允许开始: {session['status']}"}
+    now = datetime.now().isoformat()
+    db.execute(
+        "UPDATE v7_practice_sessions SET status = 'active', started_at = %s WHERE id = %s",
+        (now, session_id),
+    )
+    return get_session(session_id, user_id)
+
+
+def pause_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[dict]:
+    """暂停会话：将 active 变为 paused"""
+    from app.db.database import get_db
+    db = get_db()
+    session = db.fetchone(
+        "SELECT * FROM v7_practice_sessions WHERE id = %s AND user_id = %s",
+        (session_id, user_id),
+    )
+    if not session:
+        return None
+    if session["status"] != "active":
+        return {"error": f"当前状态不允许暂停: {session['status']}"}
+    now = datetime.now().isoformat()
+    cfg = _safe_json(session.get("config"), {})
+    pauses = cfg.get("pauses", [])
+    pauses.append({"paused_at": now, "resumed_at": None})
+    cfg["pauses"] = pauses
+    db.execute(
+        "UPDATE v7_practice_sessions SET status = 'paused', config = %s WHERE id = %s",
+        (json.dumps(cfg), session_id),
+    )
+    return get_session(session_id, user_id)
+
+
+def resume_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[dict]:
+    """恢复会话：将 paused 变为 active"""
+    from app.db.database import get_db
+    db = get_db()
+    session = db.fetchone(
+        "SELECT * FROM v7_practice_sessions WHERE id = %s AND user_id = %s",
+        (session_id, user_id),
+    )
+    if not session:
+        return None
+    if session["status"] != "paused":
+        return {"error": f"当前状态不允许恢复: {session['status']}"}
+    now = datetime.now().isoformat()
+    cfg = _safe_json(session.get("config"), {})
+    pauses = cfg.get("pauses", [])
+    if pauses and pauses[-1].get("resumed_at") is None:
+        pauses[-1]["resumed_at"] = now
+    cfg["pauses"] = pauses
+    db.execute(
+        "UPDATE v7_practice_sessions SET status = 'active', config = %s WHERE id = %s",
+        (json.dumps(cfg), session_id),
+    )
+    return get_session(session_id, user_id)
+
+
+def cancel_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[dict]:
+    """取消会话：将任何非完成态变为 cancelled"""
+    from app.db.database import get_db
+    db = get_db()
+    session = db.fetchone(
+        "SELECT * FROM v7_practice_sessions WHERE id = %s AND user_id = %s",
+        (session_id, user_id),
+    )
+    if not session:
+        return None
+    if session["status"] in ("completed", "cancelled"):
+        return {"error": f"会话已{session['status']}，不可取消"}
+    now = datetime.now().isoformat()
+    db.execute(
+        "UPDATE v7_practice_sessions SET status = 'cancelled', finished_at = %s WHERE id = %s",
+        (now, session_id),
+    )
+    return get_session(session_id, user_id)
+
+
+def get_session_result(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[dict]:
+    """获取会话结果报告"""
+    from app.db.database import get_db
+    db = get_db()
+    session = get_session(session_id, user_id)
+    if not session:
+        return None
+    if session["status"] not in ("completed", "timeout"):
+        return {"session_id": session_id, "status": session["status"], "message": "会话尚未完成"}
+
+    sq_rows = db.fetchall(
+        """SELECT sq.*, q.question_type, q.difficulty, q.cognitive_node_ids, q.stem
+           FROM v7_session_questions sq
+           LEFT JOIN v7_questions q ON sq.question_id = q.id
+           WHERE sq.session_id = %s
+           ORDER BY sq.sort_order""",
+        (session_id,),
+    )
+    detail = []
+    for sq in sq_rows:
+        detail.append({
+            "index": sq["sort_order"],
+            "question_id": sq["question_id"],
+            "stem": sq.get("stem", "")[:80],
+            "question_type": sq.get("question_type", ""),
+            "difficulty": sq.get("difficulty", 3),
+            "is_correct": sq.get("is_correct"),
+            "user_answer": _safe_json(sq.get("user_answer"), None),
+            "time_spent": sq.get("time_spent_seconds", 0),
+            "hints_used": sq.get("hints_used", 0),
+        })
+    answered = sum(1 for d in detail if d["is_correct"] is not None)
+    correct = sum(1 for d in detail if d["is_correct"] is True)
+
+    return {
+        "session_id": session_id,
+        "status": session["status"],
+        "total": session["total_count"],
+        "answered": answered,
+        "correct": correct,
+        "wrong": answered - correct,
+        "unanswered": session["total_count"] - answered,
+        "score": session.get("score"),
+        "duration_seconds": session.get("duration_seconds"),
+        "mode": session["mode"],
+        "session_type": session["session_type"],
+        "detail": detail,
+        "created_at": session.get("created_at"),
+        "finished_at": session.get("finished_at"),
+    }
+
+
 def complete_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[dict]:
     """完成会话：汇总统计"""
     from app.db.database import get_db

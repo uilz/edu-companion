@@ -181,6 +181,141 @@ def get_error_session_stats(user_id: str = DEFAULT_USER_ID) -> dict:
     }
 
 
+def review_error_question(
+    question_id: str,
+    user_id: str = DEFAULT_USER_ID,
+    is_correct: bool = False,
+    time_spent: int = 0,
+) -> dict:
+    """错题复习提交：
+    - 连续答对 2 次 → 标记为已掌握
+    - 答错 → consecutive_correct 归零
+    - 更新认知节点
+    """
+    from app.db.database import get_db
+    from app.cognitive.storage import sync_from_practice_event
+    db = get_db()
+
+    # 获取最近一次 attempt
+    last = db.fetchone(
+        """SELECT * FROM v7_practice_attempts
+           WHERE question_id = %s AND user_id = %s
+           ORDER BY created_at DESC LIMIT 1""",
+        (question_id, user_id),
+    )
+    if not last:
+        return {"error": "该题没有练习记录", "mastered": False}
+
+    current_cc = last.get("consecutive_correct", 0)
+    current_wc = last.get("wrong_count", 1)
+    node_ids = last.get("cognitive_node_ids") or []
+
+    if is_correct:
+        new_cc = current_cc + 1
+        mastered = new_cc >= 2
+        new_wc = current_wc
+    else:
+        new_cc = 0
+        mastered = False
+        new_wc = current_wc + 1
+
+    now = datetime.now().isoformat()
+    # 写入一条新的 review attempt
+    attempt_id = f"rev_{question_id}_{int(__import__('time').time())}"
+    db.execute(
+        """INSERT INTO v7_practice_attempts
+           (id, session_id, question_id, user_id, user_answer, is_correct,
+            time_spent_seconds, is_wrong, wrong_count, consecutive_correct,
+            mastered, cognitive_node_ids, created_at)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+        (attempt_id, f"review_{question_id}", question_id, user_id,
+         "[]", is_correct, time_spent, not is_correct, new_wc, new_cc,
+         mastered, node_ids, now),
+    )
+
+    # 更新认知节点
+    for nid in node_ids:
+        try:
+            sync_from_practice_event(
+                user_id=user_id, skill_id=nid,
+                is_correct=is_correct, time_spent=float(time_spent), hints_used=0,
+            )
+        except Exception:
+            pass
+
+    return {
+        "attempt_id": attempt_id,
+        "mastered": mastered,
+        "consecutive_correct": new_cc,
+        "wrong_count": new_wc,
+        "needs_more_review": not mastered,
+    }
+
+
+def get_error_materials(
+    question_id: str,
+    user_id: str = DEFAULT_USER_ID,
+    limit: int = 3,
+) -> list[dict]:
+    """根据错题关联的认知节点，推荐复习资料"""
+    from app.db.database import get_db
+    db = get_db()
+
+    q = db.fetchone(
+        "SELECT * FROM v7_questions WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
+        (question_id, user_id),
+    )
+    if not q:
+        return []
+
+    node_ids = q.get("cognitive_node_ids") or []
+    if not node_ids:
+        return []
+
+    recommendations = []
+
+    # 1. 查用户上传的资料中关联了这些节点的
+    try:
+        rows = db.fetchall(
+            """SELECT m.id, m.filename, m.file_type, m.file_size, m.created_at
+               FROM material_meta m
+               WHERE m.user_id = %s AND m.skills_covered && %s
+               ORDER BY m.created_at DESC LIMIT %s""",
+            (user_id, node_ids, limit),
+        )
+        for r in rows:
+            recommendations.append({
+                "type": "material",
+                "id": r["id"],
+                "title": r["filename"],
+                "file_type": r.get("file_type", ""),
+                "reason": "这份资料涉及你答错的知识点",
+            })
+    except Exception:
+        pass
+
+    # 2. 查 learning_memory
+    try:
+        rows2 = db.fetchall(
+            """SELECT id, title, content_preview FROM learning_memory
+               WHERE user_id = %s AND cognitive_node_ids && %s
+               ORDER BY created_at DESC LIMIT %s""",
+            (user_id, node_ids, limit),
+        )
+        for r in rows2:
+            recommendations.append({
+                "type": "learning_memory",
+                "id": r["id"],
+                "title": r.get("title") or "学习笔记",
+                "preview": (r.get("content_preview") or "")[:100],
+                "reason": "这是你关于该知识点的学习记录",
+            })
+    except Exception:
+        pass
+
+    return recommendations
+
+
 def clear_mastered_errors(user_id: str = DEFAULT_USER_ID) -> dict:
     """清除已掌握的错题记录（标记 mastered=true 的题目不再显示在错题本）"""
     from app.db.database import get_db

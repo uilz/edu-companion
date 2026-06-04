@@ -21,7 +21,7 @@ from app.services.practice_question_crud import (
     toggle_favorite, toggle_slash, batch_import_questions,
 )
 from app.services.practice_question_bank import (
-    _ensure_tables, list_banks, get_bank, create_bank, delete_bank,
+    _ensure_tables, list_banks, get_bank, create_bank, update_bank, delete_bank,
     list_questions, get_question, resolve_bank_for_conversation, resolve_bank_for_node,
 )
 from app.services.practice_question_gen import (
@@ -29,6 +29,7 @@ from app.services.practice_question_gen import (
 )
 from app.services.practice_session import (
     create_session, get_session, submit_answer, complete_session, list_sessions,
+    start_session, pause_session, resume_session, cancel_session, get_session_result,
 )
 from app.services.practice_scheduler import (
     get_due_questions, get_review_stats,
@@ -39,10 +40,13 @@ from app.services.practice_stats import (
 )
 from app.services.practice_error_book import (
     get_error_book, get_error_session_stats, clear_mastered_errors,
+    review_error_question, get_error_materials,
 )
 from app.services.achievement_service import (
     check_achievements, get_all_achievements, get_recent_unlocks, get_badge_stats,
 )
+from app.services.practice_adaptive import adaptive_select_v2
+from app.services.practice_import import get_import_history
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v7/practice", tags=["v7题库"])
@@ -94,6 +98,20 @@ async def api_delete_bank(bank_id: str, user_id: str = DEFAULT_USER_ID):
     if not ok:
         raise HTTPException(404, "题库不存在")
     return {"deleted": bank_id}
+
+
+@router.patch("/banks/{bank_id}")
+async def api_update_bank(bank_id: str, body: dict, user_id: str = DEFAULT_USER_ID):
+    """编辑题库信息"""
+    _ensure_tables()
+    result = update_bank(
+        bank_id=bank_id, user_id=user_id,
+        name=body.get("name"),
+        description=body.get("description"),
+    )
+    if not result:
+        raise HTTPException(404, "题库不存在")
+    return result
 
 
 # ═══════════════════════════════════════════════
@@ -447,6 +465,64 @@ async def api_complete_session(session_id: str, user_id: str = DEFAULT_USER_ID):
     return result
 
 
+@router.patch("/sessions/{session_id}/start")
+async def api_start_session(session_id: str, user_id: str = DEFAULT_USER_ID):
+    """开始会话"""
+    _ensure_tables()
+    result = start_session(session_id, user_id)
+    if not result:
+        raise HTTPException(404, "会话不存在")
+    if "error" in result:
+        raise HTTPException(400, result["error"])
+    return result
+
+
+@router.patch("/sessions/{session_id}/pause")
+async def api_pause_session(session_id: str, user_id: str = DEFAULT_USER_ID):
+    """暂停会话"""
+    _ensure_tables()
+    result = pause_session(session_id, user_id)
+    if not result:
+        raise HTTPException(404, "会话不存在")
+    if "error" in result:
+        raise HTTPException(400, result["error"])
+    return result
+
+
+@router.patch("/sessions/{session_id}/resume")
+async def api_resume_session(session_id: str, user_id: str = DEFAULT_USER_ID):
+    """恢复会话"""
+    _ensure_tables()
+    result = resume_session(session_id, user_id)
+    if not result:
+        raise HTTPException(404, "会话不存在")
+    if "error" in result:
+        raise HTTPException(400, result["error"])
+    return result
+
+
+@router.delete("/sessions/{session_id}")
+async def api_cancel_session(session_id: str, user_id: str = DEFAULT_USER_ID):
+    """取消会话"""
+    _ensure_tables()
+    result = cancel_session(session_id, user_id)
+    if not result:
+        raise HTTPException(404, "会话不存在")
+    if "error" in result:
+        raise HTTPException(400, result["error"])
+    return result
+
+
+@router.get("/sessions/{session_id}/result")
+async def api_session_result(session_id: str, user_id: str = DEFAULT_USER_ID):
+    """获取会话结果报告"""
+    _ensure_tables()
+    result = get_session_result(session_id, user_id)
+    if not result:
+        raise HTTPException(404, "会话不存在")
+    return result
+
+
 # ═══════════════════════════════════════════════
 # 复习调度
 # ═══════════════════════════════════════════════
@@ -556,6 +632,25 @@ async def api_clear_mastered(user_id: str = DEFAULT_USER_ID):
     """清除已掌握的错题记录"""
     _ensure_tables()
     return clear_mastered_errors(user_id)
+
+
+@router.post("/error-book/{question_id}/review")
+async def api_review_error(question_id: str, body: dict, user_id: str = DEFAULT_USER_ID):
+    """错题复习提交"""
+    _ensure_tables()
+    return review_error_question(
+        question_id=question_id,
+        user_id=user_id,
+        is_correct=body.get("is_correct", False),
+        time_spent=body.get("time_spent", 0),
+    )
+
+
+@router.get("/error-book/{question_id}/materials")
+async def api_error_materials(question_id: str, user_id: str = DEFAULT_USER_ID, limit: int = 3):
+    """错题关联资料推荐"""
+    _ensure_tables()
+    return get_error_materials(question_id, user_id, limit=min(limit, 10))
 
 
 # ═══════════════════════════════════════════════
@@ -775,4 +870,56 @@ async def api_batch_import(body: dict, user_id: str = DEFAULT_USER_ID):
     return {
         "imported": len(saved),
         "questions": saved,
+    }
+
+
+# ═══════════════════════════════════════════════
+# 导入历史
+# ═══════════════════════════════════════════════
+
+
+@router.get("/import/history")
+async def api_import_history(
+    user_id: str = DEFAULT_USER_ID,
+    bank_id: Optional[str] = None,
+    limit: int = 20,
+    offset: int = 0,
+):
+    """获取导入历史"""
+    _ensure_tables()
+    return get_import_history(
+        user_id=user_id, bank_id=bank_id,
+        limit=min(limit, 100), offset=max(offset, 0),
+    )
+
+
+# ═══════════════════════════════════════════════
+# 自适应组题（独立端点）
+# ═══════════════════════════════════════════════
+
+
+@router.post("/adaptive/select")
+async def api_adaptive_select(body: dict, user_id: str = DEFAULT_USER_ID):
+    """基于掌握度自适应选题"""
+    _ensure_tables()
+    bank_id = body.get("bank_id", "")
+    if not bank_id:
+        raise HTTPException(400, "bank_id 不能为空")
+    count = max(1, min(50, int(body.get("count", 10))))
+    questions = adaptive_select_v2(
+        bank_id=bank_id,
+        user_id=user_id,
+        count=count,
+        mode=body.get("mode", "adaptive"),
+        cognitive_node_ids=body.get("cognitive_node_ids"),
+        exclude_ids=body.get("exclude_ids"),
+    )
+    return {
+        "selected": len(questions),
+        "questions": questions,
+        "params": {
+            "bank_id": bank_id,
+            "count": count,
+            "mode": body.get("mode", "adaptive"),
+        },
     }

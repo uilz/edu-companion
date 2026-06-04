@@ -102,6 +102,34 @@ def create_bank(user_id, name, description="", ref_node_id=None, ref_node_level=
     return _row_to_bank(row)
 
 
+def update_bank(bank_id, user_id, name=None, description=None):
+    """更新题库基本信息"""
+    from app.db.database import get_db
+    db = get_db()
+    row = db.fetchone(
+        "SELECT * FROM v7_question_banks WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
+        (bank_id, user_id),
+    )
+    if not row:
+        return None
+    now = datetime.now().isoformat()
+    updates = {}
+    if name is not None:
+        updates["name"] = name.strip()
+    if description is not None:
+        updates["description"] = description.strip()
+    if not updates:
+        return get_bank(bank_id, user_id)
+    set_clause = ", ".join(f"{k} = %s" for k in updates)
+    updates["updated_at"] = now
+    params = list(updates.values()) + [bank_id, user_id]
+    db.execute(
+        f"UPDATE v7_question_banks SET {set_clause}, updated_at = %s WHERE id = %s AND user_id = %s",
+        tuple(params),
+    )
+    return get_bank(bank_id, user_id)
+
+
 def delete_bank(bank_id, user_id=DEFAULT_USER_ID):
     _ensure_tables()
     from app.db.database import get_db

@@ -529,6 +529,66 @@ def _estimate_difficulty(q: dict) -> int:
     return 3  # 默认中等难度
 
 
+def get_import_history(
+    user_id: str = DEFAULT_USER_ID,
+    bank_id: Optional[str] = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    """获取导入历史"""
+    from app.db.database import get_db
+    db = get_db()
+    conditions = ["q.metadata->>'import_batch' IS NOT NULL", "q.deleted_at IS NULL"]
+    params = []
+    if bank_id:
+        conditions.append("q.bank_id = %s")
+        params.append(bank_id)
+    where = " AND ".join(conditions)
+
+    count_row = db.fetchone(
+        f"SELECT COUNT(DISTINCT q.metadata->>'import_batch') as cnt FROM v7_questions q WHERE {where}",
+        tuple(params) if params else None,
+    )
+    total = count_row["cnt"] if count_row else 0
+
+    rows = db.fetchall(
+        f"""SELECT q.metadata->>'import_batch' as batch_id,
+                  q.bank_id,
+                  MIN(q.created_at) as imported_at,
+                  COUNT(*) as question_count,
+                  COUNT(*) FILTER (WHERE q.status = 'active') as active_count
+           FROM v7_questions q
+           WHERE {where}
+           GROUP BY batch_id, q.bank_id
+           ORDER BY imported_at DESC
+           LIMIT %s OFFSET %s""",
+        tuple(params + [limit, offset]) if params else (limit, offset),
+    )
+
+    items = []
+    for r in rows:
+        bank = db.fetchone("SELECT name FROM v7_question_banks WHERE id = %s", (r["bank_id"],))
+        items.append({
+            "batch_id": r["batch_id"],
+            "bank_id": r["bank_id"],
+            "bank_name": bank["name"] if bank else "",
+            "imported_at": _safe_iso(r.get("imported_at")),
+            "question_count": r["question_count"],
+            "active_count": r["active_count"],
+        })
+
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
+def _safe_iso(val):
+    """安全转换日期为 ISO 字符串"""
+    if val is None:
+        return None
+    if hasattr(val, "isoformat"):
+        return val.isoformat()
+    return str(val)
+
+
 def _parse_docx_fallback(file_path: str) -> list[dict]:
     """docx 备用解析（不依赖 MarkItDown）"""
     try:
