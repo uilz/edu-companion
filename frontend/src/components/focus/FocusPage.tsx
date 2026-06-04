@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
-  X, Volume2, VolumeX, Lightbulb, Network,
+  X, Volume2, VolumeX, Lightbulb, Network, Play,
   ChevronLeft, ChevronRight, ChevronDown,
 } from "lucide-react";
 import { useConversationStore } from "@/store/conversation-store";
@@ -15,6 +15,7 @@ import { fetchGraphData } from "@/lib/graph-api";
 import type { GraphData, GraphNode } from "@/lib/graph-types";
 import FocusGraph from "@/components/graph/FocusGraph";
 import ForceGraph from "@/components/graph/ForceGraph";
+import PracticePanel from "@/components/practice/PracticePanel";
 
 export default function FocusPage() {
   // ── Store data ──
@@ -154,6 +155,8 @@ export default function FocusPage() {
 
   // ── Socratic prompt bar ──
   const [showSocratic, setShowSocratic] = useState(false);
+  // ── Practice mode ──
+  const [showPractice, setShowPractice] = useState(false);
   const handleSend = useCallback(
     (text: string) => {
       if (text.trim()) {
@@ -599,16 +602,26 @@ export default function FocusPage() {
 
         {/* Messages */}
         <div className="flex-1 overflow-hidden flex flex-col">
-          <div className="flex-1 overflow-y-auto px-4 pt-6 pb-2 space-y-4">
-            <MessageList
-              messages={messages}
-              responseBlocks={responseBlocks}
-              isLoading={isLoading}
-              onDeleteMessage={deleteMessage}
-              onEditMessage={(mid, text) => editMessage(mid, text)}
-              onVersionSwitch={versionSwitch}
+          {showPractice ? (
+            <PracticePanel
+              nodeId={selectedNode?.id}
+              nodeLabel={selectedNode?.label}
+              onClose={() => setShowPractice(false)}
             />
-          </div>
+          ) : (
+            <>
+              <div className="flex-1 overflow-y-auto px-4 pt-6 pb-2 space-y-4">
+                <MessageList
+                  messages={messages}
+                  responseBlocks={responseBlocks}
+                  isLoading={isLoading}
+                  onDeleteMessage={deleteMessage}
+                  onEditMessage={(mid, text) => editMessage(mid, text)}
+                  onVersionSwitch={versionSwitch}
+                />
+              </div>
+            </>
+          )}
         </div>
 
         {/* Input area */}
@@ -620,12 +633,21 @@ export default function FocusPage() {
               conversationId={activeConversationId}
             />
             <div className="flex items-center justify-between mt-2 px-2">
-              <button onClick={() => setShowSocratic((p) => !p)}
-                className={`flex items-center gap-1 text-xs transition-colors ${
-                  showSocratic ? "text-amber-500" : "text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
-                }`}>
-                <Lightbulb size={12} />苏格拉底追问
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowSocratic((p) => !p)}
+                  className={`flex items-center gap-1 text-xs transition-colors ${
+                    showSocratic ? "text-amber-500" : "text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
+                  }`}>
+                  <Lightbulb size={12} />苏格拉底追问
+                </button>
+                <span className="text-[var(--color-border)]">|</span>
+                <button onClick={() => { setShowPractice((p) => !p); setShowSocratic(false); }}
+                  className={`flex items-center gap-1 text-xs transition-colors ${
+                    showPractice ? "text-[var(--color-accent)]" : "text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
+                  }`}>
+                  <Play size={12} />{showPractice ? "返回对话" : "智能练习"}
+                </button>
+              </div>
               <button onClick={() => setVoiceEnabled((p) => !p)}
                 className="flex items-center gap-1 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors">
                 {voiceEnabled ? <Volume2 size={12} /> : <VolumeX size={12} />}
