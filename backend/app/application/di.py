@@ -24,7 +24,7 @@ if TYPE_CHECKING:
         KnowledgeGraphService,
         MediaService,
     )
-    from domain.multimedia.service import MultimediaService
+    from app.domain.multimedia.service import MultimediaService
 
 logger = logging.getLogger("di")
 
@@ -60,7 +60,7 @@ class AppContainer:
 
         # v6 Phase 4: 事件持久化桥接
         try:
-            from app.services.event_service import event_service
+            from app.services.common.event_service import event_service
             event_service.subscribe_persist(self.event_bus)
         except Exception:
             logger.debug("EventService 持久化桥接失败", exc_info=True)
@@ -73,7 +73,7 @@ class AppContainer:
     # ═══════════════════════════════════════════════════════
 
     def _create_practice(self) -> PracticeService:
-        from domain.practice.service import PracticeServiceImpl
+        from app.domain.practice.service import PracticeServiceImpl
         from infra.database import (
             PostgresQuestionRepo,
             PostgresSessionRepo,
@@ -88,7 +88,7 @@ class AppContainer:
         )
 
     def _create_conversation(self) -> ConversationService:
-        from domain.conversation.service import ConversationServiceImpl
+        from app.domain.conversation.service import ConversationServiceImpl
         from infra.llm import LLMClient
         return ConversationServiceImpl(
             llm=LLMClient(),
@@ -97,44 +97,44 @@ class AppContainer:
         )
 
     def _create_planning(self) -> PlanningService:
-        from domain.planning.service import PlanningServiceImpl
+        from app.domain.planning.service import PlanningServiceImpl
         return PlanningServiceImpl(
             practice=self.practice_service,
             event_bus=self.event_bus,
         )
 
     def _create_analytics(self) -> AnalyticsService:
-        from domain.analytics.service import AnalyticsServiceImpl
+        from app.domain.analytics.service import AnalyticsServiceImpl
         return AnalyticsServiceImpl(
             practice=self.practice_service,
             event_bus=self.event_bus,
         )
 
     def _create_habits(self) -> HabitService:
-        from domain.habits.service import HabitServiceImpl
+        from app.domain.habits.service import HabitServiceImpl
         return HabitServiceImpl(
             event_bus=self.event_bus,
         )
 
     def _create_materials(self) -> MaterialService:
-        from domain.materials.service import MaterialServiceImpl
+        from app.domain.materials.service import MaterialServiceImpl
         return MaterialServiceImpl(
             event_bus=self.event_bus,
         )
 
     def _create_knowledge(self) -> KnowledgeGraphService:
-        from domain.knowledge.service import KnowledgeGraphServiceImpl
+        from app.domain.knowledge.service import KnowledgeGraphServiceImpl
         return KnowledgeGraphServiceImpl(
             practice=self.practice_service,
             event_bus=self.event_bus,
         )
 
     def _create_media(self) -> MediaService:
-        from domain.media.service import MediaServiceImpl
+        from app.domain.media.service import MediaServiceImpl
         return MediaServiceImpl()
 
     def _create_multimedia(self) -> MultimediaService:
-        from domain.multimedia.service import MultimediaService
+        from app.domain.multimedia.service import MultimediaService
         from infra.tts_client import EdgeTTSClient
         from infra.svg_renderer import SVGRenderer
 
@@ -183,7 +183,7 @@ class AppContainer:
                 logger.debug("Planning service failed to handle CognitiveNodeUpdated")
             # ZPD 调度器重算
             try:
-                from app.services.zpd_scheduler import zpd_scheduler
+                from app.services.knowledge.zpd_scheduler import zpd_scheduler
                 zpd_scheduler.on_knowledge_change(event.user_id, event.node_id)
             except Exception:
                 logger.debug("ZPD scheduler not available, skipping")

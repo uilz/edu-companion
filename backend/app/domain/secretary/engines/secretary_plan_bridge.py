@@ -29,7 +29,7 @@ class SecretaryPlanBridge:
     @property
     def planner(self):
         if self._planner is None:
-            from app.services.adaptive_planner import AdaptivePlanGenerator
+            from app.services.analytics.adaptive_planner import AdaptivePlanGenerator
             self._planner = AdaptivePlanGenerator()
         return self._planner
 

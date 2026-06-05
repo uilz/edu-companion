@@ -116,7 +116,7 @@ class ActiveChecker:
 
         # WS 通知
         try:
-            from app.api.ws_manager import manager as ws_manager
+            from app.api.conversation.ws_manager import manager as ws_manager
             if ws_manager and hasattr(ws_manager, 'broadcast'):
                 await ws_manager.broadcast({
                     "type": "secretary_update",

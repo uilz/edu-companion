@@ -7,7 +7,7 @@ import dynamic from "next/dynamic";
 import { Loader2 } from "lucide-react";
 
 const GraphTab = dynamic(
-  () => import("@/components/dashboard/GraphTab").then((m) => m.GraphTab),
+  () => import("@/components/dashboard/tabs/GraphTab").then((m) => m.GraphTab),
   {
     loading: () => (
       <div className="flex items-center justify-center min-h-screen">

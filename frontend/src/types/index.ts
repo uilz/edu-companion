@@ -59,7 +59,7 @@ export interface Conversation {
 
 /** 内容块（ContentBlock）：消息中的单一内容单元，支持多种媒体类型 */
 export interface ContentBlock {
-  type: "text" | "image" | "audio" | "video" | "document" | "quote";  // 内容块类型
+  type: "text" | "image" | "audio" | "video" | "document" | "quote" | "file";  // 内容块类型
   text?: string;                                              // 文本内容（仅 text 类型）
   file_id?: string;                                           // 文件 ID（图片/音频/视频/文档类型）
   duration_ms?: number;                                       // 媒体时长（毫秒，音频/视频类型）
@@ -75,6 +75,8 @@ export interface ContentBlock {
   char_start?: number;                                        // 选中文本起始偏移（quote 类型）
   char_end?: number;                                          // 选中文本结束偏移（quote 类型）
   quoted_text?: string;                                       // 引用的原文（quote 类型）
+  name?: string;                                              // 文件名（file/image 类型）
+  material_id?: string;                                       // 资料库 ID（file/image 类型）
 }
 
 /** 子支引用锚点 */

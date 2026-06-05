@@ -6,7 +6,7 @@ import {
   Clock, Target, TrendingUp, AlertCircle, ChevronRight, Zap,
 } from "lucide-react";
 import Card from "@/components/ui/Card";
-import { useStudyPlan } from "@/hooks/useStudyPlan";
+import { useStudyPlan } from "@/hooks/study/useStudyPlan";
 
 // 学习计划页面：AI 自适应学习规划 + 进度追踪 + 智能建议
 export default function StudyPage() {

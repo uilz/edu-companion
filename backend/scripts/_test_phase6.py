@@ -56,7 +56,7 @@ async def main():
 
     # ── Test 5: 手动触发 NodeCreated 事件 ──
     print("\n=== 写 NodeCreated 事件 ===")
-    from app.services.event_service import EventService
+    from app.services.common.event_service import EventService
     
     # 找一个有 embedding 的节点
     nodes_with_emb = [n for n in nodes if n.embedding][:1]

@@ -140,8 +140,14 @@ class DailyBriefModule(SecretaryModule):
                         result["total_events"] += 1
 
                 if node.practice_summary:
-                    result["practice_count"] += node.practice_summary.total_attempts or 0
-                    acc = node.practice_summary.accuracy
+                    ps = node.practice_summary
+                    result["practice_count"] += ps.total_attempts or 0
+                    acc = getattr(ps, 'accuracy', None)
+                    if acc is None:
+                        if ps.total_attempts > 0:
+                            acc = ps.correct_attempts / ps.total_attempts
+                        else:
+                            acc = ps.recent_success_rate_7d
                     if acc and acc > 0:
                         result["avg_accuracy"] = (result["avg_accuracy"] + acc) / 2
 

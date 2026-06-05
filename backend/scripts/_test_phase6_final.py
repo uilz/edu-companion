@@ -9,7 +9,7 @@ async def main():
     from app.db.database import get_db
     from app.cognitive.storage import list_all_nodes
     from app.cognitive.edge_storage import get_edges_by_status
-    from app.services.event_service import EventService
+    from app.services.common.event_service import EventService
     from app.domain.secretary.proposal_store import ProposalStore
 
     uid = DEFAULT_USER_ID

@@ -4,6 +4,44 @@
 
 ---
 
+## [8.0.0] - 2026-06-05
+
+### 📐 分层架构重构
+
+> 后端和前端全面分层重构，消除平铺文件，建立清晰的分层架构。
+
+#### 后端
+- **domain 合并** — `domain/` → `app/domain/`，消除两套 domain 并存
+- **core 合并** — `app/core/` → `shared/`，统一共享层（协议、常量、事件）
+- **services 分组** — 70+ 平铺文件 → 7 子目录：
+  - `practice/` (13) — 练习服务
+  - `conversation/` (6) — 对话服务
+  - `knowledge/` (9) — 知识服务
+  - `materials/` (8) — 资料服务
+  - `llm/` (7) — LLM 服务
+  - `analytics/` (12) — 分析服务
+  - `common/` (7) — 公共服务
+- **api 分组** — 22 平铺文件 → 5 子目录：
+  - `conversation/` (4) — 对话 API
+  - `knowledge/` (2) — 知识图谱 API
+  - `learning/` (5) — 学习/认知 API
+  - `practice/` (4) — 练习 API
+  - `system/` (7) — 系统 API
+- **死代码清理** — 删除 `backend/backend`、`.bak` 文件、空 models 目录
+
+#### 前端
+- **lib 分组** — 12 平铺 → 4 子目录：`api/`(6)、`utils/`(3)、`types/`(1)、`hooks/`(1)
+- **conversation 分组** — 38 平铺 → 10 子目录：core/renderers/blocks/banners/panels/input/cards/tree/media/hooks
+- **graph 分组** — 15 平铺 → 5 子目录：graphs/modals/panels/pages/nodes
+- **practice 分组** — 5 平铺 → 2 子目录：panels/components
+- **hooks 分组** — 5 平铺 → 4 子目录：conversation/graph/practice/study
+- **store 分组** — 按域分组：conversation/（含 actions）、explain/
+- **空目录清理** — 删除 achievements/explain/materials/progress 空壳
+
+#### 架构
+- **认证网关独立** — auth-gateway 独立进程，与业务后端完全解耦
+- **文档更新** — 新架构文档 `docs/architecture/current-v8.md`，旧文档归档
+
 ## [7.0.14] - 2026-06-04
 
 ### 📐 Phase 14.1 · 情绪分析与心理陪伴系统

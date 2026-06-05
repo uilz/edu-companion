@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, Target } from "lucide-react";
 import Card from "@/components/ui/Card";
-import { API_BASE } from "@/lib/api";
+import { API_BASE } from "@/lib/api/api";
 
 // ── Types ──
 

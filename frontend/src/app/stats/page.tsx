@@ -10,7 +10,7 @@ import {
   getOverview, getDailyTrend, getSessionHistory,
   getWeakSkills,
   type V7Overview, type V7DailyPoint, type V7SessionListItem,
-} from "@/lib/practice-api";
+} from "@/lib/api/practice-api";
 
 export default function StatsPage() {
   const [overview, setOverview] = useState<V7Overview | null>(null);

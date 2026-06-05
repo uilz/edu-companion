@@ -140,11 +140,11 @@ export default function FileDetailPage() {
     <div className="p-6 max-w-5xl mx-auto">
       {/* Breadcrumb */}
       <a
-        href="/files"
+        href="/resources"
         className="inline-flex items-center gap-1 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-accent)] mb-4"
       >
         <ArrowLeft size={12} />
-        返回资料库
+        返回资源管理
       </a>
 
       {/* File header */}

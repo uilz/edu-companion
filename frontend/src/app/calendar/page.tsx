@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 // UI 图标库及路由组件
 import { CalendarDays, ChevronLeft, ChevronRight, Loader2, Flame, Target, Zap } from "lucide-react";
 import Link from "next/link";
-import { API_BASE } from "@/lib/api";
+import { API_BASE } from "@/lib/api/api";
 
 // ── Types ──
 

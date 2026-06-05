@@ -22,34 +22,34 @@ function TabLoader() {
 
 // ----- 懒加载各标签页组件 -----
 // 使用 next/dynamic 按需加载，减少首屏包体积
-const OverviewTab = dynamic(() => import('@/components/dashboard/OverviewTab').then(m => m.OverviewTab), {
+const OverviewTab = dynamic(() => import('@/components/dashboard/tabs/OverviewTab').then(m => m.OverviewTab), {
   loading: () => <TabLoader />,
 });
-const AnalyticsTab = dynamic(() => import('@/components/dashboard/AnalyticsTab').then(m => m.AnalyticsTab), {
+const AnalyticsTab = dynamic(() => import('@/components/dashboard/tabs/AnalyticsTab').then(m => m.AnalyticsTab), {
   loading: () => <TabLoader />,
 });
-const ErrorsTab = dynamic(() => import('@/components/dashboard/ErrorsTab').then(m => m.ErrorsTab), {
+const ErrorsTab = dynamic(() => import('@/components/dashboard/tabs/ErrorsTab').then(m => m.ErrorsTab), {
   loading: () => <TabLoader />,
 });
-const CalendarTab = dynamic(() => import('@/components/dashboard/CalendarTab').then(m => m.CalendarTab), {
+const CalendarTab = dynamic(() => import('@/components/dashboard/tabs/CalendarTab').then(m => m.CalendarTab), {
   loading: () => <TabLoader />,
 });
-const AchievementsTab = dynamic(() => import('@/components/dashboard/AchievementsTab').then(m => m.AchievementsTab), {
+const AchievementsTab = dynamic(() => import('@/components/dashboard/tabs/AchievementsTab').then(m => m.AchievementsTab), {
   loading: () => <TabLoader />,
 });
-const PlanTab = dynamic(() => import('@/components/dashboard/PlanTab').then(m => m.PlanTab), {
+const PlanTab = dynamic(() => import('@/components/dashboard/tabs/PlanTab').then(m => m.PlanTab), {
   loading: () => <TabLoader />,
 });
-const QualityTab = dynamic(() => import('@/components/dashboard/QualityTab').then(m => m.QualityTab), {
+const QualityTab = dynamic(() => import('@/components/dashboard/tabs/QualityTab').then(m => m.QualityTab), {
   loading: () => <TabLoader />,
 });
-const GraphTab = dynamic(() => import('@/components/dashboard/GraphTab').then(m => m.GraphTab), {
+const GraphTab = dynamic(() => import('@/components/dashboard/tabs/GraphTab').then(m => m.GraphTab), {
   loading: () => <TabLoader />,
 });
-const ProgressTab = dynamic(() => import('@/components/dashboard/ProgressTab').then(m => m.ProgressTab), {
+const ProgressTab = dynamic(() => import('@/components/dashboard/tabs/ProgressTab').then(m => m.ProgressTab), {
   loading: () => <TabLoader />,
 });
-const StatsTab = dynamic(() => import('@/components/dashboard/StatsTab').then(m => m.StatsTab), {
+const StatsTab = dynamic(() => import('@/components/dashboard/tabs/StatsTab').then(m => m.StatsTab), {
   loading: () => <TabLoader />,
 });
 

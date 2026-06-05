@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 
-export default function FocusPage() {
-  const router = useRouter();
-  useEffect(() => { router.replace("/learn"); }, [router]);
-  return null;
+const FocusPage = dynamic(
+  () => import("@/components/focus/FocusPage"),
+  { ssr: false }
+);
+
+export default function FocusRoute() {
+  return <FocusPage />;
 }

@@ -37,7 +37,7 @@ def main():
         print("ℹ️ 无边可测试，跳过 boost_trust_on_activity")
 
     # 3. 测试 summary 保存和查询
-    from app.services.summary_service import save_summary, get_recent_summaries, build_condensed_context
+    from app.services.common.summary_service import save_summary, get_recent_summaries, build_condensed_context
 
     sid = save_summary(
         conversation_id="00000000-0000-0000-0000-000000000001",

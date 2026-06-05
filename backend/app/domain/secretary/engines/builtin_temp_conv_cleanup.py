@@ -32,7 +32,7 @@ class TempConversationCleanupModule(SecretaryModule):
         self, user_id: str, ctx: SessionContext | None = None,
     ) -> list[Proposal]:
         """清理所有用户 48h 过期的临时会话（PG + JSON 双后端）"""
-        from app.services.storage import storage
+        from app.services.common.storage import storage
         from app.cognitive.link_storage import get_links_for_conversation, remove_link
 
         cutoff = time.time() - 48 * 3600  # 48 小时前
@@ -44,7 +44,7 @@ class TempConversationCleanupModule(SecretaryModule):
             db = get_db()
             rows = db.fetchall(
                 "SELECT id FROM conversations "
-                "WHERE is_temporary = true AND updated_at < to_timestamp(%s)",
+                "WHERE is_temporary = true AND created_at < to_timestamp(%s)",
                 (cutoff,),
             )
             for row in rows:

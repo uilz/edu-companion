@@ -5,17 +5,17 @@ import {
   X, Volume2, VolumeX, Lightbulb, Network, Play,
   ChevronLeft, ChevronRight, ChevronDown,
 } from "lucide-react";
-import { useConversationStore } from "@/store/conversation-store";
-import { initWebSocket, subscribeToNavigation, syncActiveRefs, saveStreamCacheBeforeUnload } from "@/store/conversation-store";
+import { useConversationStore } from "@/store/conversation/conversation-store";
+import { initWebSocket, subscribeToNavigation, syncActiveRefs, saveStreamCacheBeforeUnload } from "@/store/conversation/conversation-store";
 import type { Partition, Domain, Topic } from "@/types";
-import { apiFetch } from "@/store/tree-helpers";
-import MessageList from "@/components/conversation/MessageList";
-import ConversationChatInput from "@/components/conversation/ChatInput";
-import { fetchGraphData } from "@/lib/graph-api";
-import type { GraphData, GraphNode } from "@/lib/graph-types";
-import FocusGraph from "@/components/graph/FocusGraph";
-import ForceGraph from "@/components/graph/ForceGraph";
-import PracticePanel from "@/components/practice/PracticePanel";
+import { apiFetch } from "@/store/conversation/tree-helpers";
+import MessageList from "@/components/conversation/core/MessageList";
+import ConversationChatInput from "@/components/conversation/core/ChatInput";
+import { fetchGraphData } from "@/lib/api/graph-api";
+import type { GraphData, GraphNode } from "@/lib/types/graph-types";
+import FocusGraph from "@/components/graph/graphs/FocusGraph";
+import ForceGraph from "@/components/graph/graphs/ForceGraph";
+import PracticePanel from "@/components/practice/panels/PracticePanel";
 
 export default function FocusPage() {
   // ── Store data ──

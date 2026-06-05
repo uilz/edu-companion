@@ -9,7 +9,7 @@ import {
   Shield, AlertTriangle, CheckCircle, XCircle, Loader2,
   ChevronDown, ChevronUp, Trash2, Zap, BarChart3,
 } from "lucide-react";
-import { API_BASE } from "@/lib/api";
+import { API_BASE } from "@/lib/api/api";
 
 /**
  * 质量分析摘要 —— 包含题目总数、各等级数量、平均分及最差题目列表

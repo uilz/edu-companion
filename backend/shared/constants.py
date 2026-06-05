@@ -9,6 +9,26 @@ def get_user_id(user_id: str | None = None) -> str:
     return user_id or DEFAULT_USER_ID
 
 
+def get_user_id_from_request(request) -> str:
+    """从 FastAPI Request 对象提取当前用户 ID
+
+    优先使用认证中间件注入的 request.state.user_id，
+    回退到查询参数 user_id，最终回退到 DEFAULT_USER_ID。
+    """
+    # 1. 认证中间件注入
+    state_uid = getattr(request.state, "user_id", None)
+    if state_uid:
+        return state_uid
+    # 2. 查询参数兼容
+    try:
+        q_uid = request.query_params.get("user_id")
+        if q_uid:
+            return q_uid
+    except Exception:
+        pass
+    return DEFAULT_USER_ID
+
+
 # ── 掌握度判定 ──
 
 _MASTERY_THRESHOLD = 0.8

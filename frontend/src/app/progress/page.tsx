@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import { Loader2, AlertTriangle } from "lucide-react";
 // 加载动画与警告图标
 import Card from "@/components/ui/Card";
-import { API_BASE } from "@/lib/api";
+import { API_BASE } from "@/lib/api/api";
 
 // ── Types ──
 // 学习进度概览数据，从后端 API /api/progress 获取

@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useConversation } from "@/components/conversation/useConversation";
-import ConversationPanel from "@/components/conversation/ConversationPanel";
-import FocusModePanel from "@/components/conversation/FocusModePanel";
+import { useConversation } from "@/components/conversation/hooks/useConversation";
+import ConversationPanel from "@/components/conversation/core/ConversationPanel";
+import FocusModePanel from "@/components/conversation/panels/FocusModePanel";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 
 const FOCUS_KEY = "learn-focus-mode";

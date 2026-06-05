@@ -5,7 +5,7 @@
 import { useState, useEffect } from "react";
 import Card from "@/components/ui/Card";
 import { RetentionData } from "@/components/dashboard/analytics/utils";
-import { API_BASE } from "@/lib/api";
+import { API_BASE } from "@/lib/api/api";
 
 export function RetentionPanel() {
   const [data, setData] = useState<RetentionData | null>(null);

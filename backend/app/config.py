@@ -52,7 +52,8 @@ class Settings(BaseSettings):
 
     # ── CORS 配置 ──
     cors_origins: list[str] = Field(
-        default=["*"], description="允许的跨域来源"
+        default=["http://localhost:3000", "http://127.0.0.1:3000"],
+        description="允许的跨域来源（env: CORS_ORIGINS，逗号分隔）",
     )
 
     # ── LLM 模型配置（OpenAI 兼容格式） ──

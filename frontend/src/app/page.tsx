@@ -28,7 +28,7 @@ import {
 // 内部组件
 import Card from "@/components/ui/Card";
 import UnifiedSearch from "@/components/search/UnifiedSearch";
-import { API_BASE } from "@/lib/api";
+import { API_BASE } from "@/lib/api/api";
 
 // ---------- 类型定义 ----------
 

@@ -3,13 +3,13 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import {
-  Brain, Trophy, BarChart3, RotateCcw, BookOpen, Play,
+  Brain, Trophy, BarChart3, BookOpen, Play,
   Sparkles, Clock, Loader2, ChevronRight, Target, TrendingUp,
-  BookMarked, FileText, Star, Upload,
+  BookMarked, FileText, Star, Upload, Trash2, RotateCcw,
 } from "lucide-react";
 import Link from "next/link";
 
-import PracticePanel from "@/components/practice/PracticePanel";
+import PracticePanel from "@/components/practice/panels/PracticePanel";
 
 type Tab = "start" | "practice" | "stats";
 
@@ -21,18 +21,29 @@ export default function PracticeHomePage() {
   const [overview, setOverview] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [recentSessions, setRecentSessions] = useState<any[]>([]);
+  const [unfinishedSessions, setUnfinishedSessions] = useState<any[]>([]);
 
   useEffect(() => {
     Promise.all([
       fetch("/api/v7/practice/stats/overview").then((r) => r.json()).catch(() => null),
       fetch("/api/v7/practice/stats/sessions?limit=5").then((r) => r.json()).catch(() => []),
       fetch("/api/v7/practice/review/stats").then((r) => r.json()).catch(() => null),
-    ]).then(([ov, sessions, review]) => {
+      fetch("/api/v7/practice/sessions/unfinished").then((r) => r.json()).catch(() => []),
+    ]).then(([ov, sessions, review, unfinished]) => {
       setOverview({ ...ov, ...review });
       setRecentSessions(Array.isArray(sessions) ? sessions : sessions?.items || []);
+      setUnfinishedSessions(Array.isArray(unfinished) ? unfinished : unfinished?.items || []);
       setLoading(false);
     });
   }, []);
+
+  // 删除会话
+  const handleDeleteSession = async (sessionId: string) => {
+    if (!confirm("确认删除此练习记录？")) return;
+    await fetch(`/api/v7/practice/sessions/${sessionId}`, { method: "DELETE" });
+    setRecentSessions(prev => prev.filter(s => s.session_id !== sessionId));
+    setUnfinishedSessions(prev => prev.filter(s => s.session_id !== sessionId));
+  };
 
   if (tab === "practice") {
     return (
@@ -138,6 +149,46 @@ export default function PracticeHomePage() {
             </Link>
           </div>
 
+          {/* 未完成考试 */}
+          {unfinishedSessions.length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-[11px] font-medium text-amber-500 mb-3 uppercase tracking-wider flex items-center gap-1.5">
+                <RotateCcw size={12} />
+                未完成考试
+              </h3>
+              <div className="space-y-2">
+                {unfinishedSessions.map((s: any) => (
+                  <div key={s.session_id}
+                    className="flex items-center gap-3 p-3 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-amber-500/10">
+                      <RotateCcw size={14} className="text-amber-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] font-medium text-[var(--color-text)]">
+                        {s.mode === "exam" ? "模拟考试" : s.mode === "review" ? "复习模式" : "自适应模式"}
+                        <span className="ml-2 text-[10px] text-[var(--color-text-muted)]">
+                          {s.total_count} 题 · {s.answered_count ?? 0} 已答
+                        </span>
+                      </p>
+                      <p className="text-[10px] text-[var(--color-text-muted)]">
+                        {s.created_at?.slice(0, 10)} · {s.status === "paused" ? "已暂停" : s.status === "active" ? "进行中" : "未开始"}
+                      </p>
+                    </div>
+                    <Link href={`/practice/sessions/${s.session_id}`}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-[10px] font-medium hover:bg-amber-600 transition-colors flex-shrink-0">
+                      继续 <ChevronRight size={10} />
+                    </Link>
+                    <button onClick={(e) => { e.preventDefault(); handleDeleteSession(s.session_id); }}
+                      className="p-1 rounded hover:bg-red-500/10 text-[var(--color-text-muted)] hover:text-red-500 transition-colors flex-shrink-0"
+                      title="删除">
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Recent sessions */}
           {recentSessions.length > 0 && (
             <div>
@@ -172,6 +223,11 @@ export default function PracticeHomePage() {
                       (s.score || 0) >= 80 ? "text-green-500" :
                       (s.score || 0) >= 60 ? "text-yellow-500" : "text-red-500"
                     }`}>{s.score ?? "—"}</span>
+                    <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteSession(s.session_id); }}
+                      className="p-1 rounded hover:bg-red-500/10 text-[var(--color-text-muted)] hover:text-red-500 transition-colors flex-shrink-0"
+                      title="删除记录">
+                      <Trash2 size={12} />
+                    </button>
                   </div>
                 ))}
               </div>

@@ -7,7 +7,7 @@
 # ── 应用配置 ──
 app_name: "智能学习伴侣"
 app_version: "0.1.0"
-debug: true
+debug: false
 
 # ── 服务配置 ──
 host: "0.0.0.0"
@@ -15,9 +15,9 @@ port: 8000
 
 # ── CORS 配置 ──
 cors_origins:
-  - "*"
-  # 生产环境请限制来源:
-  # - "http://localhost:3000"
+  - "http://localhost:3000"
+  - "http://127.0.0.1:3000"
+  # 生产环境请添加实际域名:
   # - "https://yourdomain.com"
 
 # ── LLM 模型配置 ──

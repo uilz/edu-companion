@@ -16,40 +16,41 @@ from typing import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# chat.py 已删除 — WS 端点在 conversation.py (/ws), WS 管理器在 ws_manager.py
-from app.api.study import router as study_router
-from app.api.practice import router as practice_router
-from app.api.progress import router as progress_router
-from app.api.conversation import router as conversation_router
-from app.api.knowledge import router as knowledge_router
-from app.api.partition_progress import router as partition_progress_router
-from app.api.multimodal import router as multimodal_router
-from app.api.achievements import router as achievements_router
-from app.api.search import router as search_router
-from app.api.secretary import router as secretary_router
-from app.api.learning import router as learning_router
-from app.api.knowledge_graph import router as knowledge_graph_router
-from app.api.summaries import router as summaries_router
+from app.api.learning.study import router as study_router
+from app.api.practice.practice import router as practice_router
+from app.api.learning.progress import router as progress_router
+from app.api.conversation.conversation import router as conversation_router
+from app.api.knowledge.knowledge import router as knowledge_router
+from app.api.learning.partition_progress import router as partition_progress_router
+from app.api.system.multimodal import router as multimodal_router
+from app.api.system.achievements import router as achievements_router
+from app.api.system.search import router as search_router
+from app.api.system.secretary import router as secretary_router
+from app.api.learning.cognitive import router as learning_router
+from app.api.knowledge.knowledge_graph import router as knowledge_graph_router
+from app.api.system.summaries import router as summaries_router
 
 # Phase 10: 笔记/目标/探索项目
-from app.api.learning_enhance import router as learning_enhance_router
+from app.api.learning.learning_enhance import router as learning_enhance_router
 
 # Phase 10.7+: 文件管理
-from app.api.files_api import router as files_router
+from app.api.system.files_api import router as files_router
+
+# 认证系统 — 已迁移至独立认证网关 (auth-gateway:8001)
+# 主后端仅保留认证中间件，用于调用网关验证令牌
 
 # 解释卡片 CRUD
-from app.api.explain_cards import router as explain_cards_router
+from app.api.practice.explain_cards import router as explain_cards_router
 
 # v7.0 智能题库
-from app.api.v7_practice import router as v7_practice_router
-from app.api.v7_references import router as v7_references_router
+from app.api.practice.v7_practice import router as v7_practice_router
+from app.api.practice.v7_references import router as v7_references_router
 
-# v6 Phase 4: 对话系统子路由
-from app.api.conversation_routes import router as conversation_tree_router
-from app.api.conversation_ws import router as conversation_ws_router
+# v8.0 学习数据管理
+from app.api.system.v7_data import router as v7_data_router
 
 from app.config import settings
-from app.core.learner_model import learner_engine
+from shared.learner_model import learner_engine
 
 # Phase 9 D.3: 请求追踪
 from app.middleware.trace import TraceMiddleware
@@ -86,13 +87,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("💾 PostgreSQL 已连接")
 
     # 初始化资料元数据索引
-    from app.services.materials_meta import materials_meta
+    from app.services.materials.materials_meta import materials_meta
     indexed = materials_meta.ensure_indexed()
     logger.info("📁 资料元数据初始化完成 (新注册 %d 个)", indexed)
 
+    # 恢复 stuck 文件（uploading → 重新索引）
+    try:
+        from app.api.system.files_api import recover_stuck_files
+        await recover_stuck_files()
+    except Exception as e:
+        logger.warning("stuck 文件恢复跳过: %s", e)
+
     # Phase 5: 注入领域事件总线到 Orchestrator（多媒体生成触发）
     from app.application.di import container
-    from app.api.ws_manager import manager as ws_manager
+    from app.api.conversation.ws_manager import manager as ws_manager
 
     # Phase 5: 注入 WebSocket 管理器到 ConversationService（block_update 推送）
     container.conversation_service.set_ws_manager(ws_manager)
@@ -123,14 +131,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # v6 Phase 4: 启动事件消费者（轮询 cognitive_events）
     try:
-        from app.services.event_service import event_service
+        from app.services.common.event_service import event_service
         event_service.start_consumer()
     except Exception as e:
         logger.warning("事件消费者启动失败: %s", e)
 
     # Phase 8: 初始化对话摘要表
     try:
-        from app.services.summary_service import ensure_summaries_table
+        from app.services.common.summary_service import ensure_summaries_table
         ensure_summaries_table()
         logger.info("📋 conversation_summaries 表已就绪 (Phase 8)")
     except Exception as e:
@@ -154,7 +162,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # v6 Phase 4: 停止事件消费者
     try:
-        from app.services.event_service import event_service
+        from app.services.common.event_service import event_service
         await event_service.stop_consumer()
         logger.info("🔄 事件消费者已停止")
     except Exception:
@@ -236,6 +244,10 @@ async def global_exception_handler(request: Request, exc: Exception):
 # ── 注册中间件 ──
 app.add_middleware(TraceMiddleware)
 
+# ── 认证中间件 ──
+from app.domain.auth.middleware import AuthMiddleware
+app.add_middleware(AuthMiddleware)
+
 # ── 注册路由 ──
 # WebSocket 和 HTTP 聊天
 # chat_router 已删除 — WS 端点在 conversation.py
@@ -245,10 +257,8 @@ app.include_router(study_router)
 app.include_router(practice_router)
 # 学习进度
 app.include_router(progress_router)
-# 对话系统（树结构）
+# 对话系统（树结构 + WebSocket）
 app.include_router(conversation_router, prefix="/api/conversations", tags=["conversations"])
-# 对话系统 WebSocket 流式对话
-app.include_router(conversation_ws_router, prefix="/api/conversations", tags=["conversations"])
 # 知识图谱 + 前置卡控
 app.include_router(knowledge_router)
 # 学习画像 (v3.0 PartitionProgress)
@@ -271,12 +281,18 @@ app.include_router(learning_enhance_router)
 # Phase 10.7+: 文件管理
 app.include_router(files_router)
 
+# 认证系统 — 已迁移至独立认证网关
+# app.include_router(auth_router)  # 已移除
+
 # v7.0 智能题库
 app.include_router(v7_practice_router)
 app.include_router(v7_references_router)
 
 # 解释卡片 CRUD
 app.include_router(explain_cards_router)
+
+# v8.0 学习数据管理
+app.include_router(v7_data_router)
 
 
 # ── 健康检查 ──

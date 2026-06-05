@@ -1,4 +1,4 @@
-import GraphDialoguePage from "@/components/graph/GraphDialoguePage";
+import GraphDialoguePage from "@/components/graph/pages/GraphDialoguePage";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import type { Metadata } from "next";
 

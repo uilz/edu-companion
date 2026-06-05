@@ -6,7 +6,7 @@ import {
   FileText, Clock, AlertTriangle, Loader2, ChevronRight,
   Brain, BookOpen,
 } from "lucide-react";
-import ExamPanel from "@/components/practice/ExamPanel";
+import ExamPanel from "@/components/practice/panels/ExamPanel";
 
 type Phase = "select" | "exam";
 

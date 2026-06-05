@@ -36,7 +36,7 @@ def backfill(force: bool = False):
         logger.info("No messages need embedding")
         return 0
 
-    from app.services.embedding_engine import compute_embedding
+    from app.services.llm.embedding_engine import compute_embedding
 
     total = len(rows)
     done = 0

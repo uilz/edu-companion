@@ -21,7 +21,7 @@ import { RetentionPanel } from "@/components/dashboard/analytics/RetentionPanel"
 import { OverviewCards } from "@/components/dashboard/analytics/OverviewCards";
 import { MasteryErrorsCard } from "@/components/dashboard/analytics/MasteryErrorsCard";
 import { SuggestionsCard } from "@/components/dashboard/analytics/SuggestionsCard";
-import { API_BASE } from "@/lib/api";
+import { API_BASE } from "@/lib/api/api";
 
 // ── 主页面 ──
 

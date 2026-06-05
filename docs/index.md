@@ -8,7 +8,7 @@
 
 | 文档 | 说明 |
 |------|------|
-| [current.md](architecture/current.md) | 当前系统架构 (v4.3) |
+| [current-v8.md](architecture/current-v8.md) | 当前系统架构 (v8.0) — 分层重构后 |
 
 ## 📖 阶段文档 (按开发顺序)
 
@@ -42,12 +42,13 @@
 
 | 路径 | 内容 |
 |------|------|
-| [archive/versions/](archive/versions/) | 旧版架构(v3)/v6优化方案/旧版05数据架构/旧版PROGRESS&CHANGELOG |
+| [archive/](archive/) | 旧版架构(v4)、旧版前端架构(v7)、旧版数据架构、旧版 PROGRESS/CHANGELOG |
+| [archive/versions/](archive/versions/) | v3 架构/v6 优化方案等历史版本 |
 
 ---
 
 ## 项目根文档
 
 - [README.md](../../README.md) — 项目介绍
-- [PROGRESS.md](../../PROGRESS.md) — 当前开发进度 (v0.9.4)
-- [CHANGELOG.md](../../CHANGELOG.md) — 版本更新日志 (v0.9.4)
+- [PROGRESS.md](../../PROGRESS.md) — 当前开发进度
+- [CHANGELOG.md](../../CHANGELOG.md) — 版本更新日志

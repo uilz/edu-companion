@@ -6,7 +6,7 @@ import time
 from app.cognitive.models import (
     CognitiveNode, Belief, Scheduling, PracticeSummary, Trend,
 )
-from app.services.adaptive_selector import AdaptiveSelector, ReviewResult
+from app.services.analytics.adaptive_selector import AdaptiveSelector, ReviewResult
 
 
 class TestScoreNodes:

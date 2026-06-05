@@ -1,6 +1,24 @@
 # 🚀 智能伴学系统 — 开发进度
 
-## 最新里程碑: v0.9.12 (专注模式 · 驾驶舱入口 + 学习空间集成) ✅
+## 最新里程碑: v8.0 (分层架构重构) ✅
+
+### v8.0 分层架构重构
+
+> 后端和前端全面分层重构，消除平铺文件，建立清晰的分层架构。
+
+| 维度 | 状态 | 说明 |
+|------|------|------|
+| 后端 domain 合并 | ✅ | `domain/` → `app/domain/`，消除两套 domain 并存 |
+| 后端 core 合并 | ✅ | `app/core/` → `shared/`，统一共享层 |
+| 后端 services 分组 | ✅ | 70+ 平铺 → 7 子目录（practice/conversation/knowledge/materials/llm/analytics/common） |
+| 后端 api 分组 | ✅ | 22 平铺 → 5 子目录（conversation/knowledge/learning/practice/system） |
+| 前端 lib 分组 | ✅ | 12 平铺 → 4 子目录（api/utils/types/hooks） |
+| 前端 conversation 分组 | ✅ | 38 平铺 → 10 子目录，0 平铺 |
+| 前端 graph 分组 | ✅ | 15 平铺 → 5 子目录，0 平铺 |
+| 前端 practice 分组 | ✅ | 5 平铺 → 2 子目录，0 平铺 |
+| 前端 hooks 分组 | ✅ | 5 平铺 → 4 子目录，0 平铺 |
+| 前端 store 分组 | ✅ | 按域分组（conversation/explain） |
+| 认证网关独立 | ✅ | 与业务后端完全解耦 |
 
 ### v0.9.12 专注模式集成
 

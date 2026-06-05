@@ -10,7 +10,8 @@ import {
   getErrorBook, getErrorBookStats, clearMasteredErrors,
   createPracticeSession, resolveBankForNode,
   type ErrorBookItem, type ErrorBookStats as EBStats,
-} from "@/lib/practice-api";
+} from "@/lib/api/practice-api";
+import QuestionStem from "@/components/practice/components/QuestionStem";
 
 export default function ErrorBookPage() {
   const [items, setItems] = useState<ErrorBookItem[]>([]);
@@ -62,7 +63,7 @@ export default function ErrorBookPage() {
         mode: "review", count: 5,
         cognitive_node_ids: nodeId ? [nodeId] : undefined,
       });
-      window.location.href = `/graph?session=${sess.session_id}`;
+      window.location.href = `/practice/sessions/${sess.session_id}`;
     } catch { /* ignore */ }
   }, []);
 
@@ -150,9 +151,7 @@ export default function ErrorBookPage() {
                       {item.wrong_count}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-[var(--color-text)] leading-relaxed line-clamp-2">
-                        {item.stem}
-                      </p>
+                      <QuestionStem stem={item.stem} className="text-sm leading-relaxed" />
                       <div className="flex items-center gap-3 mt-1.5 text-[10px] text-[var(--color-text-muted)]">
                         <span>难度: {"★".repeat(item.difficulty).padEnd(5, "☆")}</span>
                         <span>错 {item.wrong_count}/{item.total_attempts} 次</span>

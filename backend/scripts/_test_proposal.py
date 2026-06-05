@@ -8,7 +8,7 @@ def main():
     from shared.constants import DEFAULT_USER_ID
     from app.db.database import get_db
     from app.domain.secretary.proposal_store import ProposalStore
-    from app.services.event_service import _generate_proposal
+    from app.services.common.event_service import _generate_proposal
     from app.domain.secretary.models import Proposal
 
     uid = DEFAULT_USER_ID

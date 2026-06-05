@@ -6,10 +6,10 @@
 
 ## 快速导航
 
-- [系统架构 (v4.3)](architecture/current.md)
-- [阶段文档一览](phases/) — Phase 1~9 开发历程
+- [系统架构 (v8.0)](architecture/current-v8.md) — 分层重构后的最新架构
+- [阶段文档一览](phases/) — Phase 1~10 开发历程
 - [子系统文档](subsystems/) — 对话系统等
 - [设计文档](design/) — 子分支设计、设计语言
-- [归档](archive/) — 旧版本文档
+- [归档](archive/) — 旧版本文档（v4 架构、v7 前端架构等）
 - [开发进度](../../PROGRESS.md) — 当前里程碑
 - [更新日志](../../CHANGELOG.md) — 版本变更

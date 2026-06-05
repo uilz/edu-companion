@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from "react";
 import { DailySummary } from "@/components/dashboard/analytics/utils";
-import { API_BASE } from "@/lib/api";
+import { API_BASE } from "@/lib/api/api";
 
 export function DailySummaryCard() {
   const [summary, setSummary] = useState<DailySummary | null>(null);

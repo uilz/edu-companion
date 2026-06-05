@@ -2,7 +2,7 @@
 
 import pytest
 import time
-from app.services.spaced_repetition import (
+from app.services.analytics.spaced_repetition import (
     SpacedRepetition,
     DEFAULT_EASE_FACTOR,
     MIN_EASE_FACTOR,

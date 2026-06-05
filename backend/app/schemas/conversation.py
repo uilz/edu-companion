@@ -242,6 +242,7 @@ class KGNode(BaseModel):
     tags: list[str] = Field(default_factory=list)
     created_by: str = "ai"
     created_at: float = Field(default_factory=time.time)
+    conversation_ids: list[str] = Field(default_factory=list)
 
 class KGEdge(BaseModel):
     """知识图谱边，描述知识点间的关系（如 prerequisite）"""
