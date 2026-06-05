@@ -1,6 +1,6 @@
 import { BookOpen } from "lucide-react";
-import { useRenderedContent } from "@/lib/useRenderedContent";
-import { sanitizeHtml } from "@/lib/sanitize";
+import { useRenderedContent } from "@/lib/hooks/useRenderedContent";
+import { sanitizeHtml } from "@/lib/utils/sanitize";
 
 /** 纯文本块组件：渲染 Markdown/数学公式 转换后的 HTML，并显示引用来源 */
 export function TextBlock({ content, sources }: { content: Record<string, unknown>; sources?: string[] }) {

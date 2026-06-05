@@ -10,7 +10,7 @@ import {
   Dumbbell,
   MessageSquare,
   Bell,
-  Settings,
+  Settings, Library,
   LucideIcon,
 } from 'lucide-react';
 import SecretaryBellBadge from '@/components/secretary/SecretaryBellBadge';
@@ -26,7 +26,8 @@ interface NavItem {
 const navItems: NavItem[] = [
   { href: '/dashboard', label: '驾驶舱', icon: LayoutDashboard },
   { href: '/learn', label: '学习空间', icon: MessageSquare },
-  { href: '/practice', label: '专注练习', icon: Dumbbell },
+  { href: '/practice', label: '练习', icon: Dumbbell },
+  { href: '/resources', label: '资源', icon: Library },
   { href: '/secretary', label: '秘书', icon: Bell },
   { href: '/settings', label: '设置', icon: Settings },
 ];

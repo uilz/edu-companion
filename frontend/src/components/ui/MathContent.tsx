@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { renderMath } from "@/lib/math";
+import { renderMath } from "@/lib/utils/math";
 
 // ── 组件属性接口 ────────────────────────────────────────────────────
 // text:      包含 LaTeX 公式（$...$ 或 $$...$$）的原始文本

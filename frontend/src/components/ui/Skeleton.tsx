@@ -1,5 +1,5 @@
 // 导入 cn 工具函数，用于合并 Tailwind CSS 类名
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils/utils';
 
 // Skeleton 组件的属性接口定义
 interface SkeletonProps {

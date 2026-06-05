@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { BookOpen } from "lucide-react";
-import InlinePracticeBlock from "../InlinePracticeBlock";
-import { useRenderedContent } from "@/lib/useRenderedContent";
-import { sanitizeHtml } from "@/lib/sanitize";
+import InlinePracticeBlock from "./InlinePracticeBlock";
+import PracticeSetBlock from "./PracticeSetBlock";
+import { useRenderedContent } from "@/lib/hooks/useRenderedContent";
+import { sanitizeHtml } from "@/lib/utils/sanitize";
 
 /** 练习选项的数据结构：选项字母 + 文本内容 */
 interface Option {
@@ -10,8 +11,21 @@ interface Option {
   text: string;
 }
 
-/** 练习块路由组件：判断是交互式练习还是旧格式被动展示，分发到对应组件 */
+/** 练习块路由组件：判断 v7多题集 / 交互式练习 / 旧格式，分发到对应组件 */
 export function PracticeBlockRouter({ content }: { content: Record<string, unknown> }) {
+  // ── v7 多题格式（来自对话 generate_practice 工具）──
+  const questions = content.questions as
+    | Array<{ id?: string; stem: string; options?: Array<{ letter: string; text: string; is_correct?: boolean }>; question_type?: string; answer?: string | string[]; analysis?: string }>
+    | undefined;
+  if (questions && Array.isArray(questions) && questions.length > 0) {
+    return (
+      <PracticeSetBlock
+        questions={questions}
+        bankId={content.bank_id as string | undefined}
+      />
+    );
+  }
+
   // 提取练习数据：交互式练习需要包含 block_id 和 stem
   const blockId = content.block_id as string;
   const stem = content.stem as string;
@@ -54,7 +68,6 @@ function PracticeBlock({ content }: { content: Record<string, unknown> }) {
   const [submitted, setSubmitted] = useState(false);
 
   const questionHtml = useRenderedContent(question);
-
   const explanationHtml = useRenderedContent(explanation);
 
   return (
@@ -107,7 +120,7 @@ function PracticeBlock({ content }: { content: Record<string, unknown> }) {
           <button
             onClick={() => selectedAnswer && setSubmitted(true)}
             disabled={!selectedAnswer}
-            className="mt-2 px-4 py-2 bg-[var(--color-accent)] text-white text-sm disabled:opacity-30 hover:bg-[var(--color-accent-hover)] active:scale-[0.97] transition-colors"
+            className="mt-2 px-4 py-2 bg-[var(--color-accent)] text-white text-sm disabled:opacity-30 hover:opacity-90 active:scale-[0.97] transition-all rounded-lg"
           >
             提交答案
           </button>
@@ -127,7 +140,7 @@ function PracticeBlock({ content }: { content: Record<string, unknown> }) {
           );
         })()}
         {submitted && explanation && (
-          <div className="mt-3 px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)]">
+          <div className="mt-3 px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg">
             <div className="text-[10px] text-[var(--color-accent)] font-medium mb-1">
               解析
             </div>

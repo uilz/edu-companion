@@ -11,8 +11,11 @@ import {
   Settings,
   Sun,
   Moon,
+  Library,
+  LogOut,
 } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 import SecretaryBellBadge from '@/components/secretary/SecretaryBellBadge';
 
 // ── 导航菜单项配置 ──
@@ -20,13 +23,15 @@ import SecretaryBellBadge from '@/components/secretary/SecretaryBellBadge';
 const navItems = [
   { href: '/dashboard', label: '驾驶舱', icon: LayoutDashboard },
   { href: '/learn',    label: '学习空间', icon: Brain },
-  { href: '/practice', label: '专注练习', icon: Dumbbell },
+  { href: '/practice', label: '练习', icon: Dumbbell },
   { href: '/secretary', label: '秘书', icon: Bell },
+  { href: '/resources', label: '我的资源', icon: Library },
 ];
 // ── 桌面端侧边栏导航组件 ──
 export default function Sidebar() {
   const pathname = usePathname();
   const { theme, toggleTheme } = useTheme();
+  const { user, logout } = useAuth();
 
   // 判断当前路由是否与给定 href 匹配（用于高亮激活项）
   const isActive = (href: string) => {
@@ -84,8 +89,28 @@ export default function Sidebar() {
         </div>
       </nav>
 
-      {/* ── 底部区域：设置、主题切换、版本号 ── */}
+      {/* ── 底部区域：用户信息、设置、主题切换 ── */}
       <div className="border-t border-[var(--color-border)]">
+        {/* 用户信息 */}
+        {user && (
+          <div className="flex items-center gap-2.5 px-5 py-3">
+            <div className="w-7 h-7 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-white text-xs font-semibold shrink-0">
+              {(user.display_name || user.username).charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm text-[var(--color-text)] truncate">{user.display_name || user.username}</div>
+              <div className="text-[10px] text-[var(--color-text-muted)] truncate">@{user.username}</div>
+            </div>
+            <button
+              onClick={logout}
+              title="退出登录"
+              className="p-1.5 rounded text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
+            >
+              <LogOut size={14} />
+            </button>
+          </div>
+        )}
+
         {/* 设置入口 */}
         <Link
           href="/settings"

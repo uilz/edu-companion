@@ -1,5 +1,5 @@
-import MediaSearchBlock from "../MediaSearchBlock";
-import VideoEmbed from "../VideoEmbed";
+import MediaSearchBlock from "./MediaSearchBlock";
+import VideoEmbed from "./../media/VideoEmbed";
 
 /** 视频块路由组件：判断内容是视频嵌入还是媒体搜索结果，分发到对应组件 */
 export function VideoBlockRouter({ content }: { content: Record<string, unknown> }) {
