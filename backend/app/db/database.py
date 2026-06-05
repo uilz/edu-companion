@@ -140,10 +140,48 @@ CREATE TABLE IF NOT EXISTS materials (
     chunk_count     INTEGER DEFAULT 0,
     question_count  INTEGER DEFAULT 0,
     skills_covered_json JSONB DEFAULT '[]',
+    summary         TEXT DEFAULT '',
     expires_at      TIMESTAMP,
     created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
     indexed_at      TIMESTAMP
 );
+-- 兼容旧表
+DO $$ BEGIN
+    ALTER TABLE materials ADD COLUMN IF NOT EXISTS summary TEXT DEFAULT '';
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+
+-- 所属层级
+DO $$ BEGIN
+    ALTER TABLE materials ADD COLUMN IF NOT EXISTS level TEXT DEFAULT 'partition';
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE materials ADD COLUMN IF NOT EXISTS parent_id TEXT DEFAULT '';
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+
+-- 标签字段
+DO $$ BEGIN
+    ALTER TABLE materials ADD COLUMN IF NOT EXISTS tags_json JSONB DEFAULT '[]';
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+
+-- 软删除（回收站）
+DO $$ BEGIN
+    ALTER TABLE materials ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE materials ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+
+-- 文件夹类型
+DO $$ BEGIN
+    ALTER TABLE materials ADD COLUMN IF NOT EXISTS is_folder BOOLEAN DEFAULT FALSE;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
 
 -- 资料分块
 CREATE TABLE IF NOT EXISTS material_chunks (
@@ -161,8 +199,31 @@ CREATE TABLE IF NOT EXISTS material_chunks (
     chunk_index     INTEGER DEFAULT 0,
     created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
     indexed_at      TIMESTAMP,
-    indexing_status TEXT DEFAULT 'pending'
+    indexing_status TEXT DEFAULT 'pending',
+    heading_path    TEXT DEFAULT '',
+    embedding       DOUBLE PRECISION[]
 );
+-- 兼容旧表（已存在的表加列）
+DO $$ BEGIN
+    ALTER TABLE material_chunks ADD COLUMN IF NOT EXISTS heading_path TEXT DEFAULT '';
+    ALTER TABLE material_chunks ADD COLUMN IF NOT EXISTS embedding DOUBLE PRECISION[];
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+
+-- 资料目录树（TOC）
+CREATE TABLE IF NOT EXISTS material_toc (
+    toc_id          TEXT PRIMARY KEY,
+    material_id     TEXT NOT NULL,
+    parent_toc_id   TEXT,
+    level           INTEGER NOT NULL DEFAULT 1,
+    heading         TEXT NOT NULL DEFAULT '',
+    chunk_start     INTEGER DEFAULT 0,
+    chunk_end       INTEGER DEFAULT 0,
+    page_start      INTEGER,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_toc_material ON material_toc(material_id);
+CREATE INDEX IF NOT EXISTS idx_toc_parent ON material_toc(parent_toc_id);
 
 
 CREATE INDEX IF NOT EXISTS idx_questions_skill ON questions(skill_id);
