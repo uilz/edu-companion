@@ -26,6 +26,10 @@ htmlcov/
 .mypy_cache/
 .pytype/
 
+# IDE / tooling
+.claude-plugin/
+.out-of-scope/
+
 # Node.js
 node_modules/
 .next/
