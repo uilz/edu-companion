@@ -1,0 +1,2080 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>知识树重构 · 交互预览</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════
+   设计 Token — Professional 风格
+   ═══════════════════════════════════════ */
+:root {
+  --color-bg: #f8f9fa;
+  --color-page-secondary: #f0f1f3;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f3f4f6;
+  --color-surface-elevated: #ffffff;
+  --color-border: #e5e7eb;
+  --color-border-hover: #d1d5db;
+  --color-text: #111827;
+  --color-text-secondary: #6b7280;
+  --color-text-muted: #9ca3af;
+  --color-accent: #7c3aed;
+  --color-accent-soft: rgba(124, 58, 237, 0.08);
+  --color-accent-hover: #6d28d9;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #3b82f6;
+  --color-graph-node: #8b5cf6;
+  --color-graph-node-mastered: #10b981;
+  --color-graph-node-weak: #f59e0b;
+  --color-graph-node-unstarted: #d1d5db;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-full: 9999px;
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+
+  --motion-fast: 100ms;
+  --motion-normal: 150ms;
+  --motion-slow: 200ms;
+  --motion-slower: 300ms;
+}
+
+/* ═══════════════════════════════════════
+   基础样式
+   ═══════════════════════════════════════ */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+  color: var(--color-text);
+  overflow: hidden;
+  height: 100vh;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ═══════════════════════════════════════
+   顶部导航栏
+   ═══════════════════════════════════════ */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 48px;
+  padding: 0 16px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+  z-index: 100;
+}
+.topbar .logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--color-text);
+  margin-right: 8px;
+}
+.topbar .logo svg { color: var(--color-accent); }
+
+/* 分区选择器 */
+.partition-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--color-page-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--motion-fast);
+  white-space: nowrap;
+}
+.partition-select:hover { border-color: var(--color-accent); }
+.partition-select svg { color: var(--color-text-muted); }
+
+/* 分割线 */
+.divider {
+  width: 1px;
+  height: 24px;
+  background: var(--color-border);
+  flex-shrink: 0;
+}
+
+/* 视图模式切换 */
+.view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--color-page-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.view-toggle button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: none;
+  background: transparent;
+  border-radius: calc(var(--radius-md) - 2px);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all var(--motion-fast);
+  white-space: nowrap;
+}
+.view-toggle button:hover { color: var(--color-text); }
+.view-toggle button.active {
+  background: var(--color-surface);
+  color: var(--color-accent);
+  box-shadow: var(--shadow-sm);
+}
+
+/* 布局模式切换 */
+.layout-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--color-page-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 2px;
+}
+.layout-toggle button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  border-radius: calc(var(--radius-md) - 2px);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all var(--motion-fast);
+  white-space: nowrap;
+}
+.layout-toggle button:hover { color: var(--color-text); }
+.layout-toggle button.active {
+  background: var(--color-surface);
+  color: var(--color-accent);
+  box-shadow: var(--shadow-sm);
+}
+
+/* 对话形态切换 */
+.dialog-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--color-page-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 2px;
+}
+.dialog-toggle button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  border-radius: calc(var(--radius-md) - 2px);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all var(--motion-fast);
+}
+.dialog-toggle button:hover { color: var(--color-text); }
+.dialog-toggle button.active {
+  background: var(--color-surface);
+  color: var(--color-accent);
+  box-shadow: var(--shadow-sm);
+}
+
+/* 搜索框 */
+.search-box {
+  position: relative;
+  flex: 1;
+  max-width: 200px;
+}
+.search-box input {
+  width: 100%;
+  padding: 6px 28px 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-page-secondary);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  outline: none;
+  transition: border-color var(--motion-fast);
+}
+.search-box input:focus { border-color: var(--color-accent); background: var(--color-surface); }
+.search-box input::placeholder { color: var(--color-text-muted); }
+.search-box .search-icon {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-muted);
+}
+
+/* 右侧操作区 */
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.topbar-right button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--motion-fast);
+  white-space: nowrap;
+}
+.topbar-right button:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+/* ═══════════════════════════════════════
+   主体布局
+   ═══════════════════════════════════════ */
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+.main-area {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ═══════════════════════════════════════
+   状态栏
+   ═══════════════════════════════════════ */
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 32px;
+  padding: 0 16px;
+  background: var(--color-page-secondary);
+  border-top: 1px solid var(--color-border);
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+.statusbar strong { color: var(--color-text); font-weight: 600; }
+.statusbar .mastered { color: var(--color-success); }
+.statusbar .learning { color: var(--color-warning); }
+.statusbar .avg { font-weight: 600; }
+
+/* ═══════════════════════════════════════
+   对话面板 — 侧栏式 (A1)
+   ═══════════════════════════════════════ */
+.dialog-panel {
+  width: 320px;
+  min-width: 280px;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width var(--motion-slower), min-width var(--motion-slower);
+  flex-shrink: 0;
+}
+.dialog-panel.collapsed {
+  width: 40px;
+  min-width: 40px;
+}
+.dialog-panel.collapsed .dialog-content { display: none; }
+.dialog-panel.collapsed .dialog-collapse-btn {
+  writing-mode: vertical-rl;
+  padding: 12px 6px;
+  width: 40px;
+  height: auto;
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+.dialog-header .mode-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  cursor: pointer;
+  transition: all var(--motion-fast);
+}
+.dialog-header .mode-badge:hover { background: rgba(124,58,237,0.15); }
+.dialog-header .mode-badge.node-mode {
+  background: rgba(245,158,11,0.1);
+  color: var(--color-warning);
+}
+.dialog-collapse-btn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dialog-collapse-btn:hover { background: var(--color-surface-hover); color: var(--color-text); }
+
+.dialog-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.dialog-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dialog-msg {
+  display: flex;
+  gap: 8px;
+  max-width: 90%;
+  animation: fadeIn var(--motion-slower) ease-out;
+}
+.dialog-msg.user { align-self: flex-end; flex-direction: row-reverse; }
+.dialog-msg .avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.dialog-msg.assistant .avatar { background: var(--color-accent-soft); color: var(--color-accent); }
+.dialog-msg.user .avatar { background: rgba(16,185,129,0.1); color: var(--color-success); }
+.dialog-msg .bubble {
+  padding: 8px 12px;
+  border-radius: var(--radius-lg);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.dialog-msg.assistant .bubble {
+  background: var(--color-page-secondary);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  border-bottom-left-radius: var(--radius-sm);
+}
+.dialog-msg.user .bubble {
+  background: var(--color-accent);
+  color: white;
+  border-bottom-right-radius: var(--radius-sm);
+}
+.dialog-msg .bubble .op-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 9px;
+  font-weight: 600;
+  background: rgba(16,185,129,0.15);
+  color: var(--color-success);
+  margin-top: 4px;
+}
+
+.dialog-input-area {
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  gap: 8px;
+  background: var(--color-surface);
+}
+.dialog-input-area input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-page-secondary);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  outline: none;
+  transition: border-color var(--motion-fast);
+}
+.dialog-input-area input:focus { border-color: var(--color-accent); background: var(--color-surface); }
+.dialog-input-area input::placeholder { color: var(--color-text-muted); }
+.dialog-input-area button {
+  padding: 8px 12px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--motion-fast);
+  flex-shrink: 0;
+}
+.dialog-input-area button:hover { background: var(--color-accent-hover); }
+
+.context-switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--color-page-secondary);
+  border-top: 1px solid var(--color-border);
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+.context-switch button {
+  padding: 3px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: 10px;
+  color: var(--color-accent);
+  cursor: pointer;
+  transition: all var(--motion-fast);
+}
+.context-switch button:hover { border-color: var(--color-accent); background: var(--color-accent-soft); }
+
+/* ═══════════════════════════════════════
+   浮动气泡 (A3)
+   ═══════════════════════════════════════ */
+.float-bubble-toggle {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  color: white;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-lg);
+  z-index: 200;
+  transition: transform var(--motion-fast), box-shadow var(--motion-slow);
+}
+.float-bubble-toggle:hover {
+  transform: scale(1.05);
+  box-shadow: 0 12px 40px rgba(124,58,237,0.3);
+}
+.float-bubble-toggle .badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--color-danger);
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.float-dialog {
+  position: fixed;
+  bottom: 88px;
+  right: 24px;
+  width: 380px;
+  height: 520px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 199;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slideUp var(--motion-slower) ease-out;
+}
+.float-dialog.open { display: flex; }
+.float-dialog .float-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  cursor: grab;
+}
+.float-dialog .float-header:active { cursor: grabbing; }
+.float-dialog .float-header .title {
+  font-size: 12px;
+  font-weight: 600;
+}
+.float-dialog .float-header button {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+}
+.float-dialog .float-header button:hover { background: var(--color-surface-hover); color: var(--color-text); }
+.float-dialog .float-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.float-dialog .float-input-area {
+  padding: 10px 16px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  gap: 8px;
+}
+.float-dialog .float-input-area input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-page-secondary);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  outline: none;
+}
+.float-dialog .float-input-area input:focus { border-color: var(--color-accent); background: var(--color-surface); }
+.float-dialog .float-input-area button {
+  padding: 8px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ═══════════════════════════════════════
+   图谱画布
+   ═══════════════════════════════════════ */
+.graph-canvas {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 1px 1px, var(--color-border) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+.graph-canvas svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* 节点样式 */
+.graph-node {
+  cursor: pointer;
+  transition: opacity var(--motion-normal);
+}
+.graph-node:hover .node-card { box-shadow: 0 4px 16px rgba(0,0,0,0.12); transform: translateY(-1px); }
+.graph-node.selected .node-card {
+  box-shadow: 0 0 0 2px var(--color-accent), 0 4px 16px rgba(124,58,237,0.2);
+  transform: translateY(-1px);
+}
+
+.node-card {
+  fill: var(--color-surface);
+  stroke: var(--color-border);
+  stroke-width: 1;
+  rx: 10;
+  ry: 10;
+  filter: drop-shadow(var(--shadow-sm));
+  transition: all var(--motion-normal);
+}
+.node-card.fish-eye-highlight {
+  fill: #fef3c7;
+  stroke: var(--color-warning);
+  stroke-width: 2;
+}
+
+.node-label {
+  font-size: 11px;
+  font-weight: 500;
+  fill: var(--color-text);
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+.node-desc {
+  font-size: 9px;
+  fill: var(--color-text-muted);
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.mastery-ring-bg { fill: none; stroke: var(--color-border); stroke-width: 3; }
+.mastery-ring-fg { fill: none; stroke-width: 3; stroke-linecap: round; }
+.mastery-ring-fg.high { stroke: var(--color-success); }
+.mastery-ring-fg.mid { stroke: var(--color-warning); }
+.mastery-ring-fg.low { stroke: var(--color-text-muted); }
+
+/* 边样式 */
+.graph-edge { stroke: var(--color-border); stroke-width: 1.5; fill: none; }
+.graph-edge.active { stroke: var(--color-accent); stroke-opacity: 0.6; stroke-width: 2; }
+.graph-edge-marker { fill: var(--color-border); }
+
+/* ═══════════════════════════════════════
+   节点详情浮层 (点击弹出的 overlay)
+   ═══════════════════════════════════════ */
+.detail-popover {
+  position: absolute;
+  width: 320px;
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 50;
+  overflow: hidden;
+  animation: fadeIn var(--motion-slower) ease-out;
+}
+.detail-popover .popover-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-page-secondary);
+}
+.detail-popover .popover-header .mastery-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+.detail-popover .popover-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  flex: 1;
+}
+.detail-popover .popover-header .level-tag {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 9px;
+  background: var(--color-surface-hover);
+  color: var(--color-text-muted);
+}
+.detail-popover .popover-header button {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+}
+.detail-popover .popover-header button:hover { background: var(--color-surface-hover); color: var(--color-text); }
+.detail-popover .popover-body { padding: 16px; }
+.detail-popover .popover-body .desc {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.7;
+  margin-bottom: 12px;
+}
+.detail-popover .popover-body .meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.detail-popover .popover-body .meta-item {
+  padding: 6px 10px;
+  background: var(--color-page-secondary);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+}
+.detail-popover .popover-body .meta-item .label {
+  color: var(--color-text-muted);
+  font-size: 9px;
+}
+.detail-popover .popover-body .meta-item .value {
+  font-weight: 600;
+  color: var(--color-text);
+  margin-top: 2px;
+}
+.detail-popover .popover-body .tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.detail-popover .popover-body .tag {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+.detail-popover .popover-body .actions {
+  display: flex;
+  gap: 6px;
+}
+.detail-popover .popover-body .actions button {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--motion-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.detail-popover .popover-body .actions button:hover { border-color: var(--color-accent); color: var(--color-accent); background: var(--color-accent-soft); }
+.detail-popover .popover-body .actions button.primary { background: var(--color-accent); color: white; border-color: var(--color-accent); }
+.detail-popover .popover-body .actions button.primary:hover { background: var(--color-accent-hover); }
+
+/* ═══════════════════════════════════════
+   节点 Tooltip（悬停）
+   ═══════════════════════════════════════ */
+.node-tooltip {
+  position: absolute;
+  padding: 8px 12px;
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  font-size: 11px;
+  pointer-events: none;
+  z-index: 60;
+  max-width: 200px;
+  animation: fadeIn var(--motion-fast) ease-out;
+}
+.node-tooltip .tt-label { font-weight: 600; color: var(--color-text); }
+.node-tooltip .tt-mastery { font-size: 10px; color: var(--color-text-muted); margin-top: 2px; }
+.node-tooltip .tt-desc { font-size: 10px; color: var(--color-text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ═══════════════════════════════════════
+   右键菜单
+   ═══════════════════════════════════════ */
+.context-menu {
+  position: fixed;
+  min-width: 180px;
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 300;
+  padding: 4px;
+  animation: fadeIn var(--motion-fast) ease-out;
+}
+.context-menu .cm-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background var(--motion-fast);
+}
+.context-menu .cm-item:hover { background: var(--color-accent-soft); color: var(--color-accent); }
+.context-menu .cm-item svg { color: var(--color-text-muted); flex-shrink: 0; }
+.context-menu .cm-item:hover svg { color: var(--color-accent); }
+.context-menu .cm-divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 4px 0;
+}
+.context-menu .cm-item.danger { color: var(--color-danger); }
+.context-menu .cm-item.danger:hover { background: rgba(239,68,68,0.08); color: var(--color-danger); }
+.context-menu .cm-item.danger svg { color: var(--color-danger); }
+
+/* ═══════════════════════════════════════
+   图层面板（Layer Panel）
+   ═══════════════════════════════════════ */
+.layer-panel {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 220px;
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  z-index: 30;
+  overflow: hidden;
+  animation: fadeIn var(--motion-slower) ease-out;
+}
+.layer-panel .lp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 11px;
+  font-weight: 600;
+}
+.layer-panel .lp-header button {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+}
+.layer-panel .lp-header button:hover { background: var(--color-surface-hover); }
+.layer-panel .lp-search {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+.layer-panel .lp-search input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  outline: none;
+  background: var(--color-page-secondary);
+}
+.layer-panel .lp-search input:focus { border-color: var(--color-accent); background: var(--color-surface); }
+.layer-panel .lp-tree {
+  padding: 4px 0;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.layer-panel .lp-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background var(--motion-fast);
+}
+.layer-panel .lp-tree-item:hover { background: var(--color-surface-hover); }
+.layer-panel .lp-tree-item .collapse-icon {
+  width: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.layer-panel .lp-tree-item .node-icon { flex-shrink: 0; }
+.layer-panel .lp-tree-item .node-name { color: var(--color-text); flex: 1; }
+.layer-panel .lp-tree-item .count-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-hover);
+  color: var(--color-text-muted);
+}
+.layer-panel .lp-tree-item .match-highlight {
+  background: rgba(124,58,237,0.15);
+  padding: 0 4px;
+  border-radius: 2px;
+}
+.layer-panel .lp-tree-item.level-1 { padding-left: 24px; }
+.layer-panel .lp-tree-item.level-2 { padding-left: 36px; }
+.layer-panel .lp-tree-item.level-3 { padding-left: 48px; }
+
+.layer-panel .lp-filters {
+  padding: 8px 12px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.layer-panel .lp-filters label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.layer-panel .lp-filters input[type="checkbox"] {
+  accent-color: var(--color-accent);
+}
+
+.layer-toggle-btn {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  z-index: 20;
+  transition: all var(--motion-fast);
+}
+.layer-toggle-btn:hover { border-color: var(--color-accent); color: var(--color-accent); }
+
+/* ═══════════════════════════════════════
+   右侧详情面板（三栏模式）
+   ═══════════════════════════════════════ */
+.detail-panel {
+  width: 320px;
+  min-width: 280px;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+  animation: slideIn var(--motion-slower) ease-out;
+}
+.detail-panel .dp-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+.detail-panel .dp-header h3 { font-size: 13px; font-weight: 600; flex: 1; }
+.detail-panel .dp-header button {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+}
+.detail-panel .dp-header button:hover { background: var(--color-surface-hover); color: var(--color-text); }
+.detail-panel .dp-body { flex: 1; overflow-y: auto; padding: 16px; }
+
+.detail-panel .dp-section { margin-bottom: 16px; }
+.detail-panel .dp-section-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  margin-bottom: 8px;
+}
+.detail-panel .dp-field {
+  margin-bottom: 12px;
+}
+.detail-panel .dp-field .dp-field-label {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  margin-bottom: 2px;
+}
+.detail-panel .dp-field .dp-field-value {
+  font-size: 12px;
+  color: var(--color-text);
+}
+.detail-panel .dp-field input, .detail-panel .dp-field textarea {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  outline: none;
+  background: var(--color-page-secondary);
+  transition: border-color var(--motion-fast);
+}
+.detail-panel .dp-field input:focus, .detail-panel .dp-field textarea:focus { border-color: var(--color-accent); background: var(--color-surface); }
+.detail-panel .dp-field textarea { resize: vertical; min-height: 60px; }
+
+.detail-panel .dp-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.detail-panel .dp-tags .tag {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.detail-panel .dp-actions { display: flex; flex-direction: column; gap: 4px; }
+.detail-panel .dp-actions button {
+  padding: 7px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--motion-fast);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-secondary);
+}
+.detail-panel .dp-actions button:hover { border-color: var(--color-accent); color: var(--color-accent); background: var(--color-accent-soft); }
+.detail-panel .dp-actions button.danger:hover { border-color: var(--color-danger); color: var(--color-danger); background: rgba(239,68,68,0.06); }
+
+/* ═══════════════════════════════════════
+   键盘快捷键提示
+   ═══════════════════════════════════════ */
+.shortcut-hint {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 6px 16px;
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-md);
+  z-index: 100;
+  font-size: 10px;
+  color: var(--color-text-muted);
+  opacity: 0;
+  transition: opacity var(--motion-slower);
+  pointer-events: none;
+}
+.shortcut-hint.visible { opacity: 1; }
+.shortcut-hint kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  background: var(--color-page-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  font-size: 9px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  color: var(--color-text);
+  min-width: 18px;
+  text-align: center;
+}
+
+/* ═══════════════════════════════════════
+   动画
+   ═══════════════════════════════════════ */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.typing-indicator { display: flex; gap: 3px; padding: 8px 0; }
+.typing-indicator span {
+  width: 6px; height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-text-muted);
+  animation: pulse 1.2s infinite;
+}
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+/* ═══════════════════════════════════════
+   交互提示标注
+   ═══════════════════════════════════════ */
+.interaction-label {
+  position: absolute;
+  padding: 4px 10px;
+  background: rgba(0,0,0,0.8);
+  color: white;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-weight: 500;
+  pointer-events: none;
+  z-index: 40;
+  white-space: nowrap;
+  animation: fadeIn var(--motion-slower) ease-out;
+}
+.interaction-label::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: rgba(0,0,0,0.8);
+  transform: rotate(45deg);
+}
+.interaction-label.top::after {
+  bottom: -4px;
+  left: 50%;
+  margin-left: -4px;
+}
+.interaction-label.bottom::after {
+  top: -4px;
+  left: 50%;
+  margin-left: -4px;
+}
+
+/* ═══════════════════════════════════════
+   其他 UI 微件
+   ═══════════════════════════════════════ */
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--color-text-muted);
+}
+.empty-state svg { opacity: 0.3; }
+.empty-state p { font-size: 12px; }
+
+/* ═══════════════════════════════════════
+   响应式 / 演示标注
+   ═══════════════════════════════════════ */
+.demo-badge {
+  position: fixed;
+  top: 56px;
+  right: 16px;
+  padding: 4px 12px;
+  background: rgba(124,58,237,0.1);
+  border: 1px solid rgba(124,58,237,0.2);
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  color: var(--color-accent);
+  font-weight: 500;
+  z-index: 200;
+  backdrop-filter: blur(4px);
+}
+</style>
+</head>
+<body>
+
+<div class="app-layout">
+
+  <!-- ═══════ 顶部导航栏 ═══════ -->
+  <div class="topbar">
+    <div class="logo">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      伴学
+    </div>
+
+    <div class="partition-select" onclick="toggleDemoHint('分区切换')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>
+      高等数学
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="view-toggle">
+      <button class="active" onclick="switchView(this, 'mindmap')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        思维导图
+      </button>
+      <button onclick="switchView(this, 'force')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="18" cy="18" r="2"/><circle cx="6" cy="18" r="2"/></svg>
+        力导向
+      </button>
+      <button onclick="switchView(this, 'dag')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="4" rx="1"/><rect x="2" y="12" width="20" height="4" rx="1"/><rect x="6" y="20" width="12" height="3" rx="1"/></svg>
+        依赖图
+      </button>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="layout-toggle">
+      <button class="active" onclick="switchLayout(this, 'two-column')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="12" y="3" width="9" height="18" rx="1"/></svg>
+        两栏
+      </button>
+      <button onclick="switchLayout(this, 'three-column')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="18" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg>
+        三栏
+      </button>
+    </div>
+
+    <div class="dialog-toggle">
+      <button class="active" onclick="switchDialogStyle(this, 'sidebar')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+        侧栏
+      </button>
+      <button onclick="switchDialogStyle(this, 'float')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="14" height="14" rx="3"/><circle cx="14" cy="10" r="1.5"/><path d="M10 14c0-1.5 2-2.5 4-2.5s4 1 4 2.5"/></svg>
+        气泡
+      </button>
+    </div>
+
+    <div class="search-box">
+      <input type="text" placeholder="搜索节点…" oninput="onSearch(this.value)">
+      <svg class="search-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+    </div>
+
+    <div class="topbar-right">
+      <button onclick="toggleDemoHint('添加节点')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        添加节点
+      </button>
+      <button onclick="toggleFullscreen()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>
+        全屏
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════ 主区域 ═══════ -->
+  <div class="main-area" id="mainArea">
+
+    <!-- 对话面板 — 侧栏式 (A1) -->
+    <div class="dialog-panel" id="dialogPanel">
+      <div class="dialog-header">
+        <div class="mode-badge" id="dialogModeBadge" onclick="toggleDialogMode()">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/></svg>
+          全局对话
+        </div>
+        <button class="dialog-collapse-btn" onclick="toggleDialogCollapse()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+      </div>
+
+      <div class="dialog-content" id="dialogContent">
+        <div class="dialog-messages" id="dialogMessages">
+          <div class="dialog-msg assistant">
+            <div class="avatar">🤖</div>
+            <div class="bubble">
+              这棵<strong>高等数学</strong>知识树共有 12 个节点，覆盖了<strong>极限与连续、导数与微分、积分学、多元函数、级数、微分方程</strong>六大核心领域。
+              <br><br>
+              你已经掌握了 <strong style="color:var(--color-success)">极限与连续</strong> 和 <strong style="color:var(--color-success)">导数</strong>，建议下一步学习 <strong style="color:var(--color-warning)">积分学</strong>。
+            </div>
+          </div>
+          <div class="dialog-msg user">
+            <div class="avatar">🧑</div>
+            <div class="bubble">帮我总结一下积分学下面有哪些子概念？</div>
+          </div>
+          <div class="dialog-msg assistant">
+            <div class="avatar">🤖</div>
+            <div class="bubble">
+              「积分学」包含以下子节点：
+              <br>• 不定积分 📘
+              <br>• 定积分 📘
+              <br>• 反常积分 📘
+              <br>• 积分应用 📐
+              <br><br>
+              其中 <strong style="color:var(--color-success)">不定积分</strong> 你已掌握（82%），<strong style="color:var(--color-warning)">定积分</strong> 在学中（45%），其余尚未开始。
+              <div class="op-tag">✅ 已查询结构</div>
+            </div>
+          </div>
+          <div class="dialog-msg user">
+            <div class="avatar">🧑</div>
+            <div class="bubble">把「定积分」的优先级设为 5</div>
+          </div>
+          <div class="dialog-msg assistant">
+            <div class="avatar">🤖</div>
+            <div class="bubble">已更新「定积分」的优先级为 5（从 3 提升）。建议你优先学习这个节点，它是后续「积分应用」的前置知识。
+              <div class="op-tag">✅ 已更新节点</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="context-switch" id="contextSwitch" style="display:none">
+          <span>📍 选中节点：<strong id="selectedNodeName">极限与连续</strong></span>
+          <button onclick="toggleDialogMode()">切换到节点探索</button>
+        </div>
+
+        <div class="dialog-input-area">
+          <input type="text" placeholder="向知识树提问…" id="dialogInput" onkeydown="if(event.key==='Enter')sendMessage()">
+          <button onclick="sendMessage()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ 图谱画布 ═══════ -->
+    <div class="graph-canvas" id="graphCanvas">
+      <!-- 图层面板 (默认显示一部分演示) -->
+      <div class="layer-panel" id="layerPanel">
+        <div class="lp-header">
+          <span>📂 层级导航</span>
+          <button onclick="document.getElementById('layerPanel').style.display='none';document.getElementById('layerToggleBtn').style.display='flex'">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="lp-search">
+          <input type="text" placeholder="搜索节点…" oninput="onSearch(this.value)">
+        </div>
+        <div class="lp-tree">
+          <div class="lp-tree-item" onclick="focusNode('calculus')">
+            <span class="collapse-icon" onclick="event.stopPropagation();toggleCollapse(this)">▼</span>
+            <span class="node-name">📐 高等数学</span>
+            <span class="count-badge">12</span>
+          </div>
+          <div class="lp-tree-item level-1" onclick="focusNode('limits')">
+            <span class="collapse-icon" onclick="event.stopPropagation();toggleCollapse(this)">▶</span>
+            <span class="node-name" id="treeNodeLimits">极限与连续</span>
+            <span class="count-badge" style="background:rgba(16,185,129,0.15);color:var(--color-success)">✅ 已掌握</span>
+          </div>
+          <div class="lp-tree-item level-1" onclick="focusNode('derivatives')">
+            <span class="collapse-icon" style="visibility:hidden">▶</span>
+            <span class="node-name">导数与微分</span>
+            <span class="count-badge" style="background:rgba(16,185,129,0.15);color:var(--color-success)">✅ 已掌握</span>
+          </div>
+          <div class="lp-tree-item level-1" onclick="focusNode('integration')">
+            <span class="collapse-icon" onclick="event.stopPropagation();toggleCollapse(this)">▼</span>
+            <span class="node-name">📘 积分学</span>
+            <span class="count-badge">4</span>
+          </div>
+          <div class="lp-tree-item level-2" onclick="focusNode('indefinite')">
+            <span class="collapse-icon" style="visibility:hidden">▶</span>
+            <span class="node-name">不定积分</span>
+            <span class="count-badge" style="background:rgba(16,185,129,0.15);color:var(--color-success)">82%</span>
+          </div>
+          <div class="lp-tree-item level-2" onclick="focusNode('definite')">
+            <span class="collapse-icon" style="visibility:hidden">▶</span>
+            <span class="node-name" id="treeNodeDefinite" style="background:rgba(245,158,11,0.1);padding:0 4px;border-radius:3px">定积分</span>
+            <span class="count-badge" style="background:rgba(245,158,11,0.15);color:var(--color-warning)">45%</span>
+          </div>
+          <div class="lp-tree-item level-2">
+            <span class="collapse-icon" style="visibility:hidden">▶</span>
+            <span class="node-name">反常积分</span>
+            <span class="count-badge">—</span>
+          </div>
+          <div class="lp-tree-item level-2">
+            <span class="collapse-icon" style="visibility:hidden">▶</span>
+            <span class="node-name">积分应用</span>
+            <span class="count-badge">—</span>
+          </div>
+          <div class="lp-tree-item level-1" onclick="focusNode('multivariable')">
+            <span class="collapse-icon" style="visibility:hidden">▶</span>
+            <span class="node-name">多元函数</span>
+            <span class="count-badge">—</span>
+          </div>
+          <div class="lp-tree-item level-1">
+            <span class="collapse-icon" onclick="event.stopPropagation();toggleCollapse(this)">▶</span>
+            <span class="node-name">🔢 级数</span>
+            <span class="count-badge">3</span>
+          </div>
+          <div class="lp-tree-item level-1">
+            <span class="collapse-icon" style="visibility:hidden">▶</span>
+            <span class="node-name">微分方程</span>
+            <span class="count-badge">—</span>
+          </div>
+        </div>
+        <div class="lp-filters">
+          <label><input type="checkbox" checked> 显示已掌握</label>
+          <label><input type="checkbox" checked> 显示学习中</label>
+          <label><input type="checkbox" checked> 显示未接触</label>
+        </div>
+      </div>
+
+      <button class="layer-toggle-btn" id="layerToggleBtn" style="display:none" onclick="document.getElementById('layerPanel').style.display='block';this.style.display='none'">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      </button>
+
+      <!-- SVG 图谱 -->
+      <svg id="graphSvg" viewBox="0 0 1000 650">
+        <defs>
+          <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#d1d5db"/>
+          </marker>
+          <marker id="arrowhead-active" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#7c3aed" opacity="0.6"/>
+          </marker>
+          <filter id="shadow1">
+            <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.06"/>
+          </filter>
+          <filter id="shadowHover">
+            <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.12"/>
+          </filter>
+        </defs>
+
+        <!-- === 边 (依赖关系) === -->
+        <!-- 高等数学 → 极限与连续 -->
+        <path d="M 500,65 L 200,180" class="graph-edge active" marker-end="url(#arrowhead-active)"/>
+        <!-- 高等数学 → 导数与微分 -->
+        <path d="M 500,65 L 420,180" class="graph-edge active" marker-end="url(#arrowhead-active)"/>
+        <!-- 高等数学 → 积分学 -->
+        <path d="M 500,65 L 600,180" class="graph-edge" marker-end="url(#arrowhead)"/>
+        <!-- 高等数学 → 多元函数 -->
+        <path d="M 500,65 L 750,180" class="graph-edge" marker-end="url(#arrowhead)"/>
+        <!-- 高等数学 → 级数 -->
+        <path d="M 500,65 L 840,360" class="graph-edge" marker-end="url(#arrowhead)"/>
+        <!-- 高等数学 → 微分方程 -->
+        <path d="M 500,65 L 220,370" class="graph-edge" marker-end="url(#arrowhead)"/>
+
+        <!-- 极限与连续 → 导数 -->
+        <path d="M 200,180 L 420,180" class="graph-edge active" marker-end="url(#arrowhead-active)"/>
+        <!-- 导数 → 积分学 -->
+        <path d="M 420,180 L 600,180" class="graph-edge" marker-end="url(#arrowhead)"/>
+
+        <!-- 积分学 → 子节点 -->
+        <path d="M 600,180 L 490,300" class="graph-edge" marker-end="url(#arrowhead)"/>
+        <path d="M 600,180 L 600,300" class="graph-edge active" marker-end="url(#arrowhead-active)"/>
+        <path d="M 600,180 L 710,300" class="graph-edge" marker-end="url(#arrowhead)"/>
+        <path d="M 600,180 L 600,420" class="graph-edge" marker-end="url(#arrowhead)"/>
+
+        <!-- 不定积分 → 定积分 -->
+        <path d="M 490,300 L 600,300" class="graph-edge" marker-end="url(#arrowhead)"/>
+        <!-- 定积分 → 反常积分 -->
+        <path d="M 600,300 L 710,300" class="graph-edge" marker-end="url(#arrowhead)"/>
+        <!-- 定积分 → 积分应用 -->
+        <path d="M 600,300 L 600,420" class="graph-edge" marker-end="url(#arrowhead)"/>
+
+        <!-- === 节点 === -->
+
+        <!-- 根：高等数学 -->
+        <g class="graph-node selected" transform="translate(500, 45)" id="nodeH">
+          <rect class="node-card" x="-60" y="-20" width="120" height="40" rx="20"/>
+          <text class="node-label" y="1">📐 高等数学</text>
+        </g>
+
+        <!-- 极限与连续 (已掌握 92%) -->
+        <g class="graph-node" transform="translate(200, 180)" id="nodeLimits"
+           onmouseenter="showTooltip(event,'极限与连续',92,'理解极限概念，掌握连续函数性质')"
+           onmouseleave="hideTooltip()"
+           onmousedown="selectNode(this,'limits')"
+           oncontextmenu="showContextMenu(event,'极限与连续','limits')">
+          <rect class="node-card" x="-72" y="-28" width="144" height="56" rx="10" filter="url(#shadow1)"/>
+          <circle class="mastery-ring-bg" cx="56" cy="0" r="14"/>
+          <circle class="mastery-ring-fg high" cx="56" cy="0" r="14" stroke-dasharray="82 100" stroke-dashoffset="-3.5" transform="rotate(-90 56 0)"/>
+          <text x="56" y="0.5" text-anchor="middle" font-size="9" font-weight="600" fill="var(--color-success)">92%</text>
+          <text class="node-label" x="-8" y="-6">极限与连续</text>
+          <text class="node-desc" x="-8" y="10">极限概念 · 连续性质</text>
+        </g>
+
+        <!-- 导数与微分 (已掌握 85%) -->
+        <g class="graph-node" transform="translate(420, 180)" id="nodeDerivatives"
+           onmouseenter="showTooltip(event,'导数与微分',85,'理解导数定义，掌握求导法则')"
+           onmouseleave="hideTooltip()"
+           onmousedown="selectNode(this,'derivatives')"
+           oncontextmenu="showContextMenu(event,'导数与微分','derivatives')">
+          <rect class="node-card" x="-72" y="-28" width="144" height="56" rx="10" filter="url(#shadow1)"/>
+          <circle class="mastery-ring-bg" cx="56" cy="0" r="14"/>
+          <circle class="mastery-ring-fg high" cx="56" cy="0" r="14" stroke-dasharray="85 100" stroke-dashoffset="-3.5" transform="rotate(-90 56 0)"/>
+          <text x="56" y="0.5" text-anchor="middle" font-size="9" font-weight="600" fill="var(--color-success)">85%</text>
+          <text class="node-label" x="-8" y="-6">导数与微分</text>
+          <text class="node-desc" x="-8" y="10">求导法则 · 微分中值</text>
+        </g>
+
+        <!-- 积分学 (学习中 55%) -->
+        <g class="graph-node" transform="translate(600, 180)" id="nodeIntegration"
+           onmouseenter="showTooltip(event,'积分学',55,'理解积分概念，掌握积分方法')"
+           onmouseleave="hideTooltip()"
+           onmousedown="selectNode(this,'integration')"
+           oncontextmenu="showContextMenu(event,'积分学','integration')">
+          <rect class="node-card" x="-72" y="-28" width="144" height="56" rx="10" filter="url(#shadow1)"/>
+          <circle class="mastery-ring-bg" cx="56" cy="0" r="14"/>
+          <circle class="mastery-ring-fg mid" cx="56" cy="0" r="14" stroke-dasharray="55 100" stroke-dashoffset="-3.5" transform="rotate(-90 56 0)"/>
+          <text x="56" y="0.5" text-anchor="middle" font-size="9" font-weight="600" fill="var(--color-warning)">55%</text>
+          <text class="node-label" x="-8" y="-6">📘 积分学</text>
+          <text class="node-desc" x="-8" y="10">积分方法 · 应用</text>
+        </g>
+
+        <!-- 多元函数 (未接触) -->
+        <g class="graph-node" transform="translate(750, 180)" id="nodeMultivariable"
+           onmouseenter="showTooltip(event,'多元函数',8,'多元函数微积分学')"
+           onmouseleave="hideTooltip()"
+           onmousedown="selectNode(this,'multivariable')"
+           oncontextmenu="showContextMenu(event,'多元函数','multivariable')">
+          <rect class="node-card" x="-72" y="-28" width="144" height="56" rx="10" filter="url(#shadow1)"/>
+          <circle class="mastery-ring-bg" cx="56" cy="0" r="14"/>
+          <circle class="mastery-ring-fg low" cx="56" cy="0" r="14" stroke-dasharray="8 100" stroke-dashoffset="-3.5" transform="rotate(-90 56 0)"/>
+          <text x="56" y="0.5" text-anchor="middle" font-size="9" font-weight="600" fill="var(--color-text-muted)">8%</text>
+          <text class="node-label" x="-8" y="-6">多元函数</text>
+          <text class="node-desc" x="-8" y="10">偏导 · 重积分</text>
+        </g>
+
+        <!-- 级数 (未接触) -->
+        <g class="graph-node" transform="translate(840, 360)" id="nodeSeries"
+           onmouseenter="showTooltip(event,'级数',3,'无穷级数的收敛与展开')"
+           onmouseleave="hideTooltip()"
+           onmousedown="selectNode(this,'series')"
+           oncontextmenu="showContextMenu(event,'级数','series')">
+          <rect class="node-card" x="-72" y="-28" width="144" height="56" rx="10" filter="url(#shadow1)"/>
+          <circle class="mastery-ring-bg" cx="56" cy="0" r="14"/>
+          <circle class="mastery-ring-fg low" cx="56" cy="0" r="14" stroke-dasharray="3 100" stroke-dashoffset="-3.5" transform="rotate(-90 56 0)"/>
+          <text x="56" y="0.5" text-anchor="middle" font-size="9" font-weight="600" fill="var(--color-text-muted)">3%</text>
+          <text class="node-label" x="-8" y="-6">🔢 级数</text>
+          <text class="node-desc" x="-8" y="10">收敛 · 展开</text>
+        </g>
+
+        <!-- 微分方程 -->
+        <g class="graph-node" transform="translate(220, 370)" id="nodeDiffEq"
+           onmouseenter="showTooltip(event,'微分方程',12,'常微分方程的解法与应用')"
+           onmouseleave="hideTooltip()"
+           onmousedown="selectNode(this,'diffeq')"
+           oncontextmenu="showContextMenu(event,'微分方程','diffeq')">
+          <rect class="node-card" x="-72" y="-28" width="144" height="56" rx="10" filter="url(#shadow1)"/>
+          <circle class="mastery-ring-bg" cx="56" cy="0" r="14"/>
+          <circle class="mastery-ring-fg low" cx="56" cy="0" r="14" stroke-dasharray="12 100" stroke-dashoffset="-3.5" transform="rotate(-90 56 0)"/>
+          <text x="56" y="0.5" text-anchor="middle" font-size="9" font-weight="600" fill="var(--color-text-muted)">12%</text>
+          <text class="node-label" x="-8" y="-6">微分方程</text>
+          <text class="node-desc" x="-8" y="10">常微分 · 解法</text>
+        </g>
+
+        <!-- 积分学子节点：不定积分 -->
+        <g class="graph-node" transform="translate(490, 300)" id="nodeIndefinite"
+           onmouseenter="showTooltip(event,'不定积分',82,'掌握基本积分公式和换元法')"
+           onmouseleave="hideTooltip()"
+           onmousedown="selectNode(this,'indefinite')"
+           oncontextmenu="showContextMenu(event,'不定积分','indefinite')">
+          <rect class="node-card" x="-62" y="-22" width="124" height="44" rx="8" filter="url(#shadow1)"/>
+          <circle class="mastery-ring-bg" cx="48" cy="0" r="11"/>
+          <circle class="mastery-ring-fg high" cx="48" cy="0" r="11" stroke-dasharray="82 100" stroke-dashoffset="-2.5" transform="rotate(-90 48 0)"/>
+          <text x="48" y="0.5" text-anchor="middle" font-size="8" font-weight="600" fill="var(--color-success)">82%</text>
+          <text class="node-label" x="-6" y="1" font-size="10">不定积分</text>
+        </g>
+
+        <!-- 定积分 (选中态演示) -->
+        <g class="graph-node selected" transform="translate(600, 300)" id="nodeDefinite"
+           onmouseenter="showTooltip(event,'定积分',45,'理解定积分概念，掌握微积分基本定理')"
+           onmouseleave="hideTooltip()"
+           onmousedown="selectNode(this,'definite')"
+           oncontextmenu="showContextMenu(event,'定积分','definite')">
+          <rect class="node-card" x="-62" y="-22" width="124" height="44" rx="8" filter="url(#shadow1)"/>
+          <circle class="mastery-ring-bg" cx="48" cy="0" r="11"/>
+          <circle class="mastery-ring-fg mid" cx="48" cy="0" r="11" stroke-dasharray="45 100" stroke-dashoffset="-2.5" transform="rotate(-90 48 0)"/>
+          <text x="48" y="0.5" text-anchor="middle" font-size="8" font-weight="600" fill="var(--color-warning)">45%</text>
+          <text class="node-label" x="-6" y="1" font-size="10">⚡ 定积分</text>
+        </g>
+
+        <!-- 反常积分 -->
+        <g class="graph-node" transform="translate(710, 300)" id="nodeImproper"
+           onmouseenter="showTooltip(event,'反常积分',5,'了解反常积分的概念与审敛')"
+           onmouseleave="hideTooltip()"
+           onmousedown="selectNode(this,'improper')"
+           oncontextmenu="showContextMenu(event,'反常积分','improper')">
+          <rect class="node-card" x="-62" y="-22" width="124" height="44" rx="8" filter="url(#shadow1)"/>
+          <circle class="mastery-ring-bg" cx="48" cy="0" r="11"/>
+          <circle class="mastery-ring-fg low" cx="48" cy="0" r="11" stroke-dasharray="5 100" stroke-dashoffset="-2.5" transform="rotate(-90 48 0)"/>
+          <text x="48" y="0.5" text-anchor="middle" font-size="8" font-weight="600" fill="var(--color-text-muted)">5%</text>
+          <text class="node-label" x="-6" y="1" font-size="10">反常积分</text>
+        </g>
+
+        <!-- 积分应用 -->
+        <g class="graph-node" transform="translate(600, 420)" id="nodeIntegralApp"
+           onmouseenter="showTooltip(event,'积分应用',0,'积分在几何、物理中的应用')"
+           onmouseleave="hideTooltip()"
+           onmousedown="selectNode(this,'integralapp')"
+           oncontextmenu="showContextMenu(event,'积分应用','integralapp')">
+          <rect class="node-card" x="-62" y="-22" width="124" height="44" rx="8" filter="url(#shadow1)"/>
+          <circle class="mastery-ring-bg" cx="48" cy="0" r="11"/>
+          <circle class="mastery-ring-fg low" cx="48" cy="0" r="11" stroke-dasharray="0 100" stroke-dashoffset="-2.5" transform="rotate(-90 48 0)"/>
+          <text x="48" y="0.5" text-anchor="middle" font-size="8" font-weight="600" fill="var(--color-text-muted)">0%</text>
+          <text class="node-label" x="-6" y="1" font-size="10">积分应用</text>
+        </g>
+
+        <!-- === 交互标注 === -->
+        <text x="600" y="370" text-anchor="middle" font-size="8" fill="var(--color-accent)" font-weight="500">
+          ← D3 力导向布局可拖拽
+        </text>
+
+      </svg>
+
+      <!-- 节点详情浮层 (点击"定积分"后弹出) -->
+      <div class="detail-popover" id="detailPopover" style="display:block; top:300px; left:640px;">
+        <div class="popover-header">
+          <span class="mastery-dot" style="background:var(--color-warning)"></span>
+          <h3>定积分</h3>
+          <span class="level-tag">concept</span>
+          <button onclick="document.getElementById('detailPopover').style.display='none'">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="popover-body">
+          <div class="desc">理解定积分的定义与几何意义，掌握牛顿-莱布尼茨公式，能用定积分计算面积、体积。</div>
+          <div class="meta-grid">
+            <div class="meta-item"><div class="label">掌握度</div><div class="value" style="color:var(--color-warning)">45%</div></div>
+            <div class="meta-item"><div class="label">优先级</div><div class="value">⭐ 5</div></div>
+            <div class="meta-item"><div class="label">关联会话</div><div class="value">3 个</div></div>
+            <div class="meta-item"><div class="label">子节点</div><div class="value">2 个</div></div>
+          </div>
+          <div class="tags">
+            <span class="tag">微积分</span>
+            <span class="tag">核心概念</span>
+            <span class="tag">前置知识</span>
+          </div>
+          <div class="actions">
+            <button class="primary">编辑</button>
+            <button>AI 扩充</button>
+            <button>请求讲解</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 交互提示标注 -->
+      <div class="interaction-label top" style="top:370px; left:580px;">
+        🖱️ 双击节点内联编辑 · 右键打开菜单
+      </div>
+      <div class="interaction-label top" style="top:140px; left:160px;">
+        👆 悬停查看摘要
+      </div>
+      <div class="interaction-label bottom" style="top:256px; left:490px;">
+        🎯 搜索自动鱼眼聚焦
+      </div>
+
+      <!-- 图层面板收起按钮 (当面板隐藏时显示) -->
+      <button class="layer-toggle-btn" id="layerToggleBtn2" style="display:none"
+              onclick="document.getElementById('layerPanel').style.display='block';this.style.display='none';document.getElementById('layerToggleBtn').style.display='none'">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      </button>
+    </div>
+
+    <!-- 右侧详情面板 (三栏模式) -->
+    <div class="detail-panel" id="detailPanel" style="display:none;">
+      <div class="dp-header">
+        <h3>节点详情</h3>
+        <button onclick="document.getElementById('detailPanel').style.display='none';switchLayout(document.querySelector('.layout-toggle .active')||document.querySelector('.layout-toggle button:first-child'),'two-column')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="dp-body">
+        <div class="dp-section">
+          <div class="dp-section-title">基本信息</div>
+          <div class="dp-field">
+            <div class="dp-field-label">名称</div>
+            <input type="text" value="定积分" id="detailNameInput">
+          </div>
+          <div class="dp-field">
+            <div class="dp-field-label">描述</div>
+            <textarea id="detailDescInput">理解定积分的定义与几何意义，掌握牛顿-莱布尼茨公式，能用定积分计算面积、体积。</textarea>
+          </div>
+          <div class="dp-field">
+            <div class="dp-field-label">优先级</div>
+            <input type="number" value="5" min="1" max="10" style="width:60px">
+          </div>
+        </div>
+        <div class="dp-section">
+          <div class="dp-section-title">标签</div>
+          <div class="dp-tags">
+            <span class="tag">微积分</span>
+            <span class="tag">核心概念</span>
+            <span class="tag">前置知识</span>
+          </div>
+        </div>
+        <div class="dp-section">
+          <div class="dp-section-title">操作</div>
+          <div class="dp-actions">
+            <button><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> AI 编辑节点内容</button>
+            <button><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg> AI 扩充子节点</button>
+            <button><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg> 请求讲解</button>
+            <button class="danger"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg> 删除节点</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════ 状态栏 ═══════ -->
+  <div class="statusbar">
+    <span>📊 <strong>12</strong> 节点</span>
+    <span class="mastered">✅ 已掌握 <strong>2</strong></span>
+    <span class="learning">📖 学习中 <strong>1</strong></span>
+    <span>📐 未接触 <strong>6</strong></span>
+    <span>平均掌握度 <span class="avg" style="color:var(--color-warning)">34%</span></span>
+    <span style="margin-left:auto">快捷键: <kbd style="background:var(--color-surface-hover);padding:1px 5px;border-radius:3px;font-size:9px">↑↓←→</kbd> 切换节点 · <kbd style="background:var(--color-surface-hover);padding:1px 5px;border-radius:3px;font-size:9px">F2</kbd> 编辑 · <kbd style="background:var(--color-surface-hover);padding:1px 5px;border-radius:3px;font-size:9px">Del</kbd> 删除</span>
+  </div>
+
+</div>
+
+<!-- ═══════ 浮动气泡 (A3) ═══════ -->
+<button class="float-bubble-toggle" id="floatBubbleBtn" onclick="toggleFloatDialog()" style="display:none">
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+  <span class="badge">1</span>
+</button>
+
+<div class="float-dialog" id="floatDialog">
+  <div class="float-header">
+    <span style="display:flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:600;background:rgba(124,58,237,0.08);color:var(--color-accent)">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/></svg>
+      全局对话
+    </span>
+    <span class="title">知识树助手</span>
+    <button onclick="toggleFloatDialog()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="float-body">
+    <div style="display:flex;gap:8px;max-width:90%">
+      <div style="width:24px;height:24px;border-radius:999px;background:rgba(124,58,237,0.08);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px">🤖</div>
+      <div style="padding:6px 10px;border-radius:14px;background:var(--color-page-secondary);border:1px solid var(--color-border);font-size:11px;line-height:1.6;border-bottom-left-radius:6px">
+        💡 推荐你下一步学习 <strong>积分学</strong>，它在当前树中是最高优先级的未完成节点。
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;max-width:90%;align-self:flex-end;flex-direction:row-reverse">
+      <div style="width:24px;height:24px;border-radius:999px;background:rgba(16,185,129,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px">🧑</div>
+      <div style="padding:6px 10px;border-radius:14px;background:var(--color-accent);color:white;font-size:11px;border-bottom-right-radius:6px">好的，积分学需要什么前置知识？</div>
+    </div>
+    <div style="display:flex;gap:8px;max-width:90%">
+      <div style="width:24px;height:24px;border-radius:999px;background:rgba(124,58,237,0.08);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px">🤖</div>
+      <div style="padding:6px 10px;border-radius:14px;background:var(--color-page-secondary);border:1px solid var(--color-border);font-size:11px;line-height:1.6;border-bottom-left-radius:6px">
+        积分学的前置是 <strong>导数与微分</strong>（你已掌握 85%），可以直接开始学习 <strong>不定积分</strong>。
+      </div>
+    </div>
+  </div>
+  <div class="float-input-area">
+    <input type="text" placeholder="向知识树提问…">
+    <button>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- ═══════ 快捷键提示 ═══════ -->
+<div class="shortcut-hint" id="shortcutHint">
+  <span>快捷键</span>
+  <span><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> 切换节点</span>
+  <span><kbd>F2</kbd> 编辑</span>
+  <span><kbd>Del</kbd> 删除</span>
+  <span><kbd>Esc</kbd> 取消选中</span>
+  <span><kbd>Tab</kbd> 顺序跳转</span>
+</div>
+
+<!-- ═══════ Demo 标注 ═══════ -->
+<div class="demo-badge">🔄 交互预览 · 点击/悬停体验</div>
+
+<!-- ═══════ 右键菜单 (隐藏) ═══════ -->
+<div class="context-menu" id="contextMenu" style="display:none">
+  <div class="cm-item" onclick="contextAction('edit')">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+    编辑节点
+  </div>
+  <div class="cm-item" onclick="contextAction('add-child')">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+    添加子节点
+  </div>
+  <div class="cm-item" onclick="contextAction('ai-expand')">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+    AI 扩充子节点
+  </div>
+  <div class="cm-item" onclick="contextAction('ai-edit')">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+    AI 编辑内容
+  </div>
+  <div class="cm-item" onclick="contextAction('link')">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+    关联会话
+  </div>
+  <div class="cm-divider"></div>
+  <div class="cm-item" onclick="contextAction('explain')">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+    请求讲解
+  </div>
+  <div class="cm-divider"></div>
+  <div class="cm-item danger" onclick="contextAction('delete')">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+    删除节点
+  </div>
+</div>
+
+<script>
+// ═════════════════════════════════════════════
+// 交互逻辑
+// ═════════════════════════════════════════════
+
+let selectedNodeId = 'definite';
+let contextNodeId = '';
+let contextNodeLabel = '';
+
+// ── 视图模式切换 ──
+function switchView(btn, mode) {
+  document.querySelectorAll('.view-toggle button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  updateDemoHint('视图: ' + (mode === 'mindmap' ? '思维导图' : mode === 'force' ? '力导向' : '依赖图'));
+}
+
+// ── 布局切换 ──
+function switchLayout(btn, mode) {
+  document.querySelectorAll('.layout-toggle button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  const dialogPanel = document.getElementById('dialogPanel');
+  const detailPanel = document.getElementById('detailPanel');
+
+  if (mode === 'two-column') {
+    detailPanel.style.display = 'none';
+    dialogPanel.style.width = '320px';
+  } else {
+    detailPanel.style.display = 'flex';
+    dialogPanel.style.width = '280px';
+  }
+  updateDemoHint('布局: ' + (mode === 'two-column' ? '两栏' : '三栏'));
+}
+
+// ── 对话形态切换 ──
+function switchDialogStyle(btn, style) {
+  document.querySelectorAll('.dialog-toggle button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  const dialogPanel = document.getElementById('dialogPanel');
+  const floatBtn = document.getElementById('floatBubbleBtn');
+  const floatDialog = document.getElementById('floatDialog');
+
+  if (style === 'sidebar') {
+    dialogPanel.style.display = 'flex';
+    floatBtn.style.display = 'none';
+    floatDialog.classList.remove('open');
+  } else {
+    dialogPanel.style.display = 'none';
+    floatBtn.style.display = 'flex';
+  }
+  updateDemoHint('对话: ' + (style === 'sidebar' ? '侧栏式' : '浮动气泡'));
+}
+
+// ── 对话模式切换 (全局/节点探索) ──
+function toggleDialogMode() {
+  const badge = document.getElementById('dialogModeBadge');
+  const isGlobal = badge.textContent.trim().includes('全局');
+  if (isGlobal) {
+    badge.className = 'mode-badge node-mode';
+    badge.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg> 节点探索';
+    updateDemoHint('切换到节点探索对话');
+  } else {
+    badge.className = 'mode-badge';
+    badge.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/></svg> 全局对话';
+    updateDemoHint('切换到全局对话');
+  }
+}
+
+// ── 对话面板折叠/展开 ──
+function toggleDialogCollapse() {
+  const panel = document.getElementById('dialogPanel');
+  panel.classList.toggle('collapsed');
+}
+
+// ── 选中节点 ──
+function selectNode(el, id) {
+  document.querySelectorAll('.graph-node').forEach(n => n.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedNodeId = id;
+
+  // 显示上下文切换
+  document.getElementById('contextSwitch').style.display = 'flex';
+
+  // 更新名称
+  const label = el.querySelector('.node-label')?.textContent || id;
+  document.getElementById('selectedNodeName').textContent = label;
+
+  // 显示详情浮层 (演示)
+  const popover = document.getElementById('detailPopover');
+  const rect = el.querySelector('.node-card').getBoundingClientRect();
+  const canvas = document.getElementById('graphCanvas');
+  const canvasRect = canvas.getBoundingClientRect();
+  popover.style.display = 'block';
+  popover.style.top = (rect.top - canvasRect.top + 30) + 'px';
+  popover.style.left = Math.min(rect.left - canvasRect.left + 80, 600) + 'px';
+
+  // 更新三栏模式下的详情面板
+  document.getElementById('detailNameInput').value = label;
+  updateDemoHint('选中: ' + label);
+}
+
+// ── 节点聚焦 (图层面板点击) ──
+function focusNode(id) {
+  const el = document.getElementById('node' + id.charAt(0).toUpperCase() + id.slice(1));
+  if (el) {
+    selectNode(el, id);
+    // 模拟鱼眼聚焦: 选中节点放大
+    el.querySelector('.node-card').classList.add('fish-eye-highlight');
+    setTimeout(() => {
+      el.querySelector('.node-card').classList.remove('fish-eye-highlight');
+    }, 2000);
+    // 滚动到视图
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+// ── Tooltip ──
+const tooltipEl = document.createElement('div');
+tooltipEl.className = 'node-tooltip';
+tooltipEl.style.display = 'none';
+document.getElementById('graphCanvas').appendChild(tooltipEl);
+
+function showTooltip(e, label, mastery, desc) {
+  const canvas = document.getElementById('graphCanvas');
+  const rect = canvas.getBoundingClientRect();
+  tooltipEl.innerHTML = '<div class="tt-label">' + label + '</div><div class="tt-mastery">掌握度: ' + mastery + '%</div><div class="tt-desc">' + desc + '</div>';
+  tooltipEl.style.display = 'block';
+  tooltipEl.style.left = (e.clientX - rect.left + 12) + 'px';
+  tooltipEl.style.top = (e.clientY - rect.top - 10) + 'px';
+}
+
+function hideTooltip() {
+  tooltipEl.style.display = 'none';
+}
+
+// ── 右键菜单 ──
+function showContextMenu(e, label, id) {
+  e.preventDefault();
+  contextNodeLabel = label;
+  contextNodeId = id;
+  const menu = document.getElementById('contextMenu');
+  menu.style.display = 'block';
+  menu.style.left = e.clientX + 'px';
+  menu.style.top = e.clientY + 'px';
+  updateDemoHint('右键菜单: ' + label);
+}
+
+document.addEventListener('click', function(e) {
+  const menu = document.getElementById('contextMenu');
+  if (menu.style.display !== 'none' && !menu.contains(e.target)) {
+    menu.style.display = 'none';
+  }
+});
+
+function contextAction(action) {
+  document.getElementById('contextMenu').style.display = 'none';
+  const names = { edit: '编辑节点', 'add-child': '添加子节点', 'ai-expand': 'AI扩充', 'ai-edit': 'AI编辑', link: '关联会话', explain: '请求讲解', delete: '删除节点' };
+  updateDemoHint('执行: ' + names[action] + ' → ' + contextNodeLabel + ' (演示)');
+}
+
+// ── 搜索 ──
+function onSearch(query) {
+  updateDemoHint('搜索: ' + (query || '（清空）'));
+  // 在图层面板中高亮匹配
+  document.querySelectorAll('.lp-tree-item .node-name').forEach(el => {
+    el.innerHTML = el.getAttribute('data-orig') || el.textContent;
+    if (!el.getAttribute('data-orig')) el.setAttribute('data-orig', el.textContent);
+    if (query && el.textContent.includes(query)) {
+      el.innerHTML = el.textContent.replace(new RegExp(query, 'g'), '<span class="match-highlight">' + query + '</span>');
+    }
+  });
+}
+
+// ── 层级折叠 ──
+function toggleCollapse(el) {
+  const item = el.closest('.lp-tree-item');
+  const level = parseInt(item.className.match(/level-(\d)/)?.[1] || '0');
+  const nextLevel = level + 1;
+  let sibling = item.nextElementSibling;
+  const children = [];
+  while (sibling && sibling.classList.contains('level-' + nextLevel)) {
+    children.push(sibling);
+    sibling = sibling.nextElementSibling;
+  }
+  const isCollapsed = el.textContent === '▶';
+  children.forEach(c => c.style.display = isCollapsed ? '' : 'none');
+  el.textContent = isCollapsed ? '▼' : '▶';
+  updateDemoHint(isCollapsed ? '展开子树' : '折叠子树');
+}
+
+// ── 浮动对话 ──
+function toggleFloatDialog() {
+  const d = document.getElementById('floatDialog');
+  d.classList.toggle('open');
+}
+
+// ── 发送消息 (演示) ──
+function sendMessage() {
+  const input = document.getElementById('dialogInput');
+  const text = input.value.trim();
+  if (!text) return;
+  const msgs = document.getElementById('dialogMessages');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'dialog-msg user';
+  userDiv.innerHTML = '<div class="avatar">🧑</div><div class="bubble">' + text + '</div>';
+  msgs.appendChild(userDiv);
+  input.value = '';
+
+  // 模拟 AI 回复
+  const typingDiv = document.createElement('div');
+  typingDiv.className = 'dialog-msg assistant';
+  typingDiv.innerHTML = '<div class="avatar">🤖</div><div class="bubble"><div class="typing-indicator"><span></span><span></span><span></span></div></div>';
+  msgs.appendChild(typingDiv);
+  msgs.scrollTop = msgs.scrollHeight;
+
+  setTimeout(() => {
+    typingDiv.querySelector('.bubble').innerHTML = '这是一个演示回复。在完整实现中，AI 会根据知识树结构和你的学习数据给出个性化回答。';
+    msgs.scrollTop = msgs.scrollHeight;
+
+    // 添加操作标签演示
+    if (text.includes('优先级') || text.includes('设为')) {
+      typingDiv.querySelector('.bubble').innerHTML = '已更新节点的优先级设置。<div class="op-tag">✅ 已更新节点</div>';
+    } else if (text.includes('总结') || text.includes('有哪些')) {
+      typingDiv.querySelector('.bubble').innerHTML = '这棵树共有 12 个节点，覆盖 6 大核心领域。你已掌握 2 个节点。<div class="op-tag">✅ 已查询结构</div>';
+    }
+  }, 1200);
+}
+
+// ── 全屏 ──
+function toggleFullscreen() {
+  const el = document.documentElement;
+  if (document.fullscreenElement) {
+    document.exitFullscreen();
+  } else {
+    el.requestFullscreen();
+  }
+}
+
+// ── Demo 提示 ──
+const hintEl = document.getElementById('shortcutHint');
+let hintTimer = null;
+
+function updateDemoHint(msg) {
+  const badge = document.querySelector('.demo-badge');
+  badge.textContent = '🔄 ' + msg;
+  // 显示快捷键提示
+  hintEl.classList.add('visible');
+  clearTimeout(hintTimer);
+  hintTimer = setTimeout(() => hintEl.classList.remove('visible'), 4000);
+}
+
+// ── Demo hint 点击 ──
+function toggleDemoHint(msg) {
+  updateDemoHint(msg + ' (演示交互)');
+}
+</script>
+</body>
+</html>

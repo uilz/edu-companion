@@ -50,7 +50,7 @@ pip install openvino tokenizers numpy
 ```bash
 cd backend
 python3 -c "
-from app.services.classifier import compute_embedding, cosine_similarity
+from app.services.common.embedding_utils import compute_embedding, cosine_similarity
 v = compute_embedding('测试文本')
 print(f'✅ dim={len(v)}, self-sim={cosine_similarity(v,v):.4f}')
 "

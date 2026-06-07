@@ -4,6 +4,141 @@
 
 ---
 
+## [8.2.0] - 2026-06-07
+
+### 🎯 知识树 UI/UX 全面优化
+
+> 知识树页面交互重构：浮动球拖动吸附、侧栏拖拽调整宽度、顶栏精简、自动收起、智能锚定。
+
+#### 前端
+
+##### AgentFloat — AI 秘书交互重写
+- **位置持久化** — 拖动结束位置存入 localStorage，刷新恢复
+- **边缘吸附** — 释放时距屏幕边缘 <60px 自动吸附，球心贴边只露一半 + scaleX(0.6) 压扁
+- **吸附脱离** — 拖动开始时自动脱离吸附回到完全可见位置，防止方向误判
+- **Hover 恢复** — 吸附状态下鼠标悬停恢复完整圆形显示
+- **消息框跟随** — 面板位置按悬浮球坐标计算，不再固定右下角
+- **点击/拖动区分** — 移动 <3px 视为点击打开面板，>3px 视为拖动
+
+##### KnowledgeTreePage — 知识树页面重构
+- **顶栏精简** — 删除左侧「伴学」Logo 及图标；思维导图/力导向/依赖图三按钮合并为单按钮单击循环切换
+- **浮动助手拖动** — 与 AgentFloat 相同机制：拖动+吸附+位置记忆+边缘压扁
+- **层级开关记忆** — `layerOpen` 和 `maxDisplayLevel` 纳入 `LayoutPreference` 持久化到 localStorage
+- **可拖拽分割线** — 新增 `ResizeHandle` 组件，左右侧面板可拖拽调整宽度（200~600px）
+- **面板自动收起** — `AutoCollapsePanel` 组件，鼠标进入外侧 5% 区域立即触发收起
+- **智能锚定** — 支持 URL 参数 `?partition=xxx&node=xxx`，自动切换分区并选中节点
+- **图谱层级修正** — `filterByLevel` 多包含一级子节点（concept 下显示 atom）
+- **过滤临时分区** — 分区列表过滤「💬 临时」分区
+
+##### FocusGraph — 内部顶栏移除
+- 删除组件内部顶栏（面包屑+展开/收起），SVG 画布直接撑满容器，避免样式冲突
+
+##### FocusModePanel — 图谱替换为知识树入口
+- 右侧 `GraphPanel` 替换为 `KnowledgeTreeEntry` 入口面板
+- 点击「打开知识树」按钮跳转 `/knowledge-tree?partition=xxx&node=xxx`
+
+##### UseConversation — 图谱重定向
+- `panel=graph` 重定向目标从 `/dashboard?tab=graph` 改为 `/knowledge-tree?partition=xxx&node=xxx`
+
+#### 文件变更
+| 文件 | 变更说明 |
+|------|----------|
+| `frontend/src/components/agent/AgentFloat.tsx` | 拖动吸附完全重写 (+50行) |
+| `frontend/src/components/knowledge-tree/KnowledgeTreePage.tsx` | 顶栏/侧栏/浮动助手重构 (+120行) |
+| `frontend/src/components/graph/graphs/FocusGraph.tsx` | 移除内部顶栏 (-75行) |
+| `frontend/src/components/conversation/panels/FocusModePanel.tsx` | GraphPanel → KnowledgeTreeEntry |
+| `frontend/src/components/conversation/hooks/useConversation.ts` | panel=graph 重定向改为知识树页 |
+| `frontend/src/lib/api/graph-api.ts` | 分区列表返回字段更新 |
+| `frontend/src/lib/types/graph-types.ts` | kgTreeToGraphData 逻辑更新 |
+| `frontend/src/types/index.ts` | is_temp 字段 |
+
+## [8.1.0] - 2026-06-05
+
+### 🧠 知识树 AI 对话（作用域探索）
+
+> 每个知识树节点拥有独立的「知识树探索」会话，严格按作用域约束执行编辑操作。
+
+#### 后端
+- **`_get_descendant_ids()`** — BFS 遍历计算节点所有子孙 ID，用作作用域边界
+- **`_find_scope_violations()`** — 检查越界操作（非同节点/同层/父节点/无关节点）
+- **`ai_chat` 端点重写** — 会话名固定为「知识树探索」，metadata 标记 `type=tree_exploration` + `bound_node_id`
+- **已有会话 bound_node_id 校验** — 不一致时返回 `scope_mismatch` + 目标节点信息
+- **System Prompt 严格规则** — 4 条约束：作用域内、禁止越界、禁止创建无关节点、父节点不可操作
+- **`$RECOMMEND` 标记** — LLM 在回复中输出 `[RECOMMEND:tree_complete|deep_dive|parent]` 标记
+
+#### 前端
+- **`NodeDetailPanel.handleAiChat`** — 处理 `scope_mismatch` 响应，展示切换提示
+- **`GraphDialoguePage.NoPartitionState`** — 空分区引导页（→对话系统创建分区）
+
+#### 文件变更
+| 文件 | 变更 |
+|------|------|
+| `backend/app/api/knowledge/knowledge_graph.py` | +180 行（作用域函数 + ai_chat 重写） |
+| `frontend/src/components/graph/panels/NodeDetailPanel.tsx` | +15 行（scope_mismatch 处理）|
+| `frontend/src/components/graph/pages/GraphDialoguePage.tsx` | +40 行（NoPartitionState） |
+| `frontend/src/hooks/graph/useGraphDialogue.ts` | +3 行（空分区退 loading） |
+
+---
+
+### 🔄 对话系统 ↔ 知识树双向联动
+
+> 对话系统检测知识树探索意图→推荐去知识树；知识树探索完成/深入兴趣→推荐去对话系统。
+
+#### 对话 → 知识树（`conversation_llm.py`）
+- **`_detect_tree_interest()`** — 7 组关键词模式匹配，检测用户探索知识树结构的意图
+- **流式 `tree_recommendation` 事件** — 产出分区 ID、节点/边数量、分区名
+- **未有知识树时** — 提示「需要为这个分区生成知识树吗？」
+
+#### 知识树 → 对话（`knowledge_graph.py`）
+- **`[RECOMMEND:tree_complete]`** — 用户表达探索完成→推荐去对话系统深入学习
+- **`[RECOMMEND:deep_dive]`** — 用户对某子节点表现出浓厚兴趣→查找已有对话/推荐创建
+- **`[RECOMMEND:parent]`** — 用户提及父节点→建议切换到父节点的探索会话
+- **结果返回 `conversation_recommendation` 字段**
+
+#### 文件变更
+| 文件 | 变更 |
+|------|------|
+| `backend/app/services/conversation/conversation_llm.py` | +46 行（_detect_tree_interest + 事件） |
+| `backend/app/api/knowledge/knowledge_graph.py` | +120 行（prompt 规则 + RECOMMEND 解析） |
+
+---
+
+### 💬 临时会话增强
+
+> 统一「💬 临时」分区，标记临时会话隔离学习数据，增强意图探测与推荐切换。
+
+#### 后端
+- **`_create_node` 自动标记** — 临时分区下的对话自动设置 `is_temporary=True`
+- **子支拒绝** — 临时会话 `create_sub_branch` 返回错误提示
+- **`_detect_temp_conv_intent()`** — 学习意图/知识树意图/行动意图 3 类模式检测
+- **流式 `temp_recommendation` 事件** — 产出 `switch_to_learn` / `switch_to_tree` 类型
+
+#### 前端
+- **`ensureTempConversation`** — 分区查找改为 `p.is_temp`，新建分区名统一为「💬 临时」
+- **`Partition` 类型** — 新增 `is_temp?: boolean` 字段
+
+#### 文件变更
+| 文件 | 变更 |
+|------|------|
+| `backend/app/services/knowledge/tree_crud.py` | +12 行（is_temporary 标记 + 子支拒绝） |
+| `backend/app/services/conversation/conversation_llm.py` | +90 行（_detect_temp_conv_intent + 事件） |
+| `frontend/src/store/conversation/actions/send-message.ts` | +6 行（统一名称 + is_temp 查找）|
+| `frontend/src/types/index.ts` | +1 行（is_temp 字段） |
+
+---
+
+### 🐛 错误修复
+
+| 问题 | 根因 | 修复 |
+|------|------|------|
+| `/api/achievements` 500 | `_collect_stats()` 无 try/except | 加保护，失败返回默认零值 |
+| `/api/files/tags`、`/stats`、`/folders` 404 | 路由顺序：`/{material_id}` 过早匹配 | 特定路由移至通配路由前 |
+| 知识树空白无 UI | `useGraphDialogue` 空分区 loading 不退出 | 分区列表为空时 `setLoading(false)` |
+| resources/page.tsx TS1005 | 未使用的 StatsPanel 函数解析器认为未闭合 | 移除无用函数定义 |
+| 全局异常处理器崩溃 | `from app.core.errors import AppError` 模块不存在 | 移除损坏导入 |
+
+---
+
 ## [8.0.0] - 2026-06-05
 
 ### 📐 分层架构重构
