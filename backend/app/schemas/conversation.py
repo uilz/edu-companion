@@ -154,10 +154,19 @@ class LinkNode(BaseModel):
 # ── Conversation（v4: 替换旧 Branch） ──
 
 class Conversation(BaseModel):
-    """专题下的一个对话线程。用户在专题下手动创建，非自动分叉。
-    path 字段按序记录消息节点 ID 列表。"""
+    """对话线程，可挂载到任意层级节点（partition / domain / topic）下。
+    type 字段区分对话类型：normal（对话系统）/ tree_exploration（知识树探索）/ temporary（临时）。
+    parent_id + parent_type 记录直接父级，补全 ID 字段方便跨级查找。"""
     id: str = Field(default_factory=lambda: str(uuid4()))
-    topic_id: str
+    # ── 挂载信息 ──
+    parent_id: str = ""        # 直接父级 ID（partition_id / domain_id / topic_id）
+    parent_type: str = ""      # "partition" | "domain" | "topic"
+    type: str = "normal"       # "normal" | "tree_exploration" | "temporary"
+    # ── 补全 ID（跨级查找用，避免递归遍历） ──
+    partition_id: str = ""
+    domain_id: str = ""
+    topic_id: str = ""         # 向下兼容旧数据
+    # ── 对话属性 ──
     name: str = ""
     path: list[str] = Field(default_factory=list)  # ordered message ids
     is_active: bool = True
@@ -172,7 +181,7 @@ class Conversation(BaseModel):
     material_refs: list[str] = Field(default_factory=list)
     # ── Phase 8 融合会话 ──
     primary_node_id: str | None = None  # 关联 cognitive_nodes.id (topic 级)
-    is_temporary: bool = False          # 临时会话标记
+    is_temporary: bool = False          # 临时会话标记（旧字段，逐步迁移到 type）
     # ── 子支相关 ──
     parent_conversation_id: str = ""           # 父会话 ID（空=顶层会话）
     parent_sub_branch_ref: SubBranchRef | None = None  # 作为子支时的引用锚点
@@ -186,7 +195,8 @@ class Conversation(BaseModel):
 class Topic(BaseModel):
     """领域下的专题，例如「微积分」「线性代数」"""
     id: str = Field(default_factory=lambda: str(uuid4()))
-    domain_id: str
+    domain_id: str = ""
+    partition_id: str = ""  # 临时分区下直接挂载时使用
     name: str
     emoji: str = "📝"
     active_conversation_id: str = ""
@@ -324,3 +334,15 @@ class UserData(BaseModel):
     error_book: dict[str, list[dict]] = Field(default_factory=dict)
     knowledge_graphs: dict[str, KnowledgeGraph] = Field(default_factory=dict)
     event_log: list[dict] = Field(default_factory=list)
+
+    # ── Phase A3: 秘书系统数据（原 JSON 文件存储，现纳入 DataRepository） ──
+    secretary_prefs: dict = Field(default_factory=lambda: {
+        "enabled_extensions": ["review_reminder", "fatigue_manager", "daily_brief"],
+        "quiet_hours_start": "22:00",
+        "quiet_hours_end": "08:00",
+        "max_proactive_per_day": 5,
+    })
+    policy_memory: dict = Field(default_factory=lambda: {
+        "ignore_counts": {},
+        "accept_counts": {},
+    })

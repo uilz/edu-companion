@@ -72,7 +72,7 @@ def create_session(
     ))
 
     db.execute(
-        """INSERT INTO v7_practice_sessions
+        """INSERT INTO practice_sessions
            (id, user_id, bank_id, session_type, mode, config,
             status, total_count, cognitive_node_ids, created_at, started_at)
            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
@@ -85,7 +85,7 @@ def create_session(
     for i, q in enumerate(questions):
         sq_id = f"sq_{session_id}_{i}"
         db.execute(
-            """INSERT INTO v7_session_questions (id, session_id, question_id, sort_order, created_at)
+            """INSERT INTO session_questions (id, session_id, question_id, sort_order, created_at)
                VALUES (%s, %s, %s, %s, %s)""",
             (sq_id, session_id, q["id"], i, now),
         )
@@ -110,7 +110,7 @@ def get_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[dic
     db = get_db()
 
     session = db.fetchone(
-        "SELECT * FROM v7_practice_sessions WHERE id = %s AND user_id = %s",
+        "SELECT * FROM practice_sessions WHERE id = %s AND user_id = %s",
         (session_id, user_id),
     )
     if not session:
@@ -118,8 +118,8 @@ def get_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[dic
 
     sq_rows = db.fetchall(
         """SELECT sq.*, q.stem, q.options, q.question_type, q.difficulty, q.cognitive_node_ids, q.metadata
-           FROM v7_session_questions sq
-           LEFT JOIN v7_questions q ON sq.question_id = q.id
+           FROM session_questions sq
+           LEFT JOIN questions q ON sq.question_id = q.id
            WHERE sq.session_id = %s
            ORDER BY sq.sort_order""",
         (session_id,),
@@ -176,8 +176,8 @@ def submit_answer(
     流程:
     1. 验证会话 & 题目归属
     2. 判对错（与正确答案比较）
-    3. 更新 v7_session_questions
-    4. 写入 v7_practice_attempts
+    3. 更新 session_questions
+    4. 写入 practice_attempts
     5. 更新会话统计数据
     6. **认知节点联动** — 调用 sync_from_practice_event() 更新所有关联知识节点的 Belief/BKT
     7. 返回判题结果 + 解析
@@ -188,7 +188,7 @@ def submit_answer(
 
     # 1. 验证会话题目关联
     sq = db.fetchone(
-        "SELECT * FROM v7_session_questions WHERE session_id = %s AND question_id = %s",
+        "SELECT * FROM session_questions WHERE session_id = %s AND question_id = %s",
         (session_id, question_id),
     )
     if not sq:
@@ -203,7 +203,7 @@ def submit_answer(
 
     # 2. 获取题目正确答案
     question = db.fetchone(
-        "SELECT * FROM v7_questions WHERE id = %s AND deleted_at IS NULL",
+        "SELECT * FROM questions WHERE id = %s AND deleted_at IS NULL",
         (question_id,),
     )
     if not question:
@@ -218,7 +218,7 @@ def submit_answer(
 
     # 4. 更新会话题目关联
     db.execute(
-        """UPDATE v7_session_questions
+        """UPDATE session_questions
            SET user_answer = %s, is_correct = %s, time_spent_seconds = %s,
                hints_used = %s
            WHERE id = %s""",
@@ -231,14 +231,14 @@ def submit_answer(
 
     # 获取该题历史的错题次数
     history = db.fetchone(
-        "SELECT COUNT(*) as cnt FROM v7_practice_attempts WHERE question_id = %s AND user_id = %s AND is_wrong = true",
+        "SELECT COUNT(*) as cnt FROM practice_attempts WHERE question_id = %s AND user_id = %s AND is_wrong = true",
         (question_id, user_id),
     )
     prev_wrongs = history["cnt"] if history else 0
 
     # 连续正确 — 从最近记录查
     last_attempt = db.fetchone(
-        "SELECT consecutive_correct FROM v7_practice_attempts WHERE question_id = %s AND user_id = %s ORDER BY created_at DESC LIMIT 1",
+        "SELECT consecutive_correct FROM practice_attempts WHERE question_id = %s AND user_id = %s ORDER BY created_at DESC LIMIT 1",
         (question_id, user_id),
     )
     consecutive = (last_attempt["consecutive_correct"] or 0) if last_attempt else 0
@@ -246,7 +246,7 @@ def submit_answer(
 
     node_ids = question.get("cognitive_node_ids") or []
     db.execute(
-        """INSERT INTO v7_practice_attempts
+        """INSERT INTO practice_attempts
            (id, session_id, question_id, user_id, user_answer, is_correct,
             time_spent_seconds, is_wrong, wrong_count, consecutive_correct,
             cognitive_node_ids, created_at)
@@ -299,7 +299,7 @@ def start_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[d
     from app.db.database import get_db
     db = get_db()
     session = db.fetchone(
-        "SELECT * FROM v7_practice_sessions WHERE id = %s AND user_id = %s",
+        "SELECT * FROM practice_sessions WHERE id = %s AND user_id = %s",
         (session_id, user_id),
     )
     if not session:
@@ -308,7 +308,7 @@ def start_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[d
         return {"error": f"当前状态不允许开始: {session['status']}"}
     now = datetime.now().isoformat()
     db.execute(
-        "UPDATE v7_practice_sessions SET status = 'active', started_at = %s WHERE id = %s",
+        "UPDATE practice_sessions SET status = 'active', started_at = %s WHERE id = %s",
         (now, session_id),
     )
     return get_session(session_id, user_id)
@@ -319,7 +319,7 @@ def pause_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[d
     from app.db.database import get_db
     db = get_db()
     session = db.fetchone(
-        "SELECT * FROM v7_practice_sessions WHERE id = %s AND user_id = %s",
+        "SELECT * FROM practice_sessions WHERE id = %s AND user_id = %s",
         (session_id, user_id),
     )
     if not session:
@@ -332,7 +332,7 @@ def pause_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[d
     pauses.append({"paused_at": now, "resumed_at": None})
     cfg["pauses"] = pauses
     db.execute(
-        "UPDATE v7_practice_sessions SET status = 'paused', config = %s WHERE id = %s",
+        "UPDATE practice_sessions SET status = 'paused', config = %s WHERE id = %s",
         (json.dumps(cfg), session_id),
     )
     return get_session(session_id, user_id)
@@ -343,7 +343,7 @@ def resume_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[
     from app.db.database import get_db
     db = get_db()
     session = db.fetchone(
-        "SELECT * FROM v7_practice_sessions WHERE id = %s AND user_id = %s",
+        "SELECT * FROM practice_sessions WHERE id = %s AND user_id = %s",
         (session_id, user_id),
     )
     if not session:
@@ -357,7 +357,7 @@ def resume_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[
         pauses[-1]["resumed_at"] = now
     cfg["pauses"] = pauses
     db.execute(
-        "UPDATE v7_practice_sessions SET status = 'active', config = %s WHERE id = %s",
+        "UPDATE practice_sessions SET status = 'active', config = %s WHERE id = %s",
         (json.dumps(cfg), session_id),
     )
     return get_session(session_id, user_id)
@@ -368,7 +368,7 @@ def cancel_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[
     from app.db.database import get_db
     db = get_db()
     session = db.fetchone(
-        "SELECT * FROM v7_practice_sessions WHERE id = %s AND user_id = %s",
+        "SELECT * FROM practice_sessions WHERE id = %s AND user_id = %s",
         (session_id, user_id),
     )
     if not session:
@@ -378,14 +378,14 @@ def cancel_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[
         return get_session(session_id, user_id)
     now = datetime.now().isoformat()
     db.execute(
-        "UPDATE v7_practice_sessions SET status = 'cancelled', finished_at = %s WHERE id = %s",
+        "UPDATE practice_sessions SET status = 'cancelled', finished_at = %s WHERE id = %s",
         (now, session_id),
     )
     return get_session(session_id, user_id)
 
 
 def get_session_result(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[dict]:
-    """获取会话结果报告"""
+    """获取会话结果报告（含题单名称、每题详情）"""
     from app.db.database import get_db
     db = get_db()
     session = get_session(session_id, user_id)
@@ -394,10 +394,23 @@ def get_session_result(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optio
     if session["status"] not in ("completed", "timeout"):
         return {"session_id": session_id, "status": session["status"], "message": "会话尚未完成"}
 
+    # 题单名称
+    bank_name = ""
+    if session.get("bank_id"):
+        try:
+            b = db.fetchone(
+                "SELECT name FROM question_banks WHERE id = %s",
+                (session["bank_id"],),
+            )
+            bank_name = b["name"] if b else ""
+        except Exception:
+            pass
+
     sq_rows = db.fetchall(
-        """SELECT sq.*, q.question_type, q.difficulty, q.cognitive_node_ids, q.stem
-           FROM v7_session_questions sq
-           LEFT JOIN v7_questions q ON sq.question_id = q.id
+        """SELECT sq.*, q.question_type, q.difficulty, q.cognitive_node_ids, q.stem,
+                  q.options, q.answer, q.analysis
+           FROM session_questions sq
+           LEFT JOIN questions q ON sq.question_id = q.id
            WHERE sq.session_id = %s
            ORDER BY sq.sort_order""",
         (session_id,),
@@ -407,13 +420,16 @@ def get_session_result(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optio
         detail.append({
             "index": sq["sort_order"],
             "question_id": sq["question_id"],
-            "stem": sq.get("stem", "")[:80],
+            "stem": sq.get("stem", ""),
             "question_type": sq.get("question_type", ""),
             "difficulty": sq.get("difficulty", 3),
             "is_correct": sq.get("is_correct"),
             "user_answer": _safe_json(sq.get("user_answer"), None),
+            "correct_answer": _safe_json(sq.get("answer"), None),
             "time_spent": sq.get("time_spent_seconds", 0),
             "hints_used": sq.get("hints_used", 0),
+            "options": _safe_json(sq.get("options"), None),
+            "explanation": sq.get("analysis", ""),
         })
     answered = sum(1 for d in detail if d["is_correct"] is not None)
     correct = sum(1 for d in detail if d["is_correct"] is True)
@@ -430,8 +446,11 @@ def get_session_result(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optio
         "duration_seconds": session.get("duration_seconds"),
         "mode": session["mode"],
         "session_type": session["session_type"],
+        "bank_id": session.get("bank_id", ""),
+        "bank_name": bank_name,
         "detail": detail,
         "created_at": session.get("created_at"),
+        "started_at": session.get("started_at"),
         "finished_at": session.get("finished_at"),
     }
 
@@ -442,7 +461,7 @@ def complete_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optiona
     db = get_db()
 
     session = db.fetchone(
-        "SELECT * FROM v7_practice_sessions WHERE id = %s AND user_id = %s",
+        "SELECT * FROM practice_sessions WHERE id = %s AND user_id = %s",
         (session_id, user_id),
     )
     if not session:
@@ -453,7 +472,7 @@ def complete_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optiona
 
     total = session["total_count"]
     correct = db.fetchone(
-        "SELECT COUNT(*) as cnt FROM v7_session_questions WHERE session_id = %s AND is_correct = true",
+        "SELECT COUNT(*) as cnt FROM session_questions WHERE session_id = %s AND is_correct = true",
         (session_id,),
     )
     correct_count = correct["cnt"] if correct else 0
@@ -477,7 +496,7 @@ def complete_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optiona
         duration = int((now_dt - start_dt).total_seconds())
 
     db.execute(
-        """UPDATE v7_practice_sessions
+        """UPDATE practice_sessions
            SET status = 'completed', correct_count = %s, wrong_count = %s,
                score = %s, finished_at = %s, duration_seconds = %s
            WHERE id = %s""",
@@ -519,38 +538,133 @@ def list_sessions(
     user_id: str = DEFAULT_USER_ID,
     bank_id: Optional[str] = None,
     status: Optional[str] = None,
+    session_type: Optional[str] = None,
+    mode: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    score_min: Optional[float] = None,
+    score_max: Optional[float] = None,
+    duration_min: Optional[int] = None,
+    duration_max: Optional[int] = None,
+    question_count_min: Optional[int] = None,
+    sort_by: str = "created_at",
+    sort_order: str = "desc",
     limit: int = 20,
     offset: int = 0,
+    cursor: Optional[str] = None,
 ) -> dict:
-    """列出用户练习会话"""
+    """列出用户练习会话 — 支持筛选/排序/双分页
+
+    筛选参数:
+      bank_id, status, session_type, mode, date_from/date_to (ISO格式),
+      score_min/score_max (0~100), duration_min/duration_max (秒),
+      question_count_min
+
+    排序参数:
+      sort_by: created_at | started_at | finished_at | score | duration_seconds | total_count
+      sort_order: asc | desc
+
+    双分页（二选一）:
+      offset/limit — 传统页码分页
+      cursor — 游标分页（值为上一页最后一条的 created_at ISO 时间戳）
+    """
     from app.db.database import get_db
     db = get_db()
 
     conditions = ["user_id = %s"]
     params = [user_id]
+
     if bank_id:
         conditions.append("bank_id = %s"); params.append(bank_id)
     if status:
         conditions.append("status = %s"); params.append(status)
+    if session_type:
+        conditions.append("session_type = %s"); params.append(session_type)
+    if mode:
+        conditions.append("mode = %s"); params.append(mode)
+    if date_from:
+        conditions.append("started_at >= %s"); params.append(date_from)
+    if date_to:
+        conditions.append("started_at <= %s"); params.append(date_to)
+    if score_min is not None:
+        conditions.append("score >= %s"); params.append(score_min)
+    if score_max is not None:
+        conditions.append("score <= %s"); params.append(score_max)
+    if duration_min is not None:
+        conditions.append("duration_seconds >= %s"); params.append(duration_min)
+    if duration_max is not None:
+        conditions.append("duration_seconds <= %s"); params.append(duration_max)
+    if question_count_min is not None:
+        conditions.append("total_count >= %s"); params.append(question_count_min)
 
     where = " AND ".join(conditions)
-    total = db.fetchone(f"SELECT COUNT(*) as cnt FROM v7_practice_sessions WHERE {where}", tuple(params))
-    total_count = total["cnt"] if total else 0
 
-    rows = db.fetchall(
-        f"""SELECT id, bank_id, session_type, mode, status, total_count,
-                   correct_count, wrong_count, score, duration_seconds,
-                   created_at, started_at, finished_at
-            FROM v7_practice_sessions WHERE {where}
-            ORDER BY created_at DESC LIMIT %s OFFSET %s""",
-        tuple(params + [limit, offset]),
-    )
+    # 游标分页：cursor 是上一页最后一条的 created_at
+    if cursor:
+        conditions.append("created_at < %s"); params.append(cursor)
+        where = " AND ".join(conditions)
+
+    # 排序（防 SQL 注入校验）
+    allowed_sort = {
+        "created_at", "started_at", "finished_at",
+        "score", "duration_seconds", "total_count",
+    }
+    if sort_by not in allowed_sort:
+        sort_by = "created_at"
+    if sort_order not in ("asc", "desc"):
+        sort_order = "desc"
+
+    total = None
+    if not cursor:
+        # 无游标时返回 total（页码分页需要）
+        t = db.fetchone(
+            f"SELECT COUNT(*) as cnt FROM practice_sessions WHERE {where}",
+            tuple(params),
+        )
+        total = t["cnt"] if t else 0
+
+    if cursor:
+        rows = db.fetchall(
+            f"""SELECT id, bank_id, session_type, mode, config, status, total_count,
+                       correct_count, wrong_count, score, duration_seconds,
+                       created_at, started_at, finished_at
+                FROM practice_sessions WHERE {where}
+                ORDER BY {sort_by} {sort_order}
+                LIMIT %s""",
+            tuple(params + [limit + 1]),
+        )
+    else:
+        rows = db.fetchall(
+            f"""SELECT id, bank_id, session_type, mode, config, status, total_count,
+                       correct_count, wrong_count, score, duration_seconds,
+                       created_at, started_at, finished_at
+                FROM practice_sessions WHERE {where}
+                ORDER BY {sort_by} {sort_order}
+                LIMIT %s OFFSET %s""",
+            tuple(params + [limit + 1, offset]),
+        )
+
+    has_more = len(rows) > limit
+    if has_more:
+        rows = rows[:limit]
 
     items = []
     for r in rows:
+        bank_name = ""
+        if r["bank_id"]:
+            try:
+                b = db.fetchone(
+                    "SELECT name FROM question_banks WHERE id = %s",
+                    (r["bank_id"],),
+                )
+                bank_name = b["name"] if b else ""
+            except Exception:
+                pass
+
         items.append({
             "session_id": r["id"],
             "bank_id": r["bank_id"],
+            "bank_name": bank_name,
             "session_type": r["session_type"],
             "mode": r["mode"],
             "status": r["status"],
@@ -564,9 +678,18 @@ def list_sessions(
             "finished_at": _safe_iso(r.get("finished_at")),
         })
 
+    next_cursor = None
+    if has_more and items:
+        next_cursor = items[-1]["created_at"]
+
     return {
         "items": items,
-        "total": total_count, "limit": limit, "offset": offset,
+        "total": total,
+        "limit": limit,
+        "offset": offset if not cursor else None,
+        "cursor": cursor,
+        "next_cursor": next_cursor,
+        "has_more": has_more,
     }
 
 
@@ -578,7 +701,7 @@ def update_session_stats(db, session_id: str):
     stats = db.fetchone(
         """SELECT COUNT(*) as total,
                   SUM(CASE WHEN is_correct THEN 1 ELSE 0 END) as correct
-           FROM v7_session_questions WHERE session_id = %s""",
+           FROM session_questions WHERE session_id = %s""",
         (session_id,),
     )
     if stats:
@@ -587,7 +710,7 @@ def update_session_stats(db, session_id: str):
         wrong = total - correct
         score = round((correct / max(total, 1)) * 100, 1)
         db.execute(
-            "UPDATE v7_practice_sessions SET correct_count = %s, wrong_count = %s, score = %s WHERE id = %s",
+            "UPDATE practice_sessions SET correct_count = %s, wrong_count = %s, score = %s WHERE id = %s",
             (correct, wrong, score, session_id),
         )
 
@@ -631,3 +754,25 @@ def _safe_iso(val):
     if hasattr(val, "isoformat"):
         return val.isoformat()
     return str(val)
+
+
+def delete_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> bool:
+    """硬删除练习会话及关联数据（session_questions, practice_attempts）
+
+    返回 True 表示已删除，False 表示会话不存在。
+    """
+    from app.db.database import get_db
+    db = get_db()
+
+    session = db.fetchone(
+        "SELECT id FROM practice_sessions WHERE id = %s AND user_id = %s",
+        (session_id, user_id),
+    )
+    if not session:
+        return False
+
+    # 清理关联数据
+    db.execute("DELETE FROM practice_attempts WHERE session_id = %s", (session_id,))
+    db.execute("DELETE FROM session_questions WHERE session_id = %s", (session_id,))
+    db.execute("DELETE FROM practice_sessions WHERE id = %s", (session_id,))
+    return True

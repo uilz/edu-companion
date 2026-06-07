@@ -13,12 +13,13 @@ import logging
 from typing import Any
 
 from .models import Proposal
+from shared.protocols.secretary import SecretaryRepository
 
 logger = logging.getLogger(__name__)
 
 
-class ProposalStore:
-    """提案持久化存储"""
+class ProposalStore(SecretaryRepository):
+    """提案持久化存储（实现 SecretaryRepository 协议）"""
 
     def __init__(self):
         self._db = None
@@ -141,24 +142,59 @@ class ProposalStore:
         )
         return True
 
-    def get_pending_proposals(self, user_id: str, limit: int = 20) -> list[Proposal]:
-        """获取待处理的提案（适配扁平表结构）"""
+    def get_pending_proposals(
+        self, user_id: str, limit: int = 20,
+        source_module: str | None = None,
+        action_type: str | None = None,
+        priority_min: int | None = None,
+        priority_max: int | None = None,
+        search: str | None = None,
+    ) -> list[Proposal]:
+        """获取待处理的提案（支持筛选参数）"""
         db = self._get_db()
-        rows = db.fetchall(
-            """SELECT id, emoji, title, description, action_type, payload,
-                      priority, generated_by, overrideable, status, metadata, created_at
-               FROM secretary_proposals
-               WHERE user_id = %s AND status = 'pending'
-               ORDER BY priority DESC, created_at DESC
-               LIMIT %s""",
-            (user_id, limit),
+
+        conditions = ["user_id = %s", "status = 'pending'"]
+        params: list[Any] = [user_id]
+
+        if source_module:
+            conditions.append("generated_by = %s")
+            params.append(source_module)
+        if action_type:
+            conditions.append("action_type = %s")
+            params.append(action_type)
+        if priority_min is not None:
+            conditions.append("priority >= %s")
+            params.append(priority_min)
+        if priority_max is not None:
+            conditions.append("priority <= %s")
+            params.append(priority_max)
+
+        where_clause = " AND ".join(conditions)
+        sql = (
+            f"SELECT id, emoji, title, description, action_type, payload, "
+            f"priority, generated_by, overrideable, status, metadata, created_at "
+            f"FROM secretary_proposals WHERE {where_clause} "
+            f"ORDER BY priority DESC, created_at DESC LIMIT %s"
         )
+        params.append(limit)
+
+        rows = db.fetchall(sql, tuple(params))
+
         result = []
         for r in rows:
             try:
                 payload = r.get("payload") or {}
                 if isinstance(payload, str):
                     payload = json.loads(payload)
+
+                # 搜索过滤（在应用层做，因为需要中文全文搜索）
+                if search:
+                    q = search.lower()
+                    title = (r.get("title") or "").lower()
+                    desc = (r.get("description") or "").lower()
+                    if q not in title and q not in desc:
+                        continue
+
                 result.append(Proposal(
                     id=r["id"],
                     emoji=r.get("emoji", "💡") or "💡",
@@ -176,22 +212,38 @@ class ProposalStore:
 
     def get_history(
         self, user_id: str, days: int = 7, limit: int = 50,
+        source_module: str | None = None,
+        action_type: str | None = None,
+        page: int = 1,
+        page_size: int = 50,
     ) -> list[dict[str, Any]]:
-        """获取提案历史"""
+        """获取提案历史（支持筛选与分页）"""
         db = self._get_db()
         from datetime import datetime, timezone, timedelta
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
-        rows = db.fetchall(
-            """SELECT id, emoji, title, description, action_type, payload,
-                      priority, generated_by, overrideable, status, metadata,
-                      created_at
-               FROM secretary_proposals
-               WHERE user_id = %s AND created_at >= %s
-               ORDER BY created_at DESC
-               LIMIT %s""",
-            (user_id, cutoff, limit),
+        conditions = ["user_id = %s", "created_at >= %s"]
+        params: list[Any] = [user_id, cutoff]
+
+        if source_module:
+            conditions.append("generated_by = %s")
+            params.append(source_module)
+        if action_type:
+            conditions.append("action_type = %s")
+            params.append(action_type)
+
+        where_clause = " AND ".join(conditions)
+        offset = (page - 1) * page_size
+        sql = (
+            f"SELECT id, emoji, title, description, action_type, payload, "
+            f"priority, generated_by, overrideable, status, metadata, created_at "
+            f"FROM secretary_proposals WHERE {where_clause} "
+            f"ORDER BY created_at DESC LIMIT %s OFFSET %s"
         )
+        params.append(page_size)
+        params.append(offset)
+
+        rows = db.fetchall(sql, tuple(params))
         return [
             {
                 "id": r["id"],
@@ -240,3 +292,94 @@ class ProposalStore:
             "accepted": row["accepted"] if row else 0,
             "dismissed": row["dismissed"] if row else 0,
         }
+
+    def get_daily_usage(self, user_id: str) -> int:
+        """获取用户今日已使用的提案推送数"""
+        try:
+            from datetime import datetime, timezone
+            db = self._get_db()
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            row = db.fetchone(
+                """SELECT COUNT(*) as cnt FROM secretary_proposals
+                   WHERE user_id = %s AND DATE(created_at) = %s
+                   AND status IN ('pending', 'accepted')""",
+                (user_id, today),
+            )
+            return row["cnt"] if row else 0
+        except Exception as e:
+            logger.debug("获取每日用量失败: %s", e)
+            return 0
+
+    # ═══════════════════════════════════════════════
+    # Phase 2: 新操作 — 延后 / 删除 / 恢复 / 批量
+    # ═══════════════════════════════════════════════
+
+    def snooze_proposal(
+        self, proposal_id: str, user_id: str,
+        until_timestamp: float | None = None,
+    ) -> bool:
+        """延后提案 — status → snoozed + 记录 snoozed_until"""
+        db = self._get_db()
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+
+        meta_update: dict[str, Any] = {"snoozed_at": now.isoformat()}
+        if until_timestamp:
+            meta_update["snoozed_until"] = until_timestamp
+
+        db.execute(
+            "UPDATE secretary_proposals SET status = 'snoozed', "
+            "metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb, "
+            "updated_at = %s "
+            "WHERE id = %s AND user_id = %s",
+            (json.dumps({"snooze": meta_update}),
+             now, proposal_id, user_id),
+        )
+        return True
+
+    def delete_proposal(self, proposal_id: str, user_id: str) -> bool:
+        """删除提案 — status → deleted"""
+        db = self._get_db()
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        db.execute(
+            "UPDATE secretary_proposals SET status = 'deleted', updated_at = %s "
+            "WHERE id = %s AND user_id = %s",
+            (now, proposal_id, user_id),
+        )
+        return True
+
+    def restore_proposal(self, proposal_id: str, user_id: str) -> bool:
+        """恢复提案 — snoozed/deleted → pending"""
+        db = self._get_db()
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        db.execute(
+            "UPDATE secretary_proposals SET status = 'pending', "
+            "metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb, "
+            "updated_at = %s "
+            "WHERE id = %s AND user_id = %s "
+            "AND status IN ('snoozed', 'deleted')",
+            (json.dumps({"restored_at": now.isoformat()}),
+             now, proposal_id, user_id),
+        )
+        return True
+
+    def batch_update_status(
+        self, proposal_ids: list[str], status: str, user_id: str,
+    ) -> int:
+        """批量更新提案状态，返回更新的记录数"""
+        if not proposal_ids:
+            return 0
+        db = self._get_db()
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+
+        placeholders = ", ".join("%s" for _ in proposal_ids)
+        sql = (
+            f"UPDATE secretary_proposals SET status = %s, updated_at = %s "
+            f"WHERE id IN ({placeholders}) AND user_id = %s"
+        )
+        params = [status, now] + proposal_ids + [user_id]
+        db.execute(sql, tuple(params))
+        return len(proposal_ids)

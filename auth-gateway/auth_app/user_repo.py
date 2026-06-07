@@ -42,6 +42,7 @@ class UserRepo:
                 email VARCHAR(128) DEFAULT '',
                 password_hash VARCHAR(128) NOT NULL,
                 display_name VARCHAR(64) DEFAULT '',
+                avatar_url VARCHAR(512) DEFAULT '',
                 role VARCHAR(16) DEFAULT 'user',
                 is_active BOOLEAN DEFAULT true,
                 last_login TIMESTAMP,
@@ -49,6 +50,11 @@ class UserRepo:
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # 兼容旧表：无 avatar_url 列时添加
+        try:
+            self.db.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(512) DEFAULT ''")
+        except Exception:
+            pass
 
     def find_by_id(self, user_id: str) -> Optional[dict]:
         return self.db.fetchone("SELECT * FROM users WHERE id = %s", (user_id,))
@@ -78,6 +84,12 @@ class UserRepo:
         self.db.execute(
             "UPDATE users SET password_hash = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
             (new_password_hash, user_id),
+        )
+
+    def update_avatar(self, user_id: str, avatar_url: str):
+        self.db.execute(
+            "UPDATE users SET avatar_url = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+            (avatar_url, user_id),
         )
 
     def update_profile(self, user_id: str, display_name: str = None, email: str = None):

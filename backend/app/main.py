@@ -27,14 +27,14 @@ from app.api.system.achievements import router as achievements_router
 from app.api.system.search import router as search_router
 from app.api.system.secretary import router as secretary_router
 from app.api.learning.cognitive import router as learning_router
-from app.api.knowledge.knowledge_graph import router as knowledge_graph_router
+from app.api.knowledge.knowledge_routes import router as knowledge_graph_router
 from app.api.system.summaries import router as summaries_router
 
 # Phase 10: 笔记/目标/探索项目
 from app.api.learning.learning_enhance import router as learning_enhance_router
 
 # Phase 10.7+: 文件管理
-from app.api.system.files_api import router as files_router
+from app.api.system.files_routes import router as files_router, recover_stuck_files
 
 # 认证系统 — 已迁移至独立认证网关 (auth-gateway:8001)
 # 主后端仅保留认证中间件，用于调用网关验证令牌
@@ -42,12 +42,12 @@ from app.api.system.files_api import router as files_router
 # 解释卡片 CRUD
 from app.api.practice.explain_cards import router as explain_cards_router
 
-# v7.0 智能题库
-from app.api.practice.v7_practice import router as v7_practice_router
-from app.api.practice.v7_references import router as v7_references_router
+# 智能题库
+from app.api.practice.practice_routes import router as practice_routes_router
+from app.api.practice.references import router as references_router
 
 # v8.0 学习数据管理
-from app.api.system.v7_data import router as v7_data_router
+from app.api.system.data_routes import router as data_router
 
 from app.config import settings
 from shared.learner_model import learner_engine
@@ -93,7 +93,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # 恢复 stuck 文件（uploading → 重新索引）
     try:
-        from app.api.system.files_api import recover_stuck_files
         await recover_stuck_files()
     except Exception as e:
         logger.warning("stuck 文件恢复跳过: %s", e)
@@ -207,19 +206,6 @@ from fastapi.exceptions import HTTPException
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    # AppError 体系
-    from app.core.errors import AppError
-    if isinstance(exc, AppError):
-        logger.warning(
-            "AppError [%s] on %s %s: %s",
-            exc.code, request.method, request.url.path, exc.detail,
-            extra={"trace_id": request.headers.get("x-trace-id", "")},
-        )
-        return JSONResponse(
-            status_code=exc.status_code,
-            content=exc.to_dict(),
-        )
-
     # HTTPException (FastAPI 内置)
     if isinstance(exc, HTTPException):
         return JSONResponse(
@@ -227,11 +213,10 @@ async def global_exception_handler(request: Request, exc: Exception):
             content={"error": "http_error", "detail": exc.detail},
         )
 
-    # 未知异常
-    logger.error(
-        "Unhandled exception on %s %s: %s",
-        request.method, request.url.path, exc, exc_info=True,
-        extra={"trace_id": request.headers.get("x-trace-id", "")},
+    # 未知异常 — 记录完整堆栈后返回通用错误
+    logger.exception(
+        "未处理异常 [%s] %s %s: %s",
+        request.method, request.url.path, exc, extra={"trace_id": request.headers.get("x-trace-id", "")},
     )
     return JSONResponse(
         status_code=500,
@@ -285,14 +270,14 @@ app.include_router(files_router)
 # app.include_router(auth_router)  # 已移除
 
 # v7.0 智能题库
-app.include_router(v7_practice_router)
-app.include_router(v7_references_router)
+app.include_router(practice_routes_router)
+app.include_router(references_router)
 
 # 解释卡片 CRUD
 app.include_router(explain_cards_router)
 
 # v8.0 学习数据管理
-app.include_router(v7_data_router)
+app.include_router(data_router)
 
 
 # ── 健康检查 ──

@@ -305,11 +305,18 @@ class ErrorBookRepository(Protocol):
     async def find_unresolved(
         self, user_id: str, limit: int = 20
     ) -> list: ...
+
     async def mark_resolved(self, entry_id: str) -> None: ...
 
 
 # ═══════════════════════════════════════════════════════════
-# Multimedia — 多媒体服务 (Phase 5)
+# CognitiveNode Repository
 # ═══════════════════════════════════════════════════════════
 
-from shared.protocols.multimedia import AudioSynthesizer, ImageRenderer  # noqa: E402, F401
+from .cognitive import CognitiveNodeRepository
+from .secretary import SecretaryRepository
+
+__all__ = [
+    "CognitiveNodeRepository",
+    "SecretaryRepository",
+]

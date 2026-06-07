@@ -74,7 +74,7 @@ def create_exam(
     ))
 
     db.execute(
-        """INSERT INTO v7_practice_sessions
+        """INSERT INTO practice_sessions
            (id, user_id, bank_id, session_type, mode, config,
             status, total_count, cognitive_node_ids, created_at, started_at)
            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
@@ -87,7 +87,7 @@ def create_exam(
     for i, q in enumerate(questions):
         sq_id = f"sq_{session_id}_{i}"
         db.execute(
-            """INSERT INTO v7_session_questions (id, session_id, question_id, sort_order, created_at)
+            """INSERT INTO session_questions (id, session_id, question_id, sort_order, created_at)
                VALUES (%s, %s, %s, %s, %s)""",
             (sq_id, session_id, q["id"], i, now_iso),
         )
@@ -130,7 +130,7 @@ def get_exam_time(session_id: str, user_id: str = DEFAULT_USER_ID) -> dict:
     db = get_db()
 
     session = db.fetchone(
-        "SELECT * FROM v7_practice_sessions WHERE id = %s AND user_id = %s",
+        "SELECT * FROM practice_sessions WHERE id = %s AND user_id = %s",
         (session_id, user_id),
     )
     if not session:
@@ -188,7 +188,7 @@ def submit_all_exam(session_id: str, user_id: str = DEFAULT_USER_ID) -> dict:
 
     # 1. 检查考试状态
     session = db.fetchone(
-        "SELECT * FROM v7_practice_sessions WHERE id = %s AND user_id = %s",
+        "SELECT * FROM practice_sessions WHERE id = %s AND user_id = %s",
         (session_id, user_id),
     )
     if not session:
@@ -202,8 +202,8 @@ def submit_all_exam(session_id: str, user_id: str = DEFAULT_USER_ID) -> dict:
     sq_rows = db.fetchall(
         """SELECT sq.*, q.answer as correct_answer, q.analysis,
                   q.question_type, q.options as raw_options, q.stem
-           FROM v7_session_questions sq
-           LEFT JOIN v7_questions q ON sq.question_id = q.id
+           FROM session_questions sq
+           LEFT JOIN questions q ON sq.question_id = q.id
            WHERE sq.session_id = %s
            ORDER BY sq.sort_order""",
         (session_id,),
@@ -232,7 +232,7 @@ def submit_all_exam(session_id: str, user_id: str = DEFAULT_USER_ID) -> dict:
             unanswered += 1
             # 未答算错
             db.execute(
-                """UPDATE v7_session_questions
+                """UPDATE session_questions
                    SET user_answer = %s, is_correct = false, time_spent_seconds = 0
                    WHERE id = %s""",
                 (json.dumps([]), sq["id"]),
@@ -264,7 +264,7 @@ def submit_all_exam(session_id: str, user_id: str = DEFAULT_USER_ID) -> dict:
 
     # 4. 完成会话
     db.execute(
-        """UPDATE v7_practice_sessions
+        """UPDATE practice_sessions
            SET status = 'completed', correct_count = %s, wrong_count = %s,
                score = %s, finished_at = %s, duration_seconds = %s
            WHERE id = %s""",
@@ -297,7 +297,7 @@ def submit_all_exam(session_id: str, user_id: str = DEFAULT_USER_ID) -> dict:
             from app.db.database import get_db as _get_db
             _db2 = _get_db()
             _db2.execute(
-                """INSERT INTO v7_practice_attempts
+                """INSERT INTO practice_attempts
                    (session_id, question_id, user_id, user_answer, is_correct, time_spent_seconds,
                     is_wrong, consecutive_correct, created_at)
                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
@@ -322,7 +322,7 @@ def get_exam_result(session_id: str, user_id: str = DEFAULT_USER_ID) -> dict:
     db = get_db()
 
     session = db.fetchone(
-        "SELECT * FROM v7_practice_sessions WHERE id = %s AND user_id = %s",
+        "SELECT * FROM practice_sessions WHERE id = %s AND user_id = %s",
         (session_id, user_id),
     )
     if not session:
@@ -330,8 +330,8 @@ def get_exam_result(session_id: str, user_id: str = DEFAULT_USER_ID) -> dict:
 
     sq_rows = db.fetchall(
         """SELECT sq.*, q.stem, q.analysis, q.question_type, q.options as raw_options
-           FROM v7_session_questions sq
-           LEFT JOIN v7_questions q ON sq.question_id = q.id
+           FROM session_questions sq
+           LEFT JOIN questions q ON sq.question_id = q.id
            WHERE sq.session_id = %s
            ORDER BY sq.sort_order""",
         (session_id,),
@@ -380,7 +380,7 @@ def get_exam_answer_sheet(session_id: str, user_id: str = DEFAULT_USER_ID) -> di
     db = get_db()
 
     session = db.fetchone(
-        "SELECT * FROM v7_practice_sessions WHERE id = %s AND user_id = %s",
+        "SELECT * FROM practice_sessions WHERE id = %s AND user_id = %s",
         (session_id, user_id),
     )
     if not session:
@@ -388,7 +388,7 @@ def get_exam_answer_sheet(session_id: str, user_id: str = DEFAULT_USER_ID) -> di
 
     sq_rows = db.fetchall(
         """SELECT sq.sort_order, sq.question_id, sq.is_correct, sq.user_answer
-           FROM v7_session_questions sq
+           FROM session_questions sq
            WHERE sq.session_id = %s
            ORDER BY sq.sort_order""",
         (session_id,),
@@ -420,20 +420,20 @@ def _auto_submit_exam(session_id: str, db) -> None:
     """超时自动交卷"""
     now = datetime.now().isoformat()
     db.execute(
-        """UPDATE v7_practice_sessions
+        """UPDATE practice_sessions
            SET status = 'timeout', finished_at = %s
            WHERE id = %s AND status = 'active'""",
         (now, session_id),
     )
     # 未答的题标记为错误
     unanswered = db.fetchall(
-        """SELECT id FROM v7_session_questions
+        """SELECT id FROM session_questions
            WHERE session_id = %s AND is_correct IS NULL""",
         (session_id,),
     )
     for uq in unanswered:
         db.execute(
-            "UPDATE v7_session_questions SET user_answer = %s, is_correct = false, time_spent_seconds = 0 WHERE id = %s",
+            "UPDATE session_questions SET user_answer = %s, is_correct = false, time_spent_seconds = 0 WHERE id = %s",
             (json.dumps([]), uq["id"]),
         )
     logger.info("自动交卷: %s, %d 题未答", session_id, len(unanswered))

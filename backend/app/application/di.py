@@ -24,6 +24,7 @@ if TYPE_CHECKING:
         KnowledgeGraphService,
         MediaService,
     )
+    from shared.protocols.cognitive import CognitiveNodeRepository
     from app.domain.multimedia.service import MultimediaService
 
 logger = logging.getLogger("di")
@@ -43,6 +44,9 @@ class AppContainer:
         # ── 基础设施 ──
         self.event_bus = EventBus(handler_timeout=5.0)
         self.llm_circuit = CircuitBreaker("llm", failure_threshold=3)
+
+        # ── CognitiveNode 仓储 ──
+        self.cognitive_node_repo: CognitiveNodeRepository = self._create_cognitive_repo()
 
         # ── 领域服务（先创建无依赖的） ──
         self.practice_service: PracticeService = self._create_practice()
@@ -72,9 +76,13 @@ class AppContainer:
     # 服务工厂方法
     # ═══════════════════════════════════════════════════════
 
+    def _create_cognitive_repo(self) -> CognitiveNodeRepository:
+        from app.cognitive.pg_repository import PgCognitiveNodeRepository
+        return PgCognitiveNodeRepository()
+
     def _create_practice(self) -> PracticeService:
         from app.domain.practice.service import PracticeServiceImpl
-        from infra.database import (
+        from app.db.repositories import (
             PostgresQuestionRepo,
             PostgresSessionRepo,
             PostgresErrorBookRepo,

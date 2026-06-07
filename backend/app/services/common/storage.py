@@ -5,7 +5,7 @@
 - JSON 文件 (默认)
 - PostgreSQL (设置 USE_PG_STORAGE=true)
 
-通过统一接口 (load/save) 对外暴露。
+通过 DataRepository Port 对外暴露（见 shared/protocols/data_repository.py）。
 """
 
 from __future__ import annotations
@@ -16,9 +16,10 @@ from threading import Lock
 
 from app.config import COMPANION_HOME
 from app.schemas.conversation import UserData
+from shared.protocols.data_repository import DataRepository, AdminRepository
 
 
-class JsonStorageEngine:
+class JsonStorageEngine(DataRepository):
     """JSON 文件存储引擎，线程安全的用户数据持久化"""
 
     def __init__(self, base_dir: str | None = None) -> None:
@@ -73,7 +74,7 @@ class JsonStorageEngine:
             return f'W/"{user_id}:{version}"'
 
 
-def _get_storage():
+def _get_storage() -> DataRepository:
     """根据环境变量选择存储后端 (Phase 6.5: PG 默认)"""
     use_json = os.environ.get("USE_JSON_STORAGE", "").lower() in ("1", "true", "yes")
     if use_json:
@@ -83,4 +84,20 @@ def _get_storage():
 
 
 # 全局单例 (所有 import 方透明使用)
-storage = _get_storage()
+storage: DataRepository = _get_storage()
+
+
+def get_admin_repo() -> AdminRepository:
+    """
+    获取 AdminRepository 实例用于原始 SQL 访问。
+
+    仅限管理 API、数据迁移、后台维护使用（如 data_routes.py）。
+    仅在 PG 模式可用（USE_JSON_STORAGE = false）。
+    JSON 模式下调用会抛出 RuntimeError。
+    """
+    if isinstance(storage, AdminRepository):
+        return storage
+    raise RuntimeError(
+        "AdminRepository 需要 PostgreSQL 存储引擎。"
+        "请设置 USE_JSON_STORAGE=false 启用 PG 模式。"
+    )

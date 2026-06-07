@@ -46,7 +46,7 @@ class SecretaryService:
         scope: ScopeSpec | None = None,
     ) -> DiagnosisReport:
         """执行诊断并返回报告"""
-        report = await self.diagnosis.diagnose(user_id=user_id, scope=scope)
+        report = await self.diagnosis.diagnose(user_id=user_id)
         logger.info(
             "诊断完成: user=%s weak=%d load=%.2f findings=%s",
             user_id,

@@ -108,10 +108,10 @@ async def generate_and_save(
         logger.warning("AI 出题生成 0 道题目")
         return []
 
-    # 转 v7 格式并保存
+    # 转标准格式并保存
     saved = []
     for q in questions:
-        v7_q = add_question(
+        saved_q = add_question(
             bank_id=bank_id,
             user_id=user_id,
             question_type=CONTENT_TYPE_MAP.get(content_type, content_type),
@@ -131,7 +131,7 @@ async def generate_and_save(
                 "source_detail": q.source,
             },
         )
-        saved.append(v7_q)
+        saved.append(saved_q)
 
     logger.info("AI 出题完成: bank=%s, count=%d, skill=%s", bank_id, len(saved), skill_id)
     return saved
@@ -478,7 +478,7 @@ async def generate_similar(
     基于已有题目生成同类变体。
 
     流程:
-    1. 从 v7_questions 获取原题
+    1. 从 questions 获取原题
     2. 用 LLM 生成相似但不同的题目（同知识点、同难度、不同问法）
     3. 保存到同一题库
     """
@@ -488,7 +488,7 @@ async def generate_similar(
 
     # 1. 获取原题
     row = db.fetchone(
-        "SELECT * FROM v7_questions WHERE id = %s AND deleted_at IS NULL",
+        "SELECT * FROM questions WHERE id = %s AND deleted_at IS NULL",
         (question_id,),
     )
     if not row:
@@ -549,7 +549,7 @@ async def generate_similar(
     # 3. 保存到同一题库
     saved = []
     for q in questions:
-        v7_q = add_question(
+        saved_q = add_question(
             bank_id=bank_id,
             user_id=user_id,
             question_type=CONTENT_TYPE_MAP.get(qtype, qtype),
@@ -570,7 +570,7 @@ async def generate_similar(
                 "source_detail": q.source,
             },
         )
-        saved.append(v7_q)
+        saved.append(saved_q)
 
     logger.info("同类变体: original=%s, generated=%d", question_id, len(saved))
     return saved
@@ -600,8 +600,8 @@ async def explain_question(
 
     row = db.fetchone(
         """SELECT q.*, b.name as bank_name
-           FROM v7_questions q
-           LEFT JOIN v7_question_banks b ON q.bank_id = b.id
+           FROM questions q
+           LEFT JOIN question_banks b ON q.bank_id = b.id
            WHERE q.id = %s""",
         (question_id,),
     )

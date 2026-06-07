@@ -16,9 +16,9 @@ def _ensure_tables():
     from app.db.database import get_db
     db = get_db()
     possible_paths = [
-        "scripts/v7_question_bank.sql",
-        "backend/scripts/v7_question_bank.sql",
-        os.path.join(os.path.dirname(__file__), "../../scripts/v7_question_bank.sql"),
+        "scripts/question_bank.sql",
+        "backend/scripts/question_bank.sql",
+        os.path.join(os.path.dirname(__file__), "../../scripts/question_bank.sql"),
     ]
     sql_path = None
     for p in possible_paths:
@@ -42,13 +42,13 @@ def _ensure_tables():
 
 def _run_migrations(db):
     migrations = [
-        "ALTER TABLE v7_question_banks ADD COLUMN IF NOT EXISTS ref_node_id TEXT",
-        "ALTER TABLE v7_question_banks ADD COLUMN IF NOT EXISTS ref_node_level VARCHAR(20)",
-        "ALTER TABLE v7_question_banks ADD COLUMN IF NOT EXISTS auto_created BOOLEAN DEFAULT false",
-        "ALTER TABLE v7_question_banks ADD COLUMN IF NOT EXISTS question_count INT DEFAULT 0",
-        "ALTER TABLE v7_questions ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'",
-        "ALTER TABLE v7_questions ADD COLUMN IF NOT EXISTS cognitive_node_ids TEXT[] DEFAULT '{}'",
-        "ALTER TABLE v7_practice_attempts ADD COLUMN IF NOT EXISTS error_pattern VARCHAR(50)",
+        "ALTER TABLE question_banks ADD COLUMN IF NOT EXISTS ref_node_id TEXT",
+        "ALTER TABLE question_banks ADD COLUMN IF NOT EXISTS ref_node_level VARCHAR(20)",
+        "ALTER TABLE question_banks ADD COLUMN IF NOT EXISTS auto_created BOOLEAN DEFAULT false",
+        "ALTER TABLE question_banks ADD COLUMN IF NOT EXISTS question_count INT DEFAULT 0",
+        "ALTER TABLE questions ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'",
+        "ALTER TABLE questions ADD COLUMN IF NOT EXISTS cognitive_node_ids TEXT[] DEFAULT '{}'",
+        "ALTER TABLE practice_attempts ADD COLUMN IF NOT EXISTS error_pattern VARCHAR(50)",
     ]
     for sql in migrations:
         try:
@@ -64,8 +64,8 @@ def list_banks(user_id=DEFAULT_USER_ID):
     db = get_db()
     rows = db.fetchall(
         """SELECT qb.*,
-                  (SELECT COUNT(*) FROM v7_questions q WHERE q.bank_id = qb.id AND q.deleted_at IS NULL) as real_count
-           FROM v7_question_banks qb
+                  (SELECT COUNT(*) FROM questions q WHERE q.bank_id = qb.id AND q.deleted_at IS NULL) as real_count
+           FROM question_banks qb
            WHERE qb.user_id = %s AND qb.deleted_at IS NULL
            ORDER BY qb.auto_created ASC, qb.updated_at DESC""",
         (user_id,),
@@ -78,7 +78,7 @@ def get_bank(bank_id, user_id=DEFAULT_USER_ID):
     from app.db.database import get_db
     db = get_db()
     row = db.fetchone(
-        "SELECT * FROM v7_question_banks WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
+        "SELECT * FROM question_banks WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
         (bank_id, user_id),
     )
     return _row_to_bank(row) if row else None
@@ -91,13 +91,13 @@ def create_bank(user_id, name, description="", ref_node_id=None, ref_node_level=
     now = datetime.now().isoformat()
     bank_id = _generate_bank_id(user_id, ref_node_id or name)
     db.execute(
-        """INSERT INTO v7_question_banks
+        """INSERT INTO question_banks
            (id, user_id, name, description, ref_node_id, ref_node_level, auto_created, created_at, updated_at)
            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
            ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, description=EXCLUDED.description, updated_at=EXCLUDED.updated_at""",
         (bank_id, user_id, name, description, ref_node_id, ref_node_level, auto_created, now, now),
     )
-    row = db.fetchone("SELECT * FROM v7_question_banks WHERE id = %s", (bank_id,))
+    row = db.fetchone("SELECT * FROM question_banks WHERE id = %s", (bank_id,))
     logger.info("题库已创建: %s (%s)", bank_id, name)
     return _row_to_bank(row)
 
@@ -107,7 +107,7 @@ def update_bank(bank_id, user_id, name=None, description=None):
     from app.db.database import get_db
     db = get_db()
     row = db.fetchone(
-        "SELECT * FROM v7_question_banks WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
+        "SELECT * FROM question_banks WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
         (bank_id, user_id),
     )
     if not row:
@@ -124,7 +124,7 @@ def update_bank(bank_id, user_id, name=None, description=None):
     updates["updated_at"] = now
     params = list(updates.values()) + [bank_id, user_id]
     db.execute(
-        f"UPDATE v7_question_banks SET {set_clause}, updated_at = %s WHERE id = %s AND user_id = %s",
+        f"UPDATE question_banks SET {set_clause}, updated_at = %s WHERE id = %s AND user_id = %s",
         tuple(params),
     )
     return get_bank(bank_id, user_id)
@@ -135,8 +135,8 @@ def delete_bank(bank_id, user_id=DEFAULT_USER_ID):
     from app.db.database import get_db
     db = get_db()
     now = datetime.now().isoformat()
-    db.execute("UPDATE v7_question_banks SET deleted_at = %s WHERE id = %s AND user_id = %s", (now, bank_id, user_id))
-    return db.fetchone("SELECT id FROM v7_question_banks WHERE id = %s AND deleted_at IS NULL", (bank_id,)) is None
+    db.execute("UPDATE question_banks SET deleted_at = %s WHERE id = %s AND user_id = %s", (now, bank_id, user_id))
+    return db.fetchone("SELECT id FROM question_banks WHERE id = %s AND deleted_at IS NULL", (bank_id,)) is None
 
 
 def resolve_bank_for_conversation(conversation_id, user_id=DEFAULT_USER_ID, user_specified_bank_id=None):
@@ -197,10 +197,10 @@ def list_questions(bank_id, user_id=DEFAULT_USER_ID, page=1, page_size=50,
         conditions.append("%s = ANY(q.cognitive_node_ids)"); params.append(cognitive_node_id)
     where = " AND ".join(conditions)
     offset = (page - 1) * page_size
-    total = db.fetchone(f"SELECT COUNT(*) as cnt FROM v7_questions q WHERE {where}", tuple(params))
+    total = db.fetchone(f"SELECT COUNT(*) as cnt FROM questions q WHERE {where}", tuple(params))
     total_count = total["cnt"] if total else 0
     rows = db.fetchall(
-        f"SELECT q.* FROM v7_questions q WHERE {where} ORDER BY q.created_at DESC LIMIT %s OFFSET %s",
+        f"SELECT q.* FROM questions q WHERE {where} ORDER BY q.created_at DESC LIMIT %s OFFSET %s",
         tuple(params + [page_size, offset]),
     )
     return {
@@ -214,12 +214,12 @@ def get_question(question_id, user_id=DEFAULT_USER_ID):
     _ensure_tables()
     from app.db.database import get_db
     db = get_db()
-    row = db.fetchone("SELECT * FROM v7_questions WHERE id = %s AND deleted_at IS NULL", (question_id,))
+    row = db.fetchone("SELECT * FROM questions WHERE id = %s AND deleted_at IS NULL", (question_id,))
     return _row_to_question(row, include_answer=True) if row else None
 
 
 def _ensure_bank(db, bank_id, user_id, ref_node_id):
-    if db.fetchone("SELECT id FROM v7_question_banks WHERE id = %s", (bank_id,)):
+    if db.fetchone("SELECT id FROM question_banks WHERE id = %s", (bank_id,)):
         return
     from app.cognitive.storage import get_node
     node = get_node(ref_node_id, user_id)
@@ -227,7 +227,7 @@ def _ensure_bank(db, bank_id, user_id, ref_node_id):
     level = node.level if node else ""
     now = datetime.now().isoformat()
     db.execute(
-        "INSERT INTO v7_question_banks (id, user_id, name, description, ref_node_id, ref_node_level, "
+        "INSERT INTO question_banks (id, user_id, name, description, ref_node_id, ref_node_level, "
         "auto_created, import_source, created_at, updated_at) "
         "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING",
         (bank_id, user_id, f"{label}题库", f"自动为{level}「{label}」创建的题库",
@@ -239,7 +239,7 @@ def _ensure_bank(db, bank_id, user_id, ref_node_id):
 def _ensure_default_bank(db, bank_id, user_id):
     now = datetime.now().isoformat()
     db.execute(
-        "INSERT INTO v7_question_banks (id, user_id, name, description, auto_created, import_source, created_at, updated_at) "
+        "INSERT INTO question_banks (id, user_id, name, description, auto_created, import_source, created_at, updated_at) "
         "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING",
         (bank_id, user_id, "通用题库", "未分类题目的默认题库", True, "auto", now, now),
     )

@@ -65,6 +65,11 @@ CREATE TABLE IF NOT EXISTS questions (
     status          TEXT DEFAULT 'active',
     created_at      TIMESTAMP NOT NULL DEFAULT NOW()
 );
+-- 兼容旧表（缺少 skill_id 列的场景）
+DO $$ BEGIN
+    ALTER TABLE questions ADD COLUMN IF NOT EXISTS skill_id TEXT NOT NULL DEFAULT '';
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
 
 -- 练习会话
 CREATE TABLE IF NOT EXISTS practice_sessions (

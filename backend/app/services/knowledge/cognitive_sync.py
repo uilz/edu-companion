@@ -82,7 +82,7 @@ def _trigger_graph_update(user_id: str, conversation_id: str, new_branch_name: s
             # 已存在的图谱 → 增量合并；不存在 → 新建
             data.knowledge_graphs.get(partition_id)
 
-            from app.api.knowledge.knowledge_graph import generate_graph_logic
+            from app.api.knowledge.knowledge_routes import generate_graph_logic
             await generate_graph_logic(
                 user_id=user_id,
                 partition_id=partition_id,

@@ -76,7 +76,9 @@ class ActiveChecker:
             ).hexdigest()
             # 检查是否已经存在相同指纹的 pending 提案
             try:
-                existing = ProposalStore()._get_db().fetchone(
+                store = ProposalStore()
+                db = store._get_db()
+                existing = db.fetchone(
                     "SELECT id FROM secretary_proposals "
                     "WHERE user_id = %s AND status = 'pending' "
                     "AND metadata->>'fingerprint' = %s "

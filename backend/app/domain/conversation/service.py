@@ -37,7 +37,27 @@ class ConversationServiceImpl:
         partition_id: str | None = None,
         branch_id: str | None = None,
     ) -> dict:
-        return {}
+        """发送消息 → LLM 回复（委托到 domain/conversation/llm.py）"""
+        pid = partition_id or ""
+        if not pid and branch_id:
+            from app.services.common.storage import storage
+            data = storage.load(user_id)
+            for conv in data.conversations.values():
+                if conv.id == branch_id:
+                    if conv.partition_id:
+                        pid = conv.partition_id
+                    else:
+                        for t in data.topics.values():
+                            if t.id == conv.topic_id:
+                                for d in data.domains.values():
+                                    if d.id == t.domain_id:
+                                        pid = d.partition_id
+                                        break
+        if not pid:
+            return {"ok": False, "error": "cannot determine partition"}
+
+        from .llm import send_and_reply
+        return await send_and_reply(user_id, pid, content, conversation_id=branch_id)
 
     # ── 事件监听器 ──
 

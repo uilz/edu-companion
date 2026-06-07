@@ -35,8 +35,9 @@ PyMuPDF>=1.23.0
 python-docx>=1.1.0
 python-pptx>=0.6.0
 
-# 向量嵌入
-sentence-transformers>=2.6.0
+# 向量嵌入（OpenVINO 本地推理，无需 CUDA）
+openvino>=2024.0.0
+tokenizers>=0.19.0
 
 # 日志
 loguru>=0.7.0

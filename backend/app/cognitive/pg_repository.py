@@ -1,0 +1,105 @@
+"""
+PgCognitiveNodeRepository — PostgreSQL 适配器
+
+实现 CognitiveNodeRepository Protocol，委托到 storage.py 的函数。
+"""
+from __future__ import annotations
+
+from typing import Optional
+
+from app.cognitive.models import CognitiveNode, CognitiveEvent
+from app.cognitive import storage as _s
+
+
+class PgCognitiveNodeRepository:
+    """PostgreSQL 适配器 — 实现 CognitiveNodeRepository Protocol
+
+    所有方法委托到 app.cognitive.storage 的模块级函数。
+    保持向后兼容——直接 import storage 的旧代码仍然可用。
+    """
+
+    def upsert_node(self, node: CognitiveNode, user_id: str = "default") -> None:
+        _s.upsert_node(node, user_id)
+
+    def get_node(self, node_id: str, user_id: str = "default") -> Optional[CognitiveNode]:
+        return _s.get_node(node_id, user_id)
+
+    def delete_node(self, node_id: str, user_id: str = "default") -> None:
+        _s.delete_node(node_id, user_id)
+
+    def get_children(self, parent_id: str, user_id: str = "default") -> list[CognitiveNode]:
+        return _s.get_children(parent_id, user_id)
+
+    def get_visible_children(self, parent_id: str, user_id: str = "default") -> list[CognitiveNode]:
+        return _s.get_visible_children(parent_id, user_id)
+
+    def get_nodes_by_level(self, level: str, user_id: str = "default") -> list[CognitiveNode]:
+        return _s.get_nodes_by_level(level, user_id)
+
+    def list_all_nodes(self, user_id: str = "default") -> list[CognitiveNode]:
+        return _s.list_all_nodes(user_id)
+
+    def search_nodes(
+        self,
+        query_embedding: list[float],
+        user_id: str = "default",
+        level: str = "topic",
+        limit: int = 10,
+        min_similarity: float = 0.3,
+    ) -> list[dict]:
+        return _s.search_nodes(query_embedding, user_id, level, limit, min_similarity)
+
+    def find_node_by_path(self, path_id: str, user_id: str = "default") -> Optional[CognitiveNode]:
+        return _s.find_node_by_path(path_id, user_id)
+
+    def find_node_by_label(
+        self, label: str, user_id: str = "default", level: str | None = None
+    ) -> Optional[CognitiveNode]:
+        return _s.find_node_by_label(label, user_id, level)
+
+    def get_subtree(self, root_id: str, user_id: str = "default") -> dict[str, CognitiveNode]:
+        return _s.get_subtree(root_id, user_id)
+
+    def get_suggested_count(self, parent_id: str, user_id: str = "default") -> int:
+        return _s.get_suggested_count(parent_id, user_id)
+
+    def get_child_count(self, parent_id: str, user_id: str = "default") -> int:
+        return _s.get_child_count(parent_id, user_id)
+
+    def set_node_visible(self, node_id: str, user_id: str = "default") -> None:
+        _s.set_node_visible(node_id, user_id)
+
+    def get_urgent_nodes(self, user_id: str = "default", top_k: int = 10) -> list[dict]:
+        return _s.get_urgent_nodes(user_id, top_k)
+
+    def append_event(self, event: CognitiveEvent) -> None:
+        _s.append_event(event)
+
+    def get_unprocessed_events(self, limit: int = 100) -> list[CognitiveEvent]:
+        return _s.get_unprocessed_events(limit)
+
+    def mark_event_processed(self, event_id: str) -> None:
+        _s.mark_event_processed(event_id)
+
+    def query_events(
+        self,
+        node_id: str | None = None,
+        event_type: str | None = None,
+        limit: int = 50,
+    ) -> list[CognitiveEvent]:
+        return _s.query_events(node_id, event_type, limit)
+
+    def sync_from_practice_event(
+        self,
+        user_id: str,
+        skill_id: str,
+        is_correct: bool,
+        response_time_ms: float = 500.0,
+        topic: str = "",
+        question_id: str = "",
+        error_type: str = "",
+    ) -> dict:
+        return _s.sync_from_practice_event(
+            user_id, skill_id, is_correct,
+            response_time_ms, topic, question_id, error_type,
+        )

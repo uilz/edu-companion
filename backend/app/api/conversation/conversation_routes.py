@@ -53,8 +53,26 @@ class CreateTopicRequest(BaseModel):
 
 
 class CreateConversationRequest(BaseModel):
-    topic_id: str
+    topic_id: str = ""
+    parent_id: str = ""
+    parent_type: str = ""
+    type: str = "normal"
     name: str = ""
+
+
+class MigrateConversationRequest(BaseModel):
+    target_partition_id: str
+    target_type: str = "normal"
+
+
+class TemporaryConversationRequest(BaseModel):
+    pass
+
+
+class ExploreRequest(BaseModel):
+    node_id: str
+    node_label: str
+    node_level: str = "concept"
 
 
 class RenameRequest(BaseModel):
@@ -105,7 +123,7 @@ def _find_default_conversation(user_id: str, level: str, entity_id: str) -> str 
 
 # ══════════════════ 通用树节点 CRUD ══════════════════
 @router.get("/tree/{level}")
-async def list_nodes(level: str, request: Request, parent_id: str = Query(None)):
+async def list_nodes(level: str, request: Request, parent_id: str = Query(None), type: str = Query(None)):
     if level not in tree_ops.LEVELS:
         raise HTTPException(400, f"Invalid level: {level}")
     etag = _check_etag(request)
@@ -117,9 +135,15 @@ async def list_nodes(level: str, request: Request, parent_id: str = Query(None))
     if level == "conversation":
         nodes.sort(key=lambda n: n.get("last_active_at", 0) or 0, reverse=True)
     if parent_id:
-        parent_key = tree_ops.LEVEL_CONFIG[level]["parent_key"]
-        if parent_key:
-            nodes = [n for n in nodes if n.get(parent_key) == parent_id]
+        if level == "conversation":
+            # 新字段 parent_id 过滤
+            nodes = [n for n in nodes if n.get("parent_id") == parent_id]
+        else:
+            parent_key = tree_ops.LEVEL_CONFIG[level]["parent_key"]
+            if parent_key:
+                nodes = [n for n in nodes if n.get(parent_key) == parent_id]
+    if level == "conversation" and type:
+        nodes = [n for n in nodes if n.get("type") == type]
     return Response(
         content=json.dumps({coll_name: nodes}),
         media_type="application/json",
@@ -144,7 +168,9 @@ async def create_node(level: str, body: dict):
         elif level == "topic":
             entity = tree_ops.create_topic(USER_ID, parent_id, name, emoji)
         elif level == "conversation":
-            entity = tree_ops.create_conversation(USER_ID, parent_id, name)
+            entity = tree_ops.create_conversation(
+                USER_ID, parent_id=parent_id, name=name, type=body.get("type", "normal"),
+            )
         else:
             raise HTTPException(400, "Unsupported level")
         conv_id = _find_default_conversation(USER_ID, level, entity.id)
@@ -155,6 +181,33 @@ async def create_node(level: str, body: dict):
         raise HTTPException(404, str(e))
     except Exception:
         logger.exception(f"Failed to create {level}")
+        raise HTTPException(500, "Internal server error")
+
+
+# ══════════════════ 临时对话端点 ══════════════════
+@router.post("/tree/conversation/temporary")
+async def create_temporary_conversation():
+    """创建临时对话（空状态直接对话）。"""
+    try:
+        conv = tree_ops.create_temporary_conversation(USER_ID)
+        return {"conversation": conv.model_dump(mode="json")}
+    except Exception:
+        logger.exception("Failed to create temporary conversation")
+        raise HTTPException(500, "Internal server error")
+
+
+@router.post("/tree/conversation/{conv_id}/migrate")
+async def migrate_conversation(conv_id: str, body: MigrateConversationRequest):
+    """将临时对话迁移到正式分区。"""
+    try:
+        conv = tree_ops.migrate_temporary_conversation(
+            USER_ID, conv_id, body.target_partition_id, body.target_type,
+        )
+        return {"ok": True, "conversation": conv.model_dump(mode="json")}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception:
+        logger.exception("Failed to migrate conversation")
         raise HTTPException(500, "Internal server error")
 
 
@@ -281,7 +334,7 @@ async def get_conversation_blocks(conv_id: str, limit: int = 100):
 @router.post("/tree/conversation/{conv_id}/message")
 async def send_message_in_conversation(conv_id: str, req: SendMessageRequest):
     """在指定对话中发送消息（用于 WebSocket 降级或直接 HTTP）"""
-    from app.services.conversation.conversation_llm import send_and_reply
+    from app.domain.conversation.llm import send_and_reply
 
     pid = req.partition_id
     if not pid:
@@ -289,12 +342,17 @@ async def send_message_in_conversation(conv_id: str, req: SendMessageRequest):
         conv = data.conversations.get(conv_id)
         if not conv:
             raise HTTPException(404, "Conversation not found")
-        for topic in data.topics.values():
-            if topic.id == conv.topic_id:
-                domain = data.domains.get(topic.domain_id)
-                if domain:
-                    pid = domain.partition_id
-                    break
+        # 新路径：通过 conversation.partition_id
+        if conv.partition_id:
+            pid = conv.partition_id
+        else:
+            # 回退旧路径：通过 topic → domain → partition
+            for topic in data.topics.values():
+                if topic.id == conv.topic_id:
+                    domain = data.domains.get(topic.domain_id)
+                    if domain:
+                        pid = domain.partition_id
+                        break
     if not pid:
         raise HTTPException(400, "Cannot determine partition")
     outcome = await send_and_reply(USER_ID, pid, req.text, conversation_id=conv_id, pending_quote=req.pending_quote)
@@ -451,7 +509,8 @@ async def modify_message(message_id: str, req: ModifyMessageRequest):
 @router.post("/tree/message/{message_id}/reply")
 async def reply_to_edited_message(message_id: str):
     """编辑消息后重新生成 AI 回复"""
-    from app.services.conversation.conversation_llm import generate_reply_with_tools, _p0_post_message_hooks
+    from app.services.llm.tool_dispatch import generate_reply_with_tools
+    from app.services.knowledge.cognitive_sync import _p0_post_message_hooks
     from app.schemas.conversation import TextBlock
 
     data = storage.load(USER_ID)
@@ -465,6 +524,8 @@ async def reply_to_edited_message(message_id: str):
         raise HTTPException(404, "Conversation not found")
 
     pid = node.partition_id
+    if not pid:
+        pid = conv.partition_id
     if not pid:
         for topic in data.topics.values():
             if topic.id == conv.topic_id:

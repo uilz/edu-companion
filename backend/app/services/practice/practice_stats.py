@@ -2,9 +2,9 @@
 练习统计汇总 — v7 数据驱动
 
 聚合来源:
-- v7_practice_attempts → 答题记录
-- v7_practice_sessions → 会话统计
-- v7_questions → 题库统计
+- practice_attempts → 答题记录
+- practice_sessions → 会话统计
+- questions → 题库统计
 - cognitive_nodes → 知识掌握度
 """
 
@@ -34,7 +34,7 @@ def get_overview(user_id: str = DEFAULT_USER_ID) -> dict:
                   SUM(CASE WHEN is_correct THEN 1 ELSE 0 END) as correct,
                   SUM(CASE WHEN is_wrong THEN 1 ELSE 0 END) as wrong,
                   SUM(time_spent_seconds) as total_seconds
-           FROM v7_practice_attempts WHERE user_id = %s""",
+           FROM practice_attempts WHERE user_id = %s""",
         (user_id,),
     )
     total = agg["total"] or 0 if agg else 0
@@ -44,7 +44,7 @@ def get_overview(user_id: str = DEFAULT_USER_ID) -> dict:
 
     # 会话统计
     session_count = db.fetchone(
-        "SELECT COUNT(*) as cnt FROM v7_practice_sessions WHERE user_id = %s AND status = 'completed'",
+        "SELECT COUNT(*) as cnt FROM practice_sessions WHERE user_id = %s AND status = 'completed'",
         (user_id,),
     )
     total_sessions = session_count["cnt"] if session_count else 0
@@ -52,7 +52,7 @@ def get_overview(user_id: str = DEFAULT_USER_ID) -> dict:
     # 今日练习
     today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
     today = db.fetchone(
-        "SELECT COUNT(*) as cnt FROM v7_practice_attempts WHERE user_id = %s AND created_at >= %s",
+        "SELECT COUNT(*) as cnt FROM practice_attempts WHERE user_id = %s AND created_at >= %s",
         (user_id, today_start),
     )
     today_questions = today["cnt"] if today else 0
@@ -103,7 +103,7 @@ def get_daily_trend(user_id: str = DEFAULT_USER_ID, days: int = 30) -> list[dict
                   SUM(CASE WHEN is_correct THEN 1 ELSE 0 END) as correct,
                   SUM(CASE WHEN is_wrong THEN 1 ELSE 0 END) as wrong,
                   SUM(time_spent_seconds) as seconds
-           FROM v7_practice_attempts
+           FROM practice_attempts
            WHERE user_id = %s AND created_at >= %s
            GROUP BY DATE(created_at)
            ORDER BY day""",
@@ -145,7 +145,7 @@ def get_session_history(user_id: str = DEFAULT_USER_ID, limit: int = 10) -> list
     rows = db.fetchall(
         """SELECT id, mode, status, total_count, correct_count, wrong_count,
                   score, duration_seconds, created_at
-           FROM v7_practice_sessions
+           FROM practice_sessions
            WHERE user_id = %s
            ORDER BY created_at DESC LIMIT %s""",
         (user_id, limit),
@@ -177,8 +177,8 @@ def get_error_distribution(user_id: str = DEFAULT_USER_ID) -> list[dict]:
         """SELECT question_id, q.stem as stem_abbr,
                   COUNT(*) as total,
                   SUM(CASE WHEN is_wrong THEN 1 ELSE 0 END) as wrongs
-           FROM v7_practice_attempts att
-           LEFT JOIN v7_questions q ON att.question_id = q.id
+           FROM practice_attempts att
+           LEFT JOIN questions q ON att.question_id = q.id
            WHERE att.user_id = %s
            GROUP BY att.question_id, q.stem
            ORDER BY wrongs DESC

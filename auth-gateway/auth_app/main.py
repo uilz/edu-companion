@@ -17,10 +17,15 @@
 from __future__ import annotations
 
 import logging
+import os
+import shutil
+import uuid
+from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, APIRouter, HTTPException, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -146,18 +151,27 @@ async def refresh(body: RefreshRequest):
 
 @router.get("/me", summary="获取当前用户信息")
 async def get_me(request: Request):
-    """获取当前登录用户信息"""
+    """获取当前登录用户信息（从数据库查询完整资料）"""
     from auth_app.auth_service import get_auth_service
+    from auth_app.user_repo import get_user_repo
+
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="未登录")
 
     token = auth_header.split(" ", 1)[1]
     svc = get_auth_service()
-    user = svc.get_current_user(token)
-    if not user:
+    token_user = svc.get_current_user(token)
+    if not token_user:
         raise HTTPException(status_code=401, detail="令牌无效")
-    return user
+
+    # 从数据库查询完整用户资料（含 display_name、email、avatar_url 等）
+    repo = get_user_repo()
+    full_user = repo.find_by_id(token_user["user_id"])
+    if not full_user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    return {k: v for k, v in full_user.items() if k != "password_hash"}
 
 
 @router.post("/verify", summary="验证令牌")
@@ -198,7 +212,8 @@ async def update_me(body: UpdateProfileRequest, request: Request):
         display_name=body.display_name,
         email=body.email,
     )
-    return repo.find_by_id(user["user_id"])
+    updated = repo.find_by_id(user["user_id"])
+    return {k: v for k, v in updated.items() if k != "password_hash"} if updated else {"ok": True}
 
 
 @router.post("/change-password", summary="修改密码")
@@ -262,7 +277,58 @@ async def ensure_default_user():
     return result
 
 
+# ── 头像存储 ──
+AVATAR_DIR = Path(__file__).resolve().parent.parent / "avatars"
+AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+
+# ── 头像上传端点 ──
+
+@router.post("/avatar", summary="上传头像")
+async def upload_avatar(request: Request, file: UploadFile = File(...)):
+    """上传用户头像，返回头像 URL"""
+    from auth_app.auth_service import get_auth_service
+    from auth_app.user_repo import get_user_repo
+
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="未登录")
+
+    token = auth_header.split(" ", 1)[1]
+    svc = get_auth_service()
+    token_user = svc.get_current_user(token)
+    if not token_user:
+        raise HTTPException(status_code=401, detail="令牌无效")
+
+    # 校验文件类型
+    allowed = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+    if file.content_type not in allowed:
+        raise HTTPException(status_code=400, detail="仅支持 JPG/PNG/GIF/WebP 格式")
+
+    # 限制文件大小（5MB）
+    contents = await file.read()
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="头像文件不能超过 5MB")
+
+    # 生成唯一文件名
+    ext = {"image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp"}[file.content_type]
+    filename = f"{token_user['user_id']}_{uuid.uuid4().hex[:8]}.{ext}"
+    save_path = AVATAR_DIR / filename
+
+    with open(save_path, "wb") as f:
+        f.write(contents)
+
+    # 更新用户 avatar_url
+    avatar_url = f"/avatars/{filename}"
+    repo = get_user_repo()
+    repo.update_avatar(token_user["user_id"], avatar_url)
+
+    return {"ok": True, "avatar_url": avatar_url}
+
+
 app.include_router(router)
+
+# ── 静态文件（头像） ──
+app.mount("/avatars", StaticFiles(directory=str(AVATAR_DIR)), name="avatars")
 
 
 # ── 健康检查 ──

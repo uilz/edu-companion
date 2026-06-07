@@ -1,7 +1,7 @@
 """
 错题本 — 所有错题集中展示与管理
 
-聚合 v7_practice_attempts 中 is_wrong=true 的记录，
+聚合 practice_attempts 中 is_wrong=true 的记录，
 按知识点/题库/错误次数分组，支持筛选和一键复习。
 """
 
@@ -52,8 +52,8 @@ def get_error_book(
     # 总计数
     count_row = db.fetchone(
         f"""SELECT COUNT(DISTINCT att.question_id) as cnt
-            FROM v7_practice_attempts att
-            JOIN v7_questions q ON att.question_id = q.id AND q.deleted_at IS NULL
+            FROM practice_attempts att
+            JOIN questions q ON att.question_id = q.id AND q.deleted_at IS NULL
             WHERE {where}""",
         tuple(params),
     )
@@ -81,8 +81,8 @@ def get_error_book(
                   MAX(CASE WHEN att.is_wrong THEN att.created_at ELSE NULL END) as last_wrong,
                   MAX(att.created_at) as last_done,
                   MAX(att.consecutive_correct) as max_consecutive
-           FROM v7_practice_attempts att
-           JOIN v7_questions q ON att.question_id = q.id AND q.deleted_at IS NULL
+           FROM practice_attempts att
+           JOIN questions q ON att.question_id = q.id AND q.deleted_at IS NULL
            WHERE {where}
            GROUP BY att.question_id, q.bank_id, q.stem, q.options,
                     q.question_type, q.difficulty, q.cognitive_node_ids, q.analysis
@@ -133,7 +133,7 @@ def get_error_session_stats(user_id: str = DEFAULT_USER_ID) -> dict:
     # 唯一错题数
     unique_wrong = db.fetchone(
         """SELECT COUNT(DISTINCT question_id) as cnt
-           FROM v7_practice_attempts
+           FROM practice_attempts
            WHERE user_id = %s AND is_wrong = true""",
         (user_id,),
     )
@@ -142,7 +142,7 @@ def get_error_session_stats(user_id: str = DEFAULT_USER_ID) -> dict:
     # 总错误次数
     total_wrongs = db.fetchone(
         """SELECT COUNT(*) as cnt
-           FROM v7_practice_attempts
+           FROM practice_attempts
            WHERE user_id = %s AND is_wrong = true""",
         (user_id,),
     )
@@ -151,9 +151,9 @@ def get_error_session_stats(user_id: str = DEFAULT_USER_ID) -> dict:
     # 已掌握但曾经错过的（连续正确>=3）
     mastered_from_errors = db.fetchone(
         """SELECT COUNT(DISTINCT att.question_id) as cnt
-           FROM v7_practice_attempts att
+           FROM practice_attempts att
            WHERE att.user_id = %s AND att.question_id IN (
-               SELECT question_id FROM v7_practice_attempts
+               SELECT question_id FROM practice_attempts
                WHERE user_id = %s AND is_wrong = true
            )
            GROUP BY att.question_id
@@ -165,8 +165,8 @@ def get_error_session_stats(user_id: str = DEFAULT_USER_ID) -> dict:
     # 知识点分布
     nodes = db.fetchall(
         """SELECT DISTINCT UNNEST(q.cognitive_node_ids) as node_id
-           FROM v7_practice_attempts att
-           JOIN v7_questions q ON att.question_id = q.id
+           FROM practice_attempts att
+           JOIN questions q ON att.question_id = q.id
            WHERE att.user_id = %s AND att.is_wrong = true
            AND q.deleted_at IS NULL AND q.cognitive_node_ids IS NOT NULL""",
         (user_id,),
@@ -198,7 +198,7 @@ def review_error_question(
 
     # 获取最近一次 attempt
     last = db.fetchone(
-        """SELECT * FROM v7_practice_attempts
+        """SELECT * FROM practice_attempts
            WHERE question_id = %s AND user_id = %s
            ORDER BY created_at DESC LIMIT 1""",
         (question_id, user_id),
@@ -223,7 +223,7 @@ def review_error_question(
     # 写入一条新的 review attempt
     attempt_id = f"rev_{question_id}_{int(__import__('time').time())}"
     db.execute(
-        """INSERT INTO v7_practice_attempts
+        """INSERT INTO practice_attempts
            (id, session_id, question_id, user_id, user_answer, is_correct,
             time_spent_seconds, is_wrong, wrong_count, consecutive_correct,
             mastered, cognitive_node_ids, created_at)
@@ -262,7 +262,7 @@ def get_error_materials(
     db = get_db()
 
     q = db.fetchone(
-        "SELECT * FROM v7_questions WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
+        "SELECT * FROM questions WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
         (question_id, user_id),
     )
     if not q:
@@ -324,7 +324,7 @@ def clear_mastered_errors(user_id: str = DEFAULT_USER_ID) -> dict:
     # 找到所有 mastered 的题目 ID
     mastered_ids = db.fetchall(
         """SELECT question_id
-           FROM v7_practice_attempts
+           FROM practice_attempts
            WHERE user_id = %s AND consecutive_correct >= 3
            GROUP BY question_id""",
         (user_id,),

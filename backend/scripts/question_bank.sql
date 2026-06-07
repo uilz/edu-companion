@@ -1,9 +1,8 @@
--- v7.0 智能题库系统 — 新增表
--- 表名加 v7_ 前缀避免与旧表冲突
+-- 智能题库系统 — 新增表
 -- 遵循现有系统规范：TEXT PK、无外键约束、JSONB 灵活字段
 
 -- 7.0.1 题库表
-CREATE TABLE IF NOT EXISTS v7_question_banks (
+CREATE TABLE IF NOT EXISTS question_banks (
     id              TEXT PRIMARY KEY,
     user_id         TEXT NOT NULL,
     name            VARCHAR(255) NOT NULL,
@@ -21,7 +20,7 @@ CREATE TABLE IF NOT EXISTS v7_question_banks (
 );
 
 -- 7.0.2 题目表
-CREATE TABLE IF NOT EXISTS v7_questions (
+CREATE TABLE IF NOT EXISTS questions (
     id              TEXT PRIMARY KEY,
     bank_id         TEXT NOT NULL,
     user_id         TEXT NOT NULL,
@@ -44,12 +43,12 @@ CREATE TABLE IF NOT EXISTS v7_questions (
     deleted_at      TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS idx_v7q_bank ON v7_questions(bank_id) WHERE deleted_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_v7q_cognitive ON v7_questions USING GIN(cognitive_node_ids);
-CREATE INDEX IF NOT EXISTS idx_v7q_type ON v7_questions(question_type);
+CREATE INDEX IF NOT EXISTS idx_v7q_bank ON questions(bank_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_v7q_cognitive ON questions USING GIN(cognitive_node_ids);
+CREATE INDEX IF NOT EXISTS idx_v7q_type ON questions(question_type);
 
 -- 7.0.3 练习会话表
-CREATE TABLE IF NOT EXISTS v7_practice_sessions (
+CREATE TABLE IF NOT EXISTS practice_sessions (
     id              TEXT PRIMARY KEY,
     user_id         TEXT NOT NULL,
     bank_id         TEXT,
@@ -69,7 +68,7 @@ CREATE TABLE IF NOT EXISTS v7_practice_sessions (
 );
 
 -- 7.0.4 会话题目关联表
-CREATE TABLE IF NOT EXISTS v7_session_questions (
+CREATE TABLE IF NOT EXISTS session_questions (
     id              TEXT PRIMARY KEY,
     session_id      TEXT NOT NULL,
     question_id     TEXT NOT NULL,
@@ -81,11 +80,11 @@ CREATE TABLE IF NOT EXISTS v7_session_questions (
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_v7sq_session ON v7_session_questions(session_id);
-CREATE INDEX IF NOT EXISTS idx_v7sq_question ON v7_session_questions(question_id);
+CREATE INDEX IF NOT EXISTS idx_v7sq_session ON session_questions(session_id);
+CREATE INDEX IF NOT EXISTS idx_v7sq_question ON session_questions(question_id);
 
 -- 7.0.5 答题记录表
-CREATE TABLE IF NOT EXISTS v7_practice_attempts (
+CREATE TABLE IF NOT EXISTS practice_attempts (
     id                  TEXT PRIMARY KEY,
     session_id          TEXT NOT NULL,
     question_id         TEXT NOT NULL,
@@ -102,24 +101,24 @@ CREATE TABLE IF NOT EXISTS v7_practice_attempts (
     created_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_v7pa_session ON v7_practice_attempts(session_id);
-CREATE INDEX IF NOT EXISTS idx_v7pa_user_q ON v7_practice_attempts(user_id, question_id);
-CREATE INDEX IF NOT EXISTS idx_v7pa_wrong ON v7_practice_attempts(user_id) WHERE is_wrong = true;
+CREATE INDEX IF NOT EXISTS idx_v7pa_session ON practice_attempts(session_id);
+CREATE INDEX IF NOT EXISTS idx_pa_user_q ON practice_attempts(user_id, question_id);
+CREATE INDEX IF NOT EXISTS idx_pa_wrong ON practice_attempts(user_id) WHERE is_wrong = true;
 
 -- 7.0.6 收藏表
-CREATE TABLE IF NOT EXISTS v7_question_favorites (
+CREATE TABLE IF NOT EXISTS question_favorites (
     id              TEXT PRIMARY KEY,
     user_id         TEXT NOT NULL,
     question_id     TEXT NOT NULL,
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_v7qf_user_q ON v7_question_favorites(user_id, question_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_qf_user_q ON question_favorites(user_id, question_id);
 
 -- 7.0.7 斩题记录表
-CREATE TABLE IF NOT EXISTS v7_slashed_questions (
+CREATE TABLE IF NOT EXISTS slashed_questions (
     id              TEXT PRIMARY KEY,
     user_id         TEXT NOT NULL,
     question_id     TEXT NOT NULL,
     slashed_at      TIMESTAMPTZ DEFAULT NOW()
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_v7sq_user_q ON v7_slashed_questions(user_id, question_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sq_user_q ON slashed_questions(user_id, question_id);

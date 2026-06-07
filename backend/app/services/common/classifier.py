@@ -1,14 +1,13 @@
 """
 分类服务 v2：关键词 + LLM 智能分类
 降级策略：embedding (可选) > LLM 关键词提取 > 静态关键词匹配
-
-sentence-transformers 未装时正常降级，不报错。
 """
 
 from __future__ import annotations
 
 import logging
 
+from app.services.common.embedding_utils import compute_embedding, cosine_similarity
 from app.services.common.storage import storage
 
 logger = logging.getLogger(__name__)
@@ -67,114 +66,9 @@ def keyword_score(text: str, subject: str) -> float:
     matches = [(w, kw) for kw, w in keywords.items() if kw in text]
     if not matches:
         return 0.0
-    # 最高匹配权重 (0.7) + 多匹配奖励 (0.3)
     best = max(w for w, _ in matches)
     bonus = min(0.3, 0.1 * (len(matches) - 1))
     return min(1.0, best * 0.7 + bonus)
-
-
-def _model_cached(model_name: str) -> bool:
-    """检查 HuggingFace 模型是否已在本地缓存（无网络时不卡60秒）"""
-    from pathlib import Path
-    cache_dir = Path.home() / ".cache" / "huggingface" / "hub"
-    model_dir_name = f"models--{model_name.replace('/', '--')}"
-    return (cache_dir / model_dir_name).exists()
-
-
-# ── Embedding 模型（OpenVINO 延迟加载） ──
-_embedding_model = None
-_tokenizer = None
-
-
-def _get_embedding_model():
-    """延迟加载 OpenVINO 模型 + tokenizer，全局单例"""
-    global _embedding_model, _tokenizer
-    if _embedding_model is not None:
-        return _embedding_model, _tokenizer
-
-    import os
-    from pathlib import Path
-
-    # 模型路径：从 classifier.py 向上 4 级到项目根 (backend/app/services/ → backend/app/ → backend/ → 项目根)
-    model_path = Path(__file__).resolve().parent.parent.parent.parent / "models" / "granite-embedding-97m"
-
-    if not model_path.is_dir():
-        logger.warning("Embedding model not found at %s", model_path)
-        return None, None
-
-    try:
-        from openvino import Core
-        from tokenizers import Tokenizer
-
-        core = Core()
-        ov_model = core.read_model(str(model_path / "openvino_model.xml"))
-        _embedding_model = core.compile_model(ov_model, "CPU")
-
-        _tokenizer = Tokenizer.from_file(str(model_path / "tokenizer.json"))
-
-        logger.info("✅ OpenVINO embedding model loaded: %s (384-dim)", model_path.name)
-        return _embedding_model, _tokenizer
-    except Exception as e:
-        logger.error("Failed to load embedding model: %s", e)
-        return None, None
-
-
-def compute_embedding(text: str) -> list[float] | None:
-    """计算 384 维 embedding（OpenVINO 推理）
-
-    使用本地 granite-embedding-97m 量化模型，无需网络。
-    tokenizer: BPE, cls_token=<|startoftext|>, max_seq=32768
-    pooling: CLS token → normalize → 384-dim
-    """
-    if not text or not text.strip():
-        return None
-
-    try:
-        import numpy as np
-
-        model, tokenizer = _get_embedding_model()
-        if model is None or tokenizer is None:
-            return None
-
-        # 截断到 512 tokens（推理性能 vs 精度平衡）
-        enc = tokenizer.encode(text.strip())
-        max_len = 512
-        if len(enc.ids) > max_len:
-            enc.truncate(max_len)
-
-        input_ids = np.array([enc.ids], dtype=np.int64)
-        attention_mask = np.array([[1] * len(enc.ids)], dtype=np.int64)
-
-        result = model([input_ids, attention_mask])
-        # 输出 shape (1, 3, 384): [transformer_CLS, pooled, normalized]
-        # 取最后一个归一化向量
-        output_key = list(result.keys())[0]
-        vec = result[output_key][0, -1]  # 最后一列 = normalized embedding
-
-        return vec.tolist()
-
-    except Exception:
-        logger.debug("Embedding failed", exc_info=True)
-        return None
-
-
-def cosine_similarity(a: list[float], b: list[float]) -> float:
-    """计算余弦相似度"""
-    try:
-        import numpy as np
-        a_np, b_np = np.array(a), np.array(b)
-        norm_a = np.linalg.norm(a_np)
-        norm_b = np.linalg.norm(b_np)
-        if norm_a == 0 or norm_b == 0:
-            return 0.0
-        return float(np.dot(a_np, b_np) / (norm_a * norm_b))
-    except ImportError:
-        dot = sum(x * y for x, y in zip(a, b))
-        norm_a = sum(x * x for x in a) ** 0.5
-        norm_b = sum(x * x for x in b) ** 0.5
-        if norm_a == 0 or norm_b == 0:
-            return 0.0
-        return dot / (norm_a * norm_b)
 
 
 # ── 领域关键词表（按学科分区） ──

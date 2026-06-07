@@ -59,7 +59,7 @@ def get_due_questions(
     where = " AND ".join(conditions)
 
     questions = db.fetchall(
-        f"""SELECT q.* FROM v7_questions q WHERE {where} ORDER BY q.created_at DESC""",
+        f"""SELECT q.* FROM questions q WHERE {where} ORDER BY q.created_at DESC""",
         tuple(params),
     )
 
@@ -78,7 +78,7 @@ def get_due_questions(
                   MAX(CASE WHEN is_wrong THEN NULL ELSE created_at END) as last_correct,
                   MAX(CASE WHEN is_wrong THEN created_at ELSE NULL END) as last_wrong,
                   MAX(created_at) as last_done
-           FROM v7_practice_attempts
+           FROM practice_attempts
            WHERE question_id = ANY(%s) AND user_id = %s
            GROUP BY question_id""",
         (qids, user_id),
@@ -241,7 +241,7 @@ def _calc_interval(consecutive: int, ef: float, wrongs: int) -> float:
 def _get_consecutive(db, question_id: str, user_id: str) -> int:
     """查询某题最近连续正确次数"""
     row = db.fetchone(
-        "SELECT consecutive_correct FROM v7_practice_attempts "
+        "SELECT consecutive_correct FROM practice_attempts "
         "WHERE question_id = %s AND user_id = %s "
         "ORDER BY created_at DESC LIMIT 1",
         (question_id, user_id),

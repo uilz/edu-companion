@@ -13,7 +13,7 @@ from shared.constants import DEFAULT_USER_ID
 from app.services.materials.bilibili_search import search_bilibili
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v7/practice/references", tags=["v7参考资料"])
+router = APIRouter(prefix="/api/v7/practice/references", tags=["参考资料"])
 
 
 @router.get("/search")
@@ -75,7 +75,7 @@ async def api_references_for_question(
     from app.db.database import get_db
     db = get_db()
     question = db.fetchone(
-        "SELECT * FROM v7_questions WHERE id = %s AND deleted_at IS NULL",
+        "SELECT * FROM questions WHERE id = %s AND deleted_at IS NULL",
         (question_id,),
     )
     if not question:

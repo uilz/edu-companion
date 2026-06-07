@@ -32,7 +32,12 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════
 
 def _find_active_conversation(data, partition_id: str):
-    """通过 topic → domain 找到分区下的活跃对话（v4 数据模型）"""
+    """找到分区下的活跃对话。优先使用新字段 partition_id，回退旧 v4 遍历。"""
+    # 新路径：通过 conversation.partition_id 过滤
+    for conv in data.conversations.values():
+        if conv.partition_id == partition_id and conv.is_active:
+            return conv
+    # 回退旧路径：通过 topic → domain → partition 遍历
     for topic in data.topics.values():
         domain = data.domains.get(topic.domain_id)
         if domain and domain.partition_id == partition_id:

@@ -19,6 +19,7 @@ from shared.events import (
     CognitiveNodeUpdated,
     DomainEvent,
     SessionCompleted,
+    PracticeSubmitted,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,8 +46,9 @@ class SecretaryEventHandler:
 
         bus.subscribe("SessionCompleted", self._on_session_completed)
         bus.subscribe("CognitiveNodeUpdated", self._on_cognitive_updated)
+        bus.subscribe("PracticeSubmitted", self._on_practice_submitted)
         self._subscribed = True
-        logger.info("📡 秘书已订阅领域事件: SessionCompleted / CognitiveNodeUpdated")
+        logger.info("📡 秘书已订阅领域事件: SessionCompleted / CognitiveNodeUpdated / PracticeSubmitted")
 
     def unsubscribe(self) -> None:
         """取消订阅"""
@@ -54,6 +56,7 @@ class SecretaryEventHandler:
             return
         self._bus.unsubscribe("SessionCompleted", self._on_session_completed)
         self._bus.unsubscribe("CognitiveNodeUpdated", self._on_cognitive_updated)
+        self._bus.unsubscribe("PracticeSubmitted", self._on_practice_submitted)
         self._subscribed = False
         logger.info("📡 秘书已取消事件订阅")
 
@@ -86,6 +89,51 @@ class SecretaryEventHandler:
                     logger.info("会话完成触发疲劳建议: user=%s %d条", event.user_id, len(proposals))
         except Exception as e:
             logger.debug("会话完成处理失败: %s", e)
+
+        # 行为触发 — 会话完成反思提案
+        try:
+            from .behavior_trigger import on_session_completed
+            proposal = await on_session_completed(
+                user_id=event.user_id,
+                accuracy=event.accuracy,
+                duration_minutes=event.duration_minutes,
+                session_id=getattr(event, "event_id", ""),
+            )
+            if proposal:
+                from ...proposal_store import ProposalStore
+                store = ProposalStore()
+                store.save_proposal(proposal, user_id=event.user_id,
+                                    session_id=f"session:{getattr(event, 'event_id', '')}")
+                logger.info("会话完成行为触发: user=%s proposal=%s", event.user_id, proposal.title)
+        except Exception as e:
+            logger.debug("会话完成行为触发失败: %s", e)
+
+    async def _on_practice_submitted(self, event: DomainEvent) -> None:
+        """练习提交事件 → 低正确率时生成复习提案"""
+        if not isinstance(event, PracticeSubmitted):
+            return
+
+        payload = getattr(event, 'payload', {}) or {}
+        correctness = getattr(event, 'correctness', payload.get('correctness', 0.0))
+        atom_node_ids = getattr(event, 'atom_node_ids', payload.get('atom_node_ids', []))
+        logger.debug("练习提交: user=%s correctness=%.2f nodes=%d",
+                     event.user_id, correctness, len(atom_node_ids))
+
+        try:
+            from .behavior_trigger import on_practice_submitted
+            proposal = await on_practice_submitted(
+                user_id=event.user_id,
+                atom_node_ids=atom_node_ids,
+                correctness=correctness,
+            )
+            if proposal:
+                from ...proposal_store import ProposalStore
+                store = ProposalStore()
+                store.save_proposal(proposal, user_id=event.user_id,
+                                    session_id=f"practice:{getattr(event, 'event_id', '')}")
+                logger.info("练习行为触发: user=%s proposal=%s", event.user_id, proposal.title)
+        except Exception as e:
+            logger.debug("练习行为触发失败: %s", e)
 
     async def _on_cognitive_updated(self, event: DomainEvent) -> None:
         """CognitiveNode 更新事件 → 触发学习路径调整"""

@@ -32,6 +32,9 @@ class LLMService:
         """初始化 LiteLLM 配置 — 仅使用 OpenAI 兼容格式"""
         import os
 
+        # 禁用远程模型价格表拉取（避免网络超时警告，使用本地备份）
+        os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
+
         litellm.set_verbose = settings.debug
 
         # OpenAI 兼容 API 配置（唯一格式）

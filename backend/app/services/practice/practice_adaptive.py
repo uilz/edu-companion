@@ -51,7 +51,7 @@ def adaptive_select(
 
     # 1. 获取题库所有活跃题目
     questions = db.fetchall(
-        """SELECT q.* FROM v7_questions q
+        """SELECT q.* FROM questions q
            WHERE q.bank_id = %s AND q.deleted_at IS NULL AND q.status = 'active'
            AND q.is_slashed = false
            ORDER BY q.created_at DESC""",
@@ -87,7 +87,7 @@ def adaptive_select(
                   COUNT(*) as total,
                   SUM(CASE WHEN is_wrong THEN 1 ELSE 0 END) as wrongs,
                   MAX(created_at) as last_done
-           FROM v7_practice_attempts
+           FROM practice_attempts
            WHERE question_id = ANY(%s) AND user_id = %s
            GROUP BY question_id""",
         (qids, user_id),
@@ -241,7 +241,7 @@ def adaptive_select_v2(
 
     # 1. 获取题库所有活跃题目
     questions = db.fetchall(
-        """SELECT q.* FROM v7_questions q
+        """SELECT q.* FROM questions q
            WHERE q.bank_id = %s AND q.deleted_at IS NULL AND q.status = 'active'
            AND q.is_slashed = false
            ORDER BY q.created_at DESC""",
@@ -273,7 +273,7 @@ def adaptive_select_v2(
                   COUNT(*) as total,
                   SUM(CASE WHEN is_wrong THEN 1 ELSE 0 END) as wrongs,
                   MAX(created_at) as last_done
-           FROM v7_practice_attempts
+           FROM practice_attempts
            WHERE question_id = ANY(%s) AND user_id = %s
            GROUP BY question_id""",
         (qids, user_id),

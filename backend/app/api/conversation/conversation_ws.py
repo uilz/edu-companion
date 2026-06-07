@@ -71,7 +71,7 @@ async def websocket_conversation(websocket: WebSocket) -> None:
                 json.dumps({"type": "status", "message": "正在思考...", "request_id": request_id})
             )
 
-            from app.services.conversation.conversation_llm import send_and_reply_stream
+            from app.domain.conversation.llm import send_and_reply_stream
 
             # 后台 generator + 队列解耦（WS 断后 generator 继续跑，持续写 DB）
             stream_queue: asyncio.Queue[dict | None] = asyncio.Queue(maxsize=200)

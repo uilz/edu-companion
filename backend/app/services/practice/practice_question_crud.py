@@ -18,19 +18,19 @@ def add_question(bank_id, user_id, question_type, stem, answer,
     _ensure_tables()
     db = get_db()
     now = datetime.now().isoformat()
-    count = db.fetchone("SELECT COUNT(*) as cnt FROM v7_questions WHERE bank_id = %s", (bank_id,))
+    count = db.fetchone("SELECT COUNT(*) as cnt FROM questions WHERE bank_id = %s", (bank_id,))
     seq = (count["cnt"] if count else 0) + 1
     qid = f"q_{bank_id}_{seq}"
     db.execute(
-        "INSERT INTO v7_questions (id, bank_id, user_id, question_type, stem, options, answer, analysis, "
+        "INSERT INTO questions (id, bank_id, user_id, question_type, stem, options, answer, analysis, "
         "difficulty, cognitive_node_ids, source, metadata, status, created_at, updated_at) "
         "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
         (qid, bank_id, user_id, question_type, stem,
          json.dumps(options or []), json.dumps(answer), analysis, difficulty,
          cognitive_node_ids or [], source, json.dumps(metadata or {}), "active", now, now),
     )
-    db.execute("UPDATE v7_question_banks SET question_count = question_count + 1, updated_at = %s WHERE id = %s", (now, bank_id))
-    row = db.fetchone("SELECT * FROM v7_questions WHERE id = %s", (qid,))
+    db.execute("UPDATE question_banks SET question_count = question_count + 1, updated_at = %s WHERE id = %s", (now, bank_id))
+    row = db.fetchone("SELECT * FROM questions WHERE id = %s", (qid,))
     return _row_to_question(row)
 
 
@@ -49,8 +49,8 @@ def update_question(question_id, user_id=DEFAULT_USER_ID, **kwargs):
         return None
     now = datetime.now().isoformat()
     updates.append("updated_at = %s"); params.append(now); params.append(question_id)
-    db.execute(f"UPDATE v7_questions SET {', '.join(updates)} WHERE id = %s", tuple(params))
-    row = db.fetchone("SELECT * FROM v7_questions WHERE id = %s AND deleted_at IS NULL", (question_id,))
+    db.execute(f"UPDATE questions SET {', '.join(updates)} WHERE id = %s", tuple(params))
+    row = db.fetchone("SELECT * FROM questions WHERE id = %s AND deleted_at IS NULL", (question_id,))
     return _row_to_question(row) if row else None
 
 
@@ -58,11 +58,11 @@ def delete_question(question_id, user_id=DEFAULT_USER_ID):
     from app.db.database import get_db
     db = get_db()
     now = datetime.now().isoformat()
-    row = db.fetchone("SELECT bank_id FROM v7_questions WHERE id = %s AND deleted_at IS NULL", (question_id,))
+    row = db.fetchone("SELECT bank_id FROM questions WHERE id = %s AND deleted_at IS NULL", (question_id,))
     if not row:
         return False
-    db.execute("UPDATE v7_questions SET deleted_at = %s WHERE id = %s", (now, question_id))
-    db.execute("UPDATE v7_question_banks SET question_count = GREATEST(0, question_count - 1), updated_at = %s WHERE id = %s",
+    db.execute("UPDATE questions SET deleted_at = %s WHERE id = %s", (now, question_id))
+    db.execute("UPDATE question_banks SET question_count = GREATEST(0, question_count - 1), updated_at = %s WHERE id = %s",
                (now, row["bank_id"]))
     return True
 
@@ -70,30 +70,30 @@ def delete_question(question_id, user_id=DEFAULT_USER_ID):
 def toggle_favorite(question_id, user_id=DEFAULT_USER_ID):
     from app.db.database import get_db
     db = get_db()
-    existing = db.fetchone("SELECT id FROM v7_question_favorites WHERE question_id = %s AND user_id = %s",
+    existing = db.fetchone("SELECT id FROM question_favorites WHERE question_id = %s AND user_id = %s",
                            (question_id, user_id))
     if existing:
-        db.execute("DELETE FROM v7_question_favorites WHERE id = %s", (existing["id"],))
-        db.execute("UPDATE v7_questions SET is_favorite = false WHERE id = %s", (question_id,))
+        db.execute("DELETE FROM question_favorites WHERE id = %s", (existing["id"],))
+        db.execute("UPDATE questions SET is_favorite = false WHERE id = %s", (question_id,))
         return False
-    db.execute("INSERT INTO v7_question_favorites (id, user_id, question_id) VALUES (%s, %s, %s)",
+    db.execute("INSERT INTO question_favorites (id, user_id, question_id) VALUES (%s, %s, %s)",
                (f"fav_{question_id}_{user_id[-6:]}", user_id, question_id))
-    db.execute("UPDATE v7_questions SET is_favorite = true WHERE id = %s", (question_id,))
+    db.execute("UPDATE questions SET is_favorite = true WHERE id = %s", (question_id,))
     return True
 
 
 def toggle_slash(question_id, user_id=DEFAULT_USER_ID):
     from app.db.database import get_db
     db = get_db()
-    existing = db.fetchone("SELECT id FROM v7_slashed_questions WHERE question_id = %s AND user_id = %s",
+    existing = db.fetchone("SELECT id FROM slashed_questions WHERE question_id = %s AND user_id = %s",
                            (question_id, user_id))
     if existing:
-        db.execute("DELETE FROM v7_slashed_questions WHERE id = %s", (existing["id"],))
-        db.execute("UPDATE v7_questions SET is_slashed = false WHERE id = %s", (question_id,))
+        db.execute("DELETE FROM slashed_questions WHERE id = %s", (existing["id"],))
+        db.execute("UPDATE questions SET is_slashed = false WHERE id = %s", (question_id,))
         return False
-    db.execute("INSERT INTO v7_slashed_questions (id, user_id, question_id) VALUES (%s, %s, %s)",
+    db.execute("INSERT INTO slashed_questions (id, user_id, question_id) VALUES (%s, %s, %s)",
                (f"sl_{question_id}_{user_id[-6:]}", user_id, question_id))
-    db.execute("UPDATE v7_questions SET is_slashed = true WHERE id = %s", (question_id,))
+    db.execute("UPDATE questions SET is_slashed = true WHERE id = %s", (question_id,))
     return True
 
 

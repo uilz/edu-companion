@@ -17,7 +17,6 @@ from __future__ import annotations
 from shared.constants import DEFAULT_USER_ID
 import json
 import logging
-import os
 import time
 from datetime import datetime, timezone
 from collections import defaultdict
@@ -25,36 +24,33 @@ from ..models import Proposal
 
 logger = logging.getLogger(__name__)
 
-_MEMORY_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "policy_memory")
-
 
 # ═══════════════════════════════════════════
 # 关系记忆存储
 # ═══════════════════════════════════════════
 
 class RelationMemory:
-    """关系记忆 — 记录用户对各类提案的忽略/采纳历史"""
+    """关系记忆 — 记录用户对各类提案的忽略/采纳历史
+
+    Phase A3: 改用 DataRepository 持久化（policy_memory JSONB 字段），替代 JSON 文件存储。
+    """
 
     def __init__(self) -> None:
-        os.makedirs(_MEMORY_DIR, exist_ok=True)
+        pass
 
-    def _path(self, user_id: str) -> str:
-        return os.path.join(_MEMORY_DIR, f"{user_id}.json")
-
-    def _load(self, user_id: str) -> dict[str, Any]:
-        path = self._path(user_id)
-        if os.path.exists(path):
-            try:
-                with open(path) as f:
-                    return json.load(f)
-            except Exception as e:
-                logger.warning("Failed to load policy memory from %s: %s", path, e)
-        return {"ignore_counts": {}, "accept_counts": {}, "updated_at": time.time()}
+    def _load(self, user_id: str) -> dict:
+        from app.services.common.storage import storage
+        data = storage.load(user_id)
+        return data.policy_memory or {
+            "ignore_counts": {}, "accept_counts": {}, "updated_at": time.time(),
+        }
 
     def _save(self, user_id: str, data: dict) -> None:
         data["updated_at"] = time.time()
-        with open(self._path(user_id), "w") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        from app.services.common.storage import storage
+        user_data = storage.load(user_id)
+        user_data.policy_memory = data
+        storage.save(user_id, user_data)
 
     def record_accept(self, user_id: str, action_type: str, kp_id: str) -> None:
         """记录采纳"""
@@ -182,15 +178,7 @@ class PolicyEngine:
         try:
             from ..proposal_store import ProposalStore
             store = ProposalStore()
-            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            db = store._get_db()
-            row = db.fetchone(
-                """SELECT COUNT(*) as cnt FROM secretary_proposals
-                   WHERE user_id = %s AND DATE(created_at) = %s
-                   AND status IN ('pending', 'accepted')""",
-                (user_id, today),
-            )
-            return row["cnt"] if row else 0
+            return store.get_daily_usage(user_id)
         except Exception as e:
             logger.debug("获取每日用量失败: %s", e)
             return 0

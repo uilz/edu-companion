@@ -3,9 +3,9 @@
 
 流程:
 1. 每次 session 完成后触发 check_achievements()
-2. 从 v7_practice_attempts + cognitive_nodes 聚合 stats
+2. 从 practice_attempts + cognitive_nodes 聚合 stats
 3. 调用 AchievementEngine.check_all() 检测新成就
-4. 新成就存入 v7_achievements 表
+4. 新成就存入 achievements 表
 5. 返回新解锁列表供前端弹窗
 """
 
@@ -20,11 +20,11 @@ logger = logging.getLogger(__name__)
 
 
 def _ensure_table():
-    """确保 v7_achievements 表存在"""
+    """确保 achievements 表存在"""
     from app.db.database import get_db
     db = get_db()
     db.execute("""
-        CREATE TABLE IF NOT EXISTS v7_achievements (
+        CREATE TABLE IF NOT EXISTS achievements (
             id          TEXT PRIMARY KEY,
             user_id     TEXT NOT NULL,
             ach_id      TEXT NOT NULL,
@@ -37,11 +37,11 @@ def _ensure_table():
         )
     """)
     db.execute("""
-        CREATE INDEX IF NOT EXISTS idx_v7ach_user ON v7_achievements(user_id)
+        CREATE INDEX IF NOT EXISTS idx_ach_user ON achievements(user_id)
     """)
     db.execute("""
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_v7ach_user_ach
-        ON v7_achievements(user_id, ach_id, level)
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_ach_user_ach
+        ON achievements(user_id, ach_id, level)
     """)
 
 
@@ -52,14 +52,14 @@ def _build_stats(user_id: str) -> dict:
 
     # 练习总数
     total = db.fetchone(
-        "SELECT COUNT(*) as cnt FROM v7_practice_attempts WHERE user_id = %s",
+        "SELECT COUNT(*) as cnt FROM practice_attempts WHERE user_id = %s",
         (user_id,),
     )
     practice_count = total["cnt"] if total else 0
 
     # 正确数
     correct = db.fetchone(
-        "SELECT COUNT(*) as cnt FROM v7_practice_attempts WHERE user_id = %s AND is_correct = true",
+        "SELECT COUNT(*) as cnt FROM practice_attempts WHERE user_id = %s AND is_correct = true",
         (user_id,),
     )
     correct_count = correct["cnt"] if correct else 0
@@ -67,10 +67,10 @@ def _build_stats(user_id: str) -> dict:
     # 正确率
     accuracy = correct_count / max(practice_count, 1)
 
-    # 连续学习天数 — 从 v7_practice_attempts 按日去重
+    # 连续学习天数 — 从 practice_attempts 按日去重
     days = db.fetchall(
         """SELECT DISTINCT DATE(created_at) as day
-           FROM v7_practice_attempts
+           FROM practice_attempts
            WHERE user_id = %s
            ORDER BY day DESC""",
         (user_id,),
@@ -80,7 +80,7 @@ def _build_stats(user_id: str) -> dict:
 
     # 会话数
     sessions = db.fetchone(
-        "SELECT COUNT(*) as cnt FROM v7_practice_sessions WHERE user_id = %s",
+        "SELECT COUNT(*) as cnt FROM practice_sessions WHERE user_id = %s",
         (user_id,),
     )
     session_count = sessions["cnt"] if sessions else 0
@@ -99,14 +99,14 @@ def _build_stats(user_id: str) -> dict:
 
     # 快速正确 (10s 内答对)
     fast = db.fetchone(
-        "SELECT COUNT(*) as cnt FROM v7_practice_attempts WHERE user_id = %s AND is_correct = true AND time_spent_seconds <= 10",
+        "SELECT COUNT(*) as cnt FROM practice_attempts WHERE user_id = %s AND is_correct = true AND time_spent_seconds <= 10",
         (user_id,),
     )
     fast_correct = fast["cnt"] if fast else 0
 
     # 完全正确的 session 数
     perfect = db.fetchone(
-        """SELECT COUNT(*) as cnt FROM v7_practice_sessions
+        """SELECT COUNT(*) as cnt FROM practice_sessions
            WHERE user_id = %s AND status = 'completed'
            AND total_count > 0 AND correct_count = total_count""",
         (user_id,),
@@ -169,7 +169,7 @@ def check_achievements(user_id: str = DEFAULT_USER_ID) -> list[dict]:
 
     # 2. 获取已有成就
     existing = db.fetchall(
-        "SELECT ach_id, level, unlocked_at FROM v7_achievements WHERE user_id = %s",
+        "SELECT ach_id, level, unlocked_at FROM achievements WHERE user_id = %s",
         (user_id,),
     )
     existing_map = {}
@@ -190,7 +190,7 @@ def check_achievements(user_id: str = DEFAULT_USER_ID) -> list[dict]:
         lv = ach.get("level", 1)
         uid = f"ach_{aid}_lv{lv}_{user_id[-8:]}"
         db.execute(
-            """INSERT INTO v7_achievements (id, user_id, ach_id, level, name, icon, tier, description, unlocked_at)
+            """INSERT INTO achievements (id, user_id, ach_id, level, name, icon, tier, description, unlocked_at)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                ON CONFLICT (id) DO NOTHING""",
             (uid, user_id, aid, lv, ach["name"], ach["icon"], ach["tier"], ach["description"], now),
@@ -211,7 +211,7 @@ def get_all_achievements(user_id: str = DEFAULT_USER_ID) -> list[dict]:
     stats = _build_stats(user_id)
 
     existing = db.fetchall(
-        "SELECT ach_id, level, unlocked_at FROM v7_achievements WHERE user_id = %s",
+        "SELECT ach_id, level, unlocked_at FROM achievements WHERE user_id = %s",
         (user_id,),
     )
     existing_map = {}
@@ -230,7 +230,7 @@ def get_recent_unlocks(user_id: str = DEFAULT_USER_ID, limit: int = 5) -> list[d
     from app.db.database import get_db
     db = get_db()
     rows = db.fetchall(
-        """SELECT * FROM v7_achievements
+        """SELECT * FROM achievements
            WHERE user_id = %s
            ORDER BY unlocked_at DESC LIMIT %s""",
         (user_id, limit),
@@ -255,11 +255,11 @@ def get_badge_stats(user_id: str = DEFAULT_USER_ID) -> dict:
     from app.db.database import get_db
     db = get_db()
 
-    total = db.fetchone("SELECT COUNT(*) as cnt FROM v7_achievements WHERE user_id = %s", (user_id,))
+    total = db.fetchone("SELECT COUNT(*) as cnt FROM achievements WHERE user_id = %s", (user_id,))
     total_unlocked = total["cnt"] if total else 0
 
     by_tier = db.fetchall(
-        """SELECT tier, COUNT(*) as cnt FROM v7_achievements
+        """SELECT tier, COUNT(*) as cnt FROM achievements
            WHERE user_id = %s GROUP BY tier""",
         (user_id,),
     )

@@ -114,6 +114,9 @@ class SecretaryModuleRegistry:
         if "silent_task" not in self._modules:
             from .silent_task import SilentTaskModule
             self.register(SilentTaskModule())
+        if "behavior_trigger" not in self._modules:
+            from .behavior_trigger import BehaviorTriggerModule
+            self.register(BehaviorTriggerModule())
 
         for cls in [ReviewReminderModule, FatigueManagerModule, DailyBriefModule]:
             self.register(cls())

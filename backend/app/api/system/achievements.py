@@ -23,51 +23,67 @@ USER_ID = DEFAULT_USER_ID
 
 def _collect_stats(user_id: str) -> dict[str, Any]:
     """从现有数据源收集所有统计指标"""
-    # 从 learner profile 获取基础统计
-    profile = learner_engine.get_or_create_profile(user_id)
-    summary = learner_engine.get_progress_summary(user_id)
+    try:
+        # 从 learner profile 获取基础统计
+        profile = learner_engine.get_or_create_profile(user_id)
+        summary = learner_engine.get_progress_summary(user_id)
 
-    # Session count
-    session_count = profile.total_sessions if hasattr(profile, "total_sessions") else 0
+        # Session count
+        session_count = profile.total_sessions if hasattr(profile, "total_sessions") else 0
 
-    # 答题统计
-    practice_count = summary.total_questions
-    correct_count = summary.correct_answers
-    accuracy = summary.accuracy_rate
+        # 答题统计
+        practice_count = summary.total_questions
+        correct_count = summary.correct_answers
+        accuracy = summary.accuracy_rate
 
-    # Streak
-    streak = profile.streak_days if hasattr(profile, "streak_days") else 0
+        # Streak
+        streak = profile.streak_days if hasattr(profile, "streak_days") else 0
 
-    # 掌握技能数 (proficiency_mean >= 0.8) — migrated from BKT to CognitiveNode
-    from app.cognitive.storage import list_all_nodes
-    cog_nodes = list_all_nodes(user_id)
-    mastered_skills = sum(
-        1 for n in cog_nodes
-        if n.belief and n.belief.proficiency_mean >= 0.8
-    )
+        # 掌握技能数
+        try:
+            from app.cognitive.storage import list_all_nodes
+            cog_nodes = list_all_nodes(user_id)
+        except Exception:
+            cog_nodes = []
 
-    # 多学科覆盖
-    from domain.knowledge.prerequisites import SKILL_TO_SUBJECT
-    subject_mastered: set[str] = set()
-    for node in cog_nodes:
-        if node.belief and node.belief.proficiency_mean >= 0.8:
-            subj = SKILL_TO_SUBJECT.get(node.id, "")
-            if subj:
-                subject_mastered.add(subj)
+        mastered_skills = sum(
+            1 for n in cog_nodes
+            if n.belief and n.belief.proficiency_mean >= 0.8
+        )
 
-    return {
-        "practice_count": practice_count,
-        "correct_count": correct_count,
-        "accuracy": accuracy,
-        "session_count": session_count,
-        "conversation_count": 0,
-        "streak": streak,
-        "mastered_skills": mastered_skills,
-        "multi_subject_count": len(subject_mastered),
-        "fast_correct": 0,
-        "perfect_session": 0,
-        "comeback": 0,
-    }
+        # 多学科覆盖
+        try:
+            from app.domain.knowledge.prerequisites import SKILL_TO_SUBJECT
+        except Exception:
+            SKILL_TO_SUBJECT = {}
+        subject_mastered: set[str] = set()
+        for node in cog_nodes:
+            if node.belief and node.belief.proficiency_mean >= 0.8:
+                subj = SKILL_TO_SUBJECT.get(node.id, "")
+                if subj:
+                    subject_mastered.add(subj)
+
+        return {
+            "practice_count": practice_count,
+            "correct_count": correct_count,
+            "accuracy": accuracy,
+            "session_count": session_count,
+            "conversation_count": 0,
+            "streak": streak,
+            "mastered_skills": mastered_skills,
+            "multi_subject_count": len(subject_mastered),
+            "fast_correct": 0,
+            "perfect_session": 0,
+            "comeback": 0,
+        }
+    except Exception as e:
+        logger.warning("成就统计收集失败（返回默认值）: %s", e)
+        return {
+            "practice_count": 0, "correct_count": 0, "accuracy": 0,
+            "session_count": 0, "conversation_count": 0, "streak": 0,
+            "mastered_skills": 0, "multi_subject_count": 0,
+            "fast_correct": 0, "perfect_session": 0, "comeback": 0,
+        }
 
 
 def _load_existing(user_id: str) -> dict[str, Any]:

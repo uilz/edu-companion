@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import os
 
-from app.services.common.classifier import compute_embedding  # re-export
+from app.services.common.embedding_utils import compute_embedding  # re-export
 
 logger = logging.getLogger(__name__)
 

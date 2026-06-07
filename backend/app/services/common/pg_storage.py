@@ -3,6 +3,8 @@ PostgreSQL 对话存储引擎 (v4.2 — Phase 6.5)
 
 全字段 UserData 持久化，与 JSON 引擎接口兼容。
 处理 v4 结构：Conversation 替代 Branch, 支持 domains/topics/files/background_jobs。
+
+实现 DataRepository（业务用）和 AdminRepository（管理 SQL 用）双 Port。
 """
 
 from __future__ import annotations
@@ -11,6 +13,7 @@ import json
 import logging
 import time
 from pathlib import Path
+from typing import Any
 
 from app.db.database import Database
 from app.schemas.conversation import (
@@ -18,6 +21,7 @@ from app.schemas.conversation import (
     ResponseBlock, LinkNode, ContentBlock, Domain, Topic, FileRecord,
     BackgroundJob, KnowledgeGraph,
 )
+from shared.protocols.data_repository import DataRepository, AdminRepository
 from pydantic import TypeAdapter
 
 logger = logging.getLogger(__name__)
@@ -25,8 +29,8 @@ logger = logging.getLogger(__name__)
 SCHEMA_PATH = Path(__file__).parent.parent / "db" / "conversation_schema.sql"
 
 
-class PgStorageEngine:
-    """PostgreSQL 存储引擎，v4.2 全字段兼容"""
+class PgStorageEngine(DataRepository, AdminRepository):
+    """PostgreSQL 存储引擎，v4.2 全字段兼容。同时实现 DataRepository + AdminRepository。"""
 
     def __init__(self) -> None:
         self._initialized = False
@@ -139,6 +143,10 @@ class PgStorageEngine:
                     except Exception as e:
                         logger.warning(f"跳过损坏的知识图谱 {pid}: {e}")
 
+        # ── Phase A3: 加载秘书系统数据（原 JSON 文件存储） ──
+        secretary_prefs = self._parse_json(meta.get("secretary_prefs", {}), {})
+        policy_memory = self._parse_json(meta.get("policy_memory", {}), {})
+
         # ── 加载分区 ──
         partitions = {}
         part_rows = db.fetchall(
@@ -167,6 +175,12 @@ class PgStorageEngine:
                 # topic_id 列优先；无 topic_id 时 fallback 兼容旧数据
                 r["topic_id"] = r.pop("topic_id", "") or r.pop("partition_id", "")
                 r["path"] = r.get("path") or []
+                # 新字段向下兼容：旧数据只有 topic_id → 推导 parent_id/parent_type
+                if not r.get("parent_id"):
+                    r["parent_id"] = r["topic_id"]
+                    r["parent_type"] = "topic"
+                if not r.get("type"):
+                    r["type"] = "temporary" if r.get("is_temporary") else "normal"
                 conversations[r["id"]] = Conversation(**r)
 
         # ── 加载消息节点 ──
@@ -235,6 +249,9 @@ class PgStorageEngine:
 
             knowledge_graphs=knowledge_graphs,
             event_log=event_log,
+
+            secretary_prefs=secretary_prefs,
+            policy_memory=policy_memory,
         )
 
     # ── 保存 ──
@@ -251,8 +268,8 @@ class PgStorageEngine:
                 (user_id, role, org_id, active_partition_id,
                  knowledge_graphs,
                  event_log, domains, topics, files,
-                 background_jobs, created_at)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                 background_jobs, secretary_prefs, policy_memory, created_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (user_id) DO UPDATE SET
                 role = EXCLUDED.role,
                 org_id = EXCLUDED.org_id,
@@ -262,7 +279,9 @@ class PgStorageEngine:
                 domains = EXCLUDED.domains,
                 topics = EXCLUDED.topics,
                 files = EXCLUDED.files,
-                background_jobs = EXCLUDED.background_jobs
+                background_jobs = EXCLUDED.background_jobs,
+                secretary_prefs = EXCLUDED.secretary_prefs,
+                policy_memory = EXCLUDED.policy_memory
             """,
             (
                 user_id,
@@ -275,6 +294,8 @@ class PgStorageEngine:
                 self._j({k: v.model_dump() for k, v in data.topics.items()}),
                 self._j({k: v.model_dump() for k, v in data.files.items()}),
                 self._j({k: v.model_dump() for k, v in data.background_jobs.items()}),
+                self._j(data.secretary_prefs),
+                self._j(data.policy_memory),
                 time.time(),
             ),
         )
@@ -315,20 +336,19 @@ class PgStorageEngine:
                 partitions_params,
             )
 
-        # ── 对话 (v4 Conversation → conversation_branches 表)：通过 topic→domain 追溯真实的 partition_id（批量）──
+        # ── 对话 (v4 Conversation → conversation_branches 表) ──
         conversations_params = []
         for b in data.conversations.values():
-            # 从 Topic → Domain → Partition 追溯真实的 partition_id (FK 约束)
-            partition_id_for_table = None
-            topic = data.topics.get(b.topic_id)
-            if topic:
-                domain = data.domains.get(topic.domain_id)
-                if domain:
-                    partition_id_for_table = domain.partition_id
+            # 用新字段 partition_id（已补全）或旧路径回溯
+            partition_id_for_table = b.partition_id
             if not partition_id_for_table:
-                # fallback: 如果找不到，尝试用 b.topic_id 本身作为 partition_id
-                # （兼容旧数据或孤儿分支场景）
-                partition_id_for_table = b.topic_id
+                topic = data.topics.get(b.topic_id)
+                if topic:
+                    domain = data.domains.get(topic.domain_id)
+                    if domain:
+                        partition_id_for_table = domain.partition_id
+                if not partition_id_for_table:
+                    partition_id_for_table = b.topic_id or b.parent_id
             conversations_params.append((
                 b.id, partition_id_for_table, b.topic_id, b.name,
                 "",  # fork_point_id (legacy column, kept for DB compat)
@@ -336,6 +356,8 @@ class PgStorageEngine:
                 b.summary, b.summary_dirty, b.practice_sessions or [],
                 b.practice_summary or "",
                 b.created_at, b.last_message_at,
+                b.parent_id, b.parent_type, b.type,
+                b.domain_id,
             ))
         if conversations_params:
             db.executemany(
@@ -343,15 +365,20 @@ class PgStorageEngine:
                 INSERT INTO conversation_branches
                     (id, partition_id, topic_id, name, fork_point_id, path,
                      is_active, is_archived, summary, summary_dirty,
-                     practice_sessions, practice_summary, created_at, last_message_at)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                     practice_sessions, practice_summary, created_at, last_message_at,
+                     parent_id, parent_type, type, domain_id)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT (id) DO UPDATE SET
                     name=EXCLUDED.name, is_active=EXCLUDED.is_active,
                     path=EXCLUDED.path,
                     summary=EXCLUDED.summary,
                     practice_sessions=EXCLUDED.practice_sessions,
                     practice_summary=EXCLUDED.practice_summary,
-                    last_message_at=EXCLUDED.last_message_at
+                    last_message_at=EXCLUDED.last_message_at,
+                    parent_id=EXCLUDED.parent_id,
+                    parent_type=EXCLUDED.parent_type,
+                    type=EXCLUDED.type,
+                    domain_id=EXCLUDED.domain_id
                 """,
                 conversations_params,
             )
@@ -477,6 +504,18 @@ class PgStorageEngine:
                     db.execute("DELETE FROM conversation_branches WHERE id = %s", (bid,))
 
         logger.info(f"Conversation data saved for user {user_id} ({len(data.nodes)} nodes)")
+
+    # ── AdminRepository: 原始 SQL 访问 ──
+
+    def query(self, sql: str, params: list | None = None) -> list[dict[str, Any]]:
+        """执行 SELECT 查询，返回 dict 列表。"""
+        db = Database.get()
+        return db.fetchall(sql, tuple(params or []))
+
+    def execute(self, sql: str, params: list | None = None) -> None:
+        """执行 INSERT/UPDATE/DELETE。"""
+        db = Database.get()
+        db.execute(sql, tuple(params or []))
 
     # ── 迁移：JSON → PG ──
 

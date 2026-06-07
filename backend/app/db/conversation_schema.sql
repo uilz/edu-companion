@@ -66,6 +66,14 @@ CREATE INDEX IF NOT EXISTS idx_nodes_branch ON conversation_nodes(branch_id);
 CREATE INDEX IF NOT EXISTS idx_nodes_partition ON conversation_nodes(partition_id);
 CREATE INDEX IF NOT EXISTS idx_nodes_parent ON conversation_nodes(parent_id);
 
+-- ── v5 对话层级扩展：Conversation 支持挂载到任意层级 ──
+ALTER TABLE conversation_branches ADD COLUMN IF NOT EXISTS parent_id TEXT DEFAULT '';
+ALTER TABLE conversation_branches ADD COLUMN IF NOT EXISTS parent_type TEXT DEFAULT 'topic';
+ALTER TABLE conversation_branches ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'normal';
+ALTER TABLE conversation_branches ADD COLUMN IF NOT EXISTS domain_id TEXT DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_branches_parent ON conversation_branches(parent_id);
+CREATE INDEX IF NOT EXISTS idx_branches_type ON conversation_branches(type);
+
 -- 响应块表
 CREATE TABLE IF NOT EXISTS conversation_response_blocks (
     id TEXT PRIMARY KEY,
@@ -115,3 +123,7 @@ ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS domains JSONB DEFAUL
 ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS topics JSONB DEFAULT '{}';
 ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS files JSONB DEFAULT '{}';
 ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS background_jobs JSONB DEFAULT '{}';
+
+-- Phase A3: 秘书系统存储统一 — secretary_prefs + policy_memory 从 JSON 文件迁移到 JSONB
+ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS secretary_prefs JSONB DEFAULT '{}';
+ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS policy_memory JSONB DEFAULT '{}';

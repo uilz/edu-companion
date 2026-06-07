@@ -77,8 +77,8 @@ def _check_error_accumulation(user_id: str, session_id: str) -> bool:
 
     rows = db.fetchall(
         """SELECT sq.question_id, q.cognitive_node_ids
-           FROM v7_session_questions sq
-           JOIN v7_questions q ON sq.question_id = q.id
+           FROM session_questions sq
+           JOIN questions q ON sq.question_id = q.id
            WHERE sq.session_id = %s AND sq.is_correct = false""",
         (session_id,),
     )
@@ -90,9 +90,9 @@ def _check_error_accumulation(user_id: str, session_id: str) -> bool:
                 continue
             # 统计该知识点的总错题数
             wrong = db.fetchone(
-                """SELECT COUNT(*) as cnt FROM v7_practice_attempts pa
-                   JOIN v7_session_questions sq ON pa.session_id = sq.session_id
-                   JOIN v7_questions q ON sq.question_id = q.id
+                """SELECT COUNT(*) as cnt FROM practice_attempts pa
+                   JOIN session_questions sq ON pa.session_id = sq.session_id
+                   JOIN questions q ON sq.question_id = q.id
                    WHERE pa.user_id = %s AND pa.is_wrong = true
                    AND q.cognitive_node_ids @> ARRAY[%s]""",
                 (user_id, nid),
@@ -111,8 +111,8 @@ def _check_mastery_stall(user_id: str, session_id: str) -> bool:
     # 获取本 session 涉及的认知节点
     sq_rows = db.fetchall(
         """SELECT q.cognitive_node_ids
-           FROM v7_session_questions sq
-           JOIN v7_questions q ON sq.question_id = q.id
+           FROM session_questions sq
+           JOIN questions q ON sq.question_id = q.id
            WHERE sq.session_id = %s""",
         (session_id,),
     )
@@ -126,9 +126,9 @@ def _check_mastery_stall(user_id: str, session_id: str) -> bool:
     for nid in node_ids:
         # 查该节点近 N 次练习的正确率
         attempts = db.fetchall(
-            """SELECT is_correct FROM v7_practice_attempts pa
-               JOIN v7_session_questions sq ON pa.session_id = sq.session_id
-               JOIN v7_questions q ON sq.question_id = q.id
+            """SELECT is_correct FROM practice_attempts pa
+               JOIN session_questions sq ON pa.session_id = sq.session_id
+               JOIN questions q ON sq.question_id = q.id
                WHERE pa.user_id = %s
                AND q.cognitive_node_ids @> ARRAY[%s]
                ORDER BY pa.created_at DESC
@@ -158,8 +158,8 @@ def _generate_error_alert(user_id: str, session_id: str) -> bool:
     # 获取本 session 中错题最多的知识点
     rows = db.fetchall(
         """SELECT q.cognitive_node_ids, q.stem
-           FROM v7_session_questions sq
-           JOIN v7_questions q ON sq.question_id = q.id
+           FROM session_questions sq
+           JOIN questions q ON sq.question_id = q.id
            WHERE sq.session_id = %s AND sq.is_correct = false
            ORDER BY sq.sort_order
            LIMIT 3""",
@@ -191,9 +191,9 @@ def _generate_error_alert(user_id: str, session_id: str) -> bool:
     wrong_count = 0
     if node_id:
         wr = db.fetchone(
-            """SELECT COUNT(*) as cnt FROM v7_practice_attempts pa
-               JOIN v7_session_questions sq ON pa.session_id = sq.session_id
-               JOIN v7_questions q ON sq.question_id = q.id
+            """SELECT COUNT(*) as cnt FROM practice_attempts pa
+               JOIN session_questions sq ON pa.session_id = sq.session_id
+               JOIN questions q ON sq.question_id = q.id
                WHERE pa.user_id = %s AND pa.is_wrong = true
                AND q.cognitive_node_ids @> ARRAY[%s]""",
             (user_id, node_id),
@@ -232,8 +232,8 @@ def _generate_mastery_intervention(user_id: str, session_id: str) -> bool:
 
     sq_rows = db.fetchall(
         """SELECT q.cognitive_node_ids
-           FROM v7_session_questions sq
-           JOIN v7_questions q ON sq.question_id = q.id
+           FROM session_questions sq
+           JOIN questions q ON sq.question_id = q.id
            WHERE sq.session_id = %s""",
         (session_id,),
     )
@@ -283,7 +283,7 @@ def _generate_review_reminder(user_id: str) -> bool:
 
     # 统计待复习的错题
     due = db.fetchone(
-        """SELECT COUNT(*) as cnt FROM v7_practice_attempts pa
+        """SELECT COUNT(*) as cnt FROM practice_attempts pa
            WHERE pa.user_id = %s AND pa.is_wrong = true
            AND pa.mastered = false
            AND pa.created_at < NOW() - INTERVAL '%s days'""",
@@ -331,7 +331,7 @@ def _generate_reflection_prompt(user_id: str, session_id: str) -> bool:
     db = get_db()
 
     session = db.fetchone(
-        "SELECT * FROM v7_practice_sessions WHERE id = %s AND user_id = %s",
+        "SELECT * FROM practice_sessions WHERE id = %s AND user_id = %s",
         (session_id, user_id),
     )
     if not session:

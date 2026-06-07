@@ -10,10 +10,8 @@ from typing import Optional
 
 from app.schemas.practice import (
     BloomLevel,
-    KnowledgeState,
     PracticeSessionPlan,
     Question,
-    ReviewTask,
 )
 logger = logging.getLogger(__name__)
 
@@ -112,19 +110,23 @@ class ZPDScheduler:
         """
         估计学生在某知识点的能力θ
         """
-
-        # CognitiveNode: primary source
         try:
             from app.cognitive.storage import get_node
             node = get_node(skill_id, user_id)
             if node and node.belief:
-                mu = node.belief.proficiency_mean
-                return mu * 0.6 + mu * 0.4  # simplified: θ = proficiency_mean
+                return node.belief.proficiency_mean
         except Exception as e:
             logger.warning("Failed to read CognitiveNode for %s: %s", skill_id, e)
 
-        # CognitiveNode unavailable or has no data → return default ability
         return 0.3
+
+    def on_knowledge_change(self, user_id: str, node_id: str) -> None:
+        """知识点变化回调 — 由 DI 容器在 CognitiveNodeUpdated 事件时调用
+
+        当前无需实时重调度，记录日志即可。
+        未来可在此触发 plan_session 的增量重算。
+        """
+        logger.debug("ZPD: knowledge change user=%s node=%s (no-op)", user_id, node_id[:8])
 
     def plan_session(
         self,
@@ -154,14 +156,13 @@ class ZPDScheduler:
 
         # 简单交错排列
         if len(target_skills) > 1:
-            all_questions.sort(key=lambda q: target_skills.index(q.skill_id))
             # 轮询交错
-            interleaved = []
             per_skill = {s: [] for s in target_skills}
             for q in all_questions:
                 per_skill[q.skill_id].append(q)
             
             max_len = max(len(v) for v in per_skill.values())
+            interleaved = []
             for i in range(max_len):
                 for s in target_skills:
                     if i < len(per_skill[s]):
@@ -187,88 +188,11 @@ class ZPDScheduler:
         - 每30分钟降低0.1能力
         - 连续错题降低0.05/题
         """
-        # 时间衰减
         time_decay = session_elapsed_minutes / 300  # 5小时归零
-        
-        # 错误惩罚
         error_penalty = consecutive_wrong * 0.05
-        
         adjusted = max(0.05, base_ability * (1.0 - time_decay) - error_penalty)
-        
         return adjusted
-
-
-class SpacedRepetitionScheduler:
-    """SM-2间隔重复调度"""
-    
-    # SM-2间隔表（天数）
-    INTERVALS = [1, 3, 7, 14, 30, 60, 120, 240]
-    
-    def compute_next_review(
-        self,
-        state: KnowledgeState,
-        is_correct: bool,
-    ) -> int:
-        """
-        计算下次复习的天数间隔
-        
-        SM-2算法简化版：
-        - 答对：间隔递增
-        - 答错：重置到1天
-        """
-        if not is_correct:
-            return 1  # 答错：明天复习
-        
-        # 答对：根据当前稳定性决定间隔
-        stability = 1.0
-        if state.explanation_state:
-            stability = state.explanation_state.stability
-        
-        base_interval = int(1.0 / (1.0 - state.p_known + 0.1))
-        adjusted = int(base_interval * stability)
-        
-        return min(adjusted, 60)  # 最长60天
-    
-    def get_review_tasks(
-        self,
-        user_id: str = DEFAULT_USER_ID,
-        now: float | None = None,
-    ) -> list[ReviewTask]:
-        """获取所有需要复习的知识点 — 从 CognitiveNode 读取"""
-        from app.cognitive.storage import list_all_nodes
-        import time as _time
-
-        if now is None:
-            now = _time.time()
-
-        nodes = list_all_nodes(user_id)
-        tasks = []
-
-        for node in nodes:
-            belief = node.belief
-            trend = node.trend
-            if not belief or not trend:
-                continue
-
-            last_practiced = node.practice_summary.last_practiced
-            if last_practiced is None:
-                continue  # 从未练习过
-
-            days_since = max((now - last_practiced) / 86400, 0)
-            forgetting_prob = math.exp(-days_since / max(belief.proficiency_mean + 0.1, 0.1))
-
-            if forgetting_prob > 0.3 and belief.proficiency_mean < 0.8:
-                tasks.append(ReviewTask(
-                    type="knowledge_review",
-                    skill_id=node.id,
-                    priority=forgetting_prob,
-                    instruction=f"复习{node.label or node.id}",
-                ))
-
-        tasks.sort(key=lambda t: t.priority, reverse=True)
-        return tasks[:10]
 
 
 # 全局实例
 zpd_scheduler = ZPDScheduler()
-spacing_scheduler = SpacedRepetitionScheduler()

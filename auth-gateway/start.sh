@@ -25,7 +25,7 @@ mkdir -p logs
 
 # 启动服务
 echo "🚀 启动认证网关 ${AUTH_GATEWAY_HOST}:${AUTH_GATEWAY_PORT}..."
-nohup ./venv/bin/uvicorn app.main:app \
+nohup ./venv/bin/uvicorn auth_app.main:app \
     --host "${AUTH_GATEWAY_HOST:-0.0.0.0}" \
     --port "${AUTH_GATEWAY_PORT:-8001}" \
     --workers "${AUTH_GATEWORKERS:-2}" \

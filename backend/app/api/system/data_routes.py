@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 
 from shared.constants import DEFAULT_USER_ID
-from app.services.common.storage import storage
+from app.services.common.storage import storage, get_admin_repo
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v7/data", tags=["学习数据管理"])
@@ -19,58 +19,21 @@ USER_ID = DEFAULT_USER_ID
 
 
 # ═══════════════════════════════════════════════════════════
-# 辅助函数
+# AdminRepository 懒初始化
 # ═══════════════════════════════════════════════════════════
 
-def _get_db():
-    from app.services.common.storage import storage
-    data = storage.load(USER_ID)
-    # 尝试获取 PostgreSQL 连接
-    try:
-        from app.services.common.storage import storage as st
-        if hasattr(st, "_pg_pool") and st._pg_pool:
-            return st._pg_pool
-    except Exception:
-        pass
-    return None
+_admin_repo = None
 
 
-def _pg_query(sql: str, params: list = None):
-    """执行 PG 查询并返回结果列表"""
-    import asyncpg
-    pool = _get_db()
-    if not pool:
-        return []
-    try:
-        import asyncio
-        async def _run():
-            async with pool.acquire() as conn:
-                rows = await conn.fetch(sql, *(params or []))
-                return [dict(r) for r in rows]
-        loop = asyncio.new_event_loop()
-        result = loop.run_until_complete(_run())
-        loop.close()
-        return result
-    except Exception:
-        return []
-
-
-def _pg_execute(sql: str, params: list = None):
-    """执行 PG 写操作"""
-    pool = _get_db()
-    if not pool:
-        return None
-    try:
-        import asyncio
-        async def _run():
-            async with pool.acquire() as conn:
-                return await conn.execute(sql, *(params or []))
-        loop = asyncio.new_event_loop()
-        result = loop.run_until_complete(_run())
-        loop.close()
-        return result
-    except Exception:
-        return None
+def _get_admin_repo():
+    """懒初始化 AdminRepository，JSON 模式下返回 None（不抛出异常）。"""
+    global _admin_repo
+    if _admin_repo is None:
+        try:
+            _admin_repo = get_admin_repo()
+        except RuntimeError:
+            _admin_repo = False  # 标记不可用
+    return _admin_repo if _admin_repo is not False else None
 
 
 # ═══════════════════════════════════════════════════════════
@@ -92,25 +55,27 @@ async def data_overview():
         "graph_edges": sum(len(g.edges) for g in data.knowledge_graphs.values()),
     }
 
-    # 尝试获取 PG 中的数据统计
-    pg_stats = _pg_query("""
-        SELECT 
-            (SELECT COUNT(*) FROM v7_practice_sessions) AS practice_sessions,
-            (SELECT COUNT(*) FROM v7_question_banks) AS question_banks,
-            (SELECT COUNT(*) FROM v7_questions) AS questions,
-            (SELECT COUNT(*) FROM explain_cards) AS explain_cards,
-            (SELECT COUNT(*) FROM messages) AS messages,
-            (SELECT COUNT(*) FROM materials) AS materials
-    """)
-    if pg_stats:
-        overview.update({
-            "practice_sessions": pg_stats[0].get("practice_sessions", 0),
-            "question_banks": pg_stats[0].get("question_banks", 0),
-            "questions": pg_stats[0].get("questions", 0),
-            "explain_cards": pg_stats[0].get("explain_cards", 0),
-            "messages": pg_stats[0].get("messages", 0),
-            "materials": pg_stats[0].get("materials", 0),
-        })
+    # 通过 AdminRepository 获取 PG 中的额外数据统计
+    repo = _get_admin_repo()
+    if repo:
+        rows = repo.query("""
+            SELECT 
+                (SELECT COUNT(*) FROM practice_sessions) AS practice_sessions,
+                (SELECT COUNT(*) FROM question_banks) AS question_banks,
+                (SELECT COUNT(*) FROM questions) AS questions,
+                (SELECT COUNT(*) FROM explain_cards) AS explain_cards,
+                (SELECT COUNT(*) FROM messages) AS messages,
+                (SELECT COUNT(*) FROM materials) AS materials
+        """)
+        if rows:
+            overview.update({
+                "practice_sessions": rows[0].get("practice_sessions", 0),
+                "question_banks": rows[0].get("question_banks", 0),
+                "questions": rows[0].get("questions", 0),
+                "explain_cards": rows[0].get("explain_cards", 0),
+                "messages": rows[0].get("messages", 0),
+                "materials": rows[0].get("materials", 0),
+            })
 
     return {"ok": True, "overview": overview}
 
@@ -179,14 +144,17 @@ async def list_knowledge_graphs():
 # ═══════════════════════════════════════════════════════════
 
 @router.get("/practice-sessions")
-async def list_practice_sessions(page: int = 1, page_size: int = 20):
+async def list_practice_sessions(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100)):
     """获取练习会话列表"""
+    repo = _get_admin_repo()
+    if not repo:
+        return {"ok": True, "sessions": [], "total": 0, "page": page, "page_size": page_size}
     offset = (page - 1) * page_size
-    rows = _pg_query(
-        "SELECT * FROM v7_practice_sessions ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+    rows = repo.query(
+        "SELECT * FROM practice_sessions ORDER BY created_at DESC LIMIT %s OFFSET %s",
         [page_size, offset]
     )
-    total = _pg_query("SELECT COUNT(*) as cnt FROM v7_practice_sessions")
+    total = repo.query("SELECT COUNT(*) as cnt FROM practice_sessions")
     total = total[0]["cnt"] if total else 0
     return {"ok": True, "sessions": rows, "total": total, "page": page, "page_size": page_size}
 
@@ -196,14 +164,17 @@ async def list_practice_sessions(page: int = 1, page_size: int = 20):
 # ═══════════════════════════════════════════════════════════
 
 @router.get("/explain-cards")
-async def list_explain_cards(page: int = 1, page_size: int = 20):
+async def list_explain_cards(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100)):
     """获取解释卡片列表"""
+    repo = _get_admin_repo()
+    if not repo:
+        return {"ok": True, "cards": [], "total": 0, "page": page, "page_size": page_size}
     offset = (page - 1) * page_size
-    rows = _pg_query(
-        "SELECT * FROM explain_cards ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+    rows = repo.query(
+        "SELECT * FROM explain_cards ORDER BY created_at DESC LIMIT %s OFFSET %s",
         [page_size, offset]
     )
-    total = _pg_query("SELECT COUNT(*) as cnt FROM explain_cards")
+    total = repo.query("SELECT COUNT(*) as cnt FROM explain_cards")
     total = total[0]["cnt"] if total else 0
     return {"ok": True, "cards": rows, "total": total, "page": page, "page_size": page_size}
 
@@ -213,14 +184,17 @@ async def list_explain_cards(page: int = 1, page_size: int = 20):
 # ═══════════════════════════════════════════════════════════
 
 @router.get("/materials")
-async def list_materials(page: int = 1, page_size: int = 20):
+async def list_materials(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100)):
     """获取上传材料列表"""
+    repo = _get_admin_repo()
+    if not repo:
+        return {"ok": True, "materials": [], "total": 0, "page": page, "page_size": page_size}
     offset = (page - 1) * page_size
-    rows = _pg_query(
-        "SELECT * FROM materials ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+    rows = repo.query(
+        "SELECT * FROM materials ORDER BY created_at DESC LIMIT %s OFFSET %s",
         [page_size, offset]
     )
-    total = _pg_query("SELECT COUNT(*) as cnt FROM materials")
+    total = repo.query("SELECT COUNT(*) as cnt FROM materials")
     total = total[0]["cnt"] if total else 0
     return {"ok": True, "materials": rows, "total": total, "page": page, "page_size": page_size}
 
@@ -284,8 +258,11 @@ async def delete_knowledge_graph(partition_id: str):
 @router.delete("/practice-session/{session_id}")
 async def delete_practice_session(session_id: str):
     """删除指定练习会话"""
-    _pg_execute("DELETE FROM v7_practice_sessions WHERE id = $1", [session_id])
-    _pg_execute("DELETE FROM v7_session_questions WHERE session_id = $1", [session_id])
+    repo = _get_admin_repo()
+    if not repo:
+        raise HTTPException(status_code=400, detail="PostgreSQL 模式不可用")
+    repo.execute("DELETE FROM practice_sessions WHERE id = %s", [session_id])
+    repo.execute("DELETE FROM session_questions WHERE session_id = %s", [session_id])
     return {"ok": True}
 
 
@@ -296,7 +273,10 @@ async def delete_practice_session(session_id: str):
 @router.delete("/explain-card/{card_id}")
 async def delete_explain_card(card_id: str):
     """删除指定解释卡片"""
-    _pg_execute("DELETE FROM explain_cards WHERE id = $1", [card_id])
+    repo = _get_admin_repo()
+    if not repo:
+        raise HTTPException(status_code=400, detail="PostgreSQL 模式不可用")
+    repo.execute("DELETE FROM explain_cards WHERE id = %s", [card_id])
     return {"ok": True}
 
 
@@ -319,17 +299,13 @@ async def export_all_data():
         "knowledge_graphs": {gid: g.model_dump(mode="json") for gid, g in data.knowledge_graphs.items()},
     }
     
-    # 尝试导出 PG 数据
-    practice_sessions = _pg_query("SELECT * FROM v7_practice_sessions")
-    explain_cards = _pg_query("SELECT * FROM explain_cards")
-    materials = _pg_query("SELECT * FROM materials")
-    question_banks = _pg_query("SELECT * FROM v7_question_banks")
-    
+    # 通过 AdminRepository 导出 PG 中的数据
+    repo = _get_admin_repo()
     export.update({
-        "practice_sessions": practice_sessions,
-        "explain_cards": explain_cards,
-        "materials": materials,
-        "question_banks": question_banks,
+        "practice_sessions": repo.query("SELECT * FROM practice_sessions") if repo else [],
+        "explain_cards": repo.query("SELECT * FROM explain_cards") if repo else [],
+        "materials": repo.query("SELECT * FROM materials") if repo else [],
+        "question_banks": repo.query("SELECT * FROM question_banks") if repo else [],
     })
     
     json_str = json.dumps(export, ensure_ascii=False, default=str, indent=2)

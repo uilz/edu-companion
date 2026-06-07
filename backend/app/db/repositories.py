@@ -1,7 +1,5 @@
 """
 PostgreSQL 仓储实现 — 实现 shared.protocols 中定义的 Repository 协议
-
-从 infra/database.py 迁移至此，统一数据库层。
 """
 from __future__ import annotations
 

@@ -29,28 +29,7 @@ from app.services.common.classifier import classifier
 from app.services.llm.tool_executor import tool_executor, predict_tools, SLOW_TOOLS
 from app.services.analytics.emotion_analyzer import emotion_analyzer
 
-# ── 从子模块 re-export 所有公开符号（保持向后兼容） ──
-from app.services.llm.llm_core import (               # noqa: F401
-    _find_active_conversation,
-    detect_frustration,
-    SOURCE_PATTERN,
-    parse_sources,
-    _resolve_skill_ids,
-    generate_reply,
-    generate_reply_stream,
-)
-from app.services.llm.tool_dispatch import (            # noqa: F401
-    _build_tool_params,
-    _summarize_tool_result,
-    _build_tool_context,
-    generate_reply_with_tools,
-)
-from app.services.knowledge.cognitive_sync import (           # noqa: F401
-    _p0_post_message_hooks,
-    _trigger_graph_update,
-    _analyze_conversation_evidence,
-    _cognify_dialogue_context,
-)
+# (re-exports removed — import directly from sub-modules)
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +195,122 @@ FOLLOW_UP_RE = re.compile(
     r'<!--FOLLOW_UP-->\s*\n?(.*?)\n?<!--/FOLLOW_UP-->',
     re.DOTALL,
 )
+
+# ── 知识树探索意图关键词 ──
+TREE_INTENT_PATTERNS = [
+    r"(知识(结构|体系|图谱|树)|概念(图|关系)|思维导图|知识点(关系|链接))",
+    r"(关系|依赖|前置|前后置|先修|拓展|延伸)",
+    r"(能(不能|否|不能)?.*(列|画|展示|看看|梳理|整理|归类))",
+    r"(整个|全部|所有).*(知识|概念|节点|内容|体系|框架)",
+    r"(知识.*(掌握|学习|覆盖|关联|连通|组织|分类))",
+    r"(结构|体系|框架|大纲|全景|概览|总览).*(知识|学习|内容|课程|学科)",
+    r"(怎么|如何|怎样).*(安排|组织|构建|规划|设计|搭建).*(知识|学习|体系|框架)",
+]
+
+
+def _detect_tree_interest(user_text: str, reply_text: str, partition_id: str) -> dict | None:
+    """检测用户是否对知识树探索感兴趣，返回推荐信息或 None"""
+    import re
+    combined = (user_text + " " + reply_text).lower()
+    for pat in TREE_INTENT_PATTERNS:
+        if re.search(pat, combined):
+            # 检查该分区是否有知识树
+            from app.services.common.storage import storage
+            data = storage.load()
+            graph = data.knowledge_graphs.get(partition_id)
+            if graph and graph.nodes:
+                pname = data.partitions[partition_id].name if partition_id in data.partitions else ""
+                return {
+                    "partition_id": partition_id,
+                    "message": f"💡 这些知识点已整理成知识树，要不要去探索一下？",
+                    "node_count": len(graph.nodes),
+                    "edge_count": len(graph.edges),
+                    "partition_name": pname,
+                }
+            elif not graph or not graph.nodes:
+                return {
+                    "partition_id": partition_id,
+                    "message": "💡 需要为这个分区生成知识树吗？可以去知识树页面一键生成。",
+                    "needs_generate": True,
+                }
+    return None
+
+
+# ── 学习意图关键词（临时会话 → 推荐切换） ──
+LEARN_INTENT_PATTERNS = [
+    r"(学习|了解|掌握|理解|弄懂|搞懂|学会|学懂).*(什么|这个|哪个|知识|概念|内容|这门|这门课|这个学科)",
+    r"(想|想要|希望|打算|计划|准备).*(学|了解|掌握|看|读).*(知识|概念|内容|课|课程|学科|书)",
+    r"(这个|那|某|一个).*(知识点|概念|术语|公式|定理|定律|原理|方法|技巧)",
+    r"(怎么|如何|怎样).*(学|学习|掌握|理解|入门|开始)",
+    r"(推荐|建议|介绍).*(教材|书籍|资料|课程|课|资源|文章|视频)",
+    r"(什么|哪些|有哪些).*(基础|前置|先修|预备|前提|准备).*(知识|课程|内容)",
+    r"(教我|告诉我|讲讲|说说|解释|解释一下).*(什么|这个|那个|这些)",
+]
+
+# ── 行动模式 ──
+ACTION_NEED_PATTERNS = [
+    r"(帮我|请|麻烦).*(总结|归纳|整理|生成|创建|建|画)",
+    r"(列|写|做个|制定|安排|规划).*(计划|方案|大纲|框架|路线图|学习计划)",
+]
+
+
+def _detect_temp_conv_intent(user_text: str, reply_text: str, partition_id: str) -> dict | None:
+    """检测临时会话中用户是否有学习/探索特定主题的意图
+
+    如果检测到：
+    1. 学习某主题 → 推荐去对话系统创建相应学习会话
+    2. 知识树探索 → 推荐去知识树页面
+    3. 需要结构化整理 → 推荐知识树
+    如果都未命中 → None
+    """
+    from app.services.common.storage import storage
+    combined = (user_text + " " + reply_text).lower()
+    data = storage.load()
+
+    # 检查是否有知识树
+    graph = data.knowledge_graphs.get(partition_id) if partition_id else None
+    has_graph = bool(graph and graph.nodes)
+
+    # 检测知识树探索意图
+    for pat in TREE_INTENT_PATTERNS:
+        if re.search(pat, combined):
+            if has_graph:
+                pname = data.partitions[partition_id].name if partition_id in data.partitions else ""
+                return {
+                    "type": "switch_to_tree",
+                    "message": "💡 这些知识点在知识树中有组织结构，要不要去看看？",
+                    "partition_id": partition_id,
+                    "partition_name": pname,
+                }
+            else:
+                return {
+                    "type": "switch_to_tree",
+                    "message": "💡 需要生成知识树来梳理这些知识吗？",
+                    "needs_generate": True,
+                }
+
+    # 检测学习意图
+    for pat in LEARN_INTENT_PATTERNS:
+        if re.search(pat, combined):
+            return {
+                "type": "switch_to_learn",
+                "message": "💡 看起来你对某个主题有兴趣，要不要创建一个学习会话？",
+                "partition_id": partition_id,
+                "create_conversation": True,
+            }
+
+    # 检测行动意图（整理/生成）
+    for pat in ACTION_NEED_PATTERNS:
+        if re.search(pat, combined):
+            if has_graph:
+                return {
+                    "type": "switch_to_tree",
+                    "message": "💡 要不要去知识树中整理这些内容？",
+                    "partition_id": partition_id,
+                }
+            break
+
+    return None
 
 
 def _parse_follow_up_questions(reply_text: str) -> tuple[str, list[str]]:
@@ -571,6 +666,20 @@ async def send_and_reply_stream(
         "assistant_message": assistant_node.model_dump(mode="json"),
         "response_blocks": [b.model_dump(mode="json") for b in response_blocks],
     }
+
+    # ── P1: 对话 → 知识树 双向推荐 ──
+    tree_rec = _detect_tree_interest(user_text, full_reply, partition_id)
+    if tree_rec:
+        yield {"type": "tree_recommendation", **tree_rec}
+
+    # ── P2: 临时会话 → 学习推荐 ──
+    if resolved_conversation_id:
+        _data_temp = storage.load(user_id)
+        _conv_temp = _data_temp.conversations.get(resolved_conversation_id)
+        if _conv_temp and _conv_temp.is_temporary:
+            temp_rec = _detect_temp_conv_intent(user_text, full_reply, resolved_partition_id)
+            if temp_rec:
+                yield {"type": "temp_recommendation", **temp_rec}
 
     # Phase 6: 流式路径 — 对话 → CognitiveNode 联动
     try:

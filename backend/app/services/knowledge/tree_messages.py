@@ -1,0 +1,199 @@
+"""Tree message operations — add/update/modify/delete messages"""
+from __future__ import annotations
+
+import time
+import logging
+
+logger = logging.getLogger(__name__)
+
+from app.schemas.conversation import TextBlock, TreeNode, UserData
+from app.services.common.storage import storage
+
+
+class TreeMessagesMixin:
+    """消息 CRUD — add_message, update_message_content, modify_message, delete_message."""
+
+    _storage = storage
+
+    def add_message(
+        self, user_id, partition_id, role, content_blocks,
+        text_summary="", conversation_id="",
+    ) -> TreeNode:
+        data = self._storage.load(user_id)
+        partition = data.partitions.get(partition_id)
+        if not partition:
+            raise ValueError(f"Partition {partition_id} not found")
+
+        if not conversation_id:
+            conv = None
+            # 新路径：通过 conversation.partition_id + is_active 查找
+            for c in data.conversations.values():
+                if c.partition_id == partition_id and c.is_active:
+                    conv = c
+                    break
+            # 回退旧路径：通过 topic → domain → partition 遍历
+            if not conv:
+                for topic in data.topics.values():
+                    domain = data.domains.get(topic.domain_id)
+                    if domain and domain.partition_id == partition_id:
+                        cid = topic.active_conversation_id
+                        if cid and cid in data.conversations:
+                            conv = data.conversations[cid]
+                            break
+            if not conv:
+                raise ValueError("No active conversation in partition")
+        else:
+            conv = data.conversations.get(conversation_id)
+            if not conv:
+                raise ValueError(f"Conversation {conversation_id} not found")
+
+        node = TreeNode(
+            parent_id=conv.path[-1] if conv.path else partition.root_id,
+            partition_id=partition_id,
+            conversation_id=conv.id,
+            role=role,
+            content_blocks=content_blocks,
+            text_summary=text_summary,
+        )
+        parent = data.nodes.get(node.parent_id)
+        if parent:
+            parent.children_ids.append(node.id)
+        conv.path.append(node.id)
+        conv.last_message_at = time.time()
+        partition.message_count += 1
+        partition.updated_at = time.time()
+        partition.last_active_at = time.time()
+        data.nodes[node.id] = node
+
+        try:
+            from app.services.conversation.message_repository import save_message
+            text_content = text_summary or ""
+            save_message(
+                user_id=user_id, message_id=node.id,
+                conversation_id=conv.id, role=role,
+                content=text_content, content_blocks=content_blocks,
+                summary="", token_count=getattr(node, "token_count", 0),
+            )
+        except Exception:
+            logger.exception("写入 messages 表失败 (不影响主流程)")
+
+        self._storage.save(user_id, data)
+        return node
+
+    def update_message_content(self, user_id: str, message_id: str, text: str) -> None:
+        data = self._storage.load(user_id)
+        node = data.nodes.get(message_id)
+        if not node:
+            return
+
+        node.content_blocks = [TextBlock(text=text)]
+        node.text_summary = text
+
+        try:
+            from app.services.conversation.message_repository import save_message
+            save_message(
+                user_id=user_id, message_id=message_id,
+                conversation_id=getattr(node, "conversation_id", ""),
+                role=getattr(node, "role", "assistant"),
+                content=text, content_blocks=[TextBlock(text=text)],
+                summary="", token_count=0,
+            )
+        except Exception:
+            logger.exception("更新 messages 表失败 (不影响主流程)")
+
+        self._storage.save(user_id, data)
+
+    def modify_message(
+        self, user_id, message_id, new_content_blocks, new_text_summary="",
+    ) -> TreeNode:
+        data = self._storage.load(user_id)
+        node = data.nodes.get(message_id)
+        if not node:
+            raise ValueError(f"Message {message_id} not found")
+
+        node.has_modified_version = True
+        new_node = TreeNode(
+            parent_id=node.parent_id, partition_id=node.partition_id,
+            conversation_id=node.conversation_id, role=node.role,
+            content_blocks=new_content_blocks, text_summary=new_text_summary,
+            has_modified_version=True,
+        )
+        parent = data.nodes.get(node.parent_id)
+        if parent and new_node.id not in parent.children_ids:
+            parent.children_ids.append(new_node.id)
+        data.nodes[new_node.id] = new_node
+
+        conv = data.conversations.get(node.conversation_id)
+        if conv:
+            replace_idx = None
+            if message_id in conv.path:
+                replace_idx = conv.path.index(message_id)
+            else:
+                for i, nid in enumerate(conv.path):
+                    sibling = data.nodes.get(nid)
+                    if sibling and sibling.parent_id == node.parent_id and sibling.role == node.role:
+                        replace_idx = i
+                        break
+            if replace_idx is not None:
+                conv.path = conv.path[:replace_idx] + [new_node.id]
+                conv.summary_dirty = True
+
+        self._storage.save(user_id, data)
+        return new_node
+
+    def delete_message(self, user_id, message_id) -> None:
+        data = self._storage.load(user_id)
+        node = data.nodes.get(message_id)
+        if not node:
+            return
+
+        deleted_ids = set()
+
+        def collect(nid: str):
+            n = data.nodes.get(nid)
+            if not n or nid in deleted_ids:
+                return
+            deleted_ids.add(nid)
+            for cid in n.children_ids:
+                collect(cid)
+
+        collect(message_id)
+
+        for nid in deleted_ids:
+            n = data.nodes.get(nid)
+            if not n:
+                continue
+            n.is_deleted = True
+            parent = data.nodes.get(n.parent_id)
+            if parent and nid in parent.children_ids:
+                parent.children_ids.remove(nid)
+
+        conv = data.conversations.get(node.conversation_id)
+        if conv:
+            conv.summary_dirty = True
+            new_path = [nid for nid in conv.path if nid not in deleted_ids]
+            if not new_path:
+                for root_child_id in (
+                    data.nodes.get(node.parent_id).children_ids
+                    if data.nodes.get(node.parent_id) else []
+                ):
+                    if root_child_id not in deleted_ids:
+                        alt = data.nodes.get(root_child_id)
+                        if alt and not alt.is_deleted:
+                            new_path = [root_child_id]
+
+                            def add_children(pid):
+                                pn = data.nodes.get(pid)
+                                if not pn:
+                                    return
+                                for pcid in pn.children_ids:
+                                    pc = data.nodes.get(pcid)
+                                    if pc and not pc.is_deleted:
+                                        new_path.append(pcid)
+                                        add_children(pcid)
+
+                            add_children(root_child_id)
+                            break
+            conv.path = new_path
+
+        self._storage.save(user_id, data)
