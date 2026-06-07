@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════════
-//  v7 练习系统 API 客户端
+//  练习系统 API 客户端
 // ══════════════════════════════════════════════════════════════
 
 // ── 类型 ──
@@ -81,7 +81,7 @@ export interface V7SessionListItem {
 
 const V7_BASE = "/api/v7/practice";
 
-async function v7fetch<T>(path: string, options?: RequestInit): Promise<T> {
+async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   // 自动附加认证令牌
   const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
   const authHeaders: Record<string, string> = {};
@@ -94,14 +94,14 @@ async function v7fetch<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`v7 API error ${res.status}: ${text}`);
+    throw new Error(`practice API error ${res.status}: ${text}`);
   }
   return res.json();
 }
 
 /** 根据知识点 ID 解析（或创建）题库 */
 export async function resolveBankForNode(nodeId: string): Promise<{ bank_id: string; bank: V7Bank }> {
-  return v7fetch("/resolve/node", {
+  return apiFetch("/resolve/node", {
     method: "POST",
     body: JSON.stringify({ node_id: nodeId }),
   });
@@ -117,7 +117,7 @@ export async function createPracticeSession(
     config?: Record<string, any>;
   }
 ): Promise<V7Session> {
-  return v7fetch("/sessions", {
+  return apiFetch("/sessions", {
     method: "POST",
     body: JSON.stringify({
       bank_id: bankId,
@@ -137,7 +137,7 @@ export async function submitAnswer(
   timeSpent?: number,
   hintsUsed?: number
 ): Promise<V7SubmitResult> {
-  return v7fetch(`/sessions/${sessionId}/submit`, {
+  return apiFetch(`/sessions/${sessionId}/submit`, {
     method: "POST",
     body: JSON.stringify({
       question_id: questionId,
@@ -150,12 +150,12 @@ export async function submitAnswer(
 
 /** 完成会话 */
 export async function completeSession(sessionId: string): Promise<V7Session> {
-  return v7fetch(`/sessions/${sessionId}/complete`, { method: "POST" });
+  return apiFetch(`/sessions/${sessionId}/complete`, { method: "POST" });
 }
 
 /** 获取会话详情 */
 export async function getSession(sessionId: string): Promise<V7Session> {
-  return v7fetch(`/sessions/${sessionId}`);
+  return apiFetch(`/sessions/${sessionId}`);
 }
 
 /** 获取会话列表 */
@@ -171,7 +171,7 @@ export async function listSessions(options?: {
   if (options?.limit) params.set("limit", String(options.limit));
   if (options?.offset) params.set("offset", String(options.offset));
   const qs = params.toString();
-  return v7fetch(`/sessions${qs ? `?${qs}` : ""}`);
+  return apiFetch(`/sessions${qs ? `?${qs}` : ""}`);
 }
 
 /** AI 出题（支持指定参考资料） */
@@ -191,7 +191,7 @@ export async function generateQuestions(
   has_material_context?: boolean;
   params: any;
 }> {
-  return v7fetch("/generate", {
+  return apiFetch("/generate", {
     method: "POST",
     body: JSON.stringify({
       message,
@@ -221,7 +221,7 @@ export async function generateFromMaterials(
   material_count: number;
   params: any;
 }> {
-  return v7fetch("/generate-from-materials", {
+  return apiFetch("/generate-from-materials", {
     method: "POST",
     body: JSON.stringify({
       material_ids: materialIds,
@@ -276,7 +276,7 @@ export async function listMaterials(
 
 /** 获取题库列表 */
 export async function listBanks(): Promise<V7Bank[]> {
-  return v7fetch("/banks");
+  return apiFetch("/banks");
 }
 
 // ── 统计 ──
@@ -304,22 +304,22 @@ export interface V7DailyPoint {
 
 /** 获取概览统计 */
 export async function getOverview(): Promise<V7Overview> {
-  return v7fetch("/stats/overview");
+  return apiFetch("/stats/overview");
 }
 
 /** 获取每日趋势 */
 export async function getDailyTrend(days: number = 30): Promise<V7DailyPoint[]> {
-  return v7fetch(`/stats/daily?days=${days}`);
+  return apiFetch(`/stats/daily?days=${days}`);
 }
 
 /** 获取会话历史 */
 export async function getSessionHistory(limit: number = 10): Promise<V7SessionListItem[]> {
-  return v7fetch(`/stats/sessions?limit=${limit}`);
+  return apiFetch(`/stats/sessions?limit=${limit}`);
 }
 
 /** 获取薄弱知识点 */
 export async function getWeakSkills(): Promise<{ skill_id: string; label: string; mastery: number; attempts: number; trend: string; load: number }[]> {
-  return v7fetch("/stats/weak-skills");
+  return apiFetch("/stats/weak-skills");
 }
 
 // ── 错题本 ──
@@ -374,17 +374,17 @@ export async function getErrorBook(options?: {
   if (options?.page) params.set("page", String(options.page));
   if (options?.page_size) params.set("page_size", String(options.page_size));
   const qs = params.toString();
-  return v7fetch(`/error-book${qs ? `?${qs}` : ""}`);
+  return apiFetch(`/error-book${qs ? `?${qs}` : ""}`);
 }
 
 /** 获取错题本概览 */
 export async function getErrorBookStats(): Promise<ErrorBookStats> {
-  return v7fetch("/error-book/stats");
+  return apiFetch("/error-book/stats");
 }
 
 /** 清除已掌握错题 */
 export async function clearMasteredErrors(): Promise<{ cleared: number; message: string }> {
-  return v7fetch("/error-book/clear-mastered", { method: "POST" });
+  return apiFetch("/error-book/clear-mastered", { method: "POST" });
 }
 
 // ── 参考资料 ──
@@ -418,7 +418,7 @@ export async function searchReferences(
   if (options?.source) params.set("source", options.source);
   if (options?.page) params.set("page", String(options.page));
   if (options?.page_size) params.set("page_size", String(options.page_size));
-  return v7fetch(`/references/search?${params.toString()}`);
+  return apiFetch(`/references/search?${params.toString()}`);
 }
 
 /** 根据知识点搜索参考资料 */
@@ -428,7 +428,7 @@ export async function searchReferencesForNode(
 ): Promise<ReferenceResponse & { node_label?: string }> {
   const params = new URLSearchParams({ node_id: nodeId });
   if (source) params.set("source", source);
-  return v7fetch(`/references/for-node?${params.toString()}`);
+  return apiFetch(`/references/for-node?${params.toString()}`);
 }
 
 /** 根据题目搜索参考资料 */
@@ -438,7 +438,7 @@ export async function searchReferencesForQuestion(
 ): Promise<ReferenceResponse & { search_query?: string }> {
   const params = new URLSearchParams({ question_id: questionId });
   if (source) params.set("source", source);
-  return v7fetch(`/references/for-question?${params.toString()}`);
+  return apiFetch(`/references/for-question?${params.toString()}`);
 }
 
 // ── 复习调度 ──
@@ -477,13 +477,13 @@ export async function getDueQuestions(options?: {
   if (options?.cognitive_node_id) params.set("cognitive_node_id", options.cognitive_node_id);
   if (options?.limit) params.set("limit", String(options.limit));
   const qs = params.toString();
-  return v7fetch(`/review/due${qs ? `?${qs}` : ""}`);
+  return apiFetch(`/review/due${qs ? `?${qs}` : ""}`);
 }
 
 /** 获取复习统计 */
 export async function getReviewStats(options?: { bank_id?: string }): Promise<ReviewStats> {
   const qs = options?.bank_id ? `?bank_id=${options.bank_id}` : "";
-  return v7fetch(`/review/stats${qs}`);
+  return apiFetch(`/review/stats${qs}`);
 }
 
 // ── 考试模式 ──
@@ -588,7 +588,7 @@ export async function createExam(
   duration_minutes: number;
   created_at: string;
 }> {
-  return v7fetch("/exam", {
+  return apiFetch("/exam", {
     method: "POST",
     body: JSON.stringify({
       bank_id: bankId,
@@ -599,22 +599,22 @@ export async function createExam(
 
 /** 获取考试剩余时间 */
 export async function getExamTime(sessionId: string): Promise<ExamTimeInfo> {
-  return v7fetch(`/exam/${sessionId}/time`);
+  return apiFetch(`/exam/${sessionId}/time`);
 }
 
 /** 提交考试所有答案 */
 export async function submitAllExam(sessionId: string): Promise<ExamResult> {
-  return v7fetch(`/exam/${sessionId}/submit-all`, { method: "POST" });
+  return apiFetch(`/exam/${sessionId}/submit-all`, { method: "POST" });
 }
 
 /** 获取考试成绩报告 */
 export async function getExamResult(sessionId: string): Promise<ExamResult> {
-  return v7fetch(`/exam/${sessionId}/result`);
+  return apiFetch(`/exam/${sessionId}/result`);
 }
 
 /** 获取答题卡状态 */
 export async function getExamAnswerSheet(sessionId: string): Promise<AnswerSheetResult> {
-  return v7fetch(`/exam/${sessionId}/answer-sheet`);
+  return apiFetch(`/exam/${sessionId}/answer-sheet`);
 }
 
 // ── 题目辅助 ──
@@ -624,7 +624,7 @@ export async function getQuestionExplanation(
   questionId: string,
   style: "detailed" | "concise" | "step_by_step" = "detailed"
 ): Promise<{ explanation: string; question_id: string; style: string }> {
-  return v7fetch(`/questions/${questionId}/explain?style=${style}`);
+  return apiFetch(`/questions/${questionId}/explain?style=${style}`);
 }
 
 /** 生成同类变体题目 */
@@ -632,7 +632,7 @@ export async function generateSimilarQuestions(
   questionId: string,
   count: number = 3
 ): Promise<{ generated: number; questions: V7Question[] }> {
-  return v7fetch(`/questions/${questionId}/similar`, {
+  return apiFetch(`/questions/${questionId}/similar`, {
     method: "POST",
     body: JSON.stringify({ count }),
   });
@@ -640,12 +640,12 @@ export async function generateSimilarQuestions(
 
 /** 收藏/取消收藏 */
 export async function toggleFavorite(questionId: string): Promise<{ is_favorite: boolean }> {
-  return v7fetch(`/questions/${questionId}/favorite`, { method: "POST" });
+  return apiFetch(`/questions/${questionId}/favorite`, { method: "POST" });
 }
 
 /** 斩题/恢复 */
 export async function toggleSlash(questionId: string): Promise<{ is_slashed: boolean }> {
-  return v7fetch(`/questions/${questionId}/slash`, { method: "POST" });
+  return apiFetch(`/questions/${questionId}/slash`, { method: "POST" });
 }
 
 // ── 批量和对话出题 ──
@@ -656,7 +656,7 @@ export async function bulkGenerateQuestions(
   plans: { skill_id: string; subject: string; bloom_level: string; count: number }[],
   materialIds?: string[]
 ): Promise<{ generated: number; questions: V7Question[] }> {
-  return v7fetch("/generate-bulk", {
+  return apiFetch("/generate-bulk", {
     method: "POST",
     body: JSON.stringify({ bank_id: bankId, plans, material_ids: materialIds }),
   });
@@ -669,7 +669,7 @@ export async function generateFromConversation(
   context?: any[],
   materialIds?: string[]
 ): Promise<{ bank_id: string; generated: number; questions: V7Question[] }> {
-  return v7fetch("/generate-from-conversation", {
+  return apiFetch("/generate-from-conversation", {
     method: "POST",
     body: JSON.stringify({
       conversation_id: conversationId,
@@ -694,7 +694,7 @@ export async function getSessionResult(sessionId: string): Promise<{
   question_results: any[];
   cognitive_summary: any;
 }> {
-  return v7fetch(`/sessions/${sessionId}/result`);
+  return apiFetch(`/sessions/${sessionId}/result`);
 }
 
 // ── 未完成会话 ──
@@ -712,7 +712,7 @@ export interface UnfinishedSession {
 
 /** 获取未完成的会话列表 */
 export async function getUnfinishedSessions(): Promise<{ items: UnfinishedSession[]; total: number }> {
-  return v7fetch("/sessions/unfinished");
+  return apiFetch("/sessions/unfinished");
 }
 
 // ── 错题本扩展 ──
@@ -723,7 +723,7 @@ export async function reviewErrorQuestion(
   isCorrect: boolean,
   timeSpent: number = 0
 ): Promise<{ reviewed: string; is_correct: boolean }> {
-  return v7fetch(`/error-book/${questionId}/review`, {
+  return apiFetch(`/error-book/${questionId}/review`, {
     method: "POST",
     body: JSON.stringify({ is_correct: isCorrect, time_spent: timeSpent }),
   });
@@ -734,7 +734,7 @@ export async function getErrorMaterials(
   questionId: string,
   limit: number = 3
 ): Promise<{ question_id: string; materials: any[] }> {
-  return v7fetch(`/error-book/${questionId}/materials?limit=${limit}`);
+  return apiFetch(`/error-book/${questionId}/materials?limit=${limit}`);
 }
 
 // ── 答题历史 ──
@@ -770,7 +770,7 @@ export async function getAnswerHistory(options?: {
   if (options?.limit) params.set("limit", String(options.limit));
   if (options?.offset) params.set("offset", String(options.offset));
   const qs = params.toString();
-  return v7fetch(`/history/answers${qs ? `?${qs}` : ""}`);
+  return apiFetch(`/history/answers${qs ? `?${qs}` : ""}`);
 }
 
 // ── 错题分布 ──
@@ -782,7 +782,7 @@ export async function getErrorDistribution(): Promise<{
   by_node: { node_id: string; label: string; count: number }[];
   total_errors: number;
 }> {
-  return v7fetch("/stats/errors");
+  return apiFetch("/stats/errors");
 }
 
 // ── 秘书提案 ──
@@ -800,17 +800,17 @@ export interface SecretaryProposal {
 
 /** 获取秘书提案 */
 export async function getSecretaryProposals(limit: number = 5): Promise<{ proposals: SecretaryProposal[] }> {
-  return v7fetch(`/secretary/proposals?limit=${limit}`);
+  return apiFetch(`/secretary/proposals?limit=${limit}`);
 }
 
 /** 接受秘书提案 */
 export async function acceptProposal(proposalId: string): Promise<any> {
-  return v7fetch(`/secretary/proposals/${proposalId}/accept`, { method: "POST" });
+  return apiFetch(`/secretary/proposals/${proposalId}/accept`, { method: "POST" });
 }
 
 /** 忽略秘书提案 */
 export async function dismissProposal(proposalId: string): Promise<any> {
-  return v7fetch(`/secretary/proposals/${proposalId}/dismiss`, { method: "POST" });
+  return apiFetch(`/secretary/proposals/${proposalId}/dismiss`, { method: "POST" });
 }
 
 // ── 题库 CRUD ──
@@ -820,7 +820,7 @@ export async function createBank(
   name: string,
   options?: { description?: string; ref_node_id?: string; ref_node_level?: string }
 ): Promise<V7Bank> {
-  return v7fetch("/banks", {
+  return apiFetch("/banks", {
     method: "POST",
     body: JSON.stringify({ name, ...options }),
   });
@@ -831,7 +831,7 @@ export async function updateBank(
   bankId: string,
   updates: { name?: string; description?: string }
 ): Promise<V7Bank> {
-  return v7fetch(`/banks/${bankId}`, {
+  return apiFetch(`/banks/${bankId}`, {
     method: "PATCH",
     body: JSON.stringify(updates),
   });
@@ -839,14 +839,14 @@ export async function updateBank(
 
 /** 删除题库 */
 export async function deleteBank(bankId: string): Promise<{ deleted: string }> {
-  return v7fetch(`/banks/${bankId}`, { method: "DELETE" });
+  return apiFetch(`/banks/${bankId}`, { method: "DELETE" });
 }
 
 // ── 题库详情与题目 CRUD ──
 
 /** 获取题库详情 */
 export async function getBank(bankId: string): Promise<V7Bank & { created_at?: string; ref_node_id?: string; ref_node_label?: string }> {
-  return v7fetch(`/banks/${bankId}`);
+  return apiFetch(`/banks/${bankId}`);
 }
 
 /** 获取题库题目列表（分页） */
@@ -867,7 +867,7 @@ export async function getBankQuestions(
   if (options?.status) params.set("status", options.status);
   if (options?.cognitive_node_id) params.set("cognitive_node_id", options.cognitive_node_id);
   const qs = params.toString();
-  return v7fetch(`/banks/${bankId}/questions${qs ? `?${qs}` : ""}`);
+  return apiFetch(`/banks/${bankId}/questions${qs ? `?${qs}` : ""}`);
 }
 
 /** 手动添加题目到题库 */
@@ -885,7 +885,7 @@ export async function createQuestion(
     metadata?: Record<string, any>;
   }
 ): Promise<V7Question> {
-  return v7fetch(`/banks/${bankId}/questions`, {
+  return apiFetch(`/banks/${bankId}/questions`, {
     method: "POST",
     body: JSON.stringify(params),
   });
@@ -893,7 +893,7 @@ export async function createQuestion(
 
 /** 获取题目详情 */
 export async function getQuestion(questionId: string): Promise<V7Question & { answer?: string[]; analysis?: string; source?: string; created_at?: string }> {
-  return v7fetch(`/questions/${questionId}`);
+  return apiFetch(`/questions/${questionId}`);
 }
 
 /** 更新题目 */
@@ -909,7 +909,7 @@ export async function updateQuestion(
     cognitive_node_ids?: string[];
   }
 ): Promise<V7Question> {
-  return v7fetch(`/questions/${questionId}`, {
+  return apiFetch(`/questions/${questionId}`, {
     method: "PATCH",
     body: JSON.stringify(updates),
   });
@@ -917,7 +917,7 @@ export async function updateQuestion(
 
 /** 删除题目 */
 export async function deleteQuestion(questionId: string): Promise<{ deleted: string }> {
-  return v7fetch(`/questions/${questionId}`, { method: "DELETE" });
+  return apiFetch(`/questions/${questionId}`, { method: "DELETE" });
 }
 
 // ── 题库解析 ──
@@ -927,7 +927,7 @@ export async function resolveBankForConversation(
   conversationId: string,
   userSpecifiedBankId?: string
 ): Promise<{ bank_id: string; bank: V7Bank }> {
-  return v7fetch("/resolve/conversation", {
+  return apiFetch("/resolve/conversation", {
     method: "POST",
     body: JSON.stringify({
       conversation_id: conversationId,
@@ -940,22 +940,22 @@ export async function resolveBankForConversation(
 
 /** 开始会话 */
 export async function startSession(sessionId: string): Promise<any> {
-  return v7fetch(`/sessions/${sessionId}/start`, { method: "PATCH" });
+  return apiFetch(`/sessions/${sessionId}/start`, { method: "PATCH" });
 }
 
 /** 暂停会话 */
 export async function pauseSession(sessionId: string): Promise<any> {
-  return v7fetch(`/sessions/${sessionId}/pause`, { method: "PATCH" });
+  return apiFetch(`/sessions/${sessionId}/pause`, { method: "PATCH" });
 }
 
 /** 恢复会话 */
 export async function resumeSession(sessionId: string): Promise<any> {
-  return v7fetch(`/sessions/${sessionId}/resume`, { method: "PATCH" });
+  return apiFetch(`/sessions/${sessionId}/resume`, { method: "PATCH" });
 }
 
 /** 取消/删除会话 */
 export async function cancelSession(sessionId: string): Promise<any> {
-  return v7fetch(`/sessions/${sessionId}`, { method: "DELETE" });
+  return apiFetch(`/sessions/${sessionId}`, { method: "DELETE" });
 }
 
 // ── 成就系统 ──
@@ -975,22 +975,22 @@ export interface Achievement {
 
 /** 获取所有成就及进度 */
 export async function getAchievements(): Promise<{ achievements: Achievement[] }> {
-  return v7fetch("/achievements");
+  return apiFetch("/achievements");
 }
 
 /** 最近解锁成就 */
 export async function getRecentAchievements(limit: number = 5): Promise<{ unlocked: Achievement[] }> {
-  return v7fetch(`/achievements/recent?limit=${limit}`);
+  return apiFetch(`/achievements/recent?limit=${limit}`);
 }
 
 /** 成就统计 */
 export async function getAchievementStats(): Promise<{ total: number; unlocked: number; by_tier: Record<string, { unlocked: number; total: number }> }> {
-  return v7fetch("/achievements/stats");
+  return apiFetch("/achievements/stats");
 }
 
 /** 手动触发成就检测 */
 export async function checkAchievements(): Promise<{ newly_unlocked: Achievement[]; count: number }> {
-  return v7fetch("/achievements/check", { method: "POST" });
+  return apiFetch("/achievements/check", { method: "POST" });
 }
 
 // ── 题库导入 ──
@@ -1022,7 +1022,7 @@ export async function uploadImport(
   fileType: string,
   bankId?: string
 ): Promise<ImportPreviewResult> {
-  return v7fetch("/import/upload", {
+  return apiFetch("/import/upload", {
     method: "POST",
     body: JSON.stringify({ file_path: filePath, file_type: fileType, bank_id: bankId }),
   });
@@ -1030,7 +1030,7 @@ export async function uploadImport(
 
 /** 解析文本预览（无需上传文件） */
 export async function previewImport(text: string): Promise<ImportPreviewResult> {
-  return v7fetch("/import/preview", {
+  return apiFetch("/import/preview", {
     method: "POST",
     body: JSON.stringify({ text }),
   });
@@ -1041,7 +1041,7 @@ export async function confirmImport(
   bankId: string,
   questions: ImportPreviewItem[]
 ): Promise<ImportConfirmResult> {
-  return v7fetch("/import/confirm", {
+  return apiFetch("/import/confirm", {
     method: "POST",
     body: JSON.stringify({ bank_id: bankId, questions }),
   });
@@ -1052,7 +1052,7 @@ export async function batchImport(
   bankId: string,
   questions: any[]
 ): Promise<{ imported: number; questions: V7Question[] }> {
-  return v7fetch("/import/batch", {
+  return apiFetch("/import/batch", {
     method: "POST",
     body: JSON.stringify({ bank_id: bankId, questions }),
   });
@@ -1069,7 +1069,7 @@ export async function getImportHistory(options?: {
   if (options?.limit) params.set("limit", String(options.limit));
   if (options?.offset) params.set("offset", String(options.offset));
   const qs = params.toString();
-  return v7fetch(`/import/history${qs ? `?${qs}` : ""}`);
+  return apiFetch(`/import/history${qs ? `?${qs}` : ""}`);
 }
 
 // ── 自适应选题 ──
@@ -1084,7 +1084,7 @@ export async function adaptiveSelect(
     exclude_ids?: string[];
   }
 ): Promise<{ selected: number; questions: V7Question[]; params: Record<string, any> }> {
-  return v7fetch("/adaptive/select", {
+  return apiFetch("/adaptive/select", {
     method: "POST",
     body: JSON.stringify({
       bank_id: bankId,

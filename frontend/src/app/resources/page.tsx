@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import {
-  Upload, FileText, Image, Search, Trash2, Loader2,
+import { Upload, FileText, Image, Search, Trash2, Loader2,
   Library, ExternalLink, File, CheckCircle, AlertCircle, Play,
   Download, Pencil, FolderPlus, Folder, FolderOpen, Tag, X,
   Check, ChevronRight, Home, RefreshCw, Eye, Grid, List,
@@ -60,7 +59,7 @@ interface FileStats {
   recent_files: { material_id: string; file_name: string; file_type: string; file_size: number; created_at: string }[];
 }
 
-type Tab = "files" | "banks" | "knowledge-tree" | "stats" | "trash";
+type Tab = "files" | "banks" | "stats" | "trash";
 type TypeFilter = "all" | "pdf" | "docx" | "image" | "document";
 type ViewMode = "list" | "grid";
 
@@ -431,7 +430,6 @@ export default function ResourcesPage() {
           {[
             { id: "files" as Tab, label: "📁 文件资料" },
             { id: "banks" as Tab, label: "📚 题库资料" },
-            { id: "knowledge-tree" as Tab, label: "🌳 知识树" },
             { id: "stats" as Tab, label: "📊 统计" },
             { id: "trash" as Tab, label: "🗑️ 回收站" },
           ].map((t) => (
@@ -904,252 +902,9 @@ export default function ResourcesPage() {
             )}
           </>
         )}
-
-        {tab === "knowledge-tree" && <KnowledgeTreePanel />}
-      </div>
     </div>
+  </div>
   );
 }
 
-// ── 知识树面板组件 ──
-function KnowledgeTreePanel() {
-  const [partitions, setPartitions] = useState<any[]>([]);
-  const [selectedPartition, setSelectedPartition] = useState("");
-  const [tree, setTree] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [showAddNode, setShowAddNode] = useState(false);
-  const [showEditNode, setShowEditNode] = useState<any>(null);
-  const [newNode, setNewNode] = useState({ label: "", description: "", parent_node_id: "", priority: 5 });
-  const [editNode, setEditNode] = useState({ label: "", description: "", priority: 5, tags: "" });
-  const [aiChatMsg, setAiChatMsg] = useState("");
-  const [aiChatResp, setAiChatResp] = useState("");
-  const [aiChatConvId, setAiChatConvId] = useState("");
-  const [aiExpandNodeId, setAiExpandNodeId] = useState("");
-  const [aiExpandDepth, setAiExpandDepth] = useState(2);
-  const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  const [recommendations, setRecommendations] = useState<any[]>([]);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    fetch(`${API_BASE}/api/knowledge/graph/partitions`)
-      .then(r => r.json())
-      .then(d => {
-        setPartitions(d.partitions || []);
-        if (d.partitions?.length > 0 && !selectedPartition) setSelectedPartition(d.partitions[0].id);
-      })
-      .catch(e => setError("加载分区失败: " + e.message));
-  }, []);
-
-  useEffect(() => {
-    if (!selectedPartition) return;
-    setLoading(true);
-    setError("");
-    fetch(`${API_BASE}/api/knowledge/graph/${selectedPartition}`)
-      .then(r => r.json())
-      .then(d => {
-        setTree(d);
-        fetch(`${API_BASE}/api/knowledge/graph/recommendation?partition_id=${selectedPartition}&source=tree`)
-          .then(r => r.json())
-          .then(rd => setRecommendations(rd.recommendations || []));
-      })
-      .catch(e => setError("加载知识树失败: " + e.message))
-      .finally(() => setLoading(false));
-  }, [selectedPartition]);
-
-  const handleAddNode = async () => {
-    if (!newNode.label.trim()) return;
-    setAiLoading(true);
-    try {
-      await fetch(`${API_BASE}/api/knowledge/graph/${selectedPartition}/node`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ parent_node_id: newNode.parent_node_id || null, label: newNode.label, description: newNode.description, priority: newNode.priority }),
-      });
-      setShowAddNode(false);
-      setNewNode({ label: "", description: "", parent_node_id: "", priority: 5 });
-      const t = await fetch(`${API_BASE}/api/knowledge/graph/${selectedPartition}`).then(r => r.json());
-      setTree(t);
-    } catch (e: any) { setError(e.message); }
-    finally { setAiLoading(false); }
-  };
-
-  const handleEditNode = async () => {
-    if (!showEditNode || !editNode.label.trim()) return;
-    setAiLoading(true);
-    try {
-      await fetch(`${API_BASE}/api/knowledge/graph/${selectedPartition}/node/${showEditNode.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label: editNode.label, description: editNode.description, priority: editNode.priority, tags: editNode.tags ? editNode.tags.split(",").map((s: string) => s.trim()) : undefined }),
-      });
-      setShowEditNode(null);
-      const t = await fetch(`${API_BASE}/api/knowledge/graph/${selectedPartition}`).then(r => r.json());
-      setTree(t);
-    } catch (e: any) { setError(e.message); }
-    finally { setAiLoading(false); }
-  };
-
-  const handleDeleteNode = async (nodeId: string) => {
-    if (!confirm("确定删除该节点？")) return;
-    setAiLoading(true);
-    try {
-      await fetch(`${API_BASE}/api/knowledge/graph/${selectedPartition}/node/${nodeId}`, { method: "DELETE" });
-      const t = await fetch(`${API_BASE}/api/knowledge/graph/${selectedPartition}`).then(r => r.json());
-      setTree(t);
-      if (selectedNode === nodeId) setSelectedNode(null);
-    } catch (e: any) { setError(e.message); }
-    finally { setAiLoading(false); }
-  };
-
-  const handleAiExpand = async () => {
-    if (!aiExpandNodeId) return;
-    setAiLoading(true);
-    setError("");
-    try {
-      const res = await fetch(`${API_BASE}/api/knowledge/graph/${selectedPartition}/ai-expand`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ node_id: aiExpandNodeId, depth: aiExpandDepth, direction: "children" }),
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error);
-      const t = await fetch(`${API_BASE}/api/knowledge/graph/${selectedPartition}`).then(r => r.json());
-      setTree(t);
-      setAiExpandNodeId("");
-    } catch (e: any) { setError("AI扩充失败: " + e.message); }
-    finally { setAiLoading(false); }
-  };
-
-  const handleAiChat = async () => {
-    if (!selectedNode || !aiChatMsg.trim()) return;
-    setAiLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/knowledge/graph/${selectedPartition}/ai-chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ node_id: selectedNode, message: aiChatMsg, conversation_id: aiChatConvId || undefined }),
-      });
-      const data = await res.json();
-      setAiChatResp(data.response || "");
-      if (data.conversation_id) setAiChatConvId(data.conversation_id);
-      setAiChatMsg("");
-    } catch (e: any) { setError("AI对话失败: " + e.message); }
-    finally { setAiLoading(false); }
-  };
-
-  if (loading) return <div className="flex items-center justify-center py-16"><Loader2 size={20} className="animate-spin text-[var(--color-text-muted)]" /></div>;
-  if (error) return <div className="text-center py-16 text-red-500"><AlertCircle size={20} className="mx-auto mb-2" /><p>{error}</p></div>;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3 mb-4">
-        <select value={selectedPartition} onChange={(e) => setSelectedPartition(e.target.value)}
-          className="px-3 py-2 text-[12px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] focus:outline-none focus:border-[var(--color-accent)]">
-          {partitions.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-        </select>
-        <button onClick={() => setShowAddNode(!showAddNode)}
-          className="px-3 py-2 text-[11px] rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90">添加节点</button>
-      </div>
-
-      {showAddNode && (
-        <div className="p-4 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] space-y-3">
-          <input value={newNode.label} onChange={(e) => setNewNode({ ...newNode, label: e.target.value })} placeholder="节点名称"
-            className="w-full px-3 py-2 text-[12px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] focus:outline-none focus:border-[var(--color-accent)]" />
-          <input value={newNode.description} onChange={(e) => setNewNode({ ...newNode, description: e.target.value })} placeholder="描述"
-            className="w-full px-3 py-2 text-[12px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] focus:outline-none focus:border-[var(--color-accent)]" />
-          <div className="flex items-center gap-2">
-            <button onClick={handleAddNode} disabled={aiLoading}
-              className="px-3 py-1.5 text-[11px] rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50">
-              {aiLoading ? <Loader2 size={10} className="animate-spin" /> : "添加"}
-            </button>
-            <button onClick={() => setShowAddNode(false)} className="px-3 py-1.5 text-[11px] rounded-lg border border-[var(--color-border)] text-[var(--color-text-muted)]">取消</button>
-          </div>
-        </div>
-      )}
-
-      {tree?.nodes?.map((node: any) => (
-        <div key={node.id} className={`p-4 rounded-xl border transition-all ${selectedNode === node.id ? "border-[var(--color-accent)] bg-[var(--color-accent)]/5" : "border-[var(--color-border)]/50 bg-[var(--color-surface)]"}`}>
-          <div className="flex items-start justify-between">
-            <div className="flex-1" onClick={() => setSelectedNode(selectedNode === node.id ? null : node.id)}>
-              <h3 className="text-[13px] font-medium text-[var(--color-text)]">{node.label}</h3>
-              {node.description && <p className="text-[11px] text-[var(--color-text-muted)] mt-1">{node.description}</p>}
-              {node.tags?.length > 0 && (
-                <div className="flex items-center gap-1 mt-1 flex-wrap">
-                  {node.tags.map((tag: string) => (
-                    <span key={tag} className={`text-[9px] px-1.5 py-0.5 rounded ${getTagColor(tag)}`}>{tag}</span>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-1">
-              <button onClick={() => { setShowEditNode(node); setEditNode({ label: node.label, description: node.description || "", priority: node.priority || 5, tags: node.tags?.join(", ") || "" }); }}
-                className="p-1 rounded text-[var(--color-text-muted)] hover:text-[var(--color-accent)]"><Pencil size={12} /></button>
-              <button onClick={() => handleDeleteNode(node.id)}
-                className="p-1 rounded text-[var(--color-text-muted)] hover:text-red-500"><Trash2 size={12} /></button>
-            </div>
-          </div>
-          {selectedNode === node.id && (
-            <div className="mt-3 pt-3 border-t border-[var(--color-border)]/50">
-              <div className="flex items-center gap-2 mb-2">
-                <input value={aiExpandNodeId === node.id ? aiExpandDepth : 2} onChange={(e) => { setAiExpandNodeId(node.id); setAiExpandDepth(Number(e.target.value)); }}
-                  type="number" min={1} max={5} className="w-16 px-2 py-1 text-[11px] rounded border border-[var(--color-border)] bg-[var(--color-bg)]" />
-                <button onClick={handleAiExpand} disabled={aiLoading}
-                  className="px-2 py-1 text-[10px] rounded bg-[var(--color-accent)]/10 text-[var(--color-accent)] hover:bg-[var(--color-accent)]/20 disabled:opacity-50">
-                  {aiLoading ? <Loader2 size={10} className="animate-spin" /> : "AI扩充"}
-                </button>
-              </div>
-              <div className="flex items-center gap-2">
-                <input value={aiChatMsg} onChange={(e) => setAiChatMsg(e.target.value)} placeholder="向AI提问..."
-                  className="flex-1 px-3 py-1.5 text-[11px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] focus:outline-none focus:border-[var(--color-accent)]"
-                  onKeyDown={(e) => e.key === "Enter" && handleAiChat()} />
-                <button onClick={handleAiChat} disabled={aiLoading}
-                  className="px-3 py-1.5 text-[11px] rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50">
-                  {aiLoading ? <Loader2 size={10} className="animate-spin" /> : "发送"}
-                </button>
-              </div>
-              {aiChatResp && <p className="mt-2 text-[11px] text-[var(--color-text)] bg-[var(--color-bg)] p-2 rounded">{aiChatResp}</p>}
-            </div>
-          )}
-        </div>
-      ))}
-
-      {showEditNode && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowEditNode(null)}>
-          <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] w-full max-w-sm mx-4 p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-[14px] font-semibold text-[var(--color-text)] mb-4">编辑节点</h3>
-            <div className="space-y-3">
-              <input value={editNode.label} onChange={(e) => setEditNode({ ...editNode, label: e.target.value })} placeholder="节点名称"
-                className="w-full px-3 py-2 text-[12px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] focus:outline-none focus:border-[var(--color-accent)]" />
-              <input value={editNode.description} onChange={(e) => setEditNode({ ...editNode, description: e.target.value })} placeholder="描述"
-                className="w-full px-3 py-2 text-[12px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] focus:outline-none focus:border-[var(--color-accent)]" />
-              <input value={editNode.tags} onChange={(e) => setEditNode({ ...editNode, tags: e.target.value })} placeholder="标签（逗号分隔）"
-                className="w-full px-3 py-2 text-[12px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] focus:outline-none focus:border-[var(--color-accent)]" />
-            </div>
-            <div className="flex items-center justify-end gap-2 mt-4">
-              <button onClick={() => setShowEditNode(null)} className="px-3 py-1.5 text-[11px] rounded-lg border border-[var(--color-border)] text-[var(--color-text-muted)]">取消</button>
-              <button onClick={handleEditNode} disabled={aiLoading}
-                className="px-3 py-1.5 text-[11px] rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50">
-                {aiLoading ? <Loader2 size={10} className="animate-spin" /> : "保存"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {recommendations.length > 0 && (
-        <div className="p-4 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50">
-          <h3 className="text-[13px] font-semibold text-[var(--color-text)] mb-3 flex items-center gap-2"><Star size={14} className="text-amber-500" />推荐学习</h3>
-          <div className="space-y-2">
-            {recommendations.map((r: any) => (
-              <div key={r.node_id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-[var(--color-bg)]">
-                <span className="text-[12px] text-[var(--color-text)] flex-1">{r.label}</span>
-                <span className="text-[10px] text-[var(--color-text-muted)]">匹配度 {Math.round(r.score * 100)}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+// Note: StatsPanel removed — unused

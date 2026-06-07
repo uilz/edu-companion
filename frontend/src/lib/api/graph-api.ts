@@ -1,46 +1,29 @@
 // 知识图谱 API 工具
-import type { GraphData, GraphNode, GraphEdge } from "@/lib/types/graph-types";
+import type { GraphData } from "@/lib/types/graph-types";
+import type { KGTreeResponse } from "@/lib/types/graph-types";
+import { kgTreeToGraphData } from "@/lib/types/graph-types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
-export async function fetchGraphData(userId = "default_user"): Promise<GraphData> {
-  const res = await fetch(`${API_BASE}/api/v2/graph/nodes?user_id=${userId}`);
-  const rawNodes = await res.json();
+/**
+ * 获取统一知识图谱数据
+ * 调用 /api/knowledge/graph/{partition_id} 并转换为前端 GraphData
+ */
+export async function fetchGraphData(partitionId = "default"): Promise<GraphData> {
+  const res = await fetch(`${API_BASE}/api/knowledge/graph/${partitionId}`);
+  if (!res.ok) throw new Error(`加载知识图谱失败: ${res.statusText}`);
+  const json: KGTreeResponse = await res.json();
+  return kgTreeToGraphData(json);
+}
 
-  // Transform API nodes to GraphNode format
-  const nodes: GraphNode[] = rawNodes.map((n: any) => ({
-    id: n.id,
-    label: n.label || n.id,
-    level: n.level || "atom",
-    mastery: n.mastery ?? 0,
-    trend: (n.trend?.direction as "ascending" | "descending" | "stable") ?? "stable",
-    children: n.children || [],
-    parent: n.parent || undefined,
-    is_visible: n.is_visible ?? true,
-    node_type: n.node_type || "explicit",
-    path_id: n.path_id || "",
-    emoji: n.emoji || "",
-    color: n.color || "",
-    brief: n.brief || "",
-  }));
-
-  // Generate edges from parent-child relationships
-  const edges: GraphEdge[] = [];
-  const edgeSet = new Set<string>();
-  for (const node of nodes) {
-    if (node.parent) {
-      const key = `${node.parent}->${node.id}`;
-      if (!edgeSet.has(key)) {
-        edgeSet.add(key);
-        edges.push({
-          id: `edge_${key}`,
-          source: node.parent,
-          target: node.id,
-          relation: "parent",
-        });
-      }
-    }
-  }
-
-  return { nodes, edges };
+/**
+ * 获取分区列表
+ */
+export async function fetchPartitions(): Promise<
+  { id: string; name: string; subject?: string; emoji?: string; has_graph: boolean; node_count: number; edge_count: number }[]
+> {
+  const res = await fetch(`${API_BASE}/api/knowledge/graph/partitions`);
+  if (!res.ok) return [];
+  const json = await res.json();
+  return json.partitions || [];
 }

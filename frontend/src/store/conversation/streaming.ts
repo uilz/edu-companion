@@ -5,6 +5,7 @@
 
 import type { TreeNode, ResponseBlock } from "@/types";
 import { ConversationWS } from "@/store/conversation/ws";
+import { handleSecretaryInline, handleSecretaryProposalUpdate, handleContextSwitch, handleWSTreeRecommendation, handleTempRecommendation, handleJobUpdate } from "@/store/notification/notification-service";
 
 // ══════════════════════════════════════════════════════════════
 //  Module-level streaming refs (NOT in store — avoid re-render spam)
@@ -368,10 +369,65 @@ export function initWebSocket(storeApi: StoreApi): () => void {
           fullPath: data.full_path || "",
         },
       });
+      // 同时写入 NotificationStore
+      handleContextSwitch({
+        partition_id: data.partition_id,
+        conversation_id: data.conversation_id,
+        domain_name: data.domain_name || "",
+        topic_name: data.topic_name || "",
+        switch_detail: data.full_path ? { full_path: data.full_path } : undefined,
+      });
+    },
+
+    // Knowledge tree recommendation: conversation → knowledge tree
+    onTreeRecommendation: (data) => {
+      storeApi.setState({
+        recommendationBanner: {
+          type: "tree",
+          message: data.message,
+          partitionId: data.partition_id,
+          partitionName: data.partition_name || "",
+          nodeCount: data.node_count,
+          edgeCount: data.edge_count,
+          needsGenerate: data.needs_generate,
+        },
+      });
+      // 同时写入 NotificationStore
+      handleWSTreeRecommendation(data);
+    },
+
+    // Temp conversation recommendation: suggest switching to learn or tree
+    onTempRecommendation: (data) => {
+      storeApi.setState({
+        recommendationBanner: {
+          type: data.rec_type === "switch_to_learn" ? "learn" : "tree",
+          message: data.message,
+          partitionId: data.partition_id || "",
+          partitionName: data.partition_name || "",
+          needsGenerate: data.needs_generate,
+          createConversation: data.create_conversation,
+        },
+      });
+      // 同时写入 NotificationStore
+      handleTempRecommendation(data);
     },
 
     onConnect: () => storeApi.setState({ wsConnected: true }),
     onDisconnect: () => storeApi.setState({ wsConnected: false }),
+
+    onJobUpdate: (job) => {
+      handleJobUpdate({
+        job_id: job.id,
+        status: job.status,
+        title: `后台任务: ${job.tool_name}`,
+        message: job.error || undefined,
+        progress: job.progress / 100,
+      });
+    },
+
+    onSecretaryInline: handleSecretaryInline,
+
+    onSecretaryUpdate: handleSecretaryProposalUpdate,
   });
 
   return () => {

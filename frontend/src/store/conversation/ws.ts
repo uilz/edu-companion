@@ -1,6 +1,8 @@
 "use client";
 
-import type { TreeNode, ResponseBlock, WSIncomingMessage } from "@/types";
+import type { SecretaryNotification } from "@/store/notification/types";
+
+import type { TreeNode, ResponseBlock, WSIncomingMessage, BackgroundJob } from "@/types";
 
 // ══════════════════ WebSocket 回调类型 ══════════════════
 export type WSCallbacks = {
@@ -14,6 +16,19 @@ export type WSCallbacks = {
     full_path?: string;
     switch_detail: Record<string, string>;
   }) => void;
+  onTreeRecommendation?: (data: {
+    partition_id: string; message: string;
+    node_count?: number; edge_count?: number;
+    partition_name?: string; needs_generate?: boolean;
+  }) => void;
+  onTempRecommendation?: (data: {
+    rec_type: string; message: string;
+    partition_id?: string; partition_name?: string;
+    needs_generate?: boolean; create_conversation?: boolean;
+  }) => void;
+  onSecretaryInline?: (proposal: SecretaryNotification) => void;
+  onSecretaryUpdate?: (data: { id: string; status: string; until?: number | null }) => void;
+  onJobUpdate?: (job: BackgroundJob) => void;
   onConnect?: () => void;
   onDisconnect?: () => void;
 };
@@ -58,6 +73,21 @@ export class ConversationWS {
               break;
             case "context_switch": // 上下文切换通知
               this.callbacks?.onContextSwitch(data);
+              break;
+            case "tree_recommendation":
+              this.callbacks?.onTreeRecommendation?.(data);
+              break;
+            case "temp_recommendation":
+              this.callbacks?.onTempRecommendation?.(data);
+              break;
+            case "secretary_inline":
+              this.callbacks?.onSecretaryInline?.(data.proposal);
+              break;
+            case "secretary_proposal_update":
+              this.callbacks?.onSecretaryUpdate?.(data.content);
+              break;
+            case "job_update":
+              this.callbacks?.onJobUpdate?.(data.job);
               break;
             case "resume":        // 断线续流：服务端回放缓冲内容
               this.callbacks?.onToken(data.content);

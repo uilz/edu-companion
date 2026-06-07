@@ -56,6 +56,7 @@ export interface AuthUser {
   display_name: string;
   email: string;
   role: string;
+  avatar_url?: string;
 }
 
 export interface AuthResult {
@@ -216,6 +217,26 @@ export async function authedFetch<T>(
   }
 
   return res.json();
+}
+
+export async function uploadAvatar(file: File): Promise<string> {
+  const token = getAccessToken();
+  if (!token) throw new Error("未登录");
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${AUTH_GATEWAY_URL}/api/auth/avatar`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || "头像上传失败");
+  }
+  return data.avatar_url;
 }
 
 // ── 默认用户自动登录（迁移兼容） ──

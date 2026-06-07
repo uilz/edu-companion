@@ -3,17 +3,20 @@
  * selectConversation, switchConfirm, switchDismiss
  */
 import { setActivePartId, setActiveConvId } from "../streaming";
+import { useNotificationStore } from "@/store/notification/notification-store";
 
 export function selectConversationImpl(set: any, get: any, partitionId: string | null, conversationId: string | null) {
   const oldPartitionId = get().selectedPartitionId;
   setActivePartId(partitionId);
   setActiveConvId(conversationId);
   const resetPath = partitionId && partitionId !== oldPartitionId;
+
   set({
     selectedPartitionId: partitionId || null,
     activeConversationId: conversationId || null,
     activeDomainId: resetPath ? null : get().activeDomainId,
     activeTopicId: resetPath ? null : get().activeTopicId,
+    selectedNode: get().selectedNode,
     convError: null,
     showPartitionSidebar: false,
     switchBanner: null,
@@ -52,6 +55,11 @@ export function switchConfirmImpl(set: any, get: any) {
   }, 0);
 }
 
-export function switchDismissImpl(set: any) {
+export function switchDismissImpl(set: any, get: any) {
+  const banner = get().switchBanner;
+  if (banner) {
+    const notifId = `context_switch_${banner.partitionId}_${banner.conversationId}`;
+    useNotificationStore.getState().dismissNotification(notifId);
+  }
   set({ switchBanner: null });
 }

@@ -47,6 +47,17 @@ export type SwitchBanner = {
   fullPath: string;
 } | null;
 
+export type RecommendationBanner = {
+  type: "tree" | "learn";
+  message: string;
+  partitionId?: string;
+  partitionName?: string;
+  nodeCount?: number;
+  edgeCount?: number;
+  needsGenerate?: boolean;
+  createConversation?: boolean;
+} | null;
+
 export interface UseConversationReturn {
   partitions: Partition[];
   selectedPartitionId: string | null;
@@ -114,6 +125,7 @@ export interface ConversationState {
   statusMessage: string;
   replyingToId: string | null;
   switchBanner: SwitchBanner;
+  recommendationBanner: RecommendationBanner;
   wsConnected: boolean;
   treeRefreshKey: number;
 
@@ -228,6 +240,7 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
   statusMessage: "",
   replyingToId: null,
   switchBanner: null,
+  recommendationBanner: null,
   wsConnected: false,
   treeRefreshKey: 0,
   _wsRef: null,
@@ -266,7 +279,7 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
       base.selectedPartitionId = partitionId;
       base.activeDomainId = id;
       base.activeTopicId = null;
-      base.selectedNode = { id, level, parent: partitionId };
+      base.selectedNode = { id, level, parent: parent ?? partitionId };
     } else if (level === "topic") {
       base.selectedPartitionId = partitionId;
       base.activeDomainId = parent ?? null;
@@ -387,7 +400,14 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
       const data = await tree<{ conversations: Conversation[] }>(`/tree/conversation?parent_id=${topicId}`);
       const seen = new Set<string>();
       const convs = (data.conversations || [])
-        .map(c => ({ id: c.id, name: c.name, partition_id: topicId, is_active: c.is_active }))
+        .map(c => ({
+          id: c.id,
+          name: c.name,
+          partition_id: topicId,
+          parent_id: (c as any).parent_id,
+          parent_type: (c as any).parent_type,
+          is_active: c.is_active,
+        }))
         .filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
       set(s => {
         const next = new Map(s.convCache);
@@ -416,7 +436,7 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
   // ── Navigation ──
   selectConversation: (pid, cid) => selectConversationImpl(set, get, pid, cid),
   switchConfirm: () => switchConfirmImpl(set, get),
-  switchDismiss: () => switchDismissImpl(set),
+  switchDismiss: () => switchDismissImpl(set, get),
 
   // ── Partitions ──
   loadPartitions: () => loadPartitionsImpl(set, get),

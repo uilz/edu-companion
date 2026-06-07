@@ -1,15 +1,24 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Sun, Moon, Globe, Key, Cpu, MessageSquare, Info, Brain, Database,
-  User, Shield, LogOut, Eye, EyeOff, Check, X, Loader2,
+  User, Shield, LogOut, Eye, EyeOff, Check, X, Loader2, Palette, Camera,
 } from "lucide-react";
 import Link from "next/link";
-import { useTheme } from "@/contexts/ThemeContext";
+import { useTheme, STYLE_LIST, type DesignStyle } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { authedFetch } from "@/lib/api/auth";
+import { authedFetch, uploadAvatar } from "@/lib/api/auth";
 import Card from "@/components/ui/Card";
+
+// 各风格预览色（用于卡片左上角的色块标识）
+const STYLE_SWATCHES: Record<DesignStyle, string[]> = {
+  professional: ['#2563eb', '#ffffff', '#f5f3ef'],
+  playful:      ['#ff6b6b', '#0f3460', '#ffffff'],
+  knowledge:    ['#60a5fa', '#1a1a1a', '#fafafa'],
+  'soft-data':  ['#64d2ff', '#2c2c2e', '#ffffff'],
+  gamified:     ['#ffd700', '#252550', '#ffffff'],
+};
 
 // ===== 设置项类型定义 =====
 interface Settings {
@@ -33,7 +42,7 @@ const defaultSettings: Settings = {
 
 // ===== 设置页面组件 =====
 export default function SettingsPage() {
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, style, setStyle } = useTheme();
   const { user, logout, refresh } = useAuth();
   const [settings, setSettings] = useState<Settings>(defaultSettings);
 
@@ -43,6 +52,25 @@ export default function SettingsPage() {
   const [profileEmail, setProfileEmail] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMsg, setProfileMsg] = useState("");
+
+  // 头像上传
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAvatarUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarUploading(true);
+    try {
+      await uploadAvatar(file);
+      await refresh();
+    } catch (err: any) {
+      console.error("头像上传失败:", err);
+    } finally {
+      setAvatarUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }, [refresh]);
 
   // 修改密码
   const [pwdOpen, setPwdOpen] = useState(false);
@@ -141,8 +169,37 @@ export default function SettingsPage() {
             <div className="space-y-4">
               {/* 用户头像 + 基本信息 */}
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
-                  {user ? (user.display_name || user.username).charAt(0).toUpperCase() : "?"}
+                <div className="relative group flex-shrink-0">
+                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold overflow-hidden">
+                    {user?.avatar_url ? (
+                      <img
+                        src={`${process.env.NEXT_PUBLIC_AUTH_GATEWAY_URL || "http://127.0.0.1:18001"}${user.avatar_url}`}
+                        alt="头像"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      (user?.display_name || user?.username || "?").charAt(0).toUpperCase()
+                    )}
+                  </div>
+                  {/* 上传头像浮层 */}
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={avatarUploading}
+                    className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                  >
+                    {avatarUploading ? (
+                      <Loader2 size={16} className="animate-spin text-white" />
+                    ) : (
+                      <Camera size={16} className="text-white" />
+                    )}
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    onChange={handleAvatarUpload}
+                    className="hidden"
+                  />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-lg font-semibold text-[var(--color-text)] truncate">
@@ -311,9 +368,10 @@ export default function SettingsPage() {
 
           {/* ===== 外观设置 ===== */}
           <Card title="外观">
-            <div className="space-y-4">
+            <div className="space-y-6">
+              {/* 主题切换 */}
               <div>
-                <div className="text-sm font-semibold text-[var(--color-text)] mb-3">主题</div>
+                <div className="text-sm font-semibold text-[var(--color-text)] mb-3">主题模式</div>
                 <div className="flex gap-3">
                   <button
                     onClick={() => setTheme("dark")}
@@ -337,6 +395,58 @@ export default function SettingsPage() {
                     <Sun size={16} />
                     浅色模式
                   </button>
+                </div>
+              </div>
+
+              {/* 风格切换 */}
+              <div>
+                <div className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text)] mb-3">
+                  <Palette size={16} />
+                  视觉风格
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {STYLE_LIST.map((s) => {
+                    const active = style === s.id;
+                    const swatch = STYLE_SWATCHES[s.id];
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => setStyle(s.id)}
+                        className={`flex items-start gap-3 p-3 border text-left transition-all ${
+                          active
+                            ? "border-[var(--color-accent)] bg-[var(--color-accent)]/5"
+                            : "border-[var(--color-border)] hover:border-[var(--color-border-hover)] bg-transparent"
+                        }`}
+                        style={{ borderRadius: "var(--radius-md)" }}
+                      >
+                        {/* 色块预览 */}
+                        <div className="flex flex-col gap-0.5 shrink-0 mt-0.5">
+                          <div
+                            className="w-6 h-6 rounded"
+                            style={{ backgroundColor: swatch[0] }}
+                          />
+                          <div
+                            className="w-6 h-6 rounded"
+                            style={{ backgroundColor: swatch[1] }}
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className={`text-sm font-medium ${active ? "text-[var(--color-accent)]" : "text-[var(--color-text)]"}`}>
+                            {s.label}
+                          </div>
+                          <div className="text-[11px] text-[var(--color-text-muted)] mt-0.5 leading-relaxed">
+                            {s.description}
+                          </div>
+                        </div>
+                        {/* 选中标记 */}
+                        {active && (
+                          <div className="shrink-0 w-5 h-5 rounded-full bg-[var(--color-accent)] flex items-center justify-center mt-0.5">
+                            <Check size={12} className="text-white" />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>

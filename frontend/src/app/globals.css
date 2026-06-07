@@ -2,135 +2,26 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── 自定义动画工具类 ── */
+@layer utilities {
+  .animate-fadeIn {
+    animation: fadeIn 0.25s ease-out;
+  }
+  .animate-slideIn {
+    animation: slideIn 0.3s ease-out;
+  }
+}
+
 @import 'katex/dist/katex.min.css';
 
-/* JetBrains Mono for code/data — design.md token */
+/* JetBrains Mono for code/data */
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-/* ═══════════════════════════════════════════════════
-   DESIGN TOKENS — Paper-ink warm dual theme
-   Based on design.md: "让思考成为焦点，让界面成为陪伴"
-
-   Order matters: :root sets dark as default.
-   [data-theme="light"] comes AFTER to override via
-   equal specificity + source order.
-   ═══════════════════════════════════════════════════ */
-
-/* ── Dark Theme (default via :root) ── */
-:root,
-[data-theme="dark"] {
-  /* Surface & Canvas — warm dark, not cold gray */
-  --color-page: #1a1816;
-  --color-page-secondary: #21201e;
-  --color-surface: #2a2826;
-  --color-surface-alt: #232120;
-  --color-surface-hover: #343230;
-  --color-surface-elevated: #2a2826;
-  --color-bg: #1a1816;
-  --color-bg-elevated: #21201e;
-  --color-card: #2a2826;
-  --color-card-hover: #343230;
-  --color-input: #2a2826;
-  --color-input-focus: #343230;
-
-  /* Ink & Text — warm whites */
-  --color-text: #f5f3ef;
-  --color-text-secondary: #b0a99e;
-  --color-text-muted: #78726a;
-  --color-text-on-dark: #f5f3ef;
-
-  /* Accent & Status — slightly desaturated for dark */
-  --color-accent: #60a5fa;
-  --color-accent-hover: #93bbfd;
-  --color-accent-soft: rgba(96, 165, 250, 0.12);
-  --color-accent-glow: rgba(96, 165, 250, 0.15);
-  --color-success: #4ade80;
-  --color-warning: #fbbf24;
-  --color-error: #f87171;
-  --color-info: #22d3ee;
-
-  /* Dividers — warm-toned */
-  --color-border: #3d3a37;
-  --color-border-hover: #524f4b;
-  --color-border-soft: #2e2c2a;
-
-  /* Knowledge Graph */
-  --color-graph-node: #60a5fa;
-  --color-graph-edge-active: #93c5fd;
-  --color-graph-edge-pending: #fbbf24;
-  --color-graph-edge-suggested: #524f4b;
-  --color-graph-mastered: #4ade80;
-  --color-graph-weak: #f87171;
-
-  /* Shadows */
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.3);
-  --shadow-glow: 0 0 20px var(--color-accent-glow);
-
-  /* Selection */
-  --color-selection: rgba(96, 165, 250, 0.15);
-}
-
-/* ── Light Theme ── */
-[data-theme="light"] {
-  /* Surface & Canvas */
-  --color-page: #fbfaf7;
-  --color-page-secondary: #f5f3ef;
-  --color-surface: #ffffff;
-  --color-surface-alt: #faf9f5;
-  --color-surface-hover: #f0ede8;
-  --color-surface-elevated: #ffffff;
-  --color-bg: #fbfaf7;
-  --color-bg-elevated: #f5f3ef;
-  --color-card: #ffffff;
-  --color-card-hover: #f0ede8;
-  --color-input: #ffffff;
-  --color-input-focus: #faf9f5;
-
-  /* Ink & Text */
-  --color-text: #1c1917;
-  --color-text-secondary: #5c5650;
-  --color-text-muted: #948f89;
-  --color-text-on-dark: #fbfaf7;
-
-  /* Accent & Status */
-  --color-accent: #2563eb;
-  --color-accent-hover: #1d4ed8;
-  --color-accent-soft: #eff3ff;
-  --color-accent-glow: rgba(37, 99, 235, 0.10);
-  --color-success: #16a34a;
-  --color-warning: #d97706;
-  --color-error: #dc2626;
-  --color-info: #0891b2;
-
-  /* Dividers */
-  --color-border: #e7e3de;
-  --color-border-hover: #d4cfc8;
-  --color-border-soft: #f0ede8;
-
-  /* Knowledge Graph */
-  --color-graph-node: #2563eb;
-  --color-graph-edge-active: #1e40af;
-  --color-graph-edge-pending: #d97706;
-  --color-graph-edge-suggested: #cbd5e1;
-  --color-graph-mastered: #16a34a;
-  --color-graph-weak: #dc2626;
-
-  /* Shadows — only for floats (modals, dropdowns, tooltips) */
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
-  --shadow-glow: 0 0 20px var(--color-accent-glow);
-
-  /* Selection */
-  --color-selection: rgba(37, 99, 235, 0.12);
-}
-
-/* ── Layout ── */
+/* ═══════════════════════════════════════════════════════════════
+   SHARED DESIGN TOKENS — Common across ALL styles
+   ═══════════════════════════════════════════════════════════════ */
 :root {
-  --sidebar-width: 280px;
-  --bottom-nav-height: 64px;
-
-  /* Spacing rhythm */
+  /* ── Spacing ── */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -139,21 +30,641 @@
   --space-6: 32px;
   --space-8: 48px;
 
-  /* Radii */
+  /* ── Border Radius (base, can be overridden by style) ── */
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-xl: 20px;
   --radius-full: 9999px;
 
-  /* Typography */
+  /* ── Typography (font stacks shared, sizes per style) ── */
   --font-sans: 'Inter', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+
+  /* ── Shadows (shared, only for floats) ── */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.3);
+
+  /* ── Motion ── */
+  --motion-fast: 100ms;
+  --motion-normal: 150ms;
+  --motion-slow: 200ms;
+  --motion-slower: 300ms;
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Layout ── */
+  --sidebar-width: 280px;
+  --bottom-nav-height: 64px;
 }
 
-/* ═══════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
+   STYLE: Professional (现代专业风) — DEFAULT
+   Inspired by: Linear, Notion — 高对比、低装饰、专业工具感
+
+   Current warm paper-ink theme values kept as Professional style.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Professional: Dark (default) ── */
+:root,
+[data-style="professional"],
+[data-style="professional"][data-theme="dark"],
+[data-theme="dark"] {
+  /* Page & Surface */
+  --color-page: #1a1816;
+  --color-page-secondary: #21201e;
+  --color-surface: #2a2826;
+  --color-surface-alt: #232120;
+  --color-surface-hover: #343230;
+  --color-surface-elevated: #2a2826;
+
+  /* Ink */
+  --color-ink-primary: #f5f3ef;
+  --color-ink-secondary: #b0a99e;
+  --color-ink-muted: #78726a;
+  --color-ink-on-dark: #f5f3ef;
+  --color-ink-link: #60a5fa;
+
+  /* Accent */
+  --color-accent: #60a5fa;
+  --color-accent-hover: #93bbfd;
+  --color-accent-soft: rgba(96, 165, 250, 0.12);
+  --color-accent-glow: rgba(96, 165, 250, 0.15);
+
+  /* Status */
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-danger: #f87171;
+  --color-info: #22d3ee;
+
+  /* Dividers */
+  --color-divider: #3d3a37;
+  --color-divider-hover: #524f4b;
+  --color-divider-soft: #2e2c2a;
+
+  /* Graph */
+  --color-graph-node: #60a5fa;
+  --color-graph-edge-active: #93c5fd;
+  --color-graph-edge-pending: #fbbf24;
+  --color-graph-edge-suggested: #524f4b;
+  --color-graph-node-mastered: #4ade80;
+  --color-graph-node-weak: #f87171;
+
+  /* Selection */
+  --color-selection: rgba(96, 165, 250, 0.15);
+
+  /* Typography scale */
+  --text-hero-size: 2rem;
+  --text-hero-lineheight: 1.2;
+  --text-hero-weight: 650;
+  --text-hero-tracking: -0.02em;
+
+  --text-title-size: 1.5rem;
+  --text-title-lineheight: 1.3;
+  --text-title-weight: 600;
+  --text-title-tracking: -0.015em;
+
+  --text-heading-size: 1.25rem;
+  --text-heading-lineheight: 1.35;
+  --text-heading-weight: 600;
+  --text-heading-tracking: -0.01em;
+
+  --text-subhead-size: 1.0625rem;
+  --text-subhead-lineheight: 1.4;
+  --text-subhead-weight: 500;
+  --text-subhead-tracking: 0;
+
+  --text-body-size: 1rem;
+  --text-body-lineheight: 1.65;
+  --text-body-weight: 400;
+  --text-body-tracking: 0;
+
+  --text-body-strong-size: 1rem;
+  --text-body-strong-lineheight: 1.65;
+  --text-body-strong-weight: 500;
+  --text-body-strong-tracking: 0;
+
+  --text-caption-size: 0.875rem;
+  --text-caption-lineheight: 1.4;
+  --text-caption-weight: 400;
+  --text-caption-tracking: 0;
+
+  --text-caption-strong-size: 0.875rem;
+  --text-caption-lineheight: 1.4;
+  --text-caption-strong-weight: 600;
+  --text-caption-strong-tracking: 0;
+
+  --text-fine-size: 0.75rem;
+  --text-fine-lineheight: 1.3;
+  --text-fine-weight: 400;
+  --text-fine-tracking: 0;
+
+  --text-code-size: 0.875rem;
+  --text-code-lineheight: 1.6;
+  --text-code-weight: 400;
+  --text-code-tracking: 0;
+
+  /* ── Input (legacy, can be merged into surface) ── */
+  --color-input: #2a2826;
+  --color-input-focus: #343230;
+
+  /* ── Shadow (light override for dark) ── */
+  --shadow-glow: 0 0 20px var(--color-accent-glow);
+
+  /* ── Backward-compatible aliases ── */
+  --color-bg: var(--color-page);
+  --color-bg-elevated: var(--color-page-secondary);
+  --color-card: var(--color-surface);
+  --color-card-hover: var(--color-surface-hover);
+  --color-text: var(--color-ink-primary);
+  --color-text-secondary: var(--color-ink-secondary);
+  --color-text-muted: var(--color-ink-muted);
+  --color-text-on-dark: var(--color-ink-on-dark);
+  --color-border: var(--color-divider);
+  --color-border-hover: var(--color-divider-hover);
+  --color-border-soft: var(--color-divider-soft);
+  --color-error: var(--color-danger);
+  --color-graph-mastered: var(--color-graph-node-mastered);
+  --color-graph-weak: var(--color-graph-node-weak);
+}
+
+/* ── Professional: Light ── */
+[data-style="professional"][data-theme="light"],
+[data-theme="light"] {
+  /* Page & Surface */
+  --color-page: #fbfaf7;
+  --color-page-secondary: #f5f3ef;
+  --color-surface: #ffffff;
+  --color-surface-alt: #faf9f5;
+  --color-surface-hover: #f0ede8;
+  --color-surface-elevated: #ffffff;
+
+  /* Ink */
+  --color-ink-primary: #1c1917;
+  --color-ink-secondary: #5c5650;
+  --color-ink-muted: #948f89;
+  --color-ink-on-dark: #fbfaf7;
+  --color-ink-link: #2563eb;
+
+  /* Accent */
+  --color-accent: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-accent-soft: #eff3ff;
+  --color-accent-glow: rgba(37, 99, 235, 0.10);
+
+  /* Status */
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+  --color-info: #0891b2;
+
+  /* Dividers */
+  --color-divider: #e7e3de;
+  --color-divider-hover: #d4cfc8;
+  --color-divider-soft: #f0ede8;
+
+  /* Graph */
+  --color-graph-node: #2563eb;
+  --color-graph-edge-active: #1e40af;
+  --color-graph-edge-pending: #d97706;
+  --color-graph-edge-suggested: #cbd5e1;
+  --color-graph-node-mastered: #16a34a;
+  --color-graph-node-weak: #dc2626;
+
+  /* Selection */
+  --color-selection: rgba(37, 99, 235, 0.12);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
+
+  /* Input */
+  --color-input: #ffffff;
+  --color-input-focus: #faf9f5;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STYLE: Playful (活力趣味风)
+   Inspired by: Duolingo, Google Material 3 — 明亮色彩、大圆角、友好亲和
+   ═══════════════════════════════════════════════════════════════ */
+
+[data-style="playful"][data-theme="dark"] {
+  --color-page: #1a1a2e;
+  --color-page-secondary: #16213e;
+  --color-surface: #0f3460;
+  --color-surface-alt: #1a1a3e;
+  --color-surface-hover: #1a4a7a;
+  --color-surface-elevated: #0f3460;
+
+  --color-ink-primary: #e8e8ff;
+  --color-ink-secondary: #b0b0d0;
+  --color-ink-muted: #7070a0;
+  --color-ink-on-dark: #ffffff;
+  --color-ink-link: #7dd3fc;
+
+  --color-accent: #ff6b6b;
+  --color-accent-hover: #ff8e8e;
+  --color-accent-soft: rgba(255, 107, 107, 0.15);
+  --color-accent-glow: rgba(255, 107, 107, 0.2);
+
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-danger: #fb7185;
+  --color-info: #22d3ee;
+
+  --color-divider: #2a2a4e;
+  --color-divider-hover: #3a3a5e;
+  --color-divider-soft: #222242;
+
+  --color-graph-node: #ff6b6b;
+  --color-graph-edge-active: #ff8e8e;
+  --color-graph-edge-pending: #fbbf24;
+  --color-graph-edge-suggested: #3a3a5e;
+  --color-graph-node-mastered: #4ade80;
+  --color-graph-node-weak: #fb7185;
+
+  --color-selection: rgba(255, 107, 107, 0.2);
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 20px rgba(255, 107, 107, 0.15);
+
+  --color-input: #0f3460;
+  --color-input-focus: #1a4a7a;
+}
+
+[data-style="playful"][data-theme="light"] {
+  --color-page: #fef7f7;
+  --color-page-secondary: #fff0f0;
+  --color-surface: #ffffff;
+  --color-surface-alt: #fff5f5;
+  --color-surface-hover: #ffe8e8;
+  --color-surface-elevated: #ffffff;
+
+  --color-ink-primary: #2d1b1b;
+  --color-ink-secondary: #7a5c5c;
+  --color-ink-muted: #b09595;
+  --color-ink-on-dark: #ffffff;
+  --color-ink-link: #e65c5c;
+
+  --color-accent: #ff6b6b;
+  --color-accent-hover: #e65c5c;
+  --color-accent-soft: rgba(255, 107, 107, 0.08);
+  --color-accent-glow: rgba(255, 107, 107, 0.12);
+
+  --color-success: #22c55e;
+  --color-warning: #eab308;
+  --color-danger: #ef4444;
+  --color-info: #06b6d4;
+
+  --color-divider: #f0e0e0;
+  --color-divider-hover: #e0d0d0;
+  --color-divider-soft: #f8f0f0;
+
+  --color-graph-node: #ff6b6b;
+  --color-graph-edge-active: #e65c5c;
+  --color-graph-edge-pending: #eab308;
+  --color-graph-edge-suggested: #e0d0d0;
+  --color-graph-node-mastered: #22c55e;
+  --color-graph-node-weak: #ef4444;
+
+  --color-selection: rgba(255, 107, 107, 0.12);
+
+  --color-input: #ffffff;
+  --color-input-focus: #fff5f5;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STYLE: Knowledge (紧凑知识风)
+   Inspired by: Obsidian, Logseq — 高信息密度、阅读友好、沉浸感
+   ═══════════════════════════════════════════════════════════════ */
+
+[data-style="knowledge"][data-theme="dark"] {
+  --color-page: #0d0d0d;
+  --color-page-secondary: #141414;
+  --color-surface: #1a1a1a;
+  --color-surface-alt: #1e1e1e;
+  --color-surface-hover: #252525;
+  --color-surface-elevated: #1a1a1a;
+
+  --color-ink-primary: #d4d4d4;
+  --color-ink-secondary: #888888;
+  --color-ink-muted: #555555;
+  --color-ink-on-dark: #ededed;
+  --color-ink-link: #7dd3fc;
+
+  --color-accent: #60a5fa;
+  --color-accent-hover: #93bbfd;
+  --color-accent-soft: rgba(96, 165, 250, 0.08);
+  --color-accent-glow: rgba(96, 165, 250, 0.1);
+
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-danger: #f87171;
+  --color-info: #22d3ee;
+
+  --color-divider: #222222;
+  --color-divider-hover: #333333;
+  --color-divider-soft: #1a1a1a;
+
+  --color-graph-node: #60a5fa;
+  --color-graph-edge-active: #93c5fd;
+  --color-graph-edge-pending: #fbbf24;
+  --color-graph-edge-suggested: #333333;
+  --color-graph-node-mastered: #4ade80;
+  --color-graph-node-weak: #f87171;
+
+  --color-selection: rgba(96, 165, 250, 0.12);
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+
+  --color-input: #1a1a1a;
+  --color-input-focus: #252525;
+
+  /* Knowledge style: slightly smaller body text for density */
+  --text-body-size: 0.9375rem;
+  --text-body-lineheight: 1.7;
+  --text-caption-size: 0.8125rem;
+  --space-3: 10px;
+  --space-4: 14px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+}
+
+[data-style="knowledge"][data-theme="light"] {
+  --color-page: #fafafa;
+  --color-page-secondary: #f0f0f0;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f8f8f8;
+  --color-surface-hover: #ebebeb;
+  --color-surface-elevated: #ffffff;
+
+  --color-ink-primary: #1a1a1a;
+  --color-ink-secondary: #666666;
+  --color-ink-muted: #999999;
+  --color-ink-on-dark: #fafafa;
+  --color-ink-link: #2563eb;
+
+  --color-accent: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-accent-soft: rgba(37, 99, 235, 0.06);
+  --color-accent-glow: rgba(37, 99, 235, 0.08);
+
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+  --color-info: #0891b2;
+
+  --color-divider: #e5e5e5;
+  --color-divider-hover: #d4d4d4;
+  --color-divider-soft: #f0f0f0;
+
+  --color-graph-node: #2563eb;
+  --color-graph-edge-active: #1e40af;
+  --color-graph-edge-pending: #d97706;
+  --color-graph-edge-suggested: #d4d4d4;
+  --color-graph-node-mastered: #16a34a;
+  --color-graph-node-weak: #dc2626;
+
+  --color-selection: rgba(37, 99, 235, 0.1);
+
+  --color-input: #ffffff;
+  --color-input-focus: #f8f8f8;
+
+  --text-body-size: 0.9375rem;
+  --text-body-lineheight: 1.7;
+  --text-caption-size: 0.8125rem;
+  --space-3: 10px;
+  --space-4: 14px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STYLE: Soft-Data (柔和数据风)
+   Inspired by: Apple Health, Apple Books — 温和视觉、数据可视化、减少认知负荷
+   ═══════════════════════════════════════════════════════════════ */
+
+[data-style="soft-data"][data-theme="dark"] {
+  --color-page: #1c1c1e;
+  --color-page-secondary: #222225;
+  --color-surface: #2c2c2e;
+  --color-surface-alt: #262629;
+  --color-surface-hover: #363638;
+  --color-surface-elevated: #2c2c2e;
+
+  --color-ink-primary: #f2f2f7;
+  --color-ink-secondary: #a0a0ab;
+  --color-ink-muted: #6c6c78;
+  --color-ink-on-dark: #f2f2f7;
+  --color-ink-link: #64d2ff;
+
+  --color-accent: #64d2ff;
+  --color-accent-hover: #8ee0ff;
+  --color-accent-soft: rgba(100, 210, 255, 0.1);
+  --color-accent-glow: rgba(100, 210, 255, 0.12);
+
+  --color-success: #66d49d;
+  --color-warning: #f0c75e;
+  --color-danger: #ff6b6b;
+  --color-info: #5ac8fa;
+
+  --color-divider: #38383a;
+  --color-divider-hover: #48484a;
+  --color-divider-soft: #2a2a2c;
+
+  --color-graph-node: #64d2ff;
+  --color-graph-edge-active: #8ee0ff;
+  --color-graph-edge-pending: #f0c75e;
+  --color-graph-edge-suggested: #48484a;
+  --color-graph-node-mastered: #66d49d;
+  --color-graph-node-weak: #ff6b6b;
+
+  --color-selection: rgba(100, 210, 255, 0.15);
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.15);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.2);
+
+  --color-input: #2c2c2e;
+  --color-input-focus: #363638;
+
+  /* Soft-data: larger radii for gentle feel */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+
+  /* Soft-data: slightly relaxed spacing */
+  --space-3: 14px;
+  --space-4: 18px;
+  --space-5: 28px;
+}
+
+[data-style="soft-data"][data-theme="light"] {
+  --color-page: #f5f5f7;
+  --color-page-secondary: #eeeef0;
+  --color-surface: #ffffff;
+  --color-surface-alt: #fafafa;
+  --color-surface-hover: #e8e8ec;
+  --color-surface-elevated: #ffffff;
+
+  --color-ink-primary: #1c1c1e;
+  --color-ink-secondary: #6c6c78;
+  --color-ink-muted: #a0a0ab;
+  --color-ink-on-dark: #f5f5f7;
+  --color-ink-link: #0a84ff;
+
+  --color-accent: #0a84ff;
+  --color-accent-hover: #0070e0;
+  --color-accent-soft: rgba(10, 132, 255, 0.08);
+  --color-accent-glow: rgba(10, 132, 255, 0.1);
+
+  --color-success: #34c759;
+  --color-warning: #ff9f0a;
+  --color-danger: #ff3b30;
+  --color-info: #5ac8fa;
+
+  --color-divider: #e5e5ea;
+  --color-divider-hover: #d1d1d6;
+  --color-divider-soft: #f0f0f2;
+
+  --color-graph-node: #0a84ff;
+  --color-graph-edge-active: #0070e0;
+  --color-graph-edge-pending: #ff9f0a;
+  --color-graph-edge-suggested: #d1d1d6;
+  --color-graph-node-mastered: #34c759;
+  --color-graph-node-weak: #ff3b30;
+
+  --color-selection: rgba(10, 132, 255, 0.1);
+
+  --color-input: #ffffff;
+  --color-input-focus: #fafafa;
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+
+  --space-3: 14px;
+  --space-4: 18px;
+  --space-5: 28px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STYLE: Gamified (游戏化激励风)
+   Inspired by: 游戏化学习平台 — 成就驱动、强反馈、高能量
+   ═══════════════════════════════════════════════════════════════ */
+
+[data-style="gamified"][data-theme="dark"] {
+  --color-page: #0f0f23;
+  --color-page-secondary: #1a1a3e;
+  --color-surface: #252550;
+  --color-surface-alt: #1e1e45;
+  --color-surface-hover: #303060;
+  --color-surface-elevated: #252550;
+
+  --color-ink-primary: #f0f0ff;
+  --color-ink-secondary: #b0b0d0;
+  --color-ink-muted: #7070a0;
+  --color-ink-on-dark: #ffffff;
+  --color-ink-link: #ffd700;
+
+  --color-accent: #ffd700;
+  --color-accent-hover: #ffe44d;
+  --color-accent-soft: rgba(255, 215, 0, 0.12);
+  --color-accent-glow: rgba(255, 215, 0, 0.2);
+
+  --color-success: #50e3c2;
+  --color-warning: #f5a623;
+  --color-danger: #ff4757;
+  --color-info: #7c5cfc;
+
+  --color-divider: #303060;
+  --color-divider-hover: #404080;
+  --color-divider-soft: #252550;
+
+  --color-graph-node: #ffd700;
+  --color-graph-edge-active: #ffe44d;
+  --color-graph-edge-pending: #f5a623;
+  --color-graph-edge-suggested: #404080;
+  --color-graph-node-mastered: #50e3c2;
+  --color-graph-node-weak: #ff4757;
+
+  --color-selection: rgba(255, 215, 0, 0.15);
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 20px rgba(255, 215, 0, 0.1);
+
+  --color-input: #252550;
+  --color-input-focus: #303060;
+
+  /* Gamified: vibrant, slightly bouncy spacing */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+
+  --text-hero-size: 2.25rem;
+  --text-hero-weight: 800;
+  --text-title-size: 1.75rem;
+  --text-title-weight: 700;
+}
+
+[data-style="gamified"][data-theme="light"] {
+  --color-page: #fefce8;
+  --color-page-secondary: #fef9c3;
+  --color-surface: #ffffff;
+  --color-surface-alt: #fef9c3;
+  --color-surface-hover: #fef08a;
+  --color-surface-elevated: #ffffff;
+
+  --color-ink-primary: #1a1a2e;
+  --color-ink-secondary: #6b6b80;
+  --color-ink-muted: #a0a0b0;
+  --color-ink-on-dark: #1a1a2e;
+  --color-ink-link: #b8860b;
+
+  --color-accent: #f59e0b;
+  --color-accent-hover: #d97706;
+  --color-accent-soft: rgba(245, 158, 11, 0.08);
+  --color-accent-glow: rgba(245, 158, 11, 0.15);
+
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #7c5cfc;
+
+  --color-divider: #e5e0c0;
+  --color-divider-hover: #d4d0b0;
+  --color-divider-soft: #f0ecd8;
+
+  --color-graph-node: #f59e0b;
+  --color-graph-edge-active: #d97706;
+  --color-graph-edge-pending: #f59e0b;
+  --color-graph-edge-suggested: #d4d0b0;
+  --color-graph-node-mastered: #10b981;
+  --color-graph-node-weak: #ef4444;
+
+  --color-selection: rgba(245, 158, 11, 0.12);
+
+  --color-input: #ffffff;
+  --color-input-focus: #fef9c3;
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+
+  --text-hero-size: 2.25rem;
+  --text-hero-weight: 800;
+  --text-title-size: 1.75rem;
+  --text-title-weight: 700;
+}
+
+/* ═══════════════════════════════════════════════════════════════
    BASE STYLES
-   ═══════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════════ */
 
 @layer base {
   * {
@@ -167,54 +678,52 @@
   }
 
   body {
-    background-color: var(--color-bg);
-    color: var(--color-text);
+    background-color: var(--color-page);
+    color: var(--color-ink-primary);
     margin: 0;
     padding: 0;
     min-height: 100vh;
     overflow-x: hidden;
   }
 
-  /* Typography Scale — design.md */
   h1 {
-    font-weight: 650;
-    font-size: 2rem;          /* 32px */
-    line-height: 1.2;
-    letter-spacing: -0.02em;
+    font-weight: var(--text-hero-weight);
+    font-size: var(--text-hero-size);
+    line-height: var(--text-hero-lineheight);
+    letter-spacing: var(--text-hero-tracking);
     margin: 0 0 var(--space-6) 0;
   }
 
   h2 {
-    font-weight: 600;
-    font-size: 1.5rem;        /* 24px */
-    line-height: 1.3;
-    letter-spacing: -0.015em;
+    font-weight: var(--text-title-weight);
+    font-size: var(--text-title-size);
+    line-height: var(--text-title-lineheight);
+    letter-spacing: var(--text-title-tracking);
     margin: 0 0 var(--space-5) 0;
   }
 
   h3 {
-    font-weight: 600;
-    font-size: 1.25rem;       /* 20px */
-    line-height: 1.35;
-    letter-spacing: -0.01em;
+    font-weight: var(--text-heading-weight);
+    font-size: var(--text-heading-size);
+    line-height: var(--text-heading-lineheight);
+    letter-spacing: var(--text-heading-tracking);
     margin: 0 0 var(--space-3) 0;
   }
 
   p {
-    font-weight: 400;
-    font-size: 1rem;          /* 16px — design.md: 长文阅读需要更大字号 */
-    line-height: 1.65;
+    font-weight: var(--text-body-weight);
+    font-size: var(--text-body-size);
+    line-height: var(--text-body-lineheight);
     margin: 0 0 var(--space-3) 0;
-    color: var(--color-text);
+    color: var(--color-ink-primary);
   }
 
-  /* 消息气泡内最后一个 <p> 去掉底部 margin */
   .whitespace-pre-wrap > div > p:last-child {
     margin-bottom: 0;
   }
 
   a {
-    color: var(--color-accent);
+    color: var(--color-ink-link);
     text-decoration: none;
   }
   a:hover {
@@ -226,22 +735,21 @@
   }
 }
 
-/* ═══════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    COMPONENT STYLES
-   ═══════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════════ */
 
 @layer components {
-  /* ── Card — no shadow, border only (design.md) ── */
+  /* ── Card ── */
   .swiss-card {
-    background-color: var(--color-card);
-    border: 1px solid var(--color-border);
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-divider);
     border-radius: var(--radius-md);
     padding: var(--space-4);
-    transition: border-color 0.15s ease;
+    transition: border-color var(--motion-fast) ease;
   }
-
   .swiss-card:hover {
-    border-color: var(--color-border-hover);
+    border-color: var(--color-divider-hover);
   }
 
   /* ── Button ── */
@@ -255,15 +763,13 @@
     font-weight: 600;
     border-radius: var(--radius-md);
     cursor: pointer;
-    transition: all 0.1s ease;
+    transition: all var(--motion-fast) ease;
     border: 1px solid transparent;
     outline: none;
   }
-
   .swiss-btn:focus-visible {
     box-shadow: 0 0 0 2px var(--color-accent-glow);
   }
-
   .swiss-btn-primary {
     background-color: var(--color-accent);
     color: #ffffff;
@@ -274,24 +780,22 @@
   .swiss-btn-primary:active {
     transform: scale(0.97);
   }
-
   .swiss-btn-outline {
     background-color: transparent;
-    color: var(--color-text);
-    border-color: var(--color-border);
+    color: var(--color-ink-primary);
+    border-color: var(--color-divider);
   }
   .swiss-btn-outline:hover {
     background-color: var(--color-surface-hover);
-    border-color: var(--color-border-hover);
+    border-color: var(--color-divider-hover);
   }
-
   .swiss-btn-ghost {
     background-color: transparent;
-    color: var(--color-text-secondary);
+    color: var(--color-ink-secondary);
   }
   .swiss-btn-ghost:hover {
     background-color: var(--color-surface-hover);
-    color: var(--color-text);
+    color: var(--color-ink-primary);
   }
 
   /* ── Container ── */
@@ -307,7 +811,7 @@
   /* ── Divider ── */
   .swiss-divider {
     border: none;
-    border-top: 1px solid var(--color-border);
+    border-top: 1px solid var(--color-divider);
     margin: var(--space-4) 0;
   }
 
@@ -319,8 +823,8 @@
     padding: var(--space-2) 12px;
     font-size: 0.875rem;
     font-weight: 400;
-    color: var(--color-text-secondary);
-    transition: all 0.15s ease;
+    color: var(--color-ink-secondary);
+    transition: all var(--motion-fast) ease;
     cursor: pointer;
     border: none;
     background: none;
@@ -329,11 +833,11 @@
     border-radius: var(--radius-sm);
   }
   .nav-item:hover {
-    color: var(--color-text);
+    color: var(--color-ink-primary);
     background-color: var(--color-surface-hover);
   }
   .nav-item-active {
-    color: var(--color-text);
+    color: var(--color-ink-primary);
     font-weight: 600;
     background-color: var(--color-accent-soft);
   }
@@ -341,12 +845,12 @@
   /* ── Input ── */
   .swiss-input {
     background-color: var(--color-input);
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--color-divider);
     border-radius: var(--radius-md);
-    color: var(--color-text);
+    color: var(--color-ink-primary);
     padding: var(--space-2) var(--space-3);
     font-size: 0.875rem;
-    transition: border-color 0.15s ease;
+    transition: border-color var(--motion-fast) ease;
     outline: none;
     width: 100%;
   }
@@ -354,7 +858,7 @@
     border-color: var(--color-accent);
   }
   .swiss-input::placeholder {
-    color: var(--color-text-muted);
+    color: var(--color-ink-muted);
   }
 
   /* ── Badge ── */
@@ -367,8 +871,8 @@
     font-weight: 600;
     border-radius: var(--radius-sm);
     background-color: var(--color-surface);
-    color: var(--color-text-secondary);
-    border: 1px solid var(--color-border);
+    color: var(--color-ink-secondary);
+    border: 1px solid var(--color-divider);
   }
   .swiss-badge-accent {
     background-color: var(--color-accent-soft);
@@ -388,13 +892,13 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: var(--color-text-muted);
+    color: var(--color-ink-muted);
   }
 
   /* ── KaTeX ── */
   .katex {
     font-size: 1.05em;
-    color: var(--color-text);
+    color: var(--color-ink-primary);
   }
   .katex-display {
     margin: 1em 0;
@@ -403,15 +907,14 @@
   }
   .katex .mord, .katex .mbin, .katex .mrel,
   .katex .mopen, .katex .mclose, .katex .mpunct, .katex .mop {
-    color: var(--color-text);
+    color: var(--color-ink-primary);
   }
 }
 
-/* ═══════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    ANIMATIONS
-   ═══════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════════ */
 
-/* Message entrance — design.md: opacity 0→1 + translateY(8px→0), 150ms */
 @keyframes messageEnter {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
@@ -420,6 +923,11 @@
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 @keyframes slideUp {
@@ -437,12 +945,10 @@
   50% { box-shadow: 0 0 16px 4px var(--color-accent-glow); }
 }
 
-/* Per-message entrance animation */
 .message-enter {
-  animation: messageEnter 0.15s ease-out both;
+  animation: messageEnter var(--motion-normal) var(--ease-out) both;
 }
 
-/* Skeleton loading */
 .skeleton {
   background: linear-gradient(
     90deg,
@@ -459,15 +965,15 @@
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-text-muted);
+  background: var(--color-ink-muted);
   border-radius: 3px;
 }
-::-webkit-scrollbar-thumb:hover { background: var(--color-text-secondary); }
+::-webkit-scrollbar-thumb:hover { background: var(--color-ink-secondary); }
 
 /* ── Selection ── */
 ::selection {
   background-color: var(--color-selection);
-  color: var(--color-text);
+  color: var(--color-ink-primary);
 }
 
 /* ── Two-layer highlight system ── */
@@ -479,7 +985,7 @@
   overflow: hidden;
 }
 .hl-overlay mark.hl {
-  color: var(--color-text);
+  color: var(--color-ink-primary);
   background: rgba(245, 158, 11, 0.2);
   border-radius: 2px;
 }

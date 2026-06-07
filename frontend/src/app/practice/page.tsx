@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   Brain, Trophy, BarChart3, BookOpen, Play,
   Sparkles, Clock, Loader2, ChevronRight, Target, TrendingUp,
-  BookMarked, FileText, Star, Upload, Trash2, RotateCcw,
+  BookMarked, FileText, Star, Upload, Trash2, RotateCcw, History,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -15,6 +15,7 @@ type Tab = "start" | "practice" | "stats";
 
 export default function PracticeHomePage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const skillParam = searchParams.get("skill");
 
   const [tab, setTab] = useState<Tab>(skillParam ? "practice" : "start");
@@ -139,6 +140,10 @@ export default function PracticeHomePage() {
               <FileText size={14} className="text-orange-500" />
               <span className="text-[9px] font-medium text-[var(--color-text)] leading-tight text-center">错题本</span>
             </Link>
+            <Link href="/practice/history" className="flex flex-col items-center gap-1 p-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50 hover:border-[var(--color-accent)]/30 transition-all">
+              <History size={14} className="text-blue-500" />
+              <span className="text-[9px] font-medium text-[var(--color-text)] leading-tight text-center">练习<br/>历史</span>
+            </Link>
             <Link href="/achievements" className="flex flex-col items-center gap-1 p-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50 hover:border-[var(--color-accent)]/30 transition-all">
               <Trophy size={14} className="text-yellow-500" />
               <span className="text-[9px] font-medium text-[var(--color-text)] leading-tight text-center">成就墙</span>
@@ -192,11 +197,18 @@ export default function PracticeHomePage() {
           {/* Recent sessions */}
           {recentSessions.length > 0 && (
             <div>
-              <h3 className="text-[11px] font-medium text-[var(--color-text-muted)] mb-3 uppercase tracking-wider">最近练习</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-[11px] font-medium text-[var(--color-text-muted)] uppercase tracking-wider">最近练习</h3>
+                <Link href="/practice/history"
+                  className="text-[10px] text-[var(--color-accent)] hover:underline">
+                  查看全部 →
+                </Link>
+              </div>
               <div className="space-y-2">
                 {recentSessions.map((s: any) => (
                   <div key={s.session_id}
-                    className="flex items-center gap-3 p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50">
+                    onClick={() => router.push(`/practice/history/${s.session_id}`)}
+                    className="flex items-center gap-3 p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50 cursor-pointer hover:border-[var(--color-accent)]/30 transition-all group">
                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
                       (s.score || 0) >= 80 ? "bg-green-500/10" :
                       (s.score || 0) >= 60 ? "bg-yellow-500/10" : "bg-red-500/10"
@@ -208,7 +220,7 @@ export default function PracticeHomePage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-[12px] font-medium text-[var(--color-text)]">
-                        {s.mode === "review" ? "复习模式" : s.mode === "challenge" ? "挑战模式" : "自适应模式"}
+                        {s.bank_name || (s.mode === "review" ? "复习模式" : s.mode === "challenge" ? "挑战模式" : "自适应模式")}
                         <span className="ml-2 text-[10px] text-[var(--color-text-muted)]">
                           {s.total_count} 题 · {s.correct_count}/{s.wrong_count}
                         </span>
@@ -224,7 +236,7 @@ export default function PracticeHomePage() {
                       (s.score || 0) >= 60 ? "text-yellow-500" : "text-red-500"
                     }`}>{s.score ?? "—"}</span>
                     <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteSession(s.session_id); }}
-                      className="p-1 rounded hover:bg-red-500/10 text-[var(--color-text-muted)] hover:text-red-500 transition-colors flex-shrink-0"
+                      className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/10 text-[var(--color-text-muted)] hover:text-red-500 transition-all flex-shrink-0"
                       title="删除记录">
                       <Trash2 size={12} />
                     </button>

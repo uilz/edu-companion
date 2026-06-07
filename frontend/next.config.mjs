@@ -18,8 +18,9 @@ const nextConfig = {
       { source: '/quality', destination: '/dashboard?tab=quality', permanent: true },
       // 旧对话 → 学习空间
       { source: '/chat', destination: '/learn', permanent: true },
-      // 图形图谱页 → 驾驶舱图谱 Tab
-      { source: '/graph', destination: '/dashboard?tab=graph', permanent: true },
+      // 旧图谱页 → 知识树独立页面
+      { source: '/graph', destination: '/knowledge-tree', permanent: true },
+      { source: '/learn/graph', destination: '/knowledge-tree', permanent: true },
     ];
   },
   async rewrites() {

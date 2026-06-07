@@ -2,12 +2,13 @@
 
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import type { GraphData, GraphNode, DialogueCardInfo } from "@/lib/types/graph-types";
-import { fetchGraphData } from "@/lib/api/graph-api";
+import { fetchGraphData, fetchPartitions } from "@/lib/api/graph-api";
 import { listNotes } from "@/lib/api/learning-api";
 import type { Note } from "@/lib/api/learning-api";
 
 // ── 导出类型 ──
 export type LeftTab = "dialogue" | "practice" | "notes" | "resources" | "projects";
+export type GraphMode = "mindmap" | "force" | "dag";
 export type ReflectionTrigger = "practice_done" | "node_mastered" | "cognitive_conflict" | "weekly_review";
 
 export interface ToolbarState {
@@ -48,7 +49,7 @@ export interface UseGraphDialogueReturn {
   loading: boolean;
   error: string | null;
   selectedNode: GraphNode | null;
-  graphMode: "mindmap" | "force";
+  graphMode: GraphMode;
   graphFullscreen: boolean;
   maxDisplayLevel: string | undefined;
   availableLevels: string[];
@@ -77,6 +78,11 @@ export interface UseGraphDialogueReturn {
   activePath: string[];
   practiceStats: { total: number; correct: number; accuracy: number; streak: number };
 
+  // ── 分区相关 ──
+  partitionId: string;
+  partitionList: { id: string; name: string; emoji?: string }[];
+  setPartitionId: (pid: string) => void;
+
   loadGraph: () => void;
   handleNodeSelect: (node: GraphNode) => void;
   handleStartPractice: (nodeId: string) => void;
@@ -89,7 +95,7 @@ export interface UseGraphDialogueReturn {
   handleNote: () => void;
   handleExplainSave: (explanation: string) => void;
   setLeftTab: (t: LeftTab) => void;
-  setGraphMode: (m: "mindmap" | "force") => void;
+  setGraphMode: (m: GraphMode) => void;
   setGraphSearch: (s: string) => void;
   setGraphFullscreen: (v: boolean) => void;
   setMaxDisplayLevel: (v: string | undefined) => void;
@@ -110,13 +116,17 @@ const LEVEL_ORDER: Record<string, number> = {
 };
 const ALL_LEVELS = ["partition", "domain", "topic", "conversation", "concept", "atom"];
 
-export function useGraphDialogue(): UseGraphDialogueReturn {
+export function useGraphDialogue(initialPartitionId?: string): UseGraphDialogueReturn {
+  // ── 分区 ──
+  const [partitionId, setPartitionId] = useState(initialPartitionId || "");
+  const [partitionList, setPartitionList] = useState<{ id: string; name: string; emoji?: string }[]>([]);
+
   // ── 图谱数据 ──
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
-  const [graphMode, setGraphMode] = useState<"mindmap" | "force">("mindmap");
+  const [graphMode, setGraphMode] = useState<GraphMode>("mindmap");
   const [graphFullscreen, setGraphFullscreen] = useState(false);
 
   // ── 关联数据 ──
@@ -161,19 +171,40 @@ export function useGraphDialogue(): UseGraphDialogueReturn {
   // ── 待对接数据 ──
   const practiceStats = { total: 24, correct: 16, accuracy: 67, streak: 3 };
 
+  // ── 加载分区列表 ──
+  useEffect(() => {
+    fetchPartitions().then(list => {
+      setPartitionList(list);
+      if (!partitionId && list.length > 0) {
+        setPartitionId(list[0].id);
+      }
+      if (list.length === 0) {
+        // 没有分区时结束 loading，让 UI 显示空状态
+        setLoading(false);
+      }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── 获取图谱数据 ──
   const loadGraph = useCallback(() => {
+    if (!partitionId) return;
     setLoading(true);
-    fetchGraphData()
+    fetchGraphData(partitionId)
       .then((data) => {
         setGraphData(data);
         setError(null);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [partitionId]);
 
   useEffect(() => { loadGraph(); }, [loadGraph]);
+
+  // ── 切换分区时清空选中节点 ──
+  useEffect(() => {
+    setSelectedNode(null);
+    setGraphSearch("");
+  }, [partitionId]);
 
   // ── 选中节点时加载关联数据 ──
   useEffect(() => {
@@ -313,6 +344,10 @@ export function useGraphDialogue(): UseGraphDialogueReturn {
     reflectionOpen, reflectionTrigger, goalModalOpen, aggregateOpen,
     projectsOpen, noteSidebar, explainModal, selectedText, toolbar,
     graphSearch, matchedNodeIds, activePath, practiceStats,
+
+    // ── 分区 ──
+    partitionId, partitionList, setPartitionId,
+
     loadGraph, handleNodeSelect, handleStartPractice, handleRequestExplain,
     handleMarkMastered, handleMarkQuestion, handleReflectionSave,
     handleTextSelect, handleExplain, handleNote, handleExplainSave,

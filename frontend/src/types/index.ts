@@ -17,6 +17,7 @@ export interface Partition {
   message_count: number;          // 消息总数
   total_tokens: number;           // 消耗的总 token 数
   domain_count?: number;          // 下属领域数量（可选）
+  is_temp?: boolean;              // 临时分区标记
 }
 
 /** 领域（Domain）：分区下的二级分类，对应一个子学科或专题集 */
@@ -203,5 +204,10 @@ export type WSIncomingMessage =
   | { type: "resume"; content: string; conversation_id?: string }                                 // 断线续流：回放缓冲
   | { type: "resume_done"; message?: string }
   | { type: "pong" }                                                                                 // pong 心跳回复
-  | { type: "secretary_update"; content: { reason: string[]; proposal_count: number } };  // 秘书系统更新通知
+  | { type: "secretary_update"; content: { reason: string[]; proposal_count: number } }  // 秘书系统更新通知
+  | { type: "secretary_inline"; proposal: import("../store/notification/types").SecretaryNotification } // 秘书通知注入对话
+  | { type: "secretary_proposal_update"; content: { id: string; status: string; until?: number | null } } // 提案状态变更同步
+  // ── 双向推荐 ──
+  | { type: "tree_recommendation"; partition_id: string; message: string; node_count?: number; edge_count?: number; partition_name?: string; needs_generate?: boolean }
+  | { type: "temp_recommendation"; rec_type: string; message: string; partition_id?: string; partition_name?: string; needs_generate?: boolean; create_conversation?: boolean };
 

@@ -10,7 +10,7 @@ import {
 } from "../streaming";
 
 /**
- * 在"临时会话"分区下创建临时对话（不创建领域→专题树）
+ * 在"💬 临时"分区下创建临时对话（不创建领域→专题树）
  * 第一次发消息时，自动创建或复用临时分区 + 临时会话
  */
 async function ensureTempConversation(set: any, get: any): Promise<{ pId: string; cId: string } | null> {
@@ -22,13 +22,13 @@ async function ensureTempConversation(set: any, get: any): Promise<{ pId: string
     // 查找或创建临时分区
     if (!pId) {
       const pData = await apiFetch<{ partitions: Partition[] }>("/tree/partition");
-      const tempP = (pData.partitions || []).find(p => p.name === "临时会话");
+      const tempP = (pData.partitions || []).find(p => p.is_temp);
       if (tempP) {
         pId = tempP.id;
       } else {
         const newP = await apiFetch<{ partition: Partition }>("/tree/partition", {
           method: "POST",
-          body: JSON.stringify({ name: "临时会话", emoji: "💬" }),
+          body: JSON.stringify({ name: "💬 临时", emoji: "💬" }),
         });
         pId = newP.partition.id;
       }
