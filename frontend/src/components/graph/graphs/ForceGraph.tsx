@@ -9,6 +9,7 @@ interface ForceGraphProps {
   data: GraphData;
   selectedNodeId?: string;
   onNodeSelect?: (node: GraphNode) => void;
+  onNodeContextMenu?: (node: GraphNode, e: MouseEvent) => void;
   width: number;
   height: number;
 }
@@ -17,6 +18,7 @@ export default function ForceGraph({
   data,
   selectedNodeId,
   onNodeSelect,
+  onNodeContextMenu,
   width,
   height,
 }: ForceGraphProps) {
@@ -121,6 +123,13 @@ export default function ForceGraph({
       onNodeSelect?.(d);
     });
 
+    // Right-click handler
+    nodeGroup.on("contextmenu", (event, d) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onNodeContextMenu?.(d, event);
+    });
+
     // Simulation
     const simulation = d3
       .forceSimulation<LayoutNode>(nodes)
@@ -156,8 +165,6 @@ export default function ForceGraph({
     <div ref={containerRef} className="w-full h-full">
       <svg
         ref={svgRef}
-        width={width}
-        height={height}
         className="w-full h-full"
       />
     </div>

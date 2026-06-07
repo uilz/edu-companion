@@ -9,6 +9,7 @@ interface FocusGraphProps {
   data: GraphData;
   selectedNodeId?: string;
   onNodeSelect?: (node: GraphNode) => void;
+  onNodeContextMenu?: (node: GraphNode, e: React.MouseEvent) => void;
   activePath: string[];
   width: number;
   height: number;
@@ -38,13 +39,13 @@ interface LNode extends GraphNode {
 
 const CARD_W = 175;
 const CARD_H = 118;
-const H_GAP = 40;
-const V_GAP = 14;
+const H_GAP = 56;
+const V_GAP = 20;
 
 interface ViewTransform { x: number; y: number; scale: number; }
 
 export default function FocusGraph({
-  data, selectedNodeId, onNodeSelect, activePath, width, height, searchQuery, matchedNodeIds,
+  data, selectedNodeId, onNodeSelect, onNodeContextMenu, activePath, width, height, searchQuery, matchedNodeIds,
 }: FocusGraphProps) {
   const { children, roots, treeSet } = useMemo(() => buildTree(data.nodes), [data.nodes]);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -122,25 +123,31 @@ export default function FocusGraph({
     onNodeSelect?.(node);
   }, [onNodeSelect]);
 
-  // ── Mouse pan ──
+  // ── Mouse pan (global listeners for out-of-bounds tracking) ──
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as SVGElement;
     if (target.closest("[data-node-id],.graph-btn,.graph-slider")) return;
     isDragging.current = true;
     dragStart.current = { x: e.clientX, y: e.clientY };
     viewStart.current = { x: view.x, y: view.y };
+    e.preventDefault();
   }, [view]);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isDragging.current) return;
-    setView((v) => ({ ...v, x: viewStart.current.x + e.clientX - dragStart.current.x, y: viewStart.current.y + e.clientY - dragStart.current.y }));
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!isDragging.current) return;
+      setView((v) => ({ ...v, x: viewStart.current.x + e.clientX - dragStart.current.x, y: viewStart.current.y + e.clientY - dragStart.current.y }));
+    };
+    const onUp = () => { isDragging.current = false; };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
   }, []);
-
-  const handleMouseUp = useCallback(() => { isDragging.current = false; }, []);
 
   // ── Wheel zoom ──
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setView((v) => {
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
       const newScale = Math.min(Math.max(v.scale * delta, 0.3), 3);
@@ -267,10 +274,6 @@ export default function FocusGraph({
       : { stroke: "var(--color-border)", strokeWidth: 1.5, strokeOpacity: 0.4 };
   };
 
-  // ── SVG size ──
-  const svgW = Math.max(width, layout.length > 0 ? (layout.reduce((m, n) => Math.max(m, n.x + CARD_W + 60), 0)) : width);
-  const svgH = Math.max(height - 88, layout.length > 0 ? (layout.reduce((m, n) => Math.max(m, n.y + CARD_H + 40), 0)) : height - 88);
-
   // ── Status tag helper ──
   const statusConfig = (n: GraphNode) => {
     const m = n.mastery ?? 0;
@@ -284,53 +287,13 @@ export default function FocusGraph({
   const statusWidth = (t: string) => t.length * 7 + 10;
 
   return (
-    <div className="relative w-full h-full select-none flex flex-col" onContextMenu={(e) => e.preventDefault()}>
-
-      {/* ═══ TOP BAR ═══ */}
-      <div className="flex-shrink-0 flex items-center justify-between px-4 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-surface)] min-h-[36px]">
-        <div className="flex items-center gap-1 text-[11px] min-w-0 mr-2">
-          {breadcrumbs.length > 0 ? (
-            breadcrumbs.map((b, i) => (
-              <React.Fragment key={b.id}>
-                {i > 0 && <ChevronRight size={10} className="text-[var(--color-text-muted)] flex-shrink-0" />}
-                <button
-                  onClick={() => handleBreadcrumbClick(b)}
-                  className="truncate max-w-[100px] px-1 py-0.5 rounded hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer"
-                  style={{
-                    color: i === breadcrumbs.length - 1 ? "var(--color-text)" : "var(--color-text-muted)",
-                    fontWeight: i === breadcrumbs.length - 1 ? 600 : 400,
-                  }}
-                >
-                  {b.label}
-                </button>
-              </React.Fragment>
-            ))
-          ) : (
-            <span className="text-[var(--color-text-muted)]">知识点图谱</span>
-          )}
-        </div>
-        <div className="flex items-center gap-0.5 flex-shrink-0">
-          <button onClick={handleExpandAll}
-            className="graph-btn flex items-center gap-0.5 px-1.5 py-1 rounded text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors">
-            <ChevronDown size={10} />展开
-          </button>
-          <button onClick={handleCollapseAll}
-            className="graph-btn flex items-center gap-0.5 px-1.5 py-1 rounded text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors">
-            <ChevronUp size={10} />收起
-          </button>
-        </div>
-      </div>
+    <div className="relative w-full h-full select-none" onContextMenu={(e) => e.preventDefault()}>
 
       {/* ═══ SVG CANVAS ═══ */}
       <svg
         ref={svgRef}
-        width={svgW}
-        height={svgH}
-        className="flex-1 cursor-grab active:cursor-grabbing"
+        className="w-full h-full cursor-grab active:cursor-grabbing"
         onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
         onWheel={handleWheel}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -374,6 +337,7 @@ export default function FocusGraph({
               <g key={n.id}
                 data-node-id={n.id}
                 onClick={() => handleNodeClick(n)}
+                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onNodeContextMenu?.(n, e); }}
                 onMouseEnter={() => setHoveredId(n.id)}
                 onMouseLeave={() => setHoveredId(null)}
                 style={{ cursor: "pointer" }}
@@ -408,7 +372,6 @@ export default function FocusGraph({
                 {/* Title — 去掉 emoji 前缀防止重复 */}
                 <text x={n.x + 8} y={n.y + 38} fontSize={11}
                   fill={isSel ? "#fff" : "var(--color-text)"} fontWeight={700}
-                  textLength={CARD_W - 20} lengthAdjust="spacingAndGlyphs"
                 >{n.label.replace(n.emoji || "", "").trim()}</text>
 
                 {/* 简介（节点的内容说明） */}
