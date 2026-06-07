@@ -6,6 +6,7 @@ import ConversationChatInput from "@/components/conversation/core/ChatInput";
 import SubBranchBanner from "@/components/conversation/banners/SubBranchBanner";
 import SwitchBanner from "@/components/conversation/banners/SwitchBanner";
 import ErrorBanner from "@/components/conversation/banners/ErrorBanner";
+import SecretaryInlineBanner from "@/components/notification/SecretaryInlineBanner";
 import type { TreeNode, ResponseBlock } from "@/types";
 
 // ── Props ──
@@ -101,6 +102,7 @@ export default function ConversationMessageArea(props: ConversationMessageAreaPr
 
       <div className="flex-1 overflow-hidden flex flex-col">
         <div className={messageListClassName || "flex-1 overflow-y-auto space-y-4"}>
+          <SecretaryInlineBanner conversationId={activeConversationId} />
           <MessageList
             messages={messages}
             responseBlocks={responseBlocks}

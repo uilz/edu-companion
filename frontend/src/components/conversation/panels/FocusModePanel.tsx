@@ -3,10 +3,10 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   ChevronLeft, ChevronRight,
-  BookOpen, Volume2, VolumeX, Play,
+  BookOpen, Volume2, VolumeX, Play, Network,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import ConversationMessageArea from "@/components/conversation/core/ConversationMessageArea";
-import GraphPanel from "@/components/conversation/panels/GraphPanel";
 import PracticePanel from "@/components/practice/panels/PracticePanel";
 import { PartitionPicker } from "@/components/conversation/tree/PartitionPicker";
 import TreeBreadcrumb from "@/components/conversation/tree/TreeBreadcrumb";
@@ -485,11 +485,49 @@ export default function FocusModePanel({
         className="flex flex-col overflow-hidden"
         style={{ width: `calc((100% - ${SPLITTER_WIDTH_PX}px) * ${(100 - splitPercent) / 100})` }}
       >
-        <GraphPanel activeTopicId={activeTopicId} />
+        <KnowledgeTreeEntry activeTopicId={activeTopicId} partitionId={selectedPartitionId} />
       </div>
 
       {isDragging && (
         <div className="fixed inset-0 z-40 cursor-col-resize" />
+      )}
+    </div>
+  );
+}
+
+/** 知识树入口面板 — 替代原 GraphPanel，点击跳转知识树页并智能锚定节点 */
+function KnowledgeTreeEntry({ activeTopicId, partitionId }: { activeTopicId?: string | null; partitionId?: string | null }) {
+  const router = useRouter();
+
+  const handleNavigate = () => {
+    const params = new URLSearchParams();
+    if (partitionId) params.set("partition", partitionId);
+    if (activeTopicId) params.set("node", activeTopicId);
+    router.push(`/knowledge-tree?${params.toString()}`);
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full gap-4 p-6">
+      <div className="w-16 h-16 rounded-2xl bg-[var(--color-accent)]/10 flex items-center justify-center">
+        <Network size={28} className="text-[var(--color-accent)]" />
+      </div>
+      <div className="text-center space-y-1.5">
+        <h3 className="text-sm font-semibold text-[var(--color-text)]">知识树</h3>
+        <p className="text-xs text-[var(--color-text-muted)] max-w-[240px]">
+          可视化知识结构，探索学习路径，管理知识节点
+        </p>
+      </div>
+      <button
+        onClick={handleNavigate}
+        className="px-5 py-2.5 bg-[var(--color-accent)] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2"
+      >
+        <Network size={16} />
+        打开知识树
+      </button>
+      {activeTopicId && (
+        <p className="text-[10px] text-[var(--color-text-muted)]">
+          将自动定位到当前话题节点
+        </p>
       )}
     </div>
   );

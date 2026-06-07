@@ -175,17 +175,17 @@ export function useConversation() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Panel=graph redirect ──
+  // ── Panel=graph redirect → 知识树页 ──
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       if (params.get("panel") === "graph") {
         const pId = params.get("p") || params.get("partition_id");
-        router.replace(
-          pId
-            ? `/dashboard?tab=graph&partition_id=${pId}`
-            : "/dashboard?tab=graph",
-        );
+        const nodeId = params.get("node_id") || params.get("topic_id");
+        const treeParams = new URLSearchParams();
+        if (pId) treeParams.set("partition", pId);
+        if (nodeId) treeParams.set("node", nodeId);
+        router.replace(`/knowledge-tree${treeParams.toString() ? `?${treeParams.toString()}` : ""}`);
       }
     } catch {
     }

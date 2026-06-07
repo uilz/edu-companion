@@ -12,6 +12,7 @@ import type { UseConversationReturn } from "@/components/conversation/hooks/useC
 import { useConversationStore } from "@/store/conversation/conversation-store";
 import { NewNodeDialog } from "@/components/ui/NewNodeDialog";
 import KnowledgeTreeRecommendBanner from "@/components/conversation/banners/KnowledgeTreeRecommendBanner";
+import NodePathBreadcrumb from "@/components/conversation/tree/NodePathBreadcrumb";
 
 /**
  * ConversationPanel — 对话面板主布局组件
@@ -258,15 +259,10 @@ export default function ConversationPanel(
 
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {selectedPartitionId && activePartition && (
+        {selectedPartitionId && (
           <div className="flex-shrink-0 border-b border-[var(--color-border)] bg-[var(--color-bg)]">
-            <div className="max-w-3xl mx-auto px-6 py-3 flex items-center gap-3">
-              <span className="text-lg">{activePartition.emoji}</span>
-              <div className="flex-1 min-w-0">
-                <h2 className="text-[15px] font-semibold text-[var(--color-text)] truncate">
-                  {activePartition.name}
-                </h2>
-              </div>
+            <div className="max-w-3xl mx-auto px-6 py-3">
+              <NodePathBreadcrumb />
             </div>
           </div>
         )}

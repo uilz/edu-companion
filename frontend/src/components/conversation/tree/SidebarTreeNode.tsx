@@ -30,6 +30,8 @@ export interface TreeConv {
   id: string;
   name: string;
   partition_id: string;
+  parent_id?: string;       // 直接父级 ID（partition / domain / topic）
+  parent_type?: string;     // "partition" | "domain" | "topic"
   is_active: boolean;
 }
 
@@ -109,38 +111,20 @@ function getChildPartitionId(node: GraphNode, partitionId?: string) {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  节点样式常量
+//  节点样式常量 — Tailwind class 版本
 // ══════════════════════════════════════════════════════════════
 
 /** 三态样式：未选中 / 路径祖先 / 当前选中 */
 type NodeVariant = "normal" | "ancestor" | "selected";
 
-const variantStyle = (variant: NodeVariant): React.CSSProperties => {
+const variantClass = (variant: NodeVariant, hasChildActions = false): string => {
   switch (variant) {
     case "selected":
-      return {
-        backgroundColor: "var(--color-surface)",
-        borderLeftColor: "var(--color-accent)",
-        borderLeftWidth: 3,
-        fontWeight: 600,
-        color: "var(--color-text)",
-      };
+      return "bg-[var(--color-surface)] font-semibold text-[var(--color-text)]";
     case "ancestor":
-      return {
-        backgroundColor: "var(--color-surface-hover)",
-        borderLeftColor: "var(--color-border)",
-        borderLeftWidth: 2,
-        fontWeight: 500,
-        color: "var(--color-text-secondary)",
-      };
+      return "bg-[var(--color-surface-hover)] font-normal text-[var(--color-text-muted)]";
     default:
-      return {
-        backgroundColor: "transparent",
-        borderLeftColor: "transparent",
-        borderLeftWidth: 3,
-        fontWeight: 400,
-        color: "var(--color-text-secondary)",
-      };
+      return "bg-transparent font-normal text-[var(--color-text-secondary)]";
   }
 };
 
@@ -170,7 +154,7 @@ export function SidebarTreeNode({
   const allowChildCreation = canCreateChild(node.level);
 
   const variant: NodeVariant = isSel ? "selected" : onPath ? "ancestor" : "normal";
-  const vs = variantStyle(variant);
+  const vc = variantClass(variant);
 
   // ── 点击逻辑 ──
   const handleNodeClick = () => {
@@ -214,13 +198,12 @@ export function SidebarTreeNode({
             if (isExpanded) toggleExpand(node);
           }
         }}
-        className="group relative flex cursor-pointer items-center transition-colors"
+        className={`group relative flex cursor-pointer items-center transition-colors ${vc}`}
         style={{
           paddingLeft: indent,
           paddingRight: 8,
           paddingBlock: 6,
-          backgroundColor: vs.backgroundColor,
-          borderLeft: `${vs.borderLeftWidth}px solid ${vs.borderLeftColor}`,
+          borderLeft: isSel ? "3px solid var(--color-accent)" : onPath ? "2px solid var(--color-accent-soft)" : "3px solid transparent",
         }}
         onClick={handleNodeClick}
         aria-expanded={isExpanded}
@@ -246,13 +229,7 @@ export function SidebarTreeNode({
         <span className="mr-1.5 flex-shrink-0 text-[var(--color-text-muted)]">{levelIcon(node.level)}</span>
 
         {/* 标签 */}
-        <span
-          className="flex-1 truncate text-xs"
-          style={{
-            color: vs.color,
-            fontWeight: vs.fontWeight,
-          }}
-        >
+        <span className={`flex-1 truncate text-xs ${isSel ? "text-[var(--color-text)] font-semibold" : onPath ? "text-[var(--color-text-secondary)] font-medium" : "text-[var(--color-text-secondary)] font-normal"}`}>
           {node.label}
         </span>
 
@@ -318,12 +295,12 @@ export function SidebarTreeNode({
           {convs.map(conv => (
             <React.Fragment key={`conv:${conv.id}`}>
               <div
-                className="group/conv flex cursor-pointer items-center transition-colors"
-                style={{
-                  paddingLeft: indent + 16, paddingRight: 4, paddingBlock: 4,
-                  borderLeft: activeConversationId === conv.id ? "3px solid var(--color-accent)" : "3px solid transparent",
-                  backgroundColor: activeConversationId === conv.id ? "var(--color-surface)" : "transparent",
-                }}
+                className={`group/conv flex cursor-pointer items-center transition-colors ${
+                  activeConversationId === conv.id
+                    ? "bg-[var(--color-surface)] border-l-[3px] border-l-[var(--color-accent)]"
+                    : "border-l-[3px] border-l-transparent"
+                }`}
+                style={{ paddingLeft: indent + 16, paddingRight: 4, paddingBlock: 4 }}
                 onClick={() => handleConvClick(conv.id)}
               >
                 <span className="mr-1 w-4 flex-shrink-0" />

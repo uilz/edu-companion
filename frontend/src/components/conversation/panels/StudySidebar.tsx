@@ -8,6 +8,7 @@ import { SidebarTreeNode } from "@/components/conversation/tree/SidebarTreeNode"
 import { useTreeNavigation } from "@/hooks/graph/useTreeNavigation";
 import { useConversationStore } from "@/store/conversation/conversation-store";
 import type { GraphNode } from "@/components/conversation/tree/SidebarTreeNode";
+import { ROOT_KEY } from "@/components/conversation/tree/SidebarTreeNode";
 
 interface Props {
   partitions?: unknown[];
@@ -49,12 +50,14 @@ export default function StudySidebar({
   const selectGraphNode = useConversationStore(s => s.selectGraphNode);
   const selectedNode = useConversationStore(s => s.selectedNode);
   const childMap = useConversationStore(s => s.childMap);
+  const convCache = useConversationStore(s => s.convCache);
+  const convActiveConvId = useConversationStore(s => s.activeConversationId);
+  const effectiveConvId = activeConversationId ?? convActiveConvId;
 
   // ── 构建 parentMap（子→父映射），用于计算祖先链 ──
   const parentMap = useMemo(() => {
     const map = new Map<string, string>();
     childMap.forEach((children, parentId) => {
-      if (parentId === "__graph_root__") return;
       for (const child of children) {
         map.set(child.id, parentId);
       }
@@ -62,22 +65,42 @@ export default function StudySidebar({
     return map;
   }, [childMap]);
 
-  // ── 计算选中节点的完整祖先链 ──
+  // ── 计算祖先链 ──
   const ancestorIds = useMemo(() => {
     const ids = new Set<string>();
-    if (!selectedNode || !selectedNode.parent) return ids;
-    let cur: string | null = selectedNode.parent;
+
+    // 先确定起始节点 ID：如果有活跃会话，从其 parent_id 开始
+    let startId: string | null = null;
+    if (effectiveConvId) {
+      convCache.forEach((convs) => {
+        if (startId) return;
+        const c = convs.find((cv) => cv.id === effectiveConvId);
+        if (c?.parent_id) startId = c.parent_id;
+      });
+    }
+    // 如果没有活跃会话或没找到 parent_id，回退到 selectedNode.parent
+    if (!startId) {
+      startId = selectedNode?.parent ?? null;
+    }
+
+    if (!startId) return ids;
+
+    let cur: string | null = startId;
     while (cur) {
+      if (cur === ROOT_KEY) break;
       ids.add(cur);
       cur = parentMap.get(cur) || null;
     }
     return ids;
-  }, [selectedNode, parentMap]);
+  }, [selectedNode, parentMap, effectiveConvId, convCache]);
 
   // ── 选中+展开（交由 store 自包含处理）──
   const handleSelectGraphNode = async (node: GraphNode, partitionId: string) => {
     await selectGraphNode(node, partitionId);
   };
+
+  // 有活跃会话时，树节点不显示选中态（会话自身的强高亮由 activeConversationId 控制）
+  const treeSelectedNode = effectiveConvId ? null : selectedNode;
 
   return (
     <div className="flex flex-col h-full bg-[var(--color-page-secondary)] border-r border-[var(--color-border)] select-none">
@@ -109,7 +132,7 @@ export default function StudySidebar({
               partitionId={node.level === "partition" ? node.id : undefined}
               expandedSet={nav.expandedSet} loadingSet={nav.loadingSet}
               childMap={nav.childMap}
-              selectedNode={selectedNode}
+              selectedNode={treeSelectedNode}
               ancestorIds={ancestorIds}
               convCache={nav.convCache} activeConversationId={activeConversationId}
               editingId={nav.editingId} editValue={nav.editValue}

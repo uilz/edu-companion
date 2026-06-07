@@ -13,7 +13,7 @@ interface Option {
 
 /** 练习块路由组件：判断 v7多题集 / 交互式练习 / 旧格式，分发到对应组件 */
 export function PracticeBlockRouter({ content }: { content: Record<string, unknown> }) {
-  // ── v7 多题格式（来自对话 generate_practice 工具）──
+  // ── 多题格式（来自对话 generate_practice 工具）──
   const questions = content.questions as
     | Array<{ id?: string; stem: string; options?: Array<{ letter: string; text: string; is_correct?: boolean }>; question_type?: string; answer?: string | string[]; analysis?: string }>
     | undefined;
