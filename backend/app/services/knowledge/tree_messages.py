@@ -7,19 +7,17 @@ import logging
 logger = logging.getLogger(__name__)
 
 from app.schemas.conversation import TextBlock, TreeNode, UserData
-from app.services.common.storage import storage
+from app.services.common import get_data_repo
 
 
 class TreeMessagesMixin:
     """消息 CRUD — add_message, update_message_content, modify_message, delete_message."""
 
-    _storage = storage
-
     def add_message(
         self, user_id, partition_id, role, content_blocks,
         text_summary="", conversation_id="",
     ) -> TreeNode:
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
         partition = data.partitions.get(partition_id)
         if not partition:
             raise ValueError(f"Partition {partition_id} not found")
@@ -65,23 +63,11 @@ class TreeMessagesMixin:
         partition.last_active_at = time.time()
         data.nodes[node.id] = node
 
-        try:
-            from app.services.conversation.message_repository import save_message
-            text_content = text_summary or ""
-            save_message(
-                user_id=user_id, message_id=node.id,
-                conversation_id=conv.id, role=role,
-                content=text_content, content_blocks=content_blocks,
-                summary="", token_count=getattr(node, "token_count", 0),
-            )
-        except Exception:
-            logger.exception("写入 messages 表失败 (不影响主流程)")
-
-        self._storage.save(user_id, data)
+        self._get_data_repo().save(user_id, data)
         return node
 
     def update_message_content(self, user_id: str, message_id: str, text: str) -> None:
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
         node = data.nodes.get(message_id)
         if not node:
             return
@@ -89,24 +75,12 @@ class TreeMessagesMixin:
         node.content_blocks = [TextBlock(text=text)]
         node.text_summary = text
 
-        try:
-            from app.services.conversation.message_repository import save_message
-            save_message(
-                user_id=user_id, message_id=message_id,
-                conversation_id=getattr(node, "conversation_id", ""),
-                role=getattr(node, "role", "assistant"),
-                content=text, content_blocks=[TextBlock(text=text)],
-                summary="", token_count=0,
-            )
-        except Exception:
-            logger.exception("更新 messages 表失败 (不影响主流程)")
-
-        self._storage.save(user_id, data)
+        self._get_data_repo().save(user_id, data)
 
     def modify_message(
         self, user_id, message_id, new_content_blocks, new_text_summary="",
     ) -> TreeNode:
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
         node = data.nodes.get(message_id)
         if not node:
             raise ValueError(f"Message {message_id} not found")
@@ -138,11 +112,11 @@ class TreeMessagesMixin:
                 conv.path = conv.path[:replace_idx] + [new_node.id]
                 conv.summary_dirty = True
 
-        self._storage.save(user_id, data)
+        self._get_data_repo().save(user_id, data)
         return new_node
 
     def delete_message(self, user_id, message_id) -> None:
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
         node = data.nodes.get(message_id)
         if not node:
             return
@@ -196,4 +170,4 @@ class TreeMessagesMixin:
                             break
             conv.path = new_path
 
-        self._storage.save(user_id, data)
+        self._get_data_repo().save(user_id, data)

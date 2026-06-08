@@ -6,21 +6,19 @@ import logging
 logger = logging.getLogger(__name__)
 
 from app.schemas.conversation import Conversation, SubBranchRef, UserData
-from app.services.common.storage import storage
+from app.services.common import get_data_repo
 
 
 class TreeSubBranchMixin:
     """子支操作 — create_sub_branch, get_sub_branches, get_sub_branch_parent,
     delete_sub_branch, update_sub_branch_summary."""
 
-    _storage = storage
-
     def create_sub_branch(
         self, user_id: str, source_conversation_id: str,
         source_message_id: str, char_start: int, char_end: int,
         quoted_text: str, initial_name: str = "",
     ):
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
 
         source_msg = data.nodes.get(source_message_id)
         if not source_msg:
@@ -65,12 +63,12 @@ class TreeSubBranchMixin:
         data.conversations[conv.id] = conv
         data.nodes[source_message_id] = source_msg
         data.conversations[source_conversation_id] = source_conv
-        self._storage.save(user_id, data)
+        self._get_data_repo().save(user_id, data)
 
         return conv, ref
 
     def get_sub_branches(self, user_id: str, message_id: str) -> list[dict]:
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
         msg = data.nodes.get(message_id)
         if not msg or not msg.has_sub_branches:
             return []
@@ -91,7 +89,7 @@ class TreeSubBranchMixin:
         return result
 
     def get_sub_branch_parent(self, user_id: str, conv_id: str) -> dict | None:
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
         conv = data.conversations.get(conv_id)
         if not conv or not conv.parent_conversation_id:
             return None
@@ -105,7 +103,7 @@ class TreeSubBranchMixin:
         }
 
     def delete_sub_branch(self, user_id: str, conv_id: str) -> dict:
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
         conv = data.conversations.get(conv_id)
         if not conv:
             raise ValueError(f"Sub-branch {conv_id} not found")
@@ -143,7 +141,7 @@ class TreeSubBranchMixin:
 
         conv.is_active = False
         data.conversations[conv_id] = conv
-        self._storage.save(user_id, data)
+        self._get_data_repo().save(user_id, data)
 
         remaining_count = 0
         if source_msg_id:
@@ -161,7 +159,7 @@ class TreeSubBranchMixin:
     def update_sub_branch_summary(
         self, user_id: str, conv_id: str, summary: str,
     ) -> None:
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
         conv = data.conversations.get(conv_id)
         if not conv or not conv.parent_sub_branch_ref:
             return
@@ -187,4 +185,4 @@ class TreeSubBranchMixin:
             })
 
         data.nodes[source_msg_id] = source_msg
-        self._storage.save(user_id, data)
+        self._get_data_repo().save(user_id, data)

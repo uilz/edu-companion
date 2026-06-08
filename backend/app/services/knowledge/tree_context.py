@@ -7,16 +7,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 from app.schemas.conversation import Conversation, UserData
-from app.services.common.storage import storage
+from app.services.common import get_data_repo
 
 
 class TreeContextMixin:
     """获取上下文 / 切换活跃对话."""
 
-    _storage = storage
-
     def get_partition_context(self, user_id: str, partition_id: str) -> dict:
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
         partition = data.partitions.get(partition_id)
         if not partition:
             raise ValueError(f"Partition {partition_id} not found")
@@ -55,7 +53,7 @@ class TreeContextMixin:
         partition_id: str | None = None,
     ) -> Conversation:
         """切换活跃对话。使用 conversation.partition_id 查找同级别对话并切换。"""
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
         conv = data.conversations.get(conversation_id)
         if not conv:
             raise ValueError(f"Conversation {conversation_id} not found")
@@ -95,5 +93,5 @@ class TreeContextMixin:
             if topic:
                 topic.active_conversation_id = conversation_id
 
-        self._storage.save(user_id, data)
+        self._get_data_repo().save(user_id, data)
         return conv

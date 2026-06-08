@@ -12,7 +12,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from app.cognitive.models import CognitiveNode, MetaInfo
-from app.cognitive.storage import upsert_node, delete_node as cog_delete_node
+from app.cognitive import get_repo
 
 
 class TreeSyncMixin:
@@ -80,7 +80,7 @@ class TreeSyncMixin:
             is_visible=not auto_created,  # 临时节点不进图谱
             meta=MetaInfo(created_at=time.time()),
         )
-        upsert_node(cog_node, user_id)
+        get_repo().upsert_node(cog_node, user_id)
 
     # ────────────────────────────────────────────────────────
     # Sync: delete cognitive node
@@ -93,11 +93,10 @@ class TreeSyncMixin:
             return
         try:
             # 先检查实体是否在临时分区下（可能从未创建认知节点）
-            from app.cognitive.storage import get_node as cog_get_node
-            cog = cog_get_node(node_id, user_id)
+            cog = get_repo().get_node(node_id, user_id)
             if not cog:
                 return
-            cog_delete_node(node_id, user_id)
+            get_repo().delete_node(node_id, user_id)
         except Exception:
             logger.warning(
                 f"Failed to delete cognitive node {node_id}", exc_info=True
@@ -114,9 +113,7 @@ class TreeSyncMixin:
         if level not in ("partition", "domain", "topic", "conversation"):
             return
         try:
-            from app.cognitive.storage import get_node as cog_get_node
-
-            cog = cog_get_node(node_id, user_id)
+            cog = get_repo().get_node(node_id, user_id)
             if cog:
                 old_emoji = (
                     cog.label.split(" ")[0]
@@ -126,7 +123,7 @@ class TreeSyncMixin:
                 cog.label = (old_emoji + " " + new_name) if old_emoji else new_name
                 cog.is_visible = True  # 临时→普通：进入图谱
                 cog.node_type = "explicit"
-                upsert_node(cog, user_id)
+                get_repo().upsert_node(cog, user_id)
             else:
                 # 如果认知节点不存在（从未接入图谱），创建一个新的
                 try:
@@ -144,7 +141,7 @@ class TreeSyncMixin:
                             is_visible=True,
                             meta=MetaInfo(created_at=time.time()),
                         )
-                        upsert_node(cog_node, user_id)
+                        get_repo().upsert_node(cog_node, user_id)
                 except Exception:
                     pass
         except Exception:

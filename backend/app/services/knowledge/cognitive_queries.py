@@ -11,7 +11,7 @@ import logging
 from typing import Optional
 
 from shared.constants import DEFAULT_USER_ID
-from app.cognitive.storage import list_all_nodes, get_node, get_urgent_nodes
+from app.cognitive import get_repo
 from app.cognitive.models import CognitiveNode
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 def get_knowledge_context(user_id: str = DEFAULT_USER_ID) -> str:
     """生成注入 LLM system prompt 的知识上下文"""
     try:
-        nodes = list_all_nodes(user_id)
+        nodes = get_repo().list_all_nodes(user_id)
         practiced = [
             n for n in nodes
             if n.practice_summary and n.practice_summary.total_attempts > 0
@@ -36,7 +36,7 @@ def get_knowledge_context(user_id: str = DEFAULT_USER_ID) -> str:
         practiced.sort(key=lambda n: n.belief.proficiency_mean)
         weak = [n for n in practiced if n.belief.proficiency_mean < 0.4]
         mastered = [n for n in practiced if n.belief.proficiency_mean >= 0.8]
-        urgent = get_urgent_nodes(5, user_id)
+        urgent = get_repo().get_urgent_nodes(5, user_id)
 
         lines = ["【学生知识状态】"]
         if weak:
@@ -70,7 +70,7 @@ def get_skill_context(skill_ids: list[str], user_id: str = DEFAULT_USER_ID) -> s
     try:
         lines = []
         for sid in skill_ids:
-            node = get_node(sid, user_id)
+            node = get_repo().get_node(sid, user_id)
             if node:
                 mastery = node.belief.proficiency_mean
                 status = "✅" if mastery >= 0.8 else "📖" if mastery >= 0.4 else "⚠️"
@@ -92,7 +92,7 @@ def get_skill_context(skill_ids: list[str], user_id: str = DEFAULT_USER_ID) -> s
 def get_cognitive_profile(user_id: str = DEFAULT_USER_ID) -> str:
     """返回 CognitiveNode 的格式化画像摘要"""
     try:
-        nodes = list_all_nodes(user_id)
+        nodes = get_repo().list_all_nodes(user_id)
         practiced = [
             n for n in nodes
             if n.practice_summary and n.practice_summary.total_attempts > 0
@@ -138,7 +138,7 @@ def get_event_queue_length(user_id: str = DEFAULT_USER_ID) -> int:
 def get_all_skills_summary(user_id: str = DEFAULT_USER_ID) -> dict:
     """获取所有技能的摘要"""
     try:
-        nodes = list_all_nodes(user_id)
+        nodes = get_repo().list_all_nodes(user_id)
         practiced = [
             n for n in nodes
             if n.practice_summary and n.practice_summary.total_attempts > 0
@@ -163,7 +163,7 @@ def get_all_skills_summary(user_id: str = DEFAULT_USER_ID) -> dict:
 def get_skill_detail(skill_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[dict]:
     """获取单个技能详情"""
     try:
-        node = get_node(skill_id, user_id)
+        node = get_repo().get_node(skill_id, user_id)
         if not node:
             return None
         return {
@@ -185,7 +185,7 @@ def get_skill_detail(skill_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[
 def get_weak_skills(limit: int = 5, user_id: str = DEFAULT_USER_ID) -> list[str]:
     """获取薄弱技能列表"""
     try:
-        nodes = list_all_nodes(user_id)
+        nodes = get_repo().list_all_nodes(user_id)
         practiced = [
             n for n in nodes
             if n.practice_summary and n.practice_summary.total_attempts > 0
@@ -200,7 +200,7 @@ def get_weak_skills(limit: int = 5, user_id: str = DEFAULT_USER_ID) -> list[str]
 def get_mastered_skills(user_id: str = DEFAULT_USER_ID) -> list[str]:
     """获取已掌握技能列表"""
     try:
-        nodes = list_all_nodes(user_id)
+        nodes = get_repo().list_all_nodes(user_id)
         return [
             n.id for n in nodes
             if n.practice_summary

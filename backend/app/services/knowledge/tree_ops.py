@@ -19,7 +19,7 @@ from app.services.knowledge.tree_context import TreeContextMixin
 from app.services.knowledge.tree_sub_branch import TreeSubBranchMixin
 from app.services.knowledge.tree_sync import TreeSyncMixin
 from app.services.knowledge.tree_naming import TreeNamingMixin
-from app.services.common.storage import storage
+from app.services.common import get_data_repo
 
 
 class TreeOpsService(
@@ -29,7 +29,7 @@ class TreeOpsService(
     """所有树形结构操作（归一化版本）—— composed from focused sub-modules."""
 
     def __init__(self):
-        self._storage = storage
+        self._storage = get_data_repo()
 
 
 tree_ops = TreeOpsService()

@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 from app.schemas.conversation import (
     Conversation, Domain, Partition, Topic, TreeNode, UserData,
 )
-from app.services.common.storage import storage
+from app.services.common import get_data_repo
 
 
 class TreeHierarchyMixin:
@@ -69,8 +69,6 @@ class TreeHierarchyMixin:
             ),
         },
     }
-
-    _storage = storage
 
     # ── 内部辅助 ──
 
@@ -161,7 +159,7 @@ class TreeHierarchyMixin:
           - "partition" → parent = partition_id
           - "domain"    → parent = domain_id（自动补全）
           - "topic"/"concept" → parent = topic_id（自动补全 domain→topic）"""
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
 
         if kg_node_level == "partition":
             parent_id = partition_id
@@ -181,17 +179,17 @@ class TreeHierarchyMixin:
             type="tree_exploration",
             metadata={"bound_node_id": kg_node_id, "bound_node_label": kg_node_label},
         )
-        self._storage.save(user_id, data)
+        self._get_data_repo().save(user_id, data)
         return conv
 
     def create_temporary_conversation(self, user_id: str) -> Conversation:
         """空状态时创建临时对话（自动挂临时分区）。"""
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
         temp_part, _ = self._ensure_temp_partition(user_id, data)
         conv = self._create_conversation_node(
             user_id, data, temp_part.id, name="临时会话", type="temporary",
         )
-        self._storage.save(user_id, data)
+        self._get_data_repo().save(user_id, data)
         return conv
 
     def migrate_temporary_conversation(
@@ -200,7 +198,7 @@ class TreeHierarchyMixin:
     ) -> Conversation:
         """将临时对话迁移到正式分区。
         支持：迁移到已有分区 / 新建分区后调用此方法。"""
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
         conv = data.conversations.get(conv_id)
         if not conv:
             raise ValueError(f"Conversation {conv_id} not found")
@@ -224,7 +222,7 @@ class TreeHierarchyMixin:
         data.conversations[conv.id] = conv
         # TODO: 清理临时分区（后续可考虑更多场景）
         self._cleanup_empty_temp_partition(user_id, data)
-        self._storage.save(user_id, data)
+        self._get_data_repo().save(user_id, data)
         return conv
 
     def _cleanup_empty_temp_partition(self, user_id: str, data: UserData) -> None:
@@ -254,7 +252,7 @@ class TreeHierarchyMixin:
         self, user_id: str, node_id: str, level: str, data: UserData | None = None,
     ) -> None:
         if data is None:
-            data = self._storage.load(user_id)
+            data = self._get_data_repo().load(user_id)
 
         config = self.LEVEL_CONFIG[level]
         collection = self._get_collection(data, level)
@@ -298,7 +296,7 @@ class TreeHierarchyMixin:
         auto_created: bool = False,
     ):
         if data is None:
-            data = self._storage.load(user_id)
+            data = self._get_data_repo().load(user_id)
 
         config = self.LEVEL_CONFIG[level]
 
@@ -375,8 +373,8 @@ class TreeHierarchyMixin:
     def _ensure_conversation_parent_path(
         self, user_id: str, topic_id: str, data: UserData,
     ) -> None:
-        from app.cognitive.storage import get_node as cog_get_node
-        cog = cog_get_node(topic_id, user_id)
+        from app.cognitive import get_repo
+        cog = get_repo().get_node(topic_id, user_id)
 
         if not cog or not cog.is_visible:
             temp_partition, _ = self._ensure_temp_partition(user_id, data)
@@ -404,7 +402,7 @@ class TreeHierarchyMixin:
         parent_label = ""
         parent_emoji = ""
         if cog_parent_id:
-            parent_cog = cog_get_node(cog_parent_id, user_id)
+            parent_cog = get_repo().get_node(cog_parent_id, user_id)
             if parent_cog:
                 pl = parent_cog.label.split(" ", 1) if parent_cog.label else [""]
                 parent_emoji = ""
@@ -419,7 +417,7 @@ class TreeHierarchyMixin:
             if domain_id and domain_id not in data.domains:
                 partition_id = ""
                 if parent_cog:
-                    pp_cog = cog_get_node(parent_cog.parent, user_id) if parent_cog.parent else None
+                    pp_cog = get_repo().get_node(parent_cog.parent, user_id) if parent_cog.parent else None
                     if pp_cog:
                         partition_id = pp_cog.id
                         if partition_id not in data.partitions:
@@ -478,51 +476,51 @@ class TreeHierarchyMixin:
     # ── 公开 CRUD ──
 
     def create_partition(self, user_id, name, subject="", direction="subject", emoji="💬"):
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
         partition = self._create_node(user_id, "partition", None, name, emoji, data=data)
-        self._storage.save(user_id, data)
+        self._get_data_repo().save(user_id, data)
         return partition
 
     def delete_partition(self, user_id, partition_id):
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
         self._delete_node(user_id, partition_id, "partition", data=data)
-        self._storage.save(user_id, data)
+        self._get_data_repo().save(user_id, data)
 
     def create_domain(self, user_id, partition_id, name, emoji="📚"):
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
         domain = self._create_node(user_id, "domain", partition_id, name, emoji, data=data)
-        self._storage.save(user_id, data)
+        self._get_data_repo().save(user_id, data)
         return domain
 
     def delete_domain(self, user_id, domain_id):
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
         self._delete_node(user_id, domain_id, "domain", data=data)
-        self._storage.save(user_id, data)
+        self._get_data_repo().save(user_id, data)
 
     def create_topic(self, user_id, domain_id, name, emoji="📝"):
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
         topic = self._create_node(user_id, "topic", domain_id, name, emoji, data=data)
-        self._storage.save(user_id, data)
+        self._get_data_repo().save(user_id, data)
         return topic
 
     def delete_topic(self, user_id, topic_id):
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
         self._delete_node(user_id, topic_id, "topic", data=data)
-        self._storage.save(user_id, data)
+        self._get_data_repo().save(user_id, data)
 
     def create_conversation(self, user_id, topic_id="", name="", parent_id="", type="normal"):
         """创建对话。向下兼容：传 topic_id 走旧路径；传 parent_id 走新通用路径。"""
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
         if parent_id:
             conv = self._create_conversation_node(
                 user_id, data, parent_id, name=name, type=type,
             )
         else:
             conv = self._create_node(user_id, "conversation", topic_id, name, data=data)
-        self._storage.save(user_id, data)
+        self._get_data_repo().save(user_id, data)
         return conv
 
     def delete_conversation(self, user_id, conv_id):
-        data = self._storage.load(user_id)
+        data = self._get_data_repo().load(user_id)
         self._delete_node(user_id, conv_id, "conversation", data=data)
-        self._storage.save(user_id, data)
+        self._get_data_repo().save(user_id, data)

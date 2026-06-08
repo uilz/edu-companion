@@ -14,7 +14,7 @@ import logging
 from typing import Any
 
 from app.schemas.conversation import TreeNode
-from app.services.common.storage import storage
+from app.services.common import get_data_repo
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ def _p0_post_message_hooks(user_id: str, partition_id: str, node: TreeNode) -> N
             from app.services.analytics.meta_history import write_to_meta_history
             loop.create_task(write_to_meta_history(user_id, node))
 
-            data = storage.load(user_id)
+            data = get_data_repo().load(user_id)
             conversation = data.conversations.get(node.conversation_id) if node.conversation_id else None
             if conversation:
                 msg_count = len(conversation.path)
@@ -43,11 +43,11 @@ def _p0_post_message_hooks(user_id: str, partition_id: str, node: TreeNode) -> N
                 async def _do_rename():
                     new_name = await try_auto_rename_branch(user_id, node.conversation_id, msg_count)
                     if new_name:
-                        _data = storage.load(user_id)
+                        _data = get_data_repo().load(user_id)
                         _conv = _data.conversations.get(node.conversation_id)
                         if _conv:
                             _conv.name = new_name
-                            storage.save(user_id, _data)
+                            get_data_repo().save(user_id, _data)
                             # 分支命名后 → 异步更新知识图谱
                             _trigger_graph_update(user_id, node.conversation_id, new_name)
 
@@ -65,7 +65,7 @@ def _trigger_graph_update(user_id: str, conversation_id: str, new_branch_name: s
     """分支命名后异步触发知识图谱更新（fire and forget）"""
     async def _update():
         try:
-            data = storage.load(user_id)
+            data = get_data_repo().load(user_id)
             conversation = data.conversations.get(conversation_id)
             if not conversation:
                 return
@@ -117,10 +117,10 @@ async def _analyze_conversation_evidence(
     """分析一轮对话，提取知识证据（通过 CognitiveNode 事件系统）"""
     try:
         from app.services.knowledge.cognitive_queries import analyze_dialogue_evidence
-        from app.services.common.storage import storage as _st
+        from app.services.common import get_data_repo as _st
 
         # 从 partition 推断涉及的技能（通过 CognitiveNode 查找实际 node_id）
-        from app.cognitive.storage import find_node_by_label
+        from app.cognitive import get_repo
         data = _st.load(user_id)
         from app.services.llm.llm_core import _find_active_conversation
         conversation = data.conversations.get(conversation_id) if conversation_id else _find_active_conversation(data, partition_id)
@@ -129,11 +129,11 @@ async def _analyze_conversation_evidence(
         if partition:
             label_to_lookup = partition.name or partition.subject
             if label_to_lookup:
-                node = find_node_by_label(label_to_lookup, user_id)
+                node = get_repo().find_node_by_label(label_to_lookup, user_id)
                 if node:
                     skill_ids = [node.id]
                 elif partition.subject and partition.subject != label_to_lookup:
-                    node = find_node_by_label(partition.subject, user_id)
+                    node = get_repo().find_node_by_label(partition.subject, user_id)
                     if node:
                         skill_ids = [node.id]
 

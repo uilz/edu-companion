@@ -16,11 +16,7 @@ from pydantic import BaseModel
 from shared.constants import DEFAULT_USER_ID
 from app.cognitive.growth_engine import growth_engine
 from app.cognitive.models import CognitiveNode
-from app.cognitive.storage import (
-    find_node_by_path, get_node, get_visible_children, get_suggested_count,
-    get_child_count, get_nodes_by_level, list_all_nodes, delete_node,
-    set_node_visible, upsert_node,
-)
+from app.cognitive import get_repo
 from app.cognitive.edge_storage import (
     get_edges_for_node, update_edge_status, delete_edge,
 )
@@ -31,7 +27,7 @@ from app.cognitive.link_storage import (
 from app.services.conversation.message_repository import update_message_cognitive, get_message_conversation_id
 from app.services.common.classifier_service import classifier_service
 from app.services.analytics.adaptive_selector import adaptive_selector
-from app.services.common.storage import storage
+from app.services.common import get_data_repo
 from app.services.knowledge.tree_ops import TreeOpsService
 from app.schemas.conversation import Partition, Domain, Topic
 
@@ -53,9 +49,9 @@ def _entity_to_node(
     """将 Partition/Domain/Topic 转为 frontend graph node 格式"""
     label = (entity.emoji + " " + entity.name) if getattr(entity, "emoji", None) else entity.name
     # 从认知图谱查询对应节点的分析指标
-    cog = get_node(entity.id, user_id)
-    suggested = get_suggested_count(entity.id, user_id) if cog else 0
-    children = get_child_count(entity.id, user_id) if cog else 0
+    cog = get_repo().get_node(entity.id, user_id)
+    suggested = get_repo().get_suggested_count(entity.id, user_id) if cog else 0
+    children = get_repo().get_child_count(entity.id, user_id) if cog else 0
     return {
         "id": entity.id,
         "label": label,
@@ -130,7 +126,7 @@ def confirm_message_cognitive(message_id: str, req: CognitiveConfirmRequest) -> 
     # 解析节点名称
     nodes = []
     for nid in node_ids:
-        node = get_node(nid, DEFAULT_USER_ID)
+        node = get_repo().get_node(nid, DEFAULT_USER_ID)
         if node:
             nodes.append({
                 "id": node.id,
@@ -190,20 +186,20 @@ def get_graph_nodes(
     主数据源：对话树 (partitions/domains/topics)
     增强数据：cognitive_nodes（掌握度、趋势、子节点统计等）
     """
-    data = storage.load(user_id)
+    data = get_data_repo().load(user_id)
 
     def _enrich(
         entity: Partition | Domain | Topic,
         level_name: str,
         parent: str | None,
     ) -> dict:
-        cog = get_node(entity.id, user_id)
+        cog = get_repo().get_node(entity.id, user_id)
         emoji = getattr(entity, "emoji", "") or (cog.emoji if cog else "")
         raw_label = getattr(entity, "name", "")
         label = f"{emoji} {raw_label}".strip() if emoji and not raw_label.startswith(emoji) else raw_label
         mastery = float(cog.belief.proficiency_mean) if cog and cog.belief else 0.0
         trend_dir = cog.trend.direction if cog and cog.trend else "stable"
-        child_cnt = get_child_count(entity.id, user_id) if cog else 0
+        child_cnt = get_repo().get_child_count(entity.id, user_id) if cog else 0
         node_type = cog.node_type if cog else "explicit"
         path_id = cog.path_id if cog else entity.name
         brief = cog.brief if cog else ""
@@ -319,7 +315,7 @@ def remove_graph_node(
     partition/domain/topic → 走 tree_ops（同步删对话树 + 认知图谱）
     concept/atom → 仅删认知图谱
     """
-    data = storage.load(user_id)
+    data = get_data_repo().load(user_id)
     # 判断层级：partition > domain > topic > cognitive-only
     if node_id in data.partitions:
         tree_ops.delete_partition(user_id, node_id)
@@ -332,14 +328,14 @@ def remove_graph_node(
         return {"status": "ok", "deleted_id": node_id, "level": "topic"}
 
     # concept/atom → 仅认知图谱
-    node = get_node(node_id, user_id)
+    node = get_repo().get_node(node_id, user_id)
     if not node:
         raise HTTPException(404, f"Node {node_id} not found")
     if recursive:
-        children = get_visible_children(node_id, user_id)
+        children = get_repo().get_visible_children(node_id, user_id)
         for child in children:
             remove_graph_node(child.id, recursive=True, user_id=user_id)
-    delete_node(node_id, user_id)
+    get_repo().delete_node(node_id, user_id)
     return {"status": "ok", "deleted_id": node_id}
 
 
@@ -353,9 +349,9 @@ def dashboard_overview(
     user_id: str = DEFAULT_USER_ID,
 ) -> dict:
     """学情仪表盘概览 — 掌握度 + 队列 + 趋势 + 错误 + XP"""
-    from app.cognitive.storage import list_all_nodes
+    from app.cognitive import get_repo
 
-    all_nodes = list_all_nodes(user_id)
+    all_nodes = get_repo().list_all_nodes(user_id)
 
     # 1. 掌握度热力图
     partition_means: dict[str, float] = {}
