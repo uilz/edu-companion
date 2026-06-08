@@ -1,15 +1,66 @@
 # 🎓 智能伴学系统 (Edu-Companion) 文档
 
-> 完整的项目文档按 **版本 / 阶段 / 子系统** 组织。
->
-> 📖 **从此开始 → [index.md](index.md)**
+> 基于 AI 的全栈学习伴侣平台 — 自适应学习规划、精准答疑、多模态交互、学情追踪。
+
+## 快速开始
+
+```bash
+# 本地开发
+pnpm install && pnpm dev          # 前端（Next.js :3000）
+cd backend && poetry install && uvicorn main:app --reload  # 后端（FastAPI :8000）
+
+# 生产部署
+docker compose -f docker/docker-compose.yml up -d
+```
+
+## 文档结构怎么看
+
+| 目录 | 内容 | 适合谁 |
+|------|------|--------|
+| [architecture/](architecture/overview.md) | 系统架构、分层设计、全局规则 | 所有人 |
+| [specs/](specs/) | 数据结构和核心规则定义 | 开发前必看 |
+| [modules/](modules/) | 各模块实现方案 | 对应模块开发者 |
+| [roadmaps/](roadmaps/) | 实施计划和任务范围 | PM 和开发者 |
+| [design-language.md](design-language.md) | UI 设计规范（颜色、字体、组件） | 前端开发者 |
+| [adr/](adr/) | 架构决策记录 | 需追溯决策时 |
+| [archive/](archive/) | 历史归档（旧设计、旧计划） | 仅供参考 |
+
+### 新人 5 分钟路线
+
+1. 先读 [architecture/overview.md](architecture/overview.md) — 了解系统全貌
+2. 找到自己负责的模块，读对应 [specs/](specs/) 的数据定义
+3. 再读 [modules/](modules/) 的实现方案
+4. 最后看 [roadmaps/](roadmaps/) 确认当前迭代范围
+
+### 开发一个新功能
+
+```
+specs/ 看数据结构 → modules/ 看实现方案 → roadmaps/ 确认任务范围
+```
+
+### 修改数据结构
+
+```
+更新 specs/ 对应文档 → 同步检查所有依赖它的 modules/ 是否需要调整
+```
+
+---
 
 ## 快速导航
 
-- [系统架构 (v8.0)](architecture/current-v8.md) — 分层重构后的最新架构
-- [阶段文档一览](phases/) — Phase 1~10 开发历程
-- [子系统文档](subsystems/) — 对话系统等
-- [设计文档](design/) — 子分支设计、设计语言
-- [归档](archive/) — 旧版本文档（v4 架构、v7 前端架构等）
-- [开发进度](../../PROGRESS.md) — 当前里程碑
-- [更新日志](../../CHANGELOG.md) — 版本变更
+- [系统架构 v8.0](architecture/overview.md) — 分层重构后的最新架构
+- [项目根 README](../README.md) — 项目介绍
+- [PROGRESS.md](../PROGRESS.md) — 当前开发进度
+- [CHANGELOG.md](../CHANGELOG.md) — 版本更新日志
+
+### 核心模块
+
+| 模块 | 规格 | 实现 |
+|------|------|------|
+| 对话系统 | [specs/02-conversation-messages.md](specs/02-conversation-messages.md) | [modules/conversation-system/](modules/conversation-system/) |
+| 知识图谱 | [specs/03-knowledge-graph.md](specs/03-knowledge-graph.md) | [modules/knowledge-graph/](modules/knowledge-graph/) |
+| 练习系统 | [specs/04-practice-system.md](specs/04-practice-system.md) | [modules/practice-system/](modules/practice-system/) |
+| 秘书系统 | [specs/05-secretary-system.md](specs/05-secretary-system.md) | [modules/secretary-system/](modules/secretary-system/) |
+| 认知引擎 | [specs/01-cognitive-node.md](specs/01-cognitive-node.md) | [modules/cognitive-engine/](modules/cognitive-engine/) |
+| 多模态 | — | [modules/multimodal/](modules/multimodal/) |
+| 文件管理 | — | [modules/file-management/](modules/file-management/) |

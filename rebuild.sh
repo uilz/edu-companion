@@ -10,6 +10,24 @@ LOG_DIR="$PROJECT_DIR/logs"
 
 mkdir -p "$LOG_DIR"
 
+# ---------- 轮询等待函数（每1秒检查一次，最多等15秒）----------
+wait_for_url() {
+  local url="$1"
+  local timeout="${2:-15}"   # 默认超时15秒
+  local interval="${3:-1}"   # 默认间隔1秒
+  local start_time
+  start_time=$(date +%s)
+  while true; do
+    if curl -s -o /dev/null "$url" 2>/dev/null; then
+      return 0
+    fi
+    if [ $(($(date +%s) - start_time)) -ge "$timeout" ]; then
+      return 1
+    fi
+    sleep "$interval"
+  done
+}
+
 echo "[$TIMESTAMP] 🛑 关闭旧进程..."
 fuser -k 8000/tcp 2>/dev/null || true
 fuser -k 8001/tcp 2>/dev/null || true
@@ -76,20 +94,17 @@ echo "[$TIMESTAMP] ✅ 构建完成"
 
 echo "[$TIMESTAMP] 🚀 启动认证网关 (uvicorn @ :18001)..."
 cd "$PROJECT_DIR/auth-gateway"
-# 复用后端 venv（避免重复安装依赖）
 BACKEND_VENV="$PROJECT_DIR/backend/venv"
 if [ ! -d "$BACKEND_VENV" ]; then
     echo "[$TIMESTAMP] 🔴 后端 venv 不存在，请先运行后端初始化"
     exit 1
 fi
-# 认证网关完全独立，不依赖后端 PYTHONPATH
-# 使用 disown 确保进程在脚本结束后继续运行
 "$BACKEND_VENV/bin/python" -m uvicorn auth_app.main:app \
   --host 0.0.0.0 --port 18001 \
   >> "$LOG_DIR/auth_gateway_$TIMESTAMP.log" 2>&1 &
 disown
-sleep 12
-if curl -s -o /dev/null http://127.0.0.1:18001/health 2>/dev/null; then
+
+if wait_for_url "http://127.0.0.1:18001/health"; then
   echo "[$TIMESTAMP] ✅ 认证网关已就绪"
 else
   echo "[$TIMESTAMP] 🔴 认证网关启动异常，最近日志:"
@@ -102,8 +117,8 @@ venv/bin/python -m uvicorn app.main:app \
   --host 0.0.0.0 --port 8000 \
   >> "$LOG_DIR/backend_$TIMESTAMP.log" 2>&1 &
 disown
-sleep 8
-if curl -s -o /dev/null http://127.0.0.1:8000/docs 2>/dev/null; then
+
+if wait_for_url "http://127.0.0.1:8000/docs"; then
   echo "[$TIMESTAMP] ✅ 后端已就绪"
 else
   echo "[$TIMESTAMP] 🔴 后端启动异常，最近日志:"
@@ -115,8 +130,8 @@ cd "$PROJECT_DIR/frontend"
 npx next start -p 3000 \
   > "$LOG_DIR/frontend_$TIMESTAMP.log" 2>&1 &
 disown
-sleep 5
-if curl -s -o /dev/null http://127.0.0.1:3000/ 2>/dev/null; then
+
+if wait_for_url "http://127.0.0.1:3000/"; then
   echo "[$TIMESTAMP] ✅ 前端已就绪"
 else
   echo "[$TIMESTAMP] 🔴 前端启动异常，最近日志:"

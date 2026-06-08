@@ -4,6 +4,72 @@
 
 ---
 
+## [8.3.0] - 2026-06-08
+
+### 🧠 练习系统冷启动优化 + 智能增强
+
+> 7 项修复覆盖自适应选题/复习调度/错因分析/秘书冷启动放行，LLM 新增题库查询/创建工具，前端 3 大页面全面重构精简 56%。
+
+#### 后端 — 冷启动 + 智能增强
+
+| 修复 | 模块 | 变更 |
+|------|------|------|
+| F-01 AI fallback 学科推断 | `practice_adaptive.py` | 多途径推断：对话上下文 → 认知节点 → 题库元数据 → 默认"数学" |
+| F-02 ε-greedy 探索机制 | `practice_adaptive.py` | 10% 概率随机选题避免纯贪心，epsilon 参数可配置 |
+| F-03 Bloom 主动重平衡 | `practice_adaptive.py` | 从被动记录缺口改为从候选池主动替换补齐 |
+| F-04 复习调度冷启动 | `practice_scheduler.py` | 无复习题且总练习量 <5 时退化推荐新题 |
+| F-05 遗忘曲线 + 个性化间隔 | `practice_scheduler.py` | Ebbinghaus R=e^(-t/S)；individual_stability 基于近 7 天正确率动态调整 |
+| F-06 LLM 错因分类 | `practice_session.py` | 9 类预定义错因 + chat 调用，答错时写入 error_pattern 字段 |
+| F-07 冷启动引导 + 秘书放行 | `practice_stats.py`、`practice_error_book.py`、`context_engine.py` | 统计/错题本返回 cold_start 字段；秘书不再阻断冷启动用户 |
+
+#### 后端 — LLM 题库能力增强
+
+| 新增 | 文件 | 说明 |
+|------|------|------|
+| `query_question_banks` 工具 | `tool_executor.py` | 支持 list_banks / get_bank / search_questions |
+| `create_question_bank` 工具 | `tool_executor.py` | 按名称创建题库 |
+| `generate_practice` 扩展 | `tool_executor.py`、`practice_question_gen.py` | 新增 bank_name 参数 |
+| 题库上下文注入 | `context_builder.py` | 系统提示自动注入已有题库列表 |
+| 意图匹配规则 | `tool_executor.py` | "有什么题库""创建题库"等触发对应工具 |
+
+#### 后端 — 题库 REST API 增强
+
+| 端点 | 说明 |
+|------|------|
+| `GET /banks/search` | **新增** 按名称/描述搜索题库 |
+| `GET /questions/search` | **新增** 跨题库搜索题目，支持类型/Bloom 过滤 |
+| `GET /banks/{id}` | **增强** 返回 question_preview + total_questions |
+| `POST /generate` | **增强** 支持 bank_name 参数 |
+
+#### 前端 — 共享组件库提取
+
+新增 9 个共享组件到 `components/practice/shared/`：QuestionCard / OptionButton / FeedbackPanel / HintPanel / ProgressBar / SessionTimer / SummaryPanel / QuestionEditorModal / QuestionPreviewModal
+
+#### 前端 — 3 大页面精简
+
+| 页面 | 改造前 | 改造后 | 减少 |
+|------|--------|--------|------|
+| `practice/page.tsx` | 528 行 | 248 行 | **53%** |
+| `sessions/[id]/page.tsx` | 650 行 | 227 行 | **65%** |
+| `banks/[id]/page.tsx` | 521 行 | 264 行 | **49%** |
+| `PracticePanel.tsx` | 962 行 | 336 行 | **65%** |
+| **合计** | **~2661 行** | **~1075 行** | **~56%** |
+
+关键改进：首页 URL 双向同步、去 Hero 冗余、6列→3列；练习中页 4 状态独立 render、全部委托 QuestionCard；题库详情弹窗代替内联编辑、操作按钮始终可见。所有页面 0 TypeScript 错误。
+
+#### 文件变更
+
+| 文件 | 变更 |
+|------|------|
+| `backend/` 3 个 practice 模块 | F-01~F-06 修复 |
+| `backend/` 统计/错题本/引擎 | F-07 冷启动引导 |
+| `backend/` tool_executor / tool_dispatch | 2 新工具 + 意图匹配 |
+| `backend/` context_builder | 题库上下文注入 |
+| `backend/` banks.py / generation.py | 4 个端点新增/增强 |
+| `frontend/` shared/ 9 文件 | **新增** 共享组件 |
+| `frontend/` 3 个页面 + PracticePanel | **重构** 精简 56% |
+| `docs/` 07-coldstart-and-intelligence-optimization.md | **删除** 修复方案文档 |
+
 ## [8.2.0] - 2026-06-07
 
 ### 🎯 知识树 UI/UX 全面优化
