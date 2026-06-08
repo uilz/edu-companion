@@ -24,12 +24,10 @@ from __future__ import annotations
 
 import os
 import logging
-from typing import Iterable, Optional
+from typing import Optional
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request as StarletteRequest
 
 from shared.constants import DEFAULT_USER_ID
 
@@ -51,6 +49,7 @@ ROLE_RANK: dict[str, int] = {
 
 # ═══════════════════════════════════════════════════════════
 # 本地 JWT 验证中间件（admin 进程独立使用，不调外部网关）
+# 纯 ASGI 实现，避免 BaseHTTPMiddleware request.state 不传播的问题
 # ═══════════════════════════════════════════════════════════
 
 PUBLIC_PATHS = {
@@ -77,44 +76,61 @@ def _decode_jwt(token: str) -> Optional[dict]:
         return None
 
 
-class AdminAuthMiddleware(BaseHTTPMiddleware):
-    """admin 进程的鉴权中间件（本地 JWT 解码，不调外部服务）"""
+class AdminAuthMiddleware:
+    """admin 进程的鉴权中间件 — 纯 ASGI 实现"""
 
-    async def dispatch(self, request: StarletteRequest, call_next):
-        path = request.url.path
-
-        # 公开路径
-        if path in PUBLIC_PATHS or path.startswith("/admin/docs"):
-            request.state.user = None
-            request.state.user_id = DEFAULT_USER_ID
-            return await call_next(request)
-
-        token = self._extract_token(request)
-        if not token:
-            request.state.user = None
-            request.state.user_id = DEFAULT_USER_ID
-            return await call_next(request)
-
-        payload = _decode_jwt(token)
-        if not payload:
-            request.state.user = None
-            request.state.user_id = DEFAULT_USER_ID
-            return await call_next(request)
-
-        request.state.user = {
-            "user_id": payload.get("sub", ""),
-            "username": payload.get("username", ""),
-            "role": payload.get("role", "user"),
-        }
-        request.state.user_id = request.state.user["user_id"]
-        return await call_next(request)
+    def __init__(self, app):
+        self.app = app
 
     @staticmethod
-    def _extract_token(request: StarletteRequest) -> Optional[str]:
-        auth = request.headers.get("authorization", "")
-        if auth.startswith("Bearer "):
-            return auth[7:].strip()
-        return request.cookies.get("access_token") or request.query_params.get("token")
+    def _extract_token(scope: dict) -> Optional[str]:
+        """从 ASGI scope 提取 Bearer token"""
+        # 1. Authorization header
+        for k, v in scope.get("headers", []):
+            if k == b"authorization" and v.startswith(b"Bearer "):
+                return v[7:].strip().decode("utf-8", "ignore")
+        # 2. Cookie
+        for k, v in scope.get("headers", []):
+            if k == b"cookie":
+                for part in v.decode("utf-8", "ignore").split(";"):
+                    name, _, val = part.strip().partition("=")
+                    if name == "access_token":
+                        return val
+        # 3. Query param
+        qs = scope.get("query_string", b"").decode("utf-8", "ignore")
+        for kv in qs.split("&"):
+            if kv.startswith("token="):
+                return kv.split("=", 1)[1]
+        return None
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        path = scope.get("path", "")
+
+        # 公开路径，不注入用户
+        if path in PUBLIC_PATHS or path.startswith("/admin/docs"):
+            return await self.app(scope, receive, send)
+
+        # 提取 token 并验证
+        token = self._extract_token(scope)
+        user = None
+        if token:
+            payload = _decode_jwt(token)
+            if payload:
+                user = {
+                    "user_id": payload.get("sub", ""),
+                    "username": payload.get("username", ""),
+                    "role": payload.get("role", "user"),
+                }
+
+        # 注入到 scope.state
+        scope = dict(scope)
+        scope["state"] = dict(scope.get("state") or {})
+        scope["state"]["user"] = user
+        scope["state"]["user_id"] = user["user_id"] if user else DEFAULT_USER_ID
+        return await self.app(scope, receive, send)
 
 
 # ═══════════════════════════════════════════════════════════
