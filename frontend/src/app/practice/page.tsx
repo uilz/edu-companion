@@ -203,26 +203,52 @@ export default function PracticeHomePage() {
                   <RotateCcw size={12} /> 待复习 <span className="text-[10px] text-orange-500">({dueReviews.length}题)</span>
                 </h3>
                 <div className="space-y-1.5">
-                  {dueReviews.map((r: any) => (
-                    <div key={r.question_id}
-                      className="flex items-center gap-3 p-3 rounded-xl bg-orange-500/5 border border-orange-500/15">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-orange-500/10">
-                        <RotateCcw size={13} className="text-orange-500" />
+                  {dueReviews.map((r: any) => {
+                    const q = r.question || r;
+                    const qid = q.id || r.question_id;
+                    const stem = q.stem || q.question_text || "";
+                    const wrongCount = r.wrong_count || 0;
+                    const isColdStart = !!r.is_cold_start;
+                    // 冷启动推荐（无答题历史）显示"新题 · 推荐优先练习"；
+                    // 否则根据 due/days_until_next_review 渲染
+                    const dueLabel = isColdStart
+                      ? "新题 · 推荐优先练习"
+                      : r.due
+                        ? "已到期"
+                        : `${Math.ceil(r.days_until_next_review || 0)}天后到期`;
+                    return (
+                    <div key={qid}
+                      className={`flex items-center gap-3 p-3 rounded-xl border ${
+                        isColdStart
+                          ? "bg-blue-500/5 border-blue-500/15"
+                          : "bg-orange-500/5 border-orange-500/15"
+                      }`}>
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                        isColdStart ? "bg-blue-500/10" : "bg-orange-500/10"
+                      }`}>
+                        <RotateCcw size={13} className={isColdStart ? "text-blue-500" : "text-orange-500"} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-[var(--color-text)] truncate">
-                          {(r.stem || r.question_text || "").slice(0, 60)}
+                          {stem.slice(0, 60)}
                         </p>
                         <p className="text-[10px] text-[var(--color-text-muted)]">
-                          做错{r.wrong_count || 0}次 · {r.due_days ? `${r.due_days}天后到期` : "已到期"}
+                          {isColdStart
+                            ? "尚未练习过"
+                            : `做错${wrongCount}次 · ${dueLabel}`}
                         </p>
                       </div>
-                      <Link href={`/practice/review/${r.question_id}`}
-                        className="px-3 py-1.5 rounded-lg bg-orange-500 text-white text-[10px] font-medium hover:bg-orange-600 flex-shrink-0">
-                        复习
+                      <Link href={`/practice/review/${qid}`}
+                        className={`px-3 py-1.5 rounded-lg text-white text-[10px] font-medium flex-shrink-0 ${
+                          isColdStart
+                            ? "bg-blue-500 hover:bg-blue-600"
+                            : "bg-orange-500 hover:bg-orange-600"
+                        }`}>
+                        {isColdStart ? "开始" : "复习"}
                       </Link>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
             )}

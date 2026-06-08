@@ -240,6 +240,7 @@ def get_due_questions(
                             "cognitive_node_ids": q.get("cognitive_node_ids") or [],
                         },
                         "due": True,
+                        "is_cold_start": True,  # 标记冷启动推荐，与真实错题区分
                         "days_overdue": 0.0,
                         "days_until_next_review": 0.0,
                         "priority_score": -999.0,
