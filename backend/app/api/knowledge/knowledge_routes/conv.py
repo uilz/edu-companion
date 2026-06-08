@@ -13,9 +13,8 @@ from . import (
     _sync_graph_to_cognitive, LinkConversationRequest, AiChatRequest,
 )
 from app.services.knowledge.tree_ops import tree_ops
-from shared.constants import DEFAULT_USER_ID
+from app.domain.auth.dependencies import current_user_id
 
-_USER_ID = DEFAULT_USER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +26,7 @@ router = APIRouter()
 # ═══════════════════════════════════════════════════════════
 
 @router.post("/{partition_id}/link-conversation")
-async def link_conversation(partition_id: str, body: LinkConversationRequest):
+async def link_conversation(partition_id: str, body: LinkConversationRequest, user_id: str = Depends(current_user_id)):
     graph = _get_graph(partition_id)
     if not graph or body.node_id not in graph.nodes:
         raise HTTPException(status_code=404, detail="节点不存在")
@@ -54,7 +53,7 @@ async def link_conversation(partition_id: str, body: LinkConversationRequest):
 # ═══════════════════════════════════════════════════════════
 
 @router.delete("/{partition_id}/link-conversation/{node_id}/{conversation_id}")
-async def unlink_conversation(partition_id: str, node_id: str, conversation_id: str):
+async def unlink_conversation(partition_id: str, node_id: str, conversation_id: str, user_id: str = Depends(current_user_id)):
     graph = _get_graph(partition_id)
     if not graph or node_id not in graph.nodes:
         raise HTTPException(status_code=404, detail="节点不存在")
@@ -78,7 +77,7 @@ async def unlink_conversation(partition_id: str, node_id: str, conversation_id: 
 # ═══════════════════════════════════════════════════════════
 
 @router.post("/{partition_id}/explore")
-async def explore_node(partition_id: str, body: dict):
+async def explore_node(partition_id: str, body: dict, user_id: str = Depends(current_user_id)):
     """在知识树上点击节点，创建/恢复探索对话。"""
     graph = _get_graph(partition_id)
     if not graph:
@@ -93,7 +92,7 @@ async def explore_node(partition_id: str, body: dict):
 
     try:
         conv = tree_ops.ensure_tree_exploration(
-            _USER_ID, partition_id, node_id, node_label, node_level,
+            user_id, partition_id, node_id, node_label, node_level,
         )
 
         # 绑定到 KGNode 的 conversation_ids
@@ -128,14 +127,14 @@ async def explore_node(partition_id: str, body: dict):
 # ═══════════════════════════════════════════════════════════
 
 @router.post("/{partition_id}/ai-chat")
-async def ai_chat(partition_id: str, body: AiChatRequest):
+async def ai_chat(partition_id: str, body: AiChatRequest, user_id: str = Depends(current_user_id)):
     """与 AI 对话，帮助编辑/操作知识树。
 
     每个节点绑定一个独立的「知识树探索」会话，会话仅允许修改该节点及其子孙节点。
     若用户意图操作其他节点，系统提示切换到对应节点的探索会话。
     """
     from app.services.knowledge.tree_ops import tree_ops
-    from shared.constants import DEFAULT_USER_ID
+    from app.domain.auth.dependencies import current_user_id
 
     graph = _get_graph(partition_id)
     if not graph:
@@ -164,7 +163,7 @@ async def ai_chat(partition_id: str, body: AiChatRequest):
             # 使用新方法：自动补全层级创建探索会话
             try:
                 conversation = tree_ops.ensure_tree_exploration(
-                    DEFAULT_USER_ID, partition_id, body.node_id,
+                    DEFAULTuser_id, partition_id, body.node_id,
                     bound_node.label, "concept",
                 )
             except ValueError as e:
@@ -309,13 +308,13 @@ async def ai_chat(partition_id: str, body: AiChatRequest):
         cleaned_response = re.sub(r'\s*\[RECOMMEND:[^\]]*\]', '', response).strip()
 
         tree_ops.add_message(
-            DEFAULT_USER_ID, partition_id, "user",
+            DEFAULTuser_id, partition_id, "user",
             [{"type": "text", "content": body.message}],
             text_summary=body.message[:100],
             conversation_id=conversation_id,
         )
         tree_ops.add_message(
-            DEFAULT_USER_ID, partition_id, "assistant",
+            DEFAULTuser_id, partition_id, "assistant",
             [{"type": "text", "content": cleaned_response}],
             text_summary=cleaned_response[:100],
             conversation_id=conversation_id,

@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/knowledge/graph", tags=["知识图谱"])
 
 # ── 修复 USER_ID 未定义 bug ──
-_USER_ID = DEFAULT_USER_ID
 
 
 # ═══════════════════════════════════════════════════════════
@@ -186,11 +185,11 @@ def _sync_graph_to_cognitive(partition_id: str):
         if not graph:
             return
         for nid, node in graph.nodes.items():
-            existing = get_repo().get_node(nid, _USER_ID)
+            existing = get_repo().get_node(nid, DEFAULT_USER_ID)
             if existing:
                 if existing.label != node.label:
                     existing.label = node.label
-                    get_repo().upsert_node(existing, _USER_ID)
+                    get_repo().upsert_node(existing, DEFAULT_USER_ID)
                 continue
             cog = CognitiveNode(
                 id=nid, label=node.label, level="concept",
@@ -198,7 +197,7 @@ def _sync_graph_to_cognitive(partition_id: str):
                 node_type="auto_generated", is_visible=True,
                 meta=MetaInfo(created_at=time.time()),
             )
-            get_repo().upsert_node(cog, _USER_ID)
+            get_repo().upsert_node(cog, DEFAULT_USER_ID)
     except Exception:
         logger.debug("认知图谱同步跳过", exc_info=True)
 
@@ -207,7 +206,7 @@ def _delete_cognitive_node(node_id: str):
     """删除 CognitiveNode（附属清理）"""
     try:
         from app.cognitive import get_repo
-        get_repo().delete_node(node_id, _USER_ID)
+        get_repo().delete_node(node_id, DEFAULT_USER_ID)
     except Exception:
         logger.debug("认知节点删除跳过", exc_info=True)
 
