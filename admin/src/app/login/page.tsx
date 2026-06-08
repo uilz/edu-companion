@@ -11,8 +11,8 @@ import { setSession, type AdminRole, type AdminUser } from "@/lib/api";
  */
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("default_user");
-  const [password, setPassword] = useState("password");
+  const [username, setUsername] = useState("Apple_Admin");
+  const [password, setPassword] = useState("492210");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -21,8 +21,8 @@ export default function LoginPage() {
     setErr("");
     setLoading(true);
     try {
-      // 1. 调主后端 8000 拿 token
-      const res = await fetch("http://127.0.0.1:8000/api/auth/login", {
+      // 调认证网关 18001 拿 token
+              const res = await fetch("http://127.0.0.1:18001/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -33,11 +33,12 @@ export default function LoginPage() {
       }
       const data = await res.json();
       const token: string = data.access_token;
-      const role: AdminRole = data.role || "user";
+      const u = data.user || {};
+      const role: AdminRole = (u.role || "user") as AdminRole;
 
       const user: AdminUser = {
-        user_id: data.user_id || username,
-        username,
+        user_id: u.id || u.username || username,
+        username: u.username || username,
         role,
       };
       setSession(token, user);
