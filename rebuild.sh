@@ -32,6 +32,7 @@ echo "[$TIMESTAMP] 🛑 关闭旧进程..."
 fuser -k 8000/tcp 2>/dev/null || true
 fuser -k 8001/tcp 2>/dev/null || true
 fuser -k 3000/tcp 2>/dev/null || true
+fuser -k 3001/tcp 2>/dev/null || true
 sleep 1
 echo "[$TIMESTAMP] ✅ 端口已释放"
 
@@ -138,8 +139,42 @@ else
   tail -5 "$LOG_DIR/frontend_$TIMESTAMP.log"
 fi
 
+# ---------- admin 后端 (uvicorn @ :8001) ----------
+echo "[$TIMESTAMP] 🚀 启动 admin 后端 (uvicorn @ :8001)..."
+cd "$PROJECT_DIR/backend"
+venv/bin/python -m app_admin.main \
+  >> "$LOG_DIR/admin_backend_$TIMESTAMP.log" 2>&1 &
+disown
+
+if wait_for_url "http://127.0.0.1:8001/admin/health"; then
+  echo "[$TIMESTAMP] ✅ admin 后端已就绪"
+else
+  echo "[$TIMESTAMP] 🔴 admin 后端启动异常，最近日志:"
+  tail -5 "$LOG_DIR/admin_backend_$TIMESTAMP.log"
+fi
+
+# ---------- admin 前端 (Next.js @ :3001) ----------
+echo "[$TIMESTAMP] 🚀 启动 admin 前端 (Next.js @ :3001)..."
+cd "$PROJECT_DIR/admin"
+if [ ! -d "node_modules" ]; then
+  echo "[$TIMESTAMP] 📦 安装 admin 前端依赖..."
+  npm install --no-audit --no-fund --prefer-offline >> "$LOG_DIR/admin_frontend_$TIMESTAMP.log" 2>&1
+fi
+npx next dev -p 3001 \
+  > "$LOG_DIR/admin_frontend_$TIMESTAMP.log" 2>&1 &
+disown
+
+if wait_for_url "http://127.0.0.1:3001/"; then
+  echo "[$TIMESTAMP] ✅ admin 前端已就绪"
+else
+  echo "[$TIMESTAMP] 🔴 admin 前端启动异常，最近日志:"
+  tail -5 "$LOG_DIR/admin_frontend_$TIMESTAMP.log"
+fi
+
 echo "[$TIMESTAMP] 🎯 全部完成"
 echo "[$TIMESTAMP] 📊 服务状态:"
-echo "  - 认证网关: http://127.0.0.1:18001"
-echo "  - 后端 API: http://127.0.0.1:8000"
-echo "  - 前端:     http://127.0.0.1:3000"
+echo "  - 认证网关:    http://127.0.0.1:18001"
+echo "  - 后端 API:    http://127.0.0.1:8000"
+echo "  - 前端:        http://127.0.0.1:3000"
+echo "  - admin 后端:  http://127.0.0.1:8001"
+echo "  - admin 前端:  http://127.0.0.1:3001"
