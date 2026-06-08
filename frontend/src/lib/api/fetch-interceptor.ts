@@ -33,7 +33,18 @@ function interceptedFetch(input: RequestInfo | URL, init?: RequestInit): Promise
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  return _origFetch(input, { ...init, headers });
+  return _origFetch(input, { ...init, headers }).then((res) => {
+    // 401 + 有 token = token 过期 → 清理并跳转登录
+    if (res.status === 401 && localStorage.getItem("access_token")) {
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+      localStorage.removeItem("current_user");
+      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login";
+      }
+    }
+    return res;
+  });
 }
 
 let _initialized = false;

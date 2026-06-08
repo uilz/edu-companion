@@ -207,7 +207,9 @@ export async function authedFetch<T>(
       if (typeof window !== "undefined") {
         window.location.href = "/login";
       }
-      throw new Error("登录已过期，请重新登录");
+      // 不 throw — redirect 已触发，ErrorBoundary 不应收到错误
+      // 返回一个永远 pending 的 Promise，await 自动挂起（页面即将跳转）
+      return new Promise<T>(() => {});
     }
   }
 
