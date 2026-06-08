@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import os
 import logging
+from pathlib import Path
 from typing import Optional
 
 import jwt
@@ -33,8 +34,19 @@ from shared.constants import DEFAULT_USER_ID
 
 logger = logging.getLogger(__name__)
 
-# JWT 密钥必须与 auth-gateway 一致，从同一个环境变量读取
-JWT_SECRET = os.getenv("JWT_SECRET", "auth-gateway-secret-key-2026")
+# ── 加载 auth-gateway 的 .env 配置（与网关共享 JWT_SECRET）──
+_AUTH_GATEWAY_ENV = Path(__file__).resolve().parents[2] / "auth-gateway" / "config" / ".env"
+if _AUTH_GATEWAY_ENV.exists():
+    with open(_AUTH_GATEWAY_ENV) as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if not _line or _line.startswith("#") or "=" not in _line:
+                continue
+            _key, _, _val = _line.partition("=")
+            os.environ.setdefault(_key.strip(), _val.strip())
+
+# JWT 密钥必须与 auth-gateway 一致
+JWT_SECRET = os.getenv("JWT_SECRET", "auth-gateway-secret-key-2026-change-in-production")
 JWT_ALGORITHM = "HS256"
 
 
