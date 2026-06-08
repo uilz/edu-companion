@@ -10,7 +10,7 @@ import logging
 from typing import Optional
 
 import networkx as nx
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.domain.auth.dependencies import current_user_id, get_mastery_label
 from shared.knowledge_trace import get_cognitive_state
