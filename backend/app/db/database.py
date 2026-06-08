@@ -89,49 +89,6 @@ CREATE TABLE IF NOT EXISTS practice_sessions (
     completed_at        TIMESTAMP
 );
 
--- 答题记录
-CREATE TABLE IF NOT EXISTS attempts (
-    attempt_id      TEXT PRIMARY KEY,
-    user_id         TEXT NOT NULL,
-    question_id     TEXT NOT NULL,
-    session_id      TEXT,
-    user_answer     TEXT DEFAULT '',
-    is_correct      BOOLEAN DEFAULT FALSE,
-    time_spent_seconds DOUBLE PRECISION DEFAULT 0.0,
-    hints_used      INTEGER DEFAULT 0,
-    hint_levels_json JSONB DEFAULT '[]',
-    explanation_text TEXT,
-    explanation_score DOUBLE PRECISION,
-    error_type      TEXT,
-    error_subtype   TEXT DEFAULT '',
-    misconception   TEXT,
-    error_severity  DOUBLE PRECISION DEFAULT 0.0,
-    error_suggestion TEXT DEFAULT '',
-    bloom_level_attempted TEXT DEFAULT 'understand',
-    knowledge_before_json JSONB DEFAULT '{}',
-    knowledge_after_json  JSONB DEFAULT '{}',
-    started_at      TIMESTAMP NOT NULL DEFAULT NOW(),
-    submitted_at    TIMESTAMP NOT NULL DEFAULT NOW()
-);
-
--- 错题本
-CREATE TABLE IF NOT EXISTS error_book (
-    entry_id        TEXT PRIMARY KEY,
-    user_id         TEXT NOT NULL,
-    question_id     TEXT NOT NULL,
-    skill_id        TEXT NOT NULL,
-    error_type      TEXT,
-    misconception   TEXT,
-    user_answer     TEXT DEFAULT '',
-    correct_answer  TEXT DEFAULT '',
-    question_text   TEXT DEFAULT '',
-    review_count    INTEGER DEFAULT 0,
-    next_review     TIMESTAMP DEFAULT NOW(),
-    is_resolved     BOOLEAN DEFAULT FALSE,
-    referenced_materials_json JSONB DEFAULT '[]',
-    created_at      TIMESTAMP NOT NULL DEFAULT NOW()
-);
-
 -- 资料表
 CREATE TABLE IF NOT EXISTS materials (
     material_id     TEXT PRIMARY KEY,
@@ -234,9 +191,6 @@ CREATE INDEX IF NOT EXISTS idx_toc_parent ON material_toc(parent_toc_id);
 CREATE INDEX IF NOT EXISTS idx_questions_skill ON questions(skill_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON practice_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_started ON practice_sessions(started_at);
-CREATE INDEX IF NOT EXISTS idx_attempts_session ON attempts(session_id);
-CREATE INDEX IF NOT EXISTS idx_attempts_user_submitted ON attempts(user_id, submitted_at);
-CREATE INDEX IF NOT EXISTS idx_errors_user ON error_book(user_id);
 CREATE INDEX IF NOT EXISTS idx_materials_user ON materials(user_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_material ON material_chunks(material_id);
 """
