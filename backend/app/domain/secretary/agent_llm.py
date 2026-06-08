@@ -8,6 +8,7 @@ import re
 from typing import AsyncGenerator
 
 from app.services.llm.llm_service import LLMService
+from shared.constants import DEFAULT_USER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +57,7 @@ async def agent_generate_stream(
     user_message: str,
     current_page: str,
     tool_schemas: list[dict],
-    user_id: str = "default_user",
+    user_id: str = DEFAULT_USER_ID,
 ) -> AsyncGenerator[dict, None]:
     """Agent 流式生成回复
 

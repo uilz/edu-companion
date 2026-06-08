@@ -10,7 +10,8 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 
-from shared.constants import DEFAULT_USER_ID, get_user_id
+from app.domain.auth.dependencies import current_user_id
+from shared.constants import get_user_id
 from app.domain.auth.dependencies import current_user_id
 from app.config import COMPANION_HOME
 

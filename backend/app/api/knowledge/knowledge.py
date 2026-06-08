@@ -12,7 +12,7 @@ from typing import Optional
 import networkx as nx
 from fastapi import APIRouter
 
-from shared.constants import DEFAULT_USER_ID, get_mastery_label
+from app.domain.auth.dependencies import current_user_id, get_mastery_label
 from shared.knowledge_trace import get_cognitive_state
 from app.domain.knowledge.checker import PrerequisiteChecker
 from app.domain.knowledge.prerequisites import (
@@ -137,7 +137,7 @@ def compute_force_layout(nodes: list[dict], edges: list[dict]) -> dict[str, tupl
 
 @router.get("/graph")
 async def get_knowledge_graph(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
     subject: Optional[str] = None,
     partition_id: Optional[str] = None,
 ):
@@ -265,7 +265,7 @@ async def explain_knowledge(body: dict):
 # ═══════════════════════════════════════════════════════════
 
 @router.get("/retention")
-async def get_retention_curve(user_id: str = DEFAULT_USER_ID):
+async def get_retention_curve(user_id: str = Depends(current_user_id)):
     """
     获取遗忘曲线（艾宾浩斯估算）。
 

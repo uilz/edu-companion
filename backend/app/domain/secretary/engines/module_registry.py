@@ -9,7 +9,7 @@
 使用方式:
     registry = SecretaryModuleRegistry()
     registry.discover_builtin()
-    for proposal in registry.run_checks("default_user", ctx):
+    for proposal in registry.run_checks(user_id, ctx):
         store.save_proposal(proposal)
 """
 

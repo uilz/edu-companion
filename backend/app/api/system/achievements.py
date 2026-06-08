@@ -7,9 +7,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-from shared.constants import DEFAULT_USER_ID
+from app.domain.auth.dependencies import current_user_id
 from shared.learner_model import learner_engine
 from app.services.analytics.achievement_engine import achievement_engine
 from app.services.common import get_data_repo
@@ -17,8 +17,6 @@ from app.services.common import get_data_repo
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/achievements", tags=["成就系统"])
-
-USER_ID = DEFAULT_USER_ID
 
 
 def _collect_stats(user_id: str) -> dict[str, Any]:
@@ -106,7 +104,7 @@ def _save_achievements(user_id: str, achievements: dict[str, Any]) -> None:
 
 
 @router.get("/{user_id}")
-async def get_achievements(user_id: str = USER_ID):
+async def get_achievements(user_id: str = Depends(current_user_id)):
     """获取所有成就状态（含进度）"""
     stats = _collect_stats(user_id)
     existing = _load_existing(user_id)

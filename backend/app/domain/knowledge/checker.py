@@ -64,7 +64,7 @@ class PrerequisiteChecker:
       checker = PrerequisiteChecker(practice_service)
       # 动态加载用户知识树前置
       checker.load_from_knowledge_tree(user_id, partition_id)
-      result = await checker.can_practice("default_user", "node_abc")
+      result = await checker.can_practice(user_id, "node_abc")
       if not result.can_practice:
           print(f"需要先学: {result.blocked_by}")
     """

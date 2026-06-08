@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
-from shared.constants import DEFAULT_USER_ID
+from app.domain.auth.dependencies import current_user_id
 from app.schemas.learning_profile import (
     Anomaly,
     Coverage,
@@ -306,7 +306,7 @@ async def get_partition_progress(partition_id: str):
 
     # 无认知数据时返回空画像
     from app.services.common import get_data_repo
-    data = get_data_repo().load(DEFAULT_USER_ID)
+    data = get_data_repo().load(user_id)
     partition = data.partitions.get(partition_id)
     if not partition:
         raise HTTPException(status_code=404, detail="分区不存在")

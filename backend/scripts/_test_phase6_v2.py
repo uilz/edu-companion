@@ -15,7 +15,7 @@ async def main():
     from app.services.common.event_service import EventService
 
     db = get_db()
-    uid = DEFAULT_USER_ID  # "default_user"
+    uid = DEFAULT_USER_ID  # 注意：DEFAULT_USER_ID 仅作签名兼容，新代码不再依赖
 
     nodes = list_all_nodes(uid)
     topics = [n for n in nodes if n.level == "topic"]

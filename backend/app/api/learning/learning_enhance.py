@@ -16,7 +16,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from shared.constants import DEFAULT_USER_ID, get_user_id
+from shared.constants import get_user_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/learning", tags=["学习增强"])

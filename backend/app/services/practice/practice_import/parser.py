@@ -9,6 +9,7 @@ from . import (
     QUESTION_NUM_PATTERNS, OPTION_PATTERNS,
     ANSWER_MARKERS, ANALYSIS_MARKERS, TYPE_KEYWORDS,
 )
+from shared.constants import DEFAULT_USER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -283,7 +284,7 @@ def ai_correct_question(q: dict) -> dict:
     return q
 
 
-def match_cognitive_nodes(q: dict, user_id: str = "default_user", top_k: int = 3) -> list[str]:
+def match_cognitive_nodes(q: dict, user_id: str = DEFAULT_USER_ID, top_k: int = 3) -> list[str]:
     """将题目内容匹配到认知节点"""
     try:
         from app.services.common.embedding_utils import compute_embedding

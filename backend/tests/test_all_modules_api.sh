@@ -7,7 +7,8 @@
 #   如: bash tests/test_all_modules_api.sh http://localhost:8000
 
 BASE="${1:-http://localhost:8000}"
-USER_ID="${2:-default_user}"
+# ⚠️ 必须传入真实 user_id（不能再用 default_user）
+USER_ID="${2:?用法: $0 [base_url] <user_id>}"
 PASS=0
 FAIL=0
 

@@ -82,6 +82,7 @@ class PracticeServiceImpl:
         session_id: str,
         question_id: str,
         answer: str,
+        user_id: str,
         time_spent: float = 0.0,
         hints_used: int = 0,
         explanation_text: str = "",
@@ -102,7 +103,7 @@ class PracticeServiceImpl:
         }
 
         await self._bus.publish(AnswerSubmitted(
-            user_id=DEFAULT_USER_ID,
+            user_id=user_id,
             session_id=session_id,
             question_id=question_id,
             skill_id=question["skill_id"],
@@ -115,7 +116,7 @@ class PracticeServiceImpl:
 
         if not is_correct:
             await self._bus.publish(ErrorRecorded(
-                user_id=DEFAULT_USER_ID,
+                user_id=user_id,
                 question_id=question_id,
                 skill_id=question["skill_id"],
                 error_type="careless",

@@ -9,13 +9,12 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 
-from shared.constants import DEFAULT_USER_ID
+from app.domain.auth.dependencies import current_user_id
 from app.services.common import get_data_repo, get_admin_repo
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v7/data", tags=["学习数据管理"])
 
-USER_ID = DEFAULT_USER_ID
 
 
 # ═══════════════════════════════════════════════════════════
@@ -37,9 +36,9 @@ def _get_admin_repo():
 # ═══════════════════════════════════════════════════════════
 
 @router.get("/overview")
-async def data_overview():
+async def data_overview(user_id: str = Depends(current_user_id)):
     """获取用户所有学习数据的概览统计"""
-    data = get_data_repo().load(USER_ID)
+    data = get_data_repo().load(user_id)
     
     overview = {
         "partitions": len(data.partitions),
@@ -81,9 +80,9 @@ async def data_overview():
 # ═══════════════════════════════════════════════════════════
 
 @router.get("/partitions")
-async def list_partitions():
+async def list_partitions(user_id: str = Depends(current_user_id)):
     """获取所有分区及其子结构"""
-    data = get_data_repo().load(USER_ID)
+    data = get_data_repo().load(user_id)
     partitions = []
     for pid, p in data.partitions.items():
         domains = [d.model_dump(mode="json") for d in data.domains.values() if d.partition_id == pid]
@@ -116,9 +115,9 @@ async def list_partitions():
 # ═══════════════════════════════════════════════════════════
 
 @router.get("/knowledge-graphs")
-async def list_knowledge_graphs():
+async def list_knowledge_graphs(user_id: str = Depends(current_user_id)):
     """获取所有知识图谱"""
-    data = get_data_repo().load(USER_ID)
+    data = get_data_repo().load(user_id)
     graphs = []
     for gid, g in data.knowledge_graphs.items():
         partition = data.partitions.get(gid)
@@ -140,7 +139,7 @@ async def list_knowledge_graphs():
 # ═══════════════════════════════════════════════════════════
 
 @router.get("/practice-sessions")
-async def list_practice_sessions(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100)):
+async def list_practice_sessions(user_id: str = Depends(current_user_id), page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100)):
     """获取练习会话列表"""
     repo = _get_admin_repo()
     if not repo:
@@ -160,7 +159,7 @@ async def list_practice_sessions(page: int = Query(1, ge=1), page_size: int = Qu
 # ═══════════════════════════════════════════════════════════
 
 @router.get("/explain-cards")
-async def list_explain_cards(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100)):
+async def list_explain_cards(user_id: str = Depends(current_user_id), page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100)):
     """获取解释卡片列表"""
     repo = _get_admin_repo()
     if not repo:
@@ -180,7 +179,7 @@ async def list_explain_cards(page: int = Query(1, ge=1), page_size: int = Query(
 # ═══════════════════════════════════════════════════════════
 
 @router.get("/materials")
-async def list_materials(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100)):
+async def list_materials(user_id: str = Depends(current_user_id), page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100)):
     """获取上传材料列表"""
     repo = _get_admin_repo()
     if not repo:
@@ -200,9 +199,9 @@ async def list_materials(page: int = Query(1, ge=1), page_size: int = Query(20, 
 # ═══════════════════════════════════════════════════════════
 
 @router.delete("/partition/{partition_id}")
-async def delete_partition_data(partition_id: str):
+async def delete_partition_data(partition_id: str, user_id: str = Depends(current_user_id)):
     """删除指定分区及其所有子数据（领域、专题、对话、知识图谱）"""
-    data = get_data_repo().load(USER_ID)
+    data = get_data_repo().load(user_id)
     if partition_id not in data.partitions:
         raise HTTPException(status_code=404, detail="分区不存在")
     
@@ -228,7 +227,7 @@ async def delete_partition_data(partition_id: str):
     # 删除分区
     del data.partitions[partition_id]
     
-    get_data_repo().save(USER_ID, data)
+    get_data_repo().save(user_id, data)
     return {"ok": True, "deleted": {"partition_id": partition_id, "domains": len(domain_ids), "topics": len(topic_ids), "conversations": len(conv_ids)}}
 
 
@@ -237,13 +236,13 @@ async def delete_partition_data(partition_id: str):
 # ═══════════════════════════════════════════════════════════
 
 @router.delete("/knowledge-graph/{partition_id}")
-async def delete_knowledge_graph(partition_id: str):
+async def delete_knowledge_graph(partition_id: str, user_id: str = Depends(current_user_id)):
     """删除指定分区的知识图谱"""
-    data = get_data_repo().load(USER_ID)
+    data = get_data_repo().load(user_id)
     if partition_id not in data.knowledge_graphs:
         raise HTTPException(status_code=404, detail="知识图谱不存在")
     del data.knowledge_graphs[partition_id]
-    get_data_repo().save(USER_ID, data)
+    get_data_repo().save(user_id, data)
     return {"ok": True}
 
 
@@ -252,7 +251,7 @@ async def delete_knowledge_graph(partition_id: str):
 # ═══════════════════════════════════════════════════════════
 
 @router.delete("/practice-session/{session_id}")
-async def delete_practice_session(session_id: str):
+async def delete_practice_session(session_id: str, user_id: str = Depends(current_user_id)):
     """删除指定练习会话"""
     repo = _get_admin_repo()
     if not repo:
@@ -267,7 +266,7 @@ async def delete_practice_session(session_id: str):
 # ═══════════════════════════════════════════════════════════
 
 @router.delete("/explain-card/{card_id}")
-async def delete_explain_card(card_id: str):
+async def delete_explain_card(card_id: str, user_id: str = Depends(current_user_id)):
     """删除指定解释卡片"""
     repo = _get_admin_repo()
     if not repo:
@@ -281,13 +280,13 @@ async def delete_explain_card(card_id: str):
 # ═══════════════════════════════════════════════════════════
 
 @router.post("/export")
-async def export_all_data():
+async def export_all_data(user_id: str = Depends(current_user_id)):
     """导出当前用户所有学习数据为 JSON"""
-    data = get_data_repo().load(USER_ID)
+    data = get_data_repo().load(user_id)
     
     export = {
         "exported_at": datetime.now().isoformat(),
-        "user_id": USER_ID,
+        "user_id": user_id,
         "partitions": {pid: p.model_dump(mode="json") for pid, p in data.partitions.items()},
         "domains": {did: d.model_dump(mode="json") for did, d in data.domains.items()},
         "topics": {tid: t.model_dump(mode="json") for tid, t in data.topics.items()},

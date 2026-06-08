@@ -13,7 +13,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from shared.constants import DEFAULT_USER_ID
+from app.domain.auth.dependencies import current_user_id
 from app.cognitive.growth_engine import growth_engine
 from app.cognitive.models import CognitiveNode
 from app.cognitive import get_repo
@@ -44,7 +44,7 @@ router = APIRouter(prefix="/api/v2")
 def _entity_to_node(
     entity: Partition | Domain | Topic,
     level: str,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
 ) -> dict:
     """将 Partition/Domain/Topic 转为 frontend graph node 格式"""
     label = (entity.emoji + " " + entity.name) if getattr(entity, "emoji", None) else entity.name
@@ -79,8 +79,8 @@ class ClassifyRequest(BaseModel):
 @router.post("/classify")
 def classify_message(req: ClassifyRequest) -> dict:
     """分类单条消息 — v6 Phase 5: 使用 embedding + 沉浸感知"""
-    from shared.constants import DEFAULT_USER_ID
-    user_id = DEFAULT_USER_ID
+    from app.domain.auth.dependencies import current_user_id
+    user_id = Depends(current_user_id)
     text = req.message
     if not text:
         return {
@@ -126,7 +126,7 @@ def confirm_message_cognitive(message_id: str, req: CognitiveConfirmRequest) -> 
     # 解析节点名称
     nodes = []
     for nid in node_ids:
-        node = get_repo().get_node(nid, DEFAULT_USER_ID)
+        node = get_repo().get_node(nid, user_id)
         if node:
             nodes.append({
                 "id": node.id,
@@ -141,7 +141,7 @@ def confirm_message_cognitive(message_id: str, req: CognitiveConfirmRequest) -> 
     try:
         topic_ids_for_immersion = [n["id"] for n in nodes if n.get("level") in ("topic", "domain", "partition")]
         for tid in topic_ids_for_immersion:
-            classifier_service.increment_immersion(DEFAULT_USER_ID, tid)
+            classifier_service.increment_immersion(user_id, tid)
     except Exception:
         logger.debug("沉浸深度更新失败", exc_info=True)
 
@@ -153,7 +153,7 @@ def confirm_message_cognitive(message_id: str, req: CognitiveConfirmRequest) -> 
         topic_ids = [n["id"] for n in nodes if n.get("level") in ("topic", "domain", "partition")]
         atom_ids = [n["id"] for n in nodes if n.get("level") == "atom"]
         event_service.emit_message_classified(
-            user_id=DEFAULT_USER_ID,
+            user_id=user_id,
             message_id=message_id,
             conversation_id=conv_id or "",
             topic_node_ids=topic_ids,
@@ -177,7 +177,7 @@ def confirm_message_cognitive(message_id: str, req: CognitiveConfirmRequest) -> 
 
 @router.get("/graph/nodes")
 def get_graph_nodes(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
     parent_id: str | None = None,
     level: str | None = None,
 ) -> list[dict]:
@@ -271,7 +271,7 @@ class CreateNodeRequest(BaseModel):
     name: str
     parent_id: str | None = None
     emoji: str = ""
-    user_id: str = DEFAULT_USER_ID
+    user_id: str = Depends(current_user_id)
 
 
 @router.post("/graph/nodes")
@@ -308,7 +308,7 @@ def create_graph_node(req: CreateNodeRequest) -> dict:
 def remove_graph_node(
     node_id: str,
     recursive: bool = False,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
 ) -> dict:
     """删除图谱节点（统一入口）
 
@@ -346,7 +346,7 @@ def remove_graph_node(
 
 @router.get("/dashboard/overview", tags=["dashboard"])
 def dashboard_overview(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
 ) -> dict:
     """学情仪表盘概览 — 掌握度 + 队列 + 趋势 + 错误 + XP"""
     from app.cognitive import get_repo

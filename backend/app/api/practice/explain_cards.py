@@ -17,7 +17,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
-from shared.constants import DEFAULT_USER_ID, get_user_id
+from shared.constants import get_user_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/knowledge/explain-cards", tags=["解释卡片"])

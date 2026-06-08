@@ -8,10 +8,10 @@ import asyncio
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from shared.constants import DEFAULT_USER_ID
+from app.domain.auth.dependencies import current_user_id
 from app.services.practice.practice_service import (
     get_hint_for_question,
     get_inline_hint,
@@ -63,7 +63,7 @@ class InlineHintRequest(BaseModel):
 
 
 @router.get("/sessions")
-async def list_sessions(user_id: str = DEFAULT_USER_ID, limit: int = 20):
+async def list_sessions(user_id: str = Depends(current_user_id), limit: int = 20):
     """列出用户的所有会话"""
     return list_practice_sessions(user_id, limit)
 
@@ -71,7 +71,7 @@ async def list_sessions(user_id: str = DEFAULT_USER_ID, limit: int = 20):
 @router.post("/sessions/{session_id}/complete")
 async def complete_session(
     session_id: str,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
     partition_id: str | None = None,
     branch_id: str | None = None,
 ):
@@ -162,7 +162,7 @@ async def submit_answer(req: SubmitAnswerRequest):
     knowledge_update = None
     if skill_id:
         cog = update_cognitive_after_practice(
-            user_id=DEFAULT_USER_ID,
+            user_id=user_id,
             skill_id=skill_id,
             is_correct=is_correct,
             latency_ms=int(req.time_spent_seconds * 1000),
@@ -176,7 +176,7 @@ async def submit_answer(req: SubmitAnswerRequest):
 
     # 记录答题
     record_attempt(
-        user_id=DEFAULT_USER_ID,
+        user_id=user_id,
         session_id=req.session_id,
         question_id=req.question_id,
         answer=req.answer,
@@ -205,7 +205,7 @@ async def inline_answer(req: InlineAnswerRequest):
     from app.core.knowledge_trace import get_cognitive_state
     from shared.constants import get_mastery_label
 
-    data = get_data_repo().load(DEFAULT_USER_ID)
+    data = get_data_repo().load(user_id)
     block = data.response_blocks.get(req.block_id)
     if not block:
         raise HTTPException(404, "Practice block not found")
@@ -219,9 +219,9 @@ async def inline_answer(req: InlineAnswerRequest):
     # 更新知识状态
     knowledge_update = {}
     if skill_id:
-        state = get_cognitive_state(DEFAULT_USER_ID, skill_id)
+        state = get_cognitive_state(user_id, skill_id)
         cog = update_cognitive_after_practice(
-            user_id=DEFAULT_USER_ID,
+            user_id=user_id,
             skill_id=skill_id,
             is_correct=is_correct,
         )

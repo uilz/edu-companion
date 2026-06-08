@@ -101,4 +101,4 @@ class TempConversationCleanupModule(SecretaryModule):
         base = COMPANION_HOME / "data"
         if base.exists():
             return [d.name for d in base.iterdir() if d.is_dir()]
-        return [DEFAULT_USER_ID]
+        return []

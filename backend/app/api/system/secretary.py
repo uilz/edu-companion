@@ -14,10 +14,10 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
+from app.domain.auth.dependencies import current_user_id
 from app.domain.secretary.secretary_service import SecretaryService
 from app.domain.secretary.models import Proposal, ScopeSpec, SecretaryPrefs
 from app.domain.secretary.proposal_store import ProposalStore
-from shared.constants import DEFAULT_USER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +125,7 @@ def _get_store() -> ProposalStore:
 
 @router.get("/preferences")
 async def get_preferences(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
 ) -> dict:
     """获取用户秘书偏好"""
     prefs = _load_prefs(user_id)
@@ -144,7 +144,7 @@ async def get_preferences(
 
 @router.get("/snapshot")
 async def get_snapshot(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
     service: SecretaryService = Depends(_get_service),
 ) -> dict:
     """获取当前学习状态快照"""
@@ -165,7 +165,7 @@ async def get_snapshot(
 
 @router.get("/proposals/pending")
 async def get_pending_proposals(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
     source_module: str | None = None,
     action_type: str | None = None,
     priority_min: int | None = None,
@@ -188,7 +188,7 @@ async def get_pending_proposals(
 
 @router.get("/proposals/history")
 async def get_proposal_history(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
     days: int = 7,
     source_module: str | None = None,
     action_type: str | None = None,
@@ -207,7 +207,7 @@ async def get_proposal_history(
 @router.post("/proposals/{proposal_id}/accept")
 async def accept_proposal(
     proposal_id: str,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
     store: ProposalStore = Depends(_get_store),
 ) -> dict:
     """采纳提案 — 更新状态 + 触发对应系统动作"""
@@ -281,7 +281,7 @@ async def accept_proposal(
 @router.post("/proposals/{proposal_id}/dismiss")
 async def dismiss_proposal(
     proposal_id: str,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
     reason: str = "",
     store: ProposalStore = Depends(_get_store),
 ) -> dict:
@@ -319,7 +319,7 @@ async def dismiss_proposal(
 @router.post("/proposals/{proposal_id}/snooze")
 async def snooze_proposal(
     proposal_id: str,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
     store: ProposalStore = Depends(_get_store),
     until: float | None = None,
 ) -> dict:
@@ -342,7 +342,7 @@ async def snooze_proposal(
 @router.post("/proposals/{proposal_id}/delete")
 async def delete_proposal(
     proposal_id: str,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
     store: ProposalStore = Depends(_get_store),
 ) -> dict:
     """删除提案 — 状态设为 deleted"""
@@ -364,7 +364,7 @@ async def delete_proposal(
 @router.post("/proposals/{proposal_id}/restore")
 async def restore_proposal(
     proposal_id: str,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
     store: ProposalStore = Depends(_get_store),
 ) -> dict:
     """恢复提案 — snoozed/deleted → pending"""
@@ -386,7 +386,7 @@ async def restore_proposal(
 @router.post("/proposals/batch-accept")
 async def batch_accept_proposals(
     ids: list[str],
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
     store: ProposalStore = Depends(_get_store),
 ) -> dict:
     """批量采纳提案"""
@@ -407,7 +407,7 @@ async def batch_accept_proposals(
 @router.post("/proposals/batch-dismiss")
 async def batch_dismiss_proposals(
     ids: list[str],
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
     store: ProposalStore = Depends(_get_store),
 ) -> dict:
     """批量忽略提案"""
@@ -432,7 +432,7 @@ async def batch_dismiss_proposals(
 
 @router.post("/generate-llm-proposals")
 async def generate_llm_proposals(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
     service: SecretaryService = Depends(_get_service),
     store: ProposalStore = Depends(_get_store),
 ) -> list[dict]:
@@ -463,7 +463,7 @@ async def generate_llm_proposals(
 
 @router.get("/modules")
 async def list_modules(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
 ) -> list[dict]:
     """列出所有秘书模块及其状态"""
     from app.domain.secretary.engines.module_registry import module_registry
@@ -485,7 +485,7 @@ async def list_modules(
 async def toggle_module(
     name: str,
     enabled: bool,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
 ) -> dict:
     """启用/禁用指定模块"""
     from app.domain.secretary.engines.module_registry import module_registry
@@ -516,7 +516,7 @@ async def toggle_module(
 
 @router.post("/checker/run")
 async def run_checker(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
 ) -> dict:
     """手动触发一次主动检查"""
     from app.domain.secretary.engines.active_checker import active_checker
@@ -535,7 +535,7 @@ async def run_checker(
 
 @router.get("/checker/status")
 async def get_checker_status(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
 ) -> dict:
     """获取主动检查器状态"""
     from app.domain.secretary.engines.active_checker import active_checker
@@ -554,7 +554,7 @@ async def get_checker_status(
 @router.post("/checker/configure")
 async def configure_checker(
     body: dict,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
 ) -> dict:
     """配置主动检查器
 
@@ -590,7 +590,7 @@ async def configure_checker(
 
 @router.get("/onboarding")
 async def get_onboarding_status(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
 ) -> dict:
     """获取冷启动状态与引导信息"""
     try:
@@ -628,7 +628,7 @@ async def get_onboarding_status(
 async def report_execution_result(
     proposal_id: str,
     body: dict,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
     store: ProposalStore = Depends(_get_store),
 ) -> dict:
     """用户完成提案动作后回传执行结果
@@ -670,7 +670,7 @@ async def report_execution_result(
 
 
 @router.get("/data/export")
-async def export_secretary_data(user_id: str = DEFAULT_USER_ID) -> dict:
+async def export_secretary_data(user_id: str = Depends(current_user_id)) -> dict:
     """导出所有秘书相关个人数据"""
     data = {
         "user_id": user_id,
@@ -711,7 +711,7 @@ async def export_secretary_data(user_id: str = DEFAULT_USER_ID) -> dict:
 
 
 @router.delete("/data/delete")
-async def delete_secretary_data(user_id: str = DEFAULT_USER_ID) -> dict:
+async def delete_secretary_data(user_id: str = Depends(current_user_id)) -> dict:
     """删除所有秘书相关个人数据 (遗忘权)"""
     deleted = {"proposals": False, "prefs": False, "policy_memory": False}
 
@@ -753,7 +753,7 @@ class AgentChatRequest(BaseModel):
 
 
 @router.post("/agent/chat")
-async def agent_chat(body: AgentChatRequest, user_id: str = DEFAULT_USER_ID):
+async def agent_chat(body: AgentChatRequest, user_id: str = Depends(current_user_id)):
     """Agent 助手对话 — SSE 流式返回
 
     流程: 用户输入 → 加载工具 schema → LLM 分析意图 → 流式返回 token + tool_call 事件
@@ -877,7 +877,7 @@ class AgentPreferencesRequest(BaseModel):
 
 
 @router.get("/agent/preferences")
-async def get_agent_preferences(user_id: str = DEFAULT_USER_ID):
+async def get_agent_preferences(user_id: str = Depends(current_user_id)):
     """获取 Agent 助手偏好"""
     from app.services.common import get_data_repo
     data = get_data_repo().load(user_id)
@@ -891,7 +891,7 @@ async def get_agent_preferences(user_id: str = DEFAULT_USER_ID):
 @router.post("/agent/preferences")
 async def set_agent_preferences(
     body: AgentPreferencesRequest,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
 ):
     """设置 Agent 助手偏好"""
     valid_modes = {"smart", "always", "never"}

@@ -13,7 +13,8 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
 
-from shared.constants import DEFAULT_USER_ID, recommend_practice_items
+from app.domain.auth.dependencies import current_user_id
+from shared.constants import recommend_practice_items
 from app.services.analytics.adaptive_planner import adaptive_planner
 from datetime import datetime
 from shared.knowledge_trace import get_all_cognitive_states, get_cognitive_state
@@ -25,7 +26,7 @@ router = APIRouter(prefix="/api/study", tags=["学习计划"])
 
 @router.post("/plan/generate")
 async def generate_study_plan(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
     subject: Optional[str] = None,
     reason: str = "manual",
     partition_id: Optional[str] = None,
@@ -104,7 +105,7 @@ async def get_plan_progress(user_id: str) -> dict[str, Any]:
 
 @router.get("/suggestions")
 async def get_learning_suggestions(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str = Depends(current_user_id),
     subject: Optional[str] = None,
     partition_id: Optional[str] = None,
 ):

@@ -7,15 +7,13 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
-from shared.constants import DEFAULT_USER_ID
+from app.domain.auth.dependencies import current_user_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/search", tags=["搜索"])
-
-USER_ID = DEFAULT_USER_ID
 
 
 class SearchResultItem(BaseModel):
@@ -40,6 +38,7 @@ class UnifiedSearchResponse(BaseModel):
 async def unified_search(
     q: str = Query(..., min_length=1, description="搜索关键词"),
     limit: int = Query(5, ge=1, le=20),
+    user_id: str = Depends(current_user_id),
 ):
     """
     全站统一搜索。
@@ -48,10 +47,10 @@ async def unified_search(
     import asyncio
 
     results = await asyncio.gather(
-        _search_conversations(q, limit),
-        _search_materials(q, limit),
-        _search_knowledge(q, limit),
-        _search_errors(q, limit),
+        _search_conversations(q, limit, user_id),
+        _search_materials(q, limit, user_id),
+        _search_knowledge(q, limit, user_id),
+        _search_errors(q, limit, user_id),
     )
 
     convs, mats, know, errs = results
@@ -66,14 +65,14 @@ async def unified_search(
     )
 
 
-async def _search_conversations(q: str, limit: int) -> list[SearchResultItem]:
+async def _search_conversations(q: str, limit: int, user_id: str) -> list[SearchResultItem]:
     """搜索对话内容（节点 text_summary 模糊匹配）"""
     results: list[SearchResultItem] = []
     q_lower = q.lower()
 
     try:
         from app.services.common import get_data_repo
-        data = get_data_repo().load(USER_ID)
+        data = get_data_repo().load(user_id)
 
         for node_id, node in data.nodes.items():
             if node.is_deleted or node.is_archived:
@@ -108,14 +107,14 @@ async def _search_conversations(q: str, limit: int) -> list[SearchResultItem]:
         return []
 
 
-async def _search_materials(q: str, limit: int) -> list[SearchResultItem]:
+async def _search_materials(q: str, limit: int, user_id: str) -> list[SearchResultItem]:
     """搜索资料（已有语义搜索 API）"""
     results: list[SearchResultItem] = []
 
     try:
         from app.services.materials.material_search import material_search as ms
         search_results = await ms.search(
-            user_id=USER_ID, query=q, top_k=limit,
+            user_id=user_id, query=q, top_k=limit,
         )
         for r in search_results:
             results.append(SearchResultItem(
@@ -130,111 +129,70 @@ async def _search_materials(q: str, limit: int) -> list[SearchResultItem]:
                     "text_preview": (r.get("text", "") or "")[:100],
                 },
             ))
-    except Exception:
-        # DB 不可用时降级到元数据搜索
-        from app.services.materials.materials_meta import materials_meta
-        q_lower = q.lower()
-        for mid, meta in materials_meta.get_all().items():
-            if q_lower in meta.get("file_name", "").lower():
-                results.append(SearchResultItem(
-                    type="material",
-                    title=meta.get("file_name", ""),
-                    subtitle=f"{meta.get('file_type', '')} · {meta.get('file_size', 0) // 1024}KB",
-                    link=f"/chat",
-                    score=0.7,
-                    meta={"material_id": mid},
-                ))
-            if len(results) >= limit:
-                break
-
-    return results
-
-
-async def _search_knowledge(q: str, limit: int) -> list[SearchResultItem]:
-    """搜索知识点"""
-    results: list[SearchResultItem] = []
-    q_lower = q.lower()
-
-    try:
-        # ── CognitiveNode 搜索 (Phase 6) ──
-        try:
-            from app.db.database import get_db
-            db = get_db()
-            cog_rows = db.fetchall(
-                "SELECT id, label, belief FROM cognitive_nodes "
-                "WHERE user_id = %s AND (LOWER(id) LIKE %s OR LOWER(label) LIKE %s) "
-                "LIMIT 10",
-                (USER_ID, f"%{q_lower}%", f"%{q_lower}%")
-            )
-            for r in cog_rows:
-                belief = r.get("belief", {})
-                if isinstance(belief, str):
-                    import json
-                    try:
-                        belief = json.loads(belief)
-                    except Exception:
-                        belief = {}
-                mu = belief.get("proficiency_mean", 0.5) if isinstance(belief, dict) else 0.5
-                label = r.get("label", r["id"])
-                results.append(SearchResultItem(
-                    type="knowledge",
-                    title=label,
-                    subtitle=f"掌握 {mu:.0%} (CognitiveNode)",
-                    link=f"/graph?skill={r['id']}",
-                    score=mu,
-                    meta={"skill_id": r["id"], "mastery": mu},
-                ))
-        except Exception as e:
-            logger.warning("CognitiveNode knowledge search failed: %s", e)
-
-
-
-        return results[:limit]
-
     except Exception as e:
-        logger.error(f"知识点搜索失败: {e}")
-        return []
+        logger.error(f"资料搜索失败: {e}")
+
+    return results[:limit]
 
 
-async def _search_errors(q: str, limit: int) -> list[SearchResultItem]:
-    """搜索错题（从 error_book 表读取）"""
+async def _search_knowledge(q: str, limit: int, user_id: str) -> list[SearchResultItem]:
+    """搜索知识点（模糊匹配 name / description）"""
     results: list[SearchResultItem] = []
-    q_lower = q.lower()
 
     try:
-        # Phase A2: Read from error_book table instead of meta JSONB
         from app.db.database import get_db
         db = get_db()
+        q_lower = q.lower().strip()
+
         rows = db.fetchall(
-            "SELECT skill_id, question_text, user_answer, correct_answer "
-            "FROM error_book WHERE user_id = %s",
-            (USER_ID,),
+            "SELECT node_id, label, description, subject "
+            "FROM cognitive_nodes "
+            "WHERE user_id = %s "
+            "  AND (LOWER(label) LIKE %s OR LOWER(description) LIKE %s) "
+            "LIMIT %s",
+            (user_id, f"%{q_lower}%", f"%{q_lower}%", limit),
         )
         for row in rows:
-            if isinstance(row, (list, tuple)):
-                skill_id = row[0] if len(row) > 0 else ""
-                question_text = row[1] if len(row) > 1 else ""
-                user_answer = row[2] if len(row) > 2 else ""
-                correct_answer = row[3] if len(row) > 3 else ""
-            else:
-                skill_id = row.get("skill_id", "")
-                question_text = row.get("question_text", "")
-                user_answer = row.get("user_answer", "")
-                correct_answer = row.get("correct_answer", "")
+            results.append(SearchResultItem(
+                type="knowledge",
+                title=row["label"],
+                subtitle=f"{row['subject']} · {row['description'][:60] if row['description'] else ''}",
+                link=f"/knowledge?node_id={row['node_id']}",
+                score=0.9,
+            ))
+    except Exception as e:
+        logger.error(f"知识点搜索失败: {e}")
 
-            question_lower = (question_text or "").lower()
-            if q_lower in question_lower:
-                results.append(SearchResultItem(
-                    type="error",
-                    title=(question_text or "错题")[:80],
-                    subtitle=f"正确答案: {(correct_answer or '')[:40]}",
-                    link="/errors",
-                    score=0.6,
-                    meta={"skill_id": skill_id, "user_answer": user_answer},
-                ))
+    return results[:limit]
 
-        return results[:limit]
 
+async def _search_errors(q: str, limit: int, user_id: str) -> list[SearchResultItem]:
+    """搜索错题（按题目内容）"""
+    results: list[SearchResultItem] = []
+
+    try:
+        from app.db.database import get_db
+        db = get_db()
+        q_lower = q.lower().strip()
+
+        rows = db.fetchall(
+            "SELECT question_id, question_content, correct_answer, skill_id "
+            "FROM practice_questions "
+            "WHERE user_id = %s LIMIT %s",
+            (user_id, limit),
+        )
+        for row in rows:
+            content = (row["question_content"] or "").lower()
+            if q_lower not in content:
+                continue
+            results.append(SearchResultItem(
+                type="error",
+                title=(row["question_content"] or "")[:80],
+                subtitle=f"技能: {row['skill_id']}",
+                link=f"/practice/error-book?question_id={row['question_id']}",
+                score=0.85,
+            ))
     except Exception as e:
         logger.error(f"错题搜索失败: {e}")
-        return []
+
+    return results[:limit]
