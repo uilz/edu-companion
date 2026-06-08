@@ -260,10 +260,11 @@ def append_event(event: CognitiveEvent) -> None:
 
 
 def get_unprocessed_events(
+    *,
     user_id: str = DEFAULT_USER_ID,
     limit: int = 50,
 ) -> list[CognitiveEvent]:
-    """获取未处理事件"""
+    """获取未处理事件（v7: keyword-only 防止参数位置错位）"""
     db = get_db()
     rows = db.fetchall(
         "SELECT * FROM cognitive_events WHERE user_id = %s "

@@ -85,8 +85,8 @@ class PgCognitiveNodeRepository:
     def append_event(self, event: CognitiveEvent) -> None:
         _s.append_event(event)
 
-    def get_unprocessed_events(self, limit: int = 100) -> list[CognitiveEvent]:
-        return _s.get_unprocessed_events(limit)
+    def get_unprocessed_events(self, *, limit: int = 100) -> list[CognitiveEvent]:
+        return _s.get_unprocessed_events(limit=limit)
 
     def mark_event_processed(self, event_id: str) -> None:
         _s.mark_event_processed(event_id)
