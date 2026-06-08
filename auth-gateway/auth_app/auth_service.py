@@ -11,6 +11,12 @@ from auth_app.user_repo import get_user_repo, UserRepo, hash_password, verify_pa
 class AuthService:
     """独立认证业务逻辑"""
 
+    # 保留用户名列表，禁止注册
+    RESERVED_USERNAMES = frozenset({
+        "default_user", "admin", "root", "system", "anonymous", "guest",
+        "null", "undefined", "api", "test",
+    })
+
     def __init__(self):
         self.jwt: JWTService = get_jwt_service()
         self.repo: UserRepo = get_user_repo()
@@ -20,6 +26,9 @@ class AuthService:
         username = username.strip().lower()
         if not username:
             raise ValueError("用户名不能为空")
+
+        if username in self.RESERVED_USERNAMES:
+            raise ValueError(f"用户名 {username} 不允许注册")
 
         existing = self.repo.find_by_username(username)
         if existing:
