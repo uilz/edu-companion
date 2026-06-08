@@ -22,6 +22,7 @@ Admin 鉴权依赖 — FastAPI Dependency
 """
 from __future__ import annotations
 
+import os
 import logging
 from typing import Iterable, Optional
 
@@ -30,12 +31,12 @@ from fastapi import Depends, HTTPException, Request, status
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 
-from app.config import settings
 from shared.constants import DEFAULT_USER_ID
 
 logger = logging.getLogger(__name__)
 
-JWT_SECRET = settings.openai_api_key or "edu-companion-jwt-secret-change-me"
+# JWT 密钥必须与 auth-gateway 一致，从同一个环境变量读取
+JWT_SECRET = os.getenv("JWT_SECRET", "auth-gateway-secret-key-2026")
 JWT_ALGORITHM = "HS256"
 
 
