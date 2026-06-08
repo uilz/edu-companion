@@ -111,7 +111,7 @@ function DayDetail({ day, onClose }: { day: DayEntry; onClose: () => void }) {
           </Link>
           {day.total > 0 && (
             <Link
-              href="/errors"
+              href="/practice/errors"
               className="flex-1 text-center text-xs px-3 py-2 border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
             >
               看错题

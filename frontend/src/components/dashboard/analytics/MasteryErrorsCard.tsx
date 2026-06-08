@@ -82,7 +82,7 @@ export function MasteryErrorsCard({
         )}
         {errorDistribution.length > 0 && (
           <Link
-            href="/errors"
+            href="/practice/errors"
             className="inline-block mt-4 text-[11px] text-[var(--color-accent)] hover:underline"
           >
             查看全部错题 →

@@ -154,7 +154,7 @@ export default function SessionReviewPage() {
                 重新练习
               </button>
             )}
-            <button onClick={() => router.push("/errors")}
+            <button onClick={() => router.push("/practice/errors")}
               className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-orange-500/10 text-orange-600 text-[10px] font-medium hover:bg-orange-500/20 transition-colors">
               <FileText size={12} />
               查看错题
