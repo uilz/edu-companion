@@ -8,7 +8,6 @@ import {
   register as authRegister,
   clearAuth as authLogout,
   fetchCurrentUser,
-  ensureDefaultUser,
   getAccessToken,
 } from "../lib/api/auth";
 import { initFetchInterceptor } from "../lib/api/fetch-interceptor";
@@ -43,16 +42,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       const token = getAccessToken();
       if (token) {
+        // 有 token 才尝试拉当前用户；拿不到就视为未登录
         await refresh();
-      } else {
-        // 无 token 时自动创建/登录默认用户（迁移兼容）
-        try {
-          await ensureDefaultUser();
-          await refresh();
-        } catch {
-          setUser(null);
-        }
       }
+      // 无论有无 token，最终都进入"已加载"状态
+      // 没有 token → user=null → AuthGuard 跳 /login
+      // 有 token 但失效 → refresh 会 setUser(null) → 同样跳 /login
       setLoading(false);
     })();
   }, [refresh]);
@@ -73,10 +68,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
+    // 清掉 token 和 user，不再自动建任何账号
     authLogout();
     setUser(null);
-    // 重新自动登录默认用户
-    ensureDefaultUser().then(() => refresh()).catch(() => {});
   };
 
   return (

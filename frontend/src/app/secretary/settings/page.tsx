@@ -4,6 +4,7 @@ import {
   Settings, Moon, Bell, RefreshCw, Check, BookOpen, Download, Trash2, Bot,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useCurrentUserId } from "@/hooks/useCurrentUserId";
 import { useNotificationPreferenceStore } from "@/store/notification/notification-preferences";
 import type { NotificationSource } from "@/store/notification/types";
 
@@ -62,18 +63,21 @@ export default function SecretarySettingsPage() {
   const setSourceEnabled = useNotificationPreferenceStore((s) => s.setSourceEnabled);
   const resetPrefs = useNotificationPreferenceStore((s) => s.resetPrefs);
 
+  const userId = useCurrentUserId();
+
   useEffect(() => {
+    if (!userId) return;
     loadAll();
-  }, []);
+  }, [userId]);
 
   const loadAll = async () => {
     setLoading(true);
     try {
       const [modRes, onbRes, prefRes, agentRes] = await Promise.all([
-        fetch("/api/secretary/modules?user_id=default_user"),
-        fetch("/api/secretary/onboarding?user_id=default_user"),
-        fetch("/api/secretary/preferences?user_id=default_user"),
-        fetch("/api/secretary/agent/preferences?user_id=default_user"),
+        fetch(`/api/secretary/modules?user_id=${userId}`),
+        fetch(`/api/secretary/onboarding?user_id=${userId}`),
+        fetch(`/api/secretary/preferences?user_id=${userId}`),
+        fetch(`/api/secretary/agent/preferences?user_id=${userId}`),
       ]);
       if (modRes.ok) setModules(await modRes.json());
       if (onbRes.ok) setOnboarding(await onbRes.json());
@@ -100,7 +104,7 @@ export default function SecretarySettingsPage() {
   const handleModuleToggle = async (name: string, enabled: boolean) => {
     setSaving(name);
     try {
-      const res = await fetch(`/api/secretary/modules/toggle?name=${name}&enabled=${enabled}&user_id=default_user`, {
+      const res = await fetch(`/api/secretary/modules/toggle?name=${name}&enabled=${enabled}&user_id=${userId}`, {
         method: "POST",
       });
       if (res.ok) {
@@ -114,7 +118,7 @@ export default function SecretarySettingsPage() {
   // 保存偏好到后端
   const savePreferences = async () => {
     try {
-      await fetch("/api/secretary/preferences?user_id=default_user", {
+      await fetch(`/api/secretary/preferences?user_id=${userId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -131,7 +135,7 @@ export default function SecretarySettingsPage() {
   // 保存 Agent 偏好
   const saveAgentPrefs = async () => {
     try {
-      await fetch("/api/secretary/agent/preferences?user_id=default_user", {
+      await fetch(`/api/secretary/agent/preferences?user_id=${userId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(agentPrefs),
@@ -441,7 +445,7 @@ export default function SecretarySettingsPage() {
           <button
             onClick={async () => {
               try {
-                const res = await fetch("/api/secretary/data/export?user_id=default_user");
+                const res = await fetch(`/api/secretary/data/export?user_id=${userId}`);
                 if (!res.ok) return;
                 const blob = await res.blob();
                 const url = URL.createObjectURL(blob);
@@ -459,7 +463,7 @@ export default function SecretarySettingsPage() {
           <button
             onClick={() => {
               if (!window.confirm("确定要删除所有秘书数据吗？此操作不可撤销！")) return;
-              fetch("/api/secretary/data/delete?user_id=default_user", { method: "DELETE" }).then((res) => {
+              fetch(`/api/secretary/data/delete?user_id=${userId}`, { method: "DELETE" }).then((res) => {
                 if (res.ok) alert("数据已删除");
               });
             }}

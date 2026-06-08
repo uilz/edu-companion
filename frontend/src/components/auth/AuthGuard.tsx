@@ -19,7 +19,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     if (PUBLIC_PATHS.some((p) => pathname?.startsWith(p))) return;
 
     // 未认证用户重定向到登录页
-    // 注意：AuthProvider 会自动创建 default_user，所以正常情况下不会出现无用户
+    // 未登录时直接跳转登录页，不再自动创建 default_user
     // 但如果 ensure-default 失败，则需要跳转登录
     if (!user) {
       router.replace("/login");

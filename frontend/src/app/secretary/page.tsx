@@ -6,6 +6,7 @@ import {
   RotateCcw, EyeOff, Timer,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useCurrentUserId } from "@/hooks/useCurrentUserId";
 import { useNotificationStore } from "@/store/notification/notification-store";
 import {
   snoozeNotification,
@@ -137,17 +138,21 @@ export default function SecretaryPage() {
     id: string; message: string; success: boolean;
   } | null>(null);
 
+  const userId = useCurrentUserId();
+
   // ── 初始化 ──
   useEffect(() => {
+    if (!userId) return;
     loadData();
-  }, []);
+  }, [userId]);
 
   const loadData = async () => {
+    if (!userId) return;
     setLoading(true);
     try {
       const [snapRes, propRes] = await Promise.all([
-        fetch("/api/secretary/snapshot?user_id=default_user"),
-        fetch("/api/secretary/proposals/pending?user_id=default_user"),
+        fetch(`/api/secretary/snapshot?user_id=${userId}`),
+        fetch(`/api/secretary/proposals/pending?user_id=${userId}`),
       ]);
       if (snapRes.ok) setSnapshot(await snapRes.json());
       if (propRes.ok) {
@@ -224,7 +229,7 @@ export default function SecretaryPage() {
   // ── 处理函数 ──
   const handleAccept = useCallback(async (id: string, options?: { navigate?: boolean }) => {
     try {
-      const res = await fetch(`/api/secretary/proposals/${id}/accept?user_id=default_user`, {
+      const res = await fetch(`/api/secretary/proposals/${id}/accept?user_id=${userId}`, {
         method: "POST",
       });
       if (res.ok) {
@@ -283,14 +288,14 @@ export default function SecretaryPage() {
   const handleRestore = useCallback((id: string) => {
     restoreNotification(id);
     // also call backend if needed
-    fetch(`/api/secretary/proposals/${id}/restore?user_id=default_user`, { method: "POST" }).catch(() => {});
+    fetch(`/api/secretary/proposals/${id}/restore?user_id=${userId}`, { method: "POST" }).catch(() => {});
   }, [restoreNotification]);
 
   // ── 生成提案 ──
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      const res = await fetch("/api/secretary/generate-llm-proposals?user_id=default_user", {
+      const res = await fetch(`/api/secretary/generate-llm-proposals?user_id=${userId}`, {
         method: "POST",
       });
       if (res.ok) {
@@ -314,7 +319,7 @@ export default function SecretaryPage() {
     setChecking(true);
     setCheckerResult(null);
     try {
-      const res = await fetch("/api/secretary/checker/run?user_id=default_user", {
+      const res = await fetch(`/api/secretary/checker/run?user_id=${userId}`, {
         method: "POST",
       });
       if (res.ok) {

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Loader2, Target } from "lucide-react";
 import Card from "@/components/ui/Card";
 import { API_BASE } from "@/lib/api/api";
+import { useCurrentUserId } from "@/hooks/useCurrentUserId";
 
 // ── Types ──
 
@@ -217,15 +218,17 @@ function RadarSVG({
 // ── Main component ──
 
 export default function RadarChart() {
+  const userId = useCurrentUserId();
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [subject, setSubject] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const fetchGraph = async (subj: string) => {
+    if (!userId) return;
     setLoading(true);
     try {
-      const params = new URLSearchParams({ user_id: "default_user" });
+      const params = new URLSearchParams({ user_id: userId });
       if (subj) params.set("subject", subj);
       const res = await fetch(`${API_BASE}/api/knowledge/graph?${params}`);
       if (!res.ok) throw new Error("Failed");

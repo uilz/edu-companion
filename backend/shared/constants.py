@@ -1,32 +1,34 @@
 """共享常量与工具函数"""
 
-# 默认用户 ID — 单用户模式下使用的全局常量
+# ⚠️ 业务层 protocol/service 签名兼容默认参数（仅用于类型默认值；业务逻辑
+# 必须由调用方显式传入真实 user_id）。新的中间件与前端代码不得再依赖此值。
+# 详见 docs/CHANGELOG.md 中"default_user 移除"条目。
 DEFAULT_USER_ID = "default_user"
 
 
-def get_user_id(user_id: str | None = None) -> str:
-    """获取用户ID，None时回退默认"""
-    return user_id or DEFAULT_USER_ID
+def get_user_id(user_id: str | None = None) -> str | None:
+    """获取用户ID，None时直接透传（由调用方决定是否拒绝）"""
+    return user_id or None
 
 
-def get_user_id_from_request(request) -> str:
+def get_user_id_from_request(request) -> str | None:
     """从 FastAPI Request 对象提取当前用户 ID
 
     优先使用认证中间件注入的 request.state.user_id，
-    回退到查询参数 user_id，最终回退到 DEFAULT_USER_ID。
+    其次回退到查询参数 user_id；取不到时返回 None。
     """
     # 1. 认证中间件注入
     state_uid = getattr(request.state, "user_id", None)
     if state_uid:
         return state_uid
-    # 2. 查询参数兼容
+    # 2. 查询参数兼容（业务层决定是否接受 query 传 user_id）
     try:
         q_uid = request.query_params.get("user_id")
         if q_uid:
             return q_uid
     except Exception:
         pass
-    return DEFAULT_USER_ID
+    return None
 
 
 # ── 掌握度判定 ──

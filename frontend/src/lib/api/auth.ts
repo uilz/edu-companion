@@ -239,10 +239,5 @@ export async function uploadAvatar(file: File): Promise<string> {
   return data.avatar_url;
 }
 
-// ── 默认用户自动登录（迁移兼容） ──
-
-export async function ensureDefaultUser(): Promise<AuthResult> {
-  const result = await authFetch<AuthResult>("/ensure-default", {});
-  setTokens(result.access_token, result.refresh_token, result.user);
-  return result;
-}
+// 注：历史上 "ensureDefaultUser" / "/api/auth/ensure-default" 端点已删除。
+// 任何"匿名访问自动建账号"的行为都被移除。详见 CHANGELOG。

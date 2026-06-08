@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight, Loader2, Flame, Target, Zap } from "lucide-react";
 import Link from "next/link";
 import { API_BASE } from "@/lib/api/api";
+import { useCurrentUserId } from "@/hooks/useCurrentUserId";
 
 // ── Types ──
 
@@ -142,11 +143,16 @@ export default function CalendarPage() {
   const [selectedDay, setSelectedDay] = useState<DayEntry | null>(null);
 
   // 从后端获取指定年月的日历学习数据
+  const userId = useCurrentUserId();
   const fetchCalendar = useCallback(async (y: number, m: number) => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(
-        `${API_BASE}/api/progress/default_user/calendar?year=${y}&month=${m}`
+        `${API_BASE}/api/progress/${userId}/calendar?year=${y}&month=${m}`
       );
       if (!res.ok) throw new Error("Failed");
       const json: CalendarData = await res.json();
@@ -156,7 +162,7 @@ export default function CalendarPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userId]);
 
   // 当 year 或 month 变化时自动重新获取数据
   useEffect(() => {

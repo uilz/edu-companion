@@ -250,33 +250,6 @@ async def change_password(body: ChangePasswordRequest, request: Request):
     return {"ok": True}
 
 
-# ── 兼容性端点：为现有 default_user 自动创建账号 ──
-
-@router.post("/ensure-default", summary="确保默认用户存在（开发用）")
-async def ensure_default_user():
-    """如果 default_user 不存在则自动创建，用于迁移兼容"""
-    from auth_app.auth_service import get_auth_service
-    from auth_app.user_repo import get_user_repo
-
-    svc = get_auth_service()
-    repo = get_user_repo()
-    existing = repo.find_by_username("default_user")
-    if existing:
-        safe_user = {k: v for k, v in existing.items() if k != "password_hash"}
-        access_token = svc.jwt.create_access_token(existing["id"], "default_user", existing.get("role", "user"))
-        refresh_token = svc.jwt.create_refresh_token(existing["id"])
-        return {
-            "user": safe_user,
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "created": False,
-        }
-
-    result = svc.register(username="default_user", password="default123", display_name="默认用户")
-    result["created"] = True
-    return result
-
-
 # ── 头像存储 ──
 AVATAR_DIR = Path(__file__).resolve().parent.parent / "avatars"
 AVATAR_DIR.mkdir(parents=True, exist_ok=True)

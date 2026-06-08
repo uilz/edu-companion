@@ -7,6 +7,7 @@ import { Loader2, AlertTriangle } from "lucide-react";
 // 加载动画与警告图标
 import Card from "@/components/ui/Card";
 import { API_BASE } from "@/lib/api/api";
+import { useCurrentUserId } from "@/hooks/useCurrentUserId";
 
 // ── Types ──
 // 学习进度概览数据，从后端 API /api/progress 获取
@@ -67,15 +68,17 @@ export default function ProgressPage() {
   const [error, setError] = useState("");
 
   // ── 组件挂载时并行请求后端数据 ──
+  const userId = useCurrentUserId();
   useEffect(() => {
     async function load() {
+      if (!userId) { setLoading(false); return; }
       setLoading(true);
       setError("");
       try {
         // 并行发起四个 API 请求：概览、学科统计、趋势、错误统计
         const [sumRes, statsRes, trendRes, errRes] = await Promise.all([
-          fetch(`${API_BASE}/api/progress/default_user`),
-          fetch(`${API_BASE}/api/progress/default_user/stats`),
+          fetch(`${API_BASE}/api/progress/${userId}`),
+          fetch(`${API_BASE}/api/progress/${userId}/stats`),
           fetch(`${API_BASE}/api/practice/stats?time_range=month`),
           fetch(`${API_BASE}/api/v7/practice/error-book/stats`),
         ]);
@@ -122,7 +125,7 @@ export default function ProgressPage() {
       }
     }
     load();
-  }, []);
+  }, [userId]);
 
   // ── Derived values ──
   // 从概览数据中推导出展示用数值

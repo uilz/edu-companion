@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Bell, Check, Clock, X } from "lucide-react";
+import { useCurrentUserId } from "@/hooks/useCurrentUserId";
 
 interface SecretaryProposal {
   id: string;
@@ -61,6 +62,7 @@ export default function SecretarySuggestionsBlock({
 }
 
 function ProposalCard({ proposal }: { proposal: SecretaryProposal }) {
+  const userId = useCurrentUserId();
   const [dismissed, setDismissed] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -68,10 +70,11 @@ function ProposalCard({ proposal }: { proposal: SecretaryProposal }) {
   if (dismissed || accepted) return null;
 
   const handleAccept = async () => {
+    if (!userId) return;
     setLoading(true);
     try {
       const res = await fetch(
-        `/api/secretary/proposals/${proposal.id}/accept?user_id=default_user`,
+        `/api/secretary/proposals/${proposal.id}/accept?user_id=${userId}`,
         { method: "POST" }
       );
       if (res.ok) {
@@ -83,10 +86,11 @@ function ProposalCard({ proposal }: { proposal: SecretaryProposal }) {
   };
 
   const handleDismiss = async () => {
+    if (!userId) return;
     setLoading(true);
     try {
       const res = await fetch(
-        `/api/secretary/proposals/${proposal.id}/dismiss?user_id=default_user`,
+        `/api/secretary/proposals/${proposal.id}/dismiss?user_id=${userId}`,
         { method: "POST" }
       );
       if (res.ok) {

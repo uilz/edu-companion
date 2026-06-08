@@ -13,6 +13,7 @@ import {
 import Card from '@/components/ui/Card';
 import UnifiedSearch from '@/components/search/UnifiedSearch';
 import { API_BASE } from "@/lib/api/api";
+import { useCurrentUserId } from "@/hooks/useCurrentUserId";
 
 // 学习进度概览（来自 analytics stats/overview）
 interface StatsOverview {
@@ -90,6 +91,8 @@ export function OverviewTab() {
     return '晚上好 🌙';
   }, []);
 
+  const userId = useCurrentUserId();
+
   const [stats, setStats] = useState<StatsOverview | null>(null);
   const [dashboard, setDashboard] = useState<DashboardOverview | null>(null);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
@@ -98,10 +101,11 @@ export function OverviewTab() {
 
   useEffect(() => {
     async function loadData() {
+      if (!userId) { setLoading(false); return; }
       try {
         const [statsRes, dashRes, achieveRes, weakRes] = await Promise.all([
           fetch(`${API_BASE}/api/v7/practice/stats/overview`),
-          fetch(`${API_BASE}/api/v2/dashboard/overview?user_id=default_user`),
+          fetch(`${API_BASE}/api/v2/dashboard/overview?user_id=${userId}`),
           fetch(`${API_BASE}/api/v7/practice/achievements`),
           fetch(`${API_BASE}/api/v7/practice/stats/weak-skills`),
         ]);
@@ -121,7 +125,7 @@ export function OverviewTab() {
       }
     }
     loadData();
-  }, []);
+  }, [userId]);
 
   const accuracy = dashboard
     ? `${(dashboard.engagement.today_accuracy * 100).toFixed(1)}%`

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useCurrentUserId } from "@/hooks/useCurrentUserId";
 
 /**
  * SecretaryBellBadge — 秘书铃铛小红点组件
@@ -10,15 +11,17 @@ import { useEffect, useState } from "react";
  * 无需父组件传 props，直接放在导航项旁边即可。
  */
 export default function SecretaryBellBadge() {
+  const userId = useCurrentUserId();
   const [count, setCount] = useState(0);
 
   useEffect(() => {
+    if (!userId) return;
     let active = true;
 
     const fetchCount = async () => {
       try {
         const res = await fetch(
-          "/api/secretary/proposals/pending?user_id=default_user"
+          `/api/secretary/proposals/pending?user_id=${userId}`
         );
         if (!res.ok) return;
         const data = await res.json();
@@ -38,7 +41,7 @@ export default function SecretaryBellBadge() {
       active = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [userId]);
 
   if (count === 0) return null;
 
