@@ -22,22 +22,22 @@ USER_ID = DEFAULT_USER_ID
 
 
 def _collect_stats(user_id: str) -> dict[str, Any]:
-    """从现有数据源收集所有统计指标"""
+    """从现有数据源收集所有统计指标（v7: 全部从 PG 真实读取）"""
     try:
-        # 从 learner profile 获取基础统计
+        # 从 learner profile 拿持久化字段（streak/total_study_minutes 也走真实计算）
         profile = learner_engine.get_or_create_profile(user_id)
         summary = learner_engine.get_progress_summary(user_id)
 
-        # Session count
-        session_count = profile.total_sessions if hasattr(profile, "total_sessions") else 0
+        # Session count：从 PG practice_sessions 真实统计
+        session_count = learner_engine.get_total_sessions(user_id)
 
         # 答题统计
         practice_count = summary.total_questions
         correct_count = summary.correct_answers
         accuracy = summary.accuracy_rate
 
-        # Streak
-        streak = profile.streak_days if hasattr(profile, "streak_days") else 0
+        # Streak：从 PG 真实计算连续天数
+        streak = learner_engine.get_streak_days(user_id)
 
         # 掌握技能数
         try:

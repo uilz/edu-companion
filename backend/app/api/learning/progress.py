@@ -402,9 +402,8 @@ async def get_daily_summary(user_id: str) -> dict[str, Any]:
 
     accuracy = yesterday_correct / yesterday_total
 
-    # streak
-    profile = learner_engine.get_or_create_profile(user_id)
-    streak = profile.streak_days if hasattr(profile, "streak_days") else 0
+    # streak：从 PG 真实计算连续天数
+    streak = learner_engine.get_streak_days(user_id)
 
     # 今日推荐：从 cognitive_nodes 获取最弱的 3 个
     recommendations = _get_weak_nodes(user_id, top_n=3)

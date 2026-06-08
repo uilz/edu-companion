@@ -1,7 +1,7 @@
 """
-学习者数字孪生引擎（MVP版本 - 内存存储）
-管理学习者画像、知识状态、学习记录
-后续可替换为数据库持久化
+学习者数字孪生引擎（v7: PG 真存储 + 内存 cache）
+管理学习者画像、连续天数、进度统计。
+所有统计字段（practice_count/streak_days/total_sessions）从 PG 真实计算，不再使用内存 dict。
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ from typing import Any, Optional
 
 from app.config import settings
 from shared.constants import get_mastery_label
-from shared.learner_sample_data import get_sample_questions, get_sample_content
 from app.schemas.learner import (
     ContentItem,
     LearnerProfile,
@@ -36,28 +35,12 @@ class LearnerModelEngine:
     """
 
     def __init__(self) -> None:
-        # 内存存储（MVP）: user_id -> LearnerProfile
+        # v7: 仅保留临时会话存储（用于 in-memory clean_expired_sessions）
+        # 画像/统计字段全部从 PG 真实计算，不再维护内存 dict
         self._profiles: dict[str, LearnerProfile] = {}
-        # 会话存储: session_id -> ConversationContext
+        # 会话存储: session_id -> ConversationContext（临时缓存）
         self._sessions: dict[str, dict[str, Any]] = {}
-        # 学习记录: user_id -> list[dict]
-        self._activity_log: dict[str, list[dict[str, Any]]] = {}
-        # 学习计划: user_id -> StudyPlan
-        self._study_plans: dict[str, StudyPlan] = {}
-        # 练习题库（内存）: subject -> list[PracticeQuestion]
-        self._question_bank: dict[str, list[PracticeQuestion]] = {}
-        # 内容库（内存）: subject -> list[ContentItem]
-        self._content_store: dict[str, list[ContentItem]] = {}
         # 掌握度判定使用 shared.constants.get_mastery_label
-
-        # 初始化示例数据
-        self._init_sample_data()
-
-    def _init_sample_data(self) -> None:
-        """初始化示例数据（MVP用）"""
-        self._question_bank = get_sample_questions()
-        self._content_store = get_sample_content()
-        logger.info("示例数据初始化完成")
 
     # ──────────────────────────────────────────────
     # 学习者画像管理
@@ -168,23 +151,33 @@ class LearnerModelEngine:
     # ──────────────────────────────────────────────
 
     def get_progress_summary(self, user_id: str) -> ProgressSummary:
-        """获取学习进度摘要"""
-        profile = self.get_or_create_profile(user_id)
-        activities = self._activity_log.get(user_id, [])
-
-        # 计算统计
-        total_questions = len(
-            [a for a in activities if a.get("type") == "practice"]
-        )
-        correct_answers = len(
-            [a for a in activities if a.get("type") == "practice" and a.get("is_correct")]
-        )
+        """获取学习进度摘要（v7: 全部从 PG 真实读取）"""
+        # ── 1. 答题统计：直接从 practice_attempts 聚合 ──
+        total_questions = 0
+        correct_answers = 0
+        study_minutes = 0.0
+        try:
+            from app.db.database import get_db
+            db = get_db()
+            agg = db.fetchone(
+                """SELECT COUNT(*) AS total,
+                          SUM(CASE WHEN is_correct THEN 1 ELSE 0 END) AS correct,
+                          COALESCE(SUM(time_spent_seconds), 0) AS total_seconds
+                   FROM practice_attempts WHERE user_id = %s""",
+                (user_id,),
+            )
+            if agg:
+                total_questions = int(agg["total"] or 0)
+                correct_answers = int(agg["correct"] or 0)
+                study_minutes = round(int(agg["total_seconds"] or 0) / 60, 1)
+        except Exception as e:
+            logger.warning("Failed to read practice_attempts for %s: %s", user_id, e)
 
         accuracy_rate = (
             correct_answers / total_questions if total_questions > 0 else 0.0
         )
 
-        # 找出已掌握和困难的知识点（从 CognitiveNode 读取）
+        # ── 2. 掌握/困难知识点：从 cognitive_nodes 读取（保持原行为） ──
         mastered: list[str] = []
         struggling: list[str] = []
         try:
@@ -202,11 +195,36 @@ class LearnerModelEngine:
         except Exception as e:
             logger.warning("Failed to read CognitiveNode mastery data: %s", e)
 
-        # 生成建议
+        # ── 3. recent_activity：从 practice_attempts 取最近 10 条 ──
+        recent_activity: list[dict] = []
+        try:
+            from app.db.database import get_db
+            db = get_db()
+            rows = db.fetchall(
+                """SELECT id, question_id, is_correct, time_spent_seconds, created_at
+                   FROM practice_attempts WHERE user_id = %s
+                   ORDER BY created_at DESC LIMIT 10""",
+                (user_id,),
+            ) or []
+            for r in rows:
+                recent_activity.append({
+                    "type": "practice",
+                    "id": r.get("id"),
+                    "question_id": r.get("question_id"),
+                    "is_correct": r.get("is_correct"),
+                    "time_spent_seconds": r.get("time_spent_seconds"),
+                    "created_at": str(r.get("created_at", "")),
+                })
+        except Exception as e:
+            logger.warning("Failed to read recent activity for %s: %s", user_id, e)
+
+        # ── 4. 建议生成 ──
         recommendations: list[str] = []
         if struggling:
             recommendations.append(f"建议重点复习: {', '.join(struggling[:3])}")
-        if accuracy_rate < 0.6:
+        if total_questions == 0:
+            recommendations.append("还没有练习记录，开始你的第一次练习吧")
+        elif accuracy_rate < 0.6:
             recommendations.append("正确率较低，建议降低难度巩固基础")
         elif accuracy_rate > 0.9:
             recommendations.append("掌握不错！可以尝试更高难度的挑战")
@@ -216,12 +234,59 @@ class LearnerModelEngine:
             total_questions=total_questions,
             correct_answers=correct_answers,
             accuracy_rate=accuracy_rate,
-            study_minutes=profile.total_study_minutes,
+            study_minutes=study_minutes,
             mastered_skills=mastered,
             struggling_skills=struggling,
-            recent_activity=activities[-10:],  # 最近10条活动
+            recent_activity=recent_activity,
             recommendations=recommendations,
         )
+
+    def get_streak_days(self, user_id: str) -> int:
+        """从 PG 真实计算连续学习天数（v7: 基于 practice_attempts.created_at）"""
+        try:
+            from app.db.database import get_db
+            db = get_db()
+            # 取出最近 365 天的练习日期去重
+            rows = db.fetchall(
+                """SELECT DISTINCT DATE(created_at) AS d
+                   FROM practice_attempts
+                   WHERE user_id = %s
+                     AND created_at >= NOW() - INTERVAL '365 days'
+                   ORDER BY d DESC""",
+                (user_id,),
+            ) or []
+            if not rows:
+                return 0
+            from datetime import date, timedelta
+            practice_dates = {r["d"] for r in rows if r.get("d")}
+            # 从今天/昨天向前连续计数
+            today = date.today()
+            streak = 0
+            cursor = today
+            # 如果今天没练习，从昨天开始算
+            if cursor not in practice_dates:
+                cursor = cursor - timedelta(days=1)
+            while cursor in practice_dates:
+                streak += 1
+                cursor = cursor - timedelta(days=1)
+            return streak
+        except Exception as e:
+            logger.warning("Failed to compute streak for %s: %s", user_id, e)
+            return 0
+
+    def get_total_sessions(self, user_id: str) -> int:
+        """从 PG 真实统计 session 数（v7: 包含已完成的 practice_sessions）"""
+        try:
+            from app.db.database import get_db
+            db = get_db()
+            row = db.fetchone(
+                "SELECT COUNT(*) AS cnt FROM practice_sessions WHERE user_id = %s",
+                (user_id,),
+            )
+            return int(row["cnt"]) if row else 0
+        except Exception as e:
+            logger.warning("Failed to count sessions for %s: %s", user_id, e)
+            return 0
 
     # ──────────────────────────────────────────────
     # 会话管理
@@ -250,20 +315,6 @@ class LearnerModelEngine:
         for sid in expired:
             del self._sessions[sid]
         return len(expired)
-
-    # ──────────────────────────────────────────────
-    # 内部工具方法
-    # ──────────────────────────────────────────────
-
-    def _log_activity(self, user_id: str, activity: dict[str, Any]) -> None:
-        """记录学习活动"""
-        if user_id not in self._activity_log:
-            self._activity_log[user_id] = []
-        self._activity_log[user_id].append(activity)
-
-        # 限制记录数量
-        if len(self._activity_log[user_id]) > 1000:
-            self._activity_log[user_id] = self._activity_log[user_id][-500:]
 
 
 # ── 全局引擎实例 ──
