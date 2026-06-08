@@ -1,10 +1,14 @@
 """BI 数据分析 — analyst+ 权限
 
-GET /kpi                  顶部 KPI 卡片（用户数 / 练习总数 / 正确率 / 活跃度）
-GET /user-activity        用户活跃度（DAU/WAU/MAU 模拟）
+GET /kpi                  顶部 KPI 卡片
+GET /user-activity        用户活跃度
 GET /mastery-distribution 知识点掌握度分布
-GET /practice-trend       练习趋势（最近 30 天）
-GET /top-wrong-questions 错题 TOP 10
+GET /practice-trend       练习趋势（天数可选）
+GET /top-wrong-questions  错题 TOP N
+GET /subject-distribution 学科分布
+GET /difficulty-distribution 难度分布
+GET /user-engagement      用户参与度排名
+GET /accuracy-trend       正确率趋势
 """
 from __future__ import annotations
 
@@ -27,7 +31,6 @@ def _repo():
 
 @router.get("/kpi")
 async def kpi(_: dict = Depends(require_role("analyst"))):
-    """KPI 顶卡"""
     repo = _repo()
     if not repo:
         raise HTTPException(503, "AdminRepository 不可用")
@@ -61,7 +64,6 @@ async def kpi(_: dict = Depends(require_role("analyst"))):
 
 @router.get("/mastery-distribution")
 async def mastery_distribution(_: dict = Depends(require_role("analyst"))):
-    """知识点掌握度分布（按 α/(α+β) 分桶）"""
     repo = _repo()
     rows = repo.query("""
         SELECT
@@ -86,7 +88,6 @@ async def practice_trend(
     days: int = Query(30, ge=1, le=180),
     _: dict = Depends(require_role("analyst")),
 ):
-    """最近 N 天练习量与正确率"""
     repo = _repo()
     rows = repo.query(
         "SELECT DATE(created_at) AS day, "
@@ -115,7 +116,6 @@ async def top_wrong_questions(
     limit: int = Query(10, ge=1, le=50),
     _: dict = Depends(require_role("analyst")),
 ):
-    """错题 TOP N（按错误次数）"""
     repo = _repo()
     rows = repo.query(
         "SELECT q.id, q.stem, q.difficulty, q.bank_id, "
@@ -137,7 +137,6 @@ async def user_activity(
     days: int = Query(7, ge=1, le=90),
     _: dict = Depends(require_role("analyst")),
 ):
-    """最近 N 天 DAU（按 last_login 聚合，简易版）"""
     repo = _repo()
     rows = repo.query("""
         SELECT
@@ -154,3 +153,92 @@ async def user_activity(
         "mau": int(r.get("mau_30d", 0) or 0),
         "total": int(r.get("total_users", 0) or 0),
     }
+
+
+@router.get("/subject-distribution")
+async def subject_distribution(_: dict = Depends(require_role("analyst"))):
+    """按学科的知识节点分布"""
+    repo = _repo()
+    rows = repo.query("""
+        SELECT
+            COALESCE(q.bank_id, 'unknown') AS subject,
+            COUNT(DISTINCT q.id) AS questions,
+            COUNT(DISTINCT cn.id) AS nodes
+        FROM questions q
+        FULL JOIN cognitive_nodes cn ON cn.id = q.id
+        GROUP BY subject
+        ORDER BY questions DESC
+    """) or []
+    return {"items": rows}
+
+
+@router.get("/difficulty-distribution")
+async def difficulty_distribution(_: dict = Depends(require_role("analyst"))):
+    """题目难度分布"""
+    repo = _repo()
+    rows = repo.query("""
+        SELECT
+            CASE
+                WHEN difficulty < 0.3 THEN 'easy'
+                WHEN difficulty < 0.6 THEN 'medium'
+                ELSE 'hard'
+            END AS bucket,
+            COUNT(*) AS cnt
+        FROM questions
+        WHERE deleted_at IS NULL
+        GROUP BY bucket
+        ORDER BY bucket
+    """) or []
+    return {"buckets": rows}
+
+
+@router.get("/user-engagement")
+async def user_engagement(
+    limit: int = Query(10, ge=1, le=50),
+    _: dict = Depends(require_role("analyst")),
+):
+    """用户参与度排名（按练习次数）"""
+    repo = _repo()
+    rows = repo.query(
+        "SELECT pa.user_id, u.username, "
+        "       COUNT(*) AS total_attempts, "
+        "       COUNT(DISTINCT DATE(pa.created_at)) AS active_days, "
+        "       COUNT(*) FILTER (WHERE pa.is_correct = TRUE) AS correct_attempts "
+        "FROM practice_attempts pa "
+        "LEFT JOIN users u ON u.id = pa.user_id "
+        "GROUP BY pa.user_id, u.username "
+        "ORDER BY total_attempts DESC LIMIT %s",
+        (limit,),
+    ) or []
+    return {"items": rows, "limit": limit}
+
+
+@router.get("/accuracy-trend")
+async def accuracy_trend(
+    days: int = Query(30, ge=1, le=180),
+    _: dict = Depends(require_role("analyst")),
+):
+    """每日正确率趋势（最近 N 天）"""
+    repo = _repo()
+    rows = repo.query(
+        "SELECT DATE(created_at) AS day, "
+        "       COUNT(*) AS total, "
+        "       COUNT(*) FILTER (WHERE is_correct = TRUE) AS correct, "
+        "       AVG(time_spent) AS avg_time_spent "
+        "FROM practice_attempts "
+        "WHERE created_at > NOW() - (%s || ' days')::interval "
+        "GROUP BY DATE(created_at) ORDER BY day",
+        (str(days),),
+    ) or []
+    series = []
+    for r in rows:
+        t = int(r.get("total", 0) or 0)
+        c = int(r.get("correct", 0) or 0)
+        series.append({
+            "day": str(r.get("day") or ""),
+            "total": t,
+            "correct": c,
+            "accuracy": round(c / t, 4) if t else 0,
+            "avg_time_spent": round(float(r.get("avg_time_spent", 0) or 0), 2),
+        })
+    return {"days": days, "series": series}

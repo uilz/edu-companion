@@ -1,20 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError, getCurrentUser, hasRole, type AdminUser } from "@/lib/api";
 
 interface UserRow {
-  id: string;
-  username: string;
-  email: string;
-  display_name: string;
-  role: string;
-  is_active: boolean;
-  last_login: string | null;
-  created_at: string;
+  id: string; username: string; email: string; display_name: string;
+  role: string; is_active: boolean; last_login: string | null; created_at: string; avatar_url: string;
 }
-
 interface ListResp { items: UserRow[]; total: number; page: number; page_size: number; }
 
 export default function UsersPage() {
@@ -23,10 +16,21 @@ export default function UsersPage() {
   const [data, setData] = useState<ListResp | null>(null);
   const [q, setQ] = useState("");
   const [role, setRole] = useState("");
+  const [activeFilter, setActiveFilter] = useState("");
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  // 鉴权
+  // Modal state
+  const [modal, setModal] = useState<"create" | null>(null);
+  const [createForm, setCreateForm] = useState({ username: "", password: "123456", email: "", display_name: "", role: "user" });
+
+  // Detail modal
+  const [detailUser, setDetailUser] = useState<UserRow | null>(null);
+  const [loginLog, setLoginLog] = useState<any[] | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
   useEffect(() => {
     const u = getCurrentUser();
     if (!u) { router.replace("/login"); return; }
@@ -34,122 +38,232 @@ export default function UsersPage() {
     setMe(u);
   }, [router]);
 
-  useEffect(() => {
-    if (!me) return;
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [me, q, role]);
-
-  async function load() {
-    setLoading(true);
-    setErr("");
+  const load = useCallback(async () => {
+    setLoading(true); setErr("");
     try {
       const params = new URLSearchParams();
       if (q) params.set("q", q);
       if (role) params.set("role", role);
+      if (activeFilter) params.set("is_active", activeFilter === "active" ? "true" : "false");
+      params.set("page", String(page));
+      params.set("page_size", "20");
       const d = await api.get<ListResp>(`/users?${params}`);
       setData(d);
     } catch (e: any) {
-      if (e instanceof ApiError && e.status === 403) {
-        setErr("需要 super_admin 权限");
-      } else {
-        setErr(e.message);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }
+      setErr(e.message);
+    } finally { setLoading(false); }
+  }, [q, role, activeFilter, page]);
+
+  useEffect(() => { if (me) load(); }, [me, load]);
 
   async function setRoleOf(id: string, newRole: string) {
-    if (!confirm(`将用户 ${id} 角色改为 ${newRole}？`)) return;
-    try {
-      await api.patch(`/users/${id}/role`, { role: newRole });
-      await load();
-    } catch (e: any) {
-      alert("失败: " + e.message);
-    }
+    if (!confirm(`将用户 ${id.slice(0, 12)} 角色改为 ${newRole}？`)) return;
+    try { await api.patch(`/users/${id}`, { role: newRole }); load(); }
+    catch (e: any) { alert("失败: " + e.message); }
   }
 
   async function toggleActive(u: UserRow) {
     if (!confirm(`${u.is_active ? "封禁" : "解封"} ${u.username}？`)) return;
-    try {
-      await api.post(`/users/${u.id}/${u.is_active ? "ban" : "unban"}`);
-      await load();
-    } catch (e: any) {
-      alert("失败: " + e.message);
-    }
+    try { await api.post(`/users/${u.id}/${u.is_active ? "ban" : "unban"}`); load(); }
+    catch (e: any) { alert("失败: " + e.message); }
   }
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      await api.post("/users/create", createForm);
+      setModal(null);
+      setCreateForm({ username: "", password: "123456", email: "", display_name: "", role: "user" });
+      load();
+    } catch (e: any) { alert("创建失败: " + e.message); }
+  }
+
+  async function openDetail(u: UserRow) {
+    setDetailUser(u);
+    setDetailLoading(true);
+    setLoginLog(null);
+    try {
+      const r = await api.get<any>(`/users/${u.id}/login-log?limit=10`);
+      setLoginLog(r.recent_logins);
+    } catch { setLoginLog([]); }
+    setDetailLoading(false);
+  }
+
+  function selectAll() {
+    if (!data) return;
+    if (selected.size === data.items.length) setSelected(new Set());
+    else setSelected(new Set(data.items.map((i) => i.id)));
+  }
+
+  function toggleSelect(id: string) {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelected(next);
+  }
+
+  async function bulkRole(newRole: string) {
+    if (!selected.size || !confirm(`批量修改 ${selected.size} 个用户角色为 ${newRole}？`)) return;
+    try { await api.post("/users/bulk/role", { user_ids: Array.from(selected), role: newRole }); setSelected(new Set()); load(); }
+    catch (e: any) { alert("失败: " + e.message); }
+  }
+
+  async function bulkBan(ban: boolean) {
+    if (!selected.size || !confirm(`${ban ? "封禁" : "解封"} ${selected.size} 个用户？`)) return;
+    try { await api.post(`/users/bulk/${ban ? "ban" : "unban"}`, { user_ids: Array.from(selected) }); setSelected(new Set()); load(); }
+    catch (e: any) { alert("失败: " + e.message); }
+  }
+
+  const totalPages = data ? Math.ceil(data.total / data.page_size) : 0;
 
   return (
     <div className="page">
-      <h1>用户管理 <span className="muted">({data?.total ?? "…"} 人)</span></h1>
+      <h1>用户管理 {data && <span className="subtitle">共 {data.total} 人</span>}</h1>
+
+      {err && <div className="card card-error">{err}</div>}
 
       <div className="toolbar">
-        <input
-          placeholder="搜索 username / email / display_name"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          style={{ minWidth: 280 }}
-        />
-        <select value={role} onChange={(e) => setRole(e.target.value)}>
+        <input placeholder="搜索 username / email / display_name" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} style={{ minWidth: 260 }} />
+        <select value={role} onChange={(e) => { setRole(e.target.value); setPage(1); }}>
           <option value="">全部角色</option>
           <option value="user">user</option>
           <option value="analyst">analyst</option>
           <option value="data_admin">data_admin</option>
           <option value="super_admin">super_admin</option>
         </select>
-        <button className="btn-sm" onClick={load}>刷新</button>
+        <select value={activeFilter} onChange={(e) => { setActiveFilter(e.target.value); setPage(1); }}>
+          <option value="">全部状态</option>
+          <option value="active">活跃</option>
+          <option value="banned">封禁</option>
+        </select>
+        <button className="btn-sm" onClick={() => load()}>刷新</button>
+        <span className="spacer" />
+        <button className="btn-sm btn-success" onClick={() => setModal("create")}>+ 创建用户</button>
       </div>
 
-      {err && <div className="card" style={{ borderColor: "#7f1d1d", color: "#fca5a5" }}>{err}</div>}
+      {selected.size > 0 && (
+        <div className="alert alert-info flex">
+          <span>已选 {selected.size} 人</span>
+          <button className="btn-sm" onClick={() => bulkRole("analyst")}>设为 analyst</button>
+          <button className="btn-sm" onClick={() => bulkRole("data_admin")}>设为 data_admin</button>
+          <button className="btn-sm" onClick={() => bulkRole("super_admin")}>设为 super_admin</button>
+          <button className="btn-sm btn-danger" onClick={() => bulkBan(true)}>批量封禁</button>
+          <button className="btn-sm" onClick={() => bulkBan(false)}>批量解封</button>
+          <button className="btn-sm" onClick={() => setSelected(new Set())}>取消选择</button>
+        </div>
+      )}
 
       <div className="card">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>用户名</th>
-              <th>邮箱</th>
-              <th>角色</th>
-              <th>状态</th>
-              <th>最近登录</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && <tr><td colSpan={7} className="muted">加载中…</td></tr>}
-            {!loading && data?.items.length === 0 && (
-              <tr><td colSpan={7} className="muted">无数据</td></tr>
-            )}
-            {data?.items.map((u) => (
-              <tr key={u.id}>
-                <td className="code">{u.id.slice(0, 12)}…</td>
-                <td><b>{u.username}</b>{u.display_name && <span className="muted"> ({u.display_name})</span>}</td>
-                <td className="muted">{u.email || "—"}</td>
-                <td>
-                  <select value={u.role} onChange={(e) => setRoleOf(u.id, e.target.value)}>
-                    <option value="user">user</option>
-                    <option value="analyst">analyst</option>
-                    <option value="data_admin">data_admin</option>
-                    <option value="super_admin">super_admin</option>
-                  </select>
-                </td>
-                <td>
-                  {u.is_active
-                    ? <span className="badge badge-active">active</span>
-                    : <span className="badge badge-inactive">banned</span>}
-                </td>
-                <td className="code muted">{u.last_login || "—"}</td>
-                <td>
-                  <button className="btn-sm" onClick={() => toggleActive(u)}>
-                    {u.is_active ? "封禁" : "解封"}
-                  </button>
-                </td>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th><input type="checkbox" checked={data ? selected.size === data.items.length && data.items.length > 0 : false} onChange={selectAll} /></th>
+                <th>ID</th><th>用户名</th><th>邮箱</th><th>角色</th><th>状态</th><th>最近登录</th><th>操作</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {loading && <tr><td colSpan={8} className="muted" style={{ textAlign: "center", padding: 24 }}>加载中…</td></tr>}
+              {!loading && data?.items.length === 0 && <tr><td colSpan={8} className="empty">无匹配用户</td></tr>}
+              {data?.items.map((u) => (
+                <tr key={u.id}>
+                  <td><input type="checkbox" checked={selected.has(u.id)} onChange={() => toggleSelect(u.id)} /></td>
+                  <td className="code">{u.id.slice(0, 10)}…</td>
+                  <td><b>{u.username}</b>{u.display_name && <span className="muted"> ({u.display_name})</span>}
+                    <button className="btn-sm" style={{ marginLeft: 6, fontSize: 10 }} onClick={() => openDetail(u)}>详情</button>
+                  </td>
+                  <td className="muted">{u.email || "—"}</td>
+                  <td>
+                    <select value={u.role} onChange={(e) => setRoleOf(u.id, e.target.value)}>
+                      <option value="user">user</option>
+                      <option value="analyst">analyst</option>
+                      <option value="data_admin">data_admin</option>
+                      <option value="super_admin">super_admin</option>
+                    </select>
+                  </td>
+                  <td>{u.is_active ? <span className="badge badge-active">active</span> : <span className="badge badge-inactive">banned</span>}</td>
+                  <td className="code muted">{u.last_login?.slice(0, 16) || "—"}</td>
+                  <td>
+                    <div className="flex gap-4">
+                      <button className="btn-sm" onClick={() => toggleActive(u)}>{u.is_active ? "封禁" : "解封"}</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {data && totalPages > 1 && (
+          <div className="pagination">
+            <span>第 {data.page}/{totalPages} 页 (共 {data.total} 条)</span>
+            <button disabled={page <= 1} onClick={() => setPage(page - 1)}>上一页</button>
+            <button disabled={page >= totalPages} onClick={() => setPage(page + 1)}>下一页</button>
+          </div>
+        )}
       </div>
+
+      {/* Create User Modal */}
+      {modal === "create" && (
+        <div className="modal-overlay" onClick={() => setModal(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>创建新用户</h2>
+            <form onSubmit={handleCreate}>
+              <label>用户名 *</label>
+              <input required value={createForm.username} onChange={(e) => setCreateForm({ ...createForm, username: e.target.value })} />
+              <label>密码 *</label>
+              <input required value={createForm.password} onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })} />
+              <label>邮箱</label>
+              <input value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} />
+              <label>显示名</label>
+              <input value={createForm.display_name} onChange={(e) => setCreateForm({ ...createForm, display_name: e.target.value })} />
+              <label>角色</label>
+              <select value={createForm.role} onChange={(e) => setCreateForm({ ...createForm, role: e.target.value })}>
+                <option value="user">user</option>
+                <option value="analyst">analyst</option>
+                <option value="data_admin">data_admin</option>
+                <option value="super_admin">super_admin</option>
+              </select>
+              <div className="modal-actions">
+                <button type="button" className="btn-sm" onClick={() => setModal(null)}>取消</button>
+                <button type="submit" className="btn">创建</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* User Detail Modal */}
+      {detailUser && (
+        <div className="modal-overlay" onClick={() => { setDetailUser(null); setLoginLog(null); }}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+            <h2>{detailUser.username}</h2>
+            <table>
+              <tbody>
+                <tr><td className="muted">ID</td><td className="code">{detailUser.id}</td></tr>
+                <tr><td className="muted">邮箱</td><td>{detailUser.email || "—"}</td></tr>
+                <tr><td className="muted">显示名</td><td>{detailUser.display_name || "—"}</td></tr>
+                <tr><td className="muted">角色</td><td><span className={`role-pill role-${detailUser.role}`}>{detailUser.role}</span></td></tr>
+                <tr><td className="muted">状态</td><td>{detailUser.is_active ? <span className="badge badge-active">活跃</span> : <span className="badge badge-inactive">封禁</span>}</td></tr>
+                <tr><td className="muted">最近登录</td><td className="code">{detailUser.last_login || "从未"}</td></tr>
+                <tr><td className="muted">注册时间</td><td className="code">{detailUser.created_at?.slice(0, 16)}</td></tr>
+              </tbody>
+            </table>
+            <h3 style={{ marginTop: 16, fontSize: 14 }}>登录历史</h3>
+            {detailLoading ? <p className="muted">加载中…</p> : !loginLog?.length ? <p className="muted">无登录记录</p> : (
+              <table>
+                <thead><tr><th>时间</th><th>事件</th></tr></thead>
+                <tbody>
+                  {loginLog.map((log: any, i: number) => (
+                    <tr key={i}><td className="code">{log.timestamp?.slice(0, 19)}</td><td className="code">{log.event_id?.slice(0, 12)}…</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <div className="modal-actions">
+              <button className="btn-sm" onClick={() => { setDetailUser(null); setLoginLog(null); }}>关闭</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -10,6 +10,7 @@ const TABS: { href: string; label: string; min: AdminRole }[] = [
   { href: "/data", label: "全局数据", min: "data_admin" },
   { href: "/monitor", label: "系统监控", min: "analyst" },
   { href: "/analytics", label: "BI 分析", min: "analyst" },
+  { href: "/settings", label: "系统设置", min: "super_admin" },
 ];
 
 export function Topbar() {

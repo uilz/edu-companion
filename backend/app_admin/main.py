@@ -26,7 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app_admin.deps import AdminAuthMiddleware  # noqa: E402
 
-from app_admin.routers import users, data, monitor, analytics  # noqa: E402
+from app_admin.routers import users, data, monitor, analytics, settings  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("app_admin")
@@ -48,11 +48,12 @@ _fastapi_app.add_middleware(
     allow_headers=["*"],
 )
 
-# 挂载 4 个模块路由（必须在中间件 wrap 之前）
+# 挂载 5 个模块路由（必须在中间件 wrap 之前）
 _fastapi_app.include_router(users.router, prefix="/api/admin/users", tags=["用户管理"])
 _fastapi_app.include_router(data.router, prefix="/api/admin/data", tags=["全局数据"])
 _fastapi_app.include_router(monitor.router, prefix="/api/admin/monitor", tags=["系统监控"])
 _fastapi_app.include_router(analytics.router, prefix="/api/admin/analytics", tags=["BI 分析"])
+_fastapi_app.include_router(settings.router, prefix="/api/admin/settings", tags=["系统设置"])
 
 
 @_fastapi_app.get("/admin/health")
