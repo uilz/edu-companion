@@ -202,14 +202,10 @@ class EventService:
     async def _consume_loop(self) -> None:
         """轮询未处理 cognitive_events，按类型分发"""
         from app.cognitive import get_repo
-        from shared.constants import DEFAULT_USER_ID
 
         while self._running:
             try:
-                events = get_repo().get_unprocessed_events(
-                    user_id=DEFAULT_USER_ID,
-                    limit=_MAX_BATCH,
-                )
+                events = get_repo().get_unprocessed_events(limit=_MAX_BATCH)
                 for evt in events:
                     await self._dispatch(evt)
                     get_repo().mark_event_processed(evt.event_id)
