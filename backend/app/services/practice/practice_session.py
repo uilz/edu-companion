@@ -39,6 +39,7 @@ def create_session(
     """
     from app.db.database import get_db
     from app.services.practice.practice_adaptive import adaptive_select_v2
+    from app.services.practice.practice_conversation import create_practice_conversation
     db = get_db()
 
     cfg = {
@@ -71,14 +72,33 @@ def create_session(
         for nid in (q.get("cognitive_node_ids") or [])
     ))
 
+    # 获取题库名称
+    bank_name = ""
+    try:
+        bank_row = db.fetchone("SELECT name FROM question_banks WHERE id = %s", (bank_id,))
+        if bank_row:
+            bank_name = bank_row.get("name", "")
+    except Exception:
+        pass
+
+    # 创建 Conversation(type="practice")
+    conv_id = create_practice_conversation(
+        user_id=user_id,
+        session_id=session_id,
+        bank_id=bank_id,
+        bank_name=bank_name,
+        question_count=len(questions),
+        mode=mode,
+    )
+
     db.execute(
         """INSERT INTO practice_sessions
            (id, user_id, bank_id, session_type, mode, config,
-            status, total_count, cognitive_node_ids, created_at, started_at)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            status, total_count, cognitive_node_ids, conversation_id, created_at, started_at)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
         (session_id, user_id, bank_id, session_type, mode,
          json.dumps(cfg), "created", len(questions),
-         node_ids, now, now),
+         node_ids, conv_id, now, now),
     )
 
     # 3. 写入会话题目关联
@@ -155,6 +175,7 @@ def get_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[dic
         "score": session.get("score"),
         "config": _safe_json(session.get("config"), {}),
         "cognitive_node_ids": session.get("cognitive_node_ids") or [],
+        "conversation_id": session.get("conversation_id", ""),
         "questions": questions,
         "created_at": _safe_iso(session.get("created_at")),
         "started_at": _safe_iso(session.get("started_at")),
@@ -177,13 +198,13 @@ def submit_answer(
     1. 验证会话 & 题目归属
     2. 判对错（与正确答案比较）
     3. 更新 session_questions
-    4. 写入 practice_attempts
+    4. 写入 practice_attempts（含 LLM 错因分析）
     5. 更新会话统计数据
     6. **认知节点联动** — 调用 sync_from_practice_event() 更新所有关联知识节点的 Belief/BKT
     7. 返回判题结果 + 解析
     """
     from app.db.database import get_db
-    from app.cognitive.storage import sync_from_practice_event
+    from app.cognitive import get_repo
     db = get_db()
 
     # 1. 验证会话题目关联
@@ -225,7 +246,7 @@ def submit_answer(
         (json.dumps(user_answer or []), is_correct, time_spent, hints_used, sq["id"]),
     )
 
-    # 5. 写入答题记录
+    # 6. 写入答题记录
     attempt_id = f"att_{session_id}_{question_id}_{int(datetime.now().timestamp())}"
     is_wrong = not is_correct
 
@@ -244,17 +265,30 @@ def submit_answer(
     consecutive = (last_attempt["consecutive_correct"] or 0) if last_attempt else 0
     consecutive = 0 if is_wrong else consecutive + 1
 
+    # LLM 错因分析：答错时调用 LLM 分类
+    error_pattern = ""
+    if is_wrong and user_answer:
+        try:
+            error_pattern = _classify_error(
+                question_stem=question.get("stem", ""),
+                question_answer=str(correct_answer),
+                user_answer_str=str(user_answer),
+                analysis_hint=analysis,
+            )
+        except Exception as e:
+            logger.debug("错因分析LLM调用失败: %s", e)
+
     node_ids = question.get("cognitive_node_ids") or []
     db.execute(
         """INSERT INTO practice_attempts
            (id, session_id, question_id, user_id, user_answer, is_correct,
             time_spent_seconds, is_wrong, wrong_count, consecutive_correct,
-            cognitive_node_ids, created_at)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            cognitive_node_ids, error_pattern, created_at)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
         (attempt_id, session_id, question_id, user_id,
          json.dumps(user_answer or []), is_correct, time_spent,
          is_wrong, prev_wrongs + (1 if is_wrong else 0), consecutive,
-         node_ids, now),
+         node_ids, error_pattern, now),
     )
 
     # 6. 更新会话统计
@@ -265,7 +299,7 @@ def submit_answer(
     # ═══════════════════════════════════════════
     for cid in node_ids:
         try:
-            sync_from_practice_event(
+            get_repo().sync_from_practice_event(
                 user_id=user_id,
                 skill_id=cid,
                 is_correct=is_correct,
@@ -276,7 +310,34 @@ def submit_answer(
         except Exception as e:
             logger.warning("认知节点更新失败 skill=%s: %s", cid, e)
 
-    # 8. 判 mastery
+    # ═══════════════════════════════════════════
+    # 8. 写入 Conversation 消息
+    # ═══════════════════════════════════════════
+    try:
+        session = db.fetchone(
+            "SELECT conversation_id FROM practice_sessions WHERE id = %s",
+            (session_id,),
+        )
+        conv_id = session["conversation_id"] if session else ""
+        if conv_id:
+            from app.services.practice.practice_conversation import add_practice_answer_message
+            add_practice_answer_message(
+                user_id=user_id,
+                conversation_id=conv_id,
+                session_id=session_id,
+                question_id=question_id,
+                stem=question.get("stem", ""),
+                user_answer=user_answer or [],
+                is_correct=is_correct,
+                correct_answer=correct_answer,
+                time_spent=time_spent,
+                hints_used=hints_used,
+                analysis=analysis,
+            )
+    except Exception as e:
+        logger.debug("练习消息写入 Conversation 失败: %s", e)
+
+    # 9. 判 mastery
     mastered = consecutive >= 3
 
     logger.info(
@@ -503,6 +564,20 @@ def complete_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optiona
         (correct_count, wrong_count, score, now, duration, session_id),
     )
 
+    # 更新 Conversation 元数据
+    try:
+        from app.services.practice.practice_conversation import update_conversation_on_complete
+        update_conversation_on_complete(
+            user_id=user_id,
+            session_id=session_id,
+            correct_count=correct_count,
+            wrong_count=wrong_count,
+            score=score,
+            duration_seconds=duration,
+        )
+    except Exception as e:
+        logger.debug("Conversation 更新失败: %s", e)
+
     # 触发成就检测
     try:
         from app.services.analytics.achievement_service import check_achievements
@@ -627,7 +702,7 @@ def list_sessions(
         rows = db.fetchall(
             f"""SELECT id, bank_id, session_type, mode, config, status, total_count,
                        correct_count, wrong_count, score, duration_seconds,
-                       created_at, started_at, finished_at
+                       conversation_id, created_at, started_at, finished_at
                 FROM practice_sessions WHERE {where}
                 ORDER BY {sort_by} {sort_order}
                 LIMIT %s""",
@@ -637,7 +712,7 @@ def list_sessions(
         rows = db.fetchall(
             f"""SELECT id, bank_id, session_type, mode, config, status, total_count,
                        correct_count, wrong_count, score, duration_seconds,
-                       created_at, started_at, finished_at
+                       conversation_id, created_at, started_at, finished_at
                 FROM practice_sessions WHERE {where}
                 ORDER BY {sort_by} {sort_order}
                 LIMIT %s OFFSET %s""",
@@ -673,6 +748,7 @@ def list_sessions(
             "wrong_count": r.get("wrong_count", 0),
             "score": r.get("score"),
             "duration_seconds": r.get("duration_seconds"),
+            "conversation_id": r.get("conversation_id", ""),
             "created_at": _safe_iso(r.get("created_at")),
             "started_at": _safe_iso(r.get("started_at")),
             "finished_at": _safe_iso(r.get("finished_at")),
@@ -776,3 +852,62 @@ def delete_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> bool:
     db.execute("DELETE FROM session_questions WHERE session_id = %s", (session_id,))
     db.execute("DELETE FROM practice_sessions WHERE id = %s", (session_id,))
     return True
+
+
+# ── LLM 错因分类 ──
+
+_ERROR_CATEGORIES = [
+    "概念混淆",      # 对知识点理解错误
+    "计算失误",      # 计算过程出错（如加减乘除、代入错误）
+    "审题不清",      # 未正确理解题目要求
+    "公式记错",      # 公式/定理记忆错误
+    "逻辑推理错误",  # 推理过程出问题
+    "粗心大意",      # 非知识性错误（如笔误、看错数）
+    "缺少思路",      # 完全不知道如何下手
+    "时间不足",      # 时间压力导致错误
+    "其他",          # 无法归类的错误
+]
+
+
+def _classify_error(
+    question_stem: str,
+    question_answer: str,
+    user_answer_str: str,
+    analysis_hint: str = "",
+) -> str:
+    """
+    使用 LLM 对错题进行错因分类。
+
+    分类依据:
+    - 题目内容 (question_stem)
+    - 正确答案 (question_answer)
+    - 用户答案 (user_answer_str)
+    - 题目解析提示 (analysis_hint)
+
+    返回错误类型标签，失败时返回空字符串。
+    """
+    categories_str = "、".join(_ERROR_CATEGORIES)
+    prompt = f"""你是一位教学诊断专家。请根据以下信息，判断学生的错误类型。
+
+【题目】{question_stem[:500]}
+【正确答案】{question_answer[:300]}
+【学生答案】{user_answer_str[:300]}
+【题目解析】{analysis_hint[:300]}
+
+请从以下分类中选出最匹配的一个（仅输出分类名称）：
+{categories_str}"""
+
+    try:
+        from app.llm import chat
+        response = chat(prompt, max_tokens=16, temperature=0.1)
+        result = response.strip().rstrip("。，")
+        # 校验结果是否在已知分类中
+        if result in _ERROR_CATEGORIES:
+            return result
+        # 模糊匹配
+        for cat in _ERROR_CATEGORIES:
+            if cat in result or result in cat:
+                return cat
+        return "其他"
+    except Exception:
+        return ""

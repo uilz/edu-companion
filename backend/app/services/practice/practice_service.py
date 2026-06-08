@@ -56,8 +56,8 @@ def _ds(v):
 def get_cognitive_proficiency(user_id: str, skill_id: str) -> float | None:
     """从 CognitiveNode 读取掌握度"""
     try:
-        from app.cognitive.storage import get_node
-        node = get_node(skill_id, user_id)
+        from app.cognitive import get_repo
+        node = get_repo().get_node(skill_id, user_id)
         if node and node.belief:
             return round(node.belief.proficiency_mean, 4)
     except Exception:
@@ -94,8 +94,8 @@ def update_cognitive_after_practice(
 
     # 读取更新后的 p_after
     try:
-        from app.cognitive.storage import get_node as _get_node
-        _updated = _get_node(skill_id, user_id)
+        from app.cognitive import get_repo
+        _updated = get_repo().get_node(skill_id, user_id)
         if _updated and _updated.belief:
             p_after = _updated.belief.proficiency_mean
     except Exception:
@@ -181,9 +181,9 @@ def get_hint_for_question(question_id: str, current_level: int) -> dict:
 
 def get_inline_hint(block_id: str) -> dict:
     """获取内联提示"""
-    from app.services.common.storage import storage
+    from app.services.common import get_data_repo
 
-    data = storage.load(DEFAULT_USER_ID)
+    data = get_data_repo().load(DEFAULT_USER_ID)
     block = data.response_blocks.get(block_id)
     if not block:
         return None
@@ -356,17 +356,39 @@ def record_attempt(
     time_spent_seconds: float,
     hints_used: int,
 ) -> None:
-    """记录一次答题到 attempts 表"""
+    """记录一次答题到 practice_attempts 表（主表）+ attempts 表（兼容旧查询）"""
     db = get_db()
+    now = datetime.now().isoformat()
+    is_wrong = not is_correct
+
+    # 写入主表 practice_attempts
+    try:
+        import uuid
+        attempt_id = str(uuid.uuid4())
+        db.execute(
+            """INSERT INTO practice_attempts
+               (id, session_id, question_id, user_id, user_answer, is_correct,
+                time_spent_seconds, is_wrong, wrong_count, consecutive_correct,
+                cognitive_node_ids, created_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (attempt_id, session_id, question_id, user_id,
+             answer, is_correct, time_spent_seconds,
+             is_wrong, 1 if is_wrong else 0, 0 if is_wrong else 1,
+             [], now),
+        )
+    except Exception as e:
+        logger.debug("Failed to record attempt to practice_attempts: %s", e)
+
+    # 兼容旧表 attempts
     try:
         db.execute(
             "INSERT INTO attempts (user_id, session_id, question_id, answer, is_correct, time_spent, hints_used, submitted_at) "
             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
             (user_id, session_id, question_id, answer,
-             is_correct, time_spent_seconds, hints_used, datetime.now().isoformat()),
+             is_correct, time_spent_seconds, hints_used, now),
         )
     except Exception:
-        logger.debug("Failed to record attempt")
+        logger.debug("Failed to record attempt to attempts (legacy)")
 
 
 # ═══════════════════════════════════════════
@@ -386,7 +408,7 @@ def compute_practice_stats(time_range: str = "week", user_id: str = DEFAULT_USER
     prev_end = cutoff
 
     rows = db.fetchall(
-        "SELECT * FROM attempts WHERE user_id = %s AND submitted_at >= %s",
+        "SELECT * FROM practice_attempts WHERE user_id = %s AND created_at >= %s",
         (user_id, cutoff),
     )
     total = len(rows)
@@ -403,7 +425,7 @@ def compute_practice_stats(time_range: str = "week", user_id: str = DEFAULT_USER
     )
 
     prev_rows = db.fetchall(
-        "SELECT * FROM attempts WHERE user_id = %s AND submitted_at >= %s AND submitted_at < %s",
+        "SELECT * FROM practice_attempts WHERE user_id = %s AND created_at >= %s AND created_at < %s",
         (user_id, prev_start, prev_end),
     )
     prev_total = len(prev_rows)
@@ -443,7 +465,7 @@ def compute_practice_stats(time_range: str = "week", user_id: str = DEFAULT_USER
     daily_trend = []
     for i in range(days_back - 1, -1, -1):
         day = (now - timedelta(days=i)).strftime("%Y-%m-%d")
-        day_rows = [r for r in rows if _ds(r.get("submitted_at"))[:10] == day]
+        day_rows = [r for r in rows if _ds(r.get("created_at"))[:10] == day]
         dt = len(day_rows)
         dc = sum(1 for r in day_rows if r.get("is_correct"))
         daily_trend.append(
@@ -462,9 +484,9 @@ def compute_practice_stats(time_range: str = "week", user_id: str = DEFAULT_USER
             count = sum(
                 1
                 for r in rows
-                if r.get("submitted_at")
-                and _dt(r.get("submitted_at")).weekday() == day_idx
-                and _dt(r.get("submitted_at")).hour == hour
+                if r.get("created_at")
+                and _dt(r.get("created_at")).weekday() == day_idx
+                and _dt(r.get("created_at")).hour == hour
             )
             hourly_heatmap.append(
                 {
@@ -529,12 +551,12 @@ def compute_behavior_report_data(
         (user_id, cutoff_str),
     )
     attempt_rows = db.fetchall(
-        "SELECT * FROM attempts WHERE user_id = %s AND submitted_at >= %s",
+        "SELECT * FROM practice_attempts WHERE user_id = %s AND created_at >= %s",
         (user_id, cutoff_str),
     )
 
     today_str = now.strftime("%Y-%m-%d")
-    today_attempts = [a for a in attempt_rows if _ds(a.get("submitted_at"))[:10] == today_str]
+    today_attempts = [a for a in attempt_rows if _ds(a.get("created_at"))[:10] == today_str]
     today_questions = len(today_attempts)
     today_correct = sum(1 for a in today_attempts if a.get("is_correct"))
     today_accuracy = today_correct / today_questions if today_questions > 0 else 0.0
@@ -542,7 +564,7 @@ def compute_behavior_report_data(
     daily_trend = []
     for i in range(days_back - 1, -1, -1):
         day = (now - timedelta(days=i)).strftime("%Y-%m-%d")
-        day_attempts = [a for a in attempt_rows if _ds(a.get("submitted_at"))[:10] == day]
+        day_attempts = [a for a in attempt_rows if _ds(a.get("created_at"))[:10] == day]
         daily_trend.append({
             "date": day[-5:],
             "questions": len(day_attempts),
@@ -556,9 +578,9 @@ def compute_behavior_report_data(
         for hour in [8, 10, 14, 16, 20, 22]:
             count = sum(
                 1 for a in attempt_rows
-                if a.get("submitted_at")
-                and _dt(a["submitted_at"]).weekday() == day_idx
-                and _dt(a["submitted_at"]).hour == hour
+                if a.get("created_at")
+                and _dt(a["created_at"]).weekday() == day_idx
+                and _dt(a["created_at"]).hour == hour
             )
             hourly_heatmap.append({
                 "day": day_idx + 1, "day_name": day_names[day_idx],

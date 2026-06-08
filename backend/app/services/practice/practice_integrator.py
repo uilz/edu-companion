@@ -14,7 +14,7 @@ from datetime import datetime
 
 from app.schemas.conversation import TextBlock, TreeNode
 from app.schemas.practice import PracticeSession
-from app.services.common.storage import storage
+from app.services.common import get_data_repo
 from app.services.knowledge.tree_ops import tree_ops
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ async def integrate_practice_to_branch(
     在branch中追加一条系统元数据消息（不占token），
     记录练习结果和薄弱点。
     """
-    data = storage.load(user_id)
+    data = get_data_repo().load(user_id)
     branch = data.conversations.get(branch_id)
     if not branch:
         logger.warning(f"Branch {branch_id} not found for practice integration")
@@ -82,7 +82,7 @@ async def integrate_practice_to_branch(
             f"{session.planned_skills} 正确率{session.accuracy:.0%}"
         )
 
-    storage.save(user_id, data)
+    get_data_repo().save(user_id, data)
 
     logger.info(
         f"练习结果已写入branch {branch_id}: "
@@ -102,7 +102,7 @@ async def integrate_practice_to_branch(
                 enriched.append(label)
         if enriched:
             branch.practice_summary += " | 资料引用: " + "; ".join(enriched[:2])
-            storage.save(user_id, data)
+            get_data_repo().save(user_id, data)
     except Exception as e:
         logger.warning("Failed to enrich practice summary with references: %s", e)
 
@@ -116,7 +116,7 @@ def inject_practice_context(user_id: str, partition_id: str) -> str:
     格式：
     [Practice] 最近练习: 极限(70%), 导数(40%←薄弱), 积分(85%)
     """
-    data = storage.load(user_id)
+    data = get_data_repo().load(user_id)
     partition = data.partitions.get(partition_id)
     if not partition:
         return ""

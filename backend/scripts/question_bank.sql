@@ -67,6 +67,11 @@ CREATE TABLE IF NOT EXISTS practice_sessions (
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
+DO $$ BEGIN
+    ALTER TABLE practice_sessions ADD COLUMN IF NOT EXISTS conversation_id TEXT DEFAULT '';
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+
 -- 7.0.4 会话题目关联表
 CREATE TABLE IF NOT EXISTS session_questions (
     id              TEXT PRIMARY KEY,

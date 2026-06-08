@@ -180,8 +180,8 @@ def _generate_error_alert(user_id: str, session_id: str) -> bool:
     # 获取知识点标签
     node_label = node_id or "当前知识点"
     try:
-        from app.cognitive.storage import get_node
-        node = get_node(node_id, user_id)
+        from app.cognitive import get_repo
+        node = get_repo().get_node(node_id, user_id)
         if node and node.label:
             node_label = node.label
     except Exception:
@@ -247,8 +247,8 @@ def _generate_mastery_intervention(user_id: str, session_id: str) -> bool:
 
     node_label = node_id or "这个知识点"
     try:
-        from app.cognitive.storage import get_node
-        node = get_node(node_id, user_id) if node_id else None
+        from app.cognitive import get_repo
+        node = get_repo().get_node(node_id, user_id) if node_id else None
         if node and node.label:
             node_label = node.label
     except Exception:
