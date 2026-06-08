@@ -33,13 +33,13 @@ class LateralExpansionModule(SecretaryModule):
     ) -> list[Proposal]:
         """扫描所有父节点，检测可扩展方向"""
         from app.cognitive.growth_engine import growth_engine
-        from app.cognitive.storage import get_nodes_by_level
+        from app.cognitive import get_repo
 
         proposals: list[Proposal] = []
 
         # 扫描所有 partition、domain 级节点
         for level in ("partition", "domain", "topic"):
-            parents = get_nodes_by_level(level, user_id)
+            parents = get_repo().get_nodes_by_level(level, user_id)
             for parent in parents:
                 try:
                     suggestions = growth_engine.suggest_lateral_expansion(

@@ -32,7 +32,7 @@ class TempConversationCleanupModule(SecretaryModule):
         self, user_id: str, ctx: SessionContext | None = None,
     ) -> list[Proposal]:
         """清理所有用户 48h 过期的临时会话（PG + JSON 双后端）"""
-        from app.services.common.storage import storage
+        from app.services.common import get_data_repo
         from app.cognitive.link_storage import get_links_for_conversation, remove_link
 
         cutoff = time.time() - 48 * 3600  # 48 小时前
@@ -62,10 +62,10 @@ class TempConversationCleanupModule(SecretaryModule):
             logger.debug("PG 清理失败: %s", e)
 
         # JSON 存储后端：遍历用户数据文件
-        # PG 存储后端同样通过 storage.load 统一接口
+        # PG 存储后端同样通过 get_data_repo().load 统一接口
         for uid in self._list_users():
             try:
-                data = storage.load(uid)
+                data = get_data_repo().load(uid)
                 to_delete = []
                 for cid, conv in data.conversations.items():
                     if conv.is_temporary and conv.updated_at < cutoff:
@@ -84,7 +84,7 @@ class TempConversationCleanupModule(SecretaryModule):
                     cleaned += 1
 
                 if to_delete:
-                    storage.save(uid, data)
+                    get_data_repo().save(uid, data)
             except Exception as e:
                 logger.debug("清理用户 %s 临时会话失败: %s", uid, e)
 

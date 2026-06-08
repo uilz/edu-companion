@@ -72,8 +72,8 @@ async def _search_conversations(q: str, limit: int) -> list[SearchResultItem]:
     q_lower = q.lower()
 
     try:
-        from app.services.common.storage import storage
-        data = storage.load(USER_ID)
+        from app.services.common import get_data_repo
+        data = get_data_repo().load(USER_ID)
 
         for node_id, node in data.nodes.items():
             if node.is_deleted or node.is_archived:

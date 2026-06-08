@@ -18,8 +18,8 @@ def _get_nodes(user_id: str, nodes: list | None = None) -> list:
     """获取节点列表（缓存优先）"""
     if nodes is not None:
         return nodes
-    from app.cognitive.storage import list_all_nodes
-    return list_all_nodes(user_id)
+    from app.cognitive import get_repo
+    return get_repo().list_all_nodes(user_id)
 
 
 def find_weakness_clusters(user_id: str, limit: int = 5, *, nodes: list | None = None) -> list[dict]:

@@ -29,8 +29,8 @@ router = APIRouter(prefix="/api/secretary", tags=["秘书系统"])
 
 def _load_prefs(user_id: str) -> dict:
     """加载用户偏好（从 DataRepository 读取）"""
-    from app.services.common.storage import storage
-    data = storage.load(user_id)
+    from app.services.common import get_data_repo
+    data = get_data_repo().load(user_id)
     return data.secretary_prefs or {
         "enabled_extensions": [],
         "quiet_hours_start": "22:00",
@@ -41,10 +41,10 @@ def _load_prefs(user_id: str) -> dict:
 
 def _save_prefs(user_id: str, prefs: dict) -> None:
     """保存用户偏好（通过 DataRepository 持久化）"""
-    from app.services.common.storage import storage
-    data = storage.load(user_id)
+    from app.services.common import get_data_repo
+    data = get_data_repo().load(user_id)
     data.secretary_prefs = prefs
-    storage.save(user_id, data)
+    get_data_repo().save(user_id, data)
 
 
 def _get_proposal_by_id(store: ProposalStore, proposal_id: str, user_id: str) -> Proposal | None:
@@ -593,8 +593,8 @@ async def get_onboarding_status(
 ) -> dict:
     """获取冷启动状态与引导信息"""
     try:
-        from app.cognitive.storage import list_all_nodes
-        nodes = list_all_nodes(user_id)
+        from app.cognitive import get_repo
+        nodes = get_repo().list_all_nodes(user_id)
         total_nodes = len(nodes) if nodes else 0
     except Exception:
         total_nodes = 0
@@ -700,8 +700,8 @@ async def export_secretary_data(user_id: str = DEFAULT_USER_ID) -> dict:
 
     # 关系记忆
     try:
-        from app.services.common.storage import storage
-        user_data = storage.load(user_id)
+        from app.services.common import get_data_repo
+        user_data = get_data_repo().load(user_id)
         data["policy_memory"] = user_data.policy_memory
     except Exception as e:
         data["policy_memory_error"] = str(e)
@@ -725,11 +725,11 @@ async def delete_secretary_data(user_id: str = DEFAULT_USER_ID) -> dict:
 
     # 清空偏好 + 关系记忆（通过 DataRepository）
     try:
-        from app.services.common.storage import storage
-        user_data = storage.load(user_id)
+        from app.services.common import get_data_repo
+        user_data = get_data_repo().load(user_id)
         user_data.secretary_prefs = {}
         user_data.policy_memory = {}
-        storage.save(user_id, user_data)
+        get_data_repo().save(user_id, user_data)
         deleted["prefs"] = True
         deleted["policy_memory"] = True
     except Exception as e:
@@ -758,7 +758,7 @@ async def agent_chat(body: AgentChatRequest, user_id: str = DEFAULT_USER_ID):
     流程: 用户输入 → 加载工具 schema → LLM 分析意图 → 流式返回 token + tool_call 事件
     """
     from app.domain.secretary.tools.tool_registry import ToolRegistry
-    from app.services.common.storage import storage
+    from app.services.common import get_data_repo
     from app.services.knowledge.tree_ops import tree_ops
     from app.schemas.conversation import Conversation
     import uuid
@@ -766,7 +766,7 @@ async def agent_chat(body: AgentChatRequest, user_id: str = DEFAULT_USER_ID):
     # ── 创建/复用 secretary 类型会话 ──
     conv_id = body.conversation_id
     if not conv_id:
-        data = storage.load(user_id)
+        data = get_data_repo().load(user_id)
         # 创建临时分区下的 secretary 会话
         temp_partition = None
         for pid, p in data.partitions.items():
@@ -787,7 +787,7 @@ async def agent_chat(body: AgentChatRequest, user_id: str = DEFAULT_USER_ID):
         conv.partition_id = temp_partition.id
         conv.is_temporary = True
         data.conversations[conv.id] = conv
-        storage.save(user_id, data)
+        get_data_repo().save(user_id, data)
         conv_id = conv.id
 
     # ── 加载 tools schema ──
@@ -878,8 +878,8 @@ class AgentPreferencesRequest(BaseModel):
 @router.get("/agent/preferences")
 async def get_agent_preferences(user_id: str = DEFAULT_USER_ID):
     """获取 Agent 助手偏好"""
-    from app.services.common.storage import storage
-    data = storage.load(user_id)
+    from app.services.common import get_data_repo
+    data = get_data_repo().load(user_id)
     prefs = data.secretary_prefs.get("agent", {})
     return {
         "confirm_mode": prefs.get("confirm_mode", "smart"),
@@ -900,13 +900,13 @@ async def set_agent_preferences(
             detail=f"Invalid confirm_mode. Must be one of: {valid_modes}",
         )
 
-    from app.services.common.storage import storage
-    data = storage.load(user_id)
+    from app.services.common import get_data_repo
+    data = get_data_repo().load(user_id)
     if "agent" not in data.secretary_prefs:
         data.secretary_prefs["agent"] = {}
     data.secretary_prefs["agent"]["confirm_mode"] = body.confirm_mode
     data.secretary_prefs["agent"]["auto_jump_threshold"] = body.auto_jump_threshold
-    storage.save(user_id, data)
+    get_data_repo().save(user_id, data)
 
     return {
         "confirm_mode": body.confirm_mode,

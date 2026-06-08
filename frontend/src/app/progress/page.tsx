@@ -77,7 +77,7 @@ export default function ProgressPage() {
           fetch(`${API_BASE}/api/progress/default_user`),
           fetch(`${API_BASE}/api/progress/default_user/stats`),
           fetch(`${API_BASE}/api/practice/stats?time_range=month`),
-          fetch(`${API_BASE}/api/practice/errors/stats?user_id=default_user`),
+          fetch(`${API_BASE}/api/v7/practice/error-book/stats`),
         ]);
 
         // 解析概览数据

@@ -86,8 +86,8 @@ def _build_stats(user_id: str) -> dict:
     session_count = sessions["cnt"] if sessions else 0
 
     # 已掌握知识点数 (proficiency >= 0.8)
-    from app.cognitive.storage import get_nodes_by_level
-    atoms = get_nodes_by_level("atom", user_id) or []
+    from app.cognitive import get_repo
+    atoms = get_repo().get_nodes_by_level("atom", user_id) or []
     mastered_skills = sum(1 for n in atoms if n.belief.proficiency_mean >= 0.8)
 
     # 对话数 (取 messages 表)

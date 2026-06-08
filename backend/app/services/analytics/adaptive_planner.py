@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 
-from app.cognitive.storage import list_all_nodes, find_node_by_label
+from app.cognitive import get_repo
 from app.domain.knowledge.checker import PrerequisiteChecker
 from app.domain.knowledge.prerequisites import SKILL_TO_SUBJECT
 from app.db.database import get_db
@@ -65,7 +65,7 @@ class AdaptivePlanGenerator:
             self._checker.reset()
 
         # ── 从 CognitiveNode 读取所有节点 ──
-        all_nodes = list_all_nodes(user_id)
+        all_nodes = get_repo().list_all_nodes(user_id)
 
         # 按 proficiency_mean 降序排列，生成推荐列表
         # 模拟原来 BKT recommend_practice 的输出格式
@@ -87,7 +87,7 @@ class AdaptivePlanGenerator:
             entry = self._find_entry_skills(all_nodes, user_id, subject)
             for sid in entry:
                 if sid not in [r["skill_id"] for r in ready_skills]:
-                    node = find_node_by_label(sid, user_id)
+                    node = get_repo().find_node_by_label(sid, user_id)
                     p = node.belief.proficiency_mean if node else 0.0
                     lv = _proficiency_to_level(p) if node else "未接触"
                     ready_skills.append({"skill_id": sid, "level": lv, "p_known": p, "priority": 3})
@@ -111,7 +111,7 @@ class AdaptivePlanGenerator:
                 est, diff = 15, max(0.4, 0.7 + diff_bias)
 
             # 利用 CognitiveNode 的 trend/scheduling 信息增强优先级
-            node = find_node_by_label(sid, user_id)
+            node = get_repo().find_node_by_label(sid, user_id)
             priority = 10 - i
             if node:
                 # 停滞 7 天以上 → 提升优先级
@@ -231,7 +231,7 @@ class AdaptivePlanGenerator:
         w = (datetime.now() - timedelta(days=7)).isoformat()
         r = db.fetchone(
             "SELECT COUNT(*) as t, SUM(CASE WHEN is_correct THEN 1 ELSE 0 END) as c "
-            "FROM attempts WHERE user_id=%s AND submitted_at>%s", (user_id, w))
+            "FROM practice_attempts WHERE user_id=%s AND created_at>%s", (user_id, w))
         return r["c"] / r["t"] if r and r["t"] else 0.5
 
     def _compute_difficulty_bias(self, acc):
@@ -243,7 +243,7 @@ class AdaptivePlanGenerator:
 
     def _get_habit_level(self, user_id):
         r = get_db().fetchone(
-            "SELECT COUNT(DISTINCT DATE(submitted_at)) as d FROM attempts WHERE user_id=%s", (user_id,))
+            "SELECT COUNT(DISTINCT DATE(created_at)) as d FROM practice_attempts WHERE user_id=%s", (user_id,))
         d = r["d"] if r else 0
         return "intensive" if d >= 7 else "regular" if d >= 3 else "beginner"
 

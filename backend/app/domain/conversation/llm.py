@@ -23,11 +23,12 @@ from app.schemas.conversation import (
     TreeNode,
     ResponseBlock,
 )
-from app.services.common.storage import storage
+from app.services.common import get_data_repo
 from app.services.knowledge.tree_ops import tree_ops
 from app.services.common.classifier import classifier
 from app.services.llm.tool_executor import tool_executor, predict_tools, SLOW_TOOLS
 from app.services.analytics.emotion_analyzer import emotion_analyzer
+from app.domain.knowledge import get_knowledge_query
 
 # (re-exports removed — import directly from sub-modules)
 
@@ -69,7 +70,7 @@ async def send_and_reply(
     )
 
     # P0: 异步写入元历史 + 触发分支自动命名
-    _p0_post_message_hooks(user_id, partition_id, user_node)
+    get_knowledge_query().post_message_hooks(user_id, partition_id, user_node)
 
     # P0: 异步情绪追踪（LLM 分类 + 缓存）
     import asyncio
@@ -111,12 +112,12 @@ async def send_and_reply(
     )
 
     # 回填 message_id 到 ResponseBlock（之前存储时 message_id 尚未知）
-    data = storage.load(user_id)
+    data = get_data_repo().load(user_id)
     
     for block in response_blocks:
         if block.id in data.response_blocks:
             data.response_blocks[block.id].message_id = assistant_node.id
-    storage.save(user_id, data)
+    get_data_repo().save(user_id, data)
 
     # v3.0: 从回复中提取 [来源: xxx] 标注 → 映射为 skill_id → 写入节点
     if reply_text:
@@ -124,12 +125,12 @@ async def send_and_reply(
         if source_labels:
             skill_ids = _resolve_skill_ids(source_labels, partition_id, user_id)
             if skill_ids:
-                data = storage.load(user_id)
+                data = get_data_repo().load(user_id)
                 # 获取对话对象（优先使用传入的 conversation_id，否则查找活跃对话）
                 conversation = data.conversations.get(conversation_id) if conversation_id else _find_active_conversation(data, partition_id)
                 if assistant_node.id in data.nodes:
                     data.nodes[assistant_node.id].discussed_skill_ids = skill_ids
-                    storage.save(user_id, data)
+                    get_data_repo().save(user_id, data)
                 logger.info(f"消息 {assistant_node.id[:8]} 标注知识点: {skill_ids}")
                 # v3.0: 记录事件
                 from app.services.analytics.learning_events import record_event
@@ -155,7 +156,7 @@ async def send_and_reply(
                     logger.debug("认知对话上下文联动跳过（send_and_reply）", exc_info=True)
 
     # P0: 异步写入助手消息的元历史
-    _p0_post_message_hooks(user_id, partition_id, assistant_node)
+    get_knowledge_query().post_message_hooks(user_id, partition_id, assistant_node)
 
     # P0: 异步知识证据分析（对话 → SharedKnowledgeState）
     import asyncio as _asyncio
@@ -171,11 +172,11 @@ async def send_and_reply(
 
     # ── 将追问问题写入 assistant node 的 metadata ──
     if follow_up_questions:
-        data = storage.load(user_id)
+        data = get_data_repo().load(user_id)
         if assistant_node.id in data.nodes:
             data.nodes[assistant_node.id].metadata = data.nodes[assistant_node.id].metadata or {}
             data.nodes[assistant_node.id].metadata["follow_up_questions"] = follow_up_questions
-            storage.save(user_id, data)
+            get_data_repo().save(user_id, data)
 
     return {
         "user_message": user_node,
@@ -215,8 +216,8 @@ def _detect_tree_interest(user_text: str, reply_text: str, partition_id: str) ->
     for pat in TREE_INTENT_PATTERNS:
         if re.search(pat, combined):
             # 检查该分区是否有知识树
-            from app.services.common.storage import storage
-            data = storage.load()
+            from app.services.common import get_data_repo
+            data = get_data_repo().load()
             graph = data.knowledge_graphs.get(partition_id)
             if graph and graph.nodes:
                 pname = data.partitions[partition_id].name if partition_id in data.partitions else ""
@@ -263,9 +264,9 @@ def _detect_temp_conv_intent(user_text: str, reply_text: str, partition_id: str)
     3. 需要结构化整理 → 推荐知识树
     如果都未命中 → None
     """
-    from app.services.common.storage import storage
+    from app.services.common import get_data_repo
     combined = (user_text + " " + reply_text).lower()
-    data = storage.load()
+    data = get_data_repo().load()
 
     # 检查是否有知识树
     graph = data.knowledge_graphs.get(partition_id) if partition_id else None
@@ -395,7 +396,7 @@ async def send_and_reply_stream(
     )
 
     # P0: async meta history
-    _p0_post_message_hooks(user_id, partition_id, user_node)
+    get_knowledge_query().post_message_hooks(user_id, partition_id, user_node)
 
     # P0: 异步情绪追踪
     try:
@@ -415,7 +416,7 @@ async def send_and_reply_stream(
         if qt:
             enriched_text = f"（引用上文：「{qt}」）\n{user_text}"
     
-    data = storage.load(user_id)
+    data = get_data_repo().load(user_id)
     partition = data.partitions.get(partition_id)
     # v4: find active conversation via topic
     conversation = None
@@ -581,7 +582,7 @@ async def send_and_reply_stream(
     token_since_save = 0
     # Socratic questioning tracking: count consecutive questions
     socratic_count = 0
-    _data_sq = storage.load(user_id)
+    _data_sq = get_data_repo().load(user_id)
     _conv_sq = _data_sq.conversations.get(resolved_conversation_id)
     if _conv_sq:
         _meta_sq = getattr(_conv_sq, 'metadata', None) or {}
@@ -621,12 +622,12 @@ async def send_and_reply_stream(
         socratic_count += 1
     else:
         socratic_count = 0
-    _data_sq2 = storage.load(user_id)
+    _data_sq2 = get_data_repo().load(user_id)
     _conv_sq2 = _data_sq2.conversations.get(resolved_conversation_id)
     if _conv_sq2:
         _conv_sq2.metadata = getattr(_conv_sq2, 'metadata', None) or {}
         _conv_sq2.metadata['socratic_question_count'] = socratic_count
-        storage.save(user_id, _data_sq2)
+        get_data_repo().save(user_id, _data_sq2)
         if socratic_count >= 3:
             logger.info("Socratic limit: %d consecutive questions in conv %s", socratic_count, resolved_conversation_id[:8])
 
@@ -641,7 +642,7 @@ async def send_and_reply_stream(
         follow_up_questions = None
 
     # 刷新 assistant_node 对象，用于后续 yield done
-    data = storage.load(user_id)
+    data = get_data_repo().load(user_id)
     assistant_node = data.nodes.get(asst_node_id) or assistant_node
 
     # ── 将追问问题写入 assistant node 的 metadata ──
@@ -649,17 +650,17 @@ async def send_and_reply_stream(
         assistant_node.metadata = assistant_node.metadata or {}
         assistant_node.metadata["follow_up_questions"] = follow_up_questions
         data.nodes[assistant_node.id] = assistant_node
-        storage.save(user_id, data)
+        get_data_repo().save(user_id, data)
 
     # P0: async meta history for assistant
-    _p0_post_message_hooks(user_id, partition_id, assistant_node)
+    get_knowledge_query().post_message_hooks(user_id, partition_id, assistant_node)
 
     # 5. 存储响应块（回填 message_id）
-    data = storage.load(user_id)
+    data = get_data_repo().load(user_id)
     for block in response_blocks:
         block.message_id = assistant_node.id
         data.response_blocks[block.id] = block
-    storage.save(user_id, data)
+    get_data_repo().save(user_id, data)
 
     yield {
         "type": "done",
@@ -674,7 +675,7 @@ async def send_and_reply_stream(
 
     # ── P2: 临时会话 → 学习推荐 ──
     if resolved_conversation_id:
-        _data_temp = storage.load(user_id)
+        _data_temp = get_data_repo().load(user_id)
         _conv_temp = _data_temp.conversations.get(resolved_conversation_id)
         if _conv_temp and _conv_temp.is_temporary:
             temp_rec = _detect_temp_conv_intent(user_text, full_reply, resolved_partition_id)

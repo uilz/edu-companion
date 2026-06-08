@@ -39,18 +39,18 @@ class RelationMemory:
         pass
 
     def _load(self, user_id: str) -> dict:
-        from app.services.common.storage import storage
-        data = storage.load(user_id)
+        from app.services.common import get_data_repo
+        data = get_data_repo().load(user_id)
         return data.policy_memory or {
             "ignore_counts": {}, "accept_counts": {}, "updated_at": time.time(),
         }
 
     def _save(self, user_id: str, data: dict) -> None:
         data["updated_at"] = time.time()
-        from app.services.common.storage import storage
-        user_data = storage.load(user_id)
+        from app.services.common import get_data_repo
+        user_data = get_data_repo().load(user_id)
         user_data.policy_memory = data
-        storage.save(user_id, user_data)
+        get_data_repo().save(user_id, user_data)
 
     def record_accept(self, user_id: str, action_type: str, kp_id: str) -> None:
         """记录采纳"""

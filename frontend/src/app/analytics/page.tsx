@@ -1,67 +1,73 @@
-// 学习分析页面 — 客户端组件，展示学情数据、习惯追踪与遗忘曲线
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { BarChart3, Loader2, BookOpen, Heart } from "lucide-react";
-import Link from "next/link";
-import Card from "@/components/ui/Card";
-import RadarChart from "@/components/analytics/RadarChart";
-
-// ── 共享类型 & 工具函数（来自 dashboard/analytics/utils）──
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  AnalyticsData, BehaviorData, Tab, Suggestion,
-  generateSuggestions,
-} from "@/components/dashboard/analytics/utils";
+  BarChart3, CalendarDays, Trophy, Target, Loader2,
+} from "lucide-react";
 
-// ── 共享组件（来自 dashboard/analytics/）──
-import { TrendChart } from "@/components/dashboard/analytics/TrendChart";
-import { HeatmapGrid } from "@/components/dashboard/analytics/HeatmapGrid";
-import { HabitTab } from "@/components/dashboard/analytics/HabitTab";
-import { RetentionPanel } from "@/components/dashboard/analytics/RetentionPanel";
-import { OverviewCards } from "@/components/dashboard/analytics/OverviewCards";
-import { MasteryErrorsCard } from "@/components/dashboard/analytics/MasteryErrorsCard";
-import { SuggestionsCard } from "@/components/dashboard/analytics/SuggestionsCard";
-import { API_BASE } from "@/lib/api/api";
+// ── 子页面组件导入 ──
+import AnalyticsContent from "@/app/analytics/_content";
+import CalendarPage from "@/app/calendar/page";
+import AchievementsPage from "@/app/achievements/page";
+import StatsPage from "@/app/stats/page";
 
-// ── 主页面 ──
+// ── 子标签定义 ──
+type TabId = "analytics" | "calendar" | "achievements" | "stats";
 
-export default function AnalyticsPage() {
-  const [data, setData] = useState<AnalyticsData | null>(null);
-  const [behaviorData, setBehaviorData] = useState<BehaviorData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<Tab>("analytics");
-  const [timeRange, setTimeRange] = useState<"week" | "month" | "all">("week");
+interface TabDef {
+  id: TabId;
+  label: string;
+  icon: React.ReactNode;
+}
 
+const TABS: TabDef[] = [
+  { id: "analytics", label: "学情分析", icon: <BarChart3 size={14} /> },
+  { id: "calendar",  label: "日历热力", icon: <CalendarDays size={14} /> },
+  { id: "achievements", label: "成就墙", icon: <Trophy size={14} /> },
+  { id: "stats",     label: "学习统计", icon: <Target size={14} /> },
+];
+
+const STORAGE_KEY = "analytics_active_tab";
+
+// ── 主组件 ──
+export default function AnalyticsRootPage() {
+  // 从 URL 参数或 localStorage 读取初始 tab
+  const [activeTab, setActiveTab] = useState<TabId>("analytics");
+  const [ready, setReady] = useState(false);
+  const initialized = useRef(false);
+
+  // 初始化：URL 参数优先，其次 localStorage，最后默认 analytics
   useEffect(() => {
-    setLoading(true);
-    fetch(`${API_BASE}/api/practice/stats?time_range=${timeRange}`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then((d) => {
-        if (d && d.overview) setData(d);
-        setLoading(false);
-      })
-      .catch(() => { setData(null); setLoading(false); });
-  }, [timeRange]);
+    if (initialized.current) return;
+    initialized.current = true;
 
-  useEffect(() => {
-    if (tab === "habits") {
-      fetch(`${API_BASE}/api/practice/behavior?time_range=${timeRange}`)
-        .then((r) => r.json())
-        .then((d) => setBehaviorData(d))
-        .catch(() => {});
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get("tab") as TabId | null;
+
+    if (tabParam && TABS.some((t) => t.id === tabParam)) {
+      setActiveTab(tabParam);
+    } else {
+      const saved = localStorage.getItem(STORAGE_KEY) as TabId | null;
+      if (saved && TABS.some((t) => t.id === saved)) {
+        setActiveTab(saved);
+      }
     }
-  }, [tab, timeRange]);
+    setReady(true);
+  }, []);
 
-  const suggestions: Suggestion[] = useMemo(() => {
-    if (!data) return [];
-    return generateSuggestions(data.overview, data.mastery_bars, data.error_distribution);
-  }, [data]);
+  // 切换 tab 时保存偏好
+  const handleTabChange = useCallback((tabId: TabId) => {
+    setActiveTab(tabId);
+    localStorage.setItem(STORAGE_KEY, tabId);
+    // 清除 URL 中的 tab 参数，避免刷新后错乱
+    const params = new URLSearchParams(window.location.search);
+    params.delete("tab");
+    const qs = params.toString();
+    const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+    window.history.replaceState(null, "", newUrl);
+  }, []);
 
-  // ── 加载中 ──
-  if (loading) {
+  if (!ready) {
     return (
       <main className="min-h-screen bg-[var(--color-bg)]">
         <div className="flex items-center justify-center py-20">
@@ -71,100 +77,47 @@ export default function AnalyticsPage() {
     );
   }
 
-  // ── 空数据 ──
-  if (!data || !data.overview || data.overview.total_questions === 0) {
-    return (
-      <main className="min-h-screen bg-[var(--color-bg)]">
-        <div className="max-w-3xl mx-auto px-6 py-16 text-center">
-          <BarChart3 size={40} className="mx-auto mb-4 text-[var(--color-text-muted)]" />
-          <h1 className="text-3xl font-semibold text-[var(--color-text)] mb-2">学情分析</h1>
-          <p className="text-[var(--color-text-muted)] mb-6">还没有练习数据</p>
-          <Link
-            href="/practice"
-            className="inline-block px-6 py-2.5 bg-[var(--color-accent)] text-white text-sm hover:bg-[var(--color-accent-hover)] active:scale-[0.97] transition-colors"
-          >
-            去练习
-          </Link>
-        </div>
-      </main>
-    );
-  }
-
-  const timeLabel = timeRange === "week" ? "7天" : timeRange === "month" ? "30天" : "全部";
-
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
-      <div className="max-w-4xl mx-auto px-4 md:px-6 py-8 md:py-12">
-        {/* ── Header：标题 + Tab 切换 + 时间范围 + 错题本 ── */}
-        <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
-          <div className="flex items-center gap-4">
-            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-[var(--color-text)]">
-              <BarChart3 size={24} className="inline mr-2 text-[var(--color-accent)]" />
-              学情分析
+      <div className="max-w-6xl mx-auto px-4 sm:px-6">
+        {/* ── 顶栏：标题 + Tab 导航 ── */}
+        <div className="sticky top-0 z-30 bg-[var(--color-bg)] border-b border-[var(--color-border)] -mx-4 sm:-mx-6 px-4 sm:px-6">
+          <div className="flex items-center gap-4 py-3">
+            <h1 className="text-lg font-semibold tracking-tight text-[var(--color-text)] shrink-0">
+              学习统计
             </h1>
-            <div className="flex bg-[var(--color-surface)] p-0.5" style={{ borderRadius: "2px" }}>
-              {([
-                { key: "analytics" as Tab, label: "数据", icon: <BarChart3 size={12} /> },
-                { key: "habits" as Tab, label: "习惯", icon: <Heart size={12} /> },
-              ]).map((t) => (
-                <button
-                  key={t.key}
-                  onClick={() => setTab(t.key)}
-                  className={`flex items-center gap-1 px-3 py-1 text-xs font-medium transition-colors ${
-                    tab === t.key
-                      ? "bg-[var(--color-accent)] text-white"
-                      : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
-                  }`}
-                  style={{ borderRadius: "2px" }}
-                >
-                  {t.icon}{t.label}
-                </button>
-              ))}
+            <div className="flex items-center gap-0.5 overflow-x-auto scrollbar-hide">
+              {TABS.map((tab) => {
+                const isActive = tab.id === activeTab;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => handleTabChange(tab.id)}
+                    className={`
+                      flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium whitespace-nowrap
+                      transition-all rounded-md
+                      ${isActive
+                        ? "bg-[var(--color-accent)] text-white shadow-sm"
+                        : "text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+                      }
+                    `}
+                  >
+                    {tab.icon}
+                    {tab.label}
+                  </button>
+                );
+              })}
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {(["week", "month", "all"] as const).map((r) => (
-              <button
-                key={r}
-                onClick={() => setTimeRange(r)}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                  timeRange === r
-                    ? "bg-[var(--color-accent)] text-white"
-                    : "bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
-                }`}
-              >
-                {r === "week" ? "本周" : r === "month" ? "本月" : "全部"}
-              </button>
-            ))}
-            <Link
-              href="/errors"
-              className="ml-2 flex items-center gap-1 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-            >
-              <BookOpen size={13} /> 错题本
-            </Link>
           </div>
         </div>
 
-        {tab === "analytics" ? (
-          <>
-            <OverviewCards overview={data.overview} />
-            <Card title={`📈 每日练习趋势 · ${timeLabel}`} className="mb-8 !p-5">
-              <TrendChart data={data.daily_trend} />
-            </Card>
-            <MasteryErrorsCard
-              masteryBars={data.mastery_bars}
-              errorDistribution={data.error_distribution}
-            />
-            <Card title="⏰ 学习时段" className="mb-8 !p-5">
-              <HeatmapGrid data={data.hourly_heatmap} />
-            </Card>
-            <div className="mb-8"><RadarChart /></div>
-            <RetentionPanel />
-            <SuggestionsCard suggestions={suggestions} />
-          </>
-        ) : (
-          <HabitTab data={behaviorData} />
-        )}
+        {/* ── Tab 内容 ── */}
+        <div className="py-4">
+          {activeTab === "analytics" && <AnalyticsContent />}
+          {activeTab === "calendar" && <CalendarPage />}
+          {activeTab === "achievements" && <AchievementsPage />}
+          {activeTab === "stats" && <StatsPage />}
+        </div>
       </div>
     </main>
   );

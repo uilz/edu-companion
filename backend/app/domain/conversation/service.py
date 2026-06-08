@@ -40,8 +40,8 @@ class ConversationServiceImpl:
         """发送消息 → LLM 回复（委托到 domain/conversation/llm.py）"""
         pid = partition_id or ""
         if not pid and branch_id:
-            from app.services.common.storage import storage
-            data = storage.load(user_id)
+            from app.services.common import get_data_repo
+            data = get_data_repo().load(user_id)
             for conv in data.conversations.values():
                 if conv.id == branch_id:
                     if conv.partition_id:
@@ -59,6 +59,43 @@ class ConversationServiceImpl:
         from .llm import send_and_reply
         return await send_and_reply(user_id, pid, content, conversation_id=branch_id)
 
+    async def send_and_reply(
+        self,
+        user_id: str,
+        partition_id: str,
+        user_text: str,
+        content_blocks: list | None = None,
+        conversation_id: str = "",
+        pending_quote: dict | None = None,
+    ) -> dict:
+        """完整流程：存用户消息 → 生成回复（含工具） → 存助手消息"""
+        from .llm import send_and_reply
+        return await send_and_reply(
+            user_id, partition_id, user_text,
+            content_blocks=content_blocks,
+            conversation_id=conversation_id,
+            pending_quote=pending_quote,
+        )
+
+    async def send_and_reply_stream(
+        self,
+        user_id: str,
+        partition_id: str,
+        user_text: str,
+        content_blocks: list | None = None,
+        conversation_id: str = "",
+        pending_quote: dict | None = None,
+    ):
+        """完整流程（流式）：自动路由 → 存用户消息 → 预执行工具 → 流式生成回复 → 存助手消息"""
+        from .llm import send_and_reply_stream
+        async for event in send_and_reply_stream(
+            user_id, partition_id, user_text,
+            content_blocks=content_blocks,
+            conversation_id=conversation_id,
+            pending_quote=pending_quote,
+        ):
+            yield event
+
     # ── 事件监听器 ──
 
     async def on_session_completed(self, event: SessionCompleted) -> None:
@@ -74,8 +111,8 @@ class ConversationServiceImpl:
 
         # 更新对话 branch 的 practice_summary
         try:
-            from app.services.common.storage import storage
-            data = storage.load(user_id)
+            from app.services.common import get_data_repo
+            data = get_data_repo().load(user_id)
             # Find branches that reference this session and update practice_summary
             updated = False
             for branch in data.conversations.values():
@@ -89,7 +126,7 @@ class ConversationServiceImpl:
                     updated = True
 
             if updated:
-                storage.save(user_id, data)
+                get_data_repo().save(user_id, data)
                 logger.info("Conversation: practice_summary updated for session %s", session_id)
             else:
                 # No branch references this session yet — find most recent branch and append
@@ -101,7 +138,7 @@ class ConversationServiceImpl:
                         f"正确率{accuracy:.0%}",
                     ]
                     branch.practice_summary = ",".join(summary_parts)
-                    storage.save(user_id, data)
+                    get_data_repo().save(user_id, data)
                     logger.info("Conversation: practice_summary appended to branch for session %s", session_id)
                     break
         except Exception as exc:

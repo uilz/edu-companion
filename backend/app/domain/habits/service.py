@@ -53,7 +53,7 @@ class HabitServiceImpl:
         db = get_db()
         today = datetime.now().strftime("%Y-%m-%d")
         attempts = db.fetchall(
-            "SELECT * FROM attempts WHERE user_id = %s AND submitted_at::date = %s::date",
+            "SELECT * FROM practice_attempts WHERE user_id = %s AND created_at >= %s",
             (user_id, today),
         )
         today_q = len(attempts)
@@ -76,7 +76,7 @@ class HabitServiceImpl:
         total_sessions = len(stat_rows)
         total_minutes = sum(r.get("estimated_minutes", 0) for r in stat_rows)
         total_q = len(db.fetchall(
-            "SELECT * FROM attempts WHERE user_id = %s", (user_id,)
+            "SELECT * FROM practice_attempts WHERE user_id = %s", (user_id,)
         ))
 
         goal = hf.check_daily_goal(

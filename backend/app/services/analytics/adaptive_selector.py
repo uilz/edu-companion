@@ -15,7 +15,7 @@ import logging
 import time
 from shared.constants import DEFAULT_USER_ID
 from app.cognitive.models import CognitiveNode
-from app.cognitive.storage import list_all_nodes
+from app.cognitive import get_repo
 from app.services.analytics.spaced_repetition import ReviewResult
 
 logger = logging.getLogger(__name__)
@@ -87,14 +87,14 @@ class AdaptiveSelector:
         self, user_id: str, partition_id: str | None = None,
     ) -> list[CognitiveNode]:
         """获取候选节点：atom + concept 级别，非删除"""
-        nodes = list_all_nodes(user_id)
+        nodes = get_repo().list_all_nodes(user_id)
         # 过滤
         candidates = []
         for n in nodes:
             if n.level not in ("atom", "concept"):
                 continue
             # 检查未删除 — deleted_at 不存储在 CognitiveNode 模型中
-            # 由 SQL 过滤，此处信任 list_all_nodes
+            # 由 SQL 过滤，此处信任 get_repo().list_all_nodes
             if partition_id and n.path_id and not n.path_id.startswith(partition_id):
                 continue
             candidates.append(n)

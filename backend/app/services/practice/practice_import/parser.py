@@ -300,8 +300,8 @@ def match_cognitive_nodes(q: dict, user_id: str = "default_user", top_k: int = 3
         if not keywords:
             return []
 
-        from app.cognitive.storage import search_nodes
-        nodes = search_nodes(user_id=user_id, query=" ".join(keywords[:10]), limit=top_k)
+        from app.cognitive import get_repo
+        nodes = get_repo().search_nodes(user_id=user_id, query=" ".join(keywords[:10]), limit=top_k)
         return [n.id for n in nodes if hasattr(n, 'id')] or []
 
     except Exception as e:

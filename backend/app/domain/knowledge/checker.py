@@ -86,8 +86,8 @@ class PrerequisiteChecker:
         返回 True 表示成功加载了知识树数据，False 表示回退到硬编码。
         """
         try:
-            from app.services.common.storage import storage
-            data = storage.load(user_id)
+            from app.services.common import get_data_repo
+            data = get_data_repo().load(user_id)
             graph = data.knowledge_graphs.get(partition_id)
             if not graph or not graph.nodes:
                 logger.info(f"[checker] 分区 {partition_id} 无知识树，使用硬编码回退")

@@ -35,6 +35,7 @@ class SessionContext:
         self.is_deep_focus: bool = False
         self.estimated_energy: str = "normal"  # high / normal / low
         self.quiet_hours: bool = False
+        self.is_cold_start: bool = False  # 冷启动标记，用于生成欢迎引导
 
 
 class ContextEngine:
@@ -47,11 +48,12 @@ class ContextEngine:
         """快速评估当前情境"""
         ctx = SessionContext()
         try:
-            from app.cognitive.storage import list_all_nodes
+            from app.cognitive import get_repo
             import asyncio
 
-            nodes = await asyncio.to_thread(list_all_nodes, user_id)
+            nodes = await asyncio.to_thread(get_repo().list_all_nodes, user_id)
             if not nodes:
+                ctx.is_cold_start = True
                 return ctx
 
             # 从任意节点提取 engagement
@@ -62,6 +64,9 @@ class ContextEngine:
                 ctx.questions_done_recently = sum(
                     n.practice_summary.total_attempts for n in nodes[:5] if n.practice_summary
                 )
+
+            # 冷启动判断：练习量少且无连续学习记录
+            ctx.is_cold_start = ctx.questions_done_recently < 5 and ctx.engagement_streak == 0
 
             # 认知负荷（取平均）
             loads = [n.cognitive_load.intrinsic for n in nodes if n.cognitive_load]
@@ -96,8 +101,7 @@ class ContextEngine:
             return False, "学习刚开始，不打断"
         if ctx.is_deep_focus:
             return False, "深度专注模式，不打扰"
-        if ctx.questions_done_recently == 0 and ctx.engagement_streak == 0:
-            return False, "冷启动用户，暂无数据"
+        # 冷启动用户放行：由提案系统生成欢迎引导，而非直接阻断
         return True, "可以建议"
 
     def get_reason(self, ctx: SessionContext) -> str:

@@ -18,13 +18,13 @@ _MAX_EVENTS = 500  # 最多保留 500 条（超出自动裁剪）
 
 
 def _get_user_data():
-    from app.services.common.storage import storage
-    return storage.load(DEFAULT_USER_ID)
+    from app.services.common import get_data_repo
+    return get_data_repo().load(DEFAULT_USER_ID)
 
 
 def _save_user_data(data):
-    from app.services.common.storage import storage
-    storage.save(DEFAULT_USER_ID, data)
+    from app.services.common import get_data_repo
+    get_data_repo().save(DEFAULT_USER_ID, data)
 
 
 def record_event(

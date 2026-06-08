@@ -20,8 +20,8 @@ class KnowledgeGraphServiceImpl:
 
         # 已经支持 CognitiveNode，通过 sync_from_practice_event 统一更新
         try:
-            from app.cognitive.storage import sync_from_practice_event
-            sync_from_practice_event(
+            from app.cognitive import get_repo
+            get_repo().sync_from_practice_event(
                 user_id=user_id,
                 skill_id=skill_id,
                 is_correct=bool(is_correct),
@@ -49,11 +49,11 @@ class KnowledgeGraphServiceImpl:
         # Update the CognitiveNode's error_clusters for this skill
         try:
             import time
-            from app.cognitive.storage import get_node, upsert_node
+            from app.cognitive import get_repo
             from app.cognitive.models import ErrorCluster
 
             node_id = f"{user_id}:{skill_id}"
-            node = get_node(node_id, user_id=user_id)
+            node = get_repo().get_node(node_id, user_id=user_id)
 
             if node is None:
                 from app.cognitive.models import CognitiveNode
@@ -71,7 +71,7 @@ class KnowledgeGraphServiceImpl:
                 )
 
             node.bump_version()
-            upsert_node(node, user_id=user_id)
+            get_repo().upsert_node(node, user_id=user_id)
             logger.info(
                 "Knowledge: error cluster updated node=%s cluster=%s count=%d",
                 node_id, cluster_id, 

@@ -53,16 +53,16 @@ class AnalyticsServiceImpl:
         )
 
     async def _gather_daily_data(self, user_id: str, days: int = 7) -> dict[str, Any]:
-        """从 DB 聚合统计数据供 behavior_analyzer 使用"""
+        """从 practice_attempts 表聚合统计数据供 behavior_analyzer 使用"""
         from app.db.database import get_db
-        from app.core.knowledge_trace import get_all_cognitive_states
 
         db = get_db()
         now = datetime.now()
         cutoff = (now - timedelta(days=days)).isoformat()
 
+        # 从 practice_attempts 读取（与练习系统同一数据源）
         attempt_rows = db.fetchall(
-            "SELECT * FROM attempts WHERE user_id = %s AND submitted_at >= %s",
+            "SELECT * FROM practice_attempts WHERE user_id = %s AND created_at >= %s",
             (user_id, cutoff),
         )
         session_rows = db.fetchall(
@@ -73,7 +73,7 @@ class AnalyticsServiceImpl:
         daily_trend = []
         for i in range(days - 1, -1, -1):
             day = (now - timedelta(days=i)).strftime("%Y-%m-%d")
-            day_a = [a for a in attempt_rows if self._ds(a.get("submitted_at"))[:10] == day]
+            day_a = [a for a in attempt_rows if self._ds(a.get("created_at"))[:10] == day]
             daily_trend.append({
                 "date": day[-5:],
                 "questions": len(day_a),
@@ -87,32 +87,47 @@ class AnalyticsServiceImpl:
             for hour in [8, 10, 14, 16, 20, 22]:
                 count = sum(
                     1 for a in attempt_rows
-                    if a.get("submitted_at")
-                    and (isinstance(a["submitted_at"], str)
-                         and datetime.fromisoformat(a["submitted_at"]) or a["submitted_at"])
-                    .weekday() == day_idx
-                    and (isinstance(a["submitted_at"], str)
-                         and datetime.fromisoformat(a["submitted_at"]) or a["submitted_at"])
-                    .hour == hour
+                    if a.get("created_at")
+                    and self._parse_dt(a["created_at"]).weekday() == day_idx
+                    and self._parse_dt(a["created_at"]).hour == hour
                 )
                 hourly_heatmap.append({
                     "day": day_idx + 1, "day_name": day_names[day_idx],
                     "hour": hour, "questions": count,
                 })
 
-        skill_states = get_all_cognitive_states(user_id)
-        mastery_bars = [
-            {"skill_id": sid, "p_known": round(s.p_known, 2)}
-            for sid, s in skill_states.items() if s.attempt_count > 0
-        ]
+        # 从 cognitive_nodes 获取掌握度
+        try:
+            from app.cognitive import get_repo
+            atoms = get_repo().get_nodes_by_level("atom", user_id) or []
+            mastery_bars = [
+                {"skill_id": n.id, "p_known": round(n.belief.proficiency_mean, 2)}
+                for n in atoms if n.belief and n.belief.proficiency_mean is not None
+            ]
+        except Exception:
+            mastery_bars = []
 
         return {
             "daily_trend": daily_trend,
             "hourly_heatmap": hourly_heatmap,
             "mastery_bars": mastery_bars,
             "total_sessions": len(session_rows),
-            "total_minutes": sum(r.get("estimated_minutes", 0) for r in session_rows),
+            "total_minutes": sum(r.get("estimated_minutes", 0) or r.get("duration_seconds", 0) // 60 for r in session_rows),
         }
+
+    @staticmethod
+    def _parse_dt(val) -> datetime:
+        """安全解析日期时间值"""
+        if val is None:
+            return datetime(2000, 1, 1)
+        if isinstance(val, datetime):
+            return val
+        if isinstance(val, str):
+            try:
+                return datetime.fromisoformat(val)
+            except (ValueError, TypeError):
+                return datetime(2000, 1, 1)
+        return datetime(2000, 1, 1)
 
     async def compute_streak(self, user_id: str) -> tuple[int, int]:
         """计算连续学习天数"""

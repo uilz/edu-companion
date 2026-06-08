@@ -86,8 +86,8 @@ class ProposalActionHandler:
         # 从 cognitive_nodes 获取知识点详情
         context_text = None
         try:
-            from app.cognitive.storage import get_node
-            node = get_node(user_id, kp_id)
+            from app.cognitive import get_repo
+            node = get_repo().get_node(user_id, kp_id)
             if node and node.belief:
                 import json as _json
                 belief = node.belief
@@ -165,8 +165,8 @@ class ProposalActionHandler:
         # 从 cognitive_nodes 收集更详细的数据
         details = []
         try:
-            from app.cognitive.storage import list_all_nodes
-            nodes = list_all_nodes(user_id)
+            from app.cognitive import get_repo
+            nodes = get_repo().list_all_nodes(user_id)
             if nodes:
                 subjects = {}
                 for n in nodes:

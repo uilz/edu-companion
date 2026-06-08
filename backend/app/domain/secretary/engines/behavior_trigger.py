@@ -45,7 +45,7 @@ class BehaviorTriggerModule(SecretaryModule):
 
         # 1. 检查是否有连续错误的知识点 → 生成复习提案
         try:
-            from app.cognitive.storage import list_all_nodes
+            from app.cognitive import get_repo
             nodes = await _async_get_nodes(user_id)
             if nodes:
                 struggling = _find_struggling_topics(nodes)
@@ -129,9 +129,9 @@ class BehaviorTriggerModule(SecretaryModule):
 
 async def _async_get_nodes(user_id: str):
     """同步 list_all_nodes 包装为异步"""
-    from app.cognitive.storage import list_all_nodes
+    from app.cognitive import get_repo
     import asyncio
-    return await asyncio.to_thread(list_all_nodes, user_id)
+    return await asyncio.to_thread(get_repo().list_all_nodes, user_id)
 
 
 def _find_struggling_topics(nodes: list) -> list[dict[str, Any]]:
@@ -250,8 +250,8 @@ async def on_practice_submitted(
     # 取第一个知识点
     node_id = atom_node_ids[0]
     try:
-        from app.cognitive.storage import get_node
-        node = get_node(node_id, user_id)
+        from app.cognitive import get_repo
+        node = get_repo().get_node(node_id, user_id)
         label = getattr(node, "label", node_id) if node else node_id
     except Exception:
         label = node_id

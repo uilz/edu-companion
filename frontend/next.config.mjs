@@ -4,18 +4,13 @@ const nextConfig = {
   // output: "standalone",  // 临时注释，用 next start 正常启动
   async redirects() {
     return [
-      // 旧首页 → 驾驶舱
+      // 首页 → 驾驶舱
       { source: '/', destination: '/dashboard', permanent: true },
-      // 旧分析页 → 驾驶舱对应 Tab
-      { source: '/analytics', destination: '/dashboard?tab=analytics', permanent: true },
-      { source: '/stats', destination: '/dashboard?tab=analytics', permanent: true },
-      { source: '/progress', destination: '/dashboard?tab=analytics', permanent: true },
-      // 旧页面 → 驾驶舱对应 Tab
-      { source: '/errors', destination: '/dashboard?tab=errors', permanent: true },
-      { source: '/calendar', destination: '/dashboard?tab=calendar', permanent: true },
-      { source: '/achievements', destination: '/dashboard?tab=achievements', permanent: true },
-      { source: '/study', destination: '/dashboard?tab=plan', permanent: true },
-      { source: '/quality', destination: '/dashboard?tab=quality', permanent: true },
+      // 旧独立路由 → 统一统计页
+      { source: '/stats', destination: '/analytics?tab=stats', permanent: true },
+      { source: '/progress', destination: '/analytics?tab=stats', permanent: true },
+      { source: '/calendar', destination: '/analytics?tab=calendar', permanent: true },
+      { source: '/achievements', destination: '/analytics?tab=achievements', permanent: true },
       // 旧对话 → 学习空间
       { source: '/chat', destination: '/learn', permanent: true },
       // 旧图谱页 → 知识树独立页面

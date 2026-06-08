@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 
 from shared.constants import DEFAULT_USER_ID
-from app.services.common.storage import storage, get_admin_repo
+from app.services.common import get_data_repo, get_admin_repo
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v7/data", tags=["学习数据管理"])
@@ -19,21 +19,17 @@ USER_ID = DEFAULT_USER_ID
 
 
 # ═══════════════════════════════════════════════════════════
-# AdminRepository 懒初始化
+# AdminRepository（始终可用）
 # ═══════════════════════════════════════════════════════════
 
 _admin_repo = None
 
 
 def _get_admin_repo():
-    """懒初始化 AdminRepository，JSON 模式下返回 None（不抛出异常）。"""
     global _admin_repo
     if _admin_repo is None:
-        try:
-            _admin_repo = get_admin_repo()
-        except RuntimeError:
-            _admin_repo = False  # 标记不可用
-    return _admin_repo if _admin_repo is not False else None
+        _admin_repo = get_admin_repo()
+    return _admin_repo
 
 
 # ═══════════════════════════════════════════════════════════
@@ -43,7 +39,7 @@ def _get_admin_repo():
 @router.get("/overview")
 async def data_overview():
     """获取用户所有学习数据的概览统计"""
-    data = storage.load(USER_ID)
+    data = get_data_repo().load(USER_ID)
     
     overview = {
         "partitions": len(data.partitions),
@@ -87,7 +83,7 @@ async def data_overview():
 @router.get("/partitions")
 async def list_partitions():
     """获取所有分区及其子结构"""
-    data = storage.load(USER_ID)
+    data = get_data_repo().load(USER_ID)
     partitions = []
     for pid, p in data.partitions.items():
         domains = [d.model_dump(mode="json") for d in data.domains.values() if d.partition_id == pid]
@@ -122,7 +118,7 @@ async def list_partitions():
 @router.get("/knowledge-graphs")
 async def list_knowledge_graphs():
     """获取所有知识图谱"""
-    data = storage.load(USER_ID)
+    data = get_data_repo().load(USER_ID)
     graphs = []
     for gid, g in data.knowledge_graphs.items():
         partition = data.partitions.get(gid)
@@ -206,7 +202,7 @@ async def list_materials(page: int = Query(1, ge=1), page_size: int = Query(20, 
 @router.delete("/partition/{partition_id}")
 async def delete_partition_data(partition_id: str):
     """删除指定分区及其所有子数据（领域、专题、对话、知识图谱）"""
-    data = storage.load(USER_ID)
+    data = get_data_repo().load(USER_ID)
     if partition_id not in data.partitions:
         raise HTTPException(status_code=404, detail="分区不存在")
     
@@ -232,7 +228,7 @@ async def delete_partition_data(partition_id: str):
     # 删除分区
     del data.partitions[partition_id]
     
-    storage.save(USER_ID, data)
+    get_data_repo().save(USER_ID, data)
     return {"ok": True, "deleted": {"partition_id": partition_id, "domains": len(domain_ids), "topics": len(topic_ids), "conversations": len(conv_ids)}}
 
 
@@ -243,11 +239,11 @@ async def delete_partition_data(partition_id: str):
 @router.delete("/knowledge-graph/{partition_id}")
 async def delete_knowledge_graph(partition_id: str):
     """删除指定分区的知识图谱"""
-    data = storage.load(USER_ID)
+    data = get_data_repo().load(USER_ID)
     if partition_id not in data.knowledge_graphs:
         raise HTTPException(status_code=404, detail="知识图谱不存在")
     del data.knowledge_graphs[partition_id]
-    storage.save(USER_ID, data)
+    get_data_repo().save(USER_ID, data)
     return {"ok": True}
 
 
@@ -287,7 +283,7 @@ async def delete_explain_card(card_id: str):
 @router.post("/export")
 async def export_all_data():
     """导出当前用户所有学习数据为 JSON"""
-    data = storage.load(USER_ID)
+    data = get_data_repo().load(USER_ID)
     
     export = {
         "exported_at": datetime.now().isoformat(),

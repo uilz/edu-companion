@@ -161,7 +161,7 @@ class QualityAnalyzer:
 
         # 获取所有答题记录
         attempts = db.fetchall(
-            "SELECT * FROM attempts WHERE question_id = %s ORDER BY submitted_at",
+            "SELECT * FROM practice_attempts WHERE question_id = %s ORDER BY created_at",
             (question_id,)
         )
 

@@ -12,7 +12,7 @@ from fastapi import APIRouter
 from shared.constants import DEFAULT_USER_ID
 from shared.learner_model import learner_engine
 from app.services.analytics.achievement_engine import achievement_engine
-from app.services.common.storage import storage
+from app.services.common import get_data_repo
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +41,8 @@ def _collect_stats(user_id: str) -> dict[str, Any]:
 
         # 掌握技能数
         try:
-            from app.cognitive.storage import list_all_nodes
-            cog_nodes = list_all_nodes(user_id)
+            from app.cognitive import get_repo
+            cog_nodes = get_repo().list_all_nodes(user_id)
         except Exception:
             cog_nodes = []
 
@@ -89,7 +89,7 @@ def _collect_stats(user_id: str) -> dict[str, Any]:
 def _load_existing(user_id: str) -> dict[str, Any]:
     """加载已有成就记录"""
     try:
-        data = storage.load(user_id)
+        data = get_data_repo().load(user_id)
         return getattr(data, "achievements", {}) or {}
     except Exception:
         return {}
@@ -98,9 +98,9 @@ def _load_existing(user_id: str) -> dict[str, Any]:
 def _save_achievements(user_id: str, achievements: dict[str, Any]) -> None:
     """保存成就记录"""
     try:
-        data = storage.load(user_id)
+        data = get_data_repo().load(user_id)
         data.achievements = achievements
-        storage.save(user_id, data)
+        get_data_repo().save(user_id, data)
     except Exception as e:
         logger.error("Failed to save achievements for %s: %s", user_id, e)
 
