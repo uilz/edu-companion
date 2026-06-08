@@ -254,6 +254,7 @@ async def accept_proposal(
                     proposal_id=proposal_id,
                     action_type=proposal.action_type,
                     target_node_id=target_node_id,
+                    payload=proposal.payload,
                 )
             except Exception as e:
                 logger.debug("ProposalAccepted 事件发射失败: %s", e)

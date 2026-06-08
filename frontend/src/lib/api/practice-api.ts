@@ -347,6 +347,8 @@ export interface ErrorBookResult {
   page: number;
   page_size: number;
   total_pages: number;
+  cold_start?: boolean;
+  cold_start_hint?: string;
 }
 
 export interface ErrorBookStats {

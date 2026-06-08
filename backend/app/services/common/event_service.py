@@ -14,7 +14,7 @@ import asyncio
 import json
 import logging
 import time
-from typing import Any
+from typing import Any, Optional
 
 from shared.events import (
     DomainEvent,
@@ -165,16 +165,20 @@ class EventService:
         proposal_id: str,
         action_type: str,
         target_node_id: str = "",
+        payload: Optional[dict] = None,
     ) -> str:
+        full_payload = {
+            "proposal_id": proposal_id,
+            "action_type": action_type,
+            "target_node_id": target_node_id,
+        }
+        if payload:
+            full_payload.update(payload)
         return EventService.emit_v6_event(
             EVT_PROPOSAL_ACCEPTED,
             user_id=user_id,
             node_id=target_node_id,
-            payload={
-                "proposal_id": proposal_id,
-                "action_type": action_type,
-                "target_node_id": target_node_id,
-            },
+            payload=full_payload,
         )
 
     # ─── 后台消费者 ──────────────────────────────
@@ -295,8 +299,72 @@ class EventService:
 
     @staticmethod
     async def _handle_PracticeSubmitted(evt) -> None:
-        """practice.submitted → 掌握度更新（占位，未来实现）"""
-        pass
+        """practice.submitted → 更新涉及 atom node 的掌握度（v7: 真实数据）
+
+        PracticeSubmitted 是多 node batch 事件，payload 中
+        atom_node_ids: list[str]、correctness: float ∈ [0,1]、latency_ms: float。
+        对每个 node:
+          - 加载 CognitiveNode（不存在则用占位）
+          - 贝叶斯更新 belief.alpha/beta（α 增答对、β 增答错）
+          - 更新 practice_summary.total/correct/last_practiced
+          - 重新计算 proficiency_mean
+        """
+        payload = evt.payload or {}
+        atom_ids: list[str] = payload.get("atom_node_ids", []) or []
+        correctness: float = float(payload.get("correctness", 0.0) or 0.0)
+        latency_ms: float = float(payload.get("latency_ms", 0.0) or 0.0)
+        user_id: str = evt.user_id or ""
+        if not user_id or not atom_ids:
+            return
+        # 只在第一次答对/答错生效
+        is_correct = correctness >= 0.5
+
+        try:
+            from app.cognitive import get_repo
+            from app.cognitive.models import CognitiveNode, PracticeSummary
+            repo = get_repo()
+            now = time.time()
+            updated = 0
+            for nid in atom_ids:
+                if not nid:
+                    continue
+                node = repo.get_node(nid, user_id)
+                if node is None:
+                    # 新题 → 创建占位 atom node
+                    node = CognitiveNode(id=nid, label=nid, level="atom")
+
+                # ── 贝叶斯更新 ──
+                belief = node.belief
+                if is_correct:
+                    belief.alpha = float(belief.alpha) + 1.0
+                else:
+                    belief.beta = float(belief.beta) + 1.0
+                # 重算 mean / peak
+                alpha = float(belief.alpha)
+                beta = float(belief.beta)
+                belief.proficiency_mean = max(0.0, min(1.0, alpha / (alpha + beta)))
+                belief.peak_proficiency = max(
+                    float(belief.peak_proficiency), belief.proficiency_mean
+                )
+                belief.last_updated = now
+
+                # ── 练习摘要更新 ──
+                ps = node.practice_summary
+                ps.total_attempts = int(ps.total_attempts) + 1
+                if is_correct:
+                    ps.correct_attempts = int(ps.correct_attempts) + 1
+                ps.total_time_spent = float(ps.total_time_spent) + (latency_ms / 1000.0)
+                ps.last_practiced = now
+
+                repo.upsert_node(node, user_id)
+                updated += 1
+
+            logger.info(
+                "✅ PracticeSubmitted 掌握度更新: user=%s nodes=%d correct=%s",
+                user_id, updated, is_correct,
+            )
+        except Exception as e:
+            logger.warning("PracticeSubmitted 掌握度更新失败: %s", e)
 
     @staticmethod
     async def _handle_NodeCreated(evt) -> None:
@@ -431,7 +499,35 @@ class EventService:
             except Exception as e:
                 logger.warning("mark_expanded 执行失败: %s", e)
         elif action_type in ("review", "practice"):
-            logger.debug("提案 action_type=%s 暂未实现具体动作", action_type)
+            # v7: 记录"用户已接受复习/练习"事件，便于 dashboard 展示承诺
+            # 该事件无需后续处理（processed=true），但留作历史/统计来源
+            kp_id = payload.get("kp_id") or payload.get("target_node_id", "")
+            try:
+                from app.cognitive import get_repo
+                from app.cognitive.models import CognitiveEvent
+                ce = CognitiveEvent(
+                    event_type=f"{action_type.capitalize()}Accepted",
+                    user_id=user_id,
+                    node_id=kp_id,
+                    timestamp=time.time(),
+                    payload={
+                        "proposal_id": payload.get("proposal_id", ""),
+                        "kp_id": kp_id,
+                        "action_type": action_type,
+                        "mastery": payload.get("mastery", 0.0),
+                        "urgency": payload.get("urgency", 0.0),
+                    },
+                )
+                get_repo().append_event(ce)
+                # 立即 mark 为 processed（无需 handler）
+                from app.cognitive.storage import mark_event_processed
+                mark_event_processed(ce.event_id)
+                logger.info(
+                    "✅ 提案已记录: %sAccepted(user=%s, kp=%s, mastery=%.0f%%)",
+                    action_type, user_id, kp_id, (payload.get("mastery", 0.0) or 0.0) * 100,
+                )
+            except Exception as e:
+                logger.warning("记录 %s 接受事件失败: %s", action_type, e)
 
     @staticmethod
     async def _handle_PendingCrossTopic(evt) -> None:

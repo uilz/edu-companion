@@ -23,6 +23,7 @@ export default function ErrorBookPage() {
   const [total, setTotal] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
+  const [coldStart, setColdStart] = useState(false);
 
   const loadData = useCallback(async (p: number) => {
     setLoading(true);
@@ -34,6 +35,7 @@ export default function ErrorBookPage() {
       setItems(book.items);
       setTotal(book.total);
       setTotalPages(book.total_pages);
+      setColdStart(!!book.cold_start);
       setStats(bookStats);
     } catch { /* ignore */ }
     setLoading(false);
@@ -122,10 +124,28 @@ export default function ErrorBookPage() {
             <Loader2 className="animate-spin text-[var(--color-accent)]" size={24} />
           </div>
         ) : items.length === 0 ? (
-          <div className="text-center py-16">
-            <CheckCircle size={32} className="text-green-500 mx-auto mb-3" />
-            <p className="text-sm text-[var(--color-text)] font-medium">没有错题！</p>
-            <p className="text-xs text-[var(--color-text-muted)] mt-1">继续保持</p>
+          <div className="text-center py-16 rounded-2xl border border-[var(--color-border)]/40 bg-[var(--color-surface)]/50">
+            {coldStart ? (
+              <>
+                <BookOpen size={32} className="text-blue-500 mx-auto mb-3" />
+                <p className="text-sm text-[var(--color-text)] font-medium">还没有错题记录</p>
+                <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                  刚开始练习时不会产生错题，开始你的第一次练习吧
+                </p>
+                <a
+                  href="/practice"
+                  className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 rounded-lg bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 transition-colors"
+                >
+                  <Brain size={14} />开始练习
+                </a>
+              </>
+            ) : (
+              <>
+                <CheckCircle size={32} className="text-green-500 mx-auto mb-3" />
+                <p className="text-sm text-[var(--color-text)] font-medium">没有错题！</p>
+                <p className="text-xs text-[var(--color-text-muted)] mt-1">继续保持</p>
+              </>
+            )}
           </div>
         ) : (
           <div className="space-y-2">
