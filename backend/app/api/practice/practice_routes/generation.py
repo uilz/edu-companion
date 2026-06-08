@@ -19,12 +19,13 @@ router = APIRouter()
 
 @router.post("/generate")
 async def api_generate(body: dict, user_id: str = Depends(current_user_id)):
-    """AI 出题（自然语言指定参数）"""
+    """AI 出题（自然语言指定参数），支持 bank_name 按名称选/建题库"""
     _ensure_tables()
     user_message = body.get("message", "").strip()
     if not user_message:
         raise HTTPException(400, "请描述你想练习什么内容")
     bank_id = body.get("bank_id")
+    bank_name = body.get("bank_name", "").strip() or None
     conversation_id = body.get("conversation_id")
     node_id = body.get("node_id")
     material_ids = body.get("material_ids")
@@ -32,6 +33,7 @@ async def api_generate(body: dict, user_id: str = Depends(current_user_id)):
         user_message=user_message,
         user_id=user_id,
         bank_id=bank_id,
+        bank_name=bank_name,
         conversation_id=conversation_id,
         node_id=node_id,
         material_ids=material_ids,

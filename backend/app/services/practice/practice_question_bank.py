@@ -162,9 +162,9 @@ def resolve_bank_for_conversation(conversation_id, user_id=DEFAULT_USER_ID, user
 def resolve_bank_for_node(node_id, user_id=DEFAULT_USER_ID):
     _ensure_tables()
     from app.db.database import get_db
-    from app.cognitive.storage import get_node
+    from app.cognitive import get_repo
     db = get_db()
-    node = get_node(node_id, user_id)
+    node = get_repo().get_node(node_id, user_id)
     if not node:
         return f"bnk_{user_id}_default"
     if node.level == "topic":
@@ -172,7 +172,7 @@ def resolve_bank_for_node(node_id, user_id=DEFAULT_USER_ID):
         _ensure_bank(db, bank_id, user_id, node_id)
         return bank_id
     if node.level in ("concept", "atom") and node.parent:
-        parent = get_node(node.parent, user_id)
+        parent = get_repo().get_node(node.parent, user_id)
         if parent:
             bank_id = f"bnk_{parent.id}"
             _ensure_bank(db, bank_id, user_id, parent.id)
@@ -218,11 +218,51 @@ def get_question(question_id, user_id=DEFAULT_USER_ID):
     return _row_to_question(row, include_answer=True) if row else None
 
 
+def search_questions(keyword="", bank_id=None, user_id=DEFAULT_USER_ID, page=1, page_size=50,
+                     question_type=None, bloom_level=None):
+    """跨题库搜索题目，支持关键字、类型、Bloom层次过滤"""
+    _ensure_tables()
+    from app.db.database import get_db
+    db = get_db()
+    conditions = ["q.deleted_at IS NULL"]
+    params = []
+    if bank_id:
+        conditions.append("q.bank_id = %s"); params.append(bank_id)
+    if keyword:
+        conditions.append("q.stem ILIKE %s"); params.append(f"%{keyword}%")
+    if question_type:
+        conditions.append("q.question_type = %s"); params.append(question_type)
+    if bloom_level:
+        conditions.append("q.bloom_level = %s"); params.append(bloom_level)
+    where = " AND ".join(conditions)
+    offset = (page - 1) * page_size
+    total = db.fetchone(f"SELECT COUNT(*) as cnt FROM questions q WHERE {where}", tuple(params))
+    total_count = total["cnt"] if total else 0
+    rows = db.fetchall(
+        f"""SELECT q.*, qb.name as bank_name
+            FROM questions q
+            LEFT JOIN question_banks qb ON q.bank_id = qb.id
+            WHERE {where}
+            ORDER BY q.created_at DESC LIMIT %s OFFSET %s""",
+        tuple(params + [page_size, offset]),
+    )
+    items = []
+    for r in rows:
+        q = _row_to_question(r)
+        q["bank_name"] = r.get("bank_name", "")
+        items.append(q)
+    return {
+        "items": items,
+        "total": total_count, "page": page, "page_size": page_size,
+        "total_pages": (total_count + page_size - 1) // page_size if page_size > 0 else 0,
+    }
+
+
 def _ensure_bank(db, bank_id, user_id, ref_node_id):
     if db.fetchone("SELECT id FROM question_banks WHERE id = %s", (bank_id,)):
         return
-    from app.cognitive.storage import get_node
-    node = get_node(ref_node_id, user_id)
+    from app.cognitive import get_repo
+    node = get_repo().get_node(ref_node_id, user_id)
     label = node.label if node else ref_node_id
     level = node.level if node else ""
     now = datetime.now().isoformat()

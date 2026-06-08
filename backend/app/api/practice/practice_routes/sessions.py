@@ -80,7 +80,7 @@ async def api_unfinished_sessions(user_id: str = Depends(current_user_id)):
     from app.db.database import get_db
     db = get_db()
     rows = db.fetchall(
-        """SELECT id, bank_id, session_type, mode, status, total_count,
+        """SELECT id, bank_id, session_type, mode, status, total_count, conversation_id,
                   (SELECT COUNT(*) FROM session_questions sq
                    WHERE sq.session_id = practice_sessions.id AND sq.user_answer IS NOT NULL
                   ) as answered_count,
@@ -99,6 +99,7 @@ async def api_unfinished_sessions(user_id: str = Depends(current_user_id)):
             "mode": r["mode"],
             "status": r["status"],
             "total_count": r["total_count"],
+            "conversation_id": r.get("conversation_id", ""),
             "answered_count": r.get("answered_count", 0),
             "created_at": r["created_at"].isoformat() if hasattr(r["created_at"], "isoformat") else str(r["created_at"]),
         })

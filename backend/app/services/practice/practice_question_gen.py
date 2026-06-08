@@ -184,6 +184,7 @@ async def handle_question_generation(
     user_message: str,
     user_id: str = DEFAULT_USER_ID,
     bank_id: Optional[str] = None,
+    bank_name: Optional[str] = None,
     conversation_id: Optional[str] = None,
     node_id: Optional[str] = None,
     conversation_context: Optional[list[dict]] = None,
@@ -194,8 +195,9 @@ async def handle_question_generation(
 
     支持三种归属方式（优先级）：
     1. bank_id 明确指定
-    2. conversation_id 自动解析
-    3. node_id 自动解析
+    2. bank_name 按名称查找或创建
+    3. conversation_id 自动解析
+    4. node_id 自动解析
 
     支持指定参考资料出题（material_ids）：
     从已上传资料中提取内容块，注入到 AI 出题的 material_context 中。
@@ -213,8 +215,25 @@ async def handle_question_generation(
     count = int(params.get("count", 3))
     content_type = params.get("content_type", "choice")
 
-    # 2. 确定题库归属
+    # 2. 确定题库归属（按优先级）
     resolved_bank_id = bank_id
+    if not resolved_bank_id and bank_name:
+        # 按名称查找或创建
+        from app.services.practice.practice_question_bank import list_banks, create_bank
+        existing = [b for b in list_banks(user_id) if b.get("name") == bank_name]
+        if existing:
+            resolved_bank_id = existing[0]["id"]
+            logger.info("按名称找到现有题库: %s (%s)", bank_name, resolved_bank_id)
+        else:
+            new_bank = create_bank(
+                user_id=user_id,
+                name=bank_name,
+                description=f"AI自动创建的题库: {bank_name}",
+                auto_created=True,
+            )
+            if new_bank:
+                resolved_bank_id = new_bank["id"]
+                logger.info("按名称创建新题库: %s (%s)", bank_name, resolved_bank_id)
     if not resolved_bank_id and conversation_id:
         resolved_bank_id = resolve_bank_for_conversation(conversation_id, user_id)
     if not resolved_bank_id and node_id:
@@ -628,8 +647,8 @@ async def explain_question(
     node_labels = []
     for nid in node_ids[:3]:
         try:
-            from app.cognitive.storage import get_node
-            node = get_node(nid, user_id)
+            from app.cognitive import get_repo
+            node = get_repo().get_node(nid, user_id)
             if node and node.label:
                 node_labels.append(node.label)
         except Exception:

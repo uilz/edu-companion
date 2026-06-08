@@ -22,10 +22,6 @@ from app.services.practice.practice_service import (
     list_practice_sessions,
     complete_practice_session,
     record_attempt,
-    query_error_book,
-    review_error_entry,
-    analyze_error_entry,
-    get_error_attribution_stats,
     compute_practice_stats,
     compute_behavior_report_data,
 )
@@ -205,11 +201,11 @@ async def submit_answer(req: SubmitAnswerRequest):
 @router.post("/inline/answer")
 async def inline_answer(req: InlineAnswerRequest):
     """对话内联练习 — 提交答案，读取 response_block 内容校验"""
-    from app.services.common.storage import storage
+    from app.services.common import get_data_repo
     from app.core.knowledge_trace import get_cognitive_state
     from shared.constants import get_mastery_label
 
-    data = storage.load(DEFAULT_USER_ID)
+    data = get_data_repo().load(DEFAULT_USER_ID)
     block = data.response_blocks.get(req.block_id)
     if not block:
         raise HTTPException(404, "Practice block not found")
@@ -254,50 +250,6 @@ async def inline_hint(req: InlineHintRequest):
     if result is None:
         raise HTTPException(404, "Practice block not found")
     return result
-
-
-# ──────────────────────────────────────────────
-# 错题本（增强）
-# ──────────────────────────────────────────────
-
-
-@router.get("/errors")
-async def get_error_book(
-    resolved: Optional[bool] = None,
-    skill_id: Optional[str] = None,
-    limit: int = 20,
-):
-    """获取错题本"""
-    return query_error_book(
-        user_id=DEFAULT_USER_ID,
-        resolved=resolved,
-        skill_id=skill_id,
-        limit=limit,
-    )
-
-
-@router.post("/errors/{entry_id}/review")
-async def review_error(entry_id: str, is_correct: bool = True):
-    """复习错题"""
-    result = review_error_entry(entry_id, is_correct)
-    if result is None:
-        raise HTTPException(status_code=404, detail="Error entry not found")
-    return result
-
-
-@router.post("/errors/{entry_id}/analyze")
-async def analyze_error(entry_id: str):
-    """LLM 深度分析单条错题的错因"""
-    result = await analyze_error_entry(entry_id)
-    if result is None:
-        raise HTTPException(404, "错题记录不存在")
-    return result
-
-
-@router.get("/errors/stats")
-async def get_error_stats():
-    """错因分布统计"""
-    return get_error_attribution_stats()
 
 
 # ──────────────────────────────────────────────
@@ -356,5 +308,5 @@ async def get_question_quality(question_id: str):
 @router.get("/knowledge/state")
 async def get_knowledge_state():
     """获取统一知识状态"""
-    from app.services.knowledge.cognitive_queries import get_all_skills_summary
-    return get_all_skills_summary()
+    from app.domain.knowledge import get_knowledge_query
+    return get_knowledge_query().get_all_skills_summary()

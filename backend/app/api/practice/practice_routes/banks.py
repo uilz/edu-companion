@@ -13,7 +13,8 @@ from app.services.practice.practice_question_crud import (
 )
 from app.services.practice.practice_question_bank import (
     _ensure_tables, list_banks, get_bank, create_bank, update_bank, delete_bank,
-    list_questions, get_question, resolve_bank_for_conversation, resolve_bank_for_node,
+    list_questions, get_question, search_questions,
+    resolve_bank_for_conversation, resolve_bank_for_node,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,11 +47,35 @@ async def api_create_bank(body: dict, user_id: str = Depends(current_user_id)):
 
 
 @router.get("/banks/{bank_id}")
-async def api_get_bank(bank_id: str, user_id: str = Depends(current_user_id)):
+async def api_get_bank(
+    bank_id: str,
+    user_id: str = Depends(current_user_id),
+    preview: bool = Query(True, description="是否包含题目预览"),
+    preview_count: int = Query(5, ge=0, le=50, description="预览题目数量"),
+):
     _ensure_tables()
     bank = get_bank(bank_id, user_id)
     if not bank:
         raise HTTPException(404, "题库不存在")
+
+    # 附带题目预览
+    if preview:
+        questions = list_questions(
+            bank_id, user_id,
+            page=1, page_size=preview_count,
+        )
+        bank["question_preview"] = questions.get("items", [])
+        bank["total_questions"] = questions.get("total", 0)
+    else:
+        # 仅统计数量
+        from app.db.database import get_db
+        db = get_db()
+        row = db.fetchone(
+            "SELECT COUNT(*) as cnt FROM questions WHERE bank_id = %s AND deleted_at IS NULL",
+            (bank_id,),
+        )
+        bank["total_questions"] = row["cnt"] if row else 0
+
     return bank
 
 
@@ -74,6 +99,44 @@ async def api_update_bank(bank_id: str, body: dict, user_id: str = Depends(curre
     if not result:
         raise HTTPException(404, "题库不存在")
     return result
+
+
+@router.get("/banks/search")
+async def api_search_banks(
+    keyword: str = Query("", description="搜索关键词"),
+    user_id: str = Depends(current_user_id),
+):
+    """按名称/描述搜索题库"""
+    _ensure_tables()
+    banks = list_banks(user_id)
+    if keyword:
+        kw = keyword.lower()
+        banks = [
+            b for b in banks
+            if kw in (b.get("name") or "").lower()
+            or kw in (b.get("description") or "").lower()
+        ]
+    return {"total": len(banks), "items": banks}
+
+
+@router.get("/questions/search")
+async def api_search_questions(
+    keyword: str = Query("", description="搜索关键词"),
+    bank_id: Optional[str] = Query(None, description="按题库过滤"),
+    question_type: Optional[str] = Query(None, description="题目类型"),
+    bloom_level: Optional[str] = Query(None, description="Bloom层次"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    user_id: str = Depends(current_user_id),
+):
+    """跨题库搜索题目"""
+    _ensure_tables()
+    return search_questions(
+        keyword=keyword, bank_id=bank_id,
+        question_type=question_type, bloom_level=bloom_level,
+        page=page, page_size=page_size,
+        user_id=user_id,
+    )
 
 
 # ═══════════════════════════════════════════════

@@ -58,8 +58,8 @@ def get_overview(user_id: str = DEFAULT_USER_ID) -> dict:
     today_questions = today["cnt"] if today else 0
 
     # 知识点掌握度 — 从 cognitive_nodes 读取
-    from app.cognitive.storage import get_nodes_by_level
-    atoms = get_nodes_by_level("atom", user_id) or []
+    from app.cognitive import get_repo
+    atoms = get_repo().get_nodes_by_level("atom", user_id) or []
     mastered = sum(1 for n in atoms if n.belief.proficiency_mean >= 0.8)
     weak = [n for n in atoms if 0 < n.belief.proficiency_mean < 0.4]
 
@@ -70,6 +70,9 @@ def get_overview(user_id: str = DEFAULT_USER_ID) -> dict:
 
     accuracy = round(correct / max(total, 1) * 100, 1)
     study_minutes = round(total_seconds / 60, 1)
+
+    # 冷启动判断：练习量少时给出引导提示
+    cold_start = total < 5
 
     return {
         "total_questions": total,
@@ -82,6 +85,8 @@ def get_overview(user_id: str = DEFAULT_USER_ID) -> dict:
         "weak_count": len(weak),
         "due_review_count": due_now,
         "today_questions": today_questions,
+        "cold_start": cold_start,
+        "cold_start_hint": "开始你的第一次练习吧！" if cold_start else "",
     }
 
 
@@ -199,8 +204,8 @@ def get_error_distribution(user_id: str = DEFAULT_USER_ID) -> list[dict]:
 
 def get_weak_skills(user_id: str = DEFAULT_USER_ID) -> list[dict]:
     """从 cognitive_nodes 获取薄弱知识点"""
-    from app.cognitive.storage import get_nodes_by_level
-    atoms = get_nodes_by_level("atom", user_id) or []
+    from app.cognitive import get_repo
+    atoms = get_repo().get_nodes_by_level("atom", user_id) or []
 
     weak = []
     for n in atoms:

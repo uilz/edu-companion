@@ -19,10 +19,6 @@ import {
   AlertCircle,
   Sparkles,
   ArrowRight,
-  TrendingUp,
-  BookOpen,
-  GitGraph,
-  Zap,
   Clock,
 } from "lucide-react";
 // 内部组件
@@ -32,15 +28,26 @@ import { API_BASE } from "@/lib/api/api";
 
 // ---------- 类型定义 ----------
 
-/** 后端返回的学习进度摘要 */
-interface ProgressSummary {
-  total_questions: number;      // 总答题数
-  correct_answers: number;     // 正确数
-  accuracy_rate: number;       // 正确率（0~1）
-  study_minutes: number;       // 学习时长（分钟）
-  mastered_skills: string[];   // 已掌握的知识点
-  struggling_skills: string[]; // 薄弱知识点
-  recommendations: string[];   // 个性化建议列表
+/** 后端返回的学习统计概览（来自 analytics stats/overview） */
+interface StatsOverview {
+  total_questions: number;
+  total_correct: number;
+  total_wrong: number;
+  accuracy: number;
+  total_sessions: number;
+  study_minutes: number;
+  mastered_count: number;
+  weak_count: number;
+  due_review_count: number;
+  today_questions: number;
+  cold_start: boolean;
+}
+
+/** 薄弱知识点（来自 analytics stats/weak-skills） */
+interface WeakSkill {
+  skill_id: string;
+  label: string;
+  mastery: number;
 }
 
 /** 成就项 */
@@ -74,22 +81,27 @@ export default function HomePage() {
   }, []);
 
   // ---- 状态管理 ----
-  const [progress, setProgress] = useState<ProgressSummary | null>(null);   // 学习进度数据
-  const [achievements, setAchievements] = useState<Achievement[]>([]);      // 成就列表
-  const [loading, setLoading] = useState(true);                             // 加载中标志
+  const [stats, setStats] = useState<StatsOverview | null>(null);
+  const [weakSkills, setWeakSkills] = useState<WeakSkill[]>([]);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // ---- 页面初始化：并行拉取进度和成就数据 ----
   useEffect(() => {
     async function loadData() {
       try {
-        const [progressRes, achieveRes] = await Promise.all([
-          fetch(`${API_BASE}/api/progress/default_user`),
-          fetch(`${API_BASE}/api/achievements/default_user`),
+        const [statsRes, achieveRes, weakRes] = await Promise.all([
+          fetch(`${API_BASE}/api/v7/practice/stats/overview`),
+          fetch(`${API_BASE}/api/v7/practice/achievements`),
+          fetch(`${API_BASE}/api/v7/practice/stats/weak-skills`),
         ]);
-        if (progressRes.ok) setProgress(await progressRes.json());
+        if (statsRes.ok) setStats(await statsRes.json());
         if (achieveRes.ok) {
           const aData = await achieveRes.json();
-          setAchievements(aData.achievements || []);
+          setAchievements(aData.achievements || aData || []);
+        }
+        if (weakRes.ok) {
+          const wData = await weakRes.json();
+          setWeakSkills(wData.weak_skills || wData || []);
         }
       } catch (e) {
       } finally {
@@ -99,15 +111,13 @@ export default function HomePage() {
     loadData();
   }, []);
 
-  // ---- 从原始数据派生展示值 ----
-  const accuracy = progress?.accuracy_rate
-    ? `${(progress.accuracy_rate * 100).toFixed(1)}%`
+  const accuracy = stats?.accuracy
+    ? `${stats.accuracy}%`
     : "—";
-  const masteredCount = progress?.mastered_skills?.length || 0;
-  const strugglingCount = progress?.struggling_skills?.length || 0;
+  const masteredCount = stats?.mastered_count || 0;
   const unlockedAchievements = achievements.filter((a) => a.unlocked).length;
-  const studyHours = progress?.study_minutes
-    ? (progress.study_minutes / 60).toFixed(1)
+  const studyHours = stats?.study_minutes
+    ? (stats.study_minutes / 60).toFixed(1)
     : "—";
 
   return (
@@ -135,7 +145,7 @@ export default function HomePage() {
               <>
                 <span className="swiss-badge swiss-badge-accent">
                   <Dumbbell size={12} />
-                  {progress?.total_questions || 0} 题
+                  {stats?.total_questions || 0} 题
                 </span>
                 <span className="swiss-badge">
                   <Target size={12} />
@@ -200,7 +210,7 @@ export default function HomePage() {
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
-              { icon: Dumbbell, label: "完成题目", value: loading ? "—" : `${progress?.total_questions || 0} 道`, accent: "text-[var(--color-info)]", bg: "bg-[var(--color-accent)]/5" },
+              { icon: Dumbbell, label: "完成题目", value: loading ? "—" : `${stats?.total_questions || 0} 道`, accent: "text-[var(--color-info)]", bg: "bg-[var(--color-accent)]/5" },
               { icon: Target, label: "正确率", value: loading ? "—" : accuracy, accent: "text-[var(--color-success)]", bg: "bg-emerald-500/5" },
               { icon: Brain, label: "已掌握", value: loading ? "—" : `${masteredCount} 个`, accent: "text-violet-400", bg: "bg-violet-500/5" },
               { icon: Trophy, label: "成就", value: loading ? "—" : `${unlockedAchievements} 个`, accent: "text-[var(--color-warning)]", bg: "bg-amber-500/5" },
@@ -233,17 +243,18 @@ export default function HomePage() {
               <div className="py-6 flex justify-center">
                 <Loader2 size={18} className="animate-spin text-[var(--color-text-muted)]" />
               </div>
-            ) : strugglingCount > 0 ? (
+            ) : weakSkills.length > 0 ? (
               <div className="space-y-2">
-                {progress?.struggling_skills.slice(0, 5).map((skill) => (
+                {weakSkills.slice(0, 5).map((skill) => (
                   <div
-                    key={skill}
+                    key={skill.skill_id}
                     className="flex items-center gap-2.5 px-3 py-2.5 rounded-md bg-[var(--color-surface)] text-sm group hover:bg-[var(--color-surface-hover)] transition-colors"
                   >
                     <AlertCircle size={14} className="text-[var(--color-warning)] flex-shrink-0" />
                     <span className="text-[var(--color-text-secondary)] flex-1">
-                      {skill.replace(/_/g, " ")}
+                      {skill.label}
                     </span>
+                    <span className="text-xs text-[var(--color-text-muted)]">{Math.round(skill.mastery * 100)}%</span>
                     <ArrowRight size={12} className="text-[var(--color-text-muted)] opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
                 ))}
@@ -268,35 +279,34 @@ export default function HomePage() {
               <div className="py-6 flex justify-center">
                 <Loader2 size={18} className="animate-spin text-[var(--color-text-muted)]" />
               </div>
-            ) : progress?.recommendations?.length ? (
-              <div className="space-y-2">
-                {progress.recommendations.slice(0, 4).map((rec, i) => (
-                  <div
-                    key={i}
-                    className="flex items-start gap-2.5 px-3 py-2.5 rounded-md bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] transition-colors"
-                  >
-                    <Sparkles size={14} className="text-[var(--color-accent)] flex-shrink-0 mt-0.5" />
-                    <span className="text-sm text-[var(--color-text-secondary)] leading-relaxed">
-                      {rec}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="py-6 text-center">
-                <MessageCircle size={24} className="mx-auto mb-2 text-[var(--color-info)]" />
-                <p className="text-sm text-[var(--color-text-muted)]">
-                  开始对话获取个性化学习建议
-                </p>
-                <Link
-                  href="/learn"
-                  className="swiss-btn swiss-btn-primary mt-3 text-xs inline-flex"
-                >
-                  <MessageCircle size={13} />
-                  开始对话
-                </Link>
-              </div>
-            )}
+            ) : (() => {
+              const tips: string[] = [];
+              if (stats?.cold_start) tips.push("开始你的第一次练习吧！");
+              if (weakSkills.length > 0) tips.push(`建议重点复习: ${weakSkills.slice(0, 3).map(s => s.label).join(', ')}`);
+              if (stats && stats.accuracy < 60) tips.push("正确率较低，建议降低难度巩固基础");
+              else if (stats && stats.accuracy > 90) tips.push("掌握不错！可以尝试更高难度的挑战");
+              if (stats?.due_review_count && stats.due_review_count > 0) tips.push(`有 ${stats.due_review_count} 个知识点待复习`);
+              return tips.length > 0 ? (
+                <div className="space-y-2">
+                  {tips.slice(0, 4).map((tip, i) => (
+                    <div
+                      key={i}
+                      className="flex items-start gap-2.5 px-3 py-2.5 rounded-md bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] transition-colors"
+                    >
+                      <Sparkles size={14} className="text-[var(--color-accent)] flex-shrink-0 mt-0.5" />
+                      <span className="text-sm text-[var(--color-text-secondary)] leading-relaxed">
+                        {tip}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-6 text-center">
+                  <MessageCircle size={24} className="mx-auto mb-2 text-[var(--color-info)]" />
+                  <p className="text-sm text-[var(--color-text-muted)]">开始对话获取个性化建议</p>
+                </div>
+              );
+            })()}
           </Card>
 
           {/* ---- 成就展示 ---- */}
@@ -333,7 +343,7 @@ export default function HomePage() {
             href="/learn"
             className="inline-flex items-center gap-2 px-8 py-3.5 bg-[var(--color-accent)] text-white font-semibold rounded-lg hover:bg-[var(--color-accent-hover)] hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-200"
           >
-            <Zap size={18} />
+            <Sparkles size={18} />
             开始学习
           </Link>
           <p className="text-xs text-[var(--color-text-muted)] mt-3">

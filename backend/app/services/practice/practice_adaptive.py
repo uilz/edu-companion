@@ -155,8 +155,8 @@ def adaptive_select(
             if q not in selected:
                 selected.append(q)
 
-    # 7. Bloom 覆盖保证
-    selected = _ensure_bloom_coverage(selected, bloom_distribution)
+    # 7. Bloom 覆盖保证（主动重平衡）
+    selected = _ensure_bloom_coverage(selected, bloom_distribution, full_pool=pool)
 
     # 8. 脱敏（不返回答案）
     result = []
@@ -177,9 +177,15 @@ def adaptive_select(
 def _ensure_bloom_coverage(
     questions: list[dict],
     distribution: Optional[dict[str, int]] = None,
+    full_pool: Optional[list[dict]] = None,
 ) -> list[dict]:
     """
     保证 Bloom 层次覆盖。
+
+    改进点:
+    - 从被动记录缺口 → 主动从候选池(full_pool)中替换题目以补齐缺口
+    - 如果 full_pool 为空，则退化为日志模式
+
     distribution: {"remember": 2, "understand": 2, "apply": 3, ...}
     如果未指定，默认分布偏重"应用"和"理解"
     """
@@ -190,10 +196,12 @@ def _ensure_bloom_coverage(
     # 从 metadata 提取 bloom_level
     from collections import Counter
     meta_counts = Counter()
+    bloom_map = {}  # question_id → bloom_level
     for q in questions:
         meta = _safe_json(q.get("metadata"), {})
         bl = meta.get("bloom_level", "apply")
         meta_counts[bl] += 1
+        bloom_map[q["id"]] = bl
 
     # 检查各层次是否达标
     needs = {}
@@ -205,10 +213,70 @@ def _ensure_bloom_coverage(
     if not needs:
         return questions  # 已满足
 
-    # 需要补充的层次 — 从非选中题查找
-    # 简单实现：打印日志，保持原列表（深入补充涉及全题库重选，暂做简化）
-    logger.info("Bloom覆盖缺口: %s", dict(needs))
-    return questions
+    if not full_pool:
+        # 无候选池，仅记录日志（旧行为）
+        logger.info("Bloom覆盖缺口: %s（无可替换候选题）", dict(needs))
+        return questions
+
+    # 主动重平衡：从 full_pool 中查找缺失层次的题目替换已有重复层次的题目
+    # 找出有冗余的层次
+    surplus = {}
+    for bl, target in distribution.items():
+        have = meta_counts.get(bl, 0)
+        if have > target:
+            surplus[bl] = have - target
+
+    if not surplus:
+        # 没有冗余层次可以替换，记录日志
+        logger.info("Bloom覆盖缺口: %s（无冗余层次可替换）", dict(needs))
+        return questions
+
+    # 构建 candidate 池 (按 bloom 层次分组)
+    candidates_by_bloom = {}
+    for q in full_pool:
+        meta = _safe_json(q.get("metadata"), {})
+        bl = meta.get("bloom_level", "apply")
+        if bl not in candidates_by_bloom:
+            candidates_by_bloom[bl] = []
+        candidates_by_bloom[bl].append(q)
+
+    # 替换：从冗余层次的题目中替换为缺失层次的题目
+    # 先找出当前选中题中属于冗余层次的
+    redundant_ids = set()
+    for q in questions:
+        bl = bloom_map.get(q["id"], "apply")
+        if bl in surplus and surplus[bl] > 0:
+            redundant_ids.add(q["id"])
+            surplus[bl] -= 1
+
+    if not redundant_ids:
+        logger.info("Bloom覆盖缺口: %s（无法定位可替换题目）", dict(needs))
+        return questions
+
+    # 从候选池中找缺失层次的题目替换
+    result = [q for q in questions if q["id"] not in redundant_ids]
+    for bl, needed in needs.items():
+        available = candidates_by_bloom.get(bl, [])
+        # 排除已在结果中的
+        available = [q for q in available if q["id"] not in {r["id"] for r in result}]
+        random.shuffle(available)
+        for q in available[:needed]:
+            result.append(q)
+
+    # 用冗余层次中多出来的题补回数量
+    if len(result) < len(questions):
+        for bl in surplus:
+            available = candidates_by_bloom.get(bl, [])
+            available = [q for q in available if q["id"] not in {r["id"] for r in result}]
+            random.shuffle(available)
+            for q in available[:len(questions) - len(result)]:
+                result.append(q)
+
+    logger.info(
+        "Bloom重平衡: 缺口=%s, 替换前=%d, 替换后=%d",
+        dict(needs), len(questions), len(result),
+    )
+    return result[:len(questions)]  # 保持数量不变
 
 
 # ══════════════════════════════════════════════════════════════
@@ -224,6 +292,7 @@ def adaptive_select_v2(
     exclude_ids: Optional[list[str]] = None,
     cognitive_node_ids: Optional[list[str]] = None,
     enable_ai_fallback: bool = True,
+    subject_hint: Optional[str] = None,
 ) -> list[dict]:
     """
     增强版自适应选题。
@@ -231,8 +300,12 @@ def adaptive_select_v2(
     相比 v1 的改进：
     1. 6:3:1 分层 — 通过 practice_attempts 统计各知识点掌握度
        → 薄弱 (mastery<0.4) 60% / 巩固 (0.4-0.7) 30% / 保持 (>=0.7) 10%
-    2. AI fallback — 题目不足时自动 AI 生成补足
-    3. 冷启动 — 无历史数据时退化为 v1 算法
+    2. ε-greedy 探索 — 10% 概率随机选题，避免纯贪心
+    3. AI fallback — 题目不足时自动 AI 生成补足
+    4. 冷启动 — 无历史数据时退化为 v1 算法
+
+    参数:
+        subject_hint: AI fallback 时使用的学科提示，从对话上下文推断
     """
     from app.db.database import get_db
     db = get_db()
@@ -250,7 +323,7 @@ def adaptive_select_v2(
 
     if not questions:
         logger.info("题库 %s 无可用题目，尝试 AI fallback", bank_id)
-        return _ai_fallback(bank_id, user_id, count, cognitive_node_ids) if enable_ai_fallback else []
+        return _ai_fallback(bank_id, user_id, count, cognitive_node_ids, subject_hint=subject_hint) if enable_ai_fallback else []
 
     # 2. 过滤排除 + 知识点范围
     pool = [q for q in questions if q["id"] not in exclude]
@@ -264,7 +337,7 @@ def adaptive_select_v2(
 
     if not pool:
         logger.info("过滤后无可用题目 bank=%s, 尝试 AI fallback", bank_id)
-        return _ai_fallback(bank_id, user_id, count, cognitive_node_ids) if enable_ai_fallback else []
+        return _ai_fallback(bank_id, user_id, count, cognitive_node_ids, subject_hint=subject_hint) if enable_ai_fallback else []
 
     # 3. 获取历史作答统计 + 按知识点计算掌握度
     qids = [q["id"] for q in pool]
@@ -292,8 +365,8 @@ def adaptive_select_v2(
         mode=mode,
     )
 
-    # 6. Bloom 覆盖
-    selected = _ensure_bloom_coverage(selected)
+    # 6. Bloom 覆盖（主动重平衡）
+    selected = _ensure_bloom_coverage(selected, full_pool=pool)
 
     # 7. 脱敏
     result = []
@@ -308,7 +381,7 @@ def adaptive_select_v2(
     if len(result) < count and enable_ai_fallback:
         shortage = count - len(result)
         logger.info("AI fallback 补题: %d 道不足", shortage)
-        ai_questions = _ai_fallback(bank_id, user_id, shortage, cognitive_node_ids)
+        ai_questions = _ai_fallback(bank_id, user_id, shortage, cognitive_node_ids, subject_hint=subject_hint)
         if ai_questions:
             result.extend(ai_questions)
 
@@ -366,6 +439,7 @@ def _select_by_mastery_layers(
     node_mastery: dict[str, float],
     count: int,
     mode: str = "adaptive",
+    epsilon: float = 0.1,  # 探索率：10% 的概率随机选题
 ) -> list[dict]:
     """
     按掌握度分层选题。
@@ -374,6 +448,10 @@ def _select_by_mastery_layers(
     - 薄弱 (mastery < 0.4): 60%
     - 巩固 (0.4 <= mastery < 0.7): 30%
     - 保持 (mastery >= 0.7): 10%
+
+    ε-greedy 探索:
+    - 以 epsilon 概率从各层随机选题而非按错误次数排序
+    - 避免系统永远选"当前最优"，错过潜在能力发现
 
     其他模式:
     - review: 全从薄弱选
@@ -467,8 +545,14 @@ def _pick_from_pool(
     min_mastery: float = 0.0,
     max_mastery: float = 1.0,
     node_mastery: Optional[dict[str, float]] = None,
+    epsilon: float = 0.1,  # ε-greedy 探索率
 ) -> list[dict]:
-    """从候选池中按条件选题"""
+    """从候选池中按条件选题。
+
+    支持 ε-greedy 探索：
+    - 以 epsilon 概率纯随机选取（探索未知能力）
+    - 以 1-epsilon 概率按错误次数排序选取（利用已知弱点）
+    """
     candidates = []
     for q in pool:
         stat = stats_map.get(q["id"], {})
@@ -488,6 +572,11 @@ def _pick_from_pool(
 
     if not candidates:
         return []
+
+    # ε-greedy: 以 epsilon 概率随机探索
+    if random.random() < epsilon and len(candidates) > count:
+        random.shuffle(candidates)
+        return candidates[:count]
 
     # 按错误次数排序（错得多优先）
     candidates.sort(key=lambda q: -(stats_map.get(q["id"], {}).get("wrongs", 0) or 0))
@@ -526,16 +615,48 @@ def _ai_fallback(
     user_id: str,
     count: int,
     cognitive_node_ids: Optional[list[str]] = None,
+    subject_hint: Optional[str] = None,
 ) -> list[dict]:
     """AI 补题：当题库不够时自动生成"""
     try:
         from app.services.practice.practice_question_gen import generate_and_save
 
         skill_id = cognitive_node_ids[0] if cognitive_node_ids else ""
+
+        # 推断学科：优先使用外部提示，其次从 cognitive_node_ids 推断，最后回退
+        subject = subject_hint or ""
+        if not subject and cognitive_node_ids:
+            # 尝试从认知节点查找学科信息
+            try:
+                from app.cognitive import get_repo
+                for nid in cognitive_node_ids:
+                    node = get_repo().get_node(nid, user_id)
+                    if node and hasattr(node, 'subject') and node.subject:
+                        subject = node.subject
+                        break
+            except Exception:
+                pass
+        if not subject:
+            # 从题库元数据推测
+            try:
+                from app.db.database import get_db
+                db = get_db()
+                bank = db.fetchone(
+                    "SELECT metadata FROM question_banks WHERE id = %s",
+                    (bank_id,),
+                )
+                if bank:
+                    meta = _safe_json(bank.get("metadata"), {})
+                    subject = meta.get("subject", "") or meta.get("topic", "") or ""
+            except Exception:
+                pass
+        if not subject:
+            subject = "数学"  # 最终回退
+
         saved = generate_and_save(
             bank_id=bank_id,
             user_id=user_id,
-            subject="通用",
+            subject=subject,
             skill_id=skill_id,
             count=min(count, 5),
             content_type="choice",

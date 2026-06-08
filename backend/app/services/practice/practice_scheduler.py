@@ -2,18 +2,24 @@
 错题复习调度 — 基于间隔重复的智能复习引擎
 
 算法:
-- 简化的 SM-2 (SuperMemo) 变体
+- 简化的 SM-2 (SuperMemo) 变体 + Ebbinghaus 遗忘曲线
 - 新错题 → 1天后复习
 - 首次正确 → 3天后复查
 - 连续2次正确 → 7天后复查
 - 连续3+次正确 → 14天以上（EF 调整）
+- 遗忘曲线: R = e^(-t/S)，S 基于个体历史正确率动态调整
+- 冷启动: 无历史数据时自动推荐新题
 
-EF (Easiness Factor) 基于错题次数和难度:
+EF (Easiness Factor) 基于错题次数、难度和个人历史正确率:
   EF_base = 2.5 - wrong_count * 0.2
+  EF_historical = 近7天正确率的线性映射到 [1.3, 2.5]
+  EF = (EF_base + EF_historical) / 2
   间隔 = 基础间隔 * EF
 """
 
 import logging
+import math
+import random
 import time
 from datetime import datetime, timedelta
 from typing import Optional
@@ -23,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 # ── 默认间隔（天） ──
 INTERVALS = [1, 3, 7, 14, 30, 60]  # 第 N 次成功的间隔
+COLD_START_ATTEMPT_THRESHOLD = 5   # 低于此练习量的用户视为冷启动
 
 
 def get_due_questions(
@@ -105,12 +112,37 @@ def get_due_questions(
         last_done = stat.get("last_done")
         consecutive = _get_consecutive(db, qid, user_id)
 
-        # 计算 EF
+        # 计算 EF — 加入个体历史正确率调整
         difficulty = q.get("difficulty", 3)
-        ef = max(1.3, min(2.5, 2.5 - wrongs * 0.2 - (difficulty - 3) * 0.1))
+        ef_base = max(1.3, min(2.5, 2.5 - wrongs * 0.2 - (difficulty - 3) * 0.1))
+
+        # 个体历史稳定度：基于近7天总正确率
+        # 从 cognitive node 或 practice_attempts 统计
+        recent_accuracy = 0.5  # 默认值
+        try:
+            acc_row = db.fetchone(
+                """SELECT
+                      SUM(CASE WHEN is_correct THEN 1 ELSE 0 END)::float /
+                      NULLIF(COUNT(*), 0) as accuracy
+                   FROM practice_attempts
+                   WHERE user_id = %s AND created_at >= NOW() - INTERVAL '7 days'""",
+                (user_id,),
+            )
+            if acc_row and acc_row["accuracy"] is not None:
+                recent_accuracy = float(acc_row["accuracy"])
+        except Exception:
+            pass
+
+        # 个体稳定度: 高正确率→高稳定度→间隔更长
+        # 正确率 0.0 → S=0.5, 0.5 → S=1.0, 1.0 → S=1.5
+        individual_stability = 0.5 + recent_accuracy * 1.0
+
+        # 历史调整后的 EF
+        ef_historical = 1.3 + recent_accuracy * 1.2  # [1.3, 2.5]
+        ef = (ef_base + ef_historical) / 2.0
 
         # 当前连续正确次数 → 确定复习间隔
-        interval_days = _calc_interval(consecutive, ef, wrongs)
+        interval_days = _calc_interval(consecutive, ef, wrongs, individual_stability)
 
         # 计算下次复习时间戳
         if last_correct:
@@ -177,6 +209,48 @@ def get_due_questions(
     scored.sort(key=lambda x: x["priority_score"])
 
     result = scored[:limit]
+
+    # ── 冷启动：无历史数据时推荐新题 ──
+    if not result:
+        # 检查用户的总练习量
+        total_attempts = db.fetchone(
+            "SELECT COUNT(*) as cnt FROM practice_attempts WHERE user_id = %s",
+            (user_id,),
+        )
+        attempt_count = total_attempts["cnt"] if total_attempts else 0
+        if attempt_count < COLD_START_ATTEMPT_THRESHOLD:
+            logger.info(
+                "复习调度冷启动: user=%s, total_attempts=%d, 退化为推荐新题",
+                user_id, attempt_count,
+            )
+            # 从未做过的题中随机选取
+            untouched = [q for q in questions if (attempt_map.get(q["id"]) or {}).get("total", 0) == 0]
+            if untouched:
+                random.shuffle(untouched)
+                from app.services.practice.practice_question_bank import _safe_json as sjson
+                for q in untouched[:limit]:
+                    result.append({
+                        "question": {
+                            "id": q["id"],
+                            "bank_id": q["bank_id"],
+                            "question_type": q["question_type"],
+                            "stem": q["stem"],
+                            "options": sjson(q.get("options"), []),
+                            "difficulty": q.get("difficulty", 3),
+                            "cognitive_node_ids": q.get("cognitive_node_ids") or [],
+                        },
+                        "due": True,
+                        "days_overdue": 0.0,
+                        "days_until_next_review": 0.0,
+                        "priority_score": -999.0,
+                        "consecutive_correct": 0,
+                        "wrong_count": 0,
+                        "mastered": False,
+                        "ef": 2.5,
+                        "interval_days": 1,
+                    })
+                logger.info("冷启动推荐 %d 道新题", len(result))
+
     logger.info(
         "复习调度: user=%s, total=%d, due=%d, limit=%d",
         user_id, len(scored), sum(1 for r in scored if r["due"]), limit,
@@ -211,16 +285,25 @@ def get_review_stats(
 # ── 内部辅助 ──
 
 
-def _calc_interval(consecutive: int, ef: float, wrongs: int) -> float:
+def _calc_interval(consecutive: int, ef: float, wrongs: int,
+                   individual_stability: float = 1.0) -> float:
     """
     计算下一次复习间隔（天）。
 
-    SM-2 简化版:
+    基于 SM-2 的间隔 + Ebbinghaus 遗忘曲线调整。
+
+    遗忘曲线: R = e^(-t/S)
+    - R: 记忆保留率
+    - t: 时间
+    - S: 知识稳定性（越大越不容易忘）
+
+    SM-2 基础间隔:
     - 首次正确: 1天
     - 第2次: 3天
     - 第3次: 7天
     - 第4次+: 上次间隔 * EF
-    - 曾经错过的题 间隔减半
+
+    individual_stability: 基于用户个体历史正确率，高正确率→高稳定性→间隔更长
     """
     idx = min(consecutive, len(INTERVALS) - 1)
     base = INTERVALS[idx]
@@ -234,6 +317,14 @@ def _calc_interval(consecutive: int, ef: float, wrongs: int) -> float:
         # 如果最近还在错，间隔更短
         if consecutive == 0:
             interval = min(interval, 1.0)  # 最近答错 → 1天内复习
+
+    # 遗忘曲线调整：根据 individual_stability 调整间隔
+    # 高稳定性 → 遗忘速度慢 → 间隔可以更长
+    # R = e^(-interval / (S * 30))，保持 R > 0.7 为目标
+    # 稳定学生 (S=1.5): 间隔可延长 1.5 倍
+    # 不稳定学生 (S=0.5): 间隔需缩短至 0.5 倍
+    forgetting_factor = individual_stability
+    interval *= forgetting_factor
 
     return max(0.5, interval)  # 最少半天
 

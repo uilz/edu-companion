@@ -122,6 +122,8 @@ def get_error_book(
         "page": page,
         "page_size": page_size,
         "total_pages": max(1, (total + page_size - 1) // page_size),
+        "cold_start": total == 0,
+        "cold_start_hint": "还没有错题，继续练习吧！" if total == 0 else "",
     }
 
 
@@ -193,7 +195,7 @@ def review_error_question(
     - 更新认知节点
     """
     from app.db.database import get_db
-    from app.cognitive.storage import sync_from_practice_event
+    from app.cognitive import get_repo
     db = get_db()
 
     # 获取最近一次 attempt
@@ -236,7 +238,7 @@ def review_error_question(
     # 更新认知节点
     for nid in node_ids:
         try:
-            sync_from_practice_event(
+            get_repo().sync_from_practice_event(
                 user_id=user_id, skill_id=nid,
                 is_correct=is_correct, time_spent=float(time_spent), hints_used=0,
             )

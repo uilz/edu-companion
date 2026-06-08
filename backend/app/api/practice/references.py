@@ -49,8 +49,8 @@ async def api_references_for_node(
     if not node_id:
         raise HTTPException(400, "node_id 不能为空")
 
-    from app.cognitive.storage import get_node
-    node = get_node(node_id, DEFAULT_USER_ID)
+    from app.cognitive import get_repo
+    node = get_repo().get_node(node_id, DEFAULT_USER_ID)
     if not node:
         raise HTTPException(404, "知识点不存在")
 
@@ -84,8 +84,8 @@ async def api_references_for_question(
     # 优先使用认知节点标签作为搜索词
     node_ids = question.get("cognitive_node_ids") or []
     if node_ids:
-        from app.cognitive.storage import get_node
-        node = get_node(node_ids[0], DEFAULT_USER_ID)
+        from app.cognitive import get_repo
+        node = get_repo().get_node(node_ids[0], DEFAULT_USER_ID)
         if node and node.label:
             query = f"{node.label} 讲解"
         else:
