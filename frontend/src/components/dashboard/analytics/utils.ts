@@ -239,7 +239,7 @@ export function generateSuggestions(
       suggestions.push({
         text: `${label}占${(top.pct * 100).toFixed(0)}%（偏高），去错题本专项突破`,
         action: "错题本",
-        link: `/errors?filter=${top.type}`,
+        link: `/practice/errors?filter=${top.type}`,
       });
     }
   }

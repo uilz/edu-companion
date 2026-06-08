@@ -7,22 +7,33 @@ import Link from 'next/link';
 import {
   BookOpen, Brain, Target, TrendingUp, MessageCircle,
   Loader2, Dumbbell, Trophy, AlertCircle, Sparkles,
-  CheckCircle2, Clock, Zap, Flame,
+  CheckCircle2, Clock, Flame,
 } from 'lucide-react';
 // 自定义 UI 组件导入
 import Card from '@/components/ui/Card';
 import UnifiedSearch from '@/components/search/UnifiedSearch';
 import { API_BASE } from "@/lib/api/api";
 
-// 学习进度概览
-interface ProgressSummary {
+// 学习进度概览（来自 analytics stats/overview）
+interface StatsOverview {
   total_questions: number;
-  correct_answers: number;
-  accuracy_rate: number;
+  total_correct: number;
+  total_wrong: number;
+  accuracy: number;
+  total_sessions: number;
   study_minutes: number;
-  mastered_skills: string[];
-  struggling_skills: string[];
-  recommendations: string[];
+  mastered_count: number;
+  weak_count: number;
+  due_review_count: number;
+  today_questions: number;
+  cold_start: boolean;
+}
+
+// 薄弱知识点（来自 analytics stats/weak-skills）
+interface WeakSkill {
+  skill_id: string;
+  label: string;
+  mastery: number;
 }
 
 // 成就
@@ -66,8 +77,8 @@ interface DashboardOverview {
 const QUICK_ACTIONS = [
   { emoji: '💬', title: '智能对话', desc: '随时提问', href: '/learn' },
   { emoji: '✏️', title: '开始练习', desc: '刷题检测', href: '/practice' },
-  { emoji: '📈', title: '学情分析', desc: '深度追踪', href: '/dashboard?tab=analytics' },
-  { emoji: '🧠', title: '知识图谱', desc: '补充薄弱', href: '/dashboard?tab=graph' },
+  { emoji: '📈', title: '学情分析', desc: '深度追踪', href: '/analytics' },
+  { emoji: '🧠', title: '知识图谱', desc: '补充薄弱', href: '/knowledge-tree' },
 ];
 
 export function OverviewTab() {
@@ -79,24 +90,30 @@ export function OverviewTab() {
     return '晚上好 🌙';
   }, []);
 
-  const [progress, setProgress] = useState<ProgressSummary | null>(null);
+  const [stats, setStats] = useState<StatsOverview | null>(null);
   const [dashboard, setDashboard] = useState<DashboardOverview | null>(null);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [weakSkills, setWeakSkills] = useState<WeakSkill[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [progressRes, dashRes, achieveRes] = await Promise.all([
-          fetch(`${API_BASE}/api/progress/default_user`),
+        const [statsRes, dashRes, achieveRes, weakRes] = await Promise.all([
+          fetch(`${API_BASE}/api/v7/practice/stats/overview`),
           fetch(`${API_BASE}/api/v2/dashboard/overview?user_id=default_user`),
-          fetch(`${API_BASE}/api/achievements/default_user`),
+          fetch(`${API_BASE}/api/v7/practice/achievements`),
+          fetch(`${API_BASE}/api/v7/practice/stats/weak-skills`),
         ]);
-        if (progressRes.ok) setProgress(await progressRes.json());
+        if (statsRes.ok) setStats(await statsRes.json());
         if (dashRes.ok) setDashboard(await dashRes.json());
         if (achieveRes.ok) {
           const aData = await achieveRes.json();
-          setAchievements(aData.achievements || []);
+          setAchievements(aData.achievements || aData || []);
+        }
+        if (weakRes.ok) {
+          const wData = await weakRes.json();
+          setWeakSkills(wData.weak_skills || wData || []);
         }
       } catch (e) {
       } finally {
@@ -108,11 +125,10 @@ export function OverviewTab() {
 
   const accuracy = dashboard
     ? `${(dashboard.engagement.today_accuracy * 100).toFixed(1)}%`
-    : progress?.accuracy_rate
-      ? `${(progress.accuracy_rate * 100).toFixed(1)}%`
+    : stats?.accuracy
+      ? `${stats.accuracy}%`
       : '—';
-  const masteredCount = progress?.mastered_skills?.length || 0;
-  const strugglingCount = progress?.struggling_skills?.length || 0;
+  const masteredCount = stats?.mastered_count || 0;
   const unlockedAchievements = achievements.filter((a) => a.unlocked).length;
 
   // 练习队列：urgent 优先，取前 5
@@ -134,7 +150,7 @@ export function OverviewTab() {
             <>
               已练习{' '}
               <span className="text-[var(--color-text)] font-semibold">
-                {progress?.total_questions || dashboard?.engagement.today_practiced || 0}
+                {stats?.today_questions || dashboard?.engagement.today_practiced || 0}
               </span>
               题 · 正确率{' '}
               <span className="text-[var(--color-accent)] font-semibold">{accuracy}</span>
@@ -177,7 +193,7 @@ export function OverviewTab() {
       {/* 统计卡片 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
         {[
-          { icon: <Dumbbell size={18} />, label: '今日练习', value: loading ? '—' : `${dashboard?.engagement.today_practiced || progress?.total_questions || 0} 题`, color: 'text-[var(--color-info)]' },
+          { icon: <Dumbbell size={18} />, label: '今日练习', value: loading ? '—' : `${stats?.today_questions || dashboard?.engagement.today_practiced || 0} 题`, color: 'text-[var(--color-info)]' },
           { icon: <Target size={18} />, label: '今日正确率', value: loading ? '—' : accuracy, color: 'text-[var(--color-success)]' },
           { icon: <Brain size={18} />, label: '已掌握', value: loading ? '—' : `${masteredCount} 个`, color: 'text-[var(--color-accent)]' },
           { icon: <Trophy size={18} />, label: '成就', value: loading ? '—' : `${unlockedAchievements} 个`, color: 'text-[var(--color-warning)]' },
@@ -297,26 +313,24 @@ export function OverviewTab() {
           </div>
         )}
 
-        {/* 薄弱知识点（原有） */}
+        {/* 薄弱知识点 */}
         <div>
           <Card title="需要加强">
             {loading ? (
               <div className="py-4 text-center"><Loader2 size={14} className="animate-spin mx-auto" /></div>
-            ) : strugglingCount > 0 ? (
+            ) : weakSkills.length > 0 ? (
               <div className="space-y-2">
-                {progress?.struggling_skills.slice(0, 5).map((skill) => (
+                {weakSkills.slice(0, 5).map((skill) => (
                   <Link
-                    key={skill}
-                    href={`/practice?skill=${encodeURIComponent(skill)}`}
+                    key={skill.skill_id}
+                    href={`/practice?skill=${encodeURIComponent(skill.label)}`}
                     className="flex items-center gap-2 px-3 py-2 bg-[var(--color-surface)] text-xs hover:bg-[var(--color-accent)]/10 active:scale-[0.97] transition-colors group"
                   >
                     <AlertCircle size={13} className="text-[var(--color-warning)] flex-shrink-0" />
                     <span className="text-[var(--color-text-secondary)] group-hover:text-[var(--color-accent)]">
-                      {skill.replace(/_/g, ' ')}
+                      {skill.label}
                     </span>
-                    <span className="ml-auto text-[var(--color-text-muted)] opacity-0 group-hover:opacity-100 transition-opacity">
-                      练习 →
-                    </span>
+                    <span className="ml-auto text-[10px] text-[var(--color-text-muted)]">{Math.round(skill.mastery * 100)}%</span>
                   </Link>
                 ))}
                 <Link
@@ -335,26 +349,34 @@ export function OverviewTab() {
           </Card>
         </div>
 
-        {/* 学习建议（原有） */}
+        {/* 学习建议 */}
         <div>
           <Card title="学习建议">
             {loading ? (
               <div className="py-4 text-center"><Loader2 size={14} className="animate-spin mx-auto" /></div>
-            ) : progress?.recommendations?.length ? (
-              <div className="space-y-2">
-                {progress.recommendations.slice(0, 3).map((rec, i) => (
-                  <div key={i} className="flex items-start gap-2 px-3 py-2 text-xs">
-                    <Sparkles size={13} className="text-[var(--color-accent)] flex-shrink-0 mt-0.5" />
-                    <span className="text-[var(--color-text-secondary)]">{rec}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="py-4 text-center text-xs text-[var(--color-text-muted)]">
-                <MessageCircle size={16} className="mx-auto mb-1 text-[var(--color-info)]" />
-                开始对话获取个性化建议
-              </div>
-            )}
+            ) : (() => {
+              const tips: string[] = [];
+              if (stats?.cold_start) tips.push("开始你的第一次练习吧！");
+              if (weakSkills.length > 0) tips.push(`建议重点复习: ${weakSkills.slice(0, 3).map(s => s.label).join(', ')}`);
+              if (stats && stats.accuracy < 60) tips.push("正确率较低，建议降低难度巩固基础");
+              else if (stats && stats.accuracy > 90) tips.push("掌握不错！可以尝试更高难度的挑战");
+              if (stats?.due_review_count && stats.due_review_count > 0) tips.push(`有 ${stats.due_review_count} 个知识点待复习`);
+              return tips.length > 0 ? (
+                <div className="space-y-2">
+                  {tips.slice(0, 3).map((tip, i) => (
+                    <div key={i} className="flex items-start gap-2 px-3 py-2 text-xs">
+                      <Sparkles size={13} className="text-[var(--color-accent)] flex-shrink-0 mt-0.5" />
+                      <span className="text-[var(--color-text-secondary)]">{tip}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-4 text-center text-xs text-[var(--color-text-muted)]">
+                  <MessageCircle size={16} className="mx-auto mb-1 text-[var(--color-info)]" />
+                  开始对话获取个性化建议
+                </div>
+              );
+            })()}
           </Card>
         </div>
 
