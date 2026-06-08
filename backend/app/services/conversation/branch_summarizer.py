@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import logging
-from app.services.common.storage import storage
+from app.services.common import get_data_repo
 from app.services.llm.llm_service import llm_service
 
 logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ async def summarize_branch_name(user_id: str, branch_id: str) -> str:
     - 5-20条：尝试 LLM 重命名（加权最近消息）
     - >20条：再次 LLM 重命名（更多上下文）
     """
-    data = storage.load(user_id)
+    data = get_data_repo().load(user_id)
     branch = data.conversations.get(branch_id)
     if not branch:
         return ""
@@ -129,7 +129,7 @@ def update_partition_context(user_id: str, partition_id: str) -> str:
     合并所有分支摘要，生成分区级别的上下文
     LLM对话时注入这个摘要以省token
     """
-    data = storage.load(user_id)
+    data = get_data_repo().load(user_id)
     partition = data.partitions.get(partition_id)
     if not partition:
         return ""
@@ -154,7 +154,7 @@ def update_partition_context(user_id: str, partition_id: str) -> str:
 
     context = " | ".join(parts)
     partition.context_summary = context
-    storage.save(user_id, data)
+    get_data_repo().save(user_id, data)
 
     logger.info(f"分区 {partition_id} 上下文已更新")
     return context
@@ -166,7 +166,7 @@ def generate_branch_summary(user_id: str, branch_id: str) -> str:
 
     触发条件：消息数 > 10 且距上次摘要 > 1小时，或手动触发
     """
-    data = storage.load(user_id)
+    data = get_data_repo().load(user_id)
     branch = data.conversations.get(branch_id)
     if not branch:
         return ""
@@ -188,7 +188,7 @@ def generate_branch_summary(user_id: str, branch_id: str) -> str:
 
     branch.summary = summary
     branch.summary_dirty = False
-    storage.save(user_id, data)
+    get_data_repo().save(user_id, data)
 
     logger.info(f"分支 {branch_id} 摘要已生成: {summary[:50]}...")
     return summary

@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 
 from shared.constants import DEFAULT_USER_ID
 from app.schemas.conversation import KnowledgeGraph, KGNode, KGEdge
-from app.services.common.storage import storage
+from app.services.common import get_data_repo
 
 logger = logging.getLogger(__name__)
 
@@ -84,11 +84,11 @@ class AiChatRequest(BaseModel):
 # ═══════════════════════════════════════════════════════════
 
 def _load(user_id: str = DEFAULT_USER_ID):
-    return storage.load(user_id)
+    return get_data_repo().load(user_id)
 
 
 def _save(data, user_id: str = DEFAULT_USER_ID):
-    storage.save(user_id, data)
+    get_data_repo().save(user_id, data)
 
 
 def _get_graph(partition_id: str, user_id: str = DEFAULT_USER_ID):
@@ -178,7 +178,7 @@ def _get_tree_structure(partition_id: str) -> dict:
 def _sync_graph_to_cognitive(partition_id: str):
     """图谱节点 → CognitiveNode 同步（附属）"""
     try:
-        from app.cognitive.storage import upsert_node, get_node
+        from app.cognitive import get_repo
         from app.cognitive.models import CognitiveNode, MetaInfo
 
         data = _load()
@@ -186,11 +186,11 @@ def _sync_graph_to_cognitive(partition_id: str):
         if not graph:
             return
         for nid, node in graph.nodes.items():
-            existing = get_node(nid, _USER_ID)
+            existing = get_repo().get_node(nid, _USER_ID)
             if existing:
                 if existing.label != node.label:
                     existing.label = node.label
-                    upsert_node(existing, _USER_ID)
+                    get_repo().upsert_node(existing, _USER_ID)
                 continue
             cog = CognitiveNode(
                 id=nid, label=node.label, level="concept",
@@ -198,7 +198,7 @@ def _sync_graph_to_cognitive(partition_id: str):
                 node_type="auto_generated", is_visible=True,
                 meta=MetaInfo(created_at=time.time()),
             )
-            upsert_node(cog, _USER_ID)
+            get_repo().upsert_node(cog, _USER_ID)
     except Exception:
         logger.debug("认知图谱同步跳过", exc_info=True)
 
@@ -206,8 +206,8 @@ def _sync_graph_to_cognitive(partition_id: str):
 def _delete_cognitive_node(node_id: str):
     """删除 CognitiveNode（附属清理）"""
     try:
-        from app.cognitive.storage import delete_node
-        delete_node(node_id, _USER_ID)
+        from app.cognitive import get_repo
+        get_repo().delete_node(node_id, _USER_ID)
     except Exception:
         logger.debug("认知节点删除跳过", exc_info=True)
 

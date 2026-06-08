@@ -241,20 +241,22 @@ export default function DAGGraph({
                   fill={isSel ? "rgba(255,255,255,0.6)" : "var(--color-text-muted)"}
                   textAnchor="end">P{n.priority || "-"}</text>
 
-                {/* Label */}
-                <text x={n.x + 8} y={n.y + 32} fontSize={10}
-                  fill={isSel ? "#fff" : "var(--color-text)"} fontWeight={600}
-                  textLength={nodeW - 20} lengthAdjust="spacingAndGlyphs">
-                  {n.label}
-                </text>
+                {/* Label (use foreignObject to avoid SVG text stretching) */}
+                <foreignObject x={n.x + 8} y={n.y + 20} width={nodeW - 16} height={20}>
+                  <div className="text-[10px] font-semibold leading-[18px] overflow-hidden text-ellipsis whitespace-nowrap"
+                    style={{ color: isSel ? "#fff" : "var(--color-text)" }}>
+                    {n.label}
+                  </div>
+                </foreignObject>
 
                 {/* Tags */}
                 {n.tags?.length > 0 && (
-                  <text x={n.x + 8} y={n.y + 50} fontSize={7}
-                    fill={isSel ? "rgba(255,255,255,0.5)" : "var(--color-text-muted)"}
-                    textLength={nodeW - 20} lengthAdjust="spacingAndGlyphs">
-                    {n.tags.slice(0, 2).join(" · ")}
-                  </text>
+                  <foreignObject x={n.x + 8} y={n.y + 38} width={nodeW - 16} height={16}>
+                    <div className="text-[7px] leading-[14px] overflow-hidden text-ellipsis whitespace-nowrap"
+                      style={{ color: isSel ? "rgba(255,255,255,0.5)" : "var(--color-text-muted)" }}>
+                      {n.tags.slice(0, 2).join(" · ")}
+                    </div>
+                  </foreignObject>
                 )}
 
                 {/* Layer indicator */}

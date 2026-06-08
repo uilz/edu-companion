@@ -25,6 +25,7 @@ if TYPE_CHECKING:
         MediaService,
     )
     from shared.protocols.cognitive import CognitiveNodeRepository
+    from shared.protocols.knowledge_query import KnowledgeQueryService
     from app.domain.multimedia.service import MultimediaService
 
 logger = logging.getLogger("di")
@@ -45,6 +46,9 @@ class AppContainer:
         self.event_bus = EventBus(handler_timeout=5.0)
         self.llm_circuit = CircuitBreaker("llm", failure_threshold=3)
 
+        # ── DataRepository 仓储 ──
+        self._init_data_repo()
+
         # ── CognitiveNode 仓储 ──
         self.cognitive_node_repo: CognitiveNodeRepository = self._create_cognitive_repo()
 
@@ -56,6 +60,7 @@ class AppContainer:
         self.habit_service: HabitService = self._create_habits()
         self.material_service: MaterialService = self._create_materials()
         self.knowledge_service: KnowledgeGraphService = self._create_knowledge()
+        self.knowledge_query_service: KnowledgeQueryService = self._create_knowledge_query()
         self.media_service: MediaService = self._create_media()
         self.multimedia_service: MultimediaService = self._create_multimedia()
 
@@ -78,7 +83,15 @@ class AppContainer:
 
     def _create_cognitive_repo(self) -> CognitiveNodeRepository:
         from app.cognitive.pg_repository import PgCognitiveNodeRepository
-        return PgCognitiveNodeRepository()
+        from app.cognitive import set_repo
+        repo = PgCognitiveNodeRepository()
+        set_repo(repo)
+        return repo
+
+    def _init_data_repo(self) -> None:
+        from app.services.common import set_data_repo
+        from app.services.common.storage import storage
+        set_data_repo(storage)
 
     def _create_practice(self) -> PracticeService:
         from app.domain.practice.service import PracticeServiceImpl
@@ -136,6 +149,13 @@ class AppContainer:
             practice=self.practice_service,
             event_bus=self.event_bus,
         )
+
+    def _create_knowledge_query(self) -> KnowledgeQueryService:
+        from app.domain.knowledge.query_service import KnowledgeQueryServiceImpl
+        from app.domain.knowledge import set_knowledge_query
+        svc = KnowledgeQueryServiceImpl()
+        set_knowledge_query(svc)
+        return svc
 
     def _create_media(self) -> MediaService:
         from app.domain.media.service import MediaServiceImpl

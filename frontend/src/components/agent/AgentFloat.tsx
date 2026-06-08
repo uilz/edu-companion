@@ -30,8 +30,15 @@ export default function AgentFloat() {
     startTop: 0,
   });
 
-  // 位置持久化 & 吸附
-  const SNAP_THRESHOLD = 30; // 距边缘多少像素内视为吸附
+  // 用 ref 存储实时位置，避免拖动时频繁 setState 导致卡顿
+  const posRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const snappedRef = useRef<"none" | "left" | "right">("right");
+  // 仅在拖动结束时 setState 触发重渲染
+  const [renderPos, setRenderPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [snapped, setSnapped] = useState<"none" | "left" | "right">("right");
+  const [dragging, setDragging] = useState(false);
+
+  // 位置持久化
   const POS_KEY = "agent-float-pos";
 
   const loadPos = (): { x: number; y: number } | null => {
@@ -42,28 +49,28 @@ export default function AgentFloat() {
     return null;
   };
 
-  const [pos, setPos] = useState<{ x: number; y: number }>(() => {
+  // 初始化位置
+  useEffect(() => {
     const saved = loadPos();
-    if (saved) return saved;
-    return { x: typeof window !== "undefined" ? window.innerWidth - 64 : 0, y: typeof window !== "undefined" ? window.innerHeight - 200 : 0 };
-  });
+    const initial = saved || { x: window.innerWidth - 64, y: window.innerHeight - 200 };
+    posRef.current = initial;
+    setRenderPos(initial);
 
-  // 是否吸附到边缘
-  const [snapped, setSnapped] = useState<"none" | "left" | "right">(() => {
-    const saved = loadPos();
-    if (!saved) return "right";
-    if (saved.x <= SNAP_THRESHOLD) return "left";
-    if (saved.x >= window.innerWidth - 48 - SNAP_THRESHOLD) return "right";
-    return "none";
-  });
+    const EDGE_ZONE = 60;
+    let snapSide: "none" | "left" | "right" = "none";
+    if (initial.x < EDGE_ZONE) snapSide = "left";
+    else if (initial.x > window.innerWidth - 48 - EDGE_ZONE) snapSide = "right";
+    snappedRef.current = snapSide;
+    setSnapped(snapSide);
+  }, []);
 
-  // 吸附到最近的左/右边缘 — 仅当靠近边缘时吸附
-  const EDGE_ZONE = 60; // 距边缘多少像素内触发吸附
+  // 吸附到最近的左/右边缘
+  const EDGE_ZONE = 60;
   const snap = (x: number): { x: number; side: "left" | "right" } | null => {
     const vw = window.innerWidth;
     if (x < EDGE_ZONE) return { x: -24, side: "left" };
     if (x > vw - 48 - EDGE_ZONE) return { x: vw - 24, side: "right" };
-    return null; // 不靠近边缘，不吸附
+    return null;
   };
 
   // 登录页不显示悬浮球
@@ -85,19 +92,21 @@ export default function AgentFloat() {
   // ── 拖动事件 ──
   const handleDragStart = useCallback(
     (e: React.MouseEvent | React.TouchEvent) => {
-      // 阻止默认行为，防止文本选中
       e.preventDefault();
       const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
       const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
 
       // 如果当前吸附，先脱离吸附，调整到完全可见位置
-      let adjustedX = pos.x;
-      if (snapped === "left") adjustedX = 8;
-      else if (snapped === "right") adjustedX = window.innerWidth - 56;
-      if (adjustedX !== pos.x) {
-        setPos({ x: adjustedX, y: pos.y });
+      let adjustedX = posRef.current.x;
+      if (snappedRef.current === "left") adjustedX = 8;
+      else if (snappedRef.current === "right") adjustedX = window.innerWidth - 56;
+      if (adjustedX !== posRef.current.x) {
+        posRef.current = { x: adjustedX, y: posRef.current.y };
+        setRenderPos(posRef.current);
       }
+      snappedRef.current = "none";
       setSnapped("none");
+      setDragging(true);
 
       dragState.current = {
         dragging: true,
@@ -105,10 +114,10 @@ export default function AgentFloat() {
         startX: clientX,
         startY: clientY,
         startLeft: adjustedX,
-        startTop: pos.y,
+        startTop: posRef.current.y,
       };
     },
-    [pos, snapped],
+    [],
   );
 
   useEffect(() => {
@@ -128,33 +137,36 @@ export default function AgentFloat() {
       const newX = Math.max(0, Math.min(window.innerWidth - 48, dragState.current.startLeft + dx));
       const newY = Math.max(0, Math.min(window.innerHeight - 48, dragState.current.startTop + dy));
 
-      setPos({ x: newX, y: newY });
+      // 直接更新 ref + DOM，避免 setState 重渲染
+      posRef.current = { x: newX, y: newY };
+      if (floatRef.current) {
+        floatRef.current.style.left = `${newX}px`;
+        floatRef.current.style.top = `${newY}px`;
+      }
     };
 
     const handleDragEnd = () => {
       if (!dragState.current.dragging) return;
       const wasMoved = dragState.current.moved;
       dragState.current.dragging = false;
+      setDragging(false);
 
       if (!wasMoved) {
-        // 没有移动，视为点击
         return;
       }
 
-      // 吸附到边缘（仅靠近边缘时）
-      setPos((prev) => {
-        const result = snap(prev.x);
-        if (result) {
-          setSnapped(result.side);
-          const s = { x: result.x, y: prev.y };
-          try { localStorage.setItem(POS_KEY, JSON.stringify(s)); } catch {}
-          return s;
-        }
-        // 不靠近边缘，保持自由位置
+      // 吸附到边缘
+      const result = snap(posRef.current.x);
+      if (result) {
+        snappedRef.current = result.side;
+        posRef.current = { x: result.x, y: posRef.current.y };
+        setSnapped(result.side);
+      } else {
+        snappedRef.current = "none";
         setSnapped("none");
-        try { localStorage.setItem(POS_KEY, JSON.stringify(prev)); } catch {}
-        return prev;
-      });
+      }
+      setRenderPos({ ...posRef.current });
+      try { localStorage.setItem(POS_KEY, JSON.stringify(posRef.current)); } catch {}
     };
 
     window.addEventListener("mousemove", handleDragMove);
@@ -251,7 +263,6 @@ export default function AgentFloat() {
   };
 
   const handleFloatClick = () => {
-    // 如果刚拖动完，不触发点击
     if (dragState.current.moved) {
       dragState.current.moved = false;
       return;
@@ -271,6 +282,9 @@ export default function AgentFloat() {
   const isSnapped = snapped !== "none";
   const showFull = !isSnapped || hovering || open;
 
+  // 拖动时禁用 transition，避免位置延迟
+  const pos = dragging ? posRef.current : renderPos;
+
   return (
     <>
       {/* 悬浮球按钮 — 可拖动，吸附时贴边只露一半 */}
@@ -285,8 +299,9 @@ export default function AgentFloat() {
           fixed z-50
           w-12 h-12 rounded-full
           flex items-center justify-center
-          shadow-lg transition-all duration-300
+          shadow-lg
           select-none overflow-hidden
+          ${dragging ? "" : "transition-all duration-300"}
           ${open
             ? "bg-[var(--color-text-muted)] text-white scale-0 pointer-events-none"
             : "bg-[var(--color-accent)] text-white hover:scale-105 active:scale-95 cursor-grab active:cursor-grabbing"

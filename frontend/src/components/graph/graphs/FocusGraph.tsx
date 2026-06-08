@@ -9,6 +9,7 @@ interface FocusGraphProps {
   data: GraphData;
   selectedNodeId?: string;
   onNodeSelect?: (node: GraphNode) => void;
+  onFocusNode?: (nodeId: string) => void;
   onNodeContextMenu?: (node: GraphNode, e: React.MouseEvent) => void;
   activePath: string[];
   width: number;
@@ -21,7 +22,7 @@ interface FocusGraphProps {
 function buildTree(nodes: GraphNode[]) {
   const children = new Map<string, GraphNode[]>();
   const roots: GraphNode[] = [];
-  const levels = new Set(["partition", "domain", "topic", "concept"]);
+  const levels = new Set(["partition", "domain", "topic", "concept", "atom"]);
   const tree = nodes.filter((n) => levels.has(n.level));
   for (const n of tree) {
     if (n.parent && tree.some((t) => t.id === n.parent)) {
@@ -45,7 +46,7 @@ const V_GAP = 20;
 interface ViewTransform { x: number; y: number; scale: number; }
 
 export default function FocusGraph({
-  data, selectedNodeId, onNodeSelect, onNodeContextMenu, activePath, width, height, searchQuery, matchedNodeIds,
+  data, selectedNodeId, onNodeSelect, onFocusNode, onNodeContextMenu, activePath, width, height, searchQuery, matchedNodeIds,
 }: FocusGraphProps) {
   const { children, roots, treeSet } = useMemo(() => buildTree(data.nodes), [data.nodes]);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -386,9 +387,9 @@ export default function FocusGraph({
                 <line x1={n.x + 8} y1={n.y + CARD_H - 30} x2={n.x + CARD_W - 8} y2={n.y + CARD_H - 30}
                   stroke={isSel ? "rgba(255,255,255,0.12)" : "var(--color-border)"} strokeOpacity={0.4} strokeWidth={0.5} />
 
-                {/* Action: 深入 */}
+                {/* Action: 深入（聚焦到该节点） */}
                 <g className="graph-btn" style={{ cursor: "pointer" }}
-                  onClick={(e) => { e.stopPropagation(); onNodeSelect?.(n); }}>
+                  onClick={(e) => { e.stopPropagation(); onNodeSelect?.(n); onFocusNode?.(n.id); }}>
                   <rect x={n.x + 8} y={n.y + CARD_H - 24} width={52} height={18} rx={3}
                     fill={isSel ? "rgba(255,255,255,0.12)" : "var(--color-surface-hover)"} />
                   <text x={n.x + 18} y={n.y + CARD_H - 12} fontSize={8}

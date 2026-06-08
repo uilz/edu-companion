@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field  # type: ignore
 
 from shared.constants import DEFAULT_USER_ID
 from app.schemas.conversation import TextBlock
-from app.services.common.storage import storage
+from app.services.common import get_data_repo
 from app.services.knowledge.tree_ops import tree_ops
 
 router = APIRouter()
@@ -96,7 +96,7 @@ USER_ID = DEFAULT_USER_ID
 
 # ══════════════════ ETag 辅助 ══════════════════
 def _check_etag(request: Request) -> str | None:
-    etag = storage.get_etag(USER_ID)
+    etag = get_data_repo().get_etag(USER_ID)
     if_none_match = request.headers.get("if-none-match", "")
     if if_none_match == etag:
         raise HTTPException(304)
@@ -105,7 +105,7 @@ def _check_etag(request: Request) -> str | None:
 
 # ══════════════════ 辅助：递归找到最底层对话 ══════════════════
 def _find_default_conversation(user_id: str, level: str, entity_id: str) -> str | None:
-    data = storage.load(user_id)
+    data = get_data_repo().load(user_id)
     if level == "conversation":
         return entity_id
     config = tree_ops.LEVEL_CONFIG[level]
@@ -127,7 +127,7 @@ async def list_nodes(level: str, request: Request, parent_id: str = Query(None),
     if level not in tree_ops.LEVELS:
         raise HTTPException(400, f"Invalid level: {level}")
     etag = _check_etag(request)
-    data = storage.load(USER_ID)
+    data = get_data_repo().load(USER_ID)
     coll_name = tree_ops.LEVEL_CONFIG[level]["collection"]
     collection = getattr(data, coll_name)
     nodes = [n.model_dump(mode="json") for n in collection.values()]
@@ -266,7 +266,7 @@ async def delete_node(level: str, node_id: str):
 
 def _merge_cognitive_ids(messages: list[dict], msg_ids: list[str]) -> None:
     """从 messages 表合并 cognitive_node_ids 到树节点 json 中"""
-    from app.cognitive.storage import get_db
+    from app.db.database import get_db
 
     try:
         db = get_db()
@@ -291,7 +291,7 @@ async def list_messages(
     conv_id: str, request: Request, limit: int = 50, offset: int = 0
 ):
     etag = _check_etag(request)
-    data = storage.load(USER_ID)
+    data = get_data_repo().load(USER_ID)
     conv = data.conversations.get(conv_id)
     if not conv:
         raise HTTPException(404, "Conversation not found")
@@ -315,7 +315,7 @@ async def list_messages(
 
 @router.get("/tree/conversation/{conv_id}/blocks")
 async def get_conversation_blocks(conv_id: str, limit: int = 100):
-    data = storage.load(USER_ID)
+    data = get_data_repo().load(USER_ID)
     conv = data.conversations.get(conv_id)
     blocks = []
     if conv:
@@ -338,7 +338,7 @@ async def send_message_in_conversation(conv_id: str, req: SendMessageRequest):
 
     pid = req.partition_id
     if not pid:
-        data = storage.load(USER_ID)
+        data = get_data_repo().load(USER_ID)
         conv = data.conversations.get(conv_id)
         if not conv:
             raise HTTPException(404, "Conversation not found")
@@ -367,7 +367,7 @@ async def send_message_in_conversation(conv_id: str, req: SendMessageRequest):
 
 @router.get("/tree/message/{message_id}")
 async def get_message(message_id: str):
-    data = storage.load(USER_ID)
+    data = get_data_repo().load(USER_ID)
     node = data.nodes.get(message_id)
     if not node:
         raise HTTPException(404, "Message not found")
@@ -397,7 +397,7 @@ async def switch_version(message_id: str, req: dict | None = None):
     direction = req.get("direction")
     target_index = req.get("target_index")
 
-    data = storage.load(USER_ID)
+    data = get_data_repo().load(USER_ID)
     node = data.nodes.get(message_id)
     if not node:
         raise HTTPException(404, "Message not found")
@@ -471,7 +471,7 @@ async def switch_version(message_id: str, req: dict | None = None):
     # 5) 保存并返回
     conv.path = new_path
     conv.summary_dirty = True
-    storage.save(USER_ID, data)
+    get_data_repo().save(USER_ID, data)
 
     messages = []
     for nid in new_path:
@@ -495,7 +495,7 @@ async def modify_message(message_id: str, req: ModifyMessageRequest):
         if block.get("type") == "text"
     ]
     node = tree_ops.modify_message(USER_ID, message_id, blocks, req.text_summary)
-    data = storage.load(USER_ID)
+    data = get_data_repo().load(USER_ID)
     parent = data.nodes.get(node.parent_id) if node.parent_id else None
     all_siblings = parent.children_ids if parent else []
     version_count = sum(
@@ -510,10 +510,9 @@ async def modify_message(message_id: str, req: ModifyMessageRequest):
 async def reply_to_edited_message(message_id: str):
     """编辑消息后重新生成 AI 回复"""
     from app.services.llm.tool_dispatch import generate_reply_with_tools
-    from app.services.knowledge.cognitive_sync import _p0_post_message_hooks
     from app.schemas.conversation import TextBlock
 
-    data = storage.load(USER_ID)
+    data = get_data_repo().load(USER_ID)
     node = data.nodes.get(message_id)
     if not node or node.role != "user":
         raise HTTPException(400, "Can only reply to user messages")
@@ -564,11 +563,11 @@ async def reply_to_edited_message(message_id: str):
     )
 
     # 回填 message_id
-    data = storage.load(USER_ID)
+    data = get_data_repo().load(USER_ID)
     for block in response_blocks:
         if block.id in data.response_blocks:
             data.response_blocks[block.id].message_id = assistant_node.id
-    storage.save(USER_ID, data)
+    get_data_repo().save(USER_ID, data)
 
     return {
         "assistant_message": assistant_node.model_dump(mode="json"),
@@ -647,7 +646,7 @@ async def upload_workspace_file(
     if not file.filename:
         raise HTTPException(400, "No file selected")
 
-    data = storage.load(USER_ID)
+    data = get_data_repo().load(USER_ID)
     conv = data.conversations.get(conversation_id)
     if not conv:
         raise HTTPException(404, "Conversation not found")
@@ -681,7 +680,7 @@ async def upload_workspace_file(
         file_type=file_type,
     )
     data.files[file_id] = record
-    storage.save(USER_ID, data)
+    get_data_repo().save(USER_ID, data)
 
     return {"file_id": file_id, "original_name": file.filename, "file_type": file_type}
 

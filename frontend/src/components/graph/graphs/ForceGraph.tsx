@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useEffect, useState, useCallback } from "react";
+import React, { useRef, useEffect } from "react";
 import * as d3 from "d3";
 import type { GraphData, LayoutNode, GraphNode } from "@/lib/types/graph-types";
 import { getMasteryColor, getNodeRadius } from "@/lib/types/graph-types";
@@ -24,30 +24,31 @@ export default function ForceGraph({
 }: ForceGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [nodes, setNodes] = useState<LayoutNode[]>([]);
-  const simulationRef = useRef<d3.Simulation<LayoutNode, undefined> | null>(null);
+  // 用 ref 存储 onNodeSelect / onNodeContextMenu 避免频繁重建 simulation
+  const onNodeSelectRef = useRef(onNodeSelect);
+  onNodeSelectRef.current = onNodeSelect;
+  const onNodeContextMenuRef = useRef(onNodeContextMenu);
+  onNodeContextMenuRef.current = onNodeContextMenu;
 
-  // Initialize layout
+  // 用 ref 存储 selectedNodeId 避免选中节点时重建 simulation
+  const selectedNodeIdRef = useRef(selectedNodeId);
+  selectedNodeIdRef.current = selectedNodeId;
+
+  // 单一 effect：每次 data/width/height 变化时重建整个 simulation
   useEffect(() => {
-    if (!data.nodes.length) return;
+    if (!data.nodes.length || !svgRef.current) return;
 
+    const svg = d3.select(svgRef.current);
+    svg.selectAll("*").remove();
+
+    // 初始化节点位置
     const layoutNodes: LayoutNode[] = data.nodes.map((n) => ({
       ...n,
       x: width / 2 + (Math.random() - 0.5) * width * 0.5,
       y: height / 2 + (Math.random() - 0.5) * height * 0.5,
     }));
 
-    setNodes(layoutNodes);
-  }, [data, width, height]);
-
-  // D3 simulation
-  useEffect(() => {
-    if (!nodes.length || !svgRef.current) return;
-
-    const svg = d3.select(svgRef.current);
-    svg.selectAll("*").remove();
-
-    // Define arrow markers
+    // Arrow marker
     svg
       .append("defs")
       .append("marker")
@@ -62,6 +63,7 @@ export default function ForceGraph({
       .attr("d", "M0,-5L10,0L0,5")
       .attr("fill", "var(--color-border)");
 
+    // Edges
     const linkElements = svg
       .append("g")
       .selectAll("line")
@@ -72,10 +74,11 @@ export default function ForceGraph({
       .attr("stroke-opacity", 0.6)
       .attr("marker-end", "url(#arrow)");
 
+    // Nodes
     const nodeGroup = svg
       .append("g")
       .selectAll("g")
-      .data(nodes)
+      .data(layoutNodes)
       .join("g")
       .style("cursor", "pointer")
       .call(
@@ -102,9 +105,9 @@ export default function ForceGraph({
       .attr("r", (d) => getNodeRadius(d.level))
       .attr("fill", (d) => getMasteryColor(d.mastery))
       .attr("stroke", (d) =>
-        d.id === selectedNodeId ? "var(--color-accent)" : "var(--color-surface)"
+        d.id === selectedNodeIdRef.current ? "var(--color-accent)" : "var(--color-surface)"
       )
-      .attr("stroke-width", (d) => (d.id === selectedNodeId ? 3 : 1.5))
+      .attr("stroke-width", (d) => (d.id === selectedNodeIdRef.current ? 3 : 1.5))
       .attr("opacity", 0.9);
 
     // Node labels
@@ -117,22 +120,22 @@ export default function ForceGraph({
       .attr("fill", "var(--color-text)")
       .attr("opacity", 0.8);
 
-    // Click handler
+    // Click handler (use ref to avoid stale closure)
     nodeGroup.on("click", (event, d) => {
       event.stopPropagation();
-      onNodeSelect?.(d);
+      onNodeSelectRef.current?.(d);
     });
 
     // Right-click handler
     nodeGroup.on("contextmenu", (event, d) => {
       event.preventDefault();
       event.stopPropagation();
-      onNodeContextMenu?.(d, event);
+      onNodeContextMenuRef.current?.(d, event);
     });
 
     // Simulation
     const simulation = d3
-      .forceSimulation<LayoutNode>(nodes)
+      .forceSimulation<LayoutNode>(layoutNodes)
       .force(
         "link",
         d3
@@ -154,12 +157,10 @@ export default function ForceGraph({
         nodeGroup.attr("transform", (d) => `translate(${d.x},${d.y})`);
       });
 
-    simulationRef.current = simulation;
-
     return () => {
       simulation.stop();
     };
-  }, [nodes, data.edges, selectedNodeId, onNodeSelect, width, height]);
+  }, [data, width, height]);
 
   return (
     <div ref={containerRef} className="w-full h-full">

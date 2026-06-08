@@ -6,7 +6,7 @@ import asyncio
 import logging
 import time
 from app.schemas.conversation import BackgroundJob
-from app.services.common.storage import storage
+from app.services.common import get_data_repo
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +30,9 @@ class BackgroundJobManager:
         self._jobs[job.id] = job
 
         # 保存到存储
-        data = storage.load(user_id)
+        data = get_data_repo().load(user_id)
         data.background_jobs[job.id] = job
-        storage.save(user_id, data)
+        get_data_repo().save(user_id, data)
 
         # 异步执行
         task = asyncio.create_task(self._run_job(user_id, job.id))
@@ -59,13 +59,13 @@ class BackgroundJobManager:
             job.completed_at = time.time()
 
             # 更新关联的 ResponseBlock
-            data = storage.load(user_id)
+            data = get_data_repo().load(user_id)
             block = data.response_blocks.get(job.block_id)
             if block:
                 block.status = "ready"
                 block.content.update(result)
                 block.updated_at = time.time()
-            storage.save(user_id, data)
+            get_data_repo().save(user_id, data)
 
         except Exception as e:
             logger.error("Job %s failed: %s", job_id, e)
@@ -74,21 +74,21 @@ class BackgroundJobManager:
             job.completed_at = time.time()
 
             # 更新关联的 ResponseBlock
-            data = storage.load(user_id)
+            data = get_data_repo().load(user_id)
             block = data.response_blocks.get(job.block_id)
             if block:
                 block.status = "failed"
                 block.content["error"] = str(e)
                 block.updated_at = time.time()
-            storage.save(user_id, data)
+            get_data_repo().save(user_id, data)
 
     def _save_job(self, user_id: str, job: BackgroundJob):
-        data = storage.load(user_id)
+        data = get_data_repo().load(user_id)
         data.background_jobs[job.id] = job
-        storage.save(user_id, data)
+        get_data_repo().save(user_id, data)
 
     def get_job(self, user_id: str, job_id: str) -> BackgroundJob | None:
-        data = storage.load(user_id)
+        data = get_data_repo().load(user_id)
         return data.background_jobs.get(job_id)
 
     async def cancel(self, user_id: str, job_id: str) -> bool:

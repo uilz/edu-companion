@@ -4,7 +4,7 @@
 
 Data sources (Phase 16 S7):
   - cognitive_nodes 表：掌握度、练习汇总、推荐 (Primary)
-  - attempts 表：每日统计、日历 (DB-backed via AttemptRepo)
+  - practice_attempts 表：每日统计、日历 (DB-backed)
 """
 
 from __future__ import annotations
@@ -15,8 +15,8 @@ from typing import Any
 from fastapi import APIRouter
 
 from shared.learner_model import learner_engine
-from app.db.repository import AttemptRepo
 from app.schemas.learner import ProgressSummary
+from app.db.database import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +57,8 @@ def _build_progress_from_cognitive(user_id: str) -> ProgressSummary | None:
     返回 None 表示无认知节点数据。
     """
     try:
-        from app.cognitive.storage import list_all_nodes
-        nodes = list_all_nodes(user_id)
+        from app.cognitive import get_repo
+        nodes = get_repo().list_all_nodes(user_id)
         if not nodes:
             return None
 
@@ -116,8 +116,8 @@ def _build_progress_from_cognitive(user_id: str) -> ProgressSummary | None:
 def _list_cognitive_nodes(user_id: str) -> list[dict[str, Any]]:
     """列出用户的所有 CognitiveNode，返回精简 dict 列表"""
     try:
-        from app.cognitive.storage import list_all_nodes
-        nodes = list_all_nodes(user_id)
+        from app.cognitive import get_repo
+        nodes = get_repo().list_all_nodes(user_id)
         result = []
         for n in nodes:
             mu = n.belief.proficiency_mean if n.belief else 0.0
@@ -141,8 +141,8 @@ def _get_weak_nodes(
 ) -> list[dict[str, Any]]:
     """获取最弱的 N 个节点（按 proficiency_mean 升序）"""
     try:
-        from app.cognitive.storage import list_all_nodes
-        nodes = list_all_nodes(user_id)
+        from app.cognitive import get_repo
+        nodes = get_repo().list_all_nodes(user_id)
         rated = []
         for n in nodes:
             if n.belief and n.practice_summary and n.practice_summary.total_attempts > 0:
@@ -231,9 +231,13 @@ async def get_detailed_stats(user_id: str) -> dict[str, Any]:
         daily_stats[date_str] = {"total": 0, "correct": 0}
 
     try:
-        attempts = await AttemptRepo.list_all(user_id)
+        db = get_db()
+        attempts = db.fetchall(
+            "SELECT * FROM practice_attempts WHERE user_id = %s AND created_at >= %s ORDER BY created_at",
+            (user_id, (datetime.now() - timedelta(days=7)).isoformat()),
+        )
         for a in attempts:
-            ts = a.get("submitted_at", "")
+            ts = a.get("created_at", "") or a.get("submitted_at", "")
             if ts:
                 date_str = ts[:10]
                 if date_str in daily_stats:
@@ -288,7 +292,11 @@ async def get_calendar(
 
     # 查询当月所有 attempts
     try:
-        attempts = await AttemptRepo.list_all(user_id, since=since)
+        db = get_db()
+        attempts = db.fetchall(
+            "SELECT * FROM practice_attempts WHERE user_id = %s AND created_at >= %s AND created_at <= %s ORDER BY created_at",
+            (user_id, since, until + "T23:59:59"),
+        )
     except Exception:
         attempts = []
 
@@ -297,7 +305,7 @@ async def get_calendar(
     daily: dict[str, dict[str, int]] = defaultdict(lambda: {"total": 0, "correct": 0})
 
     for a in attempts:
-        ts = a.get("submitted_at", "")
+        ts = a.get("created_at", "") or a.get("submitted_at", "")
         if not ts:
             continue
         date_key = ts[:10]  # "2026-05-19"
@@ -372,14 +380,18 @@ async def get_daily_summary(user_id: str) -> dict[str, Any]:
 
     # 查昨日 attempts
     try:
-        attempts = await AttemptRepo.list_all(user_id, since=yesterday)
+        db = get_db()
+        attempts = db.fetchall(
+            "SELECT * FROM practice_attempts WHERE user_id = %s AND created_at >= %s AND created_at < %s",
+            (user_id, yesterday, (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")),
+        )
     except Exception:
         return {}
 
     yesterday_total = 0
     yesterday_correct = 0
     for a in attempts:
-        ts = a.get("submitted_at", "")
+        ts = a.get("created_at", "") or a.get("submitted_at", "")
         if ts and ts[:10] == yesterday:
             yesterday_total += 1
             if a.get("is_correct"):

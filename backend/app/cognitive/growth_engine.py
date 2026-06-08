@@ -11,11 +11,8 @@ from __future__ import annotations
 import logging
 from uuid import uuid4
 
+from app.cognitive import get_repo
 from app.cognitive.models import CognitiveNode
-from app.cognitive.storage import (
-    find_node_by_path, get_node, get_visible_children, upsert_node,
-    vector_search,
-)
 from app.cognitive.edge_models import KnowledgeEdge
 from app.cognitive.edge_storage import upsert_edge
 
@@ -59,7 +56,7 @@ class GrowthEngine:
             current_path = seg if i == 0 else current_path + "." + seg
             seg_level = LEVEL_ORDER[i]
 
-            existing = find_node_by_path(current_path, user_id)
+            existing = get_repo().find_node_by_path(current_path, user_id)
             if existing:
                 parent_id = existing.id
                 continue
@@ -78,7 +75,7 @@ class GrowthEngine:
                 is_visible=(seg_level == "partition"),  # 分区本身可见
                 subsystems={"growth": {"state": "initial", "ancestor_completed": True}},
             )
-            upsert_node(node, user_id)
+            get_repo().upsert_node(node, user_id)
             created_ids.append(node_id)
             parent_id = node_id
 
@@ -98,11 +95,11 @@ class GrowthEngine:
             "visible_count": N,
         }, ...]
         """
-        visible = get_visible_children(parent_node_id, user_id)
+        visible = get_repo().get_visible_children(parent_node_id, user_id)
         if len(visible) < 3:
             return []
 
-        parent = get_node(parent_node_id, user_id)
+        parent = get_repo().get_node(parent_node_id, user_id)
         if not parent:
             return []
 
@@ -128,7 +125,7 @@ class GrowthEngine:
             return
 
         # 检索相似节点
-        similar = vector_search(
+        similar = get_repo().vector_search(
             node.embedding, user_id,
             min_similarity=0.75, limit=5,
         )

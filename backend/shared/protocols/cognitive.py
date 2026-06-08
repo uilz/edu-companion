@@ -53,6 +53,17 @@ class CognitiveNodeRepository(Protocol):
         """向量搜索节点"""
         ...
 
+    def vector_search(
+        self,
+        query_embedding: list[float],
+        user_id: str = "default",
+        level: str | None = None,
+        limit: int = 10,
+        min_similarity: float = 0.1,
+    ) -> list[dict]:
+        """向量检索：按余弦相似度计算（Python 端 fallback）"""
+        ...
+
     def find_node_by_path(self, path_id: str, user_id: str = "default") -> Optional[CognitiveNode]:
         """通过 path_id 查找节点"""
         ...
@@ -119,4 +130,21 @@ class CognitiveNodeRepository(Protocol):
         error_type: str = "",
     ) -> dict:
         """从练习事件同步到认知节点"""
+        ...
+
+    # ── Writer helpers ──
+
+    def update_extra_fields(
+        self,
+        node_id: str,
+        user_id: str,
+        created_by: str,
+        description: str = "",
+        metadata: str = "",
+    ) -> None:
+        """写入 pydantic model 未声明的额外 DB 字段"""
+        ...
+
+    def add_to_parent_children(self, node_id: str, parent_id: str, user_id: str = "default") -> None:
+        """将 node_id 追加到父节点 children 列表（去重）"""
         ...

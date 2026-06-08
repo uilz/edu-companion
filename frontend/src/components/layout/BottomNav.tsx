@@ -3,7 +3,6 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  LayoutDashboard,
   Dumbbell,
   MessageSquare,
   GitGraph,
@@ -20,7 +19,6 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { href: '/dashboard', label: '驾驶舱', icon: LayoutDashboard },
   { href: '/learn', label: '学习空间', icon: MessageSquare },
   { href: '/practice', label: '练习', icon: Dumbbell },
   { href: '/knowledge-tree', label: '知识树', icon: GitGraph },

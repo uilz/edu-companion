@@ -6,15 +6,17 @@ import {
   Plus, X, RefreshCw,
   Loader2, Sparkles, ZoomIn, ZoomOut, Maximize,
   Edit3, Check, AlertCircle,
+  MessageCircle, Bot, Send,
 } from "lucide-react";
 
 import { fetchGraphData, fetchPartitions } from "@/lib/api/graph-api";
 import type { GraphData, GraphNode } from "@/lib/types/graph-types";
-import { getMasteryColor } from "@/lib/types/graph-types";
+import { getMasteryColor, filterByLevel, subtreeFilter, getNodeAncestors, findNodeById } from "@/lib/types/graph-types";
 import FocusGraph from "@/components/graph/graphs/FocusGraph";
 import ForceGraph from "@/components/graph/graphs/ForceGraph";
 import DAGGraph from "@/components/graph/graphs/DAGGraph";
 import NodeDetailPanel from "@/components/graph/panels/NodeDetailPanel";
+import FloatingNodeCard from "@/components/graph/panels/FloatingNodeCard";
 import LayerPanel from "./LayerPanel";
 import DialogContainer from "./DialogContainer";
 import ContextMenu, { getDefaultContextMenuItems } from "./ContextMenu";
@@ -57,19 +59,6 @@ function loadLayout(): LayoutPreference {
 
 function saveLayout(pref: LayoutPreference) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(pref)); } catch {}
-}
-
-// ── 工具：按层级过滤 ──
-function filterByLevel(data: GraphData, maxLevel: string | undefined): GraphData {
-  if (!maxLevel || !data?.nodes?.length) return data;
-  const LEVEL_ORDER: Record<string, number> = { partition: 0, domain: 1, topic: 2, concept: 3, atom: 4 };
-  const max = LEVEL_ORDER[maxLevel] ?? 99;
-  // 多包含一级子节点，保证 concept 下能看到 atom
-  const effectiveMax = Math.min(max + 1, 4);
-  const filtered = data.nodes.filter(n => (LEVEL_ORDER[n.level] ?? 99) <= effectiveMax);
-  const ids = new Set(filtered.map(n => n.id));
-  const edges = data.edges.filter(e => ids.has(e.source) && ids.has(e.target));
-  return { nodes: filtered, edges };
 }
 
 // ── Loading 骨架屏 ──
@@ -386,6 +375,25 @@ export default function KnowledgeTreePage() {
   // ── 掌握度筛选 ──
   const [masteryFilter, setMasteryFilter] = useState<Set<string>>(new Set(["mastered", "learning", "untouched"]));
 
+  // ── 聚焦根节点：以某节点为根展示子树 ──
+  const [focusRootId, setFocusRootId] = useState<string | undefined>(undefined);
+
+  // 聚焦面包屑：当前聚焦节点的祖先链
+  const focusBreadcrumb = useMemo(() => {
+    if (!focusRootId || !graphData) return [];
+    return getNodeAncestors(graphData, focusRootId);
+  }, [focusRootId, graphData]);
+
+  // 从聚焦模式回到全局视图
+  const handleClearFocus = useCallback(() => {
+    setFocusRootId(undefined);
+  }, []);
+
+  // 设置聚焦：双击节点或从菜单触发
+  const handleSetFocus = useCallback((nodeId: string) => {
+    setFocusRootId(nodeId);
+  }, []);
+
   // ── 内联编辑 ──
   const [inlineEditNode, setInlineEditNode] = useState<GraphNode | null>(null);
   const [inlineEditLabel, setInlineEditLabel] = useState("");
@@ -680,6 +688,9 @@ export default function KnowledgeTreePage() {
         // 触发讲解（交由现有机制处理）
         setSelectedNode(node);
         break;
+      case "focus":
+        handleSetFocus(node.id);
+        break;
       case "delete":
         if (confirm(`确定删除节点「${node.label}」？此操作不可撤销。`)) {
           fetch(`${API_BASE}/api/knowledge/graph/${partitionId}/node/${node.id}`, { method: "DELETE" })
@@ -747,6 +758,29 @@ export default function KnowledgeTreePage() {
         onToggleLayer={() => { setLayerOpen(!layerOpen); setLayoutPref(p => ({ ...p, layerOpen: !layerOpen })); }}
       />
 
+      {/* ═══════ 聚焦面包屑 ═══════ */}
+      {focusRootId && (
+        <div className="flex-shrink-0 flex items-center gap-1.5 px-4 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-page-secondary)] text-[11px] text-[var(--color-text-muted)]">
+          <button onClick={handleClearFocus}
+            className="text-[var(--color-accent)] hover:underline font-medium">
+            全局视图
+          </button>
+          <span className="text-[var(--color-text-muted)] mx-0.5">›</span>
+          {focusBreadcrumb.map((ancestor) => (
+            <span key={ancestor.id} className="flex items-center gap-1">
+              <button onClick={() => handleSetFocus(ancestor.id)}
+                className="hover:text-[var(--color-accent)] hover:underline transition-colors">
+                {ancestor.label}
+              </button>
+              <span className="text-[var(--color-text-muted)] mx-0.5">›</span>
+            </span>
+          ))}
+          <span className="text-[var(--color-text)] font-medium">
+            {findNodeById(graphData!, focusRootId)?.label || "当前聚焦"}
+          </span>
+        </div>
+      )}
+
       {/* ═══════ 主区域 ═══════ */}
       <div className="flex flex-1 overflow-hidden">
         {/* 对话面板 — 侧栏式 */}
@@ -800,9 +834,10 @@ export default function KnowledgeTreePage() {
               style={{ transform: `scale(${zoomLevel})`, transformOrigin: "top left" }}>
               {graphMode === "mindmap" && (
                 <FocusGraph
-                  data={filterByLevel(graphData, maxDisplayLevel)}
+                  data={filterByLevel(subtreeFilter(graphData, focusRootId), maxDisplayLevel)}
                   selectedNodeId={selectedNode?.id}
                   onNodeSelect={handleNodeSelect}
+                  onFocusNode={handleSetFocus}
                   onNodeContextMenu={handleNodeContextMenu}
                   activePath={[]}
                   width={graphSize.width}
@@ -813,7 +848,7 @@ export default function KnowledgeTreePage() {
               )}
               {graphMode === "force" && (
                 <ForceGraph
-                  data={filterByLevel(graphData, maxDisplayLevel)}
+                  data={filterByLevel(subtreeFilter(graphData, focusRootId), maxDisplayLevel)}
                   selectedNodeId={selectedNode?.id}
                   onNodeSelect={handleNodeSelect}
                   onNodeContextMenu={handleNodeContextMenu}
@@ -823,7 +858,7 @@ export default function KnowledgeTreePage() {
               )}
               {graphMode === "dag" && (
                 <DAGGraph
-                  data={filterByLevel(graphData, maxDisplayLevel)}
+                  data={filterByLevel(subtreeFilter(graphData, focusRootId), maxDisplayLevel)}
                   selectedNodeId={selectedNode?.id}
                   onNodeSelect={handleNodeSelect}
                   onNodeContextMenu={handleNodeContextMenu}
@@ -902,6 +937,20 @@ export default function KnowledgeTreePage() {
           </>
         )}
       </div>
+
+      {/* ═══════ 浮动节点卡片（详情面板关闭时显示） ═══════ */}
+      {!layoutPref.showDetailPanel && selectedNode && (
+        <FloatingNodeCard
+          node={selectedNode}
+          partitionId={partitionId}
+          onClose={() => setSelectedNode(null)}
+          onNodeUpdated={loadGraph}
+          onStartPractice={() => {}}
+          onRequestExplain={() => {}}
+          parentNode={selectedNode?.parent ? graphData?.nodes.find(n => n.id === selectedNode.parent) ?? null : null}
+          onNavigateToParent={(parent) => { setSelectedNode(parent); }}
+        />
+      )}
 
       {/* ═══════ 状态栏 ═══════ */}
       <StatusBar
@@ -1049,6 +1098,7 @@ export default function KnowledgeTreePage() {
             onAiEdit: () => handleContextMenuAction("ai-edit"),
             onLinkConversation: () => handleContextMenuAction("link"),
             onExplain: () => handleContextMenuAction("explain"),
+            onFocus: () => handleContextMenuAction("focus"),
             onDelete: () => handleContextMenuAction("delete"),
           })}
           onClose={() => setContextMenu(null)}
@@ -1332,12 +1382,17 @@ function FloatDialogWrapper({
   onNodeUpdated: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [msgs, setMsgs] = useState<{ role: "ai" | "user"; text: string }[]>([
-    { role: "ai", text: "你好！我是知识树助手，可以帮你总结、推荐学习路径、管理节点。请问有什么需要？" },
-  ]);
+  const [msgs, setMsgs] = useState<{ role: "ai" | "user"; text: string }[]>([]);
   const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
 
-  // ── 拖动状态 ──
+  // 自动滚动
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+  }, [msgs]);
+
+  // 拖动
   const btnRef = useRef<HTMLButtonElement>(null);
   const dragRef = useRef({ dragging: false, moved: false, startX: 0, startY: 0, startLeft: 0, startTop: 0 });
   const SNAP_THRESHOLD = 30;
@@ -1352,18 +1407,10 @@ function FloatDialogWrapper({
     return "right";
   });
 
-  const snapX = (x: number): { x: number; side: "left" | "right" } | null => {
-    const vw = window.innerWidth;
-    if (x < 60) return { x: -26, side: "left" };
-    if (x > vw - 52 - 60) return { x: vw - 26, side: "right" };
-    return null;
-  };
-
   const handleDragStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
     const cx = "touches" in e ? e.touches[0].clientX : e.clientX;
     const cy = "touches" in e ? e.touches[0].clientY : e.clientY;
-    // 如果当前吸附，先脱离吸附
     let adjustedX = pos.x;
     if (snapped === "left") adjustedX = 8;
     else if (snapped === "right") adjustedX = window.innerWidth - 60;
@@ -1388,20 +1435,18 @@ function FloatDialogWrapper({
     };
     const onUp = () => {
       if (!dragRef.current.dragging) return;
-      const wasMoved = dragRef.current.moved;
       dragRef.current.dragging = false;
-      if (wasMoved) {
+      if (dragRef.current.moved) {
         setPos(prev => {
-          const result = snapX(prev.x);
-          if (result) {
-            setSnapped(result.side);
-            const s = { x: result.x, y: prev.y };
-            try { localStorage.setItem(POS_KEY, JSON.stringify(s)); } catch {}
-            return s;
-          }
-          setSnapped("none");
-          try { localStorage.setItem(POS_KEY, JSON.stringify(prev)); } catch {}
-          return prev;
+          const vw = window.innerWidth;
+          let newX = prev.x;
+          let newSnap: "none" | "left" | "right" = "none";
+          if (prev.x < 60) { newX = -26; newSnap = "left"; }
+          else if (prev.x > vw - 52 - 60) { newX = vw - 26; newSnap = "right"; }
+          setSnapped(newSnap);
+          const s = { x: newX, y: prev.y };
+          try { localStorage.setItem(POS_KEY, JSON.stringify(s)); } catch {}
+          return s;
         });
       }
     };
@@ -1417,25 +1462,38 @@ function FloatDialogWrapper({
     setOpen(!open);
   };
 
-  // 吸附时 hover 恢复完整显示
+  const isNodeMode = dialogState?.type === "tree_exploration" && !!dialogState.boundNode;
+
+  const send = async () => {
+    if (!input.trim() || sending) return;
+    const text = input.trim();
+    setMsgs(p => [...p, { role: "user", text }]);
+    setInput("");
+    setSending(true);
+    try {
+      if (dialogState && dialogState.conversationId) {
+        const res = await fetch(`${API_BASE}/api/conversations/tree/conversation/${dialogState.conversationId}/message`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, partition_id: partitionId }),
+        });
+        const data = await res.json();
+        setMsgs(p => [...p, { role: "ai", text: data.response || data.text || "（收到）" }]);
+      } else {
+        // 没有对话时模拟回复
+        setMsgs(p => [...p, { role: "ai", text: `你好！已收到关于「${text}」的消息。可以点击右侧节点选择具体知识点进行深入学习。` }]);
+      }
+    } catch {
+      setMsgs(p => [...p, { role: "ai", text: "发送失败，请重试。" }]);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // 吸附 + hover 恢复
   const [hovering, setHovering] = useState(false);
   const isSnapped = snapped !== "none";
   const showFull = !isSnapped || hovering || open;
-
-  const send = async () => {
-    if (!input.trim()) return;
-    setMsgs(p => [...p, { role: "user", text: input.trim() }]);
-    setInput("");
-    setMsgs(p => [...p, { role: "ai", text: "正在思考…" }]);
-    // 模拟回复
-    setTimeout(() => {
-      setMsgs(p => {
-        const arr = [...p];
-        arr[arr.length - 1] = { role: "ai", text: `好的，已收到关于「${input.trim()}」的消息。我可以帮你总结相关知识点或推荐学习路径。` };
-        return arr;
-      });
-    }, 800);
-  };
 
   return (
     <>
@@ -1447,107 +1505,83 @@ function FloatDialogWrapper({
         onMouseLeave={() => setHovering(false)}
         className="fixed w-[52px] h-[52px] rounded-full bg-[var(--color-accent)] text-white border-none cursor-pointer flex items-center justify-center shadow-lg z-50 hover:scale-105 transition-all duration-300 overflow-hidden"
         style={{
-          left: isSnapped
-            ? (showFull ? (snapped === "left" ? 8 : pos.x - 18) : pos.x)
-            : pos.x,
+          left: isSnapped ? (showFull ? (snapped === "left" ? 8 : pos.x - 18) : pos.x) : pos.x,
           top: `${pos.y}px`,
-          transform: isSnapped && !showFull
-            ? "scaleX(0.6)"
-            : undefined,
-          borderRadius: isSnapped && !showFull
-            ? (snapped === "left" ? "50% 4px 4px 50%" : "4px 50% 50% 4px")
-            : undefined,
         }}>
         {open ? (
           <X size={20} />
         ) : (
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="6" y="6" width="14" height="14" rx="3"/><circle cx="14" cy="10" r="1.5"/><path d="M10 14c0-1.5 2-2.5 4-2.5s4 1 4 2.5"/>
-          </svg>
+          <MessageCircle size={22} />
         )}
       </button>
 
       {open && (
-        <div className="fixed w-[380px] h-[520px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-2xl z-50 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-200"
-          style={{ left: `${Math.min(snapped === "left" ? 12 : pos.x, window.innerWidth - 400)}px`, bottom: `${window.innerHeight - pos.y + 8}px` }}>
+        <div className="fixed w-[380px] max-h-[560px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-2xl z-50 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-200"
+          style={{
+            left: `${Math.min(snapped === "left" ? 12 : pos.x, window.innerWidth - 400)}px`,
+            bottom: `${window.innerHeight - pos.y + 8}px`,
+          }}>
           {/* 头部 */}
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-surface)]">
-            <div className="flex items-center gap-1.5">
-              <div className="w-7 h-7 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center text-xs">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--color-accent)]">
-                  <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
-                </svg>
-              </div>
-              <span className="text-xs font-medium text-[var(--color-text)]">知识树助手</span>
-            </div>
-            <span
-              onClick={() => {
-                if (dialogState?.type === "tree_exploration" && dialogState.boundNode) {
-                  // 切换到分区级探索
-                  onDialogStateChange({
-                    type: "tree_exploration",
-                    conversationId: "",
-                    parentId: partitionId,
-                    parentType: "partition",
-                    boundNode: null,
-                  });
-                } else if (selectedNode) {
-                  // 切换到节点探索
-                  onDialogStateChange({
-                    type: "tree_exploration",
-                    conversationId: "",
-                    parentId: partitionId,
-                    parentType: "partition",
-                    boundNode: selectedNode,
-                  });
-                } else {
-                  onDialogStateChange(null);
-                }
-              }}
-              className="ml-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[var(--color-accent)]/10 text-[var(--color-accent)] cursor-pointer hover:bg-[var(--color-accent)]/20 transition-colors"
-            >
-              {dialogState?.boundNode ? "📍 节点探索" : dialogState?.type === "temporary" ? "💬 临时" : "🌐 全局对话"}
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--color-border)] flex-shrink-0">
+            <MessageCircle size={15} className="text-[var(--color-accent)]" />
+            <span className="text-xs font-medium text-[var(--color-text)]">
+              {isNodeMode ? "节点探索" : "知识树助手"}
             </span>
-            <button onClick={() => setOpen(false)} className="ml-auto p-1 rounded hover:bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors">
-              <X size={14} />
-            </button>
+            {isNodeMode && dialogState?.boundNode && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)] truncate max-w-[100px]">
+                {dialogState.boundNode.label}
+              </span>
+            )}
           </div>
 
-          {/* 对话内容 */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {/* 消息列表 */}
+          <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
+            {msgs.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-full text-center gap-2 py-6">
+                <Bot size={24} className="text-[var(--color-accent)] opacity-40" />
+                <p className="text-xs text-[var(--color-text-muted)]">
+                  {isNodeMode ? "选中节点后会自动进入探索模式" : "点击节点选择具体知识点"}
+                </p>
+              </div>
+            )}
             {msgs.map((msg, i) => (
-              <div key={i} className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : ""} ${msg.role === "user" ? "" : "max-w-[90%]"}`}>
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 ${
-                  msg.role === "user" ? "bg-[var(--color-accent)]/20 text-[var(--color-accent)]" : "bg-[var(--color-page-secondary)]"
+              <div key={i} className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : ""}`} style={{ maxWidth: "92%" }}>
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs shrink-0 ${
+                  msg.role === "user" ? "bg-[var(--color-accent)]/10" : "bg-[var(--color-page-secondary)]"
                 }`}>
                   {msg.role === "user" ? "👤" : "🤖"}
                 </div>
-                <div className={`px-3 py-2 rounded-xl text-xs leading-relaxed ${
+                <div className={`px-3 py-2 text-[11px] leading-relaxed whitespace-pre-wrap rounded-xl ${
                   msg.role === "user"
-                    ? "bg-[var(--color-accent)]/10 text-[var(--color-text)]"
-                    : "bg-[var(--color-page-secondary)] border border-[var(--color-border)] text-[var(--color-text)]"
+                    ? "bg-[var(--color-accent)] text-white rounded-tr-md"
+                    : "bg-[var(--color-page-secondary)] border border-[var(--color-border)] text-[var(--color-text)] rounded-tl-md"
                 }`}>
                   {msg.text}
                 </div>
               </div>
             ))}
+            {sending && (
+              <div className="flex gap-2" style={{ maxWidth: "92%" }}>
+                <div className="w-6 h-6 rounded-full bg-[var(--color-page-secondary)] flex items-center justify-center text-xs shrink-0">🤖</div>
+                <div className="px-3 py-2 rounded-xl rounded-tl-md border border-[var(--color-border)] bg-[var(--color-page-secondary)]">
+                  <Loader2 size={12} className="animate-spin text-[var(--color-text-muted)]" />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 输入区 */}
-          <div className="px-4 py-3 border-t border-[var(--color-border)] flex gap-2 bg-[var(--color-surface)]">
-            <input
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && send()}
-              placeholder={dialogState?.boundNode ? "询问此节点相关…" : dialogState?.type === "temporary" ? "临时对话…" : "向知识树提问…"}
-              className="flex-1 px-3 py-2 text-xs border border-[var(--color-border)] rounded-lg bg-[var(--color-page-secondary)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] transition-colors"
-            />
-            <button onClick={send}
-              className="px-3 py-2 bg-[var(--color-accent)] text-white rounded-lg hover:opacity-90 transition-opacity">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4z"/>
-              </svg>
-            </button>
+          <div className="flex-shrink-0 px-4 py-3 border-t border-[var(--color-border)] bg-[var(--color-surface)]">
+            <div className="flex items-center gap-2">
+              <input value={input} onChange={e => setInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && send()}
+                placeholder="输入消息…"
+                className="flex-1 px-3 py-2 text-[12px] border border-[var(--color-border)] rounded-lg bg-[var(--color-page-secondary)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors" />
+              <button onClick={send} disabled={sending || !input.trim()}
+                className="p-2 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity">
+                {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+              </button>
+            </div>
           </div>
         </div>
       )}

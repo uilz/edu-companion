@@ -4,7 +4,6 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  LayoutDashboard,
   Dumbbell,
   Brain,
   Bell,
@@ -21,7 +20,6 @@ import SecretaryBellBadge from '@/components/secretary/SecretaryBellBadge';
 
 // ── 导航菜单项配置 ──
 const navItems = [
-  { href: '/dashboard', label: '驾驶舱', icon: LayoutDashboard },
   { href: '/learn',    label: '学习空间', icon: Brain },
   { href: '/practice', label: '练习', icon: Dumbbell },
   { href: '/knowledge-tree', label: '知识树', icon: GitGraph },

@@ -62,7 +62,7 @@ class EventService:
 
         async def handler(event: DomainEvent) -> None:
             try:
-                from app.cognitive.storage import append_event
+                from app.cognitive import get_repo
                 from app.cognitive.models import CognitiveEvent
 
                 ce = CognitiveEvent(
@@ -72,7 +72,7 @@ class EventService:
                     timestamp=time.time(),
                     payload=_domain_event_to_payload(event, event_type),
                 )
-                append_event(ce)
+                get_repo().append_event(ce)
             except Exception:
                 logger.debug("持久化事件失败 (fire-and-forget): %s", event_type, exc_info=True)
 
@@ -88,7 +88,7 @@ class EventService:
         payload: dict[str, Any] | None = None,
     ) -> str:
         """直接写入 cognitive_events 表（同步，append_event 为同步操作）"""
-        from app.cognitive.storage import append_event
+        from app.cognitive import get_repo
         from app.cognitive.models import CognitiveEvent
 
         ce = CognitiveEvent(
@@ -98,7 +98,7 @@ class EventService:
             timestamp=time.time(),
             payload=payload or {},
         )
-        append_event(ce)
+        get_repo().append_event(ce)
         return ce.event_id
 
     @staticmethod
@@ -201,18 +201,18 @@ class EventService:
 
     async def _consume_loop(self) -> None:
         """轮询未处理 cognitive_events，按类型分发"""
-        from app.cognitive.storage import get_unprocessed_events, mark_event_processed
+        from app.cognitive import get_repo
         from shared.constants import DEFAULT_USER_ID
 
         while self._running:
             try:
-                events = get_unprocessed_events(
+                events = get_repo().get_unprocessed_events(
                     user_id=DEFAULT_USER_ID,
                     limit=_MAX_BATCH,
                 )
                 for evt in events:
                     await self._dispatch(evt)
-                    mark_event_processed(evt.event_id)
+                    get_repo().mark_event_processed(evt.event_id)
             except asyncio.CancelledError:
                 break
             except Exception:
@@ -264,15 +264,15 @@ class EventService:
         try:
             topic_ids = payload.get("topic_node_ids", [])
             if topic_ids:
-                from app.cognitive.storage import get_node, get_children
+                from app.cognitive import get_repo
                 parent_candidates: set[str] = set()
                 for tid in topic_ids:
-                    node = get_node(tid, evt.user_id)
+                    node = get_repo().get_node(tid, evt.user_id)
                     if node and node.parent:
                         parent_candidates.add(node.parent)
 
                 for pid in parent_candidates:
-                    children = get_children(pid, evt.user_id)
+                    children = get_repo().get_children(pid, evt.user_id)
                     active_children = [c for c in children if c.is_visible and c.is_active]
                     if len(active_children) >= 3:
                         # 生成横向扩展提案
@@ -321,17 +321,17 @@ class EventService:
             return
 
         try:
-            from app.cognitive.storage import get_node, vector_search
+            from app.cognitive import get_repo
             from app.cognitive.edge_storage import upsert_edge, get_edges_for_node
             from app.cognitive.edge_models import KnowledgeEdge
 
-            node = get_node(node_id, user_id)
+            node = get_repo().get_node(node_id, user_id)
             if not node or not node.embedding:
                 logger.debug("节点 %s 无 embedding，跳过波纹检测", node_id)
                 return
 
             # 检索语义邻居（同层级，排除自身）
-            neighbors = vector_search(
+            neighbors = get_repo().vector_search(
                 node.embedding, user_id,
                 level=level, limit=5, min_similarity=0.3,
             )
@@ -456,7 +456,7 @@ class EventService:
         )
 
         try:
-            from app.cognitive.storage import get_node
+            from app.cognitive import get_repo
             from app.cognitive.edge_storage import get_edges_for_node
 
             user_id = evt.user_id
@@ -468,7 +468,7 @@ class EventService:
                     continue
 
                 # 检查候选节点是否存在
-                node = get_node(cid, user_id)
+                node = get_repo().get_node(cid, user_id)
                 if not node:
                     continue
 
@@ -511,19 +511,19 @@ def _cascade_ancestor_visibility(node_id: str, user_id: str) -> None:
     级联更新祖先可见性：向上递归查找父节点，
     若其不可见则设为可见，直到根或已可见节点。
     """
-    from app.cognitive.storage import get_node, set_node_visible
+    from app.cognitive import get_repo
 
     visited = set()
     current_id = node_id
     while current_id and current_id not in visited:
         visited.add(current_id)
-        node = get_node(current_id, user_id)
+        node = get_repo().get_node(current_id, user_id)
         if node is None:
             break
         # CognitiveNode 是 Pydantic 对象，使用属性访问
         if node.is_visible:
             break  # 已可见 → 祖先也应该已可见
-        set_node_visible(current_id, user_id, visible=True)
+        get_repo().set_node_visible(current_id, user_id, visible=True)
         current_id = node.parent
 
 
@@ -586,10 +586,10 @@ def _generate_proposal(
 def _get_node_label(node_id: str) -> str:
     """获取节点 label（安全降级）"""
     try:
-        from app.cognitive.storage import get_node
+        from app.cognitive import get_repo
         from shared.constants import DEFAULT_USER_ID
 
-        node = get_node(node_id, DEFAULT_USER_ID)
+        node = get_repo().get_node(node_id, DEFAULT_USER_ID)
         if node:
             return node.label or node_id
     except Exception:

@@ -14,7 +14,7 @@ import re
 
 from app.schemas.conversation import Branch, TreeNode
 from app.schemas.practice import BloomLevel
-from app.cognitive.storage import get_node
+from app.cognitive import get_repo
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +167,7 @@ class ContextAwarePracticeTrigger:
         p_values = []
         for sid in skill_ids:
             try:
-                node = get_node(sid, user_id)
+                node = get_repo().get_node(sid, user_id)
                 p_values.append(node.belief.proficiency_mean if node and node.belief else 0.3)
             except Exception:
                 p_values.append(0.3)  # 默认偏难（需要练习）

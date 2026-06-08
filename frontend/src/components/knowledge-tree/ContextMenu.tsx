@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef } from "react";
 import {
-  Edit3, PlusCircle, Sparkles, PenLine, Link, HelpCircle, Trash2,
+  Edit3, PlusCircle, Sparkles, PenLine, Link, HelpCircle, Trash2, Target,
 } from "lucide-react";
 
 export interface ContextMenuItem {
@@ -76,8 +76,8 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
 
 // ── 默认知识树右键菜单项 ──
 export function getDefaultContextMenuItems(
-  nodeLabel: string,
-  nodeId: string,
+  _nodeLabel: string,
+  _nodeId: string,
   handlers: {
     onEdit: () => void;
     onAddChild: () => void;
@@ -85,10 +85,12 @@ export function getDefaultContextMenuItems(
     onAiEdit: () => void;
     onLinkConversation: () => void;
     onExplain: () => void;
+    onFocus: () => void;
     onDelete: () => void;
   },
 ): ContextMenuItem[] {
   return [
+    { id: "focus", label: "聚焦到此节点", icon: <Target size={12} />, onClick: handlers.onFocus },
     { id: "edit", label: "编辑节点", icon: <Edit3 size={12} />, onClick: handlers.onEdit },
     { id: "add-child", label: "添加子节点", icon: <PlusCircle size={12} />, onClick: handlers.onAddChild },
     { id: "ai-expand", label: "AI 扩充子节点", icon: <Sparkles size={12} />, onClick: handlers.onAiExpand },

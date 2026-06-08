@@ -1,12 +1,18 @@
 "use client";
 
-import React, { useState } from "react";
-import { X } from "lucide-react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { AlertCircle, Loader2, Send, Bot, MessageCircle } from "lucide-react";
 import type { GraphNode } from "@/lib/types/graph-types";
 import TreeChatPanel from "@/components/graph/panels/TreeChatPanel";
 import type { DialogState } from "./KnowledgeTreePage";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+
+interface ChatMessage {
+  role: "user" | "assistant";
+  text: string;
+  id: string;
+}
 
 interface DialogContainerProps {
   dialogState: DialogState | null;
@@ -21,122 +27,84 @@ interface DialogContainerProps {
 export default function DialogContainer({
   dialogState, onDialogStateChange, partitionId, selectedNode, onNodeUpdated, width, onWidthChange,
 }: DialogContainerProps) {
-  const [collapsed, setCollapsed] = useState(false);
-  const [globalInput, setGlobalInput] = useState("");
+  // 保留接口兼容性
+  void onDialogStateChange; void selectedNode; void onWidthChange;
 
-  if (collapsed) {
-    return (
-      <div className="flex-shrink-0 w-[40px] bg-[var(--color-surface)] border-r border-[var(--color-border)] flex flex-col items-center pt-3 gap-2">
-        <button onClick={() => setCollapsed(false)}
-          className="p-2 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors"
-          title="展开对话面板">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>
-          </svg>
-        </button>
-        <div className="w-4 h-px bg-[var(--color-border)] rotate-90" />
-        <span className="text-[9px] text-[var(--color-text-muted)] writing-mode-vertical" style={{ writingMode: "vertical-rl" }}>对话</span>
-      </div>
-    );
-  }
-
-  const isNodeMode = dialogState?.type === "tree_exploration" && dialogState.boundNode;
+  const isNodeMode = dialogState?.type === "tree_exploration" && !!dialogState.boundNode;
   const isTemporary = dialogState?.type === "temporary";
-  const isGlobal = dialogState && !isNodeMode && !isTemporary;
 
-  const toggleMode = () => {
-    if (isNodeMode) {
-      // 切换到全局
-      onDialogStateChange({
-        type: "tree_exploration",
-        conversationId: "",
-        parentId: partitionId,
-        parentType: "partition",
-        boundNode: null,
-      });
-    } else if (selectedNode) {
-      // 切换到节点探索
-      onDialogStateChange({
-        type: "tree_exploration",
-        conversationId: "",
-        parentId: partitionId,
-        parentType: "partition",
-        boundNode: selectedNode,
-      });
-    } else if (isTemporary) {
-      onDialogStateChange(null);
-    } else {
-      onDialogStateChange(null);
+  // ── 全局/临时对话状态 ──
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // 自动滚动到底部
+  useEffect(() => {
+    if (listRef.current) {
+      listRef.current.scrollTop = listRef.current.scrollHeight;
     }
-  };
+  }, [messages]);
 
-  const handleGlobalSend = async () => {
-    if (!globalInput.trim() || !dialogState) return;
-    // 对全局/临时对话发送消息（实验性：先存消息到后端）
+  // ── 全局/临时对话发送消息 ──
+  const handleSend = useCallback(async () => {
+    if (!input.trim() || loading || !dialogState) return;
+    const userText = input.trim();
+    const userMsg: ChatMessage = { role: "user", text: userText, id: "u-" + Date.now() };
+    setMessages(prev => [...prev, userMsg]);
+    setInput("");
+    setLoading(true);
+    setError("");
+
     try {
-      await fetch(`${API_BASE}/api/conversations/tree/conversation/${dialogState.conversationId}/message`, {
+      const res = await fetch(`${API_BASE}/api/conversations/tree/conversation/${dialogState.conversationId}/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: globalInput.trim(),
-          partition_id: partitionId,
-        }),
+        body: JSON.stringify({ text: userText, partition_id: partitionId }),
       });
-    } catch {
-      // fallback 静默
+      const data = await res.json();
+      const reply = data.response || data.text || "（收到）";
+      setMessages(prev => [...prev, { role: "assistant", text: reply, id: "a-" + Date.now() }]);
+    } catch (e: any) {
+      setError(e.message);
+      setMessages(prev => [...prev, { role: "assistant", text: `发送失败: ${e.message}`, id: "a-" + Date.now() }]);
+    } finally {
+      setLoading(false);
     }
-    setGlobalInput("");
+  }, [input, loading, dialogState, partitionId]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (isNodeMode && dialogState?.boundNode) return; // TreeChatPanel handles its own send
+      handleSend();
+    }
   };
 
+  const title = isTemporary ? "临时对话" : isNodeMode ? "节点探索" : "知识树助手";
+  const boundLabel = isNodeMode ? dialogState?.boundNode?.label : "";
+
   return (
-    <div className="flex-shrink-0 bg-[var(--color-surface)] border-r border-[var(--color-border)] flex flex-col overflow-hidden"
+    <div className="flex flex-col h-full bg-[var(--color-surface)] border-r border-[var(--color-border)] overflow-hidden"
       style={{ width: `${width}px` }}>
-      {/* 头部 */}
-      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[var(--color-border)] flex-shrink-0">
-        <div className="w-7 h-7 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--color-accent)]">
-            <rect x="6" y="6" width="14" height="14" rx="3"/><circle cx="14" cy="10" r="1.5"/><path d="M10 14c0-1.5 2-2.5 4-2.5s4 1 4 2.5"/>
-          </svg>
-        </div>
-        <span className="text-xs font-medium text-[var(--color-text)] flex-1">
-          {isTemporary ? "临时对话" : isNodeMode ? "节点探索" : "知识树对话"}
-        </span>
-
-        {/* 模式切换 */}
-        <button onClick={toggleMode}
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all ${
-            isNodeMode
-              ? "bg-[var(--color-warning)]/10 text-[var(--color-warning)]"
-              : isTemporary
-                ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                : "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-          }`}>
-          {isNodeMode ? "📍 节点" : isTemporary ? "💬 临时" : "🌐 全局"}
-        </button>
-
-        <button onClick={() => setCollapsed(true)}
-          className="p-1 rounded text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors">
-          <X size={13} />
-        </button>
+      {/* ══ 头部 ══ */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--color-border)] flex-shrink-0">
+        <MessageCircle size={15} className="text-[var(--color-accent)] shrink-0" />
+        <span className="text-xs font-medium text-[var(--color-text)] truncate">{title}</span>
+        {boundLabel && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)] truncate max-w-[120px] shrink-0">
+            {boundLabel}
+          </span>
+        )}
+        {isTemporary && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--color-warning)]/10 text-[var(--color-warning)] shrink-0">
+            临时
+          </span>
+        )}
       </div>
 
-      {/* 作用域提示 */}
-      {isNodeMode && dialogState?.boundNode && (
-        <div className="px-3 py-2 text-[10px] text-[var(--color-text-muted)] border-b border-[var(--color-border)] bg-[var(--color-page-secondary)] truncate flex items-center gap-1.5">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/></svg>
-          探索: {dialogState.boundNode.label}
-        </div>
-      )}
-
-      {/* 临时对话迁移提示 */}
-      {isTemporary && (
-        <div className="px-3 py-2 text-[10px] text-[var(--color-accent)] border-b border-[var(--color-border)] bg-[var(--color-accent)]/5 flex items-center gap-1.5">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/></svg>
-          临时对话 — 对话内容可以在稍后迁移到正式分区
-        </div>
-      )}
-
-      {/* 内容 */}
+      {/* ══ 内容 ══ */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {isNodeMode && dialogState?.boundNode ? (
           <TreeChatPanel
@@ -146,30 +114,85 @@ export default function DialogContainer({
           />
         ) : (
           <>
-            {/* 消息占位 — 统一提示 */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-3">
-              <div className="flex gap-2" style={{ maxWidth: "92%" }}>
-                <div className="w-6 h-6 rounded-full bg-[var(--color-page-secondary)] flex items-center justify-center text-xs flex-shrink-0">🤖</div>
-                <div className="px-3 py-2 text-[11px] leading-relaxed whitespace-pre-wrap bg-[var(--color-page-secondary)] border border-[var(--color-border)] rounded-xl rounded-bl-md text-[var(--color-text)]">
-                  {isTemporary
-                    ? "你好！这是临时对话。你可以直接和我聊天，稍后可以把内容迁移到正式分区。"
-                    : "你好！我是知识树助手。我可以帮你总结知识树、推荐学习路径、管理节点。"}
+            {/* 消息列表 */}
+            <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+              {messages.length === 0 && !loading && (
+                <div className="flex flex-col items-center justify-center h-full text-center gap-3 px-4">
+                  <div className="w-10 h-10 rounded-xl bg-[var(--color-accent)]/10 flex items-center justify-center">
+                    <Bot size={22} className="text-[var(--color-accent)]" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-[var(--color-text)] mb-1">
+                      {isTemporary ? "临时对话" : "知识树助手"}
+                    </p>
+                    <p className="text-[11px] text-[var(--color-text-muted)] max-w-[220px] leading-relaxed">
+                      {isTemporary
+                        ? "你可以直接和我聊天，稍后可以把内容迁移到正式分区。"
+                        : "我可以帮你总结知识树、推荐学习路径、管理节点。"}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 justify-center mt-1">
+                    {[
+                      "总结当前知识树",
+                      "推荐学习路径",
+                      "有哪些核心概念",
+                    ].map((hint, i) => (
+                      <button key={i} onClick={() => setInput(hint)}
+                        className="px-2.5 py-1 text-[10px] rounded-lg border border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-colors">
+                        {hint}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {messages.map((msg) => (
+                <div key={msg.id} className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : ""}`} style={{ maxWidth: "92%" }}>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs shrink-0
+                    ${msg.role === "user" ? "bg-[var(--color-accent)]/10" : "bg-[var(--color-page-secondary)]"}`}>
+                    {msg.role === "user" ? "👤" : "🤖"}
+                  </div>
+                  <div className={`px-3 py-2 text-[11px] leading-relaxed whitespace-pre-wrap rounded-xl ${
+                    msg.role === "user"
+                      ? "bg-[var(--color-accent)] text-white rounded-tr-md"
+                      : "bg-[var(--color-page-secondary)] border border-[var(--color-border)] text-[var(--color-text)] rounded-tl-md"
+                  }`}>
+                    {msg.text}
+                  </div>
+                </div>
+              ))}
+
+              {loading && (
+                <div className="flex gap-2" style={{ maxWidth: "92%" }}>
+                  <div className="w-6 h-6 rounded-full bg-[var(--color-page-secondary)] flex items-center justify-center text-xs shrink-0">🤖</div>
+                  <div className="px-3 py-2 rounded-xl rounded-tl-md border border-[var(--color-border)] bg-[var(--color-page-secondary)]">
+                    <Loader2 size={12} className="animate-spin text-[var(--color-text-muted)]" />
+                  </div>
+                </div>
+              )}
+
+              {error && (
+                <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-500/10 text-red-500 text-[11px]">
+                  <AlertCircle size={12} />{error}
+                </div>
+              )}
             </div>
 
             {/* 输入区 */}
-            <div className="p-3 border-t border-[var(--color-border)] flex gap-2 bg-[var(--color-surface)]">
-              <input value={globalInput} onChange={e => setGlobalInput(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleGlobalSend()}
-                placeholder={isNodeMode ? "询问此节点相关…" : isTemporary ? "临时对话…" : "向知识树提问…"}
-                className="flex-1 px-3 py-2 text-[11px] border border-[var(--color-border)] rounded-lg bg-[var(--color-page-secondary)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors" />
-              <button onClick={handleGlobalSend}
-                className="px-3 py-2 bg-[var(--color-accent)] text-white rounded-lg hover:opacity-90 transition-opacity">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4z"/>
-                </svg>
-              </button>
+            <div className="flex-shrink-0 px-4 py-3 border-t border-[var(--color-border)] bg-[var(--color-surface)]">
+              <div className="flex items-center gap-2">
+                <input
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={isTemporary ? "输入消息…" : "向知识树提问…"}
+                  className="flex-1 px-3 py-2 text-[12px] border border-[var(--color-border)] rounded-lg bg-[var(--color-page-secondary)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+                />
+                <button onClick={handleSend} disabled={loading || !input.trim()}
+                  className="p-2 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity">
+                  {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                </button>
+              </div>
             </div>
           </>
         )}

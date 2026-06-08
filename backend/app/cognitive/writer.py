@@ -11,14 +11,13 @@ CognitiveNodeWriter — 统一认知节点写入封装
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 import time
 from typing import Optional
 
+from app.cognitive import get_repo
 from app.cognitive.models import CognitiveNode, MetaInfo
-from app.cognitive.storage import upsert_node, get_children
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +88,7 @@ class CognitiveNodeWriter:
         )
 
         # 5. 持久化（upsert_node 会将 pydantic model 转为 DB 行）
-        upsert_node(node, self.user_id)
+        get_repo().upsert_node(node, self.user_id)
 
         # 6. 额外字段通过 raw SQL 写入（pydantic model 未声明但 DB 有列）
         self._write_extra_fields(node.id, created_by, description, metadata)
@@ -129,7 +128,7 @@ class CognitiveNodeWriter:
         self, label: str, level: str, parent_id: Optional[str]
     ) -> Optional[CognitiveNode]:
         """同一 parent 下按 label 精确查找已存在且未删除的节点"""
-        children = get_children(parent_id or "", self.user_id)
+        children = get_repo().get_children(parent_id or "", self.user_id)
         clean_label = label.strip()
         for c in children:
             # get_children 已过滤 deleted_at IS NULL，无需再检查
@@ -154,31 +153,10 @@ class CognitiveNodeWriter:
         self, node_id: str, created_by: str, description: str, metadata: Optional[dict]
     ) -> None:
         """写入 pydantic model 未声明的额外 DB 字段"""
-        from app.cognitive.storage import get_db
-
-        db = get_db()
-        fields = {"created_by": created_by}
-        if description:
-            fields["description"] = description
-        if metadata:
-            fields["metadata"] = json.dumps(metadata)
-
-        set_expr = ", ".join(f"{k} = %s" for k in fields)
-        values = list(fields.values())
-        values.extend([node_id, self.user_id])
-        db.execute(
-            f"UPDATE cognitive_nodes SET {set_expr} WHERE id = %s AND user_id = %s",
-            values,
-        )
+        import json as _json
+        meta_str = _json.dumps(metadata) if metadata else ""
+        get_repo().update_extra_fields(node_id, self.user_id, created_by, description, meta_str)
 
     def _add_to_parent_children(self, node_id: str, parent_id: str) -> None:
         """将 node_id 追加到父节点 children 列表（去重）"""
-        from app.cognitive.storage import get_db
-
-        db = get_db()
-        db.execute(
-            "UPDATE cognitive_nodes SET children = children || %s::jsonb, "
-            "updated_at = NOW() WHERE id = %s AND user_id = %s "
-            "AND NOT (children @> %s::jsonb)",
-            (json.dumps([node_id]), parent_id, self.user_id, json.dumps([node_id])),
-        )
+        get_repo().add_to_parent_children(node_id, parent_id, self.user_id)

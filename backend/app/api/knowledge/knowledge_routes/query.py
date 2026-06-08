@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from . import (
     _load, _get_graph, _get_tree_structure,
 )
-from app.services.common.storage import storage
+from app.services.common import get_data_repo
 
 router = APIRouter()
 

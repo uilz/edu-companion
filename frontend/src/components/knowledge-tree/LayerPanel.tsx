@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from "react";
 import { Search, X, ChevronRight, ChevronDown, ChevronsUpDown, ChevronsDownUp } from "lucide-react";
 import type { GraphData, GraphNode } from "@/lib/types/graph-types";
-import { getMasteryColor } from "@/lib/types/graph-types";
+import { getMasteryColor, LEVEL_LABELS } from "@/lib/types/graph-types";
 
 interface LayerPanelProps {
   graphData: GraphData;
@@ -18,10 +18,6 @@ interface LayerPanelProps {
   masteryFilter?: Set<string>;
   onMasteryFilterChange?: (f: Set<string>) => void;
 }
-
-// ── 层级定义 ──
-const LEVEL_ORDER: Record<string, number> = { partition: 0, domain: 1, topic: 2, concept: 3, atom: 4 };
-const LEVEL_LABELS: Record<string, string> = { partition: "分区", domain: "领域", topic: "专题", concept: "概念", atom: "原子" };
 
 export default function LayerPanel({
   graphData, searchQuery, onSearchChange, matchedNodeIds,

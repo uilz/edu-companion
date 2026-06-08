@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.cognitive.storage import vector_search
+from app.cognitive import get_repo
 
 logger = logging.getLogger(__name__)
 
@@ -141,8 +141,7 @@ class ClassifierService:
             if matched_keywords:
                 # 2. 对得分最高的 partition，用 ILIKE 找 topic 级节点
                 top_partition = matched_keywords[0]["partition"]
-                from app.cognitive.storage import search_nodes
-                nodes = search_nodes(top_partition, user_id, limit=10)
+                nodes = get_repo().search_nodes(top_partition, user_id, limit=10)
                 for n in nodes:
                     if n.level == "topic":
                         candidates.append({
@@ -155,8 +154,7 @@ class ClassifierService:
 
             # 3. 如果关键词没匹配到，直接 ILIKE 搜索全部节点
             if not candidates:
-                from app.cognitive.storage import search_nodes
-                nodes = search_nodes(text, user_id, limit=20)
+                nodes = get_repo().search_nodes(text, user_id, limit=20)
                 for n in nodes:
                     if n.level == "topic":
                         candidates.append({
@@ -169,8 +167,8 @@ class ClassifierService:
         # 3.5 ILIKE 也无结果 → 搜索对话树中的 domain/topic 名称
         if not candidates and text:
             try:
-                from app.cognitive.storage import storage
-                data = storage.load(user_id)
+                from app.services.common import get_data_repo
+                data = get_data_repo().load(user_id)
                 words = [w for w in text.replace("?", "").replace("?", "").replace("，", " ").replace(" ", " ").split() if len(w) >= 2]
                 # 按名称搜索 domain
                 for d in data.domains.values():
@@ -202,8 +200,8 @@ class ClassifierService:
                     partition_name = top["partition"]
                     score = top["score"]
                     from app.services.knowledge.tree_ops import tree_ops
-                    from app.services.common.storage import storage
-                    data = storage.load(user_id)
+                    from app.services.common import get_data_repo
+                    data = get_data_repo().load(user_id)
                     # 找或创建 partition
                     pid = None
                     for p in data.partitions.values():
@@ -278,7 +276,7 @@ class ClassifierService:
         self, user_id: str, query_embedding: list[float], limit: int = 5,
     ) -> list[dict]:
         """检索所有 topic 级节点"""
-        return vector_search(
+        return get_repo().vector_search(
             query_embedding, user_id,
             level="topic", limit=limit, min_similarity=0.1,
         )
@@ -293,7 +291,7 @@ class ClassifierService:
             path_prefix = t.get("path_id", "")
             if not path_prefix:
                 continue
-            rows = vector_search(
+            rows = get_repo().vector_search(
                 query_embedding, user_id,
                 level=None, limit=limit, min_similarity=0.05,
             )

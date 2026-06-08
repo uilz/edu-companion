@@ -49,6 +49,16 @@ class PgCognitiveNodeRepository:
     ) -> list[dict]:
         return _s.search_nodes(query_embedding, user_id, level, limit, min_similarity)
 
+    def vector_search(
+        self,
+        query_embedding: list[float],
+        user_id: str = "default",
+        level: str | None = None,
+        limit: int = 10,
+        min_similarity: float = 0.1,
+    ) -> list[dict]:
+        return _s.vector_search(query_embedding, user_id, level, limit, min_similarity)
+
     def find_node_by_path(self, path_id: str, user_id: str = "default") -> Optional[CognitiveNode]:
         return _s.find_node_by_path(path_id, user_id)
 
@@ -102,4 +112,36 @@ class PgCognitiveNodeRepository:
         return _s.sync_from_practice_event(
             user_id, skill_id, is_correct,
             response_time_ms, topic, question_id, error_type,
+        )
+
+    def update_extra_fields(
+        self,
+        node_id: str,
+        user_id: str,
+        created_by: str,
+        description: str = "",
+        metadata: str = "",
+    ) -> None:
+        db = _s.get_db()
+        fields = {"created_by": created_by}
+        if description:
+            fields["description"] = description
+        if metadata:
+            fields["metadata"] = metadata
+        set_expr = ", ".join(f"{k} = %s" for k in fields)
+        values = list(fields.values())
+        values.extend([node_id, user_id])
+        db.execute(
+            f"UPDATE cognitive_nodes SET {set_expr} WHERE id = %s AND user_id = %s",
+            values,
+        )
+
+    def add_to_parent_children(self, node_id: str, parent_id: str, user_id: str = "default") -> None:
+        import json as _json
+        db = _s.get_db()
+        db.execute(
+            "UPDATE cognitive_nodes SET children = children || %s::jsonb, "
+            "updated_at = NOW() WHERE id = %s AND user_id = %s "
+            "AND NOT (children @> %s::jsonb)",
+            (_json.dumps([node_id]), parent_id, user_id, _json.dumps([node_id])),
         )

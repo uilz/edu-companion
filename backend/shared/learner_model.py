@@ -91,8 +91,8 @@ class LearnerModelEngine:
     ) -> dict:
         """获取用户在某个知识点的状态（从 CognitiveNode 真实读取）"""
         try:
-            from app.cognitive.storage import find_node_by_label
-            node = find_node_by_label(skill_id, user_id)
+            from app.cognitive import get_repo
+            node = get_repo().find_node_by_label(skill_id, user_id)
             if node:
                 return {
                     "skill_id": skill_id,
@@ -188,8 +188,8 @@ class LearnerModelEngine:
         mastered: list[str] = []
         struggling: list[str] = []
         try:
-            from app.cognitive.storage import list_all_nodes
-            nodes = list_all_nodes(user_id)
+            from app.cognitive import get_repo
+            nodes = get_repo().list_all_nodes(user_id)
             for node in nodes:
                 if not node.belief or not node.practice_summary:
                     continue

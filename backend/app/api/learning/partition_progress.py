@@ -42,10 +42,10 @@ def _compute_partition_progress_cognitive(partition_id: str) -> PartitionProgres
     返回 None 表示无数据 (触发备降)。
     """
     try:
-        from app.cognitive.storage import get_node
+        from app.cognitive import get_repo
         from app.cognitive.models import CognitiveNode
 
-        partition_node = get_node(partition_id)
+        partition_node = get_repo().get_node(partition_id)
         if not partition_node:
             logger.info(f"[cognitive] 分区节点不存在: {partition_id}")
             return None
@@ -194,13 +194,13 @@ def _compute_partition_progress_cognitive(partition_id: str) -> PartitionProgres
 
 def _collect_subtree(node_id: str, acc: dict) -> None:
     """递归收集子树节点"""
-    from app.cognitive.storage import get_node
-    children = get_node(node_id)
+    from app.cognitive import get_repo
+    children = get_repo().get_node(node_id)
     if not children:
         return
     for child_id in (children.children or []):
         if child_id not in acc:
-            child = get_node(child_id)
+            child = get_repo().get_node(child_id)
             if child:
                 acc[child_id] = child
                 _collect_subtree(child_id, acc)
@@ -305,8 +305,8 @@ async def get_partition_progress(partition_id: str):
         return result
 
     # 无认知数据时返回空画像
-    from app.services.common.storage import storage
-    data = storage.load(DEFAULT_USER_ID)
+    from app.services.common import get_data_repo
+    data = get_data_repo().load(DEFAULT_USER_ID)
     partition = data.partitions.get(partition_id)
     if not partition:
         raise HTTPException(status_code=404, detail="分区不存在")

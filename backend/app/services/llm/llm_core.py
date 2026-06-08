@@ -20,7 +20,7 @@ from app.schemas.conversation import (
     TreeNode,
 )
 from app.services.llm.llm_service import llm_service
-from app.services.common.storage import storage
+from app.services.common import get_data_repo
 from app.services.conversation.context_builder import _build_context_messages
 from app.services.analytics.emotion_analyzer import emotion_analyzer
 
@@ -73,8 +73,8 @@ def parse_sources(text: str) -> tuple[str, list[str]]:
 
 def _resolve_skill_ids(labels: list[str], partition_id: str, user_id: str) -> list[str]:
     """将 [来源: xxx] 中的知识点标签映射为 skill_id"""
-    from app.services.common.storage import storage
-    data = storage.load(user_id)
+    from app.services.common import get_data_repo
+    data = get_data_repo().load(user_id)
     graph = data.knowledge_graphs.get(partition_id)
     if not graph or not graph.nodes:
         return []
@@ -118,7 +118,7 @@ async def generate_reply(
         4. 调用 LLM 生成
         5. 返回纯文本回复
     """
-    data = storage.load(user_id)
+    data = get_data_repo().load(user_id)
     partition = data.partitions.get(partition_id)
     if not partition:
         raise ValueError(f"Partition {partition_id} not found")
@@ -161,7 +161,7 @@ async def generate_reply_stream(
     Yields:
         文本 chunk（str），调用方逐片段拼接。
     """
-    data = storage.load(user_id)
+    data = get_data_repo().load(user_id)
     partition = data.partitions.get(partition_id)
     if not partition:
         raise ValueError(f"Partition {partition_id} not found")

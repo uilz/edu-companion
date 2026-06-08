@@ -7,7 +7,7 @@ import {
   GitGraph, RefreshCw, Search, X, Plus, MessageCircle,
 } from "lucide-react";
 import dynamic from "next/dynamic";
-import { getMasteryColor } from "@/lib/types/graph-types";
+import { getMasteryColor, filterByLevel } from "@/lib/types/graph-types";
 import { useGraphDialogue } from "@/hooks/graph/useGraphDialogue";
 import type { UseGraphDialogueReturn } from "@/hooks/graph/useGraphDialogue";
 import type { GraphData } from "@/lib/types/graph-types";
@@ -16,18 +16,6 @@ import NodeDetailPanel from "@/components/graph/panels/NodeDetailPanel";
 import TreeChatPanel from "@/components/graph/panels/TreeChatPanel";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
-
-// ── 层级筛选 ──
-const LEVEL_ORDER: Record<string, number> = {
-  partition: 0, domain: 1, topic: 2, conversation: 3, concept: 4, atom: 5,
-};
-function filterByLevel(data: GraphData | null, maxLevel: string | undefined): GraphData | null {
-  if (!data || !maxLevel) return data;
-  const maxIdx = LEVEL_ORDER[maxLevel] ?? 99;
-  const keep = data.nodes.filter(n => (LEVEL_ORDER[n.level] ?? 99) <= maxIdx);
-  const keepIds = new Set(keep.map(n => n.id));
-  return { nodes: keep, edges: data.edges.filter(e => keepIds.has(e.source) && keepIds.has(e.target)) };
-}
 
 // ── 动态导入 ──
 const FocusGraph = dynamic(() => import("@/components/graph/graphs/FocusGraph"), { ssr: false });
@@ -316,7 +304,7 @@ function GraphDialogueLayout({ ctx }: { ctx: UseGraphDialogueReturn }) {
       <div ref={graphContainerRef} className="flex-1 overflow-hidden relative">
         {graphMode === "mindmap" && (
           <FocusGraph
-            data={filterByLevel(ctx.graphData, ctx.maxDisplayLevel) || { nodes: [], edges: [] }}
+            data={filterByLevel(ctx.graphData ?? { nodes: [], edges: [] }, ctx.maxDisplayLevel)}
             selectedNodeId={ctx.selectedNode?.id}
             onNodeSelect={ctx.handleNodeSelect}
             activePath={ctx.activePath}
@@ -328,7 +316,7 @@ function GraphDialogueLayout({ ctx }: { ctx: UseGraphDialogueReturn }) {
         )}
         {graphMode === "force" && (
           <ForceGraph
-            data={filterByLevel(ctx.graphData, ctx.maxDisplayLevel) || { nodes: [], edges: [] }}
+            data={filterByLevel(ctx.graphData ?? { nodes: [], edges: [] }, ctx.maxDisplayLevel)}
             selectedNodeId={ctx.selectedNode?.id}
             onNodeSelect={ctx.handleNodeSelect}
             width={ctx.graphFullscreen ? fsSize.width : graphSize.width}
@@ -337,7 +325,7 @@ function GraphDialogueLayout({ ctx }: { ctx: UseGraphDialogueReturn }) {
         )}
         {graphMode === "dag" && (
           <DAGGraph
-            data={filterByLevel(ctx.graphData, ctx.maxDisplayLevel) || { nodes: [], edges: [] }}
+            data={filterByLevel(ctx.graphData ?? { nodes: [], edges: [] }, ctx.maxDisplayLevel)}
             selectedNodeId={ctx.selectedNode?.id}
             onNodeSelect={ctx.handleNodeSelect}
             activePath={ctx.activePath}

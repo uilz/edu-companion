@@ -12,19 +12,21 @@ logger = logging.getLogger(__name__)
 # ── 意图预判规则 ──
 TOOL_RULES: dict[str, str] = {
     r"视频|bilibili|b站|讲解视频|搜.*视频|找.*视频|有.*视频吗|搜.*教程": "search_media",
-    r"出.*题|练习|做题|测试|考我|来.*题": "generate_practice",
+    r"出.*题|练习|做题|测试|考我|来.*题|生成.*题|练一练": "generate_practice",
     r"画|图像|函数图|图表|可视化|示意图": "generate_image",
     r"思维导图|脑图|知识结构|整理.*知识|知识.*整理": "generate_mindmap",
     r"笔记|文档|PDF|讲义|总结.*笔记|笔记.*总结": "generate_document",
+    r"有什么题库|查看题库|我的题库|有哪些题库|搜.*题库|创建.*题库|新建.*题库": "query_question_banks",
 }
 
-# 肯定回复 + AI 上次建议了某个工具 → 触发该工具
 AI_SUGGESTION_PATTERNS: dict[str, str] = {
     r"(搜|找|看看?).*?(视频|教程|讲解)": "search_media",
     r"(做|来|出|练|试试).*?(题|练习)": "generate_practice",
     r"(画|生成).*?(图|图像|示意图)": "generate_image",
     r"(整理|生成|做).*?(思维导图|脑图|知识.*结构)": "generate_mindmap",
     r"(生成|整理|做|写).*?(笔记|文档|总结)": "generate_document",
+    r"(查|看|浏览|打开).*?(题库|练习)": "query_question_banks",
+    r"(创建|新建|建).*?(题库|练习.*库)": "create_question_bank",
 }
 
 AFFIRMATIVE_PATTERNS = re.compile(
@@ -71,14 +73,15 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "generate_practice",
-            "description": "生成练习题",
+            "description": "生成练习题。当用户要求出题时使用，支持指定题库名称（如现有题库会追加，否则自动创建）",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "subject": {"type": "string", "description": "学科"},
                     "knowledge_point": {"type": "string", "description": "知识点"},
                     "difficulty": {"type": "string", "enum": ["基础", "进阶", "挑战"], "default": "进阶"},
-                    "count": {"type": "integer", "description": "题目数量", "default": 1},
+                    "count": {"type": "integer", "description": "题目数量", "default": 2},
+                    "bank_name": {"type": "string", "description": "目标题库名称。如果留空，系统会自动分配到一个通用题库"},
                 },
                 "required": ["subject"],
             },
@@ -87,52 +90,44 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
-            "name": "generate_image",
-            "description": "生成图片（函数图像、概念图、示意图等）",
+            "name": "query_question_banks",
+            "description": "查询已有的题库和题目。支持列出所有题库、按关键词搜索题库、查看某个题库下的题目列表",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "prompt": {"type": "string", "description": "图片描述"},
-                    "style": {"type": "string", "enum": ["diagram", "illustration", "chart"], "default": "diagram"},
+                    "action": {
+                        "type": "string",
+                        "enum": ["list_banks", "get_bank", "search_questions"],
+                        "description": "操作类型: list_banks=列出所有题库, get_bank=查看题库详情, search_questions=在题库中搜索题目",
+                    },
+                    "bank_id": {"type": "string", "description": "题库ID（get_bank/search_questions时需要）"},
+                    "keyword": {"type": "string", "description": "搜索关键词（search_questions时可选）"},
+                    "limit": {"type": "integer", "description": "返回数量上限", "default": 20},
                 },
-                "required": ["prompt"],
+                "required": ["action"],
             },
         },
     },
     {
         "type": "function",
         "function": {
-            "name": "generate_mindmap",
-            "description": "生成思维导图",
+            "name": "create_question_bank",
+            "description": "创建一个新的题库。在准备批量出题前先创建题库，然后多次调用 generate_practice 向其中添加题目",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "topic": {"type": "string", "description": "主题"},
-                    "depth": {"type": "integer", "description": "层级深度", "default": 3},
+                    "name": {"type": "string", "description": "题库名称，如「高中数学-导数专项」"},
+                    "description": {"type": "string", "description": "题库描述，说明覆盖的知识点和难度范围"},
+                    "subject": {"type": "string", "description": "所属学科"},
                 },
-                "required": ["topic"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "generate_document",
-            "description": "生成学习文档/笔记",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "topic": {"type": "string", "description": "主题"},
-                    "format": {"type": "string", "enum": ["pdf", "markdown", "word"], "default": "markdown"},
-                },
-                "required": ["topic"],
+                "required": ["name"],
             },
         },
     },
 ]
 
 # ── 工具分类 ──
-FAST_TOOLS = {"search_media", "generate_practice"}
+FAST_TOOLS = {"search_media", "generate_practice", "query_question_banks", "create_question_bank"}
 SLOW_TOOLS = {"generate_image", "generate_mindmap", "generate_document"}
 
 # ── 工具处理器 ──
@@ -154,6 +149,7 @@ async def _handle_generate_practice(params: dict) -> dict:
     count = params.get("count", 2)
     conversation_id = params.get("conversation_id", "")
     user_text = params.get("knowledge_point", subject)
+    bank_name = params.get("bank_name", "").strip() or None
 
     try:
         from app.services.practice.practice_question_gen import handle_question_generation
@@ -162,6 +158,7 @@ async def _handle_generate_practice(params: dict) -> dict:
             user_message=user_text[:200],
             user_id=DEFAULT_USER_ID,
             conversation_id=conversation_id or None,
+            bank_name=bank_name,
         )
 
         questions = result.get("questions", [])
@@ -249,8 +246,8 @@ async def _handle_generate_mindmap(params: dict) -> dict:
     subtopics = []
     if user_id and partition_id:
         try:
-            from app.services.common.storage import storage as _mm_storage
-            _data = _mm_storage.load(user_id)
+            from app.services.common import get_data_repo as _mm_storage
+            _data = _mm_get_data_repo().load(user_id)
             graph = _data.knowledge_graphs.get(partition_id)
             if graph and graph.nodes:
                 # 找与 topic 相关的知识点
@@ -347,9 +344,167 @@ async def _handle_generate_document(params: dict) -> dict:
         "status": "ready",
     }
 
+
+# ── 题库工具处理器 ──
+
+
+async def _handle_query_question_banks(params: dict) -> dict:
+    """查询题库和题目，支持列出/搜索/查看详情"""
+    action = params.get("action", "list_banks")
+    bank_id = params.get("bank_id", "")
+    keyword = params.get("keyword", "")
+    limit = params.get("limit", 20)
+
+    from app.services.practice.practice_question_bank import list_banks, get_bank
+
+    try:
+        if action == "list_banks":
+            banks = list_banks(DEFAULT_USER_ID)
+            items = []
+            for b in banks[:limit]:
+                items.append({
+                    "id": b.get("id"),
+                    "name": b.get("name"),
+                    "description": b.get("description", ""),
+                    "question_count": b.get("real_count") or b.get("question_count", 0),
+                    "created_at": b.get("created_at", ""),
+                })
+            return {
+                "action": "list_banks",
+                "total": len(banks),
+                "banks": items,
+                "summary": f"共有 {len(banks)} 个题库，当前显示 {len(items)} 个",
+            }
+
+        elif action == "get_bank" and bank_id:
+            bank = get_bank(bank_id, DEFAULT_USER_ID)
+            if not bank:
+                return {"action": "get_bank", "error": f"未找到题库: {bank_id}", "found": False}
+
+            # 获取题库内的题目
+            from app.db.database import get_db
+            db = get_db()
+            questions = db.fetchall(
+                """SELECT id, stem, question_type, difficulty, bloom_level, metadata
+                   FROM questions WHERE bank_id = %s AND deleted_at IS NULL
+                   ORDER BY created_at DESC LIMIT %s""",
+                (bank_id, limit),
+            )
+            q_list = []
+            for q in questions:
+                q_list.append({
+                    "id": q["id"],
+                    "stem": q["stem"][:100] + ("..." if len(q["stem"]) > 100 else ""),
+                    "type": q["question_type"],
+                    "difficulty": q["difficulty"],
+                    "bloom": q.get("bloom_level", ""),
+                })
+
+            return {
+                "action": "get_bank",
+                "found": True,
+                "bank": {
+                    "id": bank.get("id"),
+                    "name": bank.get("name"),
+                    "description": bank.get("description", ""),
+                    "question_count": bank.get("real_count") or bank.get("question_count", 0),
+                },
+                "questions": q_list,
+                "summary": f"题库「{bank.get('name')}」共 {len(q_list)} 道题",
+            }
+
+        elif action == "search_questions":
+            from app.db.database import get_db
+            db = get_db()
+            if bank_id:
+                if keyword:
+                    rows = db.fetchall(
+                        """SELECT q.id, q.stem, q.question_type, q.difficulty, qb.name as bank_name
+                           FROM questions q JOIN question_banks qb ON q.bank_id = qb.id
+                           WHERE q.bank_id = %s AND q.deleted_at IS NULL
+                             AND q.stem ILIKE %s
+                           ORDER BY q.created_at DESC LIMIT %s""",
+                        (bank_id, f"%{keyword}%", limit),
+                    )
+                else:
+                    rows = db.fetchall(
+                        """SELECT q.id, q.stem, q.question_type, q.difficulty, qb.name as bank_name
+                           FROM questions q JOIN question_banks qb ON q.bank_id = qb.id
+                           WHERE q.bank_id = %s AND q.deleted_at IS NULL
+                           ORDER BY q.created_at DESC LIMIT %s""",
+                        (bank_id, limit),
+                    )
+            else:
+                if keyword:
+                    rows = db.fetchall(
+                        """SELECT q.id, q.stem, q.question_type, q.difficulty, qb.name as bank_name
+                           FROM questions q JOIN question_banks qb ON q.bank_id = qb.id
+                           WHERE q.deleted_at IS NULL AND q.stem ILIKE %s
+                           ORDER BY q.created_at DESC LIMIT %s""",
+                        (f"%{keyword}%", limit),
+                    )
+                else:
+                    rows = []
+
+            items = []
+            for r in rows:
+                items.append({
+                    "id": r["id"],
+                    "stem": r["stem"][:120] + ("..." if len(r["stem"]) > 120 else ""),
+                    "type": r["question_type"],
+                    "difficulty": r["difficulty"],
+                    "bank_name": r.get("bank_name", ""),
+                })
+
+            return {
+                "action": "search_questions",
+                "keyword": keyword,
+                "total": len(items),
+                "questions": items,
+                "summary": f"找到 {len(items)} 道题{'包含「' + keyword + '」' if keyword else ''}",
+            }
+
+        return {"action": action, "error": f"未知操作: {action}"}
+    except Exception as e:
+        logger.warning("query_question_banks error: %s", e)
+        return {"action": action, "error": str(e), "summary": "查询题库失败"}
+
+
+async def _handle_create_question_bank(params: dict) -> dict:
+    """创建一个新的题库"""
+    name = params.get("name", "").strip()
+    description = params.get("description", "").strip()
+    subject = params.get("subject", "").strip()
+
+    if not name:
+        return {"error": "题库名称不能为空", "created": False}
+
+    from app.services.practice.practice_question_bank import create_bank
+
+    bank = create_bank(
+        user_id=DEFAULT_USER_ID,
+        name=name,
+        description=description,
+        auto_created=False,
+    )
+    if bank:
+        return {
+            "created": True,
+            "bank": {
+                "id": bank.get("id"),
+                "name": bank.get("name"),
+                "description": bank.get("description", ""),
+            },
+            "summary": f"已创建题库「{name}」，题库ID: {bank.get('id')}。接下来可以用 generate_practice 向其中添加题目。",
+        }
+    return {"error": "创建题库失败", "created": False}
+
+
 TOOL_HANDLERS = {
     "search_media": _handle_search_media,
     "generate_practice": _handle_generate_practice,
+    "query_question_banks": _handle_query_question_banks,
+    "create_question_bank": _handle_create_question_bank,
     "generate_image": _handle_generate_image,
     "generate_mindmap": _handle_generate_mindmap,
     "generate_document": _handle_generate_document,

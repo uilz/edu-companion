@@ -10,28 +10,6 @@ import time
 from typing import Optional
 
 from app.cognitive.models import CognitiveNode, CognitiveEvent
-from app.cognitive.storage import (
-    upsert_node as _upsert_node,
-    get_node as _get_node,
-    delete_node as _delete_node,
-    get_children as _get_children,
-    get_visible_children as _get_visible_children,
-    get_nodes_by_level as _get_nodes_by_level,
-    list_all_nodes as _list_all_nodes,
-    search_nodes as _search_nodes,
-    find_node_by_path as _find_node_by_path,
-    find_node_by_label as _find_node_by_label,
-    get_subtree as _get_subtree,
-    get_suggested_count as _get_suggested_count,
-    get_child_count as _get_child_count,
-    set_node_visible as _set_node_visible,
-    get_urgent_nodes as _get_urgent_nodes,
-    append_event as _append_event,
-    get_unprocessed_events as _get_unprocessed_events,
-    mark_event_processed as _mark_event_processed,
-    query_events as _query_events,
-    sync_from_practice_event as _sync_from_practice_event,
-)
 
 
 class MemoryCognitiveNodeRepository:
@@ -121,7 +99,8 @@ class MemoryCognitiveNodeRepository:
             nodes[node_id].is_visible = True
 
     def get_urgent_nodes(self, user_id: str = "default", top_k: int = 10) -> list[dict]:
-        return _get_urgent_nodes(user_id, top_k)
+        # 内存实现：返回空列表
+        return []
 
     # ── 向量搜索 ──
 
@@ -133,7 +112,19 @@ class MemoryCognitiveNodeRepository:
         limit: int = 10,
         min_similarity: float = 0.3,
     ) -> list[dict]:
-        return _search_nodes(query_embedding, user_id, level, limit, min_similarity)
+        # 内存实现：返回空列表（向量搜索需要数据库）
+        return []
+
+    def vector_search(
+        self,
+        query_embedding: list[float],
+        user_id: str = "default",
+        level: str | None = None,
+        limit: int = 10,
+        min_similarity: float = 0.1,
+    ) -> list[dict]:
+        # 内存实现：返回空列表（向量搜索需要数据库）
+        return []
 
     # ── 认知事件 ──
 
@@ -174,7 +165,27 @@ class MemoryCognitiveNodeRepository:
         question_id: str = "",
         error_type: str = "",
     ) -> dict:
-        return _sync_from_practice_event(
-            user_id, skill_id, is_correct,
-            response_time_ms, topic, question_id, error_type,
-        )
+        # 内存实现：简单更新节点
+        node = self.get_node(skill_id, user_id)
+        if node:
+            self.upsert_node(node, user_id)
+        return {"status": "ok", "node_id": skill_id}
+
+    # ── Writer helpers ──
+
+    def update_extra_fields(
+        self,
+        node_id: str,
+        user_id: str,
+        created_by: str,
+        description: str = "",
+        metadata: str = "",
+    ) -> None:
+        # 内存实现：no-op（额外字段存储在内存中不需要）
+        pass
+
+    def add_to_parent_children(self, node_id: str, parent_id: str, user_id: str = "default") -> None:
+        nodes = self._nodes.get(user_id, {})
+        parent = nodes.get(parent_id)
+        if parent and node_id not in (parent.children or []):
+            parent.children = (parent.children or []) + [node_id]

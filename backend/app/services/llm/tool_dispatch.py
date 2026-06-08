@@ -18,7 +18,7 @@ from app.schemas.conversation import (
     ResponseBlock,
 )
 from app.services.llm.llm_service import llm_service, _parse_tool_calls_response
-from app.services.common.storage import storage
+from app.services.common import get_data_repo
 from app.services.llm.tool_executor import tool_executor, predict_tools, SLOW_TOOLS
 
 from app.services.llm.llm_core import _find_active_conversation, parse_sources
@@ -43,6 +43,19 @@ def _build_tool_params(tool_name: str, user_text: str, partition, conversation=N
             "difficulty": "进阶",
             "count": 2,
             "conversation_id": conversation.id if conversation else "",
+            "bank_name": "",  # LLM 可指定
+        }
+    elif tool_name == "query_question_banks":
+        return {
+            "action": "list_banks",
+            "keyword": user_text[:50],
+            "limit": 10,
+        }
+    elif tool_name == "create_question_bank":
+        return {
+            "name": user_text[:80],
+            "description": user_text[:200],
+            "subject": subject,
         }
     elif tool_name == "generate_image":
         return {"prompt": user_text}
@@ -66,6 +79,13 @@ def _summarize_tool_result(tool_name: str, block: ResponseBlock) -> str:
         count = content.get("count", len(questions))
         bank_id = content.get("bank_id", "")
         return f"生成{count}道练习题（题库ID: {bank_id}），题目已保存到练习系统"
+    elif tool_name == "query_question_banks":
+        return content.get("summary", "查询题库完成")
+    elif tool_name == "create_question_bank":
+        if content.get("created"):
+            bank = content.get("bank", {})
+            return f"已创建题库「{bank.get('name')}」（ID: {bank.get('id')}）"
+        return f"创建题库失败: {content.get('error', '未知错误')}"
     elif tool_name == "generate_image":
         return "已生成图片"
     elif tool_name == "generate_mindmap":
@@ -101,7 +121,7 @@ async def generate_reply_with_tools(
     策略: 意图预判 → 先执行工具 → LLM 统一回复。
     返回 ResponseBlock 列表：text block（首位） + tool result blocks。
     """
-    data = storage.load(user_id)
+    data = get_data_repo().load(user_id)
     partition = data.partitions.get(partition_id)
     if not partition:
         raise ValueError(f"Partition {partition_id} not found")
@@ -162,7 +182,7 @@ async def generate_reply_with_tools(
                         conversation_id=conversation.id if conversation else "",
                     )
                     data.response_blocks[tool_block.id] = tool_block
-                    storage.save(user_id, data)
+                    get_data_repo().save(user_id, data)
             except Exception as e:
                 logger.error(f"Tool {tool_name} failed: {e}")
                 tool_results.append({"tool": tool_name, "error": str(e)})
@@ -261,7 +281,7 @@ async def generate_reply_with_tools(
                             conversation_id=conversation.id if conversation else "",
                         )
                         data.response_blocks[tool_block.id] = tool_block
-                        storage.save(user_id, data)
+                        get_data_repo().save(user_id, data)
 
                     # 将工具结果作为 tool message 添加到上下文
                     result_content = json.dumps(
@@ -323,9 +343,9 @@ async def generate_reply_with_tools(
             response_blocks.append(text_block)
 
     # 存储所有 ResponseBlocks
-    data = storage.load(user_id)
+    data = get_data_repo().load(user_id)
     for block in response_blocks:
         data.response_blocks[block.id] = block
-    storage.save(user_id, data)
+    get_data_repo().save(user_id, data)
 
     return response_blocks

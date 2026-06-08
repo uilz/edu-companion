@@ -67,9 +67,9 @@ def _build_context_messages(
 
     # ── 3. Global knowledge state ──
     try:
-        from app.services.knowledge.cognitive_queries import get_knowledge_context
+        from app.domain.knowledge import get_knowledge_query
         
-        knowledge_ctx = get_knowledge_context(user_id)
+        knowledge_ctx = get_knowledge_query().get_knowledge_context(user_id)
         if knowledge_ctx:
             system_content += f"\n\n{knowledge_ctx}"
     except Exception:
@@ -142,7 +142,7 @@ def _build_context_messages(
     # ── 7. Context-aware practice suggestion ──
     try:
         from app.services.conversation.context_trigger import context_trigger
-        from app.services.common.storage import storage as _storage2
+        from app.services.common import get_data_repo as _storage2
 
         data = _storage2.load(user_id)
         if conversation:
@@ -172,20 +172,20 @@ def _build_context_messages(
 
     # ── 7.5 CognitiveNode 认知画像注入 ──
     try:
-        from app.cognitive.storage import get_node, find_node_by_label
+        from app.cognitive import get_repo
 
         cog_node = None
         # 优先用 partition.id 直接查找
         if partition.id:
-            cog_node = get_node(partition.id, user_id)
+            cog_node = get_repo().get_node(partition.id, user_id)
         # 尝试用 subject (可能含 skill_id) 查找
         if not cog_node and partition.subject:
-            cog_node = get_node(partition.subject, user_id)
+            cog_node = get_repo().get_node(partition.subject, user_id)
         if not cog_node and partition.subject:
-            cog_node = find_node_by_label(partition.subject, user_id)
+            cog_node = get_repo().find_node_by_label(partition.subject, user_id)
         # 最后用分区名查找
         if not cog_node and partition.name:
-            cog_node = find_node_by_label(partition.name, user_id)
+            cog_node = get_repo().find_node_by_label(partition.name, user_id)
 
         if cog_node:
             prof = cog_node.belief.proficiency_mean
@@ -297,7 +297,7 @@ def _build_context_messages(
     # ── 9. Knowledge graph mastery overview ──
     try:
         if "data" not in dir():
-            from app.services.common.storage import storage as _s3
+            from app.services.common import get_data_repo as _s3
             data = _s3.load(user_id)
         graph = data.knowledge_graphs.get(partition.id)
         if graph and graph.nodes:
@@ -326,6 +326,23 @@ def _build_context_messages(
             system_content += "\n回答涉及这些知识点时，在末尾标注 [来源: 知识点名称]。"
     except Exception:
         logger.debug("知识图谱概览注入跳过", exc_info=True)
+
+    # ── 9.5 题库上下文注入 ──
+    try:
+        from app.services.practice.practice_question_bank import list_banks
+
+        banks = list_banks(user_id)
+        if banks:
+            bank_lines = ["\n\n📚 已有题库:"]
+            for b in banks[:8]:
+                name = b.get("name", "未命名")
+                qc = b.get("real_count") or b.get("question_count", 0)
+                bid = b.get("id", "")[:12]
+                bank_lines.append(f"  - {name} ({qc}道题, ID: {bid})")
+            bank_lines.append("用户问练习题时，可先调用 query_question_banks 查看现有题库，再决定出题方式。")
+            system_content += "\n".join(bank_lines)
+    except Exception:
+        logger.debug("题库上下文注入跳过", exc_info=True)
 
     # ── 10. Tool availability hint ──
     try:

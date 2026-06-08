@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 
 from app.services.common.embedding_utils import compute_embedding, cosine_similarity
-from app.services.common.storage import storage
+from app.services.common import get_data_repo
 
 logger = logging.getLogger(__name__)
 
@@ -256,7 +256,7 @@ class Classifier:
         将文本分类到最合适的分区。
         优先关键词匹配，embedding 不可用时正常降级。
         """
-        data = storage.load(user_id)
+        data = get_data_repo().load(user_id)
 
         if not data.partitions:
             return {
@@ -340,7 +340,7 @@ class Classifier:
         三级分类：分区 → 领域 → 专题。
         返回完整路由信息，含是否需要切换推荐。
         """
-        data = storage.load(user_id)
+        data = get_data_repo().load(user_id)
 
         # Step 1: 分区分类（复用现有逻辑）
         partition_result = self.classify_partition(user_id, text)
@@ -480,7 +480,7 @@ class Classifier:
         should_recommend_switch = False
         switch_detail: dict = {}
         current_topic_id = ""
-        data = storage.load(user_id)
+        data = get_data_repo().load(user_id)
 
         if current_conversation_id:
             for conv in data.conversations.values():
@@ -561,7 +561,7 @@ class Classifier:
         topic_id = existing_topic.id if existing_topic else None
 
         # 确认活跃对话（含兜底）
-        data = storage.load(user_id)
+        data = get_data_repo().load(user_id)
         conversation_id = ""
         if topic_id:
             topic = data.topics.get(topic_id)
