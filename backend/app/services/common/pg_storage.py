@@ -39,11 +39,15 @@ class PgStorageEngine(DataRepository, AdminRepository):
         if self._initialized:
             return
         db = Database.get()
-        path = __file__
-        sql_dir = path.rsplit("/", 2)[0] + "/db/conversation_schema.sql"
+        # pg_storage.py 位于 app/services/common/，schema 在 app/db/conversation_schema.sql
+        # 用 pathlib 解析到 backend 包根目录的稳定路径
+        from pathlib import Path
+        backend_root = Path(__file__).resolve().parents[3]  # .../backend
+        sql_path = backend_root / "app" / "db" / "conversation_schema.sql"
         try:
-            with open(sql_dir) as f:
+            with open(sql_path) as f:
                 db.execute(f.read())
+            logger.info("conversation_user_meta schema ensured via %s", sql_path)
         except Exception as e:
             logger.warning("schema init failed (may already exist): %s", e)
         self._initialized = True
