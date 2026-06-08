@@ -16,7 +16,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request, Response, UploadFile, File, Form, Query  # type: ignore
 from pydantic import BaseModel, Field  # type: ignore
 
-from app.domain.auth.dependencies import current_user_id
+from shared.constants import DEFAULT_USER_ID
 from app.schemas.conversation import TextBlock
 from app.services.common import get_data_repo
 from app.services.knowledge.tree_ops import tree_ops
@@ -91,11 +91,12 @@ class PersistMessageRequest(BaseModel):
     metadata: dict = {}
 
 
+USER_ID = DEFAULT_USER_ID
 
 
 # ══════════════════ ETag 辅助 ══════════════════
-def _check_etag(request: Request, user_id: str) -> str | None:
-    etag = get_data_repo().get_etag(user_id)
+def _check_etag(request: Request) -> str | None:
+    etag = get_data_repo().get_etag(USER_ID)
     if_none_match = request.headers.get("if-none-match", "")
     if if_none_match == etag:
         raise HTTPException(304)
@@ -122,11 +123,11 @@ def _find_default_conversation(user_id: str, level: str, entity_id: str) -> str 
 
 # ══════════════════ 通用树节点 CRUD ══════════════════
 @router.get("/tree/{level}")
-async def list_nodes(level: str, request: Request, parent_id: str = Query(None), type: str = Query(None), user_id: str = Depends(current_user_id)):
+async def list_nodes(level: str, request: Request, parent_id: str = Query(None), type: str = Query(None)):
     if level not in tree_ops.LEVELS:
         raise HTTPException(400, f"Invalid level: {level}")
-    etag = _check_etag(request, user_id)
-    data = get_data_repo().load(user_id)
+    etag = _check_etag(request)
+    data = get_data_repo().load(USER_ID)
     coll_name = tree_ops.LEVEL_CONFIG[level]["collection"]
     collection = getattr(data, coll_name)
     nodes = [n.model_dump(mode="json") for n in collection.values()]
@@ -151,7 +152,7 @@ async def list_nodes(level: str, request: Request, parent_id: str = Query(None),
 
 
 @router.post("/tree/{level}")
-async def create_node(level: str, body: dict, user_id: str = Depends(current_user_id)):
+async def create_node(level: str, body: dict):
     if level not in tree_ops.LEVELS:
         raise HTTPException(400, f"Invalid level: {level}")
     try:
@@ -161,18 +162,18 @@ async def create_node(level: str, body: dict, user_id: str = Depends(current_use
         if name is None:
             raise HTTPException(400, "Name is required")
         if level == "partition":
-            entity = tree_ops.create_partition(user_id, name, subject=name, emoji=emoji)
+            entity = tree_ops.create_partition(USER_ID, name, subject=name, emoji=emoji)
         elif level == "domain":
-            entity = tree_ops.create_domain(user_id, parent_id, name, emoji)
+            entity = tree_ops.create_domain(USER_ID, parent_id, name, emoji)
         elif level == "topic":
-            entity = tree_ops.create_topic(user_id, parent_id, name, emoji)
+            entity = tree_ops.create_topic(USER_ID, parent_id, name, emoji)
         elif level == "conversation":
             entity = tree_ops.create_conversation(
-                user_id, parent_id=parent_id, name=name, type=body.get("type", "normal"),
+                USER_ID, parent_id=parent_id, name=name, type=body.get("type", "normal"),
             )
         else:
             raise HTTPException(400, "Unsupported level")
-        conv_id = _find_default_conversation(user_id, level, entity.id)
+        conv_id = _find_default_conversation(USER_ID, level, entity.id)
         return {level: entity, "conversation_id": conv_id}
     except HTTPException:
         raise
@@ -185,10 +186,10 @@ async def create_node(level: str, body: dict, user_id: str = Depends(current_use
 
 # ══════════════════ 临时对话端点 ══════════════════
 @router.post("/tree/conversation/temporary")
-async def create_temporary_conversation(user_id: str = Depends(current_user_id)):
+async def create_temporary_conversation():
     """创建临时对话（空状态直接对话）。"""
     try:
-        conv = tree_ops.create_temporary_conversation(user_id)
+        conv = tree_ops.create_temporary_conversation(USER_ID)
         return {"conversation": conv.model_dump(mode="json")}
     except Exception:
         logger.exception("Failed to create temporary conversation")
@@ -196,11 +197,11 @@ async def create_temporary_conversation(user_id: str = Depends(current_user_id))
 
 
 @router.post("/tree/conversation/{conv_id}/migrate")
-async def migrate_conversation(conv_id: str, body: MigrateConversationRequest, user_id: str = Depends(current_user_id)):
+async def migrate_conversation(conv_id: str, body: MigrateConversationRequest):
     """将临时对话迁移到正式分区。"""
     try:
         conv = tree_ops.migrate_temporary_conversation(
-            user_id, conv_id, body.target_partition_id, body.target_type,
+            USER_ID, conv_id, body.target_partition_id, body.target_type,
         )
         return {"ok": True, "conversation": conv.model_dump(mode="json")}
     except ValueError as e:
@@ -211,18 +212,18 @@ async def migrate_conversation(conv_id: str, body: MigrateConversationRequest, u
 
 
 @router.patch("/tree/{level}/{node_id}")
-async def rename_node(level: str, node_id: str, req: RenameRequest, user_id: str = Depends(current_user_id)):
+async def rename_node(level: str, node_id: str, req: RenameRequest):
     if level not in tree_ops.LEVELS:
         raise HTTPException(400, f"Invalid level: {level}")
     try:
         if level == "partition":
-            entity = tree_ops.rename_partition(user_id, node_id, req.name)
+            entity = tree_ops.rename_partition(USER_ID, node_id, req.name)
         elif level == "domain":
-            entity = tree_ops.rename_domain(user_id, node_id, req.name)
+            entity = tree_ops.rename_domain(USER_ID, node_id, req.name)
         elif level == "topic":
-            entity = tree_ops.rename_topic(user_id, node_id, req.name)
+            entity = tree_ops.rename_topic(USER_ID, node_id, req.name)
         elif level == "conversation":
-            entity = tree_ops.rename_conversation(user_id, node_id, req.name)
+            entity = tree_ops.rename_conversation(USER_ID, node_id, req.name)
         else:
             raise HTTPException(400)
         return {level: entity.model_dump(mode="json")}
@@ -236,21 +237,21 @@ async def rename_node(level: str, node_id: str, req: RenameRequest, user_id: str
 
 
 @router.delete("/tree/{level}/{node_id}")
-async def delete_node(level: str, node_id: str, user_id: str = Depends(current_user_id)):
+async def delete_node(level: str, node_id: str):
     if level == "message":
-        tree_ops.delete_message(user_id, node_id)
+        tree_ops.delete_message(USER_ID, node_id)
         return {"ok": True}
     if level not in tree_ops.LEVELS:
         raise HTTPException(400, f"Invalid level: {level}")
     try:
         if level == "partition":
-            tree_ops.delete_partition(user_id, node_id)
+            tree_ops.delete_partition(USER_ID, node_id)
         elif level == "domain":
-            tree_ops.delete_domain(user_id, node_id)
+            tree_ops.delete_domain(USER_ID, node_id)
         elif level == "topic":
-            tree_ops.delete_topic(user_id, node_id)
+            tree_ops.delete_topic(USER_ID, node_id)
         elif level == "conversation":
-            tree_ops.delete_conversation(user_id, node_id)
+            tree_ops.delete_conversation(USER_ID, node_id)
         else:
             raise HTTPException(400)
         return {"ok": True}
@@ -287,10 +288,10 @@ def _merge_cognitive_ids(messages: list[dict], msg_ids: list[str]) -> None:
 # ══════════════════ 消息操作（归一化到 /tree/conversation/{conv_id}/message 和 /tree/message/{id}）══
 @router.get("/tree/conversation/{conv_id}/messages")
 async def list_messages(
-    conv_id: str, request: Request, limit: int = 50, offset: int = 0, user_id: str = Depends(current_user_id)
+    conv_id: str, request: Request, limit: int = 50, offset: int = 0
 ):
-    etag = _check_etag(request, user_id)
-    data = get_data_repo().load(user_id)
+    etag = _check_etag(request)
+    data = get_data_repo().load(USER_ID)
     conv = data.conversations.get(conv_id)
     if not conv:
         raise HTTPException(404, "Conversation not found")
@@ -313,8 +314,8 @@ async def list_messages(
 
 
 @router.get("/tree/conversation/{conv_id}/blocks")
-async def get_conversation_blocks(conv_id: str, limit: int = 100, user_id: str = Depends(current_user_id)):
-    data = get_data_repo().load(user_id)
+async def get_conversation_blocks(conv_id: str, limit: int = 100):
+    data = get_data_repo().load(USER_ID)
     conv = data.conversations.get(conv_id)
     blocks = []
     if conv:
@@ -331,13 +332,13 @@ async def get_conversation_blocks(conv_id: str, limit: int = 100, user_id: str =
     return {"blocks": blocks}
 
 @router.post("/tree/conversation/{conv_id}/message")
-async def send_message_in_conversation(conv_id: str, req: SendMessageRequest, user_id: str = Depends(current_user_id)):
+async def send_message_in_conversation(conv_id: str, req: SendMessageRequest):
     """在指定对话中发送消息（用于 WebSocket 降级或直接 HTTP）"""
     from app.domain.conversation.llm import send_and_reply
 
     pid = req.partition_id
     if not pid:
-        data = get_data_repo().load(user_id)
+        data = get_data_repo().load(USER_ID)
         conv = data.conversations.get(conv_id)
         if not conv:
             raise HTTPException(404, "Conversation not found")
@@ -354,7 +355,7 @@ async def send_message_in_conversation(conv_id: str, req: SendMessageRequest, us
                         break
     if not pid:
         raise HTTPException(400, "Cannot determine partition")
-    outcome = await send_and_reply(user_id, pid, req.text, conversation_id=conv_id, pending_quote=req.pending_quote)
+    outcome = await send_and_reply(USER_ID, pid, req.text, conversation_id=conv_id, pending_quote=req.pending_quote)
     return {
         "user_message": outcome["user_message"],
         "assistant_message": outcome["assistant_message"],
@@ -365,8 +366,8 @@ async def send_message_in_conversation(conv_id: str, req: SendMessageRequest, us
 
 
 @router.get("/tree/message/{message_id}")
-async def get_message(message_id: str, user_id: str = Depends(current_user_id)):
-    data = get_data_repo().load(user_id)
+async def get_message(message_id: str):
+    data = get_data_repo().load(USER_ID)
     node = data.nodes.get(message_id)
     if not node:
         raise HTTPException(404, "Message not found")
@@ -387,7 +388,7 @@ async def get_message(message_id: str, user_id: str = Depends(current_user_id)):
 
 
 @router.post("/tree/message/{message_id}/switch-version")
-async def switch_version(message_id: str, req: dict | None = None, user_id: str = Depends(current_user_id)):
+async def switch_version(message_id: str, req: dict | None = None):
     if req is None:
         req = {}
     """切换到指定版本：从目标版本 DFS 重建 conv.path。
@@ -396,7 +397,7 @@ async def switch_version(message_id: str, req: dict | None = None, user_id: str 
     direction = req.get("direction")
     target_index = req.get("target_index")
 
-    data = get_data_repo().load(user_id)
+    data = get_data_repo().load(USER_ID)
     node = data.nodes.get(message_id)
     if not node:
         raise HTTPException(404, "Message not found")
@@ -470,7 +471,7 @@ async def switch_version(message_id: str, req: dict | None = None, user_id: str 
     # 5) 保存并返回
     conv.path = new_path
     conv.summary_dirty = True
-    get_data_repo().save(user_id, data)
+    get_data_repo().save(USER_ID, data)
 
     messages = []
     for nid in new_path:
@@ -487,14 +488,14 @@ async def switch_version(message_id: str, req: dict | None = None, user_id: str 
 
 
 @router.put("/tree/message/{message_id}")
-async def modify_message(message_id: str, req: ModifyMessageRequest, user_id: str = Depends(current_user_id)):
+async def modify_message(message_id: str, req: ModifyMessageRequest):
     blocks = [
         TextBlock(text=block.get("text", ""))
         for block in req.content_blocks
         if block.get("type") == "text"
     ]
-    node = tree_ops.modify_message(user_id, message_id, blocks, req.text_summary)
-    data = get_data_repo().load(user_id)
+    node = tree_ops.modify_message(USER_ID, message_id, blocks, req.text_summary)
+    data = get_data_repo().load(USER_ID)
     parent = data.nodes.get(node.parent_id) if node.parent_id else None
     all_siblings = parent.children_ids if parent else []
     version_count = sum(
@@ -506,12 +507,12 @@ async def modify_message(message_id: str, req: ModifyMessageRequest, user_id: st
 
 
 @router.post("/tree/message/{message_id}/reply")
-async def reply_to_edited_message(message_id: str, user_id: str = Depends(current_user_id)):
+async def reply_to_edited_message(message_id: str):
     """编辑消息后重新生成 AI 回复"""
     from app.services.llm.tool_dispatch import generate_reply_with_tools
     from app.schemas.conversation import TextBlock
 
-    data = get_data_repo().load(user_id)
+    data = get_data_repo().load(USER_ID)
     node = data.nodes.get(message_id)
     if not node or node.role != "user":
         raise HTTPException(400, "Can only reply to user messages")
@@ -545,7 +546,7 @@ async def reply_to_edited_message(message_id: str, user_id: str = Depends(curren
         raise HTTPException(400, "Message has no text content")
 
     # 用 generate_reply_with_tools 生成回复（含工具调用）
-    response_blocks = await generate_reply_with_tools(user_id, pid, text)
+    response_blocks = await generate_reply_with_tools(USER_ID, pid, text)
 
     # 提取文本
     text_parts = []
@@ -556,17 +557,17 @@ async def reply_to_edited_message(message_id: str, user_id: str = Depends(curren
 
     # 存助手消息（会自动追加到 conv.path）
     assistant_node = tree_ops.add_message(
-        user_id, pid, "assistant",
+        USER_ID, pid, "assistant",
         [TextBlock(text=reply_text)], reply_text,
         conversation_id=conv_id,
     )
 
     # 回填 message_id
-    data = get_data_repo().load(user_id)
+    data = get_data_repo().load(USER_ID)
     for block in response_blocks:
         if block.id in data.response_blocks:
             data.response_blocks[block.id].message_id = assistant_node.id
-    get_data_repo().save(user_id, data)
+    get_data_repo().save(USER_ID, data)
 
     return {
         "assistant_message": assistant_node.model_dump(mode="json"),
@@ -576,7 +577,7 @@ async def reply_to_edited_message(message_id: str, user_id: str = Depends(curren
 
 
 @router.get("/tree/stream/active/{conversation_id}")
-async def check_stream_active(conversation_id: str, user_id: str = Depends(current_user_id)):
+async def check_stream_active(conversation_id: str):
     """检测指定对话是否正在后台流式生成"""
     from app.services.conversation.active_stream import active_streams
     active = await active_streams.is_active(conversation_id)
@@ -637,7 +638,7 @@ def _guess_file_type(mime: str) -> str:
 
 
 @router.post("/workspace/upload")
-async def upload_workspace_file(user_id: str = Depends(current_user_id), 
+async def upload_workspace_file(
     file: UploadFile = File(...),
     conversation_id: str = Form(...),
 ):
@@ -645,7 +646,7 @@ async def upload_workspace_file(user_id: str = Depends(current_user_id),
     if not file.filename:
         raise HTTPException(400, "No file selected")
 
-    data = get_data_repo().load(user_id)
+    data = get_data_repo().load(USER_ID)
     conv = data.conversations.get(conversation_id)
     if not conv:
         raise HTTPException(404, "Conversation not found")
@@ -656,7 +657,7 @@ async def upload_workspace_file(user_id: str = Depends(current_user_id),
         or "application/octet-stream"
     )
     file_type = _guess_file_type(mime)
-    ws_dir = _workspace_dir(user_id, conversation_id)
+    ws_dir = _workspace_dir(USER_ID, conversation_id)
     type_dir = _file_type_dir(ws_dir, file_type)
 
     file_id = str(uuid.uuid4())
@@ -671,7 +672,7 @@ async def upload_workspace_file(user_id: str = Depends(current_user_id),
 
     record = FileRecord(
         id=file_id,
-        user_id=user_id,
+        user_id=USER_ID,
         original_name=file.filename,
         storage_path=str(storage_path),
         mime_type=mime,
@@ -679,7 +680,7 @@ async def upload_workspace_file(user_id: str = Depends(current_user_id),
         file_type=file_type,
     )
     data.files[file_id] = record
-    get_data_repo().save(user_id, data)
+    get_data_repo().save(USER_ID, data)
 
     return {"file_id": file_id, "original_name": file.filename, "file_type": file_type}
 
@@ -696,11 +697,11 @@ class SubBranchCreateRequest(BaseModel):
 
 
 @router.post("/sub-branch")
-async def create_sub_branch(req: SubBranchCreateRequest, user_id: str = Depends(current_user_id)):
+async def create_sub_branch(req: SubBranchCreateRequest):
     """创建子支会话"""
     try:
         conv, ref = tree_ops.create_sub_branch(
-            user_id,
+            USER_ID,
             req.source_conversation_id,
             req.source_message_id,
             req.char_start,
@@ -719,16 +720,16 @@ async def create_sub_branch(req: SubBranchCreateRequest, user_id: str = Depends(
 
 
 @router.get("/messages/{message_id}/sub-branches")
-async def get_message_sub_branches(message_id: str, user_id: str = Depends(current_user_id)):
+async def get_message_sub_branches(message_id: str):
     """获取消息的子支列表"""
-    branches = tree_ops.get_sub_branches(user_id, message_id)
+    branches = tree_ops.get_sub_branches(USER_ID, message_id)
     return {"sub_branches": branches}
 
 
 @router.get("/sub-branch/{conv_id}/parent")
-async def get_sub_branch_parent(conv_id: str, user_id: str = Depends(current_user_id)):
+async def get_sub_branch_parent(conv_id: str):
     """获取子支的父会话信息"""
-    result = tree_ops.get_sub_branch_parent(user_id, conv_id)
+    result = tree_ops.get_sub_branch_parent(USER_ID, conv_id)
     if not result:
         raise HTTPException(404, "Not a sub-branch or parent not found")
     return result
@@ -740,20 +741,20 @@ async def get_sub_branch_parent(conv_id: str, user_id: str = Depends(current_use
 
 
 @router.get("/emotion/trend")
-async def get_emotion_trend(window_hours: int = 72, user_id: str = Depends(current_user_id)):
+async def get_emotion_trend(window_hours: int = 72):
     """获取用户情绪趋势分析"""
     from app.services.analytics.emotion_analyzer import emotion_analyzer
 
-    trend = await emotion_analyzer.analyze_trend(user_id, window_hours=window_hours)
+    trend = await emotion_analyzer.analyze_trend(USER_ID, window_hours=window_hours)
     return trend.to_dict()
 
 
 @router.get("/emotion/recent")
-async def get_recent_emotions(limit: int = 10, user_id: str = Depends(current_user_id)):
+async def get_recent_emotions(limit: int = 10):
     """获取最近N条情绪记录"""
     from app.services.analytics.emotion_analyzer import emotion_analyzer
 
-    records = emotion_analyzer._cache.get(user_id, [])
+    records = emotion_analyzer._cache.get(USER_ID, [])
     return {
         "records": [r.to_dict() for r in records[-min(limit, 50):]],
         "total": len(records),
@@ -761,11 +762,11 @@ async def get_recent_emotions(limit: int = 10, user_id: str = Depends(current_us
 
 
 @router.get("/emotion/stats")
-async def get_emotion_stats(user_id: str = Depends(current_user_id)):
+async def get_emotion_stats():
     """情绪统计概览（用于首页卡片展示）"""
     from app.services.analytics.emotion_analyzer import emotion_analyzer
 
-    records = emotion_analyzer._cache.get(user_id, [])
+    records = emotion_analyzer._cache.get(USER_ID, [])
     if not records:
         return {"status": "insufficient_data", "message": "还没有足够的情绪数据"}
 
