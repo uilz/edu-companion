@@ -17,7 +17,6 @@ import time
 from datetime import datetime, timezone
 from typing import Optional
 
-from shared.constants import DEFAULT_USER_ID
 
 logger = logging.getLogger(__name__)
 

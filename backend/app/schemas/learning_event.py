@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional
 
-from shared.constants import DEFAULT_USER_ID
 from pydantic import BaseModel, Field
 
 
@@ -32,7 +31,7 @@ class EventType(str, Enum):
 class LearningEvent(BaseModel):
     """单个学习行为事件"""
     id: str = Field(default_factory=lambda: f"evt_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{id(LearningEvent) % 10000:04d}")
-    user_id: str = DEFAULT_USER_ID
+    user_id: str
     type: EventType
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

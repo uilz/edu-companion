@@ -1,12 +1,13 @@
 """知识图谱 — 查询域：分区列表 / 推荐 / 图谱获取"""
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from . import (
     _load, _get_graph, _get_tree_structure,
 )
 from app.services.common import get_data_repo
+from app.domain.auth.dependencies import current_user_id
 
 router = APIRouter()
 
@@ -16,8 +17,8 @@ router = APIRouter()
 # ═══════════════════════════════════════════════════════════
 
 @router.get("/partitions")
-async def list_partitions():
-    data = _load()
+async def list_partitions(user_id: str = Depends(current_user_id)):
+    data = _load(user_id)
     partitions = []
     for pid, p in data.partitions.items():
         g = data.knowledge_graphs.get(pid)
@@ -36,12 +37,12 @@ async def list_partitions():
 # ═══════════════════════════════════════════════════════════
 
 @router.get("/recommendation")
-async def get_recommendation(partition_id: str | None = None, source: str = "tree"):
+async def get_recommendation(partition_id: str | None = None, source: str = "tree", user_id: str = Depends(current_user_id)):
     """
     source=tree: 知识树探索完毕后推荐去对话系统
     source=conversation: 对话系统产生新节点后推荐去知识树
     """
-    data = _load()
+    data = _load(user_id)
 
     if source == "tree":
         if not partition_id:
@@ -122,6 +123,6 @@ async def get_recommendation(partition_id: str | None = None, source: str = "tre
 # ═══════════════════════════════════════════════════════════
 
 @router.get("/{partition_id}")
-async def get_graph(partition_id: str):
-    result = _get_tree_structure(partition_id)
+async def get_graph(partition_id: str, user_id: str = Depends(current_user_id)):
+    result = _get_tree_structure(partition_id, user_id)
     return {"ok": True, **result}

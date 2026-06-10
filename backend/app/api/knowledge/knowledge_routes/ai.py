@@ -5,13 +5,14 @@ import json as _json
 import logging
 import time
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from . import (
     _load, _save, _get_graph, _sync_graph_to_cognitive,
     generate_graph_logic, AiExpandRequest, AiEditRequest,
 )
 from app.schemas.conversation import KGNode, KGEdge
+from app.domain.auth.dependencies import current_user_id
 
 router = APIRouter()
 
@@ -23,11 +24,11 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════════════════
 
 @router.post("/{partition_id}/generate")
-async def generate_graph(partition_id: str, depth: int = 3):
-    data = _load()
+async def generate_graph(partition_id: str, depth: int = 3, user_id: str = Depends(current_user_id)):
+    data = _load(user_id)
     if partition_id not in data.partitions:
         raise HTTPException(status_code=404, detail="分区不存在")
-    result = await generate_graph_logic(partition_id=partition_id, data=data, depth=depth)
+    result = await generate_graph_logic(partition_id=partition_id, user_id=user_id, data=data, depth=depth)
     if not result.get("ok"):
         raise HTTPException(status_code=500, detail=result.get("error", "生成失败"))
     return result
@@ -38,8 +39,8 @@ async def generate_graph(partition_id: str, depth: int = 3):
 # ═══════════════════════════════════════════════════════════
 
 @router.post("/{partition_id}/ai-expand")
-async def ai_expand_nodes(partition_id: str, body: AiExpandRequest):
-    graph = _get_graph(partition_id)
+async def ai_expand_nodes(partition_id: str, body: AiExpandRequest, user_id: str = Depends(current_user_id)):
+    graph = _get_graph(partition_id, user_id)
     if not graph:
         raise HTTPException(status_code=404, detail="分区不存在")
     if body.node_id not in graph.nodes:
@@ -118,10 +119,10 @@ async def ai_expand_nodes(partition_id: str, body: AiExpandRequest):
 
         graph.updated_at = time.time()
         graph.version += 1
-        data = _load()
+        data = _load(user_id)
         data.knowledge_graphs[partition_id] = graph
-        _save(data)
-        _sync_graph_to_cognitive(partition_id)
+        _save(data, user_id)
+        _sync_graph_to_cognitive(partition_id, user_id)
 
         return {
             "ok": True, "added_nodes": added_nodes, "added_edges": added_edges,
@@ -138,8 +139,8 @@ async def ai_expand_nodes(partition_id: str, body: AiExpandRequest):
 # ═══════════════════════════════════════════════════════════
 
 @router.post("/{partition_id}/ai-edit")
-async def ai_edit_node(partition_id: str, body: AiEditRequest):
-    graph = _get_graph(partition_id)
+async def ai_edit_node(partition_id: str, body: AiEditRequest, user_id: str = Depends(current_user_id)):
+    graph = _get_graph(partition_id, user_id)
     if not graph or body.node_id not in graph.nodes:
         raise HTTPException(status_code=404, detail="节点不存在")
 
@@ -190,10 +191,10 @@ async def ai_edit_node(partition_id: str, body: AiEditRequest):
 
         graph.updated_at = time.time()
         graph.version += 1
-        data = _load()
+        data = _load(user_id)
         data.knowledge_graphs[partition_id] = graph
-        _save(data)
-        _sync_graph_to_cognitive(partition_id)
+        _save(data, user_id)
+        _sync_graph_to_cognitive(partition_id, user_id)
 
         return {"ok": True, "node": node.model_dump(mode="json")}
 

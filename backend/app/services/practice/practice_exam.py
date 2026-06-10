@@ -14,13 +14,12 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-from shared.constants import DEFAULT_USER_ID
 
 logger = logging.getLogger(__name__)
 
 
 def create_exam(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     bank_id: str = "",
     count: int = 20,
     duration_minutes: int = 60,
@@ -124,7 +123,7 @@ def create_exam(
     }
 
 
-def get_exam_time(session_id: str, user_id: str = DEFAULT_USER_ID) -> dict:
+def get_exam_time(session_id: str, user_id: str) -> dict:
     """获取考试剩余时间及状态"""
     from app.db.database import get_db
     db = get_db()
@@ -181,7 +180,7 @@ def get_exam_time(session_id: str, user_id: str = DEFAULT_USER_ID) -> dict:
     }
 
 
-def submit_all_exam(session_id: str, user_id: str = DEFAULT_USER_ID) -> dict:
+def submit_all_exam(session_id: str, user_id: str) -> dict:
     """一次性提交考试所有答案，生成成绩报告"""
     from app.db.database import get_db
     db = get_db()
@@ -316,7 +315,7 @@ def submit_all_exam(session_id: str, user_id: str = DEFAULT_USER_ID) -> dict:
     })
 
 
-def get_exam_result(session_id: str, user_id: str = DEFAULT_USER_ID) -> dict:
+def get_exam_result(session_id: str, user_id: str) -> dict:
     """获取已完成的考试成绩报告"""
     from app.db.database import get_db
     db = get_db()
@@ -374,7 +373,7 @@ def get_exam_result(session_id: str, user_id: str = DEFAULT_USER_ID) -> dict:
     })
 
 
-def get_exam_answer_sheet(session_id: str, user_id: str = DEFAULT_USER_ID) -> dict:
+def get_exam_answer_sheet(session_id: str, user_id: str) -> dict:
     """获取答题卡状态（用于前端导航）"""
     from app.db.database import get_db
     db = get_db()

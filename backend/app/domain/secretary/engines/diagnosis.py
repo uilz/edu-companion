@@ -12,7 +12,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from shared.constants import DEFAULT_USER_ID
 from ..models import (
     DiagnosisReport,
     WeakPoint,
@@ -36,7 +35,7 @@ class DiagnosisEngine:
 
     async def diagnose(
         self,
-        user_id: str = DEFAULT_USER_ID,
+        user_id: str,
     ) -> DiagnosisReport:
         """执行全量诊断 — 一次加载 nodes，共享给所有分析函数"""
         # 一次加载，避免 7 次重复查询
@@ -143,7 +142,7 @@ class DiagnosisEngine:
 
     async def quick_assess(
         self,
-        user_id: str = DEFAULT_USER_ID,
+        user_id: str,
     ) -> dict[str, Any]:
         """快速评估 — 轻量版，只返回最关键的指标"""
         nodes = _get_nodes(user_id)

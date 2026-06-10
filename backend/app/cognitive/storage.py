@@ -11,7 +11,6 @@ import logging
 import time
 from typing import Optional
 
-from shared.constants import DEFAULT_USER_ID
 from app.cognitive.models import (
     Activation, Belief, CognitiveEvent, CognitiveLoad, CognitiveNode,
     Composition, DeepLink, DeepProcessing, Diagnostic, DialogueContext,
@@ -62,7 +61,7 @@ def _from_json(cls, raw: str | dict | None):
 # ── CognitiveNode CRUD ──
 
 
-def upsert_node(node: CognitiveNode, user_id: str = DEFAULT_USER_ID) -> None:
+def upsert_node(node: CognitiveNode, user_id: str) -> None:
     """插入或更新一个 CognitiveNode（完整覆盖）"""
     db = get_db()
     from datetime import datetime, timezone
@@ -127,7 +126,7 @@ def upsert_node(node: CognitiveNode, user_id: str = DEFAULT_USER_ID) -> None:
         db.put_conn(conn)
 
 
-def get_node(node_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[CognitiveNode]:
+def get_node(node_id: str, user_id: str) -> Optional[CognitiveNode]:
     """通过 ID 获取 CognitiveNode"""
     db = get_db()
     row = db.fetchone(
@@ -140,7 +139,7 @@ def get_node(node_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[Cognitive
 
 
 def get_nodes_by_level(
-    level: str, user_id: str = DEFAULT_USER_ID,
+    level: str, user_id: str,
 ) -> list[CognitiveNode]:
     """获取某一层级的所有节点"""
     db = get_db()
@@ -151,7 +150,7 @@ def get_nodes_by_level(
     return [_row_to_node(r) for r in rows]
 
 
-def get_children(parent_id: str, user_id: str = DEFAULT_USER_ID) -> list[CognitiveNode]:
+def get_children(parent_id: str, user_id: str) -> list[CognitiveNode]:
     """获取某节点的直接子节点"""
     db = get_db()
     rows = db.fetchall(
@@ -161,7 +160,7 @@ def get_children(parent_id: str, user_id: str = DEFAULT_USER_ID) -> list[Cogniti
     return [_row_to_node(r) for r in rows]
 
 
-def get_subtree(root_id: str, user_id: str = DEFAULT_USER_ID) -> dict[str, CognitiveNode]:
+def get_subtree(root_id: str, user_id: str) -> dict[str, CognitiveNode]:
     """获取以 root_id 为根的整个子树（广度优先）"""
     db = get_db()
     # 用递归 CTE 或简单的一层一层查
@@ -182,7 +181,7 @@ def get_subtree(root_id: str, user_id: str = DEFAULT_USER_ID) -> dict[str, Cogni
     return {r["id"]: _row_to_node(r) for r in rows}
 
 
-def delete_node(node_id: str, user_id: str = DEFAULT_USER_ID) -> None:
+def delete_node(node_id: str, user_id: str) -> None:
     """删除节点（含子节点级联）"""
     db = get_db()
     db.execute(
@@ -199,7 +198,7 @@ def delete_node(node_id: str, user_id: str = DEFAULT_USER_ID) -> None:
 
 
 def search_nodes(
-    query: str, user_id: str = DEFAULT_USER_ID, limit: int = 20,
+    query: str, user_id: str, limit: int = 20,
 ) -> list[CognitiveNode]:
     """按 label 或 id 搜索节点"""
     db = get_db()
@@ -213,7 +212,7 @@ def search_nodes(
     return [_row_to_node(r) for r in rows]
 
 
-def list_all_nodes(user_id: str = DEFAULT_USER_ID) -> list[CognitiveNode]:
+def list_all_nodes(user_id: str) -> list[CognitiveNode]:
     """获取用户所有节点"""
     db = get_db()
     rows = db.fetchall(
@@ -224,7 +223,7 @@ def list_all_nodes(user_id: str = DEFAULT_USER_ID) -> list[CognitiveNode]:
 
 
 def get_urgent_nodes(
-    limit: int = 10, user_id: str = DEFAULT_USER_ID,
+    limit: int = 10, user_id: str,
 ) -> list[CognitiveNode]:
     """获取紧迫度最高的节点（用于调度）"""
     db = get_db()
@@ -261,7 +260,7 @@ def append_event(event: CognitiveEvent) -> None:
 
 def get_unprocessed_events(
     *,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     limit: int = 50,
 ) -> list[CognitiveEvent]:
     """获取未处理事件（v7: keyword-only 防止参数位置错位）"""
@@ -286,7 +285,7 @@ def mark_event_processed(event_id: str) -> None:
 def query_events(
     event_type: str | None = None,
     node_id: str | None = None,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     limit: int = 50,
 ) -> list[CognitiveEvent]:
     """查询事件（按类型和/或节点过滤）"""
@@ -435,7 +434,7 @@ def _parse_json_dict(raw) -> dict:
 # ── Phase 8 新方法 ──
 
 
-def find_node_by_path(path_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[CognitiveNode]:
+def find_node_by_path(path_id: str, user_id: str) -> Optional[CognitiveNode]:
     """通过 path_id 查找节点"""
     db = get_db()
     row = db.fetchone(
@@ -449,7 +448,7 @@ def find_node_by_path(path_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[
 
 def vector_search(
     query_embedding: list[float],
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     level: str | None = None,
     limit: int = 10,
     min_similarity: float = 0.1,
@@ -528,7 +527,7 @@ def _cosine_similarity(norm_a: tuple[list[float], float] | list[float],
     return max(-1.0, min(1.0, dot))
 
 
-def get_visible_children(parent_id: str, user_id: str = DEFAULT_USER_ID) -> list[CognitiveNode]:
+def get_visible_children(parent_id: str, user_id: str) -> list[CognitiveNode]:
     """获取某节点下可见的直接子节点"""
     db = get_db()
     rows = db.fetchall(
@@ -541,7 +540,7 @@ def get_visible_children(parent_id: str, user_id: str = DEFAULT_USER_ID) -> list
 
 
 def find_node_by_label(
-    label: str, user_id: str = DEFAULT_USER_ID,
+    label: str, user_id: str, level: str | None = None,
 ) -> Optional[CognitiveNode]:
     """通过 label 查找节点（精确匹配优先，降级 ILIKE）"""
     db = get_db()
@@ -745,7 +744,7 @@ def sync_from_practice_event(
     )
 
 
-def get_suggested_count(parent_id: str, user_id: str = DEFAULT_USER_ID) -> int:
+def get_suggested_count(parent_id: str, user_id: str) -> int:
     """获取某节点下的建议/隐藏子节点数量（用于预览计数）"""
     db = get_db()
     row = db.fetchone(
@@ -757,7 +756,7 @@ def get_suggested_count(parent_id: str, user_id: str = DEFAULT_USER_ID) -> int:
     return row["cnt"] if row else 0
 
 
-def get_child_count(parent_id: str, user_id: str = DEFAULT_USER_ID) -> int:
+def get_child_count(parent_id: str, user_id: str) -> int:
     """获取某节点下的可见子节点总数"""
     db = get_db()
     row = db.fetchone(
@@ -768,7 +767,7 @@ def get_child_count(parent_id: str, user_id: str = DEFAULT_USER_ID) -> int:
     return row["cnt"] if row else 0
 
 
-def set_node_visible(node_id: str, user_id: str = DEFAULT_USER_ID) -> None:
+def set_node_visible(node_id: str, user_id: str) -> None:
     """设置节点可见，并级联设置所有祖先节点可见"""
     node = get_node(node_id, user_id)
     if not node:

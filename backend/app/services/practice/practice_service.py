@@ -17,7 +17,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-from shared.constants import DEFAULT_USER_ID, get_mastery_label
+from shared.constants import get_mastery_label
 from shared.knowledge_trace import get_cognitive_state, get_all_cognitive_states
 from app.db.database import get_db
 
@@ -179,11 +179,11 @@ def get_hint_for_question(question_id: str, current_level: int) -> dict:
     }
 
 
-def get_inline_hint(block_id: str) -> dict:
+def get_inline_hint(block_id: str, user_id: str) -> dict:
     """获取内联提示"""
     from app.services.common import get_data_repo
 
-    data = get_data_repo().load(DEFAULT_USER_ID)
+    data = get_data_repo().load(user_id)
     block = data.response_blocks.get(block_id)
     if not block:
         return None
@@ -204,7 +204,7 @@ def get_inline_hint(block_id: str) -> dict:
 
 
 def query_error_book(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     resolved: Optional[bool] = None,
     skill_id: Optional[str] = None,
     limit: int = 20,
@@ -283,7 +283,7 @@ async def analyze_error_entry(entry_id: str) -> Optional[dict]:
     return {"entry_id": entry_id, "attribution": result}
 
 
-def get_error_attribution_stats(user_id: str = DEFAULT_USER_ID) -> dict:
+def get_error_attribution_stats(user_id: str) -> dict:
     """错因分布统计"""
     from app.services.analytics.error_attribution import get_error_stats
 
@@ -301,7 +301,7 @@ def get_error_attribution_stats(user_id: str = DEFAULT_USER_ID) -> dict:
 # ═══════════════════════════════════════════
 
 
-def list_practice_sessions(user_id: str = DEFAULT_USER_ID, limit: int = 20) -> dict:
+def list_practice_sessions(user_id: str, limit: int = 20) -> dict:
     """列出用户的所有练习会话"""
     db = get_db()
     rows = db.fetchall(
@@ -396,7 +396,7 @@ def record_attempt(
 # ═══════════════════════════════════════════
 
 
-def compute_practice_stats(time_range: str = "week", user_id: str = DEFAULT_USER_ID) -> dict:
+def compute_practice_stats(time_range: str = "week", user_id: str) -> dict:
     """计算练习统计（overview + daily_trend + mastery_bars + error_distribution + heatmap）"""
     db = get_db()
     now = datetime.now()
@@ -534,7 +534,7 @@ def compute_practice_stats(time_range: str = "week", user_id: str = DEFAULT_USER
 
 
 def compute_behavior_report_data(
-    time_range: str = "week", user_id: str = DEFAULT_USER_ID
+    time_range: str = "week", user_id: str
 ) -> dict:
     """聚合行为报告所需数据，返回 dict 供 behavior_analyzer / habit_formation 消费"""
     from app.services.analytics.behavior_analyzer import behavior_analyzer

@@ -144,18 +144,18 @@ async def get_hint(req: HintRequest):
 
 
 @router.post("/submit")
-async def submit_answer(req: SubmitAnswerRequest):
+async def submit_answer(req: SubmitAnswerRequest, user_id: str = Depends(current_user_id)):
     """独立练习 — 提交单题答案"""
     from app.db.database import get_db
 
     db = get_db()
-    row = db.fetchone("SELECT * FROM questions WHERE question_id = %s", (req.question_id,))
+    row = db.fetchone("SELECT * FROM questions WHERE id = %s", (req.question_id,))
     if not row:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    correct_answer = (row.get("correct_answer") or "").strip()
+    correct_answer = (row.get("answer") or "").strip()
     is_correct = check_answer(req.answer, correct_answer)
-    explanation = row.get("explanation", "")
+    explanation = row.get("analysis", "")
     skill_id = row.get("skill_id", "")
 
     # 更新 CognitiveNode
@@ -199,10 +199,10 @@ async def submit_answer(req: SubmitAnswerRequest):
 
 
 @router.post("/inline/answer")
-async def inline_answer(req: InlineAnswerRequest):
+async def inline_answer(req: InlineAnswerRequest, user_id: str = Depends(current_user_id)):
     """对话内联练习 — 提交答案，读取 response_block 内容校验"""
     from app.services.common import get_data_repo
-    from app.core.knowledge_trace import get_cognitive_state
+    from shared.knowledge_trace import get_cognitive_state
     from shared.constants import get_mastery_label
 
     data = get_data_repo().load(user_id)
@@ -244,9 +244,9 @@ async def inline_answer(req: InlineAnswerRequest):
 
 
 @router.post("/inline/hint")
-async def inline_hint(req: InlineHintRequest):
+async def inline_hint(req: InlineHintRequest, user_id: str = Depends(current_user_id)):
     """对话内联练习 — 获取提示"""
-    result = get_inline_hint(req.block_id)
+    result = get_inline_hint(req.block_id, user_id)
     if result is None:
         raise HTTPException(404, "Practice block not found")
     return result
@@ -258,15 +258,15 @@ async def inline_hint(req: InlineHintRequest):
 
 
 @router.get("/stats")
-async def get_stats(time_range: str = "week"):
+async def get_stats(user_id: str = Depends(current_user_id), time_range: str = "week"):
     """获取练习统计"""
-    return compute_practice_stats(time_range=time_range)
+    return compute_practice_stats(time_range=time_range, user_id=user_id)
 
 
 @router.get("/behavior")
-async def get_behavior_report(time_range: str = "week"):
+async def get_behavior_report(user_id: str = Depends(current_user_id), time_range: str = "week"):
     """学习行为分析报告"""
-    return compute_behavior_report_data(time_range=time_range)
+    return compute_behavior_report_data(time_range=time_range, user_id=user_id)
 
 
 # ──────────────────────────────────────────────

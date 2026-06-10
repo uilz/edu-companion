@@ -3,7 +3,6 @@ ZPD自适应调度器
 基于最近发展区(Zone of Proximal Development)的题目调度
 """
 
-from shared.constants import DEFAULT_USER_ID
 import math
 import logging
 from typing import Optional
@@ -105,7 +104,7 @@ class ZPDScheduler:
     def estimate_student_ability(
         self,
         skill_id: str,
-        user_id: str = DEFAULT_USER_ID,
+        user_id: str,
     ) -> float:
         """
         估计学生在某知识点的能力θ

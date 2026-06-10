@@ -14,7 +14,6 @@
 """
 
 from __future__ import annotations
-from shared.constants import DEFAULT_USER_ID
 import logging
 from ..models import Proposal
 
@@ -34,7 +33,7 @@ class ProposalActionHandler:
         }
 
     async def execute(
-        self, proposal: Proposal, user_id: str = DEFAULT_USER_ID,
+        self, proposal: Proposal, user_id: str,
     ) -> dict[str, Any]:
         """执行提案动作，返回结果
 

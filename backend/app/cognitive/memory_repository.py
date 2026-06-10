@@ -115,6 +115,17 @@ class MemoryCognitiveNodeRepository:
         # 内存实现：返回空列表（向量搜索需要数据库）
         return []
 
+    def search_by_text(
+        self,
+        query: str,
+        user_id: str = "default",
+        limit: int = 20,
+    ) -> list[CognitiveNode]:
+        """文本搜索节点（内存实现：简单前缀匹配）"""
+        all_nodes = self.list_all_nodes(user_id)
+        q = query.lower()
+        return [n for n in all_nodes if q in n.label.lower() or q in n.id.lower()][:limit]
+
     def vector_search(
         self,
         query_embedding: list[float],

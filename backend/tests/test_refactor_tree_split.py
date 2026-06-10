@@ -20,20 +20,19 @@ class DummyNode:
                  conversation_id="c1", role="user", content_blocks=None,
                  text_summary="hello", children_ids=None, is_deleted=False,
                  has_sub_branches=False, sub_branch_ids=None,
-                 sub_branch_summaries=None, has_modified_version=False):
+                 sub_branch_summaries=None):
         self.id = id
         self.parent_id = parent_id
         self.partition_id = partition_id
         self.conversation_id = conversation_id
         self.role = role
-        self.content_blocks = content_blocks or []
+        self.content_blocks = content_blocks
         self.text_summary = text_summary
         self.children_ids = children_ids or []
         self.is_deleted = is_deleted
         self.has_sub_branches = has_sub_branches
         self.sub_branch_ids = sub_branch_ids or []
         self.sub_branch_summaries = sub_branch_summaries or []
-        self.has_modified_version = has_modified_version
 
 
 class DummyData:

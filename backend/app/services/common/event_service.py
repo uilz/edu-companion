@@ -279,7 +279,7 @@ class EventService:
                         _generate_proposal(
                             user_id=evt.user_id,
                             emoji="🌿",
-                            title=f"探索「{_get_node_label(pid)}」下的更多专题",
+                            title=f"探索「{_get_node_label(pid, evt.user_id)}」下的更多专题",
                             description=(
                                 f"该分类下已有 {len(active_children)} 个活跃子专题。"
                                 "需要自动生成更多拓展方向吗？"
@@ -288,7 +288,7 @@ class EventService:
                             priority=2,
                             payload={
                                 "parent_id": pid,
-                                "parent_label": _get_node_label(pid),
+                                "parent_label": _get_node_label(pid, evt.user_id),
                                 "visible_count": len(active_children),
                             },
                             generated_by="event_handler",
@@ -675,13 +675,12 @@ def _generate_proposal(
         logger.debug("提案保存失败 (fire-and-forget): %s", title, exc_info=True)
 
 
-def _get_node_label(node_id: str) -> str:
+def _get_node_label(node_id: str, user_id: str) -> str:
     """获取节点 label（安全降级）"""
     try:
         from app.cognitive import get_repo
-        from shared.constants import DEFAULT_USER_ID
 
-        node = get_repo().get_node(node_id, DEFAULT_USER_ID)
+        node = get_repo().get_node(node_id, user_id)
         if node:
             return node.label or node_id
     except Exception:

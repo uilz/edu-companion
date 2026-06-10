@@ -8,7 +8,7 @@
 
 import logging
 from typing import Optional
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException
 from app.domain.auth.dependencies import current_user_id
 from app.services.materials.bilibili_search import search_bilibili
 
@@ -44,6 +44,7 @@ async def api_search_references(
 async def api_references_for_node(
     node_id: str = Query("", description="知识点ID"),
     source: str = Query("bilibili"),
+    user_id: str = Depends(current_user_id),
 ):
     """根据知识点搜索参考资料（自动使用节点标签作为关键词）"""
     if not node_id:
@@ -67,6 +68,7 @@ async def api_references_for_node(
 async def api_references_for_question(
     question_id: str = Query("", description="题目ID"),
     source: str = Query("bilibili"),
+    user_id: str = Depends(current_user_id),
 ):
     """根据题目搜索参考资料（使用题干的认知节点标签或题干关键词）"""
     if not question_id:

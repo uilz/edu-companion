@@ -136,7 +136,7 @@ class TreeHierarchyMixin:
         root_node = TreeNode(
             id=root_id, parent_id=root_id,
             partition_id=conv.partition_id, conversation_id=conv.id,
-            role="assistant", content_blocks=[], text_summary="[virtual_root]",
+            role="assistant", content_blocks=[], text_summary=name or conv.name or "对话根节点",
         )
         data.nodes[root_id] = root_node
         conv.path.append(root_id)
@@ -333,7 +333,7 @@ class TreeHierarchyMixin:
             root_node = TreeNode(
                 id=root_id, parent_id=root_id, partition_id=entity.id,
                 conversation_id="", role="assistant", content_blocks=[],
-                text_summary="[virtual_root]",
+                text_summary=name,
             )
             data.nodes[root_id] = root_node
 
@@ -437,7 +437,7 @@ class TreeHierarchyMixin:
                                 id=partition.root_id, parent_id=partition.root_id,
                                 partition_id=partition_id, conversation_id="",
                                 role="assistant", content_blocks=[],
-                                text_summary="[virtual_root]",
+                                text_summary=partition.name,
                             )
                             data.nodes[partition.root_id] = root_node
                 domain = Domain(
@@ -466,10 +466,10 @@ class TreeHierarchyMixin:
         )
         data.partitions[temp_partition.id] = temp_partition
         root_node = TreeNode(
-            id=temp_partition.root_id, parent_id=temp_partition.root_id,
-            partition_id=temp_partition.id, conversation_id="",
-            role="assistant", content_blocks=[], text_summary="[virtual_root]",
-        )
+                id=temp_partition.root_id, parent_id=temp_partition.root_id,
+                partition_id=temp_partition.id, conversation_id="",
+                role="assistant", content_blocks=[], text_summary=temp_partition.name,
+            )
         data.nodes[temp_partition.root_id] = root_node
         return temp_partition, None
 

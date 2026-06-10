@@ -8,7 +8,6 @@
 """
 
 from __future__ import annotations
-from shared.constants import DEFAULT_USER_ID
 import asyncio
 import logging
 from .context_engine import ContextEngine
@@ -19,7 +18,7 @@ logger = logging.getLogger(__name__)
 class ActiveChecker:
     """主动检查器 — 基于模块注册表的周期性检查"""
 
-    def __init__(self, user_id: str = DEFAULT_USER_ID) -> None:
+    def __init__(self, user_id: str) -> None:
         self._user_id = user_id
         self._running = False
         self._task: asyncio.Task | None = None

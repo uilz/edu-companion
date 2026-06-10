@@ -13,7 +13,6 @@ AdaptiveSelector — 自适应练习队列生成器
 from __future__ import annotations
 import logging
 import time
-from shared.constants import DEFAULT_USER_ID
 from app.cognitive.models import CognitiveNode
 from app.cognitive import get_repo
 from app.services.analytics.spaced_repetition import ReviewResult
@@ -35,7 +34,7 @@ class AdaptiveSelector:
 
     def get_queue(
         self,
-        user_id: str = DEFAULT_USER_ID,
+        user_id: str,
         count: int = DEFAULT_QUEUE_SIZE,
         partition_id: str | None = None,
         mode: str = "adaptive",  # adaptive | review | explore | challenge

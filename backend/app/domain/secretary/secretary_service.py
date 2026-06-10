@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-from shared.constants import DEFAULT_USER_ID
 import logging
 import time
 from typing import Any
@@ -24,7 +23,7 @@ from .engines.proposal_generator import ProposalGenerator
 
 logger = logging.getLogger(__name__)
 
-_USER_ID_DEFAULT = DEFAULT_USER_ID
+_USER_ID_DEFAULT
 
 
 class SecretaryService:

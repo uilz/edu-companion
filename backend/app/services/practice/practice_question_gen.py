@@ -12,7 +12,6 @@ import json
 import logging
 from typing import Optional
 
-from shared.constants import DEFAULT_USER_ID
 from app.services.llm.llm_service import llm_service
 from app.services.llm.question_generator import QuestionGenerator, get_question_generator
 from app.services.practice.practice_question_crud import add_question
@@ -60,7 +59,7 @@ CONTENT_TYPE_MAP = {
 
 async def generate_and_save(
     bank_id: str,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     subject: str = "数学",
     skill_id: str = "",
     bloom_level: str = "apply",
@@ -139,7 +138,7 @@ async def generate_and_save(
 
 async def get_material_context(
     material_ids: list[str] | None,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     max_chunks: int = 10,
 ) -> str | None:
     """从已上传资料中检索内容块，拼接为出题上下文字符串。
@@ -182,7 +181,7 @@ async def get_material_context(
 
 async def handle_question_generation(
     user_message: str,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     bank_id: Optional[str] = None,
     bank_name: Optional[str] = None,
     conversation_id: Optional[str] = None,
@@ -288,7 +287,7 @@ async def handle_question_generation(
 async def generate_for_conversation(
     conversation_id: str,
     user_message: str,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     conversation_context: Optional[list[dict]] = None,
     material_ids: Optional[list[str]] = None,
 ) -> dict:
@@ -423,7 +422,7 @@ def score_quality(question: dict) -> float:
 async def bulk_generate(
     bank_id: str,
     plans: list[dict],
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     material_ids: Optional[list[str]] = None,
 ) -> dict:
     """
@@ -490,7 +489,7 @@ async def bulk_generate(
 
 async def generate_similar(
     question_id: str,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     count: int = 3,
 ) -> list[dict]:
     """
@@ -600,7 +599,7 @@ async def generate_similar(
 
 async def explain_question(
     question_id: str,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     style: str = "detailed",
 ) -> dict:
     """

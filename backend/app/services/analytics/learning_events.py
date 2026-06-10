@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from shared.constants import DEFAULT_USER_ID
 from app.schemas.learning_event import LearningEvent
 
 logger = logging.getLogger(__name__)
@@ -17,19 +16,19 @@ logger = logging.getLogger(__name__)
 _MAX_EVENTS = 500  # 最多保留 500 条（超出自动裁剪）
 
 
-def _get_user_data():
+def _get_user_data(user_id: str):
     from app.services.common import get_data_repo
-    return get_data_repo().load(DEFAULT_USER_ID)
+    return get_data_repo().load(user_id)
 
 
-def _save_user_data(data):
+def _save_user_data(data, user_id: str):
     from app.services.common import get_data_repo
-    get_data_repo().save(DEFAULT_USER_ID, data)
+    get_data_repo().save(user_id, data)
 
 
 def record_event(
     event_type,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     partition_id: str | None = None,
     branch_id: str | None = None,
     skill_ids: list[str] | None = None,
@@ -37,7 +36,7 @@ def record_event(
 ):
     """记录一条学习事件（fire-and-forget 友好）"""
     try:
-        user_data = _get_user_data()
+        user_data = _get_user_data(user_id)
         events = user_data.event_log
 
         now = datetime.now(timezone.utc)
@@ -59,6 +58,6 @@ def record_event(
             events = events[-_MAX_EVENTS:]
 
         user_data.event_log = events
-        _save_user_data(user_data)
+        _save_user_data(user_data, user_id)
     except Exception as e:
         logger.warning(f"记录事件失败: {e}")

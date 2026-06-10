@@ -13,7 +13,6 @@ import logging
 from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
-from shared.constants import DEFAULT_USER_ID
 
 if TYPE_CHECKING:
     from shared.protocols import (
@@ -51,7 +50,7 @@ class PracticeServiceImpl:
 
     async def generate_questions(
         self, subject: str, topic: str = "", level: str = "medium",
-        count: int = 5, user_id: str = DEFAULT_USER_ID,
+        count: int = 5, user_id: str,
     ) -> list:
         """从题库查询题目（按学科/难度筛选）"""
         try:
@@ -170,38 +169,38 @@ class PracticeServiceImpl:
         from app.services.practice.practice_service import get_hint_for_question
         return get_hint_for_question(question_id, current_level)
 
-    def get_inline_hint(self, block_id: str) -> dict | None:
+    def get_inline_hint(self, block_id: str, user_id: str) -> dict | None:
         from app.services.practice.practice_service import get_inline_hint
-        return get_inline_hint(block_id)
+        return get_inline_hint(block_id, user_id)
 
     # ═══════════════════════════════════════════════════════
     # 错题本（基于 practice_attempts 聚合）
     # ═══════════════════════════════════════════════════════
 
     def get_error_book(
-        self, user_id: str = DEFAULT_USER_ID, bank_id: str | None = None,
+        self, user_id: str, bank_id: str | None = None,
         cognitive_node_id: str | None = None, min_wrongs: int = 1,
         sort_by: str = "wrongs_desc", page: int = 1, page_size: int = 20,
     ) -> dict:
         from app.services.practice.practice_error_book import get_error_book
         return get_error_book(user_id, bank_id, cognitive_node_id, min_wrongs, sort_by, page, page_size)
 
-    def get_error_session_stats(self, user_id: str = DEFAULT_USER_ID) -> dict:
+    def get_error_session_stats(self, user_id: str) -> dict:
         from app.services.practice.practice_error_book import get_error_session_stats
         return get_error_session_stats(user_id)
 
     def review_error_question(
-        self, question_id: str, user_id: str = DEFAULT_USER_ID,
+        self, question_id: str, user_id: str,
         is_correct: bool = False, time_spent: int = 0,
     ) -> dict:
         from app.services.practice.practice_error_book import review_error_question
         return review_error_question(question_id, user_id, is_correct, time_spent)
 
-    def clear_mastered_errors(self, user_id: str = DEFAULT_USER_ID) -> dict:
+    def clear_mastered_errors(self, user_id: str) -> dict:
         from app.services.practice.practice_error_book import clear_mastered_errors
         return clear_mastered_errors(user_id)
 
-    def get_error_materials(self, question_id: str, user_id: str = DEFAULT_USER_ID, limit: int = 3) -> list[dict]:
+    def get_error_materials(self, question_id: str, user_id: str, limit: int = 3) -> list[dict]:
         from app.services.practice.practice_error_book import get_error_materials
         return get_error_materials(question_id, user_id, limit)
 
@@ -209,7 +208,7 @@ class PracticeServiceImpl:
     # 会话管理
     # ═══════════════════════════════════════════════════════
 
-    def list_practice_sessions(self, user_id: str = DEFAULT_USER_ID, limit: int = 20) -> dict:
+    def list_practice_sessions(self, user_id: str, limit: int = 20) -> dict:
         from app.services.practice.practice_service import list_practice_sessions
         return list_practice_sessions(user_id, limit)
 
@@ -228,11 +227,11 @@ class PracticeServiceImpl:
     # 统计
     # ═══════════════════════════════════════════════════════
 
-    def compute_practice_stats(self, time_range: str = "week", user_id: str = DEFAULT_USER_ID) -> dict:
+    def compute_practice_stats(self, time_range: str = "week", user_id: str) -> dict:
         from app.services.practice.practice_service import compute_practice_stats
         return compute_practice_stats(time_range, user_id)
 
-    def compute_behavior_report_data(self, time_range: str = "week", user_id: str = DEFAULT_USER_ID) -> dict:
+    def compute_behavior_report_data(self, time_range: str = "week", user_id: str) -> dict:
         from app.services.practice.practice_service import compute_behavior_report_data
         return compute_behavior_report_data(time_range, user_id)
 
@@ -348,7 +347,7 @@ class PracticeServiceImpl:
     # ═══════════════════════════════════════════════════════
 
     def adaptive_select(
-        self, bank_id: str, user_id: str = DEFAULT_USER_ID, count: int = 10,
+        self, bank_id: str, user_id: str, count: int = 10,
         mode: str = "adaptive", exclude_ids: list[str] | None = None,
         target_difficulty: int | None = None,
         cognitive_node_ids: list[str] | None = None,
@@ -365,7 +364,7 @@ class PracticeServiceImpl:
     # ═══════════════════════════════════════════════════════
 
     async def generate_and_save(
-        self, bank_id: str, user_id: str = DEFAULT_USER_ID,
+        self, bank_id: str, user_id: str,
         subject: str = "", skill: str = "", bloom: str = "understand",
         difficulty: int = 3, count: int = 5, question_type: str = "choice",
     ) -> list[dict]:
@@ -395,7 +394,7 @@ class PracticeServiceImpl:
     # 复习调度
     # ═══════════════════════════════════════════════════════
 
-    def get_due_reviews(self, user_id: str = DEFAULT_USER_ID, limit: int = 10) -> list[dict]:
+    def get_due_reviews(self, user_id: str, limit: int = 10) -> list[dict]:
         from app.services.practice.practice_scheduler import get_due_questions
         return get_due_questions(user_id, limit)
 
@@ -404,7 +403,7 @@ class PracticeServiceImpl:
     # ═══════════════════════════════════════════════════════
 
     def create_exam(
-        self, user_id: str = DEFAULT_USER_ID, bank_id: str = "",
+        self, user_id: str, bank_id: str = "",
         count: int = 20, duration_minutes: int = 60,
         config: dict | None = None,
         cognitive_node_ids: list[str] | None = None,

@@ -12,7 +12,7 @@ import logging
 from datetime import datetime, timezone
 
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.domain.auth.dependencies import current_user_id
 from app.schemas.learning_profile import (
@@ -35,7 +35,7 @@ router = APIRouter(prefix="/api/partition-progress", tags=["学习画像"])
 # ═══════════════════════════════════════════════════
 
 
-def _compute_partition_progress_cognitive(partition_id: str) -> PartitionProgress | None:
+def _compute_partition_progress_cognitive(partition_id: str, user_id: str) -> PartitionProgress | None:
     """
     从 cognitive_nodes 表计算分区进度画像。
 
@@ -45,14 +45,14 @@ def _compute_partition_progress_cognitive(partition_id: str) -> PartitionProgres
         from app.cognitive import get_repo
         from app.cognitive.models import CognitiveNode
 
-        partition_node = get_repo().get_node(partition_id)
+        partition_node = get_repo().get_node(partition_id, user_id)
         if not partition_node:
             logger.info(f"[cognitive] 分区节点不存在: {partition_id}")
             return None
 
         # 获取分区下所有子节点 (递归)
         all_nodes: dict[str, CognitiveNode] = {partition_id: partition_node}
-        _collect_subtree(partition_id, all_nodes)
+        _collect_subtree(partition_id, user_id, all_nodes)
 
         # 筛选 atom/concept 级别节点作为技能节点
         skill_nodes = {
@@ -192,18 +192,18 @@ def _compute_partition_progress_cognitive(partition_id: str) -> PartitionProgres
         return None
 
 
-def _collect_subtree(node_id: str, acc: dict) -> None:
+def _collect_subtree(node_id: str, user_id: str, acc: dict) -> None:
     """递归收集子树节点"""
     from app.cognitive import get_repo
-    children = get_repo().get_node(node_id)
+    children = get_repo().get_node(node_id, user_id)
     if not children:
         return
     for child_id in (children.children or []):
         if child_id not in acc:
-            child = get_repo().get_node(child_id)
+            child = get_repo().get_node(child_id, user_id)
             if child:
                 acc[child_id] = child
-                _collect_subtree(child_id, acc)
+                _collect_subtree(child_id, user_id, acc)
 
 
 def _compute_cognitive_depth(node_id: str, all_nodes: dict) -> int:
@@ -297,10 +297,10 @@ def _estimate_completion(total: int, mastered: int, velocity: float) -> int:
 
 
 @router.get("/{partition_id}", response_model=PartitionProgress)
-async def get_partition_progress(partition_id: str):
+async def get_partition_progress(partition_id: str, user_id: str = Depends(current_user_id)):
     """获取分区的完整学习进度画像 — CognitiveNode only"""
 
-    result = _compute_partition_progress_cognitive(partition_id)
+    result = _compute_partition_progress_cognitive(partition_id, user_id)
     if result is not None:
         return result
 

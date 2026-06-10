@@ -53,6 +53,15 @@ class CognitiveNodeRepository(Protocol):
         """向量搜索节点"""
         ...
 
+    def search_by_text(
+        self,
+        query: str,
+        user_id: str = "default",
+        limit: int = 20,
+    ) -> list[CognitiveNode]:
+        """文本搜索节点（ILIKE 匹配 label/id）"""
+        ...
+
     def vector_search(
         self,
         query_embedding: list[float],

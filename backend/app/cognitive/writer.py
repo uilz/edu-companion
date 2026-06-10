@@ -21,13 +21,11 @@ from app.cognitive.models import CognitiveNode, MetaInfo
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_USER_ID = "default"
-
 
 class CognitiveNodeWriter:
     """统一认知节点写入器"""
 
-    def __init__(self, user_id: str = DEFAULT_USER_ID):
+    def __init__(self, user_id: str):
         self.user_id = user_id
 
     # ── 公共接口 ──

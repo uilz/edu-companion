@@ -18,7 +18,6 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from shared.constants import DEFAULT_USER_ID
 from app.schemas.conversation import KnowledgeGraph, KGNode, KGEdge
 from app.services.common import get_data_repo
 
@@ -26,9 +25,6 @@ logger = logging.getLogger(__name__)
 
 # 所有子模块共享同一个 prefix
 router = APIRouter(prefix="/api/knowledge/graph", tags=["知识图谱"])
-
-# ── 修复 USER_ID 未定义 bug ──
-_USER_ID = DEFAULT_USER_ID
 
 
 # ═══════════════════════════════════════════════════════════
@@ -83,15 +79,15 @@ class AiChatRequest(BaseModel):
 # 辅助函数（子模块共享）
 # ═══════════════════════════════════════════════════════════
 
-def _load(user_id: str = DEFAULT_USER_ID):
+def _load(user_id: str):
     return get_data_repo().load(user_id)
 
 
-def _save(data, user_id: str = DEFAULT_USER_ID):
+def _save(data, user_id: str):
     get_data_repo().save(user_id, data)
 
 
-def _get_graph(partition_id: str, user_id: str = DEFAULT_USER_ID):
+def _get_graph(partition_id: str, user_id: str):
     """获取知识图谱（只读，不创建）"""
     data = _load(user_id)
     return data.knowledge_graphs.get(partition_id)
@@ -125,7 +121,7 @@ def _find_scope_violations(
     return [nid for nid in target_node_ids if nid not in scope]
 
 
-def _ensure_graph(partition_id: str, user_id: str = DEFAULT_USER_ID):
+def _ensure_graph(partition_id: str, user_id: str):
     """获取或创建知识图谱（写入操作时使用）"""
     data = _load(user_id)
     graph = data.knowledge_graphs.get(partition_id)
@@ -142,13 +138,13 @@ def _ensure_graph(partition_id: str, user_id: str = DEFAULT_USER_ID):
     return graph
 
 
-def _get_tree_structure(partition_id: str) -> dict:
+def _get_tree_structure(partition_id: str, user_id: str) -> dict:
     """获取完整树形结构"""
-    graph = _get_graph(partition_id)
+    graph = _get_graph(partition_id, user_id)
     if not graph:
         return {"nodes": [], "edges": [], "partition_name": "", "partition_id": partition_id, "linked_conversations": {}}
 
-    data = _load()
+    data = _load(user_id)
     partition = data.partitions.get(partition_id)
 
     nodes = [{
@@ -175,22 +171,22 @@ def _get_tree_structure(partition_id: str) -> dict:
     }
 
 
-def _sync_graph_to_cognitive(partition_id: str):
+def _sync_graph_to_cognitive(partition_id: str, user_id: str):
     """图谱节点 → CognitiveNode 同步（附属）"""
     try:
         from app.cognitive import get_repo
         from app.cognitive.models import CognitiveNode, MetaInfo
 
-        data = _load()
+        data = _load(user_id)
         graph = data.knowledge_graphs.get(partition_id)
         if not graph:
             return
         for nid, node in graph.nodes.items():
-            existing = get_repo().get_node(nid, _USER_ID)
+            existing = get_repo().get_node(nid, user_id)
             if existing:
                 if existing.label != node.label:
                     existing.label = node.label
-                    get_repo().upsert_node(existing, _USER_ID)
+                    get_repo().upsert_node(existing, user_id)
                 continue
             cog = CognitiveNode(
                 id=nid, label=node.label, level="concept",
@@ -198,16 +194,16 @@ def _sync_graph_to_cognitive(partition_id: str):
                 node_type="auto_generated", is_visible=True,
                 meta=MetaInfo(created_at=time.time()),
             )
-            get_repo().upsert_node(cog, _USER_ID)
+            get_repo().upsert_node(cog, user_id)
     except Exception:
         logger.debug("认知图谱同步跳过", exc_info=True)
 
 
-def _delete_cognitive_node(node_id: str):
+def _delete_cognitive_node(node_id: str, user_id: str):
     """删除 CognitiveNode（附属清理）"""
     try:
         from app.cognitive import get_repo
-        get_repo().delete_node(node_id, _USER_ID)
+        get_repo().delete_node(node_id, user_id)
     except Exception:
         logger.debug("认知节点删除跳过", exc_info=True)
 
@@ -218,13 +214,14 @@ def _delete_cognitive_node(node_id: str):
 
 async def generate_graph_logic(
     partition_id: str,
+    user_id: str,
     data: Any = None,
     branch_name: str = "",
     depth: int = 3,
 ) -> dict:
     """AI 生成/更新知识图谱。可由 API 或异步 hook 调用。"""
     if data is None:
-        data = _load()
+        data = _load(user_id)
 
     partition = data.partitions.get(partition_id)
     if not partition:
@@ -316,13 +313,13 @@ async def generate_graph_logic(
             )
 
         data.knowledge_graphs[partition_id] = graph
-        _save(data)
+        _save(data, user_id)
 
         if not partition.domain_tags:
             partition.domain_tags = [partition.subject or partition.name]
-            _save(data)
+            _save(data, user_id)
 
-        _sync_graph_to_cognitive(partition_id)
+        _sync_graph_to_cognitive(partition_id, user_id)
 
         return {"ok": True, "total_nodes": len(nodes_dict), "total_edges": len(edges), "version": graph.version}
 

@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from . import (
     _load, _save, _get_graph, _sync_graph_to_cognitive,
     _delete_cognitive_node, NodeCreate, NodePatch, EdgeCreateReq,
 )
 from app.schemas.conversation import KnowledgeGraph, KGNode, KGEdge
+from app.domain.auth.dependencies import current_user_id
 
 router = APIRouter()
 
@@ -19,8 +20,8 @@ router = APIRouter()
 # ═══════════════════════════════════════════════════════════
 
 @router.post("/{partition_id}/node")
-async def add_node(partition_id: str, body: NodeCreate):
-    data = _load()
+async def add_node(partition_id: str, body: NodeCreate, user_id: str = Depends(current_user_id)):
+    data = _load(user_id)
     if partition_id not in data.partitions:
         raise HTTPException(status_code=404, detail="分区不存在")
 
@@ -41,8 +42,8 @@ async def add_node(partition_id: str, body: NodeCreate):
     graph.nodes[node.id] = node
     graph.updated_at = time.time()
     graph.version += 1
-    _save(data)
-    _sync_graph_to_cognitive(partition_id)
+    _save(data, user_id)
+    _sync_graph_to_cognitive(partition_id, user_id)
     return {"ok": True, "node_id": node.id, "node": node.model_dump(mode="json")}
 
 
@@ -51,8 +52,8 @@ async def add_node(partition_id: str, body: NodeCreate):
 # ═══════════════════════════════════════════════════════════
 
 @router.patch("/{partition_id}/node/{node_id}")
-async def update_node(partition_id: str, node_id: str, body: NodePatch):
-    data = _load()
+async def update_node(partition_id: str, node_id: str, body: NodePatch, user_id: str = Depends(current_user_id)):
+    data = _load(user_id)
     graph = data.knowledge_graphs.get(partition_id)
     if not graph or node_id not in graph.nodes:
         raise HTTPException(status_code=404, detail="节点不存在")
@@ -69,8 +70,8 @@ async def update_node(partition_id: str, node_id: str, body: NodePatch):
 
     graph.updated_at = time.time()
     graph.version += 1
-    _save(data)
-    _sync_graph_to_cognitive(partition_id)
+    _save(data, user_id)
+    _sync_graph_to_cognitive(partition_id, user_id)
     return {"ok": True, "node": node.model_dump(mode="json")}
 
 
@@ -79,8 +80,8 @@ async def update_node(partition_id: str, node_id: str, body: NodePatch):
 # ═══════════════════════════════════════════════════════════
 
 @router.delete("/{partition_id}/node/{node_id}")
-async def delete_node(partition_id: str, node_id: str):
-    data = _load()
+async def delete_node(partition_id: str, node_id: str, user_id: str = Depends(current_user_id)):
+    data = _load(user_id)
     graph = data.knowledge_graphs.get(partition_id)
     if not graph or node_id not in graph.nodes:
         raise HTTPException(status_code=404, detail="节点不存在")
@@ -89,8 +90,8 @@ async def delete_node(partition_id: str, node_id: str):
     graph.edges = [e for e in graph.edges if e.from_id != node_id and e.to_id != node_id]
     graph.updated_at = time.time()
     graph.version += 1
-    _save(data)
-    _delete_cognitive_node(node_id)
+    _save(data, user_id)
+    _delete_cognitive_node(node_id, user_id)
     return {"ok": True}
 
 
@@ -99,8 +100,8 @@ async def delete_node(partition_id: str, node_id: str):
 # ═══════════════════════════════════════════════════════════
 
 @router.post("/{partition_id}/edge")
-async def add_edge(partition_id: str, body: EdgeCreateReq):
-    data = _load()
+async def add_edge(partition_id: str, body: EdgeCreateReq, user_id: str = Depends(current_user_id)):
+    data = _load(user_id)
     graph = data.knowledge_graphs.get(partition_id)
     if not graph:
         raise HTTPException(status_code=404, detail="图谱不存在")
@@ -113,7 +114,7 @@ async def add_edge(partition_id: str, body: EdgeCreateReq):
     graph.edges.append(edge)
     graph.updated_at = time.time()
     graph.version += 1
-    _save(data)
+    _save(data, user_id)
     return {"ok": True, "edge_id": edge.id}
 
 
@@ -122,8 +123,8 @@ async def add_edge(partition_id: str, body: EdgeCreateReq):
 # ═══════════════════════════════════════════════════════════
 
 @router.delete("/{partition_id}/edge/{edge_id}")
-async def delete_edge(partition_id: str, edge_id: str):
-    data = _load()
+async def delete_edge(partition_id: str, edge_id: str, user_id: str = Depends(current_user_id)):
+    data = _load(user_id)
     graph = data.knowledge_graphs.get(partition_id)
     if not graph:
         raise HTTPException(status_code=404, detail="图谱不存在")
@@ -135,5 +136,5 @@ async def delete_edge(partition_id: str, edge_id: str):
 
     graph.updated_at = time.time()
     graph.version += 1
-    _save(data)
+    _save(data, user_id)
     return {"ok": True}

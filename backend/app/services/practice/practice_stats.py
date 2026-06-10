@@ -11,12 +11,11 @@
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
-from shared.constants import DEFAULT_USER_ID
 
 logger = logging.getLogger(__name__)
 
 
-def get_overview(user_id: str = DEFAULT_USER_ID) -> dict:
+def get_overview(user_id: str) -> dict:
     """
     总体概览统计。
 
@@ -90,7 +89,7 @@ def get_overview(user_id: str = DEFAULT_USER_ID) -> dict:
     }
 
 
-def get_daily_trend(user_id: str = DEFAULT_USER_ID, days: int = 30) -> list[dict]:
+def get_daily_trend(user_id: str, days: int = 30) -> list[dict]:
     """
     每日练习趋势。
 
@@ -137,7 +136,7 @@ def get_daily_trend(user_id: str = DEFAULT_USER_ID, days: int = 30) -> list[dict
     return filled
 
 
-def get_session_history(user_id: str = DEFAULT_USER_ID, limit: int = 10) -> list[dict]:
+def get_session_history(user_id: str, limit: int = 10) -> list[dict]:
     """
     最近练习会话历史。
 
@@ -173,7 +172,7 @@ def get_session_history(user_id: str = DEFAULT_USER_ID, limit: int = 10) -> list
     return result
 
 
-def get_error_distribution(user_id: str = DEFAULT_USER_ID) -> list[dict]:
+def get_error_distribution(user_id: str) -> list[dict]:
     """错题分布（按错误次数分组）"""
     from app.db.database import get_db
     db = get_db()
@@ -202,7 +201,7 @@ def get_error_distribution(user_id: str = DEFAULT_USER_ID) -> list[dict]:
     ]
 
 
-def get_weak_skills(user_id: str = DEFAULT_USER_ID) -> list[dict]:
+def get_weak_skills(user_id: str) -> list[dict]:
     """从 cognitive_nodes 获取薄弱知识点"""
     from app.cognitive import get_repo
     atoms = get_repo().get_nodes_by_level("atom", user_id) or []

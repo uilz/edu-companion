@@ -14,14 +14,13 @@ import logging
 import random
 from datetime import datetime, timedelta
 from typing import Optional
-from shared.constants import DEFAULT_USER_ID
 
 logger = logging.getLogger(__name__)
 
 
 def adaptive_select(
     bank_id: str,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     count: int = 10,
     mode: str = "adaptive",
     exclude_ids: Optional[list[str]] = None,
@@ -286,7 +285,7 @@ def _ensure_bloom_coverage(
 
 def adaptive_select_v2(
     bank_id: str,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     count: int = 10,
     mode: str = "adaptive",
     exclude_ids: Optional[list[str]] = None,

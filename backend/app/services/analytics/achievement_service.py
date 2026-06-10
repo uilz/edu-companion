@@ -13,7 +13,6 @@ import json
 import logging
 from datetime import datetime
 from typing import Optional
-from shared.constants import DEFAULT_USER_ID
 from app.services.analytics.achievement_engine import achievement_engine, ACHIEVEMENTS
 
 logger = logging.getLogger(__name__)
@@ -154,7 +153,7 @@ def _calc_streak(day_list: list) -> int:
     return streak
 
 
-def check_achievements(user_id: str = DEFAULT_USER_ID) -> list[dict]:
+def check_achievements(user_id: str) -> list[dict]:
     """
     检测成就 — 在 session 完成后调用。
 
@@ -200,7 +199,7 @@ def check_achievements(user_id: str = DEFAULT_USER_ID) -> list[dict]:
     return newly
 
 
-def get_all_achievements(user_id: str = DEFAULT_USER_ID) -> list[dict]:
+def get_all_achievements(user_id: str) -> list[dict]:
     """
     获取所有成就及进度（成就墙展示）
     """
@@ -224,7 +223,7 @@ def get_all_achievements(user_id: str = DEFAULT_USER_ID) -> list[dict]:
     return achievement_engine.get_all_with_progress(stats, existing_map)
 
 
-def get_recent_unlocks(user_id: str = DEFAULT_USER_ID, limit: int = 5) -> list[dict]:
+def get_recent_unlocks(user_id: str, limit: int = 5) -> list[dict]:
     """最近解锁的成就"""
     _ensure_table()
     from app.db.database import get_db
@@ -249,7 +248,7 @@ def get_recent_unlocks(user_id: str = DEFAULT_USER_ID, limit: int = 5) -> list[d
     ]
 
 
-def get_badge_stats(user_id: str = DEFAULT_USER_ID) -> dict:
+def get_badge_stats(user_id: str) -> dict:
     """徽章统计"""
     _ensure_table()
     from app.db.database import get_db

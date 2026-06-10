@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from shared.constants import DEFAULT_USER_ID
 from app.cognitive import get_repo
 from app.cognitive.models import CognitiveNode
 
@@ -22,7 +21,7 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════
 
 
-def get_knowledge_context(user_id: str = DEFAULT_USER_ID) -> str:
+def get_knowledge_context(user_id: str) -> str:
     """生成注入 LLM system prompt 的知识上下文"""
     try:
         nodes = get_repo().list_all_nodes(user_id)
@@ -65,7 +64,7 @@ def get_knowledge_context(user_id: str = DEFAULT_USER_ID) -> str:
         return ""
 
 
-def get_skill_context(skill_ids: list[str], user_id: str = DEFAULT_USER_ID) -> str:
+def get_skill_context(skill_ids: list[str], user_id: str) -> str:
     """获取特定技能的知识上下文"""
     try:
         lines = []
@@ -89,7 +88,7 @@ def get_skill_context(skill_ids: list[str], user_id: str = DEFAULT_USER_ID) -> s
         return ""
 
 
-def get_cognitive_profile(user_id: str = DEFAULT_USER_ID) -> str:
+def get_cognitive_profile(user_id: str) -> str:
     """返回 CognitiveNode 的格式化画像摘要"""
     try:
         nodes = get_repo().list_all_nodes(user_id)
@@ -121,7 +120,7 @@ def get_cognitive_profile(user_id: str = DEFAULT_USER_ID) -> str:
         return ""
 
 
-def get_event_queue_length(user_id: str = DEFAULT_USER_ID) -> int:
+def get_event_queue_length(user_id: str) -> int:
     """获取未处理事件队列长度"""
     try:
         from app.db.database import get_db
@@ -135,7 +134,7 @@ def get_event_queue_length(user_id: str = DEFAULT_USER_ID) -> int:
         return -1
 
 
-def get_all_skills_summary(user_id: str = DEFAULT_USER_ID) -> dict:
+def get_all_skills_summary(user_id: str) -> dict:
     """获取所有技能的摘要"""
     try:
         nodes = get_repo().list_all_nodes(user_id)
@@ -160,7 +159,7 @@ def get_all_skills_summary(user_id: str = DEFAULT_USER_ID) -> dict:
         return {"total_skills": 0, "skills": {}}
 
 
-def get_skill_detail(skill_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[dict]:
+def get_skill_detail(skill_id: str, user_id: str) -> Optional[dict]:
     """获取单个技能详情"""
     try:
         node = get_repo().get_node(skill_id, user_id)
@@ -182,7 +181,7 @@ def get_skill_detail(skill_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[
         return None
 
 
-def get_weak_skills(limit: int = 5, user_id: str = DEFAULT_USER_ID) -> list[str]:
+def get_weak_skills(limit: int = 5, user_id: str) -> list[str]:
     """获取薄弱技能列表"""
     try:
         nodes = get_repo().list_all_nodes(user_id)
@@ -197,7 +196,7 @@ def get_weak_skills(limit: int = 5, user_id: str = DEFAULT_USER_ID) -> list[str]
         return []
 
 
-def get_mastered_skills(user_id: str = DEFAULT_USER_ID) -> list[str]:
+def get_mastered_skills(user_id: str) -> list[str]:
     """获取已掌握技能列表"""
     try:
         nodes = get_repo().list_all_nodes(user_id)

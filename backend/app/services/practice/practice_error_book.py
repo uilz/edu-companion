@@ -8,13 +8,12 @@
 import logging
 from datetime import datetime
 from typing import Optional
-from shared.constants import DEFAULT_USER_ID
 
 logger = logging.getLogger(__name__)
 
 
 def get_error_book(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     bank_id: Optional[str] = None,
     cognitive_node_id: Optional[str] = None,
     min_wrongs: int = 1,
@@ -127,7 +126,7 @@ def get_error_book(
     }
 
 
-def get_error_session_stats(user_id: str = DEFAULT_USER_ID) -> dict:
+def get_error_session_stats(user_id: str) -> dict:
     """错题本概览统计"""
     from app.db.database import get_db
     db = get_db()
@@ -185,7 +184,7 @@ def get_error_session_stats(user_id: str = DEFAULT_USER_ID) -> dict:
 
 def review_error_question(
     question_id: str,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     is_correct: bool = False,
     time_spent: int = 0,
 ) -> dict:
@@ -256,7 +255,7 @@ def review_error_question(
 
 def get_error_materials(
     question_id: str,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     limit: int = 3,
 ) -> list[dict]:
     """根据错题关联的认知节点，推荐复习资料"""
@@ -318,7 +317,7 @@ def get_error_materials(
     return recommendations
 
 
-def clear_mastered_errors(user_id: str = DEFAULT_USER_ID) -> dict:
+def clear_mastered_errors(user_id: str) -> dict:
     """清除已掌握的错题记录（标记 mastered=true 的题目不再显示在错题本）"""
     from app.db.database import get_db
     db = get_db()

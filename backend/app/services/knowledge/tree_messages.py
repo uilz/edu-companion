@@ -85,32 +85,21 @@ class TreeMessagesMixin:
         if not node:
             raise ValueError(f"Message {message_id} not found")
 
-        node.has_modified_version = True
         new_node = TreeNode(
             parent_id=node.parent_id, partition_id=node.partition_id,
             conversation_id=node.conversation_id, role=node.role,
             content_blocks=new_content_blocks, text_summary=new_text_summary,
-            has_modified_version=True,
         )
         parent = data.nodes.get(node.parent_id)
         if parent and new_node.id not in parent.children_ids:
             parent.children_ids.append(new_node.id)
         data.nodes[new_node.id] = new_node
 
+        # 直接追加到 conv.path 末尾，不截断
         conv = data.conversations.get(node.conversation_id)
         if conv:
-            replace_idx = None
-            if message_id in conv.path:
-                replace_idx = conv.path.index(message_id)
-            else:
-                for i, nid in enumerate(conv.path):
-                    sibling = data.nodes.get(nid)
-                    if sibling and sibling.parent_id == node.parent_id and sibling.role == node.role:
-                        replace_idx = i
-                        break
-            if replace_idx is not None:
-                conv.path = conv.path[:replace_idx] + [new_node.id]
-                conv.summary_dirty = True
+            conv.path.append(new_node.id)
+            conv.summary_dirty = True
 
         self._get_data_repo().save(user_id, data)
         return new_node
@@ -145,29 +134,6 @@ class TreeMessagesMixin:
         conv = data.conversations.get(node.conversation_id)
         if conv:
             conv.summary_dirty = True
-            new_path = [nid for nid in conv.path if nid not in deleted_ids]
-            if not new_path:
-                for root_child_id in (
-                    data.nodes.get(node.parent_id).children_ids
-                    if data.nodes.get(node.parent_id) else []
-                ):
-                    if root_child_id not in deleted_ids:
-                        alt = data.nodes.get(root_child_id)
-                        if alt and not alt.is_deleted:
-                            new_path = [root_child_id]
-
-                            def add_children(pid):
-                                pn = data.nodes.get(pid)
-                                if not pn:
-                                    return
-                                for pcid in pn.children_ids:
-                                    pc = data.nodes.get(pcid)
-                                    if pc and not pc.is_deleted:
-                                        new_path.append(pcid)
-                                        add_children(pcid)
-
-                            add_children(root_child_id)
-                            break
-            conv.path = new_path
+            conv.path = [nid for nid in conv.path if nid not in deleted_ids]
 
         self._get_data_repo().save(user_id, data)

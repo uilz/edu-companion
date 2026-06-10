@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from shared.constants import DEFAULT_USER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -19,33 +18,33 @@ class KnowledgeQueryServiceImpl:
 
     # ── 上下文生成 ──
 
-    def get_knowledge_context(self, user_id: str = DEFAULT_USER_ID) -> str:
+    def get_knowledge_context(self, user_id: str) -> str:
         from app.services.knowledge.cognitive_queries import get_knowledge_context
         return get_knowledge_context(user_id)
 
-    def get_skill_context(self, skill_ids: list[str], user_id: str = DEFAULT_USER_ID) -> str:
+    def get_skill_context(self, skill_ids: list[str], user_id: str) -> str:
         from app.services.knowledge.cognitive_queries import get_skill_context
         return get_skill_context(skill_ids, user_id)
 
-    def get_cognitive_profile(self, user_id: str = DEFAULT_USER_ID) -> str:
+    def get_cognitive_profile(self, user_id: str) -> str:
         from app.services.knowledge.cognitive_queries import get_cognitive_profile
         return get_cognitive_profile(user_id)
 
     # ── 技能查询 ──
 
-    def get_all_skills_summary(self, user_id: str = DEFAULT_USER_ID) -> dict:
+    def get_all_skills_summary(self, user_id: str) -> dict:
         from app.services.knowledge.cognitive_queries import get_all_skills_summary
         return get_all_skills_summary(user_id)
 
-    def get_skill_detail(self, skill_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[dict]:
+    def get_skill_detail(self, skill_id: str, user_id: str) -> Optional[dict]:
         from app.services.knowledge.cognitive_queries import get_skill_detail
         return get_skill_detail(skill_id, user_id)
 
-    def get_weak_skills(self, limit: int = 5, user_id: str = DEFAULT_USER_ID) -> list[str]:
+    def get_weak_skills(self, limit: int = 5, user_id: str) -> list[str]:
         from app.services.knowledge.cognitive_queries import get_weak_skills
         return get_weak_skills(limit, user_id)
 
-    def get_mastered_skills(self, user_id: str = DEFAULT_USER_ID) -> list[str]:
+    def get_mastered_skills(self, user_id: str) -> list[str]:
         from app.services.knowledge.cognitive_queries import get_mastered_skills
         return get_mastered_skills(user_id)
 

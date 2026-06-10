@@ -49,6 +49,15 @@ class PgCognitiveNodeRepository:
     ) -> list[dict]:
         return _s.search_nodes(query_embedding, user_id, level, limit, min_similarity)
 
+    def search_by_text(
+        self,
+        query: str,
+        user_id: str = "default",
+        limit: int = 20,
+    ) -> list[CognitiveNode]:
+        """文本搜索节点（ILIKE 匹配 label/id）"""
+        return _s.search_nodes(query, user_id, limit)
+
     def vector_search(
         self,
         query_embedding: list[float],

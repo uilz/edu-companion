@@ -5,7 +5,6 @@ import json
 import logging
 from datetime import datetime
 from typing import Optional
-from shared.constants import DEFAULT_USER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,7 @@ def add_question(bank_id, user_id, question_type, stem, answer,
     return _row_to_question(row)
 
 
-def update_question(question_id, user_id=DEFAULT_USER_ID, **kwargs):
+def update_question(question_id, user_id, **kwargs):
     from app.db.database import get_db
     db = get_db()
     allowed = {"stem", "options", "answer", "analysis", "difficulty",
@@ -54,7 +53,7 @@ def update_question(question_id, user_id=DEFAULT_USER_ID, **kwargs):
     return _row_to_question(row) if row else None
 
 
-def delete_question(question_id, user_id=DEFAULT_USER_ID):
+def delete_question(question_id, user_id):
     from app.db.database import get_db
     db = get_db()
     now = datetime.now().isoformat()
@@ -67,7 +66,7 @@ def delete_question(question_id, user_id=DEFAULT_USER_ID):
     return True
 
 
-def toggle_favorite(question_id, user_id=DEFAULT_USER_ID):
+def toggle_favorite(question_id, user_id):
     from app.db.database import get_db
     db = get_db()
     existing = db.fetchone("SELECT id FROM question_favorites WHERE question_id = %s AND user_id = %s",
@@ -82,7 +81,7 @@ def toggle_favorite(question_id, user_id=DEFAULT_USER_ID):
     return True
 
 
-def toggle_slash(question_id, user_id=DEFAULT_USER_ID):
+def toggle_slash(question_id, user_id):
     from app.db.database import get_db
     db = get_db()
     existing = db.fetchone("SELECT id FROM slashed_questions WHERE question_id = %s AND user_id = %s",

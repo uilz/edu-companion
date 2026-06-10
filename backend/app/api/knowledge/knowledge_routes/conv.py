@@ -6,16 +6,14 @@ import logging
 import re
 import time
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from . import (
     _load, _save, _get_graph, _get_descendant_ids,
     _sync_graph_to_cognitive, LinkConversationRequest, AiChatRequest,
 )
 from app.services.knowledge.tree_ops import tree_ops
-from shared.constants import DEFAULT_USER_ID
-
-_USER_ID = DEFAULT_USER_ID
+from app.domain.auth.dependencies import current_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +25,12 @@ router = APIRouter()
 # ═══════════════════════════════════════════════════════════
 
 @router.post("/{partition_id}/link-conversation")
-async def link_conversation(partition_id: str, body: LinkConversationRequest):
-    graph = _get_graph(partition_id)
+async def link_conversation(partition_id: str, body: LinkConversationRequest, user_id: str = Depends(current_user_id)):
+    graph = _get_graph(partition_id, user_id)
     if not graph or body.node_id not in graph.nodes:
         raise HTTPException(status_code=404, detail="节点不存在")
 
-    data = _load()
+    data = _load(user_id)
     if body.conversation_id not in data.conversations:
         raise HTTPException(status_code=404, detail="会话不存在")
 
@@ -45,7 +43,7 @@ async def link_conversation(partition_id: str, body: LinkConversationRequest):
     graph.updated_at = time.time()
     graph.version += 1
     data.knowledge_graphs[partition_id] = graph
-    _save(data)
+    _save(data, user_id)
     return {"ok": True, "conversation_ids": conv_ids}
 
 
@@ -54,8 +52,8 @@ async def link_conversation(partition_id: str, body: LinkConversationRequest):
 # ═══════════════════════════════════════════════════════════
 
 @router.delete("/{partition_id}/link-conversation/{node_id}/{conversation_id}")
-async def unlink_conversation(partition_id: str, node_id: str, conversation_id: str):
-    graph = _get_graph(partition_id)
+async def unlink_conversation(partition_id: str, node_id: str, conversation_id: str, user_id: str = Depends(current_user_id)):
+    graph = _get_graph(partition_id, user_id)
     if not graph or node_id not in graph.nodes:
         raise HTTPException(status_code=404, detail="节点不存在")
 
@@ -67,9 +65,9 @@ async def unlink_conversation(partition_id: str, node_id: str, conversation_id: 
 
     graph.updated_at = time.time()
     graph.version += 1
-    data = _load()
+    data = _load(user_id)
     data.knowledge_graphs[partition_id] = graph
-    _save(data)
+    _save(data, user_id)
     return {"ok": True, "conversation_ids": conv_ids}
 
 
@@ -78,9 +76,9 @@ async def unlink_conversation(partition_id: str, node_id: str, conversation_id: 
 # ═══════════════════════════════════════════════════════════
 
 @router.post("/{partition_id}/explore")
-async def explore_node(partition_id: str, body: dict):
+async def explore_node(partition_id: str, body: dict, user_id: str = Depends(current_user_id)):
     """在知识树上点击节点，创建/恢复探索对话。"""
-    graph = _get_graph(partition_id)
+    graph = _get_graph(partition_id, user_id)
     if not graph:
         raise HTTPException(status_code=404, detail="分区不存在")
 
@@ -93,7 +91,7 @@ async def explore_node(partition_id: str, body: dict):
 
     try:
         conv = tree_ops.ensure_tree_exploration(
-            _USER_ID, partition_id, node_id, node_label, node_level,
+            user_id, partition_id, node_id, node_label, node_level,
         )
 
         # 绑定到 KGNode 的 conversation_ids
@@ -103,16 +101,16 @@ async def explore_node(partition_id: str, body: dict):
             if conv.id not in conv_ids:
                 conv_ids.append(conv.id)
                 bound_node.conversation_ids = conv_ids
-                data = _load()
+                data = _load(user_id)
                 data.knowledge_graphs[partition_id] = graph
-                _save(data)
+                _save(data, user_id)
 
         # 返回已有消息
-        data = _load()
+        data = _load(user_id)
         messages = []
-        for nid in conv.path:
+        for i, nid in enumerate(conv.path):
             node = data.nodes.get(nid)
-            if node and not node.is_deleted and node.text_summary != "[virtual_root]":
+            if node and not node.is_deleted and i > 0:
                 messages.append(node.model_dump(mode="json"))
 
         return {"ok": True, "conversation_id": conv.id, "messages": messages}
@@ -128,23 +126,22 @@ async def explore_node(partition_id: str, body: dict):
 # ═══════════════════════════════════════════════════════════
 
 @router.post("/{partition_id}/ai-chat")
-async def ai_chat(partition_id: str, body: AiChatRequest):
+async def ai_chat(partition_id: str, body: AiChatRequest, user_id: str = Depends(current_user_id)):
     """与 AI 对话，帮助编辑/操作知识树。
 
     每个节点绑定一个独立的「知识树探索」会话，会话仅允许修改该节点及其子孙节点。
     若用户意图操作其他节点，系统提示切换到对应节点的探索会话。
     """
     from app.services.knowledge.tree_ops import tree_ops
-    from shared.constants import DEFAULT_USER_ID
 
-    graph = _get_graph(partition_id)
+    graph = _get_graph(partition_id, user_id)
     if not graph:
         raise HTTPException(status_code=404, detail="分区不存在")
 
     if body.node_id not in graph.nodes:
         raise HTTPException(status_code=404, detail="节点不存在")
 
-    data = _load()
+    data = _load(user_id)
     partition = data.partitions.get(partition_id)
     bound_node = graph.nodes[body.node_id]
     scope_ids = _get_descendant_ids(graph, body.node_id)
@@ -164,7 +161,7 @@ async def ai_chat(partition_id: str, body: AiChatRequest):
             # 使用新方法：自动补全层级创建探索会话
             try:
                 conversation = tree_ops.ensure_tree_exploration(
-                    DEFAULT_USER_ID, partition_id, body.node_id,
+                    user_id, partition_id, body.node_id,
                     bound_node.label, "concept",
                 )
             except ValueError as e:
@@ -173,7 +170,7 @@ async def ai_chat(partition_id: str, body: AiChatRequest):
 
             bound_node.conversation_ids = list(set(bound_node.conversation_ids or []) | {conversation_id})
             data.knowledge_graphs[partition_id] = graph
-            _save(data)
+            _save(data, user_id)
         else:
             conv = data.conversations.get(conversation_id)
             existing_bound = conv.metadata.get("bound_node_id", "") if conv else ""
@@ -309,13 +306,13 @@ async def ai_chat(partition_id: str, body: AiChatRequest):
         cleaned_response = re.sub(r'\s*\[RECOMMEND:[^\]]*\]', '', response).strip()
 
         tree_ops.add_message(
-            DEFAULT_USER_ID, partition_id, "user",
+            user_id, partition_id, "user",
             [{"type": "text", "content": body.message}],
             text_summary=body.message[:100],
             conversation_id=conversation_id,
         )
         tree_ops.add_message(
-            DEFAULT_USER_ID, partition_id, "assistant",
+            user_id, partition_id, "assistant",
             [{"type": "text", "content": cleaned_response}],
             text_summary=cleaned_response[:100],
             conversation_id=conversation_id,

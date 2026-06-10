@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 def update_message_cognitive(
     message_id: str,
     cognitive_node_ids: list[str],
+    user_id: str,
     cognitive_annotations: Optional[list[dict]] = None,
 ) -> None:
     """更新消息的认知关联，写入 UserData.nodes.metadata
@@ -27,9 +28,8 @@ def update_message_cognitive(
     替代旧版直接写 messages 表的方式。
     """
     from app.services.common import get_data_repo
-    from shared.constants import DEFAULT_USER_ID
 
-    data = get_data_repo().load(DEFAULT_USER_ID)
+    data = get_data_repo().load(user_id)
     node = data.nodes.get(message_id)
     if not node:
         logger.warning("消息 %s 不存在于 UserData.nodes", message_id)
@@ -42,16 +42,15 @@ def update_message_cognitive(
     node.metadata = meta
 
     data.nodes[message_id] = node
-    get_data_repo().save(DEFAULT_USER_ID, data)
+    get_data_repo().save(user_id, data)
     logger.debug("认知标注已更新到 node %s: %s", message_id, cognitive_node_ids)
 
 
-def get_message_conversation_id(message_id: str) -> str | None:
+def get_message_conversation_id(message_id: str, user_id: str) -> str | None:
     """获取消息所属的 conversation_id，来自 UserData.nodes"""
     from app.services.common import get_data_repo
-    from shared.constants import DEFAULT_USER_ID
 
-    data = get_data_repo().load(DEFAULT_USER_ID)
+    data = get_data_repo().load(user_id)
     node = data.nodes.get(message_id)
     if not node:
         return None

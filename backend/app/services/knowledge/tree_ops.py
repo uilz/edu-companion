@@ -31,5 +31,8 @@ class TreeOpsService(
     def __init__(self):
         self._storage = get_data_repo()
 
+    def _get_data_repo(self):
+        return self._storage
+
 
 tree_ops = TreeOpsService()

@@ -6,7 +6,6 @@ import logging
 import os
 from datetime import datetime
 from typing import Optional
-from shared.constants import DEFAULT_USER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +56,7 @@ def _run_migrations(db):
             pass
 
 
-def list_banks(user_id=DEFAULT_USER_ID):
+def list_banks(user_id: str):
     """获取用户所有题库"""
     _ensure_tables()
     from app.db.database import get_db
@@ -73,7 +72,7 @@ def list_banks(user_id=DEFAULT_USER_ID):
     return [_row_to_bank(r) for r in rows]
 
 
-def get_bank(bank_id, user_id=DEFAULT_USER_ID):
+def get_bank(bank_id, user_id):
     _ensure_tables()
     from app.db.database import get_db
     db = get_db()
@@ -130,7 +129,7 @@ def update_bank(bank_id, user_id, name=None, description=None):
     return get_bank(bank_id, user_id)
 
 
-def delete_bank(bank_id, user_id=DEFAULT_USER_ID):
+def delete_bank(bank_id, user_id):
     _ensure_tables()
     from app.db.database import get_db
     db = get_db()
@@ -139,7 +138,7 @@ def delete_bank(bank_id, user_id=DEFAULT_USER_ID):
     return db.fetchone("SELECT id FROM question_banks WHERE id = %s AND deleted_at IS NULL", (bank_id,)) is None
 
 
-def resolve_bank_for_conversation(conversation_id, user_id=DEFAULT_USER_ID, user_specified_bank_id=None):
+def resolve_bank_for_conversation(conversation_id, user_id, user_specified_bank_id=None):
     _ensure_tables()
     if user_specified_bank_id:
         return user_specified_bank_id
@@ -159,7 +158,7 @@ def resolve_bank_for_conversation(conversation_id, user_id=DEFAULT_USER_ID, user
     return default_id
 
 
-def resolve_bank_for_node(node_id, user_id=DEFAULT_USER_ID):
+def resolve_bank_for_node(node_id, user_id):
     _ensure_tables()
     from app.db.database import get_db
     from app.cognitive import get_repo
@@ -182,7 +181,7 @@ def resolve_bank_for_node(node_id, user_id=DEFAULT_USER_ID):
     return bank_id
 
 
-def list_questions(bank_id, user_id=DEFAULT_USER_ID, page=1, page_size=50,
+def list_questions(bank_id, user_id, page=1, page_size=50,
                    question_type=None, status=None, cognitive_node_id=None):
     _ensure_tables()
     from app.db.database import get_db
@@ -210,7 +209,7 @@ def list_questions(bank_id, user_id=DEFAULT_USER_ID, page=1, page_size=50,
     }
 
 
-def get_question(question_id, user_id=DEFAULT_USER_ID):
+def get_question(question_id, user_id: str):
     _ensure_tables()
     from app.db.database import get_db
     db = get_db()
@@ -218,7 +217,7 @@ def get_question(question_id, user_id=DEFAULT_USER_ID):
     return _row_to_question(row, include_answer=True) if row else None
 
 
-def search_questions(keyword="", bank_id=None, user_id=DEFAULT_USER_ID, page=1, page_size=50,
+def search_questions(keyword="", bank_id=None, user_id, page=1, page_size=50,
                      question_type=None, bloom_level=None):
     """跨题库搜索题目，支持关键字、类型、Bloom层次过滤"""
     _ensure_tables()

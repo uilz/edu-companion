@@ -23,7 +23,6 @@ import random
 import time
 from datetime import datetime, timedelta
 from typing import Optional
-from shared.constants import DEFAULT_USER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +32,7 @@ COLD_START_ATTEMPT_THRESHOLD = 5   # 低于此练习量的用户视为冷启动
 
 
 def get_due_questions(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     bank_id: Optional[str] = None,
     cognitive_node_id: Optional[str] = None,
     limit: int = 20,
@@ -260,7 +259,7 @@ def get_due_questions(
 
 
 def get_review_stats(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     bank_id: Optional[str] = None,
 ) -> dict:
     """复习统计：待复习数量 vs 已掌握"""

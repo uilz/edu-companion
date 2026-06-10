@@ -4,7 +4,6 @@
 行为: 静默任务，不产生用户可见提案
 """
 from __future__ import annotations
-from shared.constants import DEFAULT_USER_ID
 import logging
 import time
 from ..models import Proposal

@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 
-from shared.constants import DEFAULT_USER_ID
 import json
 import logging
 import time
@@ -96,7 +95,7 @@ class PolicyEngine:
     async def filter(
         self,
         proposals: list[Proposal],
-        user_id: str = DEFAULT_USER_ID,
+        user_id: str,
         quiet_hours: bool = False,
         daily_used: int = 0,
         max_daily: int = 5,

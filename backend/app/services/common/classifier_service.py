@@ -91,7 +91,7 @@ class ClassifierService:
 
         # 3. 模式决策（含沉浸感知）
         immersion_depth = self.get_immersion_depth(user_id, current_topic_id or "")
-        result = self._decide_mode(seeds, current_topic_id, immersion_depth)
+        result = self._decide_mode(seeds, current_topic_id, immersion_depth, user_id)
 
         # 4. 沉浸抑制标记
         is_suppressed = (
@@ -141,7 +141,7 @@ class ClassifierService:
             if matched_keywords:
                 # 2. 对得分最高的 partition，用 ILIKE 找 topic 级节点
                 top_partition = matched_keywords[0]["partition"]
-                nodes = get_repo().search_nodes(top_partition, user_id, limit=10)
+                nodes = get_repo().search_by_text(top_partition, user_id, limit=10)
                 for n in nodes:
                     if n.level == "topic":
                         candidates.append({
@@ -154,7 +154,7 @@ class ClassifierService:
 
             # 3. 如果关键词没匹配到，直接 ILIKE 搜索全部节点
             if not candidates:
-                nodes = get_repo().search_nodes(text, user_id, limit=20)
+                nodes = get_repo().search_by_text(text, user_id, limit=20)
                 for n in nodes:
                     if n.level == "topic":
                         candidates.append({
@@ -238,7 +238,7 @@ class ClassifierService:
 
         # 5. 用相同的模式决策逻辑
         immersion_depth = self.get_immersion_depth(user_id, current_topic_id or "")
-        result = self._decide_mode(candidates, current_topic_id, immersion_depth)
+        result = self._decide_mode(candidates, current_topic_id, immersion_depth, user_id)
         result["immersion_depth"] = immersion_depth
         result["immersion_suppressed"] = (
             immersion_depth >= _DEEP_IMMERSION_THRESHOLD
@@ -342,6 +342,7 @@ class ClassifierService:
         candidates: list[dict],
         current_topic_id: str | None = None,
         immersion_depth: int = 0,
+        user_id: str | None = None,
     ) -> dict[str, Any]:
         """
         模式决策：
@@ -363,7 +364,8 @@ class ClassifierService:
                 # 深度沉浸抑制
                 if immersion_depth >= _DEEP_IMMERSION_THRESHOLD:
                     # 不弹出，但记录到 cognitive_events 供秘书延后处理
-                    self._queue_pending_cross_topic(candidates)
+                    if user_id:
+                        self._queue_pending_cross_topic(candidates, user_id)
                     return {
                         "mode": 3,
                         "candidates": [top],
@@ -394,14 +396,13 @@ class ClassifierService:
     # ─── 待处理跨主题队列 ──────────────────────
 
     @staticmethod
-    def _queue_pending_cross_topic(candidates: list[dict]) -> None:
+    def _queue_pending_cross_topic(candidates: list[dict], user_id: str) -> None:
         """深度沉浸下将跨主题候选写入 cognitive_events，供秘书延后处理"""
         try:
             from app.services.common.event_service import event_service
-            from shared.constants import DEFAULT_USER_ID
             event_service.emit_v6_event(
                 event_type="PendingCrossTopic",
-                user_id=DEFAULT_USER_ID,
+                user_id=user_id,
                 payload={
                     "candidates": [
                         {"id": c["id"], "label": c["label"], "score": c.get("score", 0)}

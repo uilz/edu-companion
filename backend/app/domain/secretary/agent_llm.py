@@ -8,7 +8,6 @@ import re
 from typing import AsyncGenerator
 
 from app.services.llm.llm_service import LLMService
-from shared.constants import DEFAULT_USER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +42,16 @@ def parse_tool_call(text: str) -> dict | None:
         return None
     try:
         data = json.loads(match.group(1))
-        return data.get("tool_call")
+        tc = data.get("tool_call")
+        # 标准化：如果 tool_call 是字符串，转为完整格式
+        if isinstance(tc, str):
+            return {"name": tc, "arguments": {}}
+        if isinstance(tc, dict):
+            # 确保 arguments 存在
+            if "arguments" not in tc:
+                tc["arguments"] = {}
+            return tc
+        return None
     except (json.JSONDecodeError, KeyError):
         return None
 
@@ -57,7 +65,7 @@ async def agent_generate_stream(
     user_message: str,
     current_page: str,
     tool_schemas: list[dict],
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
 ) -> AsyncGenerator[dict, None]:
     """Agent 流式生成回复
 
@@ -73,8 +81,9 @@ async def agent_generate_stream(
     if tool_schemas:
         tools_desc = "\n可用工具：\n"
         for t in tool_schemas:
+            properties = t.get("parameters", {}).get("properties", {})
             params_desc = ", ".join(
-                f"{k}({v.get('type', 'string')})" for k, v in t.get("parameters", {}).items()
+                f"{k}({v.get('type', 'string')})" for k, v in properties.items()
             )
             tools_desc += f"- {t['name']}: {t['description']} [参数: {params_desc or '无'}]\n"
 
@@ -109,3 +118,56 @@ async def agent_generate_stream(
         yield {"type": "tool_call", "tool_call": tool_call}
 
     yield {"type": "done", "full_text": strip_tool_call_json(full_text)}
+
+
+async def agent_generate_followup(
+    user_message: str,
+    tool_name: str,
+    tool_result: dict,
+    user_id: str,
+) -> AsyncGenerator[dict, None]:
+    """基于工具执行结果，让 LLM 生成后续回复
+
+    Yields:
+        {"type": "token", "delta": str} — 文本增量
+        {"type": "done", "full_text": str} — 完成
+    """
+    llm = LLMService()
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你是一个学习助手 AI 秘书。你刚刚执行了一个工具，请基于工具结果"
+                "用1-2句话简短回复用户，说明结果并给出建议。不要再次调用工具。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"用户请求: {user_message}",
+        },
+        {
+            "role": "assistant",
+            "content": f"我调用了工具 {tool_name}，执行结果: {json.dumps(tool_result, ensure_ascii=False)}",
+        },
+        {
+            "role": "user",
+            "content": "请基于以上结果回复用户。",
+        },
+    ]
+
+    full_text = ""
+    try:
+        async for token in llm.generate_stream(
+            messages=messages,
+            task_type="agent_chat",
+            temperature=0.5,
+            max_tokens=256,
+        ):
+            full_text += token
+            yield {"type": "token", "delta": token}
+    except Exception as e:
+        logger.error("Agent followup LLM 生成失败: %s", e)
+        yield {"type": "token", "delta": "已为您找到相关资源，请查看页面。"}
+
+    yield {"type": "done", "full_text": full_text}

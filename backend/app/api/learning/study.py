@@ -122,8 +122,8 @@ async def get_learning_suggestions(
     building = []  # 发展中
     new_topic = [] # 初学/未接触
 
-    from domain.knowledge.checker import PrerequisiteChecker
-    from domain.knowledge.prerequisites import SKILL_TO_SUBJECT
+    from app.domain.knowledge.checker import PrerequisiteChecker
+    from app.domain.knowledge.prerequisites import SKILL_TO_SUBJECT
 
     from app.services.knowledge.knowledge_state import get_knowledge_state as _canonical_get_ks
 

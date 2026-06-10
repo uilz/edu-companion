@@ -7,7 +7,6 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from shared.constants import DEFAULT_USER_ID
 from .parser import (
     parse_file, ai_correct_question, match_cognitive_nodes,
     _infer_type_from_analysis, _estimate_difficulty,
@@ -19,7 +18,7 @@ logger = logging.getLogger(__name__)
 def preview_import(
     file_path: str,
     file_type: str = "",
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     bank_id: Optional[str] = None,
 ) -> dict:
     """
@@ -52,7 +51,7 @@ def preview_import(
 def confirm_import(
     questions: list[dict],
     bank_id: str,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
 ) -> dict:
     """确认导入题目到题库"""
     from app.db.database import get_db
@@ -133,7 +132,7 @@ def confirm_import(
 
 
 def get_import_history(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     bank_id: Optional[str] = None,
     limit: int = 20,
     offset: int = 0,

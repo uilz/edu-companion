@@ -13,7 +13,6 @@
 """
 
 from __future__ import annotations
-from shared.constants import DEFAULT_USER_ID
 import logging
 from ..models import Proposal
 
@@ -34,7 +33,7 @@ class SecretaryPlanBridge:
         return self._planner
 
     async def on_proposal_accepted(
-        self, proposal: Proposal, user_id: str = DEFAULT_USER_ID,
+        self, proposal: Proposal, user_id: str,
     ) -> dict[str, Any]:
         """提案被采纳时触发计划调整"""
         action_type = proposal.action_type
@@ -69,7 +68,7 @@ class SecretaryPlanBridge:
             return {"adjusted": False, "reason": str(e)}
 
     async def get_plan_summary(
-        self, user_id: str = DEFAULT_USER_ID,
+        self, user_id: str,
     ) -> dict[str, Any]:
         """获取当前学习计划摘要"""
         try:

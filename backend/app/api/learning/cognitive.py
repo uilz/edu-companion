@@ -44,7 +44,7 @@ router = APIRouter(prefix="/api/v2")
 def _entity_to_node(
     entity: Partition | Domain | Topic,
     level: str,
-    user_id: str = Depends(current_user_id),
+    user_id: str,
 ) -> dict:
     """将 Partition/Domain/Topic 转为 frontend graph node 格式"""
     label = (entity.emoji + " " + entity.name) if getattr(entity, "emoji", None) else entity.name
@@ -77,10 +77,8 @@ class ClassifyRequest(BaseModel):
 
 
 @router.post("/classify")
-def classify_message(req: ClassifyRequest) -> dict:
+def classify_message(req: ClassifyRequest, user_id: str = Depends(current_user_id)) -> dict:
     """分类单条消息 — v6 Phase 5: 使用 embedding + 沉浸感知"""
-    from app.domain.auth.dependencies import current_user_id
-    user_id = Depends(current_user_id)
     text = req.message
     if not text:
         return {
@@ -116,11 +114,11 @@ class CognitiveConfirmRequest(BaseModel):
 
 
 @router.post("/messages/{message_id}/cognitive-confirm")
-def confirm_message_cognitive(message_id: str, req: CognitiveConfirmRequest) -> dict:
+def confirm_message_cognitive(message_id: str, req: CognitiveConfirmRequest, user_id: str = Depends(current_user_id)) -> dict:
     """用户确认消息的认知分类归属后回写 messages 表"""
     node_ids = req.cognitive_node_ids
     if not node_ids:
-        update_message_cognitive(message_id, [])
+        update_message_cognitive(message_id, [], user_id)
         return {"status": "ok", "cognitive_node_ids": [], "nodes": []}
 
     # 解析节点名称
@@ -135,7 +133,7 @@ def confirm_message_cognitive(message_id: str, req: CognitiveConfirmRequest) -> 
                 "path_id": node.path_id or "",
             })
 
-    update_message_cognitive(message_id, node_ids)
+    update_message_cognitive(message_id, node_ids, user_id)
 
     # v6 Phase 5: 沉浸深度更新 — 确认的 topic 增加沉浸计数
     try:
@@ -148,7 +146,7 @@ def confirm_message_cognitive(message_id: str, req: CognitiveConfirmRequest) -> 
     # v6 Phase 4: 发布 message.classified 事件（同步写入 cognitive_events）
     try:
         from app.services.common.event_service import event_service
-        conv_id = get_message_conversation_id(message_id)
+        conv_id = get_message_conversation_id(message_id, user_id)
         # 按 level 区分 topic/atom
         topic_ids = [n["id"] for n in nodes if n.get("level") in ("topic", "domain", "partition")]
         atom_ids = [n["id"] for n in nodes if n.get("level") == "atom"]
@@ -271,11 +269,10 @@ class CreateNodeRequest(BaseModel):
     name: str
     parent_id: str | None = None
     emoji: str = ""
-    user_id: str = Depends(current_user_id)
 
 
 @router.post("/graph/nodes")
-def create_graph_node(req: CreateNodeRequest) -> dict:
+def create_graph_node(req: CreateNodeRequest, user_id: str = Depends(current_user_id)) -> dict:
     """创建 partition/domain/topic（统一入口）
 
     内部调 tree_ops，自动同步到对话树 + 认知图谱
@@ -285,16 +282,16 @@ def create_graph_node(req: CreateNodeRequest) -> dict:
         raise HTTPException(400, f"Unsupported level: {level}")
     try:
         if level == "partition":
-            entity = tree_ops.create_partition(req.user_id, name, subject=name, emoji=req.emoji)
+            entity = tree_ops.create_partition(user_id, name, subject=name, emoji=req.emoji)
         elif level == "domain":
             if not req.parent_id:
                 raise HTTPException(400, "parent_id required for domain")
-            entity = tree_ops.create_domain(req.user_id, req.parent_id, name, req.emoji)
+            entity = tree_ops.create_domain(user_id, req.parent_id, name, req.emoji)
         else:  # topic
             if not req.parent_id:
                 raise HTTPException(400, "parent_id required for topic")
-            entity = tree_ops.create_topic(req.user_id, req.parent_id, name, req.emoji)
-        return {"node": _entity_to_node(entity, level, req.user_id), "id": entity.id}
+            entity = tree_ops.create_topic(user_id, req.parent_id, name, req.emoji)
+        return {"node": _entity_to_node(entity, level, user_id), "id": entity.id}
     except ValueError as e:
         raise HTTPException(404, str(e))
     except HTTPException:

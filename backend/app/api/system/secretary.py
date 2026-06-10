@@ -776,7 +776,7 @@ async def agent_chat(body: AgentChatRequest, user_id: str = Depends(current_user
                 break
 
         if not temp_partition:
-            temp_partition = tree_ops._ensure_temp_partition(user_id, data)
+            temp_partition, _ = tree_ops._ensure_temp_partition(user_id, data)
 
         conv = Conversation(
             id=str(uuid.uuid4()),
@@ -815,6 +815,8 @@ async def agent_chat(body: AgentChatRequest, user_id: str = Depends(current_user
                     yield f"event: token\ndata: {json.dumps({'delta': event['delta']})}\n\n"
                 elif event["type"] == "tool_call":
                     tc = event["tool_call"]
+                    if not isinstance(tc, dict):
+                        tc = {"name": str(tc), "arguments": {}}
                     tool_name = tc.get("name", "")
                     tool_args = tc.get("arguments", {})
 
@@ -823,6 +825,7 @@ async def agent_chat(body: AgentChatRequest, user_id: str = Depends(current_user
                     route = tool_def.route if tool_def else None
                     confirmation_text = f'即将执行 {tool_name}'
                     require_confirmation = tool_def.require_confirmation if tool_def else True
+                    tool_result_data = None
 
                     if tool_def:
                         try:
@@ -834,6 +837,7 @@ async def agent_chat(body: AgentChatRequest, user_id: str = Depends(current_user
                                     "target": tool_result.route_target,
                                     "params": tool_result.route_params or {},
                                 }
+                            tool_result_data = tool_result.data
                         except Exception:
                             pass  # 执行失败时使用默认值
 
@@ -846,6 +850,21 @@ async def agent_chat(body: AgentChatRequest, user_id: str = Depends(current_user
                         'confirmation_text': confirmation_text,
                     }
                     yield f"event: tool_call\ndata: {json.dumps(tool_data)}\n\n"
+
+                    # 基于工具结果让 LLM 生成后续回复
+                    if tool_result_data is not None:
+                        try:
+                            from app.domain.secretary.agent_llm import agent_generate_followup
+                            async for followup_event in agent_generate_followup(
+                                user_message=body.message,
+                                tool_name=tool_name,
+                                tool_result=tool_result_data,
+                                user_id=user_id,
+                            ):
+                                if followup_event["type"] == "token":
+                                    yield f"event: token\ndata: {json.dumps({'delta': followup_event['delta']})}\n\n"
+                        except Exception:
+                            pass  # 后续回复失败不影响主流程
                 elif event["type"] == "done":
                     pass  # 最后统一发送 done
 

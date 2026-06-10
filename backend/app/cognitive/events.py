@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-from shared.constants import DEFAULT_USER_ID
 import logging
 import time
 from typing import Any
@@ -47,7 +46,7 @@ logger = logging.getLogger(__name__)
 _global_states: dict[str, UserCognitiveState] = {}
 
 
-def get_state(user_id: str = DEFAULT_USER_ID) -> UserCognitiveState:
+def get_state(user_id: str) -> UserCognitiveState:
     """Get or create per-session cognitive state."""
     if user_id not in _global_states:
         _global_states[user_id] = UserCognitiveState(user_id=user_id)
@@ -92,7 +91,7 @@ def process_event(event: CognitiveEvent) -> dict[str, Any]:
         return {"status": "error", "error": str(e)}
 
 
-def process_unprocessed(user_id: str = DEFAULT_USER_ID) -> list[dict]:
+def process_unprocessed(user_id: str) -> list[dict]:
     """Process all unprocessed events for a user."""
     from .storage import get_unprocessed_events
 

@@ -13,14 +13,13 @@ import random
 from datetime import datetime
 from typing import Optional
 
-from shared.constants import DEFAULT_USER_ID
 
 logger = logging.getLogger(__name__)
 
 
 def create_session(
     bank_id: str,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     session_type: str = "practice",
     mode: str = "adaptive",
     question_count: int = 10,
@@ -124,7 +123,7 @@ def create_session(
     }
 
 
-def get_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[dict]:
+def get_session(session_id: str, user_id: str) -> Optional[dict]:
     """获取会话详情（含题目状态）"""
     from app.db.database import get_db
     db = get_db()
@@ -186,7 +185,7 @@ def get_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[dic
 def submit_answer(
     session_id: str,
     question_id: str,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     user_answer: Optional[list] = None,
     time_spent: int = 0,
     hints_used: int = 0,
@@ -355,7 +354,7 @@ def submit_answer(
     }
 
 
-def start_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[dict]:
+def start_session(session_id: str, user_id: str) -> Optional[dict]:
     """开始会话：将状态从 created 变为 active"""
     from app.db.database import get_db
     db = get_db()
@@ -375,7 +374,7 @@ def start_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[d
     return get_session(session_id, user_id)
 
 
-def pause_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[dict]:
+def pause_session(session_id: str, user_id: str) -> Optional[dict]:
     """暂停会话：将 active 变为 paused"""
     from app.db.database import get_db
     db = get_db()
@@ -399,7 +398,7 @@ def pause_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[d
     return get_session(session_id, user_id)
 
 
-def resume_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[dict]:
+def resume_session(session_id: str, user_id: str) -> Optional[dict]:
     """恢复会话：将 paused 变为 active"""
     from app.db.database import get_db
     db = get_db()
@@ -424,7 +423,7 @@ def resume_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[
     return get_session(session_id, user_id)
 
 
-def cancel_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[dict]:
+def cancel_session(session_id: str, user_id: str) -> Optional[dict]:
     """取消会话：将任何非完成态变为 cancelled"""
     from app.db.database import get_db
     db = get_db()
@@ -445,7 +444,7 @@ def cancel_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[
     return get_session(session_id, user_id)
 
 
-def get_session_result(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[dict]:
+def get_session_result(session_id: str, user_id: str) -> Optional[dict]:
     """获取会话结果报告（含题单名称、每题详情）"""
     from app.db.database import get_db
     db = get_db()
@@ -516,7 +515,7 @@ def get_session_result(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optio
     }
 
 
-def complete_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optional[dict]:
+def complete_session(session_id: str, user_id: str) -> Optional[dict]:
     """完成会话：汇总统计"""
     from app.db.database import get_db
     db = get_db()
@@ -610,7 +609,7 @@ def complete_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> Optiona
 
 
 def list_sessions(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     bank_id: Optional[str] = None,
     status: Optional[str] = None,
     session_type: Optional[str] = None,
@@ -832,7 +831,7 @@ def _safe_iso(val):
     return str(val)
 
 
-def delete_session(session_id: str, user_id: str = DEFAULT_USER_ID) -> bool:
+def delete_session(session_id: str, user_id: str) -> bool:
     """硬删除练习会话及关联数据（session_questions, practice_attempts）
 
     返回 True 表示已删除，False 表示会话不存在。
