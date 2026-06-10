@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { API_BASE } from "@/lib/api/api";
+import { api } from "@/lib/api/api";
 
 /** 题目选项 */
 export interface QuestionOption { letter: string; text: string; is_correct: boolean; }
@@ -57,12 +57,21 @@ export function usePracticeSession(initialSkill: string | null) {
   const createSession = useCallback(async (skillIds?: string[]) => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/practice/sessions`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ skill_ids: skillIds || [], duration_minutes: 30, mode: "adaptive" }),
-      });
-      const data = await res.json();
-      setSession(data.session); setQuestions(data.questions);
+      const data = await api<Session & { questions?: Question[] }>(
+        `/api/practice/sessions`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            bank_id: "default",
+            session_type: "practice",
+            mode: "adaptive",
+            count: 10,
+            cognitive_node_ids: skillIds || [],
+          }),
+        },
+      );
+      setSession(data);
+      setQuestions(data.questions || []);
       setCurrentIndex(0); resetForNewQuestion();
     } catch { /* ignore */ }
     setLoading(false);
@@ -77,11 +86,19 @@ export function usePracticeSession(initialSkill: string | null) {
     setLoading(true);
     try {
       const timeSpent = (Date.now() - startTime) / 1000;
-      const res = await fetch(`${API_BASE}/api/practice/submit`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: session.session_id, question_id: q.question_id, answer: selected, time_spent_seconds: timeSpent, hints_used: hintLevel }),
-      });
-      setSubmitResult(await res.json());
+      const data = await api<SubmitResult>(
+        `/api/practice/sessions/${session.session_id}/submit`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            question_id: q.question_id,
+            answer: selected,
+            time_spent: timeSpent,
+            hints_used: hintLevel,
+          }),
+        },
+      );
+      setSubmitResult(data);
       setSubmitted(true);
     } catch { /* ignore */ }
     setLoading(false);
@@ -90,11 +107,13 @@ export function usePracticeSession(initialSkill: string | null) {
   const handleHint = async () => {
     if (!q) return;
     try {
-      const res = await fetch(`${API_BASE}/api/practice/hint`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question_id: q.question_id, current_level: hintLevel }),
-      });
-      const data = await res.json();
+      const data = await api<{ hint: HintResult }>(
+        `/api/practice/hint`,
+        {
+          method: "POST",
+          body: JSON.stringify({ question_id: q.question_id, current_level: hintLevel }),
+        },
+      );
       setHint(data.hint); setHintLevel(data.hint.level);
     } catch { /* ignore */ }
   };

@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   BookOpen, Plus, Loader2, ChevronRight, Library,
 } from "lucide-react";
-
-const API = "/api/v7/practice";
+import { api } from "@/lib/api/api";
 
 export default function PracticeBanksPage() {
   const router = useRouter();
@@ -14,8 +13,7 @@ export default function PracticeBanksPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API}/banks`)
-      .then(r => r.json())
+    api<any[]>("/api/v7/practice/banks")
       .then(data => setBanks(Array.isArray(data) ? data : []))
       .catch(() => {})
       .finally(() => setLoading(false));

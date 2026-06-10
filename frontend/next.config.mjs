@@ -20,20 +20,25 @@ const nextConfig = {
   },
   async rewrites() {
     return [
-      // WebSocket 对话代理（显式静态路径，比动态 rewrite 更可靠处理 WS upgrade）
+      // WebSocket 对话代理（走认证网关统一入口，由网关转发到后端）
       {
         source: "/api/conversations/ws",
-        destination: "http://127.0.0.1:8000/api/conversations/ws",
+        destination: "http://127.0.0.1:18001/api/conversations/ws",
       },
-      // WebSocket 其他代理
+      // WebSocket 其他代理（走认证网关统一入口）
       {
         source: "/ws/:path*",
-        destination: "http://127.0.0.1:8000/ws/:path*",
+        destination: "http://127.0.0.1:18001/ws/:path*",
       },
-      // REST API 代理到后端
+      // REST API 代理到认证网关（网关转发到主后端）
       {
         source: "/api/:path*",
-        destination: "http://127.0.0.1:8000/api/:path*",
+        destination: "http://127.0.0.1:18001/api/:path*",
+      },
+      // 头像静态文件代理到认证网关
+      {
+        source: "/avatars/:path*",
+        destination: "http://127.0.0.1:18001/avatars/:path*",
       },
     ];
   },

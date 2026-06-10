@@ -112,17 +112,13 @@ const BADGE_COLORS = [
 function FloatingExplainCard({ card }: { card: ExplainCardData }) {
   const updateCard = useExplainStore((s) => s.updateCard);
   const [renderPos, setRenderPos] = useState({ x: card.pos_x || 0, y: card.pos_y || 0 });
-  const [dragging, setDragging] = useState(false);
-  // Refs track the current drag state across renders (no closure issues)
-  const dragRef = useRef({ active: false, startX: 0, startY: 0, origX: 0, origY: 0 });
   const posRef = useRef({ x: card.pos_x || 0, y: card.pos_y || 0 });
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   // Sync from store when not dragging
   useEffect(() => {
-    if (!dragRef.current.active) {
-      posRef.current = { x: card.pos_x || 0, y: card.pos_y || 0 };
-      setRenderPos({ x: card.pos_x || 0, y: card.pos_y || 0 });
-    }
+    posRef.current = { x: card.pos_x || 0, y: card.pos_y || 0 };
+    setRenderPos({ x: card.pos_x || 0, y: card.pos_y || 0 });
   }, [card.pos_x, card.pos_y]);
 
   // 卡片折叠时不渲染外层 wrapper（避免空 div 遮挡点击）
@@ -136,35 +132,38 @@ function FloatingExplainCard({ card }: { card: ExplainCardData }) {
     e.preventDefault();
     e.stopPropagation(); // 阻止 KnowledgeExplainCard 内部的重复拖拽处理
 
-    // Capture start state
-    dragRef.current = {
-      active: true,
-      startX: e.clientX,
-      startY: e.clientY,
-      origX: posRef.current.x,
-      origY: posRef.current.y,
-    };
-    setDragging(true);
+    // 禁用 transition 避免拖动延迟
+    if (wrapperRef.current) {
+      wrapperRef.current.style.transition = "none";
+    }
 
     const onMove = (ev: MouseEvent) => {
-      if (!dragRef.current.active) return;
-      const dx = ev.clientX - dragRef.current.startX;
-      const dy = ev.clientY - dragRef.current.startY;
-      const newX = dragRef.current.origX + dx;
-      const newY = dragRef.current.origY + dy;
-      posRef.current = { x: newX, y: newY };
-      setRenderPos({ x: newX, y: newY });
+      const dx = ev.clientX - e.clientX;
+      const dy = ev.clientY - e.clientY;
+      const newX = posRef.current.x + dx;
+      const newY = posRef.current.y + dy;
+      // 直接操作 DOM，避免 setState 重渲染
+      if (wrapperRef.current) {
+        wrapperRef.current.style.left = `${newX}px`;
+        wrapperRef.current.style.top = `${newY}px`;
+      }
     };
 
     const onUp = () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
-      dragRef.current.active = false;
-      setDragging(false);
-      // Commit final position to store
+      // 恢复 transition
+      if (wrapperRef.current) {
+        wrapperRef.current.style.transition = "";
+      }
+      // 读取最终位置并提交
+      const finalX = parseInt(wrapperRef.current?.style.left || "0");
+      const finalY = parseInt(wrapperRef.current?.style.top || "0");
+      posRef.current = { x: finalX, y: finalY };
+      setRenderPos({ x: finalX, y: finalY });
       updateCard(card.id, {
-        pos_x: Math.round(posRef.current.x),
-        pos_y: Math.round(posRef.current.y),
+        pos_x: Math.round(finalX),
+        pos_y: Math.round(finalY),
       });
     };
 
@@ -174,6 +173,7 @@ function FloatingExplainCard({ card }: { card: ExplainCardData }) {
 
   return (
     <div
+      ref={wrapperRef}
       className="absolute z-10 select-none"
       style={{ left: `${renderPos.x}px`, top: `${renderPos.y}px` }}
     >
@@ -193,7 +193,6 @@ interface MessageListProps {
   conversationId?: string | null;  // for explain cards loading
   onDeleteMessage?: (messageId: string) => void;
   onEditMessage?: (messageId: string, newText: string) => Promise<number>;
-  onVersionSwitch?: (messageId: string, direction: "prev" | "next", currentIndex?: number) => Promise<{ index: number; total: number } | null>;
   onSend?: (text: string) => void;
 }
 
@@ -208,7 +207,6 @@ export default function MessageList({
   conversationId,
   onDeleteMessage,
   onEditMessage,
-  onVersionSwitch,
   onSend,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -217,9 +215,12 @@ export default function MessageList({
   const [editingText, setEditingText] = useState("");
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [editedTexts, setEditedTexts] = useState<EditedMap>({});
-  const [versionMap, setVersionMap] = useState<Record<string, { index: number; total: number }>>({});
   const [subBranchData, setSubBranchData] = useState<Record<string, SubBranchInfo[]>>({});
   const [noteCard, setNoteCard] = useState<{ text: string; position: { x: number; y: number } } | null>(null);
+
+  // ── 版本覆盖：用户点击 1/n 切换时，前端临时显示指定版本 ──
+  // key = `${parent_id}::${role}`, value = 要显示的消息 ID
+  const [versionOverrides, setVersionOverrides] = useState<Record<string, string>>({});
 
   const setPendingQuote = useConversationStore((s) => s.setPendingQuote);
   const enterSubBranch = useConversationStore((s) => s.enterSubBranch);
@@ -253,35 +254,6 @@ export default function MessageList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.map((m) => m.id).join(",")]);
 
-  // Restore version map on refresh
-  useEffect(() => {
-    const modifiedIds = messages.filter(m => m.role === "user" && m.has_modified_version && !versionMap[m.id]).map(m => m.id);
-    if (modifiedIds.length === 0) return;
-    let cancelled = false;
-    Promise.all(
-      modifiedIds.map(async (msgId) => {
-        try {
-          const res = await fetch(`/api/conversations/tree/message/${msgId}`, { cache: "no-store" });
-          if (!res.ok) return { msgId, total: 0, index: 0 };
-          const data = await res.json();
-          const versions: string[] = data.versions || [];
-          const total = versions.length;
-          const idx = versions.indexOf(msgId);
-          return { msgId, total, index: idx >= 0 ? idx + 1 : total };
-        } catch { return { msgId, total: 0, index: 0 }; }
-      })
-    ).then(results => {
-      if (cancelled) return;
-      setVersionMap(prev => {
-        const next = { ...prev };
-        for (const r of results) { if (r.total > 1 && !prev[r.msgId]) next[r.msgId] = { index: r.index, total: r.total }; }
-        return next;
-      });
-    });
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages.map(m => m.id).join(",")]);
-
   const handleCopyMessage = async (text: string) => {
     try { await navigator.clipboard.writeText(text); }
     catch {
@@ -291,21 +263,33 @@ export default function MessageList({
     }
   };
 
-  const handleVersionNav = async (messageId: string, direction: "prev" | "next") => {
-    if (!onVersionSwitch) return;
-    const currentIdx = versionMap[messageId]?.index;
-    const result = await onVersionSwitch(messageId, direction, currentIdx);
-    if (result) {
-      const newUserMsg = messages.find(m => m.role === "user" && m.id !== messageId);
-      const newMsgId = newUserMsg?.id || messageId;
-      setVersionMap(prev => {
-        const next = { ...prev };
-        next[newMsgId] = result;
-        if (newMsgId !== messageId) delete next[messageId];
-        return next;
-      });
+  // ── 版本切换：纯前端，不调后端 API ──
+  // 在同一 parent_id+role 的版本组内切换
+  const handleVersionNav = useCallback((messageId: string, _direction: "prev" | "next") => {
+    const groupKey = versionGroupByMessage[messageId];
+    if (!groupKey) return;
+    const group = versionGroups[groupKey];
+    if (!group || group.ids.length <= 1) return;
+    const currentOverrideId = versionOverrides[groupKey];
+    const allIds = group.ids;
+    // 确定当前显示的是哪个版本
+    let curIdx: number;
+    if (currentOverrideId) {
+      curIdx = allIds.indexOf(currentOverrideId);
+    } else {
+      curIdx = allIds.length - 1; // 默认显示最后（最新）
     }
-  };
+    if (curIdx < 0) curIdx = allIds.length - 1;
+    // 循环切换
+    const newIdx = (curIdx - 1 + allIds.length) % allIds.length;
+    const newId = allIds[newIdx];
+    if (newIdx === allIds.length - 1) {
+      // 回到最新版本 → 清除覆盖
+      setVersionOverrides(prev => { const next = { ...prev }; delete next[groupKey]; return next; });
+    } else {
+      setVersionOverrides(prev => ({ ...prev, [groupKey]: newId }));
+    }
+  }, [versionOverrides]);
 
   const handleDeleteMessage = (messageId: string) => onDeleteMessage?.(messageId);
   const handleStartEdit = (msgId: string, currentText: string) => { setEditingId(msgId); setEditingText(currentText); };
@@ -315,10 +299,13 @@ export default function MessageList({
     if (!msgId || !newText) { setEditingId(null); return; }
     if (onEditMessage) {
       try {
-        const result = await onEditMessage(msgId, newText);
-        const verTotal = result > 0 ? result : 2;
+        await onEditMessage(msgId, newText);
+        // 编辑后清除该消息旧版本的覆盖显示
+        const groupKey = versionGroupByMessage[msgId];
+        if (groupKey && versionOverrides[groupKey]) {
+          setVersionOverrides(prev => { const next = { ...prev }; delete next[groupKey]; return next; });
+        }
         setEditedTexts(prev => ({ ...prev, [msgId]: newText }));
-        setVersionMap(prev => ({ ...prev, [msgId]: { index: verTotal, total: verTotal } }));
       } catch {}
     }
     setEditingId(null);
@@ -337,28 +324,65 @@ export default function MessageList({
     setShowScrollButton(scrollHeight - scrollTop - clientHeight > 300);
   }, []);
 
-  // Deduplicate messages
-  const prevMsgsRef = useRef<{ len: number; lastId: string; result: TreeNode[] } | null>(null);
-  const dedupedMessages = useMemo(() => {
-    const lastId = messages.length > 0 ? messages[messages.length - 1].id : "";
-    const prev = prevMsgsRef.current;
-    if (prev && prev.len === messages.length && prev.lastId === lastId) return prev.result;
-    const seen = new Map<string, TreeNode>();
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
+  // ── 版本感知显示 ──
+  // 1) 构建版本组：groupKey = `${parent_id}::${role}`
+  const { visibleMessages, versionGroups, versionGroupByMessage } = useMemo(() => {
+    type GroupKey = string;
+    // 收集每条消息的版本组 key
+    const messageGroupKey = new Map<string, GroupKey>();
+    for (const m of messages) {
       if (m.is_deleted) continue;
-      const existing = seen.get(m.id);
-      if (!existing) { seen.set(m.id, m); }
-      else {
-        const existingText = existing.content_blocks?.find(b => b.type === "text")?.text || "";
-        const currentText = m.content_blocks?.find(b => b.type === "text")?.text || "";
-        if (currentText && !existingText) seen.set(m.id, m);
+      messageGroupKey.set(m.id, `${m.parent_id}::${m.role}`);
+    }
+    // 每个组的所有消息 ID（按 conv.path 顺序）
+    const groupIds = new Map<GroupKey, string[]>();
+    for (const m of messages) {
+      if (m.is_deleted) continue;
+      const gk = messageGroupKey.get(m.id)!;
+      if (!groupIds.has(gk)) groupIds.set(gk, []);
+      groupIds.get(gk)!.push(m.id);
+    }
+    // 每个组的"活跃版本"：如果没有被覆盖显示，则取最后一个；否则取覆盖的版本
+    const activeVersions = new Map<GroupKey, string>();
+    groupIds.forEach((ids, gk) => {
+      const overrideId = versionOverrides[gk];
+      if (overrideId && ids.includes(overrideId)) {
+        activeVersions.set(gk, overrideId);
+      } else {
+        activeVersions.set(gk, ids[ids.length - 1]);
+      }
+    });
+    // 2) 确定可见消息：活跃版本 + 父节点也可见（递归）
+    const activeIdSet = new Set<string>();
+    // 按 path 序遍历
+    for (const m of messages) {
+      if (m.is_deleted) continue;
+      const gk = messageGroupKey.get(m.id)!;
+      const activeId = activeVersions.get(gk);
+      if (m.id !== activeId) continue; // 不是活跃版本，跳过
+      // 检查父节点是否可见：父节点需要是活跃的 或者 是根级消息
+      if (!m.parent_id || activeIdSet.has(m.parent_id)) {
+        activeIdSet.add(m.id);
       }
     }
-    const result = Array.from(seen.values()).reverse();
-    prevMsgsRef.current = { len: messages.length, lastId, result };
-    return result;
-  }, [messages]);
+    // 按 path 顺序输出
+    const vis = messages.filter(m => activeIdSet.has(m.id));
+    // 版本组信息（用于 1/n 展示）
+    const vg: Record<GroupKey, { ids: string[]; activeIndex: number; total: number }> = {};
+    groupIds.forEach((ids, gk) => {
+      if (ids.length > 1) {
+        const active = activeVersions.get(gk)!;
+        const activeIdx = ids.indexOf(active);
+        vg[gk] = { ids, activeIndex: activeIdx >= 0 ? activeIdx : ids.length - 1, total: ids.length };
+      }
+    });
+    // 每条消息 → 其版本组 key
+    const vgbm: Record<string, string> = {};
+    messageGroupKey.forEach((gk, mid) => {
+      vgbm[mid] = gk;
+    });
+    return { visibleMessages: vis, versionGroups: vg, versionGroupByMessage: vgbm };
+  }, [messages, versionOverrides]);
 
   // Group response blocks by message_id
   const blocksByMessage = useMemo(() => {
@@ -396,13 +420,17 @@ export default function MessageList({
     <div className="flex-1 flex flex-col overflow-hidden">
       <ErrorBoundary>
       <div ref={containerRef} className="flex-1 overflow-y-auto px-4 pt-6 pb-2 space-y-6" onScroll={handleScroll}>
-        {dedupedMessages.map((message) => {
+        {visibleMessages.map((message) => {
           const isUser = message.role === "user";
           const isEditing = editingId === message.id;
           const messageBlocks = blocksByMessage.get(message.id) || [];
           const displayText = getDisplayText(message);
-          const hasVersions = message.has_modified_version || !!editedTexts[message.id];
-          const vInfo = versionMap[message.id] || { index: 1, total: hasVersions ? 1 : 0 };
+          const groupKey = versionGroupByMessage[message.id];
+          const group = groupKey ? versionGroups[groupKey] : undefined;
+          const hasVersions = !!group && group.total > 1;
+          const vInfo = hasVersions
+            ? { index: group.activeIndex + 1, total: group.total }
+            : { index: 1, total: 1 };
           const cardsForMsg = getCardsForMessage(message.id, explainCards);
 
           return (

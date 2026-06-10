@@ -52,12 +52,12 @@ export default function AppShell({ children }: AppShellProps) {
       {!isDesktop && <BottomNav />}
 
       <main
-        className="min-h-screen transition-all duration-200"
-        style={{
-          paddingLeft: isDesktop ? 'var(--sidebar-width)' : '0',
-          paddingBottom: !isDesktop ? 'var(--bottom-nav-height)' : '0',
-        }}
-      >
+          className="min-h-screen transition-all duration-300"
+          style={{
+            paddingLeft: isDesktop ? 'var(--sidebar-actual-width, 280px)' : '0',
+            paddingBottom: !isDesktop ? 'var(--bottom-nav-height)' : '0',
+          }}
+        >
         <div className="swiss-container">{children}</div>
       </main>
 

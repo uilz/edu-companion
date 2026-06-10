@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Wand2, Loader2, Send, Sparkles, Brain,
 } from "lucide-react";
-
-const API = "/api/v7/practice";
+import { api } from "@/lib/api/api";
 
 export default function GenerateQuestionsPage() {
   const router = useRouter();
@@ -22,13 +21,10 @@ export default function GenerateQuestionsPage() {
     setError("");
     setResult(null);
     try {
-      const res = await fetch(`${API}/questions/generate`, {
+      const data = await api<any>("/api/v7/practice/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: topic.trim(), count }),
+        body: JSON.stringify({ message: topic.trim(), count }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || data.message || "生成失败");
       setResult(data);
     } catch (e: any) {
       setError(e.message || "生成失败");

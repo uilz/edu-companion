@@ -10,21 +10,24 @@ export async function handleNewConversationImpl(set: any, get: any, level: strin
     let pId = partitionId || get().selectedPartitionId;
 
     if (level === "default") {
-      if (!pId) {
-        if (get().partitions.length > 0) {
-          pId = get().partitions[0].id;
-        } else {
-          const pData = await apiFetch<{ partition: Partition; conversation_id?: string }>("/tree/partition", {
-            method: "POST",
-            body: JSON.stringify({ name: "新分区", emoji: "💬" }),
-          });
-          pId = pData.partition.id;
-          if (pData.conversation_id) get().selectConversation(pId, pData.conversation_id);
+      // 侧边栏顶部「新建会话」→ 在临时分区创建
+      // 查找或创建临时分区
+      const parts = get().partitions as Partition[];
+      let tempPartition = parts.find(p => p.name === "临时分区");
+      if (!tempPartition) {
+        const pData = await apiFetch<{ partition: Partition; conversation_id?: string }>("/tree/partition", {
+          method: "POST",
+          body: JSON.stringify({ name: "临时分区", emoji: "💬" }),
+        });
+        tempPartition = pData.partition;
+        if (pData.conversation_id) {
+          get().selectConversation(tempPartition.id, pData.conversation_id);
           await get().loadPartitions();
           return;
         }
-        set({ selectedPartitionId: pId });
       }
+      pId = tempPartition.id;
+      set({ selectedPartitionId: pId });
       return get().handleNewConversation("partition", pId);
     }
 

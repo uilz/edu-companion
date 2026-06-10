@@ -438,7 +438,6 @@ export default function FocusModePanel({
             onSend={socraticSend}
             onDeleteMessage={deleteMessage}
             onEditMessage={editMessage}
-            onVersionSwitch={versionSwitch}
             socraticEnabled={socraticMode}
             followUpMode={followUpMode}
             setFollowUpMode={setFollowUpMode}

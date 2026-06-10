@@ -7,7 +7,7 @@
 // ══════════════════════════════════════════════════════════════
 
 import { create } from "zustand";
-import { API_BASE } from "@/lib/api/api";
+import { api } from "@/lib/api/api";
 
 // ── Types ──
 
@@ -132,9 +132,9 @@ export const useExplainStore = create<ExplainStore>((set, get) => ({
 
   loadFromConversation: async (conversationId) => {
     try {
-      const res = await fetch(`${API_BASE}/api/knowledge/explain-cards?conversation_id=${encodeURIComponent(conversationId)}`);
-      if (!res.ok) return;
-      const data: ExplainCardData[] = await res.json();
+      const data = await api<ExplainCardData[]>(
+        `/api/knowledge/explain-cards?conversation_id=${encodeURIComponent(conversationId)}`,
+      );
       set({ cards: data });
     } catch {
       // 静默失败
@@ -143,13 +143,13 @@ export const useExplainStore = create<ExplainStore>((set, get) => ({
 
   createCard: async (data) => {
     try {
-      const res = await fetch(`${API_BASE}/api/knowledge/explain-cards`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const card: ExplainCardData = await res.json();
+      const card = await api<ExplainCardData>(
+        `/api/knowledge/explain-cards`,
+        {
+          method: "POST",
+          body: JSON.stringify(data),
+        },
+      );
       set((s) => ({ cards: [...s.cards, card] }));
       return card;
     } catch {
@@ -188,9 +188,8 @@ export const useExplainStore = create<ExplainStore>((set, get) => ({
     }));
     // 同步到后端
     try {
-      await fetch(`${API_BASE}/api/knowledge/explain-cards/${id}`, {
+      await api<void>(`/api/knowledge/explain-cards/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
       });
     } catch {
@@ -207,7 +206,7 @@ export const useExplainStore = create<ExplainStore>((set, get) => ({
     }));
     // 同步到后端
     try {
-      await fetch(`${API_BASE}/api/knowledge/explain-cards/${id}`, { method: "DELETE" });
+      await api<void>(`/api/knowledge/explain-cards/${id}`, { method: "DELETE" });
     } catch {
       // 静默
     }
@@ -222,9 +221,8 @@ export const useExplainStore = create<ExplainStore>((set, get) => ({
       ),
     }));
     // 异步同步到后端（只同步根卡片）
-    fetch(`${API_BASE}/api/knowledge/explain-cards/${id}`, {
+    api<void>(`/api/knowledge/explain-cards/${id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ collapsed }),
     }).catch(() => {});
   },

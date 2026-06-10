@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import {
   createPracticeSession, submitAnswer, completeSession,
-  resolveBankForNode, generateQuestions,
+  resolveBankForNode, generateQuestions, listBanks, listMaterials,
   type V7Session, type V7SubmitResult, type MaterialItem,
 } from "@/lib/api/practice-api";
 import QuestionCard from "@/components/practice/shared/QuestionCard";
@@ -33,6 +33,7 @@ export default function PracticePanel({ nodeId, nodeLabel, bankId, onClose }: Pr
   const [error, setError] = useState("");
   const [mode, setMode] = useState<"adaptive" | "review" | "challenge">("adaptive");
   const [count, setCount] = useState(5);
+  const [difficulty, setDifficulty] = useState<"auto" | "easy" | "medium" | "hard">("auto");
   const [questionStart, setQuestionStart] = useState(0);
   const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([]);
   const [results, setResults] = useState<V7SubmitResult[]>([]);
@@ -43,8 +44,10 @@ export default function PracticePanel({ nodeId, nodeLabel, bankId, onClose }: Pr
   const handleStart = useCallback(async () => {
     setPhase("loading"); setError(""); setResults([]); setCurrentIdx(0);
     try {
-      const resolvedBankId = bankId || (nodeId ? (await resolveBankForNode(nodeId)).bank_id : (await (await fetch("/api/v7/practice/banks")).json())?.[0]?.id || "bnk_default");
-      const sess = await createPracticeSession(resolvedBankId, { mode, count, cognitive_node_ids: nodeId ? [nodeId] : undefined });
+      const resolvedBankId = bankId || (nodeId ? (await resolveBankForNode(nodeId)).bank_id : (await listBanks())?.[0]?.id || "bnk_default");
+      const config: Record<string, any> = {};
+      if (difficulty !== "auto") config.difficulty = difficulty;
+      const sess = await createPracticeSession(resolvedBankId, { mode, count, config, cognitive_node_ids: nodeId ? [nodeId] : undefined });
 
       if (sess.questions?.length > 0) {
         setSession(sess); setPhase("answering"); setSelected([]); setLastResult(null); setQuestionStart(Date.now());
@@ -61,7 +64,7 @@ export default function PracticePanel({ nodeId, nodeLabel, bankId, onClose }: Pr
         }
       }
     } catch (e: any) { setPhase("error"); setError(e?.message || "创建练习失败"); }
-  }, [nodeId, nodeLabel, mode, count, selectedMaterialIds, bankId]);
+  }, [nodeId, nodeLabel, mode, count, difficulty, selectedMaterialIds, bankId]);
 
   const handleSelect = (label: string) => {
     if (showFeedback || submitting) return;
@@ -150,6 +153,7 @@ export default function PracticePanel({ nodeId, nodeLabel, bankId, onClose }: Pr
     return (
       <IdleScreen
         mode={mode} setMode={setMode} count={count} setCount={setCount}
+        difficulty={difficulty} setDifficulty={setDifficulty}
         selectedMaterialIds={selectedMaterialIds} setSelectedMaterialIds={setSelectedMaterialIds}
         nodeLabel={nodeLabel} onStart={handleStart}
       />
@@ -223,10 +227,12 @@ function ErrorScreen({ message, onRetry }: { message: string; onRetry: () => voi
 }
 
 function IdleScreen({
-  mode, setMode, count, setCount, selectedMaterialIds, setSelectedMaterialIds,
+  mode, setMode, count, setCount, difficulty, setDifficulty,
+  selectedMaterialIds, setSelectedMaterialIds,
   nodeLabel, onStart,
 }: {
   mode: string; setMode: (m: any) => void; count: number; setCount: (n: number) => void;
+  difficulty: string; setDifficulty: (d: any) => void;
   selectedMaterialIds: string[]; setSelectedMaterialIds: (ids: string[]) => void;
   nodeLabel?: string; onStart: () => void;
 }) {
@@ -236,7 +242,7 @@ function IdleScreen({
 
   const loadMaterials = async () => {
     setLoadingMaterials(true);
-    try { setMaterials(await (await fetch("/api/v7/practice/materials")).json()); } catch {}
+    try { const r = await listMaterials(); setMaterials(r.items || []); } catch {}
     setLoadingMaterials(false);
   };
 
@@ -313,13 +319,31 @@ function IdleScreen({
       </div>
 
       {/* 题数 */}
-      <div className="w-full mb-6">
+      <div className="w-full mb-4">
         <p className="text-[10px] text-[var(--color-text-muted)] mb-2 font-medium">题数</p>
         <div className="flex gap-2">
           {[3, 5, 10].map(n => (
             <button key={n} onClick={() => setCount(n)}
               className={`flex-1 py-2 rounded-lg border text-center text-sm font-medium transition-all ${count === n ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]" : "border-[var(--color-border)]/50 bg-[var(--color-surface)] text-[var(--color-text)] hover:border-[var(--color-accent)]/30"}`}>
               {n} 题
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 难度 */}
+      <div className="w-full mb-6">
+        <p className="text-[10px] text-[var(--color-text-muted)] mb-2 font-medium">难度</p>
+        <div className="flex gap-2">
+          {[
+            { key: "auto", label: "自适应" },
+            { key: "easy", label: "简单" },
+            { key: "medium", label: "中等" },
+            { key: "hard", label: "困难" },
+          ].map(d => (
+            <button key={d.key} onClick={() => setDifficulty(d.key)}
+              className={`flex-1 py-2 rounded-lg border text-center text-xs font-medium transition-all ${difficulty === d.key ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]" : "border-[var(--color-border)]/50 bg-[var(--color-surface)] text-[var(--color-text)] hover:border-[var(--color-accent)]/30"}`}>
+              {d.label}
             </button>
           ))}
         </div>

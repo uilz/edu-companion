@@ -5,12 +5,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { clearSession, getCurrentUser, hasRole, type AdminRole, type AdminUser } from "@/lib/api";
 
-const TABS: { href: string; label: string; min: AdminRole }[] = [
-  { href: "/users", label: "用户管理", min: "super_admin" },
-  { href: "/data", label: "全局数据", min: "data_admin" },
-  { href: "/monitor", label: "系统监控", min: "analyst" },
-  { href: "/analytics", label: "BI 分析", min: "analyst" },
-  { href: "/settings", label: "系统设置", min: "super_admin" },
+const TABS: { href: string; label: string; icon: string; min: AdminRole }[] = [
+  { href: "/users", label: "用户管理", icon: "👥", min: "super_admin" },
+  { href: "/data", label: "全局数据", icon: "📊", min: "data_admin" },
+  { href: "/monitor", label: "系统监控", icon: "📡", min: "analyst" },
+  { href: "/analytics", label: "BI 分析", icon: "📈", min: "analyst" },
+  { href: "/settings", label: "系统设置", icon: "⚙️", min: "super_admin" },
 ];
 
 export function Topbar() {
@@ -29,7 +29,10 @@ export function Topbar() {
 
   return (
     <header className="topbar">
-      <div className="brand">🛡️ Edu Admin</div>
+      <div className="brand">
+        <span>&#x1F6E1;&#xFE0F;</span>
+        <span>Edu Admin</span>
+      </div>
       <nav className="tabs">
         {TABS.map((t) => {
           const ok = hasRole(user?.role, t.min);
@@ -37,6 +40,7 @@ export function Topbar() {
           const active = pathname?.startsWith(t.href);
           return (
             <Link key={t.href} href={t.href} className={active ? "tab active" : "tab"}>
+              <span style={{ marginRight: 4 }}>{t.icon}</span>
               {t.label}
             </Link>
           );
@@ -48,7 +52,7 @@ export function Topbar() {
             <span className="user-info">
               {user.username} <span className={`role-pill role-${user.role}`}>{user.role}</span>
             </span>
-            <button onClick={logout} className="btn-sm">退出</button>
+            <button onClick={logout} className="btn-sm" style={{ fontSize: 11 }}>退出</button>
           </>
         ) : (
           <Link href="/login" className="btn-sm">登录</Link>

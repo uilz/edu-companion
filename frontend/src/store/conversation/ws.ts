@@ -46,10 +46,11 @@ export class ConversationWS {
     this.callbacks = cbs;
     if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
 
-    // 使用与 HTTP API 相同的后端地址，协议换为 ws/wss
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
-    const wsBase = apiBase ? apiBase.replace(/^http/, "ws") : "";
-    const url = `${wsBase}/api/conversations/ws`;
+    // 始终使用相对路径 —— 通过 Next.js rewrites → 认证网关 (:18001) → 后端 (:8000)
+    // 所有流量都走统一入口，在网关层做 JWT 验证
+    // 浏览器 WebSocket API 不支持自定义 header，将 access_token 放到 query 参数中
+    const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : "";
+    const url = token ? `/api/conversations/ws?token=${encodeURIComponent(token)}` : "/api/conversations/ws";
 
     try {
       this.ws = new WebSocket(url);

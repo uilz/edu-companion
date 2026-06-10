@@ -5,6 +5,8 @@
 import { setActivePartId, setActiveConvId } from "../streaming";
 import { useNotificationStore } from "@/store/notification/notification-store";
 
+/** 选中会话。domainId/topicId 由调用方保证已设置（StudySidebar 加载时通过 resolveConversationPath 解析），
+    跨分区切换时重置 domain/topic，同分区内保持当前路径。 */
 export function selectConversationImpl(set: any, get: any, partitionId: string | null, conversationId: string | null) {
   const oldPartitionId = get().selectedPartitionId;
   setActivePartId(partitionId);

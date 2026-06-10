@@ -11,7 +11,7 @@
 
 import { create } from "zustand";
 import type { Conversation, Partition, TreeNode, ResponseBlock, SubBranchInfo } from "@/types";
-import type { GraphNode, TreeConv, SelectedNode } from "@/components/conversation/tree/SidebarTreeNode";
+import type { GraphNode, TreeConv, SelectedNode, GraphLevel } from "@/components/conversation/tree/SidebarTreeNode";
 
 import { apiFetch, fireClassify, ensureConversationAtLevel } from "./tree-helpers";
 import { v2, tree } from "@/lib/api/api";
@@ -154,8 +154,10 @@ export interface ConversationState {
 
   // ── 树操作 ──
   loadRootNodes: () => Promise<void>;
-  loadChildren: (nodeId: string) => Promise<GraphNode[]>;
+  loadChildren: (nodeId: string, level?: string) => Promise<GraphNode[]>;
   loadConversations: (topicId: string) => Promise<TreeConv[]>;
+  expandPath: (partitionId: string, domainId?: string | null, topicId?: string | null) => Promise<void>;
+  resolveConversationPath: (conversationId: string) => Promise<{ partition_id: string; domain_id: string; topic_id: string; parent_id: string; parent_type: string } | null>;
   setChildMap: (m: Map<string, GraphNode[]>) => void;
   setConvCache: (m: Map<string, TreeConv[]>) => void;
 
@@ -189,23 +191,36 @@ export interface ConversationState {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  辅助：在 childMap 中按 ID 查找节点
-// ══════════════════════════════════════════════════════════════
-function findNodeInMap(map: Map<string, GraphNode[]>, id: string): GraphNode | null {
-  let found: GraphNode | null = null;
-  map.forEach((children) => {
-    if (found) return;
-    const f = children.find(c => c.id === id);
-    if (f) found = f;
-  });
-  return found;
-}
-
-// ══════════════════════════════════════════════════════════════
 //  Store
 // ══════════════════════════════════════════════════════════════
 
 const ROOT_KEY = "__graph_root__";
+const EXPANDED_KEY = "learn-tree-expanded";
+const SIDEBAR_KEY = "learn-sidebar-collapsed";
+
+// ── 持久化 expandedSet ──
+function persistExpandedSet(expanded: Set<string>) {
+  try {
+    localStorage.setItem(EXPANDED_KEY, JSON.stringify(Array.from(expanded)));
+  } catch { /* ignore */ }
+}
+
+function restoreExpandedSet(): Set<string> {
+  try {
+    const saved = localStorage.getItem(EXPANDED_KEY);
+    if (saved) {
+      const arr: string[] = JSON.parse(saved);
+      return new Set(arr);
+    }
+  } catch { /* ignore */ }
+  return new Set();
+}
+
+function restoreSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_KEY) === "true";
+  } catch { return false; }
+}
 
 export const useConversationStore = create<ConversationState>()((set, get) => ({
   // ── Initial state ──
@@ -221,7 +236,7 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
   // ── 树数据 ──
   childMap: new Map(),
   convCache: new Map(),
-  expandedSet: new Set(),
+  expandedSet: restoreExpandedSet(), // ← 从 localStorage 恢复
   loadingSet: new Set(),
   rootLoaded: false,
   ROOT_KEY,
@@ -229,7 +244,7 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
   partitions: [],
   loadingPartitions: true,
   showPartitionSidebar: false,
-  sidebarCollapsed: false,
+  sidebarCollapsed: restoreSidebarCollapsed(),
   showNewPartition: false,
 
   messages: [],
@@ -259,7 +274,6 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
   // ── selectGraphNode：自包含选中 + 父链展开 + 数据加载 ──
   selectGraphNode: async (node: GraphNode, partitionId: string) => {
     const { id, level, parent } = node;
-    const state = get();
 
     // 1) 更新选中状态（同步）
     const base: Partial<ConversationState> = {
@@ -304,7 +318,12 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
     for (const cid of chain) {
       if (cid === ROOT_KEY) continue;
       if (!get().childMap.has(cid)) {
-        await get().loadChildren(cid);
+        let childLevel: string | undefined;
+        if (cid === partitionId) childLevel = "partition";
+        else if (cid === parent && level === "domain") childLevel = "partition";
+        else if (cid === parent && level === "topic") childLevel = "domain";
+        else if (cid === id) childLevel = level;
+        await get().loadChildren(cid, childLevel);
       }
     }
 
@@ -345,22 +364,36 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
       const next = new Set(s.expandedSet);
       if (next.has(node.id)) next.delete(node.id);
       else next.add(node.id);
+      persistExpandedSet(next);
       return { expandedSet: next };
     });
-    // 展开时顺手加载子节点（wasExpanded=false 表示正在展开）
+    // 展开时顺手加载子节点和会话（wasExpanded=false 表示正在展开）
     if (!wasExpanded) {
-      if (!get().childMap.has(node.id)) get().loadChildren(node.id);
-      if (node.level === "topic") {
-        const cv = get().convCache;
-        if (!cv.has(node.id) || (cv.get(node.id) || []).length === 0) get().loadConversations(node.id);
-      }
+      if (!get().childMap.has(node.id)) get().loadChildren(node.id, node.level);
+      // 加载该节点下的会话（partition / domain / topic 均可有会话）
+      const cv = get().convCache;
+      if (!cv.has(node.id) || (cv.get(node.id) || []).length === 0) get().loadConversations(node.id);
     }
   },
 
   // ── 树数据加载 ──
   loadRootNodes: async () => {
     try {
-      const nodes = await v2<GraphNode[]>("/graph/nodes?level=partition");
+      const data = await apiFetch<{ partitions: { id: string; name: string; emoji?: string; root_id?: string }[] }>("/tree/partition");
+      const nodes: GraphNode[] = (data.partitions || []).map((p, i) => ({
+        id: p.id,
+        label: p.name,
+        level: "partition" as GraphLevel,
+        parent: null,
+        emoji: p.emoji || "",
+        nodeIndex: i,
+        path_id: p.name,
+        is_visible: true,
+        node_type: "explicit",
+        suggested_count: 0,
+        created_at: 0,
+        brief: "",
+      }));
       set(s => {
         const next = new Map(s.childMap);
         next.set(ROOT_KEY, nodes);
@@ -369,13 +402,49 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
     } catch { /* ignore */ }
   },
 
-  loadChildren: async (nodeId: string): Promise<GraphNode[]> => {
+  loadChildren: async (nodeId: string, level?: string): Promise<GraphNode[]> => {
     const key = `graph:${nodeId}`;
     const s = get();
     if (s.loadingSet.has(key)) return [];
     set(s => { const n = new Set(s.loadingSet); n.add(key); return { loadingSet: n }; });
     try {
-      const children = await v2<GraphNode[]>(`/graph/nodes?parent_id=${nodeId}`);
+      let children: GraphNode[] = [];
+      if (level === "partition") {
+        const data = await apiFetch<{ domains: { id: string; name: string; emoji?: string; partition_id: string }[] }>(`/tree/domain?parent_id=${nodeId}`);
+        children = (data.domains || []).map((d, i) => ({
+          id: d.id,
+          label: d.name,
+          level: "domain" as GraphLevel,
+          parent: d.partition_id,
+          emoji: d.emoji || "",
+          nodeIndex: i,
+          path_id: d.name,
+          is_visible: true,
+          node_type: "explicit",
+          suggested_count: 0,
+          created_at: 0,
+          brief: "",
+        }));
+      } else if (level === "domain") {
+        const data = await apiFetch<{ topics: { id: string; name: string; emoji?: string; domain_id: string }[] }>(`/tree/topic?parent_id=${nodeId}`);
+        children = (data.topics || []).map((t, i) => ({
+          id: t.id,
+          label: t.name,
+          level: "topic" as GraphLevel,
+          parent: t.domain_id,
+          emoji: t.emoji || "",
+          nodeIndex: i,
+          path_id: t.name,
+          is_visible: true,
+          node_type: "explicit",
+          suggested_count: 0,
+          created_at: 0,
+          brief: "",
+        }));
+      } else {
+        // fallback: use graph API
+        children = await v2<GraphNode[]>(`/graph/nodes?parent_id=${nodeId}`);
+      }
       set(s => {
         const next = new Map(s.childMap);
         next.set(nodeId, children);
@@ -424,9 +493,66 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
     }
   },
 
+  expandPath: async (partitionId: string, domainId?: string | null, topicId?: string | null) => {
+    const state = get();
+    const expand = (id: string) => {
+      set(s => {
+        const n = new Set(s.expandedSet);
+        n.add(id);
+        persistExpandedSet(n);
+        return { expandedSet: n };
+      });
+    };
+
+    // 1) 加载 + 展开 partition 的子节点
+    if (!state.childMap.has(partitionId)) {
+      await get().loadChildren(partitionId, "partition");
+    }
+    expand(partitionId);
+
+    // 2) 加载 + 展开 domain
+    if (domainId) {
+      if (!state.childMap.has(domainId)) {
+        await get().loadChildren(domainId, "domain");
+      }
+      expand(domainId);
+    }
+
+    // 3) 展开 topic + 加载会话
+    if (topicId) {
+      expand(topicId);
+      const cv = get().convCache;
+      if (!cv.has(topicId) || (cv.get(topicId) || []).length === 0) {
+        await get().loadConversations(topicId);
+      }
+    }
+  },
+
+  // ── resolveConversationPath：从后端获取会话的完整 parent 链路 ──
+  resolveConversationPath: async (conversationId: string) => {
+    try {
+      const data = await apiFetch<{
+        conversation: { partition_id: string; domain_id: string; topic_id: string; parent_id: string; parent_type: string };
+      }>(`/tree/conversation/${conversationId}`);
+      const c = data.conversation;
+      return {
+        partition_id: c.partition_id || "",
+        domain_id: c.domain_id || "",
+        topic_id: c.topic_id || "",
+        parent_id: c.parent_id || "",
+        parent_type: c.parent_type || "",
+      };
+    } catch {
+      return null;
+    }
+  },
+
   setUrlInitialized: (v) => set({ urlInitialized: v }),
   setShowPartitionSidebar: (v) => set({ showPartitionSidebar: v }),
-  setSidebarCollapsed: (v) => set({ sidebarCollapsed: v }),
+  setSidebarCollapsed: (v) => {
+    try { localStorage.setItem(SIDEBAR_KEY, v ? "true" : "false"); } catch {}
+    set({ sidebarCollapsed: v });
+  },
   setShowNewPartition: (v) => set({ showNewPartition: v }),
   clearPendingQuote: () => set({ pendingQuote: null }),
 
@@ -482,5 +608,6 @@ export {
   clearStreamCacheData,
   isSending,
   setIsSending,
+  isStreamCompleting,
   saveStreamCacheBeforeUnload,
 } from "./streaming";

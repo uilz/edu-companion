@@ -13,8 +13,7 @@ import type {
 } from "./types";
 import { useNotificationStore } from "./notification-store";
 import { navigateToProposal } from "./proposal-navigator";
-
-const SECRETARY_API_BASE = "/api/secretary";
+import { api } from "@/lib/api/api";
 
 /**
  * 处理 secretary_update WS 事件：
@@ -24,9 +23,7 @@ export async function handleSecretaryUpdate(
   _payload: SecretaryUpdatePayload,
 ): Promise<void> {
   try {
-    const res = await fetch(`${SECRETARY_API_BASE}/proposals/pending`);
-    if (!res.ok) return;
-    const proposals: SecretaryNotification[] = await res.json();
+    const proposals: SecretaryNotification[] = await api("/api/secretary/proposals/pending");
     const store = useNotificationStore.getState();
     proposals.forEach((p) => store.addNotification(p));
   } catch {
@@ -87,9 +84,7 @@ export function handleSecretaryProposalUpdate(
 export async function markNotificationRead(id: string): Promise<void> {
   useNotificationStore.getState().markRead(id);
   try {
-    await fetch(`${SECRETARY_API_BASE}/proposals/${id}/dismiss`, {
-      method: "POST",
-    });
+    await api(`/api/secretary/proposals/${id}/dismiss`, { method: "POST" });
   } catch {
     // 静默失败
   }
@@ -108,35 +103,30 @@ export async function acceptNotification(
 
   store.acceptNotification(id);
   try {
-    const res = await fetch(`${SECRETARY_API_BASE}/proposals/${id}/accept`, {
-      method: "POST",
-    });
-    if (res.ok) {
-      const body = await res.json();
-      // 将执行结果存入 feedback，方便 UI 展示
-      if (body.action_result || body.plan_adjustment) {
-        store.addActionFeedback({
-          id: `feedback_${id}`,
-          proposalId: id,
-          actionType: (notif?.actionType || "") as ActionType,
-          title: notif?.title || "提案已执行",
-          result: body.action_result || null,
-          planAdjustment: body.plan_adjustment || null,
-          timestamp: Date.now(),
-        });
-      }
+    const body: any = await api(`/api/secretary/proposals/${id}/accept`, { method: "POST" });
+    // 将执行结果存入 feedback，方便 UI 展示
+    if (body.action_result || body.plan_adjustment) {
+      store.addActionFeedback({
+        id: `feedback_${id}`,
+        proposalId: id,
+        actionType: (notif?.actionType || "") as ActionType,
+        title: notif?.title || "提案已执行",
+        result: body.action_result || null,
+        planAdjustment: body.plan_adjustment || null,
+        timestamp: Date.now(),
+      });
+    }
 
-      // 自动导航到目标页面
-      const shouldNavigate = options?.navigate !== false;
-      if (shouldNavigate && notif) {
-        navigateToProposal({
-          actionType: notif.actionType || "",
-          payload: body.action_result?.payload || {},
-          title: notif.title,
-          description: notif.description,
-          targetActionPath: notif.target?.actionPath,
-        });
-      }
+    // 自动导航到目标页面
+    const shouldNavigate = options?.navigate !== false;
+    if (shouldNavigate && notif) {
+      navigateToProposal({
+        actionType: notif.actionType || "",
+        payload: body.action_result?.payload || {},
+        title: notif.title,
+        description: notif.description,
+        targetActionPath: notif.target?.actionPath,
+      });
     }
   } catch {
     // 静默失败
@@ -149,9 +139,7 @@ export async function acceptNotification(
 export async function dismissNotification(id: string): Promise<void> {
   useNotificationStore.getState().dismissNotification(id);
   try {
-    await fetch(`${SECRETARY_API_BASE}/proposals/${id}/dismiss`, {
-      method: "POST",
-    });
+    await api(`/api/secretary/proposals/${id}/dismiss`, { method: "POST" });
   } catch {
     // 静默失败
   }
@@ -163,9 +151,7 @@ export async function dismissNotification(id: string): Promise<void> {
 export async function deleteNotification(id: string): Promise<void> {
   useNotificationStore.getState().removeNotification(id);
   try {
-    await fetch(`${SECRETARY_API_BASE}/proposals/${id}/delete`, {
-      method: "POST",
-    });
+    await api(`/api/secretary/proposals/${id}/delete`, { method: "POST" });
   } catch {
     // 静默失败
   }
@@ -181,9 +167,8 @@ export async function snoozeNotification(
 ): Promise<void> {
   useNotificationStore.getState().snoozeNotification(id, untilTimestamp);
   try {
-    await fetch(`${SECRETARY_API_BASE}/proposals/${id}/snooze`, {
+    await api(`/api/secretary/proposals/${id}/snooze`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ until: untilTimestamp }),
     });
   } catch {
@@ -197,9 +182,7 @@ export async function snoozeNotification(
 export async function restoreNotification(id: string): Promise<void> {
   useNotificationStore.getState().restoreNotification(id);
   try {
-    await fetch(`${SECRETARY_API_BASE}/proposals/${id}/restore`, {
-      method: "POST",
-    });
+    await api(`/api/secretary/proposals/${id}/restore`, { method: "POST" });
   } catch {
     // 静默失败
   }
@@ -218,9 +201,8 @@ export async function batchAcceptNotifications(
   const store = useNotificationStore.getState();
   ids.forEach((id) => store.acceptNotification(id));
   try {
-    await fetch(`${SECRETARY_API_BASE}/proposals/batch-accept`, {
+    await api("/api/secretary/proposals/batch-accept", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ids }),
     });
   } catch {
@@ -237,9 +219,8 @@ export async function batchDismissNotifications(
   const store = useNotificationStore.getState();
   ids.forEach((id) => store.dismissNotification(id));
   try {
-    await fetch(`${SECRETARY_API_BASE}/proposals/batch-dismiss`, {
+    await api("/api/secretary/proposals/batch-dismiss", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ids }),
     });
   } catch {
@@ -262,11 +243,7 @@ export async function fetchHistory(
   if (filter?.sourceModule) params.set("source_module", filter.sourceModule);
   if (filter?.actionType) params.set("action_type", filter.actionType);
   try {
-    const res = await fetch(
-      `${SECRETARY_API_BASE}/proposals/history?${params}`,
-    );
-    if (!res.ok) return [];
-    return await res.json();
+    return await api<NotificationHistoryItem[]>(`/api/secretary/proposals/history?${params}`);
   } catch {
     return [];
   }

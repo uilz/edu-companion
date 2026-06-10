@@ -1,11 +1,11 @@
-// ══════════════════════════════════════════════════════════════
-//  API helpers + tree navigation helpers
-// ══════════════════════════════════════════════════════════════
+/**
+ * tree-helpers — 树操作辅助函数
+ * ensureConversationAtLevel, createConversationWithSmartName
+ */
 
 // ══════════════════════════════════════════════════════════════
-//  API helpers (duplicated from api.ts — cannot import "use client" file)
+//  API helpers
 // ══════════════════════════════════════════════════════════════
-
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`/api/conversations${path}`, {
     headers: { "Content-Type": "application/json", ...options?.headers },
@@ -39,118 +39,96 @@ export function fireClassify(convId: string, text: string) {
   }).catch(() => {}); // fire-and-forget
 }
 
-// ══════════════════════════════════════════════════════════════
-//  Helper: ensure conversation exists at a given tree level
-// ══════════════════════════════════════════════════════════════
+/** 智能命名：获取下一个可用的会话名称 */
+async function getNextConversationName(parentId: string): Promise<string> {
+  try {
+    const data = await apiFetch<{
+      conversations: { name: string; message_count?: number }[];
+    }>(`/tree/conversation?parent_id=${parentId}`);
+    const convs = data.conversations || [];
 
+    // 检查是否已有空的新会话
+    const emptyConv = convs.find(
+      (c) => (!c.message_count || c.message_count === 0) && c.name.startsWith("新会话"),
+    );
+    if (emptyConv) return "__use_existing__";
+
+    // 找出最大的编号
+    let maxN = 0;
+    const baseName = "新会话";
+    for (const c of convs) {
+      if (c.name === baseName) { maxN = Math.max(maxN, 1); continue; }
+      const m = c.name.match(/^新会话(\d+)$/);
+      if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
+    }
+
+    if (maxN === 0) return baseName;
+    return `${baseName}${maxN + 1}`;
+  } catch {
+    return "新会话";
+  }
+}
+
+/**
+ * 确保在指定层级下创建对话。
+ *
+ * 层级含义：
+ *   partition → 直接在分区下创建会话
+ *   domain    → 直接在领域下创建会话
+ *   topic     → 在专题下创建会话
+ *
+ * 不再忽略中间层自动补全——对话可以挂在 partition/domain/topic 任意层级。
+ */
 export async function ensureConversationAtLevel(
   level: string,
   parentId: string,
   pId: string,
 ): Promise<{ partitionId: string; conversationId: string } | null> {
   try {
+    let actualParentId = parentId;
+
+    // ── 1. 确定实际父节点 ID ──
     if (level === "partition") {
-      // Find or create domain under partition
-      const dData = await apiFetch<{ domains: { id: string }[] }>(
-        `/tree/domain?parent_id=${parentId}`,
-      );
-      const domainId =
-        dData.domains?.[0]?.id ||
-        (
-          await apiFetch<{ domain: { id: string } }>("/tree/domain", {
-            method: "POST",
-            body: JSON.stringify({ parent_id: parentId, name: "新领域", emoji: "📚" }),
-          })
-        ).domain.id;
-
-      // Find or create topic under domain
-      const tData = await apiFetch<{ topics: { id: string }[] }>(
-        `/tree/topic?parent_id=${domainId}`,
-      );
-      const topicId =
-        tData.topics?.[0]?.id ||
-        (
-          await apiFetch<{ topic: { id: string } }>("/tree/topic", {
-            method: "POST",
-            body: JSON.stringify({ parent_id: domainId, name: "新专题", emoji: "📝" }),
-          })
-        ).topic.id;
-
-      // Find or create conversation under topic
-      const cData = await apiFetch<{
-        conversations: { id: string; message_count?: number }[];
-      }>(`/tree/conversation?parent_id=${topicId}`);
-      const empty = (cData.conversations || []).find(
-        (c) => !c.message_count || c.message_count === 0,
-      );
-      const convId =
-        empty?.id ||
-        (
-          await apiFetch<{ conversation: { id: string } }>("/tree/conversation", {
-            method: "POST",
-            body: JSON.stringify({ parent_id: topicId, name: "" }),
-          })
-        ).conversation.id;
-
-      return { partitionId: pId, conversationId: convId };
+      // 对话直接挂在 partition 下
+      actualParentId = parentId; // parentId 就是 partitionId
+    } else if (level === "domain") {
+      // 对话直接挂在 domain 下
+      actualParentId = parentId;
+    } else if (level === "topic") {
+      // 对话直接挂在 topic 下
+      actualParentId = parentId;
+    } else {
+      return null;
     }
 
-    if (level === "domain") {
-      // Find or create topic under domain
-      const tData = await apiFetch<{ topics: { id: string }[] }>(
-        `/tree/topic?parent_id=${parentId}`,
-      );
-      const topicId =
-        tData.topics?.[0]?.id ||
-        (
-          await apiFetch<{ topic: { id: string } }>("/tree/topic", {
-            method: "POST",
-            body: JSON.stringify({ parent_id: parentId, name: "新专题", emoji: "📝" }),
-          })
-        ).topic.id;
+    // ── 2. 智能命名：先检查是否已存在空的「新会话」 ──
+    const name = await getNextConversationName(actualParentId);
 
-      // Find or create conversation under topic
+    // 如果已有空的「新会话」，直接使用它
+    if (name === "__use_existing__") {
       const cData = await apiFetch<{
-        conversations: { id: string; message_count?: number }[];
-      }>(`/tree/conversation?parent_id=${topicId}`);
+        conversations: { id: string; name: string; message_count?: number }[];
+      }>(`/tree/conversation?parent_id=${actualParentId}`);
       const empty = (cData.conversations || []).find(
-        (c) => !c.message_count || c.message_count === 0,
+        (c) => (!c.message_count || c.message_count === 0) && c.name.startsWith("新会话"),
       );
-      const convId =
-        empty?.id ||
-        (
-          await apiFetch<{ conversation: { id: string } }>("/tree/conversation", {
-            method: "POST",
-            body: JSON.stringify({ parent_id: topicId, name: "" }),
-          })
-        ).conversation.id;
-
-      return { partitionId: pId, conversationId: convId };
+      if (empty) {
+        return { partitionId: pId, conversationId: empty.id };
+      }
     }
 
-    if (level === "topic") {
-      // Find or create conversation under topic
-      const cData = await apiFetch<{
-        conversations: { id: string; message_count?: number }[];
-      }>(`/tree/conversation?parent_id=${parentId}`);
-      const empty = (cData.conversations || []).find(
-        (c) => !c.message_count || c.message_count === 0,
-      );
-      const convId =
-        empty?.id ||
-        (
-          await apiFetch<{ conversation: { id: string } }>("/tree/conversation", {
-            method: "POST",
-            body: JSON.stringify({ parent_id: parentId, name: "" }),
-          })
-        ).conversation.id;
-
-      return { partitionId: pId, conversationId: convId };
-    }
-
-    return null;
+    // ── 3. 创建新会话 ──
+    const createData = await apiFetch<{ conversation: { id: string } }>(
+      "/tree/conversation",
+      {
+        method: "POST",
+        body: JSON.stringify({ parent_id: actualParentId, name }),
+      },
+    );
+    const convId = createData.conversation.id;
+    return { partitionId: pId, conversationId: convId };
   } catch (e) {
-
+    console.error("ensureConversationAtLevel failed:", e);
     return null;
   }
 }

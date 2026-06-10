@@ -110,7 +110,6 @@ export default function ConversationPanel(
             onSend={handleSend}
             onDeleteMessage={handleDeleteMessage}
             onEditMessage={handleEditMessage}
-            onVersionSwitch={handleVersionSwitch}
             switchBanner={switchBanner}
             switchBannerPartitionName={switchBannerPartitionName}
             handleSwitchConfirm={handleSwitchConfirm}
@@ -158,7 +157,7 @@ export default function ConversationPanel(
           onClose={() => setShowNewPartition(false)}
           onCreate={handleCreatePartition}
           title="新建分区"
-          namePlaceholder="例如: 高等数学-极限"
+          namePlaceholder="例如: 高等数学"
           defaultEmoji="📐"
           nameLabel="分区名称"
         />
@@ -189,13 +188,10 @@ export default function ConversationPanel(
               <div className="flex items-center gap-0.5">
                 <button
                   onClick={() => {
-                    if (selectedPartitionId) {
-                      handleNewConversation("partition", selectedPartitionId);
-                    }
+                    handleNewConversation("default", "");
                   }}
-                  className={`p-1.5 rounded-md ${selectedPartitionId ? "text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]" : "text-[var(--color-text-muted)] opacity-40 cursor-not-allowed"}`}
-                  title="新建会话"
-                  disabled={!selectedPartitionId}
+                  className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+                  title="临时新建会话"
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                 </button>
@@ -295,7 +291,7 @@ export default function ConversationPanel(
         onClose={() => setShowNewPartition(false)}
         onCreate={handleCreatePartition}
         title="新建分区"
-        namePlaceholder="例如: 高等数学-极限"
+        namePlaceholder="例如: 高等数学"
         defaultEmoji="📐"
         nameLabel="分区名称"
       />

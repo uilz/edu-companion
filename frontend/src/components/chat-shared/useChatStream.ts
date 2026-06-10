@@ -28,6 +28,16 @@ export interface ChatStreamConfig {
   onError?: (msg: string) => void;
 }
 
+/** 获取认证头 */
+function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem("access_token") || localStorage.getItem("token");
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 export function useChatStream() {
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -40,7 +50,7 @@ export function useChatStream() {
     try {
       const response = await fetch(config.endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           message,
           ...config.bodyExtra,

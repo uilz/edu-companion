@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { API_BASE } from "@/lib/api/api";
+import { api } from "@/lib/api/api";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
 
 /** 学习计划中的单个任务项 */
@@ -52,17 +52,16 @@ export function useStudyPlan() {
     if (!userId) return;
     setLoading(true); setError("");
     try {
-      const [planRes, progRes, suggRes] = await Promise.all([
-        fetch(`${API_BASE}/api/study/plan/${userId}`),
-        fetch(`${API_BASE}/api/study/plan/${userId}/progress`),
-        fetch(`${API_BASE}/api/study/suggestions`),
+      const [planData, progData, suggData] = await Promise.all([
+        api<any>(`/api/study/plan/${userId}`).catch(() => null),
+        api<any>(`/api/study/plan/${userId}/progress`).catch(() => null),
+        api<any>("/api/study/suggestions").catch(() => null),
       ]);
-      if (planRes.ok) {
-        const d = await planRes.json();
-        setPlanItems(d.plan?.items || []); setPlanMeta(d.plan || null);
+      if (planData) {
+        setPlanItems(planData.plan?.items || []); setPlanMeta(planData.plan || null);
       }
-      if (progRes.ok) setProgress(await progRes.json());
-      if (suggRes.ok) setSuggestions(await suggRes.json());
+      if (progData) setProgress(progData);
+      if (suggData) setSuggestions(suggData);
     } catch { setError("加载失败，请检查后端服务"); }
     finally { setLoading(false); }
   }, [userId]);
@@ -72,21 +71,17 @@ export function useStudyPlan() {
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      const res = await fetch(`${API_BASE}/api/study/plan/generate?user_id=${userId}&reason=manual`, {
-        method: "POST",
-      });
-      if (res.ok) await loadData();
+      await api(`/api/study/plan/generate?user_id=${userId}&reason=manual`, { method: "POST" });
+      await loadData();
     } catch { /* ignore */ }
     finally { setGenerating(false); }
   };
 
   const handleComplete = async (taskId: string) => {
     try {
-      const res = await fetch(`${API_BASE}/api/study/plan/${userId}/${taskId}/complete`, { method: "PUT" });
-      if (res.ok) {
-        const progRes = await fetch(`${API_BASE}/api/study/plan/${userId}/progress`);
-        if (progRes.ok) setProgress(await progRes.json());
-      }
+      await api(`/api/study/plan/${userId}/${taskId}/complete`, { method: "PUT" });
+      const progData = await api<any>(`/api/study/plan/${userId}/progress`);
+      setProgress(progData);
     } catch { /* ignore */ }
   };
 

@@ -60,7 +60,7 @@ async function ensureTempConversation(set: any, get: any): Promise<{ pId: string
         content_blocks: [{ type: "text" as const, text: "❌ 无法创建临时会话，请检查后端连接" }],
         text_summary: "", role: "assistant" as const,
         timestamp: Date.now(), token_count: 0,
-        is_deleted: false, is_archived: false, has_modified_version: false,
+        is_deleted: false, is_archived: false,
       }],
     }));
     return null;
@@ -113,7 +113,6 @@ export async function sendMessageImpl(
     token_count: 0,
     is_deleted: false,
     is_archived: false,
-    has_modified_version: false,
   };
 
   // 3. Assistant placeholder
@@ -130,7 +129,7 @@ export async function sendMessageImpl(
       content_blocks: [{ type: "text" as const, text: "" }],
       text_summary: "", role: "assistant",
       timestamp: Date.now(), token_count: 0,
-      is_deleted: false, is_archived: false, has_modified_version: false,
+      is_deleted: false, is_archived: false,
     }],
   }));
   fireClassify(cId || "", text);

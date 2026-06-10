@@ -21,7 +21,7 @@ export interface ConversationMessageAreaProps {
   onSend: (text: string) => void;
   onDeleteMessage: (id: string) => void;
   onEditMessage: (messageId: string, newText: string) => Promise<number>;
-  onVersionSwitch: (messageId: string, direction: "prev" | "next", currentIndex?: number) => Promise<{ index: number; total: number } | null>;
+  onVersionSwitch?: (messageId: string, direction: "prev" | "next", currentIndex?: number) => Promise<{ index: number; total: number } | null>;
 
   switchBanner?: {
     domainName: string;
@@ -65,7 +65,6 @@ export default function ConversationMessageArea(props: ConversationMessageAreaPr
     onSend,
     onDeleteMessage,
     onEditMessage,
-    onVersionSwitch,
     switchBanner,
     switchBannerPartitionName,
     handleSwitchConfirm,
@@ -112,7 +111,6 @@ export default function ConversationMessageArea(props: ConversationMessageAreaPr
             conversationId={activeConversationId}
             onDeleteMessage={onDeleteMessage}
             onEditMessage={onEditMessage}
-            onVersionSwitch={onVersionSwitch}
             onSend={onSend}
           />
         </div>

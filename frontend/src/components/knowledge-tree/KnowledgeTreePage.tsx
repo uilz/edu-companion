@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Plus, X, RefreshCw,
   Loader2, Sparkles, ZoomIn, ZoomOut, Maximize,
@@ -338,6 +338,7 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
 // ══════════════════════════════════════════
 
 export default function KnowledgeTreePage() {
+  const router = useRouter();
   // ── URL 参数（智能锚定） ──
   const searchParams = useSearchParams();
   const urlPartition = searchParams.get("partition");
@@ -649,6 +650,8 @@ export default function KnowledgeTreePage() {
         });
         const partitions = await fetchPartitions();
         setPartitionList(partitions);
+        // 跳转到对话页
+        router.push(`/conversation?cid=${conv.id}&pid=${conv.parent_id}`);
       }
     } catch (e) {
       console.error("启动临时对话失败", e);

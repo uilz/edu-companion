@@ -65,12 +65,10 @@ export interface AuthResult {
   refresh_token: string;
 }
 
-// ── API 调用 — 认证网关独立地址 ──
-
-const AUTH_GATEWAY_URL = process.env.NEXT_PUBLIC_AUTH_GATEWAY_URL || "http://127.0.0.1:18001";
+// ── API 调用 — 使用相对路径，走 Next.js 代理 ──
 
 async function authFetch<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${AUTH_GATEWAY_URL}/api/auth${path}`, {
+  const res = await fetch(`/api/auth${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -125,7 +123,7 @@ export async function refreshToken(): Promise<string | null> {
   if (!refresh) return null;
 
   try {
-    const res = await fetch(`${AUTH_GATEWAY_URL}/api/auth/refresh`, {
+    const res = await fetch("/api/auth/refresh", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh_token: refresh }),
@@ -149,7 +147,7 @@ export async function fetchCurrentUser(): Promise<AuthUser | null> {
   if (!token) return null;
 
   try {
-    const res = await fetch(`${AUTH_GATEWAY_URL}/api/auth/me`, {
+    const res = await fetch("/api/auth/me", {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) return null;
@@ -181,7 +179,7 @@ export async function authedFetch<T>(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  let res = await fetch(path.startsWith("http") ? path : `${AUTH_GATEWAY_URL}${path}`, {
+  let res = await fetch(path, {
     ...options,
     headers,
   });
@@ -198,7 +196,7 @@ export async function authedFetch<T>(
     const newToken = await refreshPromise;
     if (newToken) {
       headers["Authorization"] = `Bearer ${newToken}`;
-      res = await fetch(path.startsWith("http") ? path : `${AUTH_GATEWAY_URL}${path}`, {
+      res = await fetch(path, {
         ...options,
         headers,
       });
@@ -228,7 +226,7 @@ export async function uploadAvatar(file: File): Promise<string> {
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(`${AUTH_GATEWAY_URL}/api/auth/avatar`, {
+  const res = await fetch("/api/auth/avatar", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: formData,

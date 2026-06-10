@@ -4,7 +4,7 @@ import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useMediaQuery } from "./useMediaQuery";
 import { useShallow } from "zustand/shallow";
-import { useConversationStore, type ConversationState, subscribeToNavigation, initWebSocket, syncActiveRefs, getStreamCacheData, clearStreamCacheData, saveStreamCacheBeforeUnload, isSending, setIsSending } from "@/store/conversation/conversation-store";
+import { useConversationStore, type ConversationState, subscribeToNavigation, initWebSocket, syncActiveRefs, getStreamCacheData, clearStreamCacheData, saveStreamCacheBeforeUnload, isSending, setIsSending, isStreamCompleting } from "@/store/conversation/conversation-store";
 
 // Re-export the return type so ConversationPanel can import from here
 export type { UseConversationReturn } from "@/store/conversation/conversation-store";
@@ -220,6 +220,8 @@ export function useConversation() {
 
   // ── Load messages when activeConversationId changes ──
   useEffect(() => {
+    // 正在进行 WS 流完成处理 → 跳过，避免与 onDone 替换产生竞态
+    if (isStreamCompleting()) return;
     if (isSending()) {
       setIsSending(false);
       return;

@@ -113,10 +113,9 @@ export interface TreeNode {
   role: "user" | "assistant";               // 角色：用户或助手
   timestamp: number;                         // 时间戳（毫秒）
   token_count: number;                       // token 数量
-  is_deleted: boolean;                       // 是否已删除
-  is_archived: boolean;                      // 是否已归档
-  has_modified_version: boolean;             // 是否存在已修改的版本
-  links_to?: string[];                       // 指向的其他节点 ID 列表（可选）
+is_deleted: boolean;                       // 是否已删除
+is_archived: boolean;                      // 是否已归档
+links_to?: string[];                       // 指向的其他节点 ID 列表（可选）
   linked_from?: string[];                    // 被哪些节点引用（可选）
   discussed_skill_ids?: string[];            // 涉及的能力/技能 ID 列表（可选）
   // 子支相关

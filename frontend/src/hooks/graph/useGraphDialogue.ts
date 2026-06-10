@@ -5,6 +5,7 @@ import type { GraphData, GraphNode, DialogueCardInfo } from "@/lib/types/graph-t
 import { fetchGraphData, fetchPartitions } from "@/lib/api/graph-api";
 import { listNotes } from "@/lib/api/learning-api";
 import type { Note } from "@/lib/api/learning-api";
+import { api } from "@/lib/api/api";
 
 // ── 导出类型 ──
 export type LeftTab = "dialogue" | "practice" | "notes" | "resources" | "projects";
@@ -21,9 +22,7 @@ export interface ToolbarState {
 // ── 工具函数 ──
 async function fetchRelatedConversations(node: GraphNode): Promise<DialogueCardInfo[]> {
   try {
-    const res = await fetch(`/api/conversations/tree/topic?parent_id=${encodeURIComponent(node.parent || "")}`);
-    if (!res.ok) return [];
-    const data = await res.json();
+    const data: any = await api(`/api/conversations/tree/topic?parent_id=${encodeURIComponent(node.parent || "")}`);
     const convs: DialogueCardInfo[] = [];
     if (data.topics) {
       for (const t of Object.values(data.topics) as any[]) {

@@ -19,6 +19,8 @@ export let _streamingMsgId: string | null = null;
 export let _streamBuffer = "";
 export let _streamSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let _isSending = false;
+// ── 防止 onDone 与 loadMessages 竞态的标志 ──
+let _streamCompleting = false;
 
 // Setters for module-level refs
 export function setActiveConvId(v: string | null) { _activeConvId = v; }
@@ -89,6 +91,11 @@ export function isSending(): boolean {
 
 export function setIsSending(v: boolean) {
   _isSending = v;
+}
+
+/** 检查当前是否正在完成流（用于 useConversation.ts 跳过主动 loadMessages） */
+export function isStreamCompleting(): boolean {
+  return _streamCompleting;
 }
 
 export function saveStreamCacheBeforeUnload() {
@@ -229,6 +236,7 @@ export function initWebSocket(storeApi: StoreApi): () => void {
     onDone: (_partId: string, assistantMessage: TreeNode, responseBlocks?: ResponseBlock[]) => {
       storeApi.setState({ isLoading: false, statusMessage: "" });
 
+      // ⚡ 提前清除流标志，防止 loadMessages 等问题
       const streamPid = _streamingPartId;
       const streamCid = _streamingConvId;
       const streamMsgId = _streamingMsgId;
@@ -242,10 +250,12 @@ export function initWebSocket(storeApi: StoreApi): () => void {
       }
       clearStreamCache(streamCid || undefined);
 
+      // ── 设置完成标志，阻止 useConversation.ts 的 activeConversationId effect 重复加载 ──
+      _streamCompleting = true;
+      setTimeout(() => { _streamCompleting = false; }, 500);
+
       // If user switched conversation, refresh current conversation to catch response blocks
       if (streamPid !== _activePartId || streamCid !== _activeConvId) {
-        // 不要过滤旧会话的消息（当前 messages 列表已经是新会话的了）
-        // 刷新当前会话以获取已存储的 response blocks
         const currentConvId = _activeConvId;
         if (currentConvId) {
           setTimeout(() => storeApi.getState().loadMessages(currentConvId), 500);
@@ -255,7 +265,6 @@ export function initWebSocket(storeApi: StoreApi): () => void {
 
       // Replace placeholder with final message
       if (assistantMessage) {
-        // ── 从 metadata 提取 follow_up_questions ──
         const assistantMsgAny = assistantMessage as unknown as Record<string, unknown>;
         const metadata = assistantMsgAny.metadata as Record<string, unknown> | undefined;
         if (metadata?.follow_up_questions) {
@@ -282,6 +291,11 @@ export function initWebSocket(storeApi: StoreApi): () => void {
                 };
             return { messages: updated };
           }
+          // 占位符未找到 → 用 loadMessages 整体刷新
+          setTimeout(() => {
+            const currentConvId = _activeConvId;
+            if (currentConvId) storeApi.getState().loadMessages(currentConvId);
+          }, 100);
           return {};
         });
       } else if (streamMsgId) {
@@ -300,9 +314,6 @@ export function initWebSocket(storeApi: StoreApi): () => void {
             : {};
         });
       }
-
-      // Delayed refresh: sidebar only (message data already in onDone callback)
-      setTimeout(() => storeApi.getState().loadPartitions(), 300);
     },
 
     // Error callback: show error message
@@ -321,7 +332,6 @@ export function initWebSocket(storeApi: StoreApi): () => void {
         token_count: 0,
         is_deleted: false,
         is_archived: false,
-        has_modified_version: false,
       };
       if (_streamingMsgId) {
         const msgId = _streamingMsgId;

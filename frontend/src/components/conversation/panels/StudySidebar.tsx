@@ -40,10 +40,50 @@ export default function StudySidebar({
   onTreeChanged,
   onSelectConv,
 }: Props) {
-  // 挂载时加载根节点
+  // ── 挂载时统一导航入口：覆盖 URL 恢复的三种场景 ──
+  //  1) ?p=xxx&c=yyy (有会话、无 domain/topic) → 从后端解析路径 → 展开 + 选中
+  //  2) ?p=xxx&d=yyy&t=zzz (有 domain/topic)       → 直接 expandPath
+  //  3) ?p=xxx (仅分区)                              → 展开分区级
   useEffect(() => {
-    const store = useConversationStore.getState();
-    if (!store.rootLoaded) store.loadRootNodes();
+    const init = async () => {
+      const store = useConversationStore.getState();
+      if (!store.rootLoaded) {
+        await store.loadRootNodes();
+      }
+      const s = useConversationStore.getState();
+      const pid = s.selectedPartitionId;
+      if (!pid) return;
+
+      const cid = s.activeConversationId;
+      const did = s.activeDomainId;
+      const tid = s.activeTopicId;
+
+      if (cid && (!did || !tid)) {
+        // 场景1：有会话但缺少 domain/topic → 从后端解析完整路径
+        const path = await s.resolveConversationPath(cid);
+        if (path && path.partition_id) {
+          useConversationStore.setState({
+            selectedPartitionId: path.partition_id,
+            activeDomainId: path.domain_id || null,
+            activeTopicId: path.topic_id || null,
+            selectedNode: path.topic_id
+              ? { id: path.topic_id, level: "topic", parent: path.domain_id || path.partition_id }
+              : path.domain_id
+                ? { id: path.domain_id, level: "domain", parent: path.partition_id }
+                : null,
+          });
+          await store.expandPath(path.partition_id, path.domain_id || null, path.topic_id || null);
+          store.selectConversation(path.partition_id, cid);
+        }
+      } else if (did || tid) {
+        // 场景2：已有 domain/topic → 直接展开
+        await store.expandPath(pid, did, tid);
+      } else {
+        // 场景3：仅分区 → 展开分区级
+        await store.expandPath(pid);
+      }
+    };
+    init();
   }, []);
 
   const nav = useTreeNavigation(onConversationReady, onTreeChanged);

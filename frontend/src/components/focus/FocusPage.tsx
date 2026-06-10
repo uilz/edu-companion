@@ -617,7 +617,6 @@ export default function FocusPage() {
                   isLoading={isLoading}
                   onDeleteMessage={deleteMessage}
                   onEditMessage={(mid, text) => editMessage(mid, text)}
-                  onVersionSwitch={versionSwitch}
                 />
               </div>
             </>

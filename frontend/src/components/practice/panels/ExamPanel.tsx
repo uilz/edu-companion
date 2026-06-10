@@ -11,6 +11,7 @@ import {
   getExamTime,
   submitAllExam,
   getExamAnswerSheet,
+  submitAnswer,
   type ExamQuestion,
   type ExamResult,
   type ExamTimeInfo,
@@ -184,15 +185,7 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
       for (const q of questions) {
         const userAns = savedAnswers[q.id];
         if (userAns && userAns.length > 0) {
-          await fetch(`/api/v7/practice/sessions/${session.session_id}/submit`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              question_id: q.id,
-              answer: userAns,
-              time_spent: 0,
-            }),
-          }).catch(() => {});
+          await submitAnswer(session.session_id, q.id, userAns, 0).catch(() => {});
         }
       }
       // 批量交卷

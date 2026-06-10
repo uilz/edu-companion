@@ -56,17 +56,16 @@ export async function editMessageImpl(set: any, get: any, messageId: string, new
       }),
     });
     const newVersionId = data.node?.id || messageId;
-    set({ isLoading: true, statusMessage: "正在根据修改重新回复...", replyingToId: messageId });
+    // 触发 AI 重新回复，后端通过 WS 流式输出，不手动设 loading（WS 自行管理占位消息）
     try {
       await apiFetch(`/tree/message/${newVersionId}/reply`, { method: "POST" });
     } catch { /* ignore reply errors */ }
+    // 刷新消息列表：WS 流完成后 onDone 会再次替换占位，loadMessages 幂等
     const cId = get().activeConversationId;
     if (cId) await get().loadMessages(cId);
-    set({ isLoading: false, statusMessage: "", replyingToId: null });
     return data.version_count || 0;
   } catch (e) {
     console.error("编辑消息失败:", e);
-    set({ isLoading: false, statusMessage: "", replyingToId: null });
     return 0;
   }
 }

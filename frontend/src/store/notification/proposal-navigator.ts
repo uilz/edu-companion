@@ -6,6 +6,7 @@
 // ══════════════════════════════════════════════════════════════
 
 import type { ActionType } from "./types";
+import { api } from "@/lib/api/api";
 
 // ══════════════════════════════════════════════════════════════
 //  Types
@@ -209,9 +210,8 @@ export async function reportProposalExecution(
   result: ExecutionResult,
 ): Promise<void> {
   try {
-    await fetch(`/api/secretary/proposals/${proposalId}/execution-result`, {
+    await api(`/api/secretary/proposals/${proposalId}/execution-result`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         success: result.success,
         message: result.message,

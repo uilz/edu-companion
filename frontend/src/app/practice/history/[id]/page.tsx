@@ -6,8 +6,7 @@ import {
   Clock, Check, X, ChevronLeft, ChevronRight,
   Trash2, Loader2, RotateCcw, FileText,
 } from "lucide-react";
-
-const API = "/api/v7/practice";
+import { api } from "@/lib/api/api";
 
 export default function SessionReviewPage() {
   const { id } = useParams<{ id: string }>();
@@ -19,11 +18,7 @@ export default function SessionReviewPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch(`${API}/sessions/${id}/result`)
-      .then(r => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
+    api<any>(`/api/v7/practice/sessions/${id}/result`)
       .then(data => {
         if (Array.isArray(data.detail)) setResult(data);
         else setError(data.message || "无法加载结果");
@@ -34,7 +29,7 @@ export default function SessionReviewPage() {
 
   const handleDelete = async () => {
     if (!confirm("确认删除此练习记录？")) return;
-    await fetch(`${API}/sessions/${id}`, { method: "DELETE" });
+    await api(`/api/v7/practice/sessions/${id}`, { method: "DELETE" });
     router.push("/practice/history");
   };
 

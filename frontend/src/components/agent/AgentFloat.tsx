@@ -19,8 +19,12 @@ export default function AgentFloat() {
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // ── 浮现动画状态（防止刷新瞬移）──
+  const [visible, setVisible] = useState(false);
+
   // ── 拖动状态 ──
   const floatRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const dragState = useRef({
     dragging: false,
     moved: false,
@@ -49,7 +53,7 @@ export default function AgentFloat() {
     return null;
   };
 
-  // 初始化位置
+  // 初始化位置，延迟 0.5s 浮现（防止刷新瞬移）
   useEffect(() => {
     const saved = loadPos();
     const initial = saved || { x: window.innerWidth - 64, y: window.innerHeight - 200 };
@@ -62,6 +66,10 @@ export default function AgentFloat() {
     else if (initial.x > window.innerWidth - 48 - EDGE_ZONE) snapSide = "right";
     snappedRef.current = snapSide;
     setSnapped(snapSide);
+
+    // 延迟 0.5s 后浮现
+    const timer = setTimeout(() => setVisible(true), 500);
+    return () => clearTimeout(timer);
   }, []);
 
   // 吸附到最近的左/右边缘
@@ -78,15 +86,16 @@ export default function AgentFloat() {
 
   // 加载用户偏好
   useEffect(() => {
-    fetch("/api/secretary/agent/preferences")
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.confirm_mode) store.setConfirmMode(data.confirm_mode);
-        if (data.auto_jump_threshold !== undefined) {
-          store.setAutoJumpThreshold(data.auto_jump_threshold);
-        }
-      })
-      .catch(() => { /* 使用默认偏好 */ });
+    import("@/lib/api/api").then(({ api }) => {
+      api<any>("/api/secretary/agent/preferences")
+        .then((data) => {
+          if (data.confirm_mode) store.setConfirmMode(data.confirm_mode);
+          if (data.auto_jump_threshold !== undefined) {
+            store.setAutoJumpThreshold(data.auto_jump_threshold);
+          }
+        })
+        .catch(() => { /* 使用默认偏好 */ });
+    });
   }, []);
 
   // ── 拖动事件 ──
@@ -102,11 +111,54 @@ export default function AgentFloat() {
       else if (snappedRef.current === "right") adjustedX = window.innerWidth - 56;
       if (adjustedX !== posRef.current.x) {
         posRef.current = { x: adjustedX, y: posRef.current.y };
-        setRenderPos(posRef.current);
+        // 直接操作 DOM 避免重渲染
+        if (floatRef.current) {
+          floatRef.current.style.left = `${adjustedX}px`;
+        }
       }
       snappedRef.current = "none";
-      setSnapped("none");
-      setDragging(true);
+      // 不调用 setSnapped/setDragging 避免拖动开始时重渲染
+      // 用 CSS class 直接控制
+      if (floatRef.current) {
+        floatRef.current.style.transition = "none";
+      }
+      dragState.current = {
+        dragging: true,
+        moved: false,
+        startX: clientX,
+        startY: clientY,
+        startLeft: adjustedX,
+        startTop: posRef.current.y,
+      };
+    },
+    [],
+  );
+
+  // ── 面板拖拽（展开时替代悬浮球拖拽）─ 实时更新面板位置 ──
+  const handlePanelDragStart = useCallback(
+    (e: React.MouseEvent | React.TouchEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+      const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
+
+      let adjustedX = posRef.current.x;
+      if (snappedRef.current === "left") adjustedX = 8;
+      else if (snappedRef.current === "right") adjustedX = window.innerWidth - 56;
+      if (adjustedX !== posRef.current.x) {
+        posRef.current = { x: adjustedX, y: posRef.current.y };
+        if (floatRef.current) {
+          floatRef.current.style.left = `${adjustedX}px`;
+        }
+      }
+      snappedRef.current = "none";
+      // 禁用 transition 避免拖动延迟
+      if (floatRef.current) {
+        floatRef.current.style.transition = "none";
+      }
+      if (panelRef.current) {
+        panelRef.current.style.transition = "none";
+      }
 
       dragState.current = {
         dragging: true,
@@ -143,15 +195,38 @@ export default function AgentFloat() {
         floatRef.current.style.left = `${newX}px`;
         floatRef.current.style.top = `${newY}px`;
       }
+      if (panelRef.current) {
+        const panelWidth = 380;
+        const panelLeft = Math.min(Math.max(newX, 12), window.innerWidth - panelWidth);
+        panelRef.current.style.left = `${panelLeft}px`;
+        // 触顶时面板放球下方，否则放上方
+        const panelAbove = newY >= 520; // 面板高度 480 + 间隙
+        if (panelAbove) {
+          panelRef.current.style.bottom = `${window.innerHeight - newY + 8}px`;
+          panelRef.current.style.top = "auto";
+        } else {
+          panelRef.current.style.top = `${newY + 56}px`;
+          panelRef.current.style.bottom = "auto";
+        }
+      }
     };
 
     const handleDragEnd = () => {
       if (!dragState.current.dragging) return;
       const wasMoved = dragState.current.moved;
       dragState.current.dragging = false;
-      setDragging(false);
+
+      // 恢复 transition
+      if (floatRef.current) {
+        floatRef.current.style.transition = "";
+      }
+      if (panelRef.current) {
+        panelRef.current.style.transition = "";
+      }
 
       if (!wasMoved) {
+        // 点击而非拖动，同步状态
+        setDragging(false);
         return;
       }
 
@@ -165,6 +240,7 @@ export default function AgentFloat() {
         snappedRef.current = "none";
         setSnapped("none");
       }
+      setDragging(false);
       setRenderPos({ ...posRef.current });
       try { localStorage.setItem(POS_KEY, JSON.stringify(posRef.current)); } catch {}
     };
@@ -302,12 +378,15 @@ export default function AgentFloat() {
           shadow-lg
           select-none overflow-hidden
           ${dragging ? "" : "transition-all duration-300"}
+          ${visible ? "opacity-100" : "opacity-0"}
           ${open
             ? "bg-[var(--color-text-muted)] text-white scale-0 pointer-events-none"
             : "bg-[var(--color-accent)] text-white hover:scale-105 active:scale-95 cursor-grab active:cursor-grabbing"
           }
         `}
         style={{
+          opacity: visible ? 1 : 0,
+          transition: visible ? "opacity 0.5s ease-in-out, left 0.3s, top 0.3s, transform 0.3s" : "none",
           left: isSnapped
             ? (showFull ? (snapped === "left" ? 8 : pos.x - 16) : pos.x)
             : pos.x,
@@ -327,18 +406,25 @@ export default function AgentFloat() {
       {/* 弹出面板 — 跟随悬浮球位置 */}
       {open && (
         <div
+          ref={panelRef}
           className="fixed z-50
             w-[calc(100vw-2rem)] max-w-[380px] max-h-[480px]
             bg-[var(--color-surface)] border border-[var(--color-border)]
             rounded-xl shadow-2xl flex flex-col overflow-hidden
-            animate-in slide-in-from-bottom-4 duration-200"
-          style={{
-            left: `${Math.min(snapped === "left" ? 12 : pos.x, window.innerWidth - 400)}px`,
-            bottom: `${window.innerHeight - pos.y + 8}px`,
-          }}
-        >
-          {/* 头部 */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
+            right-10"
+      style={{
+        left: `${Math.min(Math.max(pos.x, 12), window.innerWidth - 380)}px`,
+        ...(pos.y >= 520
+          ? { bottom: `${Math.max(8, Math.min(window.innerHeight - pos.y + 8, window.innerHeight - 480))}px` }
+          : { top: `${pos.y + 56}px` }),
+      }}
+    >
+          {/* 头部 — 可拖拽 */}
+          <div
+            onMouseDown={handlePanelDragStart}
+            onTouchStart={handlePanelDragStart}
+            className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)] cursor-grab active:cursor-grabbing select-none"
+          >
             <span className="text-sm font-semibold text-[var(--color-text)]">
               AI 秘书
             </span>

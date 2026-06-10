@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
-import type { Conversation } from "@/types";
+import { useState, useCallback } from "react";
 import { v2, tree } from "@/lib/api/api";
 import type { GraphNode, TreeConv, GraphLevel } from "@/components/conversation/tree/SidebarTreeNode";
 import { ROOT_KEY, CHILD_LEVEL } from "@/components/conversation/tree/SidebarTreeNode";
 import { useConversationStore } from "@/store/conversation/conversation-store";
+import { ensureConversationAtLevel } from "@/store/conversation/tree-helpers";
 
 export interface UseTreeNavReturn {
   rootNodes: GraphNode[];
@@ -46,8 +46,6 @@ export function useTreeNavigation(
   const loadingSet = useConversationStore(s => s.loadingSet);
   const rootNodes = (childMap.get(ROOT_KEY) || []).filter(n => n.level === "partition");
   const storeToggleExpand = useConversationStore(s => s.toggleExpand);
-  const storeLoadChildren = useConversationStore(s => s.loadChildren);
-  const storeLoadConversations = useConversationStore(s => s.loadConversations);
 
   const toggleExpand = useCallback((node: GraphNode) => {
     storeToggleExpand(node);
@@ -67,7 +65,7 @@ export function useTreeNavigation(
       await tree(`/tree/${newChildTarget.level}`, {
         method: "POST", body: JSON.stringify({ parent_id: newChildTarget.parent.id, name, emoji }),
       });
-      await store.loadChildren(newChildTarget.parent.id);
+      await store.loadChildren(newChildTarget.parent.id, newChildTarget.parent.level);
       store.toggleExpand(newChildTarget.parent);
       onTreeChanged?.();
     } catch { /* ignore */ }
@@ -78,13 +76,18 @@ export function useTreeNavigation(
   const handleRename = useCallback(async (node: GraphNode, name: string) => {
     try {
       await tree(`/tree/${node.level}/${node.id}`, { method: "PATCH", body: JSON.stringify({ name }) });
-      // 刷新子节点缓存
+      // 更新 childMap 中对应节点的 label
       const store = useConversationStore.getState();
-      // 找到父级 id 并刷新
-      const p = node.parent;
-      if (p) store.loadChildren(p);
-      // 同时在 childMap 里替换 label
-      store.setChildMap?.(new Map(store.childMap));
+      const newMap = new Map(store.childMap);
+      newMap.forEach((nodes: GraphNode[], key: string) => {
+        const idx = nodes.findIndex((n: GraphNode) => n.id === node.id);
+        if (idx !== -1) {
+          const updated = [...nodes];
+          updated[idx] = { ...updated[idx], label: name };
+          newMap.set(key, updated);
+        }
+      });
+      store.setChildMap?.(newMap);
       onTreeChanged?.();
     } catch { /* ignore */ }
     setEditingId(null);
@@ -95,57 +98,32 @@ export function useTreeNavigation(
     try {
       await tree(`/tree/conversation/${convId}`, { method: "PATCH", body: JSON.stringify({ name }) });
       const store = useConversationStore.getState();
-      const convs = store.convCache.get(topicId) || [];
-      store.setConvCache?.(new Map(store.convCache));
+      const newCache = new Map(store.convCache);
+      const convs = newCache.get(topicId) || [];
+      newCache.set(topicId, convs.map(c => c.id === convId ? { ...c, name } : c));
+      store.setConvCache?.(newCache);
     } catch { /* ignore */ }
     setEditingId(null);
   }, []);
 
-  // ── 新建会话 ──
-  const handleNewConvClick = useCallback(async (node: GraphNode, pid?: string) => {
-    const partitionId = pid || node.id;
-    const store = useConversationStore.getState();
-    try {
-      let topicId: string;
-      if (node.level === "topic") {
-        topicId = node.id;
-      } else if (node.level === "domain") {
-        const kids = await store.loadChildren(node.id);
-        const topic = kids.find(n => n.level === "topic");
-        topicId = topic ? topic.id : await tree<{ id: string }>(`/tree/topic`, {
-          method: "POST", body: JSON.stringify({ parent_id: node.id, name: "新专题", emoji: "📝" }),
-        }).then(r => r.id);
-        await store.loadChildren(node.id);
-      } else {
-        const domains = await store.loadChildren(node.id);
-        let domain = domains.find(n => n.level === "domain");
-        if (!domain) {
-          const res = await tree<{ id: string }>("/tree/domain", {
-            method: "POST", body: JSON.stringify({ parent_id: node.id, name: "新领域", emoji: "📚" }),
-          });
-          domain = { id: res.id, label: "新领域", level: "domain" } as GraphNode;
+  // ── 新建会话 ──（直接在节点层级创建，不再自动补全中间层）
+    const handleNewConvClick = useCallback(async (node: GraphNode, pid?: string) => {
+      const partitionId = pid || node.id;
+      const store = useConversationStore.getState();
+      try {
+        // 使用 ensureConversationAtLevel 直接在节点层级创建会话
+        // 会自动智能命名（新会话、新会话2...）并复用空会话
+        const result = await ensureConversationAtLevel(node.level, node.id, partitionId);
+        if (result) {
+          // 刷新该节点下的对话列表，让新建的会话出现在侧边栏
+          store.toggleExpand(node);
+          await store.loadConversations(node.id);
+          onConversationReady?.(result.partitionId, result.conversationId);
         }
-        const topics = await store.loadChildren(domain.id);
-        const topic = topics.find(n => n.level === "topic");
-        topicId = topic ? topic.id : await tree<{ id: string }>("/tree/topic", {
-          method: "POST", body: JSON.stringify({ parent_id: domain.id, name: "新专题", emoji: "📝" }),
-        }).then(r => r.id);
-        await store.loadChildren(domain.id);
+      } catch (e) {
+        console.warn("sidebar 新建会话失败:", e);
       }
-
-      const data = await tree<{ conversations: Conversation[] }>(`/tree/conversation?parent_id=${topicId}`);
-      const empty = (data.conversations || []).find(c => !c.message_count || c.message_count === 0);
-      const convId = empty ? empty.id : await tree<{ conversation: { id: string } }>("/tree/conversation", {
-        method: "POST", body: JSON.stringify({ parent_id: topicId, name: "" }),
-      }).then(r => r.conversation.id);
-
-      await store.loadConversations(topicId);
-      onConversationReady?.(partitionId, convId);
-    } catch (e) {
-      console.warn("sidebar 新建会话失败:", e);
-      try { await store.loadRootNodes(); } catch { /* ignore */ }
-    }
-  }, [onConversationReady]);
+    }, [onConversationReady]);
 
   // ── 删除 ──
   const confirmDelete = useCallback(async () => {
@@ -157,8 +135,19 @@ export function useTreeNavigation(
         if (deleteTarget.topicId) store.loadConversations(deleteTarget.topicId);
         onTreeChanged?.();
       } else {
-        await v2(`/graph/nodes/${deleteTarget.id}?recursive=true`, { method: "DELETE" });
-        // 刷新根节点
+        // 使用 conversation tree 路由删除，而非 cognitive graph 路由
+        // 需要从 childMap 中找到节点的 level
+        let level: string | undefined;
+        store.childMap.forEach((nodes: GraphNode[]) => {
+          const found = nodes.find((n: GraphNode) => n.id === deleteTarget!.id);
+          if (found) { level = found.level; }
+        });
+        if (level) {
+          await tree(`/tree/${level}/${deleteTarget.id}`, { method: "DELETE" });
+        } else {
+          // fallback: 使用 cognitive graph 路由
+          await v2(`/graph/nodes/${deleteTarget.id}?recursive=true`, { method: "DELETE" });
+        }
         store.loadRootNodes();
         onTreeChanged?.();
       }

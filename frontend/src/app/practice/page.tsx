@@ -12,6 +12,8 @@ import Link from "next/link";
 
 import PracticePanel from "@/components/practice/panels/PracticePanel";
 import ExamPanel from "@/components/practice/panels/ExamPanel";
+import { api } from "@/lib/api/api";
+import { getWeakSkills, getErrorBookStats } from "@/lib/api/practice-api";
 
 type Tab = "start" | "practice" | "exam";
 
@@ -30,6 +32,8 @@ export default function PracticeHomePage() {
   const [dueReviews, setDueReviews] = useState<any[]>([]);
   const [banks, setBanks] = useState<any[]>([]);
   const [selectedBankId, setSelectedBankId] = useState<string>(bankParam || "");
+  const [weakSkills, setWeakSkills] = useState<any[]>([]);
+  const [errorBookStats, setErrorBookStats] = useState<any>(null);
 
   // URL 双向同步
   useEffect(() => {
@@ -51,12 +55,12 @@ export default function PracticeHomePage() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/v7/practice/stats/overview").then(r => r.json()).catch(() => null),
-      fetch("/api/v7/practice/stats/sessions?limit=5").then(r => r.json()).catch(() => ({ items: [] })),
-      fetch("/api/v7/practice/review/stats").then(r => r.json()).catch(() => null),
-      fetch("/api/v7/practice/sessions/unfinished").then(r => r.json()).catch(() => ({ items: [] })),
-      fetch("/api/v7/practice/review/due?limit=5").then(r => r.json()).catch(() => []),
-      fetch("/api/v7/practice/banks").then(r => r.json()).catch(() => []),
+      api<any>("/api/v7/practice/stats/overview").catch(() => null),
+      api<any>("/api/v7/practice/stats/sessions?limit=5").catch(() => ({ items: [] })),
+      api<any>("/api/v7/practice/review/stats").catch(() => null),
+      api<any>("/api/v7/practice/sessions/unfinished").catch(() => ({ items: [] })),
+      api<any>("/api/v7/practice/review/due?limit=5").catch(() => []),
+      api<any>("/api/v7/practice/banks").catch(() => []),
     ]).then(([ov, sess, rev, unf, dueR, bk]) => {
       setData({ ...(ov || {}), ...(rev || {}) });
       setRecentSessions(Array.isArray(sess) ? sess : sess?.items || []);
@@ -65,10 +69,14 @@ export default function PracticeHomePage() {
       setBanks(Array.isArray(bk) ? bk : []);
       setLoading(false);
     });
+
+    // 加载薄弱点 & 错题统计
+    getWeakSkills().then(setWeakSkills).catch(() => {});
+    getErrorBookStats().then(setErrorBookStats).catch(() => {});
   }, []);
 
   const handleDelete = async (id: string) => {
-    await fetch(`/api/v7/practice/sessions/${id}`, { method: "DELETE" });
+    await api(`/api/v7/practice/sessions/${id}`, { method: "DELETE" });
     setRecentSessions(p => p.filter(s => s.session_id !== id));
   };
 
@@ -195,6 +203,83 @@ export default function PracticeHomePage() {
               <QuickLink href="/practice/banks" icon={<Library size={14} />} label="题库浏览" color="text-purple-500" />
               <QuickLink href="/practice/generate" icon={<Wand2 size={14} />} label="AI 出题" color="text-emerald-500" />
             </div>
+
+            {/* ── 薄弱点分析 ── */}
+            {(weakSkills.length > 0 || errorBookStats) && (
+              <section>
+                <h3 className="text-xs font-medium text-[var(--color-text-muted)] mb-2.5 flex items-center gap-1.5">
+                  <Target size={12} /> 薄弱点分析
+                </h3>
+                <div className="space-y-2">
+                  {/* 错题总览小卡片 */}
+                  {errorBookStats && (
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-rose-500/5 border border-rose-500/15 mb-2">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-rose-500/10">
+                        <FileText size={13} className="text-rose-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-[var(--color-text)]">
+                          错题本 · {errorBookStats.still_weak ?? 0} 题仍薄弱
+                        </p>
+                        <p className="text-[10px] text-[var(--color-text-muted)]">
+                          共 {errorBookStats.unique_wrong_questions ?? 0} 道错题 · {errorBookStats.total_wrong_attempts ?? 0} 次失误
+                          {errorBookStats.mastered_from_errors > 0 && ` · 已攻破 ${errorBookStats.mastered_from_errors} 题`}
+                        </p>
+                      </div>
+                      <Link href="/practice/errors"
+                        className="px-3 py-1.5 rounded-lg bg-rose-500 text-white text-[10px] font-medium hover:bg-rose-600 flex-shrink-0">
+                        查看
+                      </Link>
+                    </div>
+                  )}
+
+                  {/* 薄弱知识点列表 */}
+                  {weakSkills.length > 0 && (
+                    <div className="space-y-1.5">
+                      {weakSkills.slice(0, 5).map((skill: any) => {
+                        const mastery = skill.mastery ?? 0;
+                        const color = mastery < 30 ? "text-red-500" : mastery < 50 ? "text-orange-500" : "text-amber-500";
+                        const bg = mastery < 30 ? "bg-red-500/5 border-red-500/15" : mastery < 50 ? "bg-orange-500/5 border-orange-500/15" : "bg-amber-500/5 border-amber-500/15";
+                        const barColor = mastery < 30 ? "bg-red-400" : mastery < 50 ? "bg-orange-400" : "bg-amber-400";
+                        return (
+                          <div key={skill.skill_id}
+                            className={`flex items-center gap-3 p-3 rounded-xl border ${bg}`}>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="text-xs font-medium text-[var(--color-text)] truncate">
+                                  {skill.label}
+                                </p>
+                                <span className={`text-[10px] font-bold ml-2 ${color}`}>{mastery}%</span>
+                              </div>
+                              <div className="w-full h-1.5 bg-[var(--color-border)]/50 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full ${barColor} transition-all`}
+                                  style={{ width: `${mastery}%` }} />
+                              </div>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[9px] text-[var(--color-text-muted)]">
+                                  {skill.attempts ?? 0} 次练习
+                                </span>
+                                {skill.trend === "up" && <span className="text-[9px] text-green-500">↑ 上升</span>}
+                                {skill.trend === "down" && <span className="text-[9px] text-red-500">↓ 下降</span>}
+                                {skill.load !== undefined && (
+                                  <span className="text-[9px] text-[var(--color-text-muted)]">
+                                    · 掌握负载: {skill.load}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <button onClick={() => switchTab("practice")}
+                              className="px-3 py-1.5 rounded-lg bg-[var(--color-accent)] text-white text-[10px] font-medium hover:opacity-90 flex-shrink-0">
+                              去练习
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
 
             {/* ── 复习队列 ── */}
             {dueReviews.length > 0 && (
