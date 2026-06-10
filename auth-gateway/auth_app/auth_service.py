@@ -42,7 +42,10 @@ class AuthService:
             display_name=display_name or username,
         )
 
-        access_token = self.jwt.create_access_token(user["id"], user["username"], user.get("role", "user"))
+        access_token = self.jwt.create_access_token(
+            user["id"], user["username"], user.get("role", "user"),
+            token_version=user.get("token_version", 0),
+        )
         refresh_token = self.jwt.create_refresh_token(user["id"])
 
         safe_user = {k: v for k, v in user.items() if k != "password_hash"}
@@ -64,7 +67,10 @@ class AuthService:
 
         self.repo.update_last_login(user["id"])
 
-        access_token = self.jwt.create_access_token(user["id"], user["username"], user.get("role", "user"))
+        access_token = self.jwt.create_access_token(
+            user["id"], user["username"], user.get("role", "user"),
+            token_version=user.get("token_version", 0),
+        )
         refresh_token = self.jwt.create_refresh_token(user["id"])
 
         safe_user = {k: v for k, v in user.items() if k != "password_hash"}
@@ -85,7 +91,10 @@ class AuthService:
 
         self.repo.update_last_login(user["id"])
 
-        access_token = self.jwt.create_access_token(user["id"], user["username"], user.get("role", "user"))
+        access_token = self.jwt.create_access_token(
+            user["id"], user["username"], user.get("role", "user"),
+            token_version=user.get("token_version", 0),
+        )
         refresh_token = self.jwt.create_refresh_token(user["id"])
 
         safe_user = {k: v for k, v in user.items() if k != "password_hash"}
@@ -104,7 +113,10 @@ class AuthService:
         if not user:
             raise ValueError("用户不存在")
 
-        access_token = self.jwt.create_access_token(user["id"], user["username"], user.get("role", "user"))
+        access_token = self.jwt.create_access_token(
+            user["id"], user["username"], user.get("role", "user"),
+            token_version=user.get("token_version", 0),
+        )
         new_refresh_token = self.jwt.create_refresh_token(user["id"])
 
         return {

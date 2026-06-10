@@ -199,6 +199,7 @@ async def generate_reply_with_tools(
                 task_type="chat",
                 temperature=0.7,
                 max_tokens=2048,
+                user_id=user_id,
             )
         except Exception as e:
             logger.error("LLM generation failed: %s", e)
@@ -228,6 +229,7 @@ async def generate_reply_with_tools(
                 temperature=0.7,
                 max_tokens=2048,
                 tools=tools,
+                user_id=user_id,
             )
         except Exception as e:
             logger.error("LLM generation failed: %s", e)
@@ -313,6 +315,7 @@ async def generate_reply_with_tools(
                     task_type="chat",
                     temperature=0.7,
                     max_tokens=2048,
+                    user_id=user_id,
                 )
             except Exception as e:
                 logger.error("LLM second call failed: %s", e)

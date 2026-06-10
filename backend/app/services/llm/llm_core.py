@@ -137,12 +137,13 @@ async def generate_reply(
     # 构建上下文
     llm_messages = _build_context_messages(partition, conversation, recent_messages, user_text, user_id)
 
-    # 调用 LLM
+    # 调用 LLM（传入 user_id 以支持自定义配置）
     reply = await llm_service.generate(
         messages=llm_messages,
         task_type="chat",
         temperature=0.7,
         max_tokens=2048,
+        user_id=user_id,
     )
 
     return reply
@@ -193,11 +194,12 @@ async def generate_reply_stream(
             "content": "提示：你已经连续问了多个问题，学生可能感到困惑。请尝试直接解释知识点，减少提问，用陈述句帮助学生理解。",
         })
 
-    # 流式调用 LLM
+    # 流式调用 LLM（传入 user_id 以支持自定义配置）
     async for chunk in llm_service.generate_stream(
         messages=llm_messages,
         task_type="chat",
         temperature=0.7,
         max_tokens=2048,
+        user_id=user_id,
     ):
         yield chunk

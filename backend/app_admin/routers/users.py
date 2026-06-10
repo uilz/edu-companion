@@ -151,6 +151,23 @@ async def list_users(
     )
 
 
+@router.get("/online/list")
+async def online_users(
+    limit: int = Query(50, ge=1, le=200),
+    _user: dict = Depends(require_role("super_admin")),
+):
+    """获取当前在线用户列表"""
+    try:
+        from app.domain.auth.login_event_repo import get_login_event_repo
+        le_repo = get_login_event_repo()
+        return {
+            "online_count": le_repo.get_all_online_count(),
+            "users": le_repo.get_online_users(limit=limit),
+        }
+    except Exception as e:
+        return {"online_count": 0, "users": [], "error": str(e)}
+
+
 @router.get("/{user_id}", response_model=UserRow)
 async def get_user(
     user_id: str,
@@ -265,7 +282,7 @@ async def login_log(
     limit: int = Query(20, ge=1, le=100),
     _user: dict = Depends(require_role("super_admin")),
 ):
-    """用户登录历史（基于 users.last_login + cognitive_events 登录事件）"""
+    """用户登录历史（含设备/IP/区域信息）"""
     repo = _repo()
 
     # 先查用户信息
@@ -273,26 +290,28 @@ async def login_log(
     if not user_rows:
         raise HTTPException(404, "用户不存在")
 
-    # 从 cognitive_events 查 login 事件
-    events = repo.query(
-        "SELECT event_id, timestamp, payload FROM cognitive_events "
-        "WHERE user_id = %s AND event_type = 'login' "
-        "ORDER BY timestamp DESC LIMIT %s",
-        (user_id, limit),
-    ) or []
+    # 从 login_events 表查询
+    try:
+        from app.domain.auth.login_event_repo import get_login_event_repo
+        le_repo = get_login_event_repo()
+        events = le_repo.get_user_login_history(user_id, limit=limit)
+        online = le_repo.get_user_online_status(user_id)
+        active_sessions = le_repo.get_user_active_sessions(user_id)
+        ip_analysis = le_repo.get_ip_analysis(user_id)
+    except Exception:
+        events = []
+        online = {"online": False, "last_seen": None}
+        active_sessions = []
+        ip_analysis = []
 
     return {
         "user_id": user_id,
         "username": user_rows[0].get("username", ""),
         "last_login": str(user_rows[0].get("last_login") or "") or None,
-        "recent_logins": [
-            {
-                "event_id": e.get("event_id"),
-                "timestamp": str(e.get("timestamp") or ""),
-                "payload": e.get("payload"),
-            }
-            for e in events
-        ],
+        "online": online,
+        "active_sessions": active_sessions,
+        "recent_logins": events,
+        "ip_analysis": ip_analysis,
     }
 
 
@@ -345,3 +364,36 @@ async def bulk_unban(
         affected += r or 0
     logger.info("admin 批量解封: count=%d", len(body.user_ids))
     return {"ok": True, "affected": affected}
+
+
+@router.post("/{user_id}/force-logout")
+async def force_logout_user(
+    user_id: str,
+    _user: dict = Depends(require_role("super_admin")),
+):
+    """强制踢出用户所有设备（递增 token_version）"""
+    repo = _repo()
+    existing = repo.query("SELECT id FROM users WHERE id = %s", (user_id,))
+    if not existing:
+        raise HTTPException(404, "用户不存在")
+
+    repo.execute(
+        "UPDATE users SET token_version = COALESCE(token_version, 0) + 1, updated_at = NOW() WHERE id = %s",
+        (user_id,),
+    )
+    repo.execute(
+        "UPDATE login_events SET is_current = FALSE WHERE user_id = %s",
+        (user_id,),
+    )
+    logger.info("admin 强制踢出用户所有设备: user_id=%s", user_id)
+    return {"ok": True, "message": "已强制该用户所有设备下线"}
+
+    # 软删除：用户名加后缀防止重复，标记为不活跃
+    old_username = existing[0].get("username", "")
+    new_username = f"{old_username}_deleted_{user_id[:8]}"
+    repo.execute(
+        "UPDATE users SET is_active = FALSE, username = %s, status = 'deactivated', updated_at = NOW() WHERE id = %s",
+        (new_username, user_id),
+    )
+    logger.info("admin 注销用户: id=%s username=%s", user_id, old_username)
+    return {"ok": True, "user_id": user_id, "message": "用户已注销"}

@@ -7,11 +7,12 @@
 3. 将验证结果注入 request.state.user 和 request.state.user_id
 4. 未携带 token / token 无效：除公开路径外，**返回 401**，不再隐式 fallback 到 default_user
 
-认证网关地址：http://127.0.0.1:18001
+认证网关地址：从环境变量 AUTH_GATEWAY_URL 读取
 """
 from __future__ import annotations
 
 import logging
+import os
 import urllib.request
 import urllib.error
 import json
@@ -19,13 +20,16 @@ from typing import Optional, Any
 
 logger = logging.getLogger(__name__)
 
-# 认证网关地址
-AUTH_GATEWAY_URL = "http://127.0.0.1:18001"
+# 认证网关地址（从环境变量读取）
+AUTH_GATEWAY_URL = os.getenv("AUTH_GATEWAY_URL", "http://127.0.0.1:18001")
 
 # 不需要认证的路径前缀
-# 注意：不要把 "/" 放进来 — 所有路径都以 "/" 开头，会导致 is_public 永远 True
+# 注意：不要把 "/api/auth" 整体放进来 — 其子路径 /api/auth/me/* 需要认证
 PUBLIC_PATHS = {
-    "/api/auth",
+    "/api/auth/login",
+    "/api/auth/register",
+    "/api/auth/refresh",
+    "/api/auth/verify",
     "/docs",
     "/redoc",
     "/openapi.json",
@@ -74,6 +78,10 @@ class AuthMiddleware:
         scope["state"] = dict(scope.get("state") or {})
         scope["state"]["user"] = user
         scope["state"]["user_id"] = user["user_id"]
+
+        # 更新用户最后活动时间（异步不阻塞，节流5分钟）
+        self._touch_last_active(user["user_id"])
+
         return await self.app(scope, receive, send)
 
     @staticmethod
@@ -119,6 +127,16 @@ class AuthMiddleware:
         except Exception as e:
             logger.warning("认证网关验证失败: %s", e)
         return None
+
+    @staticmethod
+    def _touch_last_active(user_id: str) -> None:
+        """更新用户最后活动时间（节流5分钟，失败静默）"""
+        try:
+            from app.domain.auth.repository import get_user_repo
+            repo = get_user_repo()
+            repo.update_last_active(user_id)
+        except Exception:
+            pass  # 静默失败，不影响请求
 
 
 def get_request_user_id(request: Any) -> str:

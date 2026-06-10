@@ -512,6 +512,7 @@ async def send_and_reply_stream(
                 temperature=0.7,
                 max_tokens=2048,
                 tools=tools,
+                user_id=user_id,
             ):
                 probe_accumulated += chunk
                 # 如果有文本内容且未检测到工具调用，直接 yield

@@ -1,7 +1,6 @@
 """系统设置 — super_admin 权限
 
 GET    /config        获取系统配置（环境变量快照）
-GET    /env           获取关键环境变量（脱敏）
 GET    /db-status     数据库连接状态
 GET    /services      各服务运行状态
 """
@@ -34,36 +33,6 @@ async def get_config(_: dict = Depends(require_role("super_admin"))):
         "pid": os.getpid(),
         "cwd": os.getcwd(),
     }
-
-
-@router.get("/env")
-async def get_env(_: dict = Depends(require_role("super_admin"))):
-    """获取关键环境变量（脱敏显示）"""
-    keys = [
-        "JWT_SECRET", "JWT_ALGORITHM",
-        "DB_HOST", "DB_PORT", "DB_NAME", "DB_USER",
-        "AUTH_GATEWAY_URL",
-    ]
-    result = {}
-    for k in keys:
-        val = os.getenv(k, "")
-        # 脱敏
-        if k == "JWT_SECRET" and val:
-            val = val[:8] + "***" + val[-4:] if len(val) > 14 else "***"
-        if "PASSWORD" in k.upper() and val:
-            val = val[:4] + "***" if len(val) > 8 else "***"
-        result[k] = val or "(未设置)"
-
-    # 检查配置文件
-    env_files = {}
-    for path in [
-        "/home/deploy/edu-companion/backend/.env",
-        "/home/deploy/edu-companion/auth-gateway/config/.env",
-    ]:
-        env_files[path] = os.path.exists(path)
-    result["_env_files"] = env_files
-
-    return {"env": result}
 
 
 @router.get("/db-status")

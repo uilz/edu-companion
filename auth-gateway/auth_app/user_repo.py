@@ -45,6 +45,7 @@ class UserRepo:
                 avatar_url VARCHAR(512) DEFAULT '',
                 role VARCHAR(16) DEFAULT 'user',
                 is_active BOOLEAN DEFAULT true,
+                token_version INTEGER DEFAULT 0,
                 last_login TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -53,6 +54,11 @@ class UserRepo:
         # 兼容旧表：无 avatar_url 列时添加
         try:
             self.db.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(512) DEFAULT ''")
+        except Exception:
+            pass
+        # 兼容旧表：无 token_version 列时添加
+        try:
+            self.db.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER DEFAULT 0")
         except Exception:
             pass
 
@@ -79,6 +85,19 @@ class UserRepo:
             "UPDATE users SET last_login = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
             (user_id,),
         )
+
+    def get_token_version(self, user_id: str) -> int:
+        """获取用户的 token 版本号"""
+        row = self.db.fetchone("SELECT token_version FROM users WHERE id = %s", (user_id,))
+        return row["token_version"] if row else 0
+
+    def increment_token_version(self, user_id: str) -> int:
+        """递增 token 版本号（用于强制其他设备下线）"""
+        self.db.execute(
+            "UPDATE users SET token_version = token_version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+            (user_id,),
+        )
+        return self.get_token_version(user_id)
 
     def update_password(self, user_id: str, new_password_hash: str):
         self.db.execute(

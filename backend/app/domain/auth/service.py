@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional
@@ -23,10 +24,12 @@ from app.domain.auth.repository import get_user_repo
 logger = logging.getLogger(__name__)
 
 # JWT 配置
-JWT_SECRET = settings.openai_api_key or "edu-companion-jwt-secret-change-me"
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET environment variable is not set")
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRE_HOURS = 24
-JWT_REFRESH_EXPIRE_DAYS = 7
+JWT_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "24"))
+JWT_REFRESH_EXPIRE_DAYS = int(os.getenv("JWT_REFRESH_EXPIRE_DAYS", "7"))
 
 
 class AuthService:

@@ -75,6 +75,34 @@ class LLMService:
         logger.debug("任务类型 [%s] -> 选择模型 [%s]", task_type, model)
         return model
 
+    def _get_user_llm_kwargs(self, user_id: Optional[str] = None) -> dict:
+        """获取用户的 LLM 自定义配置参数
+
+        如果用户已保存自定义配置（api_key/api_base/model_name），
+        返回对应的 LiteLLM acompletion 参数用于覆盖全局配置。
+
+        Returns:
+            dict，可解包传入 acompletion：api_key/api_base/model
+        """
+        if not user_id:
+            return {}
+        try:
+            from app.domain.auth.user_llm_repo import get_user_llm_config_repo
+            repo = get_user_llm_config_repo()
+            config = repo.get(user_id)
+            if config and config.get("model_name"):
+                kwargs: dict = {}
+                if config.get("api_key"):
+                    kwargs["api_key"] = config["api_key"]
+                if config.get("api_base"):
+                    kwargs["api_base"] = config["api_base"]
+                if config.get("model_name"):
+                    kwargs["model"] = config["model_name"]
+                return kwargs
+        except Exception as e:
+            logger.warning("获取用户 LLM 配置失败 (user_id=%s): %s", user_id, e)
+        return {}
+
     async def generate(
         self,
         messages: list[dict[str, str]],
@@ -83,6 +111,7 @@ class LLMService:
         temperature: float = 0.7,
         max_tokens: int = 2048,
         tools: list[dict] | None = None,
+        user_id: Optional[str] = None,  # 用户自定义配置
         **kwargs: Any,
     ) -> str:
         """
@@ -95,6 +124,7 @@ class LLMService:
             temperature: 温度
             max_tokens: 最大token数
             tools: OpenAI function calling 工具定义列表 (Phase 5)
+            user_id: 用户ID，传入后将使用用户自定义 LLM 配置
 
         返回:
             生成的文本；如果 LLM 返回 tool_calls，返回特殊标记 JSON
@@ -102,15 +132,31 @@ class LLMService:
         异常:
             ValueError: 模型或 API Key 未配置
         """
-        model = self.select_model(task_type, subject)
+        # 检查用户自定义配置
+        user_kwargs = self._get_user_llm_kwargs(user_id)
+        use_custom = bool(user_kwargs.get("model"))
 
-        # 统一配置校验 — 所有调用者共用
+        if use_custom:
+            model = user_kwargs.pop("model")
+        else:
+            model = self.select_model(task_type, subject)
+
+        # 统一配置校验
         if not model:
             raise ValueError("LLM 模型未配置，请在 .env 中设置 TEXT_MODEL")
-        if not settings.openai_api_key and not os.environ.get("OPENAI_API_KEY"):
-            raise ValueError("API Key 未配置，请在 .env 中设置 OPENAI_API_KEY")
+        if not use_custom:
+            if not settings.openai_api_key and not os.environ.get("OPENAI_API_KEY"):
+                raise ValueError("API Key 未配置，请在 .env 中设置 OPENAI_API_KEY")
+        elif not user_kwargs.get("api_key"):
+            # 用户自定义模式但没填 API Key — 回退全局 key
+            if settings.openai_api_key:
+                user_kwargs["api_key"] = settings.openai_api_key
+            else:
+                raise ValueError("自定义 LLM 未配置 API Key")
 
         extra = dict(kwargs)
+        # 合并用户自定义参数
+        extra.update(user_kwargs)
         if tools:
             extra["tools"] = tools
             extra["tool_choice"] = "auto"
@@ -165,6 +211,7 @@ class LLMService:
         subject: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: int = 2048,
+        user_id: Optional[str] = None,  # 用户自定义配置
         **kwargs: Any,
     ) -> AsyncGenerator[str, None]:
         """
@@ -176,17 +223,35 @@ class LLMService:
             subject: 学科
             temperature: 温度
             max_tokens: 最大token数
+            user_id: 用户ID，传入后将使用用户自定义 LLM 配置
 
         产出:
             逐个token的文本片段
         """
-        model = self.select_model(task_type, subject)
+        # 检查用户自定义配置
+        user_kwargs = self._get_user_llm_kwargs(user_id)
+        use_custom = bool(user_kwargs.get("model"))
+
+        if use_custom:
+            model = user_kwargs.pop("model")
+        else:
+            model = self.select_model(task_type, subject)
 
         # 统一配置校验
         if not model:
             raise ValueError("LLM 模型未配置，请在 .env 中设置 TEXT_MODEL")
-        if not settings.openai_api_key and not os.environ.get("OPENAI_API_KEY"):
-            raise ValueError("API Key 未配置，请在 .env 中设置 OPENAI_API_KEY")
+        if not use_custom:
+            if not settings.openai_api_key and not os.environ.get("OPENAI_API_KEY"):
+                raise ValueError("API Key 未配置，请在 .env 中设置 OPENAI_API_KEY")
+        elif not user_kwargs.get("api_key"):
+            # 用户自定义模式但没填 API Key — 回退全局 key
+            if settings.openai_api_key:
+                user_kwargs["api_key"] = settings.openai_api_key
+            else:
+                raise ValueError("自定义 LLM 未配置 API Key")
+
+        extra = dict(kwargs)
+        extra.update(user_kwargs)
 
         yielded_any = False
         last_reasoning = ""
@@ -198,7 +263,7 @@ class LLMService:
                 max_tokens=max_tokens,
                 stream=True,
                 timeout=120,  # 流式超时更长 (M3)
-                **kwargs,
+                **extra,
             )
             async for chunk in response:
                 if not (chunk.choices and chunk.choices[0].delta):

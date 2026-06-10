@@ -7,13 +7,14 @@
 - 健康检查端点
 - CORS 支持
 """
-
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.learning.study import router as study_router
@@ -48,6 +49,12 @@ from app.api.practice.references import router as references_router
 
 # v8.0 学习数据管理
 from app.api.system.data_routes import router as data_router
+
+# 认证 API（登录历史、活跃会话等 — 通过网关代理访问）
+from app.domain.auth.api import router as auth_router
+
+# 用户自定义 LLM 配置
+from app.domain.auth.settings_api import router as settings_router
 
 from app.config import settings
 from shared.learner_model import learner_engine
@@ -176,9 +183,46 @@ app = FastAPI(
     version=settings.app_version,
     description="基于 AI 的智能学习伴侣后端系统",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url=None if not settings.debug else "/docs",
+    redoc_url=None if not settings.debug else "/redoc",
 )
+
+
+# ── 安全响应头中间件 ──
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "connect-src 'self' ws: wss:; "
+        "font-src 'self'; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'"
+    )
+    response.headers["Content-Security-Policy"] = csp
+    return response
+
+
+# ── 请求超时中间件 ──
+REQUEST_TIMEOUT = 30  # 30秒超时
+@app.middleware("http")
+async def request_timeout(request: Request, call_next):
+    try:
+        return await asyncio.wait_for(call_next(request), timeout=REQUEST_TIMEOUT)
+    except asyncio.TimeoutError:
+        return Response(
+            content=json.dumps({"error": "timeout", "detail": "请求超时，请重试"}),
+            media_type="application/json",
+            status_code=408,
+        )
+
 
 # ── CORS 中间件 ──
 app.add_middleware(
@@ -267,7 +311,11 @@ app.include_router(learning_enhance_router)
 app.include_router(files_router)
 
 # 认证系统 — 已迁移至独立认证网关
-# app.include_router(auth_router)  # 已移除
+# 以下路由通过认证网关反向代理访问
+app.include_router(auth_router)
+
+# 用户自定义 LLM 配置
+app.include_router(settings_router)
 
 # v7.0 智能题库
 app.include_router(practice_routes_router)

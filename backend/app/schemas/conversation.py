@@ -109,10 +109,11 @@ class SubBranchRef(BaseModel):
 # ── TreeNode（核心消息节点，branch_id → conversation_id） ──
 
 class TreeNode(BaseModel):
-    """消息节点，构成对话的树形结构。支持多版本（编辑时在同一父节点下产生同级兄弟版本）。"""
+    """消息节点，构成对话的树形结构。编辑时在同一父节点下产生同级兄弟节点，
+    前端自动按 parent_id+role 分组检测版本。"""
     id: str = Field(default_factory=lambda: str(uuid4()))
     parent_id: str  # virtual root id if top-level
-    children_ids: list[str] = Field(default_factory=list)  # alternative versions (for edit)
+    children_ids: list[str] = Field(default_factory=list)
     partition_id: str
     conversation_id: str  # v4: 替换 branch_id
     content_blocks: list[ContentBlock] = Field(default_factory=list)
@@ -124,7 +125,6 @@ class TreeNode(BaseModel):
     token_count: int = 0
     is_deleted: bool = False
     is_archived: bool = False
-    has_modified_version: bool = False
     links_to: list[str] = Field(default_factory=list)
     linked_from: list[str] = Field(default_factory=list)
     discussed_skill_ids: list[str] = Field(default_factory=list)

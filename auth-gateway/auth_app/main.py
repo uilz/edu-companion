@@ -5,8 +5,10 @@
 - 用户注册/登录/密码管理
 - JWT 令牌签发/验证/刷新
 - 用户信息查询与更新
+- 反向代理：非 /api/auth/* 请求转发到主后端 (8000)
+- WebSocket 代理：将 WS 连接透明转发到主后端
 
-端口：8001
+端口：18001
 
 独立特性：
 - 不依赖业务后端任何模块
@@ -15,27 +17,82 @@
 """
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import os
 import shutil
+import time
 import uuid
 from pathlib import Path
 from typing import Optional
+from urllib.parse import parse_qs
 
+import websockets
 from fastapi import FastAPI, APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+import httpx
+
+# 确保 .env 在 JWTService 单例创建前加载
+from auth_app import database  # noqa: F401
+
 logger = logging.getLogger(__name__)
+
+# ── 登录限流（防止暴力破解）──
+# key: 用户名/邮箱/IP, value: (attempts, first_attempt_time)
+_login_attempts: dict[str, tuple[int, float]] = {}
+_LOGIN_RATE_LIMIT = 5  # 5次尝试
+_LOGIN_RATE_WINDOW = 60  # 60秒窗口
+
+
+def _check_login_rate_limit(key: str) -> bool:
+    """检查登录尝试是否超过限制"""
+    now = time.time()
+    attempts, first_time = _login_attempts.get(key, (0, now))
+
+    # 窗口过期，重置计数
+    if now - first_time > _LOGIN_RATE_WINDOW:
+        _login_attempts[key] = (1, now)
+        return True
+
+    # 检查是否超过限制
+    if attempts >= _LOGIN_RATE_LIMIT:
+        return False
+
+    # 增加计数
+    _login_attempts[key] = (attempts + 1, first_time)
+    return True
+
+
+def _clear_login_rate_limit(key: str) -> None:
+    """登录成功后清除限流记录"""
+    _login_attempts.pop(key, None)
+
 
 # ── 请求/响应模型 ──
 
 class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=32, pattern=r"^[a-zA-Z0-9_\u4e00-\u9fff]+$")
-    password: str = Field(min_length=6, max_length=64)
+    password: str = Field(min_length=8, max_length=64)
     email: str = Field(default="", max_length=128)
     display_name: str = Field(default="", max_length=64)
+
+    @model_validator(mode="after")
+    def validate_password_complexity(self):
+        password = self.password
+        if len(password) < 8:
+            raise ValueError("密码至少需要8个字符")
+        if not any(c.isupper() for c in password):
+            raise ValueError("密码需要包含至少一个大写字母")
+        if not any(c.islower() for c in password):
+            raise ValueError("密码需要包含至少一个小写字母")
+        if not any(c.isdigit() for c in password):
+            raise ValueError("密码需要包含至少一个数字")
+        return self
 
 
 class LoginRequest(BaseModel):
@@ -74,18 +131,61 @@ class TokenVerifyResponse(BaseModel):
 
 
 # ── 创建 FastAPI 应用 ──
+# 生产环境关闭 docs（通过 ENV=production 或 APP_DEBUG=false 控制）
+is_production = os.getenv("ENV") == "production" or os.getenv("APP_DEBUG") == "false"
+docs_url = None if is_production else "/docs"
+redoc_url = None if is_production else "/redoc"
+
 app = FastAPI(
     title="Auth Gateway",
     version="1.0.0",
     description="独立认证 API 网关服务",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url=docs_url,
+    redoc_url=redoc_url,
 )
 
+
+# ── 安全响应头中间件 ──
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "connect-src 'self' ws: wss:; "
+        "font-src 'self'; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'"
+    )
+    response.headers["Content-Security-Policy"] = csp
+    return response
+
+
+# ── 请求超时中间件 ──
+REQUEST_TIMEOUT = 30  # 30秒超时
+@app.middleware("http")
+async def request_timeout(request: Request, call_next):
+    try:
+        return await asyncio.wait_for(call_next(request), timeout=REQUEST_TIMEOUT)
+    except asyncio.TimeoutError:
+        return Response(
+            content=json.dumps({"error": "timeout", "detail": "请求超时，请重试"}),
+            media_type="application/json",
+            status_code=408,
+        )
+
+
 # ── CORS ──
+cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -114,27 +214,189 @@ async def register(body: RegisterRequest):
 
 
 @router.post("/login", summary="用户登录")
-async def login(body: LoginRequest):
+async def login(body: LoginRequest, request: Request):
     """用户登录，返回 JWT"""
     from auth_app.auth_service import get_auth_service
+
+    # 限流检查
+    client_ip = request.client.host if request.client else "unknown"
+    rate_limit_key = f"login_{body.username}_{client_ip}"
+    if not _check_login_rate_limit(rate_limit_key):
+        raise HTTPException(status_code=429, detail="登录尝试过于频繁，请稍后再试")
+
     svc = get_auth_service()
     try:
         result = svc.login(username=body.username, password=body.password)
-        return result
+        # 登录成功，清除限流记录
+        _clear_login_rate_limit(rate_limit_key)
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
+
+    # 记录登录事件（设备/IP/区域）
+    try:
+        _record_login_event(request, result["user"]["id"])
+    except Exception as e:
+        logger.warning("记录登录事件失败: %s", e)
+
+    return result
 
 
 @router.post("/login/email", summary="邮箱登录")
-async def login_by_email(body: EmailLoginRequest):
+async def login_by_email(body: EmailLoginRequest, request: Request):
     """使用邮箱登录，返回 JWT"""
     from auth_app.auth_service import get_auth_service
+
+    # 限流检查
+    client_ip = request.client.host if request.client else "unknown"
+    rate_limit_key = f"login_{body.email}_{client_ip}"
+    if not _check_login_rate_limit(rate_limit_key):
+        raise HTTPException(status_code=429, detail="登录尝试过于频繁，请稍后再试")
+
     svc = get_auth_service()
     try:
         result = svc.login_by_email(email=body.email, password=body.password)
-        return result
+        # 登录成功，清除限流记录
+        _clear_login_rate_limit(rate_limit_key)
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
+
+    # 记录登录事件
+    try:
+        _record_login_event(request, result["user"]["id"])
+    except Exception as e:
+        logger.warning("记录登录事件失败: %s", e)
+
+    return result
+
+
+def _record_login_event(request: Request, user_id: str) -> None:
+    """记录登录事件到 login_events 表（同设备1小时内去重）"""
+    import uuid
+    from auth_app.database import get_db_instance
+
+    db = get_db_instance()
+
+    # 确保 login_events 表存在
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS login_events (
+            event_id     TEXT PRIMARY KEY,
+            user_id      TEXT NOT NULL,
+            ip_address   TEXT DEFAULT '',
+            country      TEXT DEFAULT '',
+            region       TEXT DEFAULT '',
+            city         TEXT DEFAULT '',
+            user_agent   TEXT DEFAULT '',
+            device_type  TEXT DEFAULT '',
+            browser      TEXT DEFAULT '',
+            os           TEXT DEFAULT '',
+            is_current   BOOLEAN DEFAULT FALSE,
+            created_at   TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+    """)
+
+    # 提取 IP
+    ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    if not ip:
+        ip = request.client.host if request.client else ""
+
+    # 解析 UA
+    ua = request.headers.get("user-agent", "")
+    ua_info = _parse_user_agent(ua)
+
+    # 解析 IP 区域
+    ip_info = _parse_ip_region(ip)
+
+    # 检查同设备1小时内是否有记录（去重）
+    existing = db.fetchone(
+        """SELECT event_id FROM login_events
+           WHERE user_id = %s
+             AND ip_address = %s
+             AND device_type = %s
+             AND browser = %s
+             AND os = %s
+             AND created_at > NOW() - INTERVAL '1 hour'
+           ORDER BY created_at DESC
+           LIMIT 1""",
+        (user_id, ip, ua_info["device_type"], ua_info["browser"], ua_info["os"]),
+    )
+    if existing:
+        event_id = existing["event_id"]
+        # 更新已有记录时间并标记为当前
+        db.execute(
+            "UPDATE login_events SET created_at = NOW() WHERE event_id = %s",
+            (event_id,),
+        )
+        db.execute(
+            "UPDATE login_events SET is_current = FALSE WHERE user_id = %s AND is_current = TRUE",
+            (user_id,),
+        )
+        db.execute(
+            "UPDATE login_events SET is_current = TRUE WHERE event_id = %s",
+            (event_id,),
+        )
+        return
+
+    # 清除之前的 is_current 标记
+    db.execute(
+        "UPDATE login_events SET is_current = FALSE WHERE user_id = %s AND is_current = TRUE",
+        (user_id,),
+    )
+
+    # 插入新记录
+    event_id = f"le_{uuid.uuid4().hex[:12]}"
+    db.execute(
+        """INSERT INTO login_events
+           (event_id, user_id, ip_address, country, region, city,
+            user_agent, device_type, browser, os, is_current, created_at)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE, NOW())""",
+        (event_id, user_id, ip, ip_info["country"], ip_info["region"], ip_info["city"],
+         ua[:500], ua_info["device_type"], ua_info["browser"], ua_info["os"]),
+    )
+
+
+def _parse_user_agent(ua: str) -> dict:
+    """解析 User-Agent"""
+    if not ua:
+        return {"device_type": "unknown", "browser": "unknown", "os": "unknown"}
+    ua_lower = ua.lower()
+    device_type = "desktop"
+    if any(k in ua_lower for k in ["mobile", "android", "iphone", "ipod"]):
+        device_type = "mobile"
+    elif "ipad" in ua_lower or "tablet" in ua_lower:
+        device_type = "tablet"
+    browser = "unknown"
+    if "edg/" in ua_lower or "edge" in ua_lower:
+        browser = "Edge"
+    elif "opr/" in ua_lower or "opera" in ua_lower:
+        browser = "Opera"
+    elif "firefox" in ua_lower:
+        browser = "Firefox"
+    elif "chrome" in ua_lower and "edg/" not in ua_lower:
+        browser = "Chrome"
+    elif "safari" in ua_lower and "chrome" not in ua_lower:
+        browser = "Safari"
+    os_name = "unknown"
+    if "windows" in ua_lower:
+        os_name = "Windows"
+    elif "mac os" in ua_lower or "macos" in ua_lower:
+        os_name = "macOS"
+    elif "android" in ua_lower:
+        os_name = "Android"
+    elif "iphone" in ua_lower or "ipad" in ua_lower:
+        os_name = "iOS"
+    elif "linux" in ua_lower:
+        os_name = "Linux"
+    return {"device_type": device_type, "browser": browser, "os": os_name}
+
+
+def _parse_ip_region(ip: str) -> dict:
+    """解析 IP 区域"""
+    if not ip or ip in ("127.0.0.1", "::1", "localhost"):
+        return {"country": "本地", "region": "本地", "city": "本地网络"}
+    if ip.startswith(("192.168.", "10.", "172.16.", "172.17.", "172.18.",
+                       "172.19.", "172.2", "172.3")):
+        return {"country": "内网", "region": "内网", "city": "局域网"}
+    return {"country": "", "region": "", "city": ""}
 
 
 @router.post("/refresh", summary="刷新令牌")
@@ -330,3 +592,332 @@ async def root() -> dict[str, str]:
         "docs": "/docs",
         "health": "/health",
     }
+
+
+# ═══════════════════════════════════════════════════════════
+# 反向代理中间件
+# 将非认证 API 请求透明转发到主后端 (8000)
+# 使认证网关成为统一的对外入口
+# ═══════════════════════════════════════════════════════════
+
+PROXY_TARGET = os.getenv("PROXY_TARGET", "http://127.0.0.1:8000")
+
+# 认证网关自行处理的路径前缀
+_LOCAL_PREFIXES = frozenset({
+    "/api/auth/", "/avatars/",
+})
+
+# 认证网关自行处理的精确路径
+_LOCAL_PATHS = frozenset({
+    "/health", "/", "/docs", "/redoc", "/openapi.json",
+})
+
+# 以 _LOCAL_PREFIXES 开头但不应本地处理、应代理到主后端的路径
+_PROXY_PATHS = frozenset({
+    "/api/auth/me/login-history",
+    "/api/auth/me/active-sessions",
+})
+
+# ═══════════════════════════════════════════════════════════
+# WebSocket 安全配置
+# ═══════════════════════════════════════════════════════════
+
+# 允许的 Origin（逗号分隔，空 = 允许所有，生产应配置具体值）
+_ALLOWED_ORIGINS = os.getenv("WS_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://192.168.13.133:3000").split(",")
+
+# 单 IP 最大 WS 连接数
+_MAX_WS_PER_IP = int(os.getenv("WS_MAX_CONNECTIONS_PER_IP", "5"))
+
+# WS 消息大小上限（字节）
+_MAX_WS_MESSAGE_SIZE = int(os.getenv("WS_MAX_MESSAGE_SIZE", str(1024 * 1024)))  # 默认 1MB
+
+# WS 连接追踪 {client_host: set[task]}
+_ws_connections: dict[str, set[asyncio.Task]] = {}
+_ws_lock = asyncio.Lock()
+
+
+class ReverseProxyMiddleware:
+    """ASGI 反向代理中间件（HTTP + WebSocket）"""
+
+    def __init__(self, inner):
+        self.inner = inner
+        self.client = httpx.AsyncClient(
+            base_url=PROXY_TARGET,
+            timeout=60.0,
+            follow_redirects=True,
+        )
+
+    async def __call__(self, scope, receive, send):
+        # WebSocket 代理
+        if scope["type"] == "websocket":
+            return await self._proxy_ws(scope, receive, send)
+
+        # HTTP 代理
+        if scope["type"] != "http":
+            return await self.inner(scope, receive, send)
+
+        path = scope.get("path", "")
+
+        # 认证网关本地处理
+        if self._is_local(path):
+            return await self.inner(scope, receive, send)
+
+        # 反向代理到主后端
+        await self._proxy(scope, receive, send)
+
+    @staticmethod
+    def _is_local(path: str) -> bool:
+        if path in _LOCAL_PATHS:
+            return True
+        for prefix in _LOCAL_PREFIXES:
+            if path.startswith(prefix):
+                # 检查是否属于应代理的例外路径
+                for proxy_path in _PROXY_PATHS:
+                    if path.startswith(proxy_path):
+                        return False
+                return True
+        return False
+
+    async def _proxy_ws(self, scope, receive, send):
+        """WebSocket 反向代理 — 安全加固版
+
+        安全措施：
+        1. JWT 验证：从 query ?token=xxx 提取并验证
+        2. Origin 检查：只允许配置的来源
+        3. 连接数限制：单 IP 上限 _MAX_WS_PER_IP
+        4. 消息大小限制：超过 _MAX_WS_MESSAGE_SIZE 断开
+        """
+        path = scope.get("path", "/")
+        qs = scope.get("query_string", b"").decode()
+        client_ip = self._get_client_ip(scope)
+
+        # ── 1. JWT 验证 ──
+        params = parse_qs(qs, keep_blank_values=True)
+        token = params.get("token", [""])[0]
+        if not token:
+            logger.warning("WS 拒绝: 无 token (ip=%s, path=%s)", client_ip, path)
+            await send({"type": "websocket.close", "code": 4001})
+            return
+
+        from auth_app.jwt_service import get_jwt_service
+        user = get_jwt_service().verify_token(token)
+        if not user:
+            logger.warning("WS 拒绝: token 无效 (ip=%s, path=%s)", client_ip, path)
+            await send({"type": "websocket.close", "code": 4001})
+            return
+
+        # ── 2. Origin 检查 ──
+        origin = ""
+        for k, v in scope.get("headers", []):
+            if k.decode("utf-8", "ignore").lower() == "origin":
+                origin = v.decode("utf-8", "ignore")
+                break
+        if _ALLOWED_ORIGINS and origin:
+            origin_ok = False
+            for allowed in _ALLOWED_ORIGINS:
+                allowed = allowed.strip()
+                if allowed and (origin == allowed or origin.startswith(allowed.rstrip("/") + "/")):
+                    origin_ok = True
+                    break
+            if not origin_ok:
+                logger.warning("WS 拒绝: Origin 不允许 (origin=%s, ip=%s)", origin, client_ip)
+                await send({"type": "websocket.close", "code": 4003})
+                return
+
+        # ── 3. 连接数限制 ──
+        async with _ws_lock:
+            ip_connections = _ws_connections.setdefault(client_ip, set())
+            if len(ip_connections) >= _MAX_WS_PER_IP:
+                logger.warning("WS 拒绝: 连接数超限 (ip=%s, count=%d)", client_ip, len(ip_connections))
+                await send({"type": "websocket.close", "code": 4003})
+                return
+
+            # ── 构建目标 WS URL（不转发 token，注入 user_id）──
+            # 过滤掉 token 参数，避免后端日志/调试泄漏
+            clean_qs_parts = [p for p in qs.split("&") if not p.startswith("token=") and p]
+            # 注入 user_id（从 JWT 解析得到）
+            user_id = user.get("user_id", "")
+            clean_qs_parts.append(f"user_id={user_id}")
+            clean_qs = "&".join(clean_qs_parts) if clean_qs_parts else ""
+            target_path_no_qs = path.split("?")[0]
+            target_path = f"{target_path_no_qs}?{clean_qs}" if clean_qs else target_path_no_qs
+
+            target_ws_base = PROXY_TARGET.replace("http://", "ws://").replace("https://", "wss://")
+            target_url = f"{target_ws_base}{target_path}"
+
+            # 提取 headers（过滤 WS 握手专用头）
+            extra_headers = []
+            for k, v in scope.get("headers", []):
+                key = k.decode("utf-8", "ignore")
+                val = v.decode("utf-8", "ignore")
+                if key.lower() not in (
+                    "host", "upgrade", "connection",
+                    "sec-websocket-key", "sec-websocket-version",
+                    "sec-websocket-extensions", "origin",
+                ):
+                    extra_headers.append((key, val))
+
+            # 注册连接追踪
+            proxy_task = asyncio.current_task()
+            ip_connections.add(proxy_task)
+
+        try:
+            async with websockets.connect(
+                target_url,
+                additional_headers=extra_headers,
+                ping_interval=20,
+                ping_timeout=10,
+                max_size=10 * 1024 * 1024,  # 10MB
+            ) as backend_ws:
+                # 接受客户端 WS 连接
+                await send({"type": "websocket.accept"})
+
+                async def client_to_backend():
+                    """转发客户端消息 → 后端（含消息大小校验）"""
+                    while True:
+                        msg = await receive()
+                        if msg["type"] == "websocket.receive":
+                            if "text" in msg and len(msg["text"]) > _MAX_WS_MESSAGE_SIZE:
+                                logger.warning("WS 消息超限: %d bytes (ip=%s)", len(msg["text"]), client_ip)
+                                await backend_ws.close(code=1009)
+                                break
+                            if "bytes" in msg and len(msg["bytes"]) > _MAX_WS_MESSAGE_SIZE:
+                                logger.warning("WS 消息超限: %d bytes (ip=%s)", len(msg["bytes"]), client_ip)
+                                await backend_ws.close(code=1009)
+                                break
+                            if "text" in msg:
+                                await backend_ws.send(msg["text"])
+                            elif "bytes" in msg:
+                                await backend_ws.send(msg["bytes"])
+                        elif msg["type"] == "websocket.disconnect":
+                            break
+
+                async def backend_to_client():
+                    """转发后端消息 → 客户端"""
+                    async for msg in backend_ws:
+                        if isinstance(msg, str):
+                            await send({"type": "websocket.send", "text": msg})
+                        elif isinstance(msg, bytes):
+                            await send({"type": "websocket.send", "bytes": msg})
+
+                # 双向并发转发
+                tasks = [
+                    asyncio.create_task(client_to_backend()),
+                    asyncio.create_task(backend_to_client()),
+                ]
+                try:
+                    await asyncio.gather(*tasks)
+                except Exception:
+                    for t in tasks:
+                        t.cancel()
+
+        except Exception as e:
+            logger.error("WS 代理错误 (path=%s, ip=%s): %s", path, client_ip, e)
+            try:
+                await send({"type": "websocket.close", "code": 1011})
+            except Exception:
+                pass
+        finally:
+            # 清理连接追踪
+            async with _ws_lock:
+                ip_set = _ws_connections.get(client_ip)
+                if ip_set:
+                    ip_set.discard(proxy_task)
+                    if not ip_set:
+                        _ws_connections.pop(client_ip, None)
+
+    @staticmethod
+    def _get_client_ip(scope) -> str:
+        """从 scope 提取客户端 IP"""
+        # 优先取 X-Forwarded-For（通过代理转发时）
+        for k, v in scope.get("headers", []):
+            if k.decode("utf-8", "ignore").lower() == "x-forwarded-for":
+                return v.decode("utf-8", "ignore").split(",")[0].strip()
+        # 其次取 peer 地址
+        client_info = scope.get("client")
+        if client_info:
+            return client_info[0]
+        return "unknown"
+
+    async def _proxy(self, scope, receive, send):
+        """读取请求 → 转发到主后端 → 返回响应"""
+        # 读取请求体
+        body = b""
+        more = True
+        while more:
+            msg = await receive()
+            if msg["type"] == "http.request":
+                body += msg.get("body", b"")
+                more = msg.get("more_body", False)
+            else:
+                break
+
+        # 构建转发请求
+        method = scope.get("method", "GET")
+        path = scope.get("path", "/")
+        qs = scope.get("query_string", b"").decode()
+        url = f"{path}?{qs}" if qs else path
+
+        # 提取 headers（过滤掉 host）
+        headers = {}
+        for k, v in scope.get("headers", []):
+            key = k.decode("utf-8", "ignore").lower()
+            if key == "host":
+                continue
+            headers[key] = v.decode("utf-8", "ignore")
+
+        try:
+            resp = await self.client.request(
+                method=method,
+                url=url,
+                headers=headers,
+                content=body,
+            )
+
+            # 构建响应 headers
+            resp_headers = []
+            for k, v in resp.headers.items():
+                k_lower = k.lower()
+                if k_lower in ("transfer-encoding", "content-encoding", "content-length"):
+                    continue
+                # 修正 Location 重定向地址
+                if k_lower == "location" and v.startswith("http://127.0.0.1:8000"):
+                    v = v.replace("http://127.0.0.1:8000", "")
+                resp_headers.append([k.encode(), v.encode()])
+
+            await send({
+                "type": "http.response.start",
+                "status": resp.status_code,
+                "headers": resp_headers,
+            })
+            await send({
+                "type": "http.response.body",
+                "body": resp.content,
+            })
+
+        except httpx.ConnectError:
+            logger.error("主后端不可达: %s", PROXY_TARGET)
+            await send({
+                "type": "http.response.start",
+                "status": 502,
+                "headers": [[b"content-type", b"application/json"]],
+            })
+            await send({
+                "type": "http.response.body",
+                "body": b'{"error":"upstream_unavailable","detail":"\xe4\xb8\xbb\xe5\x90\x8e\xe7\xab\xaf\xe6\x9c\x8d\xe5\x8a\xa1\xe4\xb8\x8d\xe5\x8f\xaf\xe7\x94\xa8"}',
+            })
+        except Exception as e:
+            logger.error("反向代理错误: %s", e)
+            await send({
+                "type": "http.response.start",
+                "status": 500,
+                "headers": [[b"content-type", b"application/json"]],
+            })
+            await send({
+                "type": "http.response.body",
+                "body": b'{"error":"proxy_error"}',
+            })
+
+
+# 用反向代理中间件包装 app（uvicorn 加载的 app 是 wrap 后的版本）
+app = ReverseProxyMiddleware(app)

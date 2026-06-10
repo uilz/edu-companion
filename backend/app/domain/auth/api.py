@@ -64,14 +64,43 @@ async def register(body: RegisterRequest):
 
 
 @router.post("/login", summary="用户登录")
-async def login(body: LoginRequest):
+async def login(body: LoginRequest, request: Request):
     """用户登录，返回 JWT"""
     svc = get_auth_service()
     try:
         result = svc.login(username=body.username, password=body.password)
-        return result
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
+
+    # 记录登录事件（设备/IP/区域）
+    try:
+        from app.domain.auth.login_event_repo import get_login_event_repo
+        from app.domain.auth.ua_parser import parse_user_agent, parse_ip_region
+
+        user_id = result["user"]["id"]
+        ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        if not ip:
+            ip = request.client.host if request.client else ""
+        ua = request.headers.get("user-agent", "")
+        ua_info = parse_user_agent(ua)
+        ip_info = parse_ip_region(ip)
+
+        repo = get_login_event_repo()
+        repo.record_login(
+            user_id=user_id,
+            ip_address=ip,
+            user_agent=ua[:500],  # 截断防止过长
+            country=ip_info["country"],
+            region=ip_info["region"],
+            city=ip_info["city"],
+            device_type=ua_info["device_type"],
+            browser=ua_info["browser"],
+            os=ua_info["os"],
+        )
+    except Exception as e:
+        logger.warning("记录登录事件失败: %s", e)
+
+    return result
 
 
 @router.post("/refresh", summary="刷新令牌")
@@ -103,11 +132,11 @@ async def update_me(body: UpdateProfileRequest, request: Request):
     from domain.auth.repository import get_user_repo
     repo = get_user_repo()
     repo.update_profile(
-        user_id=user["id"],
+        user_id=user["user_id"],
         display_name=body.display_name,
         email=body.email,
     )
-    return repo.find_by_id(user["id"])
+    return repo.find_by_id(user["user_id"])
 
 
 @router.post("/change-password", summary="修改密码")
@@ -133,6 +162,116 @@ async def change_password(body: ChangePasswordRequest, request: Request):
     from datetime import datetime
     db.execute(
         "UPDATE users SET password_hash = %s, updated_at = %s WHERE id = %s",
-        (new_hash, datetime.now().isoformat(), user["id"]),
+        (new_hash, datetime.now().isoformat(), user["user_id"]),
     )
     return {"ok": True}
+
+
+class DeactivateRequest(BaseModel):
+    password: str = Field(min_length=1)
+
+
+@router.get("/me/login-history", summary="获取当前用户登录历史")
+async def get_my_login_history(request: Request, limit: int = 20):
+    """获取当前用户的登录历史"""
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+
+    from app.domain.auth.login_event_repo import get_login_event_repo
+    repo = get_login_event_repo()
+    events = repo.get_user_login_history(user["user_id"], limit=limit)
+    online = repo.get_user_online_status(user["user_id"])
+    active_sessions = repo.get_user_active_sessions(user["user_id"])
+    ip_analysis = repo.get_ip_analysis(user["user_id"])
+
+    return {
+        "online": online,
+        "active_sessions": active_sessions,
+        "login_history": events,
+        "ip_analysis": ip_analysis,
+    }
+
+
+@router.get("/me/active-sessions", summary="获取当前用户活跃会话")
+async def get_my_active_sessions(request: Request):
+    """获取当前用户的活跃会话"""
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+
+    from app.domain.auth.login_event_repo import get_login_event_repo
+    repo = get_login_event_repo()
+    return {"sessions": repo.get_user_active_sessions(user["user_id"])}
+
+
+@router.post("/me/logout-other-devices", summary="踢出其他设备")
+async def logout_other_devices(request: Request):
+    """使其他设备下线（递增 token_version，使旧 token 失效）"""
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+
+    from app.domain.auth.login_event_repo import get_login_event_repo
+    from app.db.database import get_db
+    from datetime import datetime
+    
+    user_id = user["user_id"]
+    
+    # 递增 token_version 使其他设备的 token 失效
+    db = get_db()
+    db.execute(
+        "UPDATE users SET token_version = COALESCE(token_version, 0) + 1, updated_at = %s WHERE id = %s",
+        (datetime.now().isoformat(), user_id),
+    )
+    
+    # 清除其他设备的 is_current 标记
+    repo = get_login_event_repo()
+    db.execute(
+        "UPDATE login_events SET is_current = FALSE WHERE user_id = %s",
+        (user_id,),
+    )
+    
+    # 重新标记当前会话为 is_current
+    # 当前会话通过当前请求的 IP + UA 来识别
+    ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    if not ip:
+        ip = request.client.host if request.client else ""
+    ua = request.headers.get("user-agent", "")
+    db.execute(
+        """UPDATE login_events SET is_current = TRUE 
+           WHERE user_id = %s AND ip_address = %s AND user_agent = %s
+           ORDER BY created_at DESC LIMIT 1""",
+        (user_id, ip, ua[:500]),
+    )
+    
+    return {"ok": True, "message": "其他设备已下线"}
+
+
+@router.post("/deactivate", summary="注销账号")
+async def deactivate_account(body: DeactivateRequest, request: Request):
+    """注销当前用户账号（软删除）"""
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+
+    svc = get_auth_service()
+    from domain.auth.repository import get_user_repo
+    repo = get_user_repo()
+    full_user = repo.find_by_username(user["username"])
+    if not full_user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    if not svc.verify_password(body.password, full_user["password_hash"]):
+        raise HTTPException(status_code=400, detail="密码错误")
+
+    from app.db.database import get_db
+    db = get_db()
+    from datetime import datetime
+    now = datetime.now().isoformat()
+    # 软删除：标记为已注销，用户名加后缀防止重复
+    db.execute(
+        "UPDATE users SET deleted_at = %s, username = %s, status = 'deactivated' WHERE id = %s",
+        (now, f"{full_user['username']}_deleted_{user['id'][:8]}", user["user_id"]),
+    )
+    return {"ok": True, "message": "账号已注销"}

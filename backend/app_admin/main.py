@@ -13,6 +13,7 @@ Admin 子应用 — 独立 FastAPI 应用（端口 8001）
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -31,18 +32,46 @@ from app_admin.routers import users, data, monitor, analytics, settings  # noqa:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("app_admin")
 
+# 生产环境关闭 docs（通过 ENV=production 或 APP_DEBUG=false 控制）
+_is_production = os.getenv("ENV") == "production" or os.getenv("APP_DEBUG") == "false"
+_admin_docs_url = None if _is_production else "/admin/docs"
+
 _fastapi_app = FastAPI(
     title="Edu Companion Admin",
     version="1.0.0",
     description="独立管理子应用 — 跨用户 CRUD / 监控 / BI / 用户角色",
-    docs_url="/admin/docs",
-    openapi_url="/admin/openapi.json",
+    docs_url=_admin_docs_url,
+    openapi_url="/admin/openapi.json" if not _is_production else None,
 )
 
+
+# 安全响应头中间件
+@_fastapi_app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "connect-src 'self' ws: wss:; "
+        "font-src 'self'; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'"
+    )
+    response.headers["Content-Security-Policy"] = csp
+    return response
+
+
 # CORS（独立部署时 admin 前端 3001 可访问）
+_cors_origins = os.getenv("ADMIN_CORS_ORIGINS", "http://localhost:3001,http://127.0.0.1:3001").split(",")
 _fastapi_app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3001", "http://127.0.0.1:3001"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

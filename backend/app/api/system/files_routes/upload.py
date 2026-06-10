@@ -43,6 +43,9 @@ ALLOWED_EXTENSIONS = {
     ".zip",
 }
 
+# 最大文件大小限制（50MB）
+MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+
 
 # ── 工具函数 ──
 
@@ -93,9 +96,12 @@ async def upload_file(
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail=f"不支持的文件格式: {ext}")
 
-    material_id = str(uuid.uuid4())
+    # 文件大小限制检查
     content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail=f"文件大小超过限制（最大 {MAX_FILE_SIZE // (1024 * 1024)}MB）")
 
+    material_id = str(uuid.uuid4())
     actual_purpose = purpose
     if purpose == "auto":
         actual_purpose = _classify_purpose(len(content), upload_source)

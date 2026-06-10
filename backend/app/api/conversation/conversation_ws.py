@@ -13,13 +13,10 @@ import uuid
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect  # type: ignore
 
-from shared.constants import DEFAULT_USER_ID
 from app.services.conversation.active_stream import active_streams
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-USER_ID = DEFAULT_USER_ID
 
 
 # ═══════════════════════════════════════════
@@ -29,9 +26,18 @@ USER_ID = DEFAULT_USER_ID
 
 @router.websocket("/ws")
 async def websocket_conversation(websocket: WebSocket) -> None:
-    """WebSocket 流式对话端点，后台 generator 不依赖 WS 连接"""
+    """WebSocket 流式对话端点，后台 generator 不依赖 WS 连接
+
+    认证机制：
+    - 请求经 auth-gateway（:18001）代理转发，由 gateway 完成 JWT 验证
+    - user_id 由 gateway 注入到 query 参数，backend 信任内网来源，直接使用
+    """
+    # 从 query 参数获取 user_id（由 auth-gateway 注入）
+    user_id = websocket.query_params.get("user_id", "")
+    if not user_id:
+        await websocket.close(code=4001)
+        return
     await websocket.accept()
-    user_id = USER_ID
 
     try:
         while True:

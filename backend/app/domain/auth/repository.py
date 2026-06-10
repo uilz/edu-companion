@@ -31,7 +31,9 @@ class UserRepo:
                 display_name TEXT DEFAULT '',
                 role        TEXT DEFAULT 'user',
                 is_active   BOOLEAN DEFAULT TRUE,
+                token_version INTEGER DEFAULT 0,
                 last_login  TIMESTAMP,
+                last_active_at TIMESTAMP,
                 created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
                 updated_at  TIMESTAMP NOT NULL DEFAULT NOW()
             )
@@ -39,6 +41,16 @@ class UserRepo:
         self._db.execute("""
             CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)
         """)
+        # 兼容旧表：添加 last_active_at 列
+        try:
+            self._db.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP")
+        except Exception:
+            pass
+        # 兼容旧表：添加 token_version 列
+        try:
+            self._db.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER DEFAULT 0")
+        except Exception:
+            pass
 
     def create(self, user_id: str, username: str, password_hash: str,
                email: str = "", display_name: str = "") -> dict:
@@ -69,8 +81,26 @@ class UserRepo:
         """更新最后登录时间"""
         now = datetime.now().isoformat()
         self._db.execute(
-            "UPDATE users SET last_login = %s, updated_at = %s WHERE id = %s",
-            (now, now, user_id),
+            "UPDATE users SET last_login = %s, last_active_at = %s, updated_at = %s WHERE id = %s",
+            (now, now, now, user_id),
+        )
+
+    def update_last_active(self, user_id: str) -> None:
+        """更新最后活动时间（节流：5分钟内不重复更新）"""
+        row = self._db.fetchone(
+            "SELECT last_active_at FROM users WHERE id = %s", (user_id,)
+        )
+        if row and row.get("last_active_at"):
+            try:
+                last = datetime.fromisoformat(str(row["last_active_at"]))
+                if (datetime.now() - last).total_seconds() < 300:  # 5分钟内不更新
+                    return
+            except (ValueError, TypeError):
+                pass
+        now = datetime.now().isoformat()
+        self._db.execute(
+            "UPDATE users SET last_active_at = %s WHERE id = %s",
+            (now, user_id),
         )
 
     def update_profile(self, user_id: str, display_name: str = None, email: str = None) -> None:

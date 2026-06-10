@@ -30,8 +30,6 @@ from typing import Optional
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 
-from shared.constants import DEFAULT_USER_ID
-
 logger = logging.getLogger(__name__)
 
 # ── 加载 auth-gateway 的 .env 配置（与网关共享 JWT_SECRET）──
@@ -46,7 +44,9 @@ if _AUTH_GATEWAY_ENV.exists():
             os.environ.setdefault(_key.strip(), _val.strip())
 
 # JWT 密钥必须与 auth-gateway 一致
-JWT_SECRET = os.getenv("JWT_SECRET", "auth-gateway-secret-key-2026-change-in-production")
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET environment variable is not set")
 JWT_ALGORITHM = "HS256"
 
 
@@ -141,7 +141,7 @@ class AdminAuthMiddleware:
         scope = dict(scope)
         scope["state"] = dict(scope.get("state") or {})
         scope["state"]["user"] = user
-        scope["state"]["user_id"] = user["user_id"] if user else DEFAULT_USER_ID
+        scope["state"]["user_id"] = user["user_id"] if user else None
         return await self.app(scope, receive, send)
 
 
