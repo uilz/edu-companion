@@ -6,7 +6,6 @@ import logging
 import re
 from app.schemas.conversation import ResponseBlock
 
-from shared.constants import DEFAULT_USER_ID
 logger = logging.getLogger(__name__)
 
 # ── 意图预判规则 ──
@@ -156,7 +155,7 @@ async def _handle_generate_practice(params: dict) -> dict:
 
         result = await handle_question_generation(
             user_message=user_text[:200],
-            user_id=DEFAULT_USER_ID,
+            user_id,
             conversation_id=conversation_id or None,
             bank_name=bank_name,
         )
@@ -354,12 +353,13 @@ async def _handle_query_question_banks(params: dict) -> dict:
     bank_id = params.get("bank_id", "")
     keyword = params.get("keyword", "")
     limit = params.get("limit", 20)
+    user_id = params.get("user_id", "")
 
     from app.services.practice.practice_question_bank import list_banks, get_bank
 
     try:
         if action == "list_banks":
-            banks = list_banks(DEFAULT_USER_ID)
+            banks = list_banks(user_id) if user_id else []
             items = []
             for b in banks[:limit]:
                 items.append({
@@ -377,7 +377,7 @@ async def _handle_query_question_banks(params: dict) -> dict:
             }
 
         elif action == "get_bank" and bank_id:
-            bank = get_bank(bank_id, DEFAULT_USER_ID)
+            bank = get_bank(bank_id, user_id) if user_id else None
             if not bank:
                 return {"action": "get_bank", "error": f"未找到题库: {bank_id}", "found": False}
 
@@ -482,7 +482,7 @@ async def _handle_create_question_bank(params: dict) -> dict:
     from app.services.practice.practice_question_bank import create_bank
 
     bank = create_bank(
-        user_id=DEFAULT_USER_ID,
+        user_id,
         name=name,
         description=description,
         auto_created=False,
@@ -514,7 +514,7 @@ TOOL_HANDLERS = {
 class ToolExecutor:
     """统一的工具执行器"""
 
-    async def execute(self, tool_name: str, params: dict) -> ResponseBlock:
+    async def execute(self, tool_name: str, params: dict, user_id: str = "") -> ResponseBlock:
         """执行工具，返回 ResponseBlock"""
         handler = TOOL_HANDLERS.get(tool_name)
         if not handler:
@@ -522,6 +522,10 @@ class ToolExecutor:
                 type=tool_name, status="failed",
                 content={"error": f"Unknown tool: {tool_name}"}
             )
+
+        # 注入 user_id 到 params
+        if user_id:
+            params = {**params, "user_id": user_id}
 
         if tool_name in FAST_TOOLS:
             return await self._execute_inline(tool_name, handler, params)
