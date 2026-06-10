@@ -27,7 +27,7 @@ _Avoid_: 仪表盘（中文用"驾驶舱"）
 秘书系统前端（路由 `/secretary`）。展示 Proposal 列表（待处理/已采纳/已忽略），支持分页。子路由 `/secretary/settings` 为模块配置页（复习提醒/疲劳管理/日简报等模块开关）。
 
 **Settings Page (设置页)**:
-全局设置页面（路由 `/settings`）。含子路由：`/settings/data`（数据管理：导出/导入/重置）。支持设计风格切换（professional / playful / knowledge / soft-data / gamified）、亮暗主题切换。
+全局设置页面（路由 `/settings`）。含子路由：`/settings/data`（数据管理：导出/导入/重置）。支持设计风格切换（professional / playful / knowledge / soft-data / gamified）、亮暗主题切换。API 设置区域支持用户自定义 LLM 模型配置：API 端点 / API Key（密码输入框）/ 模型名称 / 系统提示词。配置通过 `authedFetch` 与后端 `/api/settings/llm` 交互（GET 加载 / PUT 保存 / DELETE 重置），API Key 加密存储在服务端。页面显示自定义状态指示器（"已启用自定义模型" / "使用系统默认模型"），保存/重置按钮及操作结果提示。学习偏好（系统提示词 / 苏格拉底模式 / 追问模式）单独本地存储。
 
 **Files Page (文件管理)**:
 文件管理页面（路由 `/files`）。双区设计：知识库（永久保留）+ 临时文件（跟随对话，7 天清理）。`/files/[material_id]` 展示材料详情（含 TOC 目录树）。

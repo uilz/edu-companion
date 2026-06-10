@@ -201,6 +201,26 @@ _Avoid_: 分支（branch 是 v3 旧概念，指会话级分支）
 独立认证网关服务（`auth-gateway/`，端口 8001/18001）。负责用户注册/登录/密码修改/JWT 签发与验证。完全独立——独立数据库、独立 JWT 密钥库。
 _Avoid_: auth service（与业务后端的 auth middleware 混淆时）
 
+**Login Event (登录事件)**:
+每次用户登录时记录的事件，存储在 `login_events` 表。含 user_id / ip_address / device_type / browser / os / region / login_time。通过 UA 解析工具 `infrastructure/ua_parser.py` 从 User-Agent 提取设备/浏览器/OS 信息。IP 区域使用简化版本地/内网/公网推断。
+
+**Online Status (在线状态)**:
+基于 `users.last_active_at` 字段判定。每次认证请求更新（5 分钟节流），30 分钟内活跃视为在线。API：`GET /api/auth/me/active-sessions`（查看自己）、`GET /api/auth/users/online/list`（管理员查看在线用户）。
+
+### 用户设置系统
+
+**Settings API**:
+用户自定义设置 API（`/api/settings/llm`）。三个端点：`GET`（查询自定义配置，API Key 脱敏返回）、`PUT`（保存配置，Key 加密存储）、`DELETE`（重置为系统默认）。所有端点需要 JWT 认证。
+
+**User LLM Config (用户自定义 LLM 配置)**:
+存储在 `user_llm_configs` 表。字段：user_id / api_base / api_key_encrypted / model_name / is_active / updated_at。API Key 使用 Fernet 对称加密（密钥从 DB_PASSWORD 派生），存储时 `encrypt()` 加密，读取时 `decrypt()` 解密。GET 返回时脱敏显示（`sk-12345678****5678`）。
+
+**LLM Config Injection (配置注入机制)**:
+`LLMService.generate()` 和 `generate_stream()` 新增 `user_id` 参数。调用 `_get_user_llm_kwargs(user_id)` 查询用户自定义配置，若存在则用用户的 `api_key` / `api_base` / `model` 覆盖 LiteLLM 的全局参数。用户未配置时完全不受影响，继续使用系统 `.env` 配置。6 个 LLM 调用点均已注入：`llm_core.py`（流式/非流式）、`tool_dispatch.py`（3 处）、`conversation/llm.py`（流式探测）。
+
+**Crypto (加密工具)**:
+`infrastructure/crypto.py` 提供 `encrypt(plaintext)` / `decrypt(ciphertext)` 函数。基于 `cryptography.fernet.Fernet` 对称加密。密钥生成规则：优先用 `ENCRYPTION_KEY` 环境变量，其次用 `DB_PASSWORD` 的 SHA-256 哈希派生。
+
 **Next.js Rewrites (前端代理)**:
 生产环境前端 Next.js（:3000）通过 rewrites 将 `/api/*` 和 `/ws/*` 请求转发到后端（127.0.0.1:8000）。实现同源访问，替代 Nginx。
 _Avoid_: Nginx 反向代理（目前由 Next.js rewrites 替代）

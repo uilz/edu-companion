@@ -1,6 +1,6 @@
 # 系统架构总览 v8.0
 
-> 版本: v8.2.0 | 最后更新: 2026-06-07
+> 版本: v8.4.0 | 最后更新: 2026-06-09
 > CognitiveNode 是唯一数据源，所有模块的认知状态以此为基准。
 
 ---
@@ -17,8 +17,9 @@
 | 状态管理 | Zustand | 分模块 store（conversation/、explain/） |
 | 后端 | Python FastAPI | 异步高性能，OpenAPI 自动文档 |
 | 数据库 | PostgreSQL 14+ + pgvector | JSONB 灵活存储 + 向量检索 |
-| LLM | OpenAI 兼容 API | 通过 .env 配置模型名 |
-| 认证 | 独立认证网关 | 与业务后端完全解耦 |
+| LLM | LiteLLM（统一路由） | 支持 OpenAI / DeepSeek / 通义千问 / Anthropic 等 100+ 模型，支持用户自定义配置 |
+| 认证 | 独立认证网关 | 与业务后端完全解耦，独立 JWT 管理 |
+| 加密 | cryptography (Fernet) | API Key 等敏感信息加密存储 |
 | 部署 | Docker + Nginx | 双容器部署，前端 standalone 模式 |
 
 ---
@@ -37,6 +38,7 @@ backend/
 │   │
 │   ├── domain/           # 领域层 — 业务逻辑核心
 │   │   ├── analytics/    # 分析域（行为分析、情绪分析、习惯养成）
+│   │   ├── auth/         # 认证域（用户、登录事件、LLM 自定义配置）
 │   │   ├── conversation/ # 对话域
 │   │   ├── knowledge/    # 知识域（图谱、认知引擎、ZPD）
 │   │   ├── practice/     # 练习域
@@ -47,7 +49,7 @@ backend/
 │   │   ├── conversation/ # 对话服务（LLM 对话、消息仓库）
 │   │   ├── knowledge/    # 知识服务（图谱展开、ZPD 调度）
 │   │   ├── practice/     # 练习服务（自适应、题库、错题）
-│   │   ├── llm/          # LLM 服务（核心、提示词、嵌入）
+│   │   ├── llm/          # LLM 服务（核心、提示词、工具调度、嵌入、服务）
 │   │   └── ...
 │   │
 │   ├── cognitive/        # 认知引擎模型
@@ -138,7 +140,7 @@ frontend/src/
 采用**独立认证网关**方案，与业务后端完全解耦：
 
 ```
-前端 → 认证网关(:8001) → 业务后端(:8000)
+前端 → 认证网关(:18001) → 业务后端(:8000)
            ↘              ↘
         认证数据库      业务数据库
 ```
@@ -146,6 +148,31 @@ frontend/src/
 - 认证网关独立进程、独立数据库，负责注册/登录/JWT 签发
 - 业务后端通过中间件验证 JWT，注入用户上下文
 - 前端全局 fetch 拦截器自动附加 Token
+
+### 用户自定义 LLM 配置
+
+```
+前端设置页 → PUT /api/settings/llm → 业务后端
+                                         │
+                                     ├── Fernet 加密 api_key
+                                     ├── 存入 user_llm_configs 表
+                                     └── 返回 { ok: true }
+
+对话系统 → LLMService.generate(user_id=xxx)
+               │
+           ├── 查询 user_llm_configs
+           ├── 解密 api_key
+           └── 调用 LiteLLM(api_key, api_base, model)
+```
+
+### 登录事件追踪
+
+| 事件 | 存储表 | 数据 |
+|------|--------|------|
+| 用户登录 | `login_events` | user_id, ip_address, device_type, browser, os, region, login_time |
+| 用户活跃 | `users.last_active_at` | 每次请求更新（5 分钟节流） |
+
+在线状态判定：`last_active_at` 在最近 30 分钟内 → 在线。
 
 ---
 
@@ -176,7 +203,7 @@ Nginx (:80/443)
 
 | 数据库 | 用途 | 归属 |
 |--------|------|------|
-| 业务数据库 (PostgreSQL) | CognitiveNode、对话、图谱、练习等 | 业务后端 |
+| 业务数据库 (PostgreSQL) | CognitiveNode、对话、图谱、练习、login_events、user_llm_configs 等 | 业务后端 |
 | 认证数据库 (PostgreSQL) | 用户、凭据、JWT | 认证网关 |
 
 ---
@@ -187,7 +214,7 @@ Nginx (:80/443)
 |------|------|------|
 | 前端 ↔ 后端 | REST + WebSocket | REST 用于 CRUD，WS 用于流式对话 |
 | 前端 ↔ 认证网关 | REST | 注册、登录、Token 刷新 |
-| 后端 ↔ LLM | HTTP | OpenAI 兼容 API |
+| 后端 ↔ LLM | HTTP (LiteLLM) | 通过 LiteLLM 统一路由，支持 100+ 模型，支持用户自定义配置 |
 
 ---
 

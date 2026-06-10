@@ -1,9 +1,9 @@
 # 智能伴学系统架构文档 v8.0
 
-> 版本: v8.2.0
-> 最后更新: 2026-06-07
-> 当前版本号: v8.2.0
-> 状态: 知识树交互重构 + 浮动球吸附系统 + 侧栏拖拽调整 (✅) | 分层重构已完成（后端 + 前端）
+> 版本: v8.4.0
+> 最后更新: 2026-06-09
+> 当前版本号: v8.4.0
+> 状态: 用户自定义 LLM 配置 + 登录事件追踪 + 架构文档更新
 
 ---
 
@@ -19,8 +19,9 @@
 | 状态管理 | Zustand | 分模块 store（conversation/、explain/） |
 | 后端 | Python FastAPI | 异步高性能，OpenAPI 自动文档 |
 | 数据库 | PostgreSQL 14+ + pgvector | JSONB 灵活存储 + 向量检索 |
-| LLM | OpenAI 兼容 API | 通过 .env 配置模型名 |
+| LLM | LiteLLM（统一路由） | 支持 OpenAI / DeepSeek / 通义千问 / Anthropic 等 100+ 模型，支持用户自定义配置 |
 | 认证 | 独立认证网关 | 与业务后端完全解耦，独立数据库、JWT 管理 |
+| 加密 | cryptography (Fernet) | API Key 等敏感信息加密存储 |
 | 部署 | Docker + Nginx | 双容器部署，前端 standalone 模式 |
 
 ---
@@ -39,7 +40,7 @@ backend/
 │   │
 │   ├── domain/                   # 领域层 — 业务逻辑核心
 │   │   ├── analytics/            # 分析域（行为分析、情绪分析、习惯养成）
-│   │   ├── auth/                 # 认证域（JWT、用户、会话）
+│   │   ├── auth/                 # 认证域（JWT、用户、会话、登录事件、LLM 自定义配置）
 │   │   ├── conversation/         # 对话域
 │   │   ├── habits/               # 习惯域
 │   │   ├── knowledge/            # 知识域（图谱、认知引擎、ZPD）
@@ -76,6 +77,8 @@ backend/
 │
 ├── infra/                        # 基础设施层 — 外部依赖适配
 │   ├── llm/                      # LLM 客户端适配
+│   ├── crypto.py                 # Fernet 加密工具
+│   ├── ua_parser.py              # User-Agent 解析工具
 │   └── database.py               # 数据库兼容重导出
 │
 └── auth-gateway/                 # 独立认证网关（独立进程）
@@ -107,7 +110,7 @@ frontend/src/
 │   ├── practice/                 # 练习页
 │   ├── focus/                    # 专注模式页
 │   ├── graph/                    # 图谱页
-│   ├── settings/                 # 设置页
+│   ├── settings/                 # 设置页（主题、API 自定义 LLM 配置、学习偏好）
 │   └── ...
 │
 ├── components/                   # UI 组件 — 按业务域分组
@@ -177,7 +180,7 @@ frontend/src/
 ┌─────────────┐     ┌──────────────────┐     ┌──────────────────┐
 │   前端       │────▶│  认证网关         │────▶│  业务后端         │
 │  Next.js    │     │  auth-gateway    │     │  FastAPI         │
-│             │◀────│  :8001           │     │  :8000           │
+│             │◀────│  :18001          │     │  :8000           │
 └─────────────┘     └──────────────────┘     └──────────────────┘
                            │                          │
                     ┌──────┴──────┐            ┌──────┴──────┐
@@ -189,6 +192,32 @@ frontend/src/
 - **认证网关**：独立进程，独立数据库，负责注册/登录/密码修改/JWT 签发
 - **业务后端**：通过认证中间件验证 JWT，注入用户上下文
 - **前端**：全局 fetch 拦截器自动附加 Token
+
+### 4.1 用户自定义 LLM 配置
+
+用户可在设置页自定义 AI 模型参数，API Key 加密存储：
+
+```
+PUT /api/settings/llm → Fernet 加密 api_key → 存入 user_llm_configs 表
+GET /api/settings/llm → 解密 → 脱敏返回（sk-12345678****5678）
+DELETE /api/settings/llm → 删除配置
+```
+
+对话时自动注入：
+
+```
+LLMService.generate(user_id=xxx) → 查询 user_llm_configs → 解密 api_key
+                                   → LiteLLM.acompletion(api_key, base_url, model)
+```
+
+### 4.2 登录事件追踪
+
+| 事件 | 存储表 | 数据 |
+|------|--------|------|
+| 用户登录 | `login_events` | user_id, ip_address, device_type, browser, os, region, login_time |
+| 用户活跃 | `users.last_active_at` | 每次请求更新（5 分钟节流） |
+
+在线状态判定：`last_active_at` 在最近 30 分钟内 → 在线。
 
 ---
 

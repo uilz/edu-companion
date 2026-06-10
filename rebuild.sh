@@ -90,7 +90,10 @@ echo "[$TIMESTAMP] ✅ 认证网关语法检查通过"
 
 echo "[$TIMESTAMP] 🔨 构建前端..."
 cd "$PROJECT_DIR/frontend"
-npm run build 2>&1 | tail -3
+NODE_OPTIONS="--max-old-space-size=2048" \
+NEXT_TELEMETRY_DISABLED=1 \
+NODE_ENV=production \
+  npx next build --no-lint 2>&1 | tail -20
 echo "[$TIMESTAMP] ✅ 构建完成"
 
 echo "[$TIMESTAMP] 🚀 启动认证网关 (uvicorn @ :18001)..."
@@ -173,8 +176,8 @@ fi
 
 echo "[$TIMESTAMP] 🎯 全部完成"
 echo "[$TIMESTAMP] 📊 服务状态:"
-echo "  - 认证网关:    http://127.0.0.1:18001"
-echo "  - 后端 API:    http://127.0.0.1:8000"
+echo "  - 认证网关:    http://127.0.0.1:18001  (统一对外入口)"
+echo "  - 后端 API:    http://127.0.0.1:8000   (内网，通过网关代理)"
 echo "  - 前端:        http://127.0.0.1:3000"
-echo "  - admin 后端:  http://127.0.0.1:8001"
-echo "  - admin 前端:  http://127.0.0.1:3001"
+echo "  - admin 后端:  http://127.0.0.1:8001   (仅内网)"
+echo "  - admin 前端:  http://127.0.0.1:3001   (仅内网/本机)"

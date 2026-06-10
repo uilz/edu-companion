@@ -4,6 +4,132 @@
 
 ---
 
+## [8.4.1] - 2026-06-10
+
+### 🔐 上线安全加固
+
+> 全面修复生产环境安全漏洞，包括用户数据隔离、认证安全、请求限流、文件上传安全等。
+
+#### 后端 — 用户数据隔离
+
+| 修复 | 文件 | 说明 |
+|------|------|------|
+| 会话路由用户隔离 | `app/api/conversation/conversation_routes.py` | 21 个路由全部改为 `Depends(current_user_id)` 动态注入，修复硬编码 `DEFAULT_USER_ID` 导致的用户数据共享问题 |
+
+#### 认证安全
+
+| 修复 | 文件 | 说明 |
+|------|------|------|
+| JWT 密钥统一 | `app/domain/auth/service.py` / `auth-gateway/auth_app/jwt_service.py` / `app_admin/deps.py` | 统一使用 `JWT_SECRET` 环境变量，缺失时强制报错退出 |
+| AUTH_GATEWAY_URL 环境变量化 | `app/domain/auth/middleware.py` | 从环境变量读取认证网关地址 |
+| 密码策略强化 | `auth-gateway/auth_app/main.py` | 最小 8 位 + 必须包含大小写字母和数字 |
+| 登录限流 | `auth-gateway/auth_app/main.py` | 60秒内最多尝试 5 次，超过返回 429 |
+
+#### CORS 与安全响应头
+
+| 修复 | 文件 | 说明 |
+|------|------|------|
+| CORS 白名单 | `auth-gateway/auth_app/main.py` | 从环境变量读取允许的源列表 |
+| 安全响应头 | `app/main.py` / `auth-gateway/auth_app/main.py` / `app_admin/main.py` | 添加 `X-Content-Type-Options`、`X-Frame-Options`、`X-XSS-Protection`、`Referrer-Policy` |
+
+#### 请求安全
+
+| 修复 | 文件 | 说明 |
+|------|------|------|
+| 请求超时 | `app/main.py` / `auth-gateway/auth_app/main.py` | 30 秒请求超时，防止慢速请求攻击 |
+| 文件上传大小限制 | `app/api/system/files_routes/upload.py` | 最大 50MB，防止 DoS 攻击 |
+
+#### 运维安全
+
+| 修复 | 文件 | 说明 |
+|------|------|------|
+| 生产环境关闭 docs | 所有 main.py | 根据 `ENV=production` 自动关闭 API 文档 |
+| 删除敏感端点 | `app_admin/routers/settings.py` | 删除 `/api/admin/settings/env` 端点，防止环境变量泄露 |
+
+#### WebSocket 安全
+
+| 修复 | 文件 | 说明 |
+|------|------|------|
+| WS 用户隔离 | `auth-gateway/auth_app/main.py` / `app/api/conversation/conversation_ws.py` | auth-gateway WS 代理注入 `user_id` query 参数，backend WS 从 query 读取，修复 WS 端点使用 `DEFAULT_USER_ID` 问题 |
+
+#### 安全加固
+
+| 修复 | 文件 | 说明 |
+|------|------|------|
+| Content-Security-Policy | 所有 main.py | 添加 CSP 响应头，防御 XSS 和数据注入攻击 |
+| 清理 DEFAULT_USER_ID 默认参数 | `practice_question_bank.py` / `practice_error_book.py` / `achievement_service.py` | 移除 service 函数中的 `DEFAULT_USER_ID` 默认参数，强制调用方传入真实 user_id |
+| 知识图谱路由用户隔离 | `knowledge_routes/__init__.py` / `conv.py` / `crud.py` / `ai.py` / `query.py` | 5 个文件全部路由改为 `Depends(current_user_id)`，移除内部 `_USER_ID = DEFAULT_USER_ID` 硬编码 |
+| admin 中间件回退清理 | `app_admin/deps.py` | `DEFAULT_USER_ID` 回退改为 `None`，避免未认证请求以默认用户身份执行 |
+| 函数体内硬编码清理 | `learning_events.py` / `message_repository.py` / `practice_service.py` / `event_service.py` / `classifier_service.py` / `tool_executor.py` | 6 个文件中函数体内硬编码 `DEFAULT_USER_ID` 调用改为强制 `user_id` 参数，thread 调用链 |
+| 批量清理残留 import | 28 个 domain/service/cognitive 文件 | 移除不再使用的 `from shared.constants import DEFAULT_USER_ID` 语句 |
+| schema 字段默认值清理 | `app/schemas/learning_event.py` | `user_id` 字段移除 `DEFAULT_USER_ID` 默认值，强制调用方传入 |
+| 修复缺失 `import os` + JWT 超时环境变量化 | `app/domain/auth/service.py` | 补充缺失的 `import os`；`JWT_EXPIRE_HOURS` / `JWT_REFRESH_EXPIRE_DAYS` 改为 `os.getenv()` 读取 |
+| 修复 admin CORS 硬编码 + 缺失 `import os` | `app_admin/main.py` | `allow_origins` 硬编码列表改为 `ADMIN_CORS_ORIGINS` 环境变量；补充缺失的 `import os` |
+
+---
+
+## [8.4.0] - 2026-06-09
+
+### 🔐 用户自定义 LLM 配置 + 登录事件追踪
+
+> 用户可在设置页自定义 AI 模型（API 端点/Key/模型名），API Key 加密存储；新增登录事件追踪（设备/IP/区域）及在线状态优化。
+
+#### 后端 — 用户自定义 LLM 配置
+
+| 新增 | 文件 | 说明 |
+|------|------|------|
+| 加密工具 | `app/infrastructure/crypto.py` | Fernet 对称加密，密钥从 DB_PASSWORD 派生 |
+| 用户 LLM 配置仓储 | `app/domain/auth/user_llm_repo.py` | `user_llm_configs` 表 CRUD，API Key 自动加解密 |
+| Settings API 端点 | `app/domain/auth/settings_api.py` | `GET/PUT/DELETE /api/settings/llm` 三个端点 |
+| 路由注册 | `app/main.py` | 注册 `settings_router` |
+| LLMService 自定义支持 | `app/services/llm/llm_service.py` | `generate()`/`generate_stream()` 新增 `user_id` 参数，运行时动态查询并覆盖 api_key/api_base/model |
+| 对话流注入 | `llm_core.py` / `tool_dispatch.py` / `conversation/llm.py` | 6 处 LLM 调用点传入 `user_id` |
+
+#### 后端 — 登录事件追踪
+
+| 新增 | 文件 | 说明 |
+|------|------|------|
+| 登录事件仓储 | `app/domain/auth/login_event_repo.py` | `login_events` 表，记录设备/IP/区域/登录时间 |
+| UA 解析工具 | `app/infrastructure/ua_parser.py` | 轻量级 User-Agent 解析（设备/浏览器/OS），无外部依赖 |
+| IP 区域推断 | `login_event_repo.py` | 简化版 IP 地理信息解析（本地/内网/公网） |
+| 用户活跃追踪 | `app/middleware/auth.py` | 每次请求更新 `last_active_at`（5 分钟节流） |
+| 认证网关集成 | `auth-gateway/auth_app/main.py` | 登录时记录 login_events 到主数据库 |
+
+#### 安全措施
+
+| 措施 | 说明 |
+|------|------|
+| API Key 加密 | 存储时使用 Fernet 对称加密，密钥从环境变量派生 |
+| 返回脱敏 | GET 接口返回 `sk-12345678****5678` 格式脱敏 |
+| JWT 认证 | 所有 settings API 需要 JWT 令牌 |
+| 优雅回退 | 用户自定义配置为空时自动回退系统全局配置 |
+
+#### 前端
+
+| 变更 | 文件 | 说明 |
+|------|------|------|
+| 设置页重构 | `frontend/src/app/settings/page.tsx` | API 设置区域连接后端，添加保存/重置按钮 + 状态指示器 |
+| 学习偏好分离 | `frontend/src/app/settings/page.tsx` | 系统提示词与 API 配置解耦，仅系统提示词本地存储 |
+
+#### 文件变更
+
+| 文件 | 变更 |
+|------|------|
+| `backend/app/infrastructure/crypto.py` | **新增** Fernet 加密工具 |
+| `backend/app/infrastructure/ua_parser.py` | **新增** UA 解析工具 |
+| `backend/app/domain/auth/user_llm_repo.py` | **新增** 用户 LLM 配置仓储 |
+| `backend/app/domain/auth/login_event_repo.py` | **新增** 登录事件仓储 |
+| `backend/app/domain/auth/settings_api.py` | **新增** Settings API 端点 |
+| `backend/app/services/llm/llm_service.py` | **修改** 支持用户自定义配置 |
+| `backend/app/services/llm/llm_core.py` | **修改** 传入 user_id |
+| `backend/app/services/llm/tool_dispatch.py` | **修改** 传入 user_id |
+| `backend/app/domain/conversation/llm.py` | **修改** 传入 user_id |
+| `backend/app/main.py` | **修改** 注册 settings 路由 |
+| `backend/app/middleware/auth.py` | **修改** 用户活跃追踪 |
+| `backend/app/domain/auth/api.py` | **修改** 登录历史/在线状态 API |
+| `auth-gateway/auth_app/main.py` | **修改** 登录事件记录 |
+| `frontend/src/app/settings/page.tsx` | **修改** 连接后端 API |
+
 ## [8.3.0] - 2026-06-08
 
 ### 🧠 练习系统冷启动优化 + 智能增强

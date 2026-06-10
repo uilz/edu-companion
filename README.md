@@ -342,6 +342,29 @@ npm run dev
 | `DB_PASSWORD` | PostgreSQL 密码 | （从环境变量读取，禁止硬编码） |
 | `DB_PORT` | PostgreSQL 端口 | 5433 |
 | `COMPANION_HOME` | 数据目录 | ~/.companion |
+| `ENV` | 运行环境 | development |
+| `JWT_SECRET` | JWT 签名密钥 | （生产环境必须设置） |
+| `CORS_ORIGINS` | CORS 允许的源列表 | http://localhost:3000,http://127.0.0.1:3000 |
+| `AUTH_GATEWAY_URL` | 认证网关地址 | http://127.0.0.1:18001 |
+| `ADMIN_CORS_ORIGINS` | Admin 端 CORS 允许的源列表 | http://localhost:3001,http://127.0.0.1:3001 |
+| `JWT_EXPIRE_HOURS` | JWT 令牌有效期（小时） | 24 |
+| `JWT_REFRESH_EXPIRE_DAYS` | JWT 刷新令牌有效期（天） | 7 |
+
+### 生产环境必需配置
+
+```bash
+# 安全相关
+ENV=production                    # 关闭 API 文档
+JWT_SECRET=your-strong-secret     # 安全的 JWT 密钥（至少 32 位）
+CORS_ORIGINS=https://yourdomain.com
+
+# 数据库
+DB_PASSWORD=your-db-password
+
+# AI 配置
+OPENAI_API_KEY=your-api-key
+OPENAI_API_BASE=https://api.deepseek.com/v1
+```
 
 ### 运行测试
 
