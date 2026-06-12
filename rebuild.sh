@@ -59,12 +59,9 @@ stop_nginx() {
 start_nginx() {
   echo "[$TIMESTAMP] 🚀 启动 Nginx 统一网关 (:8080)..."
   stop_nginx
-  # 确保 nginx 默认日志目录可写（非 root 运行需要）
-  if [ ! -w "/var/log/nginx" ] 2>/dev/null; then
-    sudo mkdir -p /var/log/nginx 2>/dev/null && sudo chown "$USER:$USER" /var/log/nginx 2>/dev/null || true
-  fi
-  # 清理旧日志文件防止权限冲突
-  sudo rm -f /var/log/nginx/error.log /var/log/nginx/access.log 2>/dev/null || true
+  # 确保 nginx 默认日志目录可写
+  mkdir -p /var/log/nginx 2>/dev/null || true
+  rm -f /var/log/nginx/error.log /var/log/nginx/access.log 2>/dev/null || true
   $NGINX_BIN -c "$NGINX_DIR/nginx.conf" -p "$NGINX_DIR" 2>&1
   wait_for_url "http://127.0.0.1:8080/health" "Nginx"
 }
