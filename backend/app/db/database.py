@@ -10,11 +10,15 @@ from __future__ import annotations
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Any, Optional
 
 from dotenv import load_dotenv
 
-load_dotenv()  # 从 .env 加载环境变量
+# 从 config/.env 加载环境变量
+_env_path = Path(__file__).resolve().parent.parent.parent / "config" / ".env"
+if _env_path.exists():
+    load_dotenv(dotenv_path=str(_env_path), override=False)
 
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
