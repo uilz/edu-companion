@@ -65,6 +65,15 @@ class MigrateConversationRequest(BaseModel):
     target_type: str = "normal"
 
 
+class SwitchConfirmRequest(BaseModel):
+    """用户确认 SwitchBanner 后，迁移节点的请求"""
+    source_conversation_id: str
+    source_node_id: str          # 触发分类的用户消息节点 ID
+    target_partition_id: str     # 目标分区 ID
+    target_domain_name: str = "" # 目标领域名（跨分区/同分区专题切换）
+    target_topic_name: str = ""  # 目标专题名
+
+
 class TemporaryConversationRequest(BaseModel):
     pass
 
@@ -208,6 +217,26 @@ async def migrate_conversation(conv_id: str, body: MigrateConversationRequest, u
         raise HTTPException(500, "Internal server error")
 
 
+@router.post("/tree/switch")
+async def switch_conversation(body: SwitchConfirmRequest, user_id: str = Depends(current_user_id)):
+    """用户确认切换推荐后：将触发节点及其子节点迁移到目标层级下的新会话。"""
+    try:
+        result = tree_ops.move_subtree_to_conversation(
+            user_id=user_id,
+            source_node_id=body.source_node_id,
+            target_domain_name=body.target_domain_name,
+            target_topic_name=body.target_topic_name,
+            source_conversation_id=body.source_conversation_id,
+            target_partition_id=body.target_partition_id,
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception:
+        logger.exception("Failed to switch conversation")
+        raise HTTPException(500, "Internal server error")
+
+
 @router.get("/tree/conversation/{conv_id}")
 async def get_conversation(conv_id: str, user_id: str = Depends(current_user_id)):
     """获取单个会话的完整信息（含 parent 链路）。
@@ -235,6 +264,8 @@ async def get_conversation(conv_id: str, user_id: str = Depends(current_user_id)
             domain = data.domains.get(pid)
             if domain:
                 result["partition_id"] = domain.partition_id
+        elif ptype == "partition":
+            result["partition_id"] = pid
     return {"conversation": result}
 
 
@@ -360,8 +391,8 @@ async def get_conversation_blocks(conv_id: str, user_id: str = Depends(current_u
 
 @router.post("/tree/conversation/{conv_id}/message")
 async def send_message_in_conversation(conv_id: str, req: SendMessageRequest, user_id: str = Depends(current_user_id)):
-    """在指定对话中发送消息（用于 WebSocket 降级或直接 HTTP）"""
-    from app.domain.conversation.llm import send_and_reply
+    """在指定对话中发送消息（WebSocket 降级 / 直接 HTTP）"""
+    from app.domain.conversation.conversation_processor import process_message
 
     try:
         pid = req.partition_id
@@ -370,11 +401,9 @@ async def send_message_in_conversation(conv_id: str, req: SendMessageRequest, us
             conv = data.conversations.get(conv_id)
             if not conv:
                 raise HTTPException(404, "Conversation not found")
-            # 新路径：通过 conversation.partition_id
             if conv.partition_id:
                 pid = conv.partition_id
             else:
-                # 回退旧路径：通过 topic → domain → partition
                 for topic in data.topics.values():
                     if topic.id == conv.topic_id:
                         domain = data.domains.get(topic.domain_id)
@@ -383,13 +412,25 @@ async def send_message_in_conversation(conv_id: str, req: SendMessageRequest, us
                             break
         if not pid:
             raise HTTPException(400, "Cannot determine partition")
-        outcome = await send_and_reply(user_id, pid, req.text, conversation_id=conv_id, pending_quote=req.pending_quote)
+
+        assistant_text = ""
+        response_blocks = []
+
+        async for event in process_message(
+            user_id, req.text, pid,
+            conversation_id=conv_id,
+            pending_quote=req.pending_quote,
+        ):
+            if event.type == "token":
+                assistant_text += event.content
+            elif event.type == "tool_block" and event.block:
+                response_blocks.append(event.block)
+
         return {
-            "user_message": outcome["user_message"],
-            "assistant_message": outcome["assistant_message"],
+            "assistant_message": assistant_text,
             "partition_id": pid,
             "conversation_id": conv_id,
-            "response_blocks": outcome.get("response_blocks", []),
+            "response_blocks": response_blocks,
         }
     except HTTPException:
         raise

@@ -128,6 +128,8 @@ links_to?: string[];                       // 指向的其他节点 ID 列表（
   }[];
   // 认知分类关联
   cognitive_node_ids?: string[];              // 关联的 cognitive node IDs
+  // 多 Agent 体系
+  agent_label?: string;                      // "orchestrator" | "tutor" | "coach" | "secretary"
   // 追问问题
   follow_up_questions?: string[];              // 3 个追问问题（最末 assistant 消息）
 }
@@ -208,5 +210,6 @@ export type WSIncomingMessage =
   | { type: "secretary_proposal_update"; content: { id: string; status: string; until?: number | null } } // 提案状态变更同步
   // ── 双向推荐 ──
   | { type: "tree_recommendation"; partition_id: string; message: string; node_count?: number; edge_count?: number; partition_name?: string; needs_generate?: boolean }
-  | { type: "temp_recommendation"; rec_type: string; message: string; partition_id?: string; partition_name?: string; needs_generate?: boolean; create_conversation?: boolean };
+  | { type: "temp_recommendation"; rec_type: string; message: string; partition_id?: string; partition_name?: string; needs_generate?: boolean; create_conversation?: boolean }
+  | { type: "conversation_created"; data: { conversation_id: string } };
 

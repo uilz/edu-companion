@@ -93,6 +93,9 @@ class AdminAuthMiddleware:
 
     def __init__(self, app):
         self.app = app
+        # IP 白名单（逗号分隔，留空 = 不限制）
+        whitelist_raw = os.getenv("ADMIN_IP_WHITELIST", "")
+        self.ip_whitelist = {ip.strip() for ip in whitelist_raw.split(",") if ip.strip()} if whitelist_raw else set()
 
     @staticmethod
     def _extract_token(scope: dict) -> Optional[str]:
@@ -115,15 +118,39 @@ class AdminAuthMiddleware:
                 return kv.split("=", 1)[1]
         return None
 
+    @staticmethod
+    def _get_client_ip(scope: dict) -> str:
+        """从 ASGI scope 提取客户端 IP"""
+        # 优先 x-forwarded-for
+        for k, v in scope.get("headers", []):
+            if k == b"x-forwarded-for":
+                return v.decode("utf-8", "ignore").split(",")[0].strip()
+        # 回退到 client address
+        client = scope.get("client")
+        if client:
+            return client[0]
+        return "unknown"
+
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
 
         path = scope.get("path", "")
 
-        # 公开路径，不注入用户
+        # 公开路径，不限制
         if path in PUBLIC_PATHS or path.startswith("/admin/docs"):
             return await self.app(scope, receive, send)
+
+        # ── IP 白名单检查（如果配置了白名单） ──
+        if self.ip_whitelist:
+            client_ip = self._get_client_ip(scope)
+            if client_ip not in self.ip_whitelist:
+                logger.warning("Admin IP 白名单拒绝: ip=%s path=%s (whitelist=%s)", client_ip, path, self.ip_whitelist)
+                await self._send_json_response(
+                    send, 403,
+                    {"error": "forbidden", "detail": "您的 IP 不在管理后台白名单中"},
+                )
+                return
 
         # 提取 token 并验证
         token = self._extract_token(scope)
@@ -143,6 +170,24 @@ class AdminAuthMiddleware:
         scope["state"]["user"] = user
         scope["state"]["user_id"] = user["user_id"] if user else None
         return await self.app(scope, receive, send)
+
+    @staticmethod
+    async def _send_json_response(send, status_code: int, body: dict):
+        """发送 JSON 响应"""
+        import json
+        data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        await send({
+            "type": "http.response.start",
+            "status": status_code,
+            "headers": [
+                (b"content-type", b"application/json; charset=utf-8"),
+                (b"content-length", str(len(data)).encode()),
+            ],
+        })
+        await send({
+            "type": "http.response.body",
+            "body": data,
+        })
 
 
 # ═══════════════════════════════════════════════════════════

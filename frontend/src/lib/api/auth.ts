@@ -90,14 +90,14 @@ async function authFetch<T>(path: string, body: unknown): Promise<T> {
   return data as T;
 }
 
-export async function login(username: string, password: string): Promise<AuthResult> {
-  const result = await authFetch<AuthResult>("/login", { username, password });
+export async function login(username: string, password: string, turnstileToken?: string): Promise<AuthResult> {
+  const result = await authFetch<AuthResult>("/login", { username, password, turnstile_token: turnstileToken || "" });
   setTokens(result.access_token, result.refresh_token, result.user);
   return result;
 }
 
-export async function loginByEmail(email: string, password: string): Promise<AuthResult> {
-  const result = await authFetch<AuthResult>("/login/email", { email, password });
+export async function loginByEmail(email: string, password: string, turnstileToken?: string): Promise<AuthResult> {
+  const result = await authFetch<AuthResult>("/login/email", { email, password, turnstile_token: turnstileToken || "" });
   setTokens(result.access_token, result.refresh_token, result.user);
   return result;
 }
@@ -107,12 +107,14 @@ export async function register(
   password: string,
   display_name?: string,
   email?: string,
+  turnstileToken?: string,
 ): Promise<AuthResult> {
   const result = await authFetch<AuthResult>("/register", {
     username,
     password,
     display_name: display_name || "",
     email: email || "",
+    turnstile_token: turnstileToken || "",
   });
   setTokens(result.access_token, result.refresh_token, result.user);
   return result;

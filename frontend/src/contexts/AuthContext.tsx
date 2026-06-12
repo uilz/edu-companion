@@ -15,9 +15,9 @@ import { initFetchInterceptor } from "../lib/api/fetch-interceptor";
 interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  loginByEmail: (email: string, password: string) => Promise<void>;
-  register: (username: string, password: string, displayName?: string, email?: string) => Promise<void>;
+  login: (username: string, password: string, turnstileToken?: string) => Promise<void>;
+  loginByEmail: (email: string, password: string, turnstileToken?: string) => Promise<void>;
+  register: (username: string, password: string, displayName?: string, email?: string, turnstileToken?: string) => Promise<void>;
   logout: () => void;
   refresh: () => Promise<void>;
 }
@@ -52,18 +52,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })();
   }, [refresh]);
 
-  const login = async (username: string, password: string) => {
-    const result = await authLogin(username, password);
+  const login = async (username: string, password: string, turnstileToken?: string) => {
+    const result = await authLogin(username, password, turnstileToken);
     setUser(result.user);
   };
 
-  const loginByEmail = async (email: string, password: string) => {
-    const result = await authLoginByEmail(email, password);
+  const loginByEmail = async (email: string, password: string, turnstileToken?: string) => {
+    const result = await authLoginByEmail(email, password, turnstileToken);
     setUser(result.user);
   };
 
-  const register = async (username: string, password: string, displayName?: string, email?: string) => {
-    const result = await authRegister(username, password, displayName, email);
+  const register = async (username: string, password: string, displayName?: string, email?: string, turnstileToken?: string) => {
+    const result = await authRegister(username, password, displayName, email, turnstileToken);
     setUser(result.user);
   };
 

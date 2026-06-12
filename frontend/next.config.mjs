@@ -1,4 +1,25 @@
 /** @type {import('next').NextConfig} */
+
+// 从 config/.env 加载环境变量（不用 dotenv 包，避免额外依赖）
+import { readFileSync, existsSync } from 'fs';
+import { resolve } from 'path';
+
+const envPath = resolve(import.meta.dirname || process.cwd(), 'config', '.env');
+if (existsSync(envPath)) {
+  const content = readFileSync(envPath, 'utf-8');
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx === -1) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    const val = trimmed.slice(eqIdx + 1).trim();
+    if (key && !process.env[key]) {
+      process.env[key] = val;
+    }
+  }
+}
+
 const nextConfig = {
   reactStrictMode: true,
   // output: "standalone",  // 临时注释，用 next start 正常启动
@@ -20,26 +41,7 @@ const nextConfig = {
   },
   async rewrites() {
     return [
-      // WebSocket 对话代理（走认证网关统一入口，由网关转发到后端）
-      {
-        source: "/api/conversations/ws",
-        destination: "http://127.0.0.1:18001/api/conversations/ws",
-      },
-      // WebSocket 其他代理（走认证网关统一入口）
-      {
-        source: "/ws/:path*",
-        destination: "http://127.0.0.1:18001/ws/:path*",
-      },
-      // REST API 代理到认证网关（网关转发到主后端）
-      {
-        source: "/api/:path*",
-        destination: "http://127.0.0.1:18001/api/:path*",
-      },
-      // 头像静态文件代理到认证网关
-      {
-        source: "/avatars/:path*",
-        destination: "http://127.0.0.1:18001/avatars/:path*",
-      },
+      // Nginx 统一网关处理所有 API/WS 路由，无需 Next.js rewrite
     ];
   },
 };

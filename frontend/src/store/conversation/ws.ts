@@ -31,6 +31,7 @@ export type WSCallbacks = {
   onJobUpdate?: (job: BackgroundJob) => void;
   onConnect?: () => void;
   onDisconnect?: () => void;
+  onConversationCreated?: (data: { conversation_id: string }) => void;
 };
 
 // ══════════════════ WebSocket 管理器: 单连接 + 指数退避重连 ══════════════════
@@ -46,10 +47,11 @@ export class ConversationWS {
     this.callbacks = cbs;
     if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
 
-    // 始终使用相对路径 —— 通过 Next.js rewrites → 认证网关 (:18001) → 后端 (:8000)
-    // 所有流量都走统一入口，在网关层做 JWT 验证
-    // 浏览器 WebSocket API 不支持自定义 header，将 access_token 放到 query 参数中
     const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : "";
+
+    // 统一使用相对路径 —— Nginx 统一网关处理所有路由
+    //   /api/conversations/ws  →  auth-gateway :18001（JWT 验证 + 注入 user_id → 后端）
+    //   REST API 同源，浏览器自动发到当前 origin
     const url = token ? `/api/conversations/ws?token=${encodeURIComponent(token)}` : "/api/conversations/ws";
 
     try {
@@ -94,6 +96,9 @@ export class ConversationWS {
               this.callbacks?.onToken(data.content);
               break;
             case "resume_done":   // 无活跃流可续
+              break;
+            case "conversation_created":  // 自动创建了新会话
+              this.callbacks?.onConversationCreated?.(data.data);
               break;
             // user_message, pong, status — 无需处理
           }

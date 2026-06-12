@@ -1,16 +1,17 @@
 "use client";
 
 /**
- * 登录 / 注册页（v2）
+ * 登录 / 注册页（v3 — 集成 Cloudflare Turnstile）
  *
  * 设计要点:
  * 1. 主区一个表单，根据当前 LocalProvider 动态渲染字段
  * 2. 登录按钮下方一行 chip「使用 用户名 / 邮箱 登录」→ 不抢主视觉、可扩展
  * 3. OAuth（未来）独立一排按钮，与本地登录互不干扰
  * 4. 切换方式时，只切换字段，不刷新页面
+ * 5. 注册/登录集成 Turnstile 人机验证
  */
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { BookOpen, Loader2 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import {
@@ -18,6 +19,9 @@ import {
   ENABLED_OAUTH_PROVIDERS,
   type LocalLoginProvider,
 } from "@/lib/auth/providers";
+
+// Turnstile 站点密钥（在 .env.local 中配置）
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
 
 type Mode = "login" | "register";
 
@@ -35,9 +39,15 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Turnstile 状态
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const turnstileRef = useRef<HTMLDivElement>(null);
+  const turnstileWidgetId = useRef<string | null>(null);
+
   const switchMode = (m: Mode) => {
     setMode(m);
     setError("");
+    setTurnstileToken("");
   };
 
   const switchLocalProvider = (idx: number) => {
@@ -45,27 +55,103 @@ export default function LoginPage() {
     setError("");
   };
 
+  // ── 加载 Turnstile 脚本并渲染 widget ──
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY || !turnstileRef.current) return;
+
+    // 如果 widget 已渲染，重置
+    const win = window as any;
+    if (turnstileWidgetId.current && win.turnstile) {
+      win.turnstile.reset(turnstileWidgetId.current);
+      return;
+    }
+
+    // 加载 Turnstile 脚本
+    if (!document.getElementById("turnstile-script")) {
+      const script = document.createElement("script");
+      script.id = "turnstile-script";
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+      script.async = true;
+      script.defer = true;
+      script.onload = () => {
+        renderTurnstile();
+      };
+      document.body.appendChild(script);
+    } else if ((window as any).turnstile) {
+      renderTurnstile();
+    }
+
+    function renderTurnstile() {
+      if (!turnstileRef.current || !(window as any).turnstile) return;
+      // 清除已有内容
+      turnstileRef.current.innerHTML = "";
+      turnstileWidgetId.current = (window as any).turnstile.render(
+        turnstileRef.current,
+        {
+          sitekey: TURNSTILE_SITE_KEY,
+          callback: (token: string) => {
+            setTurnstileToken(token);
+          },
+          "expired-callback": () => {
+            setTurnstileToken("");
+          },
+          "error-callback": () => {
+            setTurnstileToken("");
+          },
+          theme: "auto",
+        }
+      );
+    }
+
+    return () => {
+      // 清理 widget
+      if (turnstileWidgetId.current && (window as any).turnstile) {
+        try {
+          (window as any).turnstile.remove(turnstileWidgetId.current);
+        } catch {}
+        turnstileWidgetId.current = null;
+      }
+    };
+  }, [mode, providerIdx]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    // Turnstile 验证检查（如果配置了 site key）
+    if (TURNSTILE_SITE_KEY && !turnstileToken) {
+      setError("请完成人机验证");
+      return;
+    }
+
     setLoading(true);
 
     try {
       if (mode === "login") {
         if (provider.id === "email") {
-          await loginByEmail(email, password);
+          await loginByEmail(email, password, turnstileToken);
         } else {
-          await login(username, password);
+          await login(username, password, turnstileToken);
         }
       } else {
         // 注册始终使用用户名作为主键（邮箱为可选）
-        await register(username, password, displayName || username, email);
+        await register(username, password, displayName || username, email, turnstileToken);
       }
       window.location.href = "/";
     } catch (err: any) {
       setError(err.message || "操作失败");
+      // Turnstile 令牌已使用，重置
+      resetTurnstile();
     } finally {
       setLoading(false);
+    }
+  };
+
+  const resetTurnstile = () => {
+    setTurnstileToken("");
+    const win = window as any;
+    if (turnstileWidgetId.current && win.turnstile) {
+      win.turnstile.reset(turnstileWidgetId.current);
     }
   };
 
@@ -153,6 +239,13 @@ export default function LoginPage() {
             maxLength={64}
           />
 
+          {/* ── Turnstile 验证控件 ── */}
+          {TURNSTILE_SITE_KEY && (
+            <div className="flex justify-center">
+              <div ref={turnstileRef} />
+            </div>
+          )}
+
           {/* 主登录按钮 */}
           <button
             type="submit"
@@ -199,7 +292,6 @@ export default function LoginPage() {
                       key={p.id}
                       type="button"
                       onClick={() => {
-                        // TODO: 调用 oauth flow
                         setError(`「${p.label}」登录尚未对接`);
                       }}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-300 transition-colors"

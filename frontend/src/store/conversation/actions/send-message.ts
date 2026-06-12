@@ -98,7 +98,7 @@ export async function sendMessageImpl(
   const pq = get().pendingQuote;
   const userMsg: TreeNode = {
     id: userMsgId,
-    parent_id: pId || "virtual_root",
+    parent_id: "",
     children_ids: [],
     partition_id: pId || "",
     conversation_id: cId || "",

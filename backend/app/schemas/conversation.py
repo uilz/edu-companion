@@ -125,10 +125,13 @@ class TreeNode(BaseModel):
     token_count: int = 0
     is_deleted: bool = False
     is_archived: bool = False
+    has_modified_version: bool = False
     links_to: list[str] = Field(default_factory=list)
     linked_from: list[str] = Field(default_factory=list)
     discussed_skill_ids: list[str] = Field(default_factory=list)
     metadata: dict = Field(default_factory=dict)
+    # ── 多 Agent 体系 ──
+    agent_label: str = ""  # "orchestrator" | "tutor" | "coach" | "secretary"
     # ── 子支相关 ──
     has_sub_branches: bool = False
     sub_branch_ids: list[str] = Field(default_factory=list)

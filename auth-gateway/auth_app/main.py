@@ -5,15 +5,19 @@
 - 用户注册/登录/密码管理
 - JWT 令牌签发/验证/刷新
 - 用户信息查询与更新
-- 反向代理：非 /api/auth/* 请求转发到主后端 (8000)
-- WebSocket 代理：将 WS 连接透明转发到主后端
+- WebSocket 代理：将 WS 连接透明转发到主后端（含 JWT 验证 + user_id 注入）
 
 端口：18001
+
+（可选）HTTP 反向代理：通过 ReverseProxyMiddleware 将非 /api/auth/* 请求转发到后端。
+部署 Nginx 统一网关后此层为 fallback，Nginx 路由：/api/auth/* → auth-gateway，/api/* → backend。
 
 独立特性：
 - 不依赖业务后端任何模块
 - 独立数据库连接池
 - 独立 JWT 密钥管理
+
+架构关系详见 ../CONTEXT-MAP.md
 """
 from __future__ import annotations
 
@@ -33,7 +37,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 import httpx
 
@@ -80,6 +84,7 @@ class RegisterRequest(BaseModel):
     password: str = Field(min_length=8, max_length=64)
     email: str = Field(default="", max_length=128)
     display_name: str = Field(default="", max_length=64)
+    turnstile_token: str = Field(default="", max_length=2048, description="Cloudflare Turnstile 令牌")
 
     @model_validator(mode="after")
     def validate_password_complexity(self):
@@ -98,11 +103,13 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+    turnstile_token: str = Field(default="", max_length=2048, description="Cloudflare Turnstile 令牌")
 
 
 class EmailLoginRequest(BaseModel):
     email: str
     password: str
+    turnstile_token: str = Field(default="", max_length=2048, description="Cloudflare Turnstile 令牌")
 
 
 class RefreshRequest(BaseModel):
@@ -197,9 +204,41 @@ router = APIRouter(prefix="/api/auth", tags=["认证"])
 # ── 端点 ──
 
 @router.post("/register", summary="用户注册")
-async def register(body: RegisterRequest):
-    """注册新用户"""
+async def register(body: RegisterRequest, request: Request):
+    """注册新用户（需 Turnstile 验证）"""
     from auth_app.auth_service import get_auth_service
+    from auth_app.security import (
+        verify_turnstile_token,
+        get_system_config,
+        get_cooling_manager,
+        get_ip_control_manager,
+    )
+
+    client_ip = request.client.host if request.client else "unknown"
+
+    # 1) 检查注册开关
+    if not get_system_config().is_registration_enabled():
+        raise HTTPException(status_code=403, detail="注册功能已关闭，请联系管理员")
+
+    # 2) IP 黑名单检查
+    if get_ip_control_manager().is_blacklisted(client_ip):
+        logger.warning("注册拒绝: IP %s 在黑名单中", client_ip)
+        raise HTTPException(status_code=403, detail="您的 IP 已被限制访问")
+
+    # 3) 冷却检查
+    cooling_level = get_cooling_manager().check_and_apply(client_ip)
+    if cooling_level >= 2:
+        raise HTTPException(status_code=429, detail="请求过于频繁，请稍后再试")
+    if cooling_level >= 1:
+        # Level 1: 强制 Turnstile 验证
+        if not await verify_turnstile_token(body.turnstile_token, client_ip):
+            raise HTTPException(status_code=400, detail="请完成人机验证后重试")
+    else:
+        # 正常模式: Turnstile token 可选，若有则验证
+        if body.turnstile_token:
+            if not await verify_turnstile_token(body.turnstile_token, client_ip):
+                raise HTTPException(status_code=400, detail="人机验证失败，请重试")
+
     svc = get_auth_service()
     try:
         result = svc.register(
@@ -208,8 +247,12 @@ async def register(body: RegisterRequest):
             email=body.email,
             display_name=body.display_name,
         )
+        # 注册成功，清除失败记录
+        get_cooling_manager().clear_register_fails(client_ip)
         return result
     except ValueError as e:
+        # 注册失败，记录冷却
+        get_cooling_manager().record_register_failure(client_ip)
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -217,9 +260,34 @@ async def register(body: RegisterRequest):
 async def login(body: LoginRequest, request: Request):
     """用户登录，返回 JWT"""
     from auth_app.auth_service import get_auth_service
+    from auth_app.security import (
+        verify_turnstile_token,
+        get_system_config,
+        get_cooling_manager,
+        get_ip_control_manager,
+    )
 
-    # 限流检查
     client_ip = request.client.host if request.client else "unknown"
+
+    # 1) 检查登录开关
+    if not get_system_config().is_login_enabled():
+        raise HTTPException(status_code=403, detail="登录功能已关闭，请联系管理员")
+
+    # 2) IP 黑名单检查
+    if get_ip_control_manager().is_blacklisted(client_ip):
+        logger.warning("登录拒绝: IP %s 在黑名单中", client_ip)
+        raise HTTPException(status_code=403, detail="您的 IP 已被限制访问")
+
+    # 3) 冷却检查
+    cooling_level = get_cooling_manager().check_and_apply(client_ip)
+    if cooling_level >= 2:
+        raise HTTPException(status_code=429, detail="请求过于频繁，请稍后再试")
+    if cooling_level >= 1:
+        # Level 1: 强制 Turnstile 验证
+        if not await verify_turnstile_token(body.turnstile_token, client_ip):
+            raise HTTPException(status_code=400, detail="请完成人机验证后重试")
+
+    # 4) 限流检查（原有）
     rate_limit_key = f"login_{body.username}_{client_ip}"
     if not _check_login_rate_limit(rate_limit_key):
         raise HTTPException(status_code=429, detail="登录尝试过于频繁，请稍后再试")
@@ -229,7 +297,10 @@ async def login(body: LoginRequest, request: Request):
         result = svc.login(username=body.username, password=body.password)
         # 登录成功，清除限流记录
         _clear_login_rate_limit(rate_limit_key)
+        get_cooling_manager().clear_login_fails(client_ip)
     except ValueError as e:
+        # 登录失败，记录冷却
+        get_cooling_manager().record_login_failure(client_ip)
         raise HTTPException(status_code=401, detail=str(e))
 
     # 记录登录事件（设备/IP/区域）
@@ -245,9 +316,34 @@ async def login(body: LoginRequest, request: Request):
 async def login_by_email(body: EmailLoginRequest, request: Request):
     """使用邮箱登录，返回 JWT"""
     from auth_app.auth_service import get_auth_service
+    from auth_app.security import (
+        verify_turnstile_token,
+        get_system_config,
+        get_cooling_manager,
+        get_ip_control_manager,
+    )
 
-    # 限流检查
     client_ip = request.client.host if request.client else "unknown"
+
+    # 1) 检查登录开关
+    if not get_system_config().is_login_enabled():
+        raise HTTPException(status_code=403, detail="登录功能已关闭，请联系管理员")
+
+    # 2) IP 黑名单检查
+    if get_ip_control_manager().is_blacklisted(client_ip):
+        logger.warning("登录拒绝: IP %s 在黑名单中", client_ip)
+        raise HTTPException(status_code=403, detail="您的 IP 已被限制访问")
+
+    # 3) 冷却检查
+    cooling_level = get_cooling_manager().check_and_apply(client_ip)
+    if cooling_level >= 2:
+        raise HTTPException(status_code=429, detail="请求过于频繁，请稍后再试")
+    if cooling_level >= 1:
+        # Level 1: 强制 Turnstile 验证
+        if not await verify_turnstile_token(body.turnstile_token, client_ip):
+            raise HTTPException(status_code=400, detail="请完成人机验证后重试")
+
+    # 4) 限流检查（原有）
     rate_limit_key = f"login_{body.email}_{client_ip}"
     if not _check_login_rate_limit(rate_limit_key):
         raise HTTPException(status_code=429, detail="登录尝试过于频繁，请稍后再试")
@@ -257,7 +353,10 @@ async def login_by_email(body: EmailLoginRequest, request: Request):
         result = svc.login_by_email(email=body.email, password=body.password)
         # 登录成功，清除限流记录
         _clear_login_rate_limit(rate_limit_key)
+        get_cooling_manager().clear_login_fails(client_ip)
     except ValueError as e:
+        # 登录失败，记录冷却
+        get_cooling_manager().record_login_failure(client_ip)
         raise HTTPException(status_code=401, detail=str(e))
 
     # 记录登录事件
@@ -559,6 +658,128 @@ async def upload_avatar(request: Request, file: UploadFile = File(...)):
     return {"ok": True, "avatar_url": avatar_url}
 
 
+# ═══════════════════════════════════════════════════════════
+# 管理员安全配置 API（JWT super_admin 保护）
+# ═══════════════════════════════════════════════════════════
+
+def _require_admin(request: Request) -> dict:
+    """验证请求是否为 super_admin 角色"""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="未登录")
+    token = auth_header.split(" ", 1)[1]
+    from auth_app.jwt_service import get_jwt_service
+    user = get_jwt_service().verify_token(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="令牌无效")
+    if user.get("role") != "super_admin":
+        raise HTTPException(status_code=403, detail="需要 super_admin 权限")
+    return user
+
+
+# ── 系统配置管理 ──
+
+@router.get("/admin/config", summary="获取系统安全配置")
+async def admin_get_config(request: Request):
+    """获取系统安全配置（super_admin）"""
+    _require_admin(request)
+    from auth_app.security import get_system_config
+    cfg = get_system_config()
+    return cfg.get_all()
+
+
+@router.put("/admin/config", summary="更新系统安全配置")
+async def admin_update_config(body: dict, request: Request):
+    """更新系统安全配置（super_admin）
+    
+    支持字段:
+      registration_enabled: "true" | "false"
+      login_enabled: "true" | "false"
+    """
+    _require_admin(request)
+    from auth_app.security import get_system_config
+    cfg = get_system_config()
+    allowed_keys = {"registration_enabled", "login_enabled"}
+    updated = {}
+    for key, value in body.items():
+        if key in allowed_keys:
+            cfg.set(key, str(value).lower())
+            updated[key] = str(value).lower()
+    return {"ok": True, "updated": updated}
+
+
+# ── IP 管控管理 ──
+
+@router.get("/admin/ip-controls", summary="列出 IP 管控列表")
+async def admin_list_ip_controls(request: Request):
+    """列出所有 IP 黑白名单（super_admin）"""
+    _require_admin(request)
+    from auth_app.security import get_ip_control_manager
+    mgr = get_ip_control_manager()
+    return {
+        "blacklist": mgr.list_blacklist(),
+        "whitelist": mgr.list_whitelist(),
+    }
+
+
+class AddIPControlRequest(BaseModel):
+    ip: str
+    list_type: str = Field(pattern=r"^(blacklist|whitelist)$")
+    reason: str = ""
+    expires_minutes: int = 0
+
+
+@router.post("/admin/ip-controls", summary="添加 IP 管控")
+async def admin_add_ip_control(body: AddIPControlRequest, request: Request):
+    """添加 IP 到黑白名单（super_admin）"""
+    admin_user = _require_admin(request)
+    from auth_app.security import get_ip_control_manager
+    mgr = get_ip_control_manager()
+    created_by = admin_user.get("username", "admin")
+
+    if body.list_type == "blacklist":
+        mgr.add_blacklist(body.ip, reason=body.reason, expires_minutes=body.expires_minutes, created_by=created_by)
+    else:
+        mgr.add_whitelist(body.ip, reason=body.reason, created_by=created_by)
+
+    return {"ok": True, "detail": f"IP {body.ip} 已加入{body.list_type}"}
+
+
+@router.delete("/admin/ip-controls/{record_id}", summary="删除 IP 管控")
+async def admin_delete_ip_control(record_id: int, request: Request):
+    """删除 IP 管控记录（super_admin）"""
+    _require_admin(request)
+    from auth_app.security import get_ip_control_manager
+    mgr = get_ip_control_manager()
+    if mgr.delete_by_id(record_id):
+        return {"ok": True, "detail": f"记录 {record_id} 已删除"}
+    raise HTTPException(status_code=404, detail="记录不存在")
+
+
+# ── 冷却状态管理 ──
+
+@router.get("/admin/cooling", summary="获取攻击冷却状态")
+async def admin_get_cooling(request: Request):
+    """获取当前攻击冷却状态（super_admin）"""
+    _require_admin(request)
+    from auth_app.security import get_cooling_manager
+    return get_cooling_manager().get_status()
+
+
+@router.delete("/admin/cooling/{ip}", summary="解除某 IP 的冷却")
+async def admin_remove_cooling(ip: str, request: Request):
+    """手动解除某 IP 的冷却状态（super_admin）"""
+    _require_admin(request)
+    from auth_app.security import get_cooling_manager, get_ip_control_manager
+    get_cooling_manager().remove_cooling(ip)
+    # 也从 IP 黑名单中解除临时封禁
+    try:
+        get_ip_control_manager().remove(ip, "blacklist")
+    except Exception:
+        pass
+    return {"ok": True, "detail": f"IP {ip} 冷却已解除"}
+
+
 app.include_router(router)
 
 # ── 静态文件（头像） ──
@@ -598,6 +819,10 @@ async def root() -> dict[str, str]:
 # 反向代理中间件
 # 将非认证 API 请求透明转发到主后端 (8000)
 # 使认证网关成为统一的对外入口
+#
+# TODO: 部署 Nginx 统一网关后 HTTP 代理层可移除
+#   Nginx 路由：/api/auth/* → auth-gateway, /api/* → backend
+#   届时可删除：_proxy(), httpx.AsyncClient, _is_local(), _LOCAL_PREFIXES 等
 # ═══════════════════════════════════════════════════════════
 
 PROXY_TARGET = os.getenv("PROXY_TARGET", "http://127.0.0.1:8000")
@@ -623,10 +848,10 @@ _PROXY_PATHS = frozenset({
 # ═══════════════════════════════════════════════════════════
 
 # 允许的 Origin（逗号分隔，空 = 允许所有，生产应配置具体值）
-_ALLOWED_ORIGINS = os.getenv("WS_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://192.168.13.133:3000").split(",")
+_ALLOWED_ORIGINS = os.getenv("WS_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://192.168.13.133:3000,http://localhost:8080,http://127.0.0.1:8080,http://192.168.13.133:8080").split(",")
 
 # 单 IP 最大 WS 连接数
-_MAX_WS_PER_IP = int(os.getenv("WS_MAX_CONNECTIONS_PER_IP", "5"))
+_MAX_WS_PER_IP = int(os.getenv("WS_MAX_CONNECTIONS_PER_IP", "30"))
 
 # WS 消息大小上限（字节）
 _MAX_WS_MESSAGE_SIZE = int(os.getenv("WS_MAX_MESSAGE_SIZE", str(1024 * 1024)))  # 默认 1MB
@@ -761,62 +986,79 @@ class ReverseProxyMiddleware:
             proxy_task = asyncio.current_task()
             ip_connections.add(proxy_task)
 
+        # ── 先 accept 客户端 WS 连接（避免 uvicorn 裸 403 拒绝）──
+        # 若后端连接失败，通过 WS 发错误消息给客户端
+        await send({"type": "websocket.accept"})
+
+        _backend_ws: websockets.WebSocketClientProtocol | None = None
         try:
-            async with websockets.connect(
+            _backend_ws = await websockets.connect(
                 target_url,
                 additional_headers=extra_headers,
                 ping_interval=20,
                 ping_timeout=10,
                 max_size=10 * 1024 * 1024,  # 10MB
-            ) as backend_ws:
-                # 接受客户端 WS 连接
-                await send({"type": "websocket.accept"})
-
-                async def client_to_backend():
-                    """转发客户端消息 → 后端（含消息大小校验）"""
-                    while True:
-                        msg = await receive()
-                        if msg["type"] == "websocket.receive":
-                            if "text" in msg and len(msg["text"]) > _MAX_WS_MESSAGE_SIZE:
-                                logger.warning("WS 消息超限: %d bytes (ip=%s)", len(msg["text"]), client_ip)
-                                await backend_ws.close(code=1009)
-                                break
-                            if "bytes" in msg and len(msg["bytes"]) > _MAX_WS_MESSAGE_SIZE:
-                                logger.warning("WS 消息超限: %d bytes (ip=%s)", len(msg["bytes"]), client_ip)
-                                await backend_ws.close(code=1009)
-                                break
-                            if "text" in msg:
-                                await backend_ws.send(msg["text"])
-                            elif "bytes" in msg:
-                                await backend_ws.send(msg["bytes"])
-                        elif msg["type"] == "websocket.disconnect":
-                            break
-
-                async def backend_to_client():
-                    """转发后端消息 → 客户端"""
-                    async for msg in backend_ws:
-                        if isinstance(msg, str):
-                            await send({"type": "websocket.send", "text": msg})
-                        elif isinstance(msg, bytes):
-                            await send({"type": "websocket.send", "bytes": msg})
-
-                # 双向并发转发
-                tasks = [
-                    asyncio.create_task(client_to_backend()),
-                    asyncio.create_task(backend_to_client()),
-                ]
-                try:
-                    await asyncio.gather(*tasks)
-                except Exception:
-                    for t in tasks:
-                        t.cancel()
-
+            )
         except Exception as e:
-            logger.error("WS 代理错误 (path=%s, ip=%s): %s", path, client_ip, e)
+            logger.error("WS 后端连接失败 (path=%s, ip=%s): %s", path, client_ip, e)
+            err_msg = json.dumps({"type": "error", "message": "后端服务暂不可用，请稍后重试"})
+            try:
+                await send({"type": "websocket.send", "text": err_msg})
+            except Exception:
+                pass
             try:
                 await send({"type": "websocket.close", "code": 1011})
             except Exception:
                 pass
+            # 清理连接追踪
+            async with _ws_lock:
+                ip_set = _ws_connections.get(client_ip)
+                if ip_set:
+                    ip_set.discard(proxy_task)
+                    if not ip_set:
+                        _ws_connections.pop(client_ip, None)
+            return
+
+        backend_ws = _backend_ws
+
+        async def client_to_backend():
+            """转发客户端消息 → 后端（含消息大小校验）"""
+            while True:
+                msg = await receive()
+                if msg["type"] == "websocket.receive":
+                    if "text" in msg and len(msg["text"]) > _MAX_WS_MESSAGE_SIZE:
+                        logger.warning("WS 消息超限: %d bytes (ip=%s)", len(msg["text"]), client_ip)
+                        await backend_ws.close(code=1009)
+                        break
+                    if "bytes" in msg and len(msg["bytes"]) > _MAX_WS_MESSAGE_SIZE:
+                        logger.warning("WS 消息超限: %d bytes (ip=%s)", len(msg["bytes"]), client_ip)
+                        await backend_ws.close(code=1009)
+                        break
+                    if "text" in msg:
+                        await backend_ws.send(msg["text"])
+                    elif "bytes" in msg:
+                        await backend_ws.send(msg["bytes"])
+                elif msg["type"] == "websocket.disconnect":
+                    break
+
+        async def backend_to_client():
+            """转发后端消息 → 客户端"""
+            async for msg in backend_ws:
+                if isinstance(msg, str):
+                    await send({"type": "websocket.send", "text": msg})
+                elif isinstance(msg, bytes):
+                    await send({"type": "websocket.send", "bytes": msg})
+
+        # 双向并发转发
+        tasks = [
+            asyncio.create_task(client_to_backend()),
+            asyncio.create_task(backend_to_client()),
+        ]
+        try:
+            await asyncio.gather(*tasks)
+        except Exception:
+            for t in tasks:
+                t.cancel()
         finally:
             # 清理连接追踪
             async with _ws_lock:

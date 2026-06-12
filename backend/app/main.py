@@ -120,6 +120,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning("秘书模块注册失败: %s", e)
 
+    # v9: 初始化统一工具仓库（ToolRepository）
+    try:
+        from app.services.llm.tool_repository import get_tool_repository
+        repo = get_tool_repository()
+        # 发现秘书工具
+        import os
+        secretary_tools_dir = os.path.join(os.path.dirname(__file__), "domain/secretary/tools")
+        repo.discover([secretary_tools_dir])
+        # 注册 LLM 原生工具
+        from app.services.llm.tool_executor import TOOL_DEFINITIONS
+        repo.register_raw_tools(TOOL_DEFINITIONS)
+        logger.info("🔧 ToolRepository 已初始化 (%d 个工具)", len(repo.list_tools()))
+    except Exception as e:
+        logger.warning("ToolRepository 初始化失败: %s", e)
+
     try:
         from app.domain.secretary.engines.active_checker import active_checker
         active_checker.start()
