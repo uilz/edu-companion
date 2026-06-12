@@ -41,7 +41,12 @@ const nextConfig = {
   },
   async rewrites() {
     return [
-      // Nginx 统一网关处理所有 API/WS 路由，无需 Next.js rewrite
+      // 直接访问 :3000 时，API 请求代理到统一网关 :8080
+      //（通过 :8080 访问时 Nginx 会处理，不会命中这些 rewrite）
+      { source: '/api/auth/:path*', destination: 'http://127.0.0.1:8080/api/auth/:path*' },
+      { source: '/api/conversations/ws', destination: 'http://127.0.0.1:8080/api/conversations/ws' },
+      { source: '/api/:path*', destination: 'http://127.0.0.1:8080/api/:path*' },
+      { source: '/avatars/:path*', destination: 'http://127.0.0.1:8080/avatars/:path*' },
     ];
   },
 };
