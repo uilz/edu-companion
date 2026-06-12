@@ -14,6 +14,7 @@
 - [项目结构](#项目结构)
 - [核心数据流](#核心数据流)
 - [快速开始](#快速开始)
+- [部署流程](#-部署流程)
 - [近期里程碑](#近期里程碑)
 
 ---
@@ -178,6 +179,8 @@ v5.0 设计:       ████████████████████�
 | **秘书引擎** | 诊断+提案+策略 | 7 个内置主动服务模块 |
 | **调度** | SM-2 间隔重复 + 三级队列 | 复习×2 / ZPD×1.5 / 探索×0.5 |
 | **部署** | systemd + nginx | 双机部署（编辑机+运行机） |
+| **安全** | Cloudflare Turnstile + IP 管控 + 攻击冷却 | 人机验证 / 黑白名单 / 多级限流 |
+| **认证** | 独立认证网关（HS256 JWT） | 与业务后端完全解耦，独立端口 :18001 |
 
 ---
 
@@ -185,7 +188,24 @@ v5.0 设计:       ████████████████████�
 
 ```
 edu-companion/
-├── backend/
+├── auth-gateway/                    ## 独立认证网关（:18001）
+│   ├── config/
+│   │   ├── .env                      # JWT_SECRET / Turnstile / DB
+│   │   └── .env.example
+│   ├── auth_app/
+│   │   ├── main.py                   # API 入口 + 安全管控端点
+│   │   ├── security.py               # Turnstile / IP管控 / 冷却
+│   │   ├── auth_service.py           # 认证业务逻辑
+│   │   ├── user_repo.py              # 用户 CRUD
+│   │   ├── jwt_service.py            # JWT 令牌
+│   │   └── database.py               # PostgreSQL 连接池
+│   ├── requirements.txt
+│   ├── start.sh / stop.sh
+│   └── venv → ../backend/venv        # 共享 venv
+├── backend/                          ## 业务主后端（:8000）
+│   ├── config/
+│   │   ├── .env                      # API Key / DB / 模型配置
+│   │   └── .env.example
 │   ├── app/
 │   │   ├── api/                     ## REST API 端点 (13 路由, ~82 端点)
 │   │   │   ├── conversation.py       # 对话系统 facade（→ routes + ws）
@@ -233,7 +253,10 @@ edu-companion/
 │   ├── scripts/
 │   │   └── cleanup_temp_convs.py     # 48h 临时对话清理
 │   └── tests/                        # 220 项测试
-├── frontend/
+├── frontend/                         ## Next.js 前端（:3000）
+│   ├── config/
+│   │   ├── .env                      # NEXT_PUBLIC_TURNSTILE_SITE_KEY
+│   │   └── .env.example
 │   └── src/
 │       ├── app/                     ## 16 个路由页面
 │       │   ├── learn/                # AI 对话
@@ -267,6 +290,13 @@ edu-companion/
 │   ├── architecture.md               # 系统架构 v4.2（最新）
 │   ├── PROGRESS.md                   # 开发进度跟踪
 │   └── phase1/ ~ phase8/             # 分阶段设计文档（已归档）
+├── scripts/                          ## 辅助脚本
+├── nginx/                            ## Nginx 网关配置
+│   └── start.sh
+├── init.sh                           ## 一键初始化
+├── startup.sh                        ## 快速启动
+├── shutdown.sh                       ## 关闭所有服务
+├── rebuild.sh                        ## 构建 + 重启
 ├── PROGRESS.md                      ## 进度总览
 ├── CHANGELOG.md                     ## 版本更新日志
 └── README.md
@@ -314,19 +344,46 @@ CognitiveNode 更新
 - PostgreSQL 14+（含 pgvector 扩展）
 - Redis 7+（可选，缓存）
 
-### 安装
+### 一键初始化
+
+```bash
+# 克隆仓库
+git clone <repo-url> edu-companion
+cd edu-companion
+
+# 一键初始化：venv / npm install / .env / 数据库（可选）
+bash init.sh
+
+# 编辑 .env 配置（根据提示填入密钥）
+#   backend/config/.env  → OPENAI_API_KEY, DB_PASSWORD
+#   auth-gateway/config/.env → JWT_SECRET（生产环境）
+
+# 启动开发环境
+bash startup.sh
+
+# 或完整构建 + 重启
+bash rebuild.sh
+```
+
+### 分步安装（手动）
 
 ```bash
 # 后端
 cd backend
+cp config/.env.example config/.env  # 修改配置
 python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env          # 修改配置
+./venv/bin/pip install -r requirements.txt
 ./venv/bin/uvicorn app.main:app --reload --port 8000
 
+# 认证网关（共享后端 venv，无需重新创建）
+cd ../auth-gateway
+ln -sf ../backend/venv venv
+./venv/bin/pip install -r requirements.txt
+./venv/bin/uvicorn auth_app.main:app --reload --port 18001
+
 # 前端
-cd frontend
+cd ../frontend
+cp config/.env.example config/.env
 npm install
 npm run dev
 ```
@@ -339,16 +396,37 @@ npm run dev
 | `OPENAI_API_BASE` | API 端点 | https://api.deepseek.com/v1 |
 | `TEXT_MODEL` | 对话模型 | deepseek/deepseek-v4-flash |
 | `TEXT_REASONING_MODEL` | 推理+视觉模型 | openai/gpt-4o |
+| `TEXT_FAST_MODEL` | 轻量模型（意图分类/情绪分析） | openai/gpt-4o-mini |
 | `DB_PASSWORD` | PostgreSQL 密码 | （从环境变量读取，禁止硬编码） |
-| `DB_PORT` | PostgreSQL 端口 | 5433 |
+| `DB_HOST` | PostgreSQL 主机 | localhost |
+| `DB_PORT` | PostgreSQL 端口 | 5432 |
+| `DB_USER` | PostgreSQL 用户 | companion |
+| `DB_NAME` | PostgreSQL 数据库名 | edu_companion |
 | `COMPANION_HOME` | 数据目录 | ~/.companion |
 | `ENV` | 运行环境 | development |
 | `JWT_SECRET` | JWT 签名密钥 | （生产环境必须设置） |
-| `CORS_ORIGINS` | CORS 允许的源列表 | http://localhost:3000,http://127.0.0.1:3000 |
-| `AUTH_GATEWAY_URL` | 认证网关地址 | http://127.0.0.1:18001 |
-| `ADMIN_CORS_ORIGINS` | Admin 端 CORS 允许的源列表 | http://localhost:3001,http://127.0.0.1:3001 |
-| `JWT_EXPIRE_HOURS` | JWT 令牌有效期（小时） | 24 |
+| `JWT_ALGORITHM` | JWT 加密算法 | HS256 |
+| `JWT_ACCESS_EXPIRE_HOURS` | JWT 令牌有效期（小时） | 24 |
 | `JWT_REFRESH_EXPIRE_DAYS` | JWT 刷新令牌有效期（天） | 7 |
+| `CORS_ORIGINS` | CORS 允许的源列表 | http://localhost:3000,http://127.0.0.1:3000 |
+| `AUTH_GATEWAY_URL` | 认证网关地址（admin 代理用） | http://127.0.0.1:18001 |
+| `ADMIN_CORS_ORIGINS` | Admin 端 CORS 允许的源列表 | http://localhost:3001,http://127.0.0.1:3001 |
+
+### 安全配置（v8.5+）
+
+| 变量 | 所属 | 说明 | 默认值 |
+|:-----|:-----|:-----|:-------|
+| `TURNSTILE_SECRET_KEY` | `auth-gateway/config/.env` | Cloudflare Turnstile 服务端密钥 | （留空跳过验证） |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | `frontend/config/.env` | Cloudflare Turnstile 站点密钥 | （留空跳过验证） |
+| `ADMIN_IP_WHITELIST` | `app_admin` 进程环境变量 | 管理后台 IP 白名单（逗号分隔，留空不限制） | - |
+
+环境配置文件约定：
+
+| 服务 | 配置文件 | 模板文件 |
+|:-----|:---------|:---------|
+| 后端 (backend) | `backend/config/.env` | `backend/config/.env.example` |
+| 认证网关 (auth-gateway) | `auth-gateway/config/.env` | `auth-gateway/config/.env.example` |
+| 前端 (frontend) | `frontend/config/.env` | `frontend/config/.env.example` |
 
 ### 生产环境必需配置
 
@@ -378,6 +456,18 @@ npx tsc --noEmit              # TypeScript 编译检查
 ---
 
 ## 🧹 近期里程碑
+
+### v8.5 — 网站安全增强 (2026-06-12)
+
+系统性安全加固，4 项新能力：
+
+- 🔐 **Cloudflare Turnstile**：注册/登录页面集成人机验证，异常 IP 强制验证码
+- 🚫 **IP 管控**：黑名单（注册/登录拒绝）+ 白名单（admin 后台 IP 限制）+ 按 IP 速率控制
+- 🛡️ **攻击冷却**：两级冷却（L1 强制验证 → L2 30 分钟 IP 封禁），管理员可手动解封
+- 🔛 **登录/注册独立开关**：管理员后台可单独关闭「允许注册」或「允许登录」，持久化到数据库
+- ⚙️ **管理 API**：`/api/auth/admin/config`、`/api/auth/admin/ip-controls`、`/api/auth/admin/cooling`
+- 📁 **Env 规范化**：所有服务的 `.env` 统一放到 `config/` 目录下，含 `.env.example` 模板
+- 📜 **init.sh**：一键初始化脚本（venv + npm install + .env 模板 + 数据库创建）
 
 ### v0.9.4 — v5.0 设计重构 (2026-05-31)
 
@@ -476,6 +566,161 @@ npx tsc --noEmit              # TypeScript 编译检查
 - 树结构会话 + 多模态消息
 - CognitiveNode 15 子系统 + 22 方程
 - 事件驱动 13 种学习事件
+
+---
+
+## 🚀 部署流程
+
+### 前置依赖
+
+| 组件 | 版本 | 用途 |
+|:-----|:-----|:-----|
+| Python | 3.11+ | 后端运行环境 |
+| Node.js | 18+ | 前端构建 |
+| PostgreSQL | 14+ | 主数据库（含 pgvector 扩展） |
+| Redis | 7+ | 缓存 / 事件队列 |
+| Nginx | 1.24+ | 统一网关（可选） |
+
+### 1. 克隆 & 配置环境变量
+
+```bash
+git clone <repo-url> edu-companion
+cd edu-companion
+
+# 一键初始化（venv + npm install + .env 模板 + 数据库创建）
+bash init.sh
+
+# 编辑 .env 配置（根据 init.sh 提示）
+#   vi backend/config/.env
+#   vi auth-gateway/config/.env
+```
+
+或手动配置：
+
+```bash
+git clone <repo-url> edu-companion
+cd edu-companion
+
+# 后端配置
+cp backend/config/.env.example backend/config/.env
+# 编辑 backend/config/.env，填入实际值：
+#   OPENAI_API_KEY / OPENAI_API_BASE  — LLM API
+#   TEXT_MODEL / TEXT_REASONING_MODEL — 模型配置
+#   DB_PASSWORD — PostgreSQL 密码
+
+# 认证网关配置
+cp auth-gateway/config/.env.example auth-gateway/config/.env
+
+# 前端配置
+cp frontend/config/.env.example frontend/config/.env
+```
+
+### 2. 初始化数据库
+
+```bash
+# 创建数据库和 pgvector 扩展
+psql -U postgres -c "CREATE DATABASE edu_companion;"
+psql -U postgres -d edu_companion -c "CREATE EXTENSION IF NOT EXISTS vector;"
+# 设置 DB_PASSWORD（与 .env 一致）
+psql -U postgres -c "ALTER USER postgres PASSWORD 'your-password';"
+```
+
+### 3. 启动后端
+
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# 表结构由 SQLAlchemy 自动创建，首次启动即建表
+venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+后端监听 `0.0.0.0:8000`。
+
+### 4. 启动认证网关
+
+认证网关是一个独立的 FastAPI 服务，处理用户认证、头像服务和安全管控。
+
+```bash
+cd auth-gateway
+cp config/.env.example config/.env  # 编辑 config/.env 配置
+ln -sf ../backend/venv venv         # 复用后端 venv
+./venv/bin/pip install -r requirements.txt
+
+./venv/bin/python -m uvicorn auth_app.main:app --host 0.0.0.0 --port 18001
+```
+
+认证网关监听 `0.0.0.0:18001`。
+
+> **💡 认证网关共享后端的 Python 虚拟环境**（`auth-gateway/venv → ../backend/venv`），无需单独创建 venv。添加依赖时用 `backend/venv/bin/pip install -r auth-gateway/requirements.txt` 即可。
+
+**安全配置**（见上方 [安全配置](#安全配置v85) 表）：
+- `config/.env` → `TURNSTILE_SECRET_KEY`：Cloudflare Turnstile 人机验证密钥
+- `config/.env` → `JWT_SECRET`：生产环境务必修改为强密钥
+
+### 5. 构建 & 启动前端
+
+```bash
+cd frontend
+cp config/.env.example config/.env  # 编辑 config/.env 配置
+npm install
+npm run build
+npm start -p 3000
+```
+
+前端监听 `127.0.0.1:3000`（仅本地，由 Nginx 反向代理）。
+
+**前端配置**：`config/.env` → `NEXT_PUBLIC_TURNSTILE_SITE_KEY`：Cloudflare Turnstile 站点密钥
+
+### 6. 启动 Nginx 统一网关
+
+```bash
+cd nginx
+bash start.sh start
+# 验证：curl http://127.0.0.1:8080/
+```
+
+Nginx 网关监听 `0.0.0.0:8080`，路由规则：
+
+| 路径 | 上游 |
+|:-----|:-----|
+| `/` | Next.js (3000) |
+| `/api/auth/` | Auth Gateway (18001) |
+| `/api/conversations/ws` | Auth Gateway (18001, WS 升级) |
+| `/api/` | Backend (8000) |
+
+### 7. 验证部署
+
+```bash
+# 健康检查
+curl http://127.0.0.1:8080/api/health
+# 预期返回：{"status":"ok","service":"智能学习伴侣","version":"0.1.0","db":true}
+```
+
+浏览器访问 `http://localhost:8080`，确认页面正常加载、对话可用。
+
+### 8. 生产部署建议
+
+- **使用 systemd 管理后台进程**：为每个 FastAPI、Next.js、Nginx 编写 `service` 单元，实现开机自启 + 崩溃自动重启
+- **日志**：各进程日志默认输出到 `stdout/stderr`，可通过 systemd journal 或重定向到文件集中管理
+- **安全**：Nginx 网关统一管理 TLS 终止、请求限流、IP 白名单；**禁止直接暴露后端端口**
+- **管理后台 IP 白名单**：设置环境变量 `ADMIN_IP_WHITELIST=你的办公IP` 保护 `app_admin:8001`，非白名单 IP 自动 403
+- **人机验证**：配置 Cloudflare Turnstile（免费）后，注册和异常登录会强制验证码，有效阻止自动化攻击
+- **临时对话清理**：部署 `backend/scripts/cleanup_temp_convs.py` 为定时任务（推荐 48h 执行一次），清理过期临时对话
+
+### 进程架构
+
+```
+                         Nginx (:8080)
+                        ↙    |    ↘
+              Next.js (:3000)  |   Auth GW (:18001)
+                               |
+                          Backend (:8000)
+                        ↙    |    ↘
+                 PostgreSQL    Redis     AI API
+```
 
 ---
 

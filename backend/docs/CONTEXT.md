@@ -15,11 +15,11 @@ AI 学习教练智能体，负责制定学习计划、追踪进度、习惯养�
 _Avoid_: 学习顾问
 
 **Secretary (秘书)**:
-AI 学习秘书智能体，不参与直接对话。负责分析学情、生成提案、主动提醒。通过诊断引擎 + 提案生成器 + 策略引擎三层架构工作。
+AI 学习秘书智能体，在对话流中可见（橙色标签）。负责学情分析、提案生成、复习提醒。通过诊断引擎 + 提案生成器 + 策略引擎三层架构工作。输出包含提案卡片 + 流中总结。
 _Avoid_: 小秘书（非正式场合可用）
 
-**Orchestrator (编排器)**:
-负责协调 Tutor/Coach/Secretary 三个智能体的调度与消息路由。Secretary 的提案需经 Orchestrator 委托给 Tutor/Coach 呈现给用户。
+**Orchestrator (编排器 Agent)**:
+对话入口 Agent，在对话流中可见（紫色标签）。负责意图分析 → Agent 调度 → 消息路由。单 Agent 场景静默路由，多 Agent 协作出声解释后逐个委托。通过 `agent_delegate` 事件中转 Agent 间互调。
 
 ### 对话层次
 
@@ -195,6 +195,73 @@ _Avoid_: 分支（branch 是 v3 旧概念，指会话级分支）
 **Background Job (后台任务)**:
 异步长时间运行操作。由 job_manager 管理，支持状态查询/取消。含 progress 0-1、block_id（关联响应块）。
 
+### 对话流水线 (vNext 架构)
+
+**ContextPipeline (上下文管线)**:
+将 LLM 上下文构建从单一函数深化为 Provider 管线。输入 `ContextInput`（user_id/partition_id/user_text/conversation_id/previous_payloads），按序执行 6 个 Provider，`assemble()` 产出 `list[dict[str, str]]` 消息列表。文件：`backend/app/services/conversation/context_pipeline.py`。
+
+**ContextProvider (上下文提供者)**:
+管线中的一个阶段。`async def build(input: ContextInput) -> ContextOutput | None`。产出 `SystemChunk`（纯文本）或 `ContextPayload`（key+data+render 结构化字段）。后续 Provider 通过 `previous_payloads` 引用前序产出。
+_Avoid_: 上下文注入器（旧 `_build_context_messages`）
+
+**6 个 Provider**:
+| Provider | 数据源 | 产出 | 语义 |
+|----------|--------|------|------|
+| TutorPersona | SYSTEM_PROMPT（静态） | SystemChunk | AI 人格 |
+| ConversationLocation | parent_chain + context_summary | SystemChunk + ContextPayload(location) | 对话层级位置 (PDTC/PDC/PC) |
+| LearnerEmotion | emotion_analyzer | SystemChunk + ContextPayload(emotion) | 会话情绪 + 即时情绪策略 |
+| LearnerCognition | knowledge_query + cognitive_repo + KG | ContextPayload(cognition) | 知识状态 + BKT 信念 + 认知画像 |
+| LearningActivity | practice_integrator + practice_recall + context_trigger | SystemChunk + ContextPayload(activity) | 练习上下文 + 选题建议 |
+| TutorCapability | TOOL_DEFINITIONS + material_search + list_banks | SystemChunk + ContextPayload(capability) | 可用工具 + RAG + 题库 |
+
+**ReplyPipeline (回复管线)**:
+合并 LLM Facade + Core + Tool Dispatch + Cognitive Sync 为单一深模块。`invoke() → AsyncGenerator[Event]`，内部 7 阶段：auto_resolve → add_message → predict_tools → LLM probe → assemble context → stream generation → post-process + sync。
+_Avoid_: 分散的 send_and_reply / send_and_reply_stream（旧）
+
+### 多 Agent 体系 (vNext 架构)
+
+**AgentAdapter (智能体适配器)**:
+统一 Agent 接口。`agent_label` / `tools` / `agents` / `reply_stream(user_id, user_text, context, conversation_id) → AsyncGenerator[AgentEvent]`。4 个实现：OrchestratorAdapter / TutorAdapter / CoachAdapter / SecretaryAdapter。文件：`backend/app/domain/agents/`。
+
+**AgentEvent (智能体事件)**:
+Agent 流式输出事件：token / tool_block / agent_delegate / agent_message / done / error。每个事件带 `agent_label`。
+
+**AgentRegistry (智能体注册表)**:
+所有 Agent 的注册 + 查找中心。Agent 间通过 `agents` 属性互访，委托调用通过 `agent_delegate` 事件经 Orchestrator 中转。
+
+**TreeNode.agent_label**:
+消息节点的 Agent 归属标签。前端 MessageList 据此渲染不同头像/颜色。
+
+### 工具系统 (vNext 架构)
+
+**ToolRepository (工具聚合中心)**:
+所有 Agent 共享的工具注册 + 分类 + 意图检测统一中心。替代 `tool_executor.py` + `tool_registry.py`。`discover()` 后自动合并同模块操作为单 tool + action 参数。5 个合并工具：tool_practice / tool_media / tool_search / tool_learning / tool_secretary。文件：`backend/app/services/llm/tool_repository.py`。
+
+**ToolIntent (工具意图)**:
+工具检测结果。含 tool_name / confidence / params_hint。Agent 据此决定是否预执行工具。
+
+### 对话引擎 (vNext 架构)
+
+**ConversationEngine (对话引擎)**:
+纯消息处理引擎，不碰网络 I/O。`process(user_id, text, partition_id, conversation_id) → AsyncGenerator[EngineEvent]`。内部编排 Orchestrator → Agent 流。文件：`backend/app/domain/conversation/engine.py`。
+
+**ConnectionAdapter (连接适配器)**:
+薄 I/O 层。WebSocket handler（~30 行）：accept → receive → engine.process() → send_json。HTTP handler（~30 行）：收请求 → engine.process() → 收集事件 → JSON 响应。
+
+### 树存储 (vNext 架构)
+
+**TreeStore (树存储聚合根)**:
+组合 TreeQuery（只读） + TreeMutate（读写 + 事件）。替代 `tree_ops.py` + 6 个 mixin。存储可注入（DataStorage 接口：PgStorage / JsonFileStorage / InMemoryStorage）。Sync 事件驱动（TreeMutate 产出领域事件 → SyncHook 订阅处理）。文件：`backend/app/domain/conversation/tree_store.py`。
+
+**TreeQuery (树查询)**:
+只读操作：get_node / get_conversation / get_ancestor_chain / list_messages / list_path（查询节点所在完整 partition→domain→topic→conversation 路径）/ find_active_conversation / auto_resolve（分类器并入）。
+
+**TreeMutate (树变更)**:
+写操作，产出事件：create_partition / add_message / move_subtree / delete_conversation。add_message 支持 agent_label 参数。
+
+**DataStorage (存储适配器)**:
+`load(user_id) → UserData` / `save(user_id, data)` 接口。PgStorage（生产）/ JsonFileStorage（开发）/ InMemoryStorage（测试）。
+
 ### 网关与部署
 
 **Auth Gateway**:
@@ -221,16 +288,22 @@ _Avoid_: auth service（与业务后端的 auth middleware 混淆时）
 **Crypto (加密工具)**:
 `infrastructure/crypto.py` 提供 `encrypt(plaintext)` / `decrypt(ciphertext)` 函数。基于 `cryptography.fernet.Fernet` 对称加密。密钥生成规则：优先用 `ENCRYPTION_KEY` 环境变量，其次用 `DB_PASSWORD` 的 SHA-256 哈希派生。
 
-**Next.js Rewrites (前端代理)**:
-生产环境前端 Next.js（:3000）通过 rewrites 将 `/api/*` 和 `/ws/*` 请求转发到后端（127.0.0.1:8000）。实现同源访问，替代 Nginx。
-_Avoid_: Nginx 反向代理（目前由 Next.js rewrites 替代）
+**Nginx 统一网关（推荐）**:
+生产环境通过 Nginx :8080 统一入口。前端使用相对路径，Nginx 按路径分发：
+- `/api/auth/*` → Auth Gateway :18001
+- `/api/conversations/ws` → Auth Gateway :18001（WS 代理 + JWT 注入）
+- `/api/*` → Backend :8000（业务 API，后端 AuthMiddleware 本地解码 JWT）
+- `/*` → Next.js :3000（SSR）
+Nginx 配置见 `nginx/nginx.conf`。
 
 **部署架构**:
 ```
-Nginx 或 Next.js Rewrites
-├── /api/* → Backend (FastAPI :8000)
-├── /ws/*  → Backend (FastAPI :8000) [WebSocket]
-└── /auth/* → Auth Gateway (FastAPI :8001)
+Nginx :8080（统一入口）
+├── /api/auth/*          → Auth Gateway :18001
+├── /api/conversations/ws → Auth Gateway :18001 [WebSocket]
+├── /api/*                → Backend :8000（本地 JWT 解码）
+├── /avatars/*            → Auth Gateway :18001
+└── /*                    → Next.js :3000
 ```
 
 ### Flagged ambiguities

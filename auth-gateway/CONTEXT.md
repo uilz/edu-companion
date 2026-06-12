@@ -56,11 +56,20 @@ _Avoid_: 暴力破解防护（具体实现是限流）
 ### 代理
 
 **Reverse Proxy (反向代理)**:
-auth-gateway 同时作为反向代理——非 `/api/auth/*` 的请求透明转发到业务后端(127.0.0.1:8000)。
+auth-gateway 内嵌 HTTP 反向代理（`ReverseProxyMiddleware`），将非认证 API 请求转发到业务后端。当 Nginx 统一网关部署后（推荐），此层为 fallback，不再承担主要路由职责。
+_Avoid_: 依赖 auth-gateway 作为主要 HTTP 代理（应使用 Nginx）
 
 **WebSocket Proxy (WS 代理)**:
-auth-gateway 将 `/ws/*` 的 WebSocket 升级请求透明转发到业务后端。在代理层注入 `user_id` query 参数（从 JWT payload 提取），实现 WS 层面的用户隔离。
-_Avoid_: WS 直连后端（生产环境不使用）
+auth-gateway 将 `/api/conversations/ws` 的 WebSocket 升级请求透明转发到业务后端。在代理层注入 `user_id` query 参数（从 JWT payload 提取），实现 WS 层面的用户隔离。此功能在 Nginx 架构下仍保留——Nginx 将 WS 流量路由到 auth-gateway 执行认证 + 注入后，再转发到后端。
+
+### 流量路径（Nginx 架构）
+
+```
+登录/注册:  Browser → Nginx :8080 → Auth GW :18001
+WS 对话:    Browser → Nginx :8080 → Auth GW :18001（JWT 验证 + user_id 注入 → Backend :8000）
+业务 API:   Browser → Nginx :8080 → Backend :8000（后端本地 JWT 解码）
+前端页面:   Browser → Nginx :8080 → Next.js :3000
+```
 
 ### 部署
 

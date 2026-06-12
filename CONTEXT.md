@@ -48,95 +48,35 @@ _Avoid_: 分支、branch（v3 旧术语）
 
 ### 认知系统
 
-**CognitiveNode**:
-统一认知量子实体，覆盖 `partition → domain → topic → concept → atom` 五层知识层级 + conversation 层（额外层）。含 15+ 子系统：ACT-R 激活、贝叶斯信念、预测编码、认知负荷等。
+**CognitiveEvent (认知事件)**:
+用户学习行为事件（解析/复习/练习/定时回顾）。每个事件为一个"认知原子"，带 `action/object` 语义向量。
 
-**Concept (概念)**:
-专题下的核心概念，CognitiveNode 第 4 层（如"极限的 ε-δ 定义"）。
-_Avoid_: 知识点（与 atom 混淆时）
+**ConceptModel (概念模型)**:
+用户对某个概念/技能的知识状态模型。含 proficiency（掌握度），integrated（是否已整合到知识体系），concept_embedding（语义向量）。
 
-**Atom (原子技能)**:
-最细粒度知识点/技能单元，CognitiveNode 第 5 层。认知追踪最小分析单位。
-
-**Mastery (掌握度)**:
-基于 Beta 分布 α/(α+β) 的 0-1 概率值。5 级：未接触(<0.3) / 初学(0.3-0.6) / 发展中(0.6-0.8) / 接近掌握(0.8-0.9) / 已掌握(>0.9)。
-
-**ZPD (最近发展区)**:
-掌握度 0.3~0.8 的"甜点"区间，最适合学习的难度范围。
+**LearnerModel (学习者模型)**:
+用户整体学习画像的顶层模型。聚合事件，产出以下三个视图：
+- 知识视图（CognitiveStateMap）：概念掌握度热力图
+- 行为视图（BehaviorProfile）：学习时段偏好 / 复习时效性 / 瓶颈专题
+- 元认知视图（MetaCognitiveProfile）：反思能力 / 求助倾向 / 自我评估偏差 / 动机情绪
 
 ### 练习系统
 
-**Practice Session**:
-一次连续的答题练习过程。含题目列表、实时评分、进度追踪。
-_Avoid_: 练习、答题（当需区分 session 时）
-
 **Question Bank (题库)**:
-题目集合。支持 single/multiple/judge/fill/essay 等题型。
+用户的练习题目集合。每个 bank 有 name/subject/description。支持自动创建（对话中生成并保存）和手动创建。
 
-**Error Book (错题本)**:
-自动整理的错题集合，含三层错因分析：表象层 → 根因层 → 干预策略层。
+**Practice Session (练习会话)**:
+一次计时练习任务。含 start_time/end_time/total_count/correct_count/score。支持交互式和被动式两种练习模式。
 
-**SM-2**:
-SuperMemo SM-2 间隔重复算法。控制知识点复习间隔。
+**Explain Card (解释卡片)**:
+知识点的逐层讲解卡片。嵌套结构：ParentCard → ChildCards。每张卡片有 cue（提示）和 body（内容），body 支持多模态块。
 
-### 知识图谱
+### UI/UX
 
-**Knowledge Graph (知识树)**:
-知识的结构化可视化。含分区列表、图谱查询、AI 生成、节点/边 CRUD。
+**Responsive Breakpoints (响应式断点)**:
+Three-tier: desktop（≥1024px, 完整侧边栏 + 图谱）/ tablet（768-1023px, 折叠侧栏）/ mobile（<768px, 底部导航 + MobileBottomSheet）。
 
-**KGNode (知识树节点)**:
-知识树中的结构/可视化载体。区别于 CognitiveNode（认知状态追踪载体）。
-
-### 秘书系统
-
-**Secretary Engine (秘书引擎)**:
-三层架构：分析洞察层 → 诊断层 → 提案生成层。
-
-**Proposal (提案)**:
-秘书系统生成的主动建议。含 emoji/title/description/action_type/priority/status。
-
-**Blackboard (黑板)**:
-基于内存的请求级共享上下文。用于秘书与 Orchestrator 间异步交换提案。
-
-### 分类系统
-
-**Classifier (分类器)**:
-三级分类系统。对用户输入自动确定目标 partition → domain → topic。支持关键词匹配 + 向量语义分类。
-
-**Temp Conversation (临时会话)**:
-以 `💬 临时` 为分区名的临时对话。48h 无活动自动清理。
-
-### 认证与网关
-
-**Auth Gateway**:
-独立认证网关服务（端口 18001）。负责注册/登录/密码修改/JWT 签发与验证。完全独立——独立数据库、独立 JWT 密钥。
-_Avoid_: auth service（与业务后端 auth middleware 混淆时）
-
-**JWT Token**:
-HS256 签名的 JSON Web Token。含 sub(user_id)/username/role/token_version/exp/iat/type 声明。type=access 为访问令牌，type=refresh 为刷新令牌。
-
-**Login Event (登录事件)**:
-每次登录记录的事件，含 user_id/ip_address/device_type/browser/os/region/login_time。
-
-### 部署架构
-
-**三组件架构**:
-auth-gateway(:18001) → main backend(:8000) → admin backend(:8001)。认证网关独立部署，业务后端与管理员后端通过 JWT 验证身份。
-
-**Next.js Rewrites**:
-生产环境前端通过 rewrites 将 `/api/*` 和 `/ws/*` 请求转发到后端(127.0.0.1:8000)，实现同源访问。
-
-### 用户界面
-
-**LearnPage (学习空间)**:
-核心对话页面（路由 `/learn`）。含侧栏树/消息列表/输入框/SwitchBanner 等组件。
-_Avoid_: 聊天页、对话页
-
-**Dashboard (驾驶舱)**:
-学习概览仪表盘（路由 `/dashboard`）。含 Overview/Graph/Analytics/Plan/Calendar/Errors/Achievements/Quality 等 tab。
-_Avoid_: 仪表盘
-
-**App Shell**:
+**Sidebar / Bottom Sheet**:
 应用外壳布局。桌面端完整侧边栏，移动端底部导航 + 汉堡菜单。
 
 **Design Language (设计语言)**:
@@ -149,6 +89,100 @@ _Avoid_: 仪表盘
 
 **ResponseBlock (响应块)**:
 AI 回复的模块化内容单元。类型含 text/video/practice/mindmap/image/audio/document/media_search。
+
+## Architecture
+
+### 部署架构
+
+```
+用户浏览器
+    │
+    ▼
+Nginx :8080（统一入口，单一端口）
+    │
+    ├── /api/auth/*          → Auth Gateway :18001（登录/注册/验证）
+    ├── /api/conversations/ws → Auth Gateway :18001（WS 代理 + JWT 注入）
+    ├── /api/*                → Backend :8000（业务 API，本地 JWT 解码）
+    ├── /avatars/*            → Auth Gateway :18001（头像静态文件）
+    └── /*                    → Next.js :3000（SSR 页面）
+```
+
+### 认证安全体系
+
+1. **JWT 签发** — 登录/注册由 Auth Gateway（:18001）签发 HS256 JWT
+2. **REST API 验证** — Backend AuthMiddleware 本地解码 JWT（共享 `JWT_SECRET`，~0.01ms），不 HTTP 调网关
+3. **WebSocket 验证** — Auth Gateway 验证 JWT → 注入 `user_id` 参数 → 转发到 Backend
+4. **统一入口** — Nginx 屏蔽内部拓扑，外部不可直接访问 :18001/:8000/:3000
+
+### 组件关系
+
+```
+Nginx            ← 反向代理，路由分发，唯一对外端口
+Auth Gateway     ← JWT 签发/验证，WS 代理（JWT 注入），独立 DB
+Backend          ← 业务逻辑，本地 JWT 解码，LLM 对话/练习/认知追踪
+Frontend (Next.js) ← SSR 页面，相对路径请求 API，无代理逻辑
+```
+
+### 对话流水线
+
+**ContextPipeline (上下文管线)**:
+将 LLM 上下文构建从单一函数深化为 Provider 管线。输入 `ContextInput`（user_id/partition_id/user_text/conversation_id/previous_payloads），按序执行 6 个 Provider，产出 `list[dict[str, str]]` 消息列表。
+_Avoid_: 上下文构建器（旧 `_build_context_messages`）
+
+**ContextProvider (上下文提供者)**:
+管线中的一个阶段。接口 `async def build(input: ContextInput) -> ContextOutput | None`。产出 `SystemChunk`（纯文本）或 `ContextPayload`（key+data+render 结构化字段）。6 个 Provider：TutorPersona / ConversationLocation / LearnerEmotion / LearnerCognition / LearningActivity / TutorCapability。
+_Avoid_: 上下文注入器
+
+**ReplyPipeline (回复管线)**:
+合并 LLM Facade + Core + Tool Dispatch + Cognitive Sync 为单一深模块。单一入口 `invoke() → AsyncGenerator[Event]`，内部 7 个阶段：auto_resolve → add_message → predict_tools → LLM probe → assemble context → stream generation → post-process + sync。
+
+### 多 Agent 体系
+
+**AgentAdapter (智能体适配器)**:
+统一 Agent 接口。`agent_label` / `tools` / `agents` / `reply_stream(user_id, user_text, context, conversation_id) → AsyncGenerator[AgentEvent]`。4 个实现：Orchestrator / Tutor / Coach / Secretary。
+_Avoid_: Agent 接口、智能体基类
+
+**AgentEvent (智能体事件)**:
+Agent 流式输出事件联合类型：token / tool_block / agent_delegate / agent_message / done / error。
+
+**AgentRegistry (智能体注册表)**:
+所有 Agent 的注册中心。Agent 间通过 `agents` 属性互访，委托调用通过 `agent_delegate` 事件经 Orchestrator 中转。
+
+**Orchestrator (编排器 Agent)**:
+对话入口 Agent。负责意图分析 → Agent 调度 → 消息路由。单 Agent 场景静默路由，多 Agent 协作出声解释后逐个委托。在对话流中可见（紫色标签）。
+
+### 工具系统
+
+**ToolRepository (工具聚合中心)**:
+所有 Agent 共享的工具注册 + 分类 + 意图检测统一中心。替代 `tool_executor.py` + `tool_registry.py`。预处理合并：同模块多操作 → 单 tool + action 参数。5 个合并工具：tool_practice / tool_media / tool_search / tool_learning / tool_secretary。
+_Avoid_: 工具注册表（旧 ToolRegistry）、工具执行器（旧 tool_executor）
+
+**ToolIntent (工具意图)**:
+工具检测结果。含 tool_name / confidence / params_hint。用于 Agent 决定是否预执行工具。
+
+### 对话引擎
+
+**ConversationEngine (对话引擎)**:
+纯消息处理引擎，不碰网络 I/O。接口 `process(user_id, text, partition_id, conversation_id) → AsyncGenerator[EngineEvent]`。内部编排 Orchestrator → Agent 流。
+_Avoid_: 对话服务（旧 ConversationServiceImpl）
+
+**ConnectionAdapter (连接适配器)**:
+薄 I/O 层。WS handler（~30 行）：accept → receive → engine.process() → send_json。HTTP handler（~30 行）：收请求 → engine.process() → 收集事件 → JSON 响应。
+
+### 树存储
+
+**TreeStore (树存储聚合根)**:
+组合 TreeQuery（只读） + TreeMutate（读写 + 事件）。替代 6 个 mixin 文件。存储可注入（DataStorage 接口：PG / JSON / InMemory）。Sync 事件驱动（TreeMutate 产出领域事件 → SyncHook 订阅处理）。
+_Avoid_: tree_ops（旧）、mixin（旧组合模式）
+
+**TreeQuery (树查询)**:
+只读操作：get_node / get_conversation / get_ancestor_chain / list_messages / list_path（查询节点所在完整 PDTC 路径）/ find_active_conversation / auto_resolve。
+
+**TreeMutate (树变更)**:
+写操作，产出事件：create_partition / add_message / move_subtree / delete_conversation 等。
+
+**DataStorage (存储适配器)**:
+`load(user_id) → UserData` / `save(user_id, data)`。三个实现：PgStorage（生产）/ JsonFileStorage（开发）/ InMemoryStorage（测试）。
 
 ### Flagged ambiguities
 

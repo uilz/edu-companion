@@ -46,6 +46,12 @@ _Avoid_: 仪表盘（中文用"驾驶舱"）
 **Message List**:
 消息列表组件。渲染用户/助理消息，支持去重（反向遍历，同 ID 优先保留有内容版本）、内联编辑、版本切换（`<` `>`）、复制、删除、自动滚动。每 30 秒轮询刷新。响应块通过 `ResponseBlockRenderer` 分发。
 
+**Multi-Agent Message (多 Agent 消息)**:
+消息节点的 `agent_label` 字段指定 Agent 归属（`orchestrator` / `tutor` / `coach` / `secretary`）。MessageList 据此渲染不同头像和颜色气泡。Agent 代表色：Orchestrator 紫色、Tutor 蓝色、Coach 绿色、Secretary 橙色。多 Agent 协作时同一轮产生多个 assistant 节点，按 `conversation.path` 顺序渲染。
+
+**Agent Store (agent-store.ts)**:
+多 Agent 前端状态管理。含 Agent 配置（label/color/avatar/description）、当前活跃 Agent 追踪、Agent 切换事件处理。WebSocket 事件中 `agent_label` 字段驱动 Agent 气泡切换。
+
 **Conversation Chat Input**:
 聊天输入框组件。文本输入 + 文件/图片上传 + 语音录制（VoiceRecorder）+ Enter 发送。发送前自动调用 `ensureConversation()` 确保目标分区/对话存在（如无则自动创建默认链）。
 
@@ -183,12 +189,19 @@ _Avoid_: MathJax（技术实现不对外暴露）
 
 ### 网关与代理
 
-**Next.js Rewrites (API 代理)**:
-Next.js rewrites 将所有 `/api/*` 和 `/ws/*` 请求转发到后端（127.0.0.1:8000）。实现前后端同源访问，避免 CORS。
+**Nginx 统一网关（推荐）**:
+生产环境通过 Nginx :8080 统一入口。前端使用相对路径（`/api/*`、`/api/conversations/ws`），Nginx 按路径分发：
+- `/api/conversations/ws` → Auth Gateway :18001（JWT 验证 + user_id 注入 → Backend）
+- `/api/auth/*` → Auth Gateway :18001（认证 API）
+- `/api/*` → Backend :8000（业务 API，后端本地解码 JWT）
+- `/*` → Next.js :3000（SSR）
+
+**Next.js Rewrites (开发/备用)**:
+开发环境 (`next dev`) 下，Next.js rewrites 转发 `/api/*` 到 auth-gateway :18001，WS 直连 :18001。
 
 **WebSocket Proxy**:
-独立的 WS 升级代理路径：`/api/conversations/ws` 和 `/ws/:path*`。前端通过 `connectConversationWS()` 建立连接，6 个回调处理 WS 事件（onStatus / onToken / onDone / onError / onBlockUpdate / onContextSwitch）。
-_Avoid_: 直连后端 WS（生产环境不使用）
+WS 连接通过 `ConversationWS` 类管理，使用相对路径 `/api/conversations/ws?token=xxx`。连接失败时自动指数退避重连（1s→30s 上限，退避系数 2x）。
+_Avoid_: 直连后端 WS（必须经过 auth-gateway JWT 验证）
 
 **HTTP Fallback**:
 WS 不可用时的回退机制。`sendWSMessage()` 返回 false 时自动退化为 `POST /api/conversations/message`，解析 response 中的 assistant_message。
