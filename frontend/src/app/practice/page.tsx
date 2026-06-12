@@ -78,6 +78,11 @@ export default function PracticeHomePage() {
   const handleDelete = async (id: string) => {
     await api(`/api/v7/practice/sessions/${id}`, { method: "DELETE" });
     setRecentSessions(p => p.filter(s => s.session_id !== id));
+    setUnfinished(p => p.filter(s => s.session_id !== id));
+    setDueReviews(p => p.filter((r: any) => {
+      const qid = r.question_id || r.question?.id;
+      return qid !== id;
+    }));
   };
 
   const handleStartExam = (bankId: string) => {

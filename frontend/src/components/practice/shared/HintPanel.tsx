@@ -1,6 +1,10 @@
 "use client";
 
 import { Lightbulb, Loader2, X } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 
 interface Props {
   hintText: string;
@@ -27,7 +31,11 @@ export default function HintPanel({ hintText, loading, visible, onClose }: Props
           {loading ? (
             <Loader2 size={14} className="animate-spin text-blue-400" />
           ) : (
-            <p className="text-[12px] text-[var(--color-text-muted)] leading-relaxed">{hintText}</p>
+            <p className="text-[12px] text-[var(--color-text-muted)] leading-relaxed [&_p]:m-0 [&_.katex]:text-xs">
+              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} components={{ p: ({ children }) => <>{children}</> }}>
+                {hintText}
+              </ReactMarkdown>
+            </p>
           )}
         </div>
       </div>

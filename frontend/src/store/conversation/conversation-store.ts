@@ -42,6 +42,9 @@ import {
 export type SwitchBanner = {
   partitionId: string;
   conversationId: string;
+  targetPartitionId: string;
+  targetDomainName: string;
+  targetTopicName: string;
   domainName: string;
   topicName: string;
   fullPath: string;
@@ -156,6 +159,7 @@ export interface ConversationState {
   loadRootNodes: () => Promise<void>;
   loadChildren: (nodeId: string, level?: string) => Promise<GraphNode[]>;
   loadConversations: (topicId: string) => Promise<TreeConv[]>;
+  reloadConversations: (parentId: string) => Promise<TreeConv[]>;
   expandPath: (partitionId: string, domainId?: string | null, topicId?: string | null) => Promise<void>;
   resolveConversationPath: (conversationId: string) => Promise<{ partition_id: string; domain_id: string; topic_id: string; parent_id: string; parent_type: string } | null>;
   setChildMap: (m: Map<string, GraphNode[]>) => void;
@@ -460,19 +464,30 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
     }
   },
 
-  loadConversations: async (topicId: string): Promise<TreeConv[]> => {
-    const key = `conv:${topicId}`;
+  /** 强制重新加载，忽略 loadingSet 缓存 */
+  reloadConversations: async (parentId: string): Promise<TreeConv[]> => {
+    const key = `conv:${parentId}`;
+    set(s => {
+      const n = new Set(s.loadingSet);
+      n.delete(key);
+      return { loadingSet: n };
+    });
+    return get().loadConversations(parentId);
+  },
+
+  loadConversations: async (parentId: string): Promise<TreeConv[]> => {
+    const key = `conv:${parentId}`;
     const s = get();
     if (s.loadingSet.has(key)) return [];
     set(s => { const n = new Set(s.loadingSet); n.add(key); return { loadingSet: n }; });
     try {
-      const data = await tree<{ conversations: Conversation[] }>(`/tree/conversation?parent_id=${topicId}`);
+      const data = await tree<{ conversations: Conversation[] }>(`/tree/conversation?parent_id=${parentId}`);
       const seen = new Set<string>();
       const convs = (data.conversations || [])
         .map(c => ({
           id: c.id,
           name: c.name,
-          partition_id: topicId,
+          partition_id: (c as any).partition_id || parentId,
           parent_id: (c as any).parent_id,
           parent_type: (c as any).parent_type,
           is_active: c.is_active,
@@ -480,7 +495,7 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
         .filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
       set(s => {
         const next = new Map(s.convCache);
-        next.set(topicId, convs);
+        next.set(parentId, convs);
         return { convCache: next };
       });
       return convs;
@@ -502,6 +517,14 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
         persistExpandedSet(n);
         return { expandedSet: n };
       });
+    };
+
+    // 加载会话列表 helper
+    const ensureConvs = async (id: string) => {
+      const cv = get().convCache;
+      if (!cv.has(id) || (cv.get(id) || []).length === 0) {
+        await get().loadConversations(id);
+      }
     };
 
     // 1) 加载 + 展开 partition 的子节点
@@ -526,6 +549,10 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
         await get().loadConversations(topicId);
       }
     }
+
+    // 4) 确保会话已加载（支持 pc/pdc：会话可挂在 partition/domain/topic 任意层级）
+    await ensureConvs(partitionId);
+    if (domainId) await ensureConvs(domainId);
   },
 
   // ── resolveConversationPath：从后端获取会话的完整 parent 链路 ──

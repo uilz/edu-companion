@@ -21,6 +21,15 @@ export let _streamSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let _isSending = false;
 // ── 防止 onDone 与 loadMessages 竞态的标志 ──
 let _streamCompleting = false;
+// ── 暂存 context_switch 事件，onDone 后才展示 SwitchBanner ──
+let _pendingContextSwitch: {
+  partitionId: string;
+  conversationId: string;
+  targetPartitionId: string;
+  targetDomainName: string;
+  targetTopicName: string;
+  fullPath: string;
+} | null = null;
 
 // Setters for module-level refs
 export function setActiveConvId(v: string | null) { _activeConvId = v; }
@@ -279,24 +288,35 @@ export function initWebSocket(storeApi: StoreApi): () => void {
             (m) => m.id === streamMsgId || m.id === assistantMessage.id,
           );
           if (idx >= 0) {
-            const updated = [...state.messages];
-            updated[idx] = hasContent
-              ? assistantMessage
+            // 保留占位符的 parent_id（后端存的是 root_id，前端不可见）
+            const existing = state.messages[idx];
+            const merged = hasContent
+              ? { ...assistantMessage, parent_id: existing.parent_id }
               : {
                   ...assistantMessage,
+                  parent_id: existing.parent_id,
                   content_blocks: [
                     { type: "text" as const, text: "（助手返回了空回复）" },
                   ],
                   text_summary: "（助手返回了空回复）",
                 };
-            return { messages: updated };
+            return { messages: Object.assign([], state.messages, { [idx]: merged }) };
           }
-          // 占位符未找到 → 用 loadMessages 整体刷新
+          // 占位符未找到 → 直接追加消息（防止"消失"），同时调度 loadMessages 修复 parent_id
+          const newMsg = hasContent
+            ? assistantMessage
+            : {
+                ...assistantMessage,
+                content_blocks: [
+                  { type: "text" as const, text: "（助手返回了空回复）" },
+                ],
+                text_summary: "（助手返回了空回复）",
+              };
           setTimeout(() => {
             const currentConvId = _activeConvId;
             if (currentConvId) storeApi.getState().loadMessages(currentConvId);
-          }, 100);
-          return {};
+          }, 300);
+          return { messages: [...state.messages, newMsg] };
         });
       } else if (streamMsgId) {
         storeApi.setState((state: { messages: TreeNode[] }) => ({
@@ -312,6 +332,30 @@ export function initWebSocket(storeApi: StoreApi): () => void {
           return newBlocks.length
             ? { responseBlocks: [...state.responseBlocks, ...newBlocks] }
             : {};
+        });
+      }
+
+      // ⚡ 流完成后，检查是否有缓存的 context_switch 推荐
+      if (_pendingContextSwitch) {
+        const data = _pendingContextSwitch;
+        _pendingContextSwitch = null;
+        storeApi.setState({
+          switchBanner: {
+            partitionId: data.partitionId,
+            conversationId: data.conversationId,
+            targetPartitionId: data.targetPartitionId,
+            targetDomainName: data.targetDomainName,
+            targetTopicName: data.targetTopicName,
+            fullPath: data.fullPath,
+          },
+        });
+        handleContextSwitch({
+          partition_id: data.partitionId,
+          conversation_id: data.conversationId,
+          target_partition_id: data.targetPartitionId,
+          domain_name: data.targetDomainName,
+          topic_name: data.targetTopicName,
+          switch_detail: data.fullPath ? { full_path: data.fullPath } : undefined,
         });
       }
     },
@@ -362,31 +406,24 @@ export function initWebSocket(storeApi: StoreApi): () => void {
       });
     },
 
-    // Context switch notification: AI suggests switching to a different partition/conversation
+    // Context switch notification: AI recommends switching partition/topic
+    // 缓存到模块级变量，流完成后（onDone）才展示 SwitchBanner
     onContextSwitch: (data: {
       partition_id: string;
       conversation_id: string;
-      domain_name?: string;
-      topic_name?: string;
+      target_partition_id?: string;
+      target_domain_name?: string;
+      target_topic_name?: string;
       full_path?: string;
     }) => {
-      storeApi.setState({
-        switchBanner: {
-          partitionId: data.partition_id,
-          conversationId: data.conversation_id,
-          domainName: data.domain_name || "",
-          topicName: data.topic_name || "",
-          fullPath: data.full_path || "",
-        },
-      });
-      // 同时写入 NotificationStore
-      handleContextSwitch({
-        partition_id: data.partition_id,
-        conversation_id: data.conversation_id,
-        domain_name: data.domain_name || "",
-        topic_name: data.topic_name || "",
-        switch_detail: data.full_path ? { full_path: data.full_path } : undefined,
-      });
+      _pendingContextSwitch = {
+        partitionId: data.partition_id,
+        conversationId: data.conversation_id,
+        targetPartitionId: data.target_partition_id || "",
+        targetDomainName: data.target_domain_name || "",
+        targetTopicName: data.target_topic_name || "",
+        fullPath: data.full_path || "",
+      };
     },
 
     // Knowledge tree recommendation: conversation → knowledge tree
@@ -438,6 +475,17 @@ export function initWebSocket(storeApi: StoreApi): () => void {
     onSecretaryInline: handleSecretaryInline,
 
     onSecretaryUpdate: handleSecretaryProposalUpdate,
+
+    // ── 自动创建新会话 → 更新 streaming ref 防止 token 被丢弃 ──
+    onConversationCreated: (data: { conversation_id: string }) => {
+      const cid = data.conversation_id;
+      if (!cid) return;
+      // 直接更新模块级 refs，防止 subscription 延迟导致 onDone 检查失败
+      _streamingConvId = cid;
+      _activeConvId = cid;
+      // 更新 store 中的 activeConversationId
+      storeApi.setState({ activeConversationId: cid });
+    },
   });
 
   return () => {

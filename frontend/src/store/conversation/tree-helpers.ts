@@ -7,8 +7,12 @@
 //  API helpers
 // ══════════════════════════════════════════════════════════════
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : "";
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
   const res = await fetch(`/api/conversations${path}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
+    headers: { ...headers, ...(options?.headers as Record<string, string> | undefined) },
     cache: "no-store",
     ...options,
   });
@@ -20,8 +24,12 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
 }
 
 export async function v2Fetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : "";
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
   const res = await fetch(`/api/v2${path}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
+    headers: { ...headers, ...(options?.headers as Record<string, string> | undefined) },
     cache: "no-store",
     ...options,
   });
@@ -115,14 +123,16 @@ export async function ensureConversationAtLevel(
       if (empty) {
         return { partitionId: pId, conversationId: empty.id };
       }
+      // 没找到空会话，回退到默认名称
     }
 
     // ── 3. 创建新会话 ──
+    const convName = name === "__use_existing__" ? "新会话" : name;
     const createData = await apiFetch<{ conversation: { id: string } }>(
       "/tree/conversation",
       {
         method: "POST",
-        body: JSON.stringify({ parent_id: actualParentId, name }),
+        body: JSON.stringify({ parent_id: actualParentId, name: convName }),
       },
     );
     const convId = createData.conversation.id;

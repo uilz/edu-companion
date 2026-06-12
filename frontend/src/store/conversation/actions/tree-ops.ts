@@ -36,7 +36,11 @@ export async function handleNewConversationImpl(set: any, get: any, level: strin
       return;
     }
     const result = await ensureConversationAtLevel(level, parentId, pId);
-    if (result) get().selectConversation(result.partitionId, result.conversationId);
+    if (result) {
+      // 确保 convCache 包含新会话后再导航
+      await get().reloadConversations(parentId);
+      get().selectConversation(result.partitionId, result.conversationId);
+    }
     await get().loadPartitions();
     set({ showPartitionSidebar: false });
   } catch (e) {

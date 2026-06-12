@@ -1,6 +1,10 @@
 "use client";
 
 import { X, Check, Eye, Edit3 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import type { V7Question } from "@/lib/api/practice-api";
 import QuestionStem from "@/components/practice/components/QuestionStem";
 
@@ -60,7 +64,11 @@ export default function QuestionPreviewModal({ question, onClose, onEdit }: Prop
                 opt.is_correct ? "border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/10" : "border-[var(--color-border)]"
               }`}>
                 <span className="font-medium mr-2 text-sm">{opt.letter}.</span>
-                <span className="text-sm">{opt.text}</span>
+                <span className="text-sm [&_p]:m-0 [&_.katex]:text-sm">
+                  <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} components={{ p: ({ children }) => <>{children}</> }}>
+                    {opt.text}
+                  </ReactMarkdown>
+                </span>
                 {opt.is_correct && <Check size={14} className="ml-auto text-green-500" />}
               </div>
             ))}
@@ -71,7 +79,9 @@ export default function QuestionPreviewModal({ question, onClose, onEdit }: Prop
         {(question as any).analysis && (
           <div>
             <label className="text-xs text-[var(--color-text-muted)] block mb-1">解析</label>
-            <p className="text-sm text-[var(--color-text-muted)] bg-[var(--color-surface)] p-3 rounded-xl">{(question as any).analysis}</p>
+            <div className="text-sm text-[var(--color-text-muted)] bg-[var(--color-surface)] p-3 rounded-xl [&_p]:m-0 [&_.katex]:text-xs">
+            <QuestionStem stem={(question as any).analysis || ""} />
+          </div>
           </div>
         )}
 

@@ -83,11 +83,22 @@ export function useConversation() {
     const tId = params.get("t") || params.get("topic_id");
     const cId = params.get("c") || params.get("conversation_id");
     if (pId) {
+      // 根据 URL 参数构建 selectedNode，确保非会话节点也能正确高亮
+      let selNode: { id: string; level: string; parent: string | null } | null = null;
+      if (tId) {
+        selNode = { id: tId, level: "topic", parent: dId || pId };
+      } else if (dId) {
+        selNode = { id: dId, level: "domain", parent: pId };
+      } else {
+        selNode = { id: pId, level: "partition", parent: null };
+      }
+      // 注意：有 cId 时不设 selectedNode，由 selectConversationImpl 异步解析
       useConversationStore.setState({
         selectedPartitionId: pId,
         activeDomainId: dId || null,
         activeTopicId: tId || null,
         activeConversationId: cId || null,
+        selectedNode: cId ? null : selNode,
       });
     } else {
       try {

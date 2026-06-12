@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, X, AlertTriangle } from "lucide-react";
+import QuestionStem from "@/components/practice/components/QuestionStem";
 
 interface Props {
   isCorrect: boolean;
@@ -49,9 +50,9 @@ export default function FeedbackPanel({ isCorrect, correctAnswer, analysis, skip
       )}
 
       {analysis && (
-        <div className="text-xs text-[var(--color-text-muted)] leading-relaxed">
+        <div className="mt-2 text-xs text-[var(--color-text-muted)] leading-relaxed [&_p]:m-0 [&_.katex]:text-xs">
           <span className="font-medium text-[var(--color-text)]">解析：</span>
-          {analysis}
+          <QuestionStem stem={analysis} />
         </div>
       )}
     </div>

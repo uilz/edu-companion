@@ -1,5 +1,10 @@
 "use client";
 
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
+
 interface Props {
   label: string;
   text: string;
@@ -70,7 +75,11 @@ export default function OptionButton({
       }`}>
         {label}
       </span>
-      <span className="flex-1 text-left text-sm leading-relaxed">{text}</span>
+      <span className="flex-1 text-left text-sm leading-relaxed [&_p]:m-0 [&_.katex]:text-sm">
+        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} components={{ p: ({ children }) => <>{children}</> }}>
+          {text}
+        </ReactMarkdown>
+      </span>
       {indicator}
     </button>
   );

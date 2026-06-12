@@ -262,8 +262,9 @@ export async function fetchHistory(
 export function handleContextSwitch(data: {
   partition_id: string;
   conversation_id: string;
-  domain_name: string;
-  topic_name: string;
+  target_partition_id?: string;
+  domain_name?: string;
+  topic_name?: string;
   switch_detail?: Record<string, string>;
 }): void {
   const id = `context_switch_${data.partition_id}_${data.conversation_id}`;

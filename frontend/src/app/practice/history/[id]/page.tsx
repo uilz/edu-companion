@@ -7,6 +7,11 @@ import {
   Trash2, Loader2, RotateCcw, FileText,
 } from "lucide-react";
 import { api } from "@/lib/api/api";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
+import QuestionStem from "@/components/practice/components/QuestionStem";
 
 export default function SessionReviewPage() {
   const { id } = useParams<{ id: string }>();
@@ -221,9 +226,9 @@ export default function SessionReviewPage() {
             </div>
 
             {/* 题干 */}
-            <p className="text-[12px] text-[var(--color-text)] leading-relaxed whitespace-pre-wrap">
-              {q.stem}
-            </p>
+          <div className="text-[12px] text-[var(--color-text)] leading-relaxed [&_p]:m-0 [&_.katex]:text-xs">
+            <QuestionStem stem={q.stem} />
+          </div>
 
             {/* 选项（选择题） */}
             {q.options?.length > 0 && (
@@ -239,7 +244,9 @@ export default function SessionReviewPage() {
                       "bg-[var(--color-bg)] text-[var(--color-text)]"
                     }`}>
                       <span className="font-bold w-5">{opt.letter}</span>
-                      <span>{opt.text}</span>
+                      <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} components={{ p: ({ children }) => <>{children}</> }}>
+                        {opt.text}
+                      </ReactMarkdown>
                       {isUserAnswer && <span className="ml-auto text-[9px]">你的选择</span>}
                       {isCorrectAnswer && !isUserAnswer && <Check size={10} className="ml-auto text-green-500" />}
                     </div>
@@ -274,7 +281,9 @@ export default function SessionReviewPage() {
               {q.explanation && (
                 <div className="mt-2 p-3 rounded-lg bg-blue-500/5 border border-blue-500/10">
                   <p className="text-[10px] text-blue-600 font-medium mb-1">解析</p>
-                  <p className="text-[11px] text-[var(--color-text)] leading-relaxed">{q.explanation}</p>
+                  <div className="text-[11px] text-[var(--color-text)] leading-relaxed [&_p]:m-0 [&_.katex]:text-xs">
+                    <QuestionStem stem={q.explanation} />
+                  </div>
                 </div>
               )}
             </div>

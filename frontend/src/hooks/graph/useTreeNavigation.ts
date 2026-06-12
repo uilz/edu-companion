@@ -15,12 +15,12 @@ export interface UseTreeNavReturn {
   loadingSet: Set<string>;
   editingId: string | null;
   editValue: string;
-  deleteTarget: { id: string; label: string; isConv?: boolean; topicId?: string } | null;
+  deleteTarget: { id: string; label: string; isConv?: boolean; parentId?: string } | null;
   newChildTarget: { parent: GraphNode; level: GraphLevel; defaultEmoji: string } | null;
   toggleExpand: (node: GraphNode) => void;
   handleCreateChild: (node: GraphNode) => void;
   handleRename: (node: GraphNode, name: string) => void;
-  handleRenameConv: (convId: string, name: string, topicId: string) => void;
+  handleRenameConv: (convId: string, name: string, parentId: string) => void;
   handleNewConvClick: (node: GraphNode, pid?: string) => void;
   confirmDelete: () => void;
   confirmCreateChild: (name: string, emoji: string) => void;
@@ -36,7 +36,7 @@ export function useTreeNavigation(
 ): UseTreeNavReturn {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string; isConv?: boolean; topicId?: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string; isConv?: boolean; parentId?: string } | null>(null);
   const [newChildTarget, setNewChildTarget] = useState<{ parent: GraphNode; level: GraphLevel; defaultEmoji: string } | null>(null);
 
   // 从 store 读取树数据
@@ -51,6 +51,23 @@ export function useTreeNavigation(
     storeToggleExpand(node);
   }, [storeToggleExpand]);
 
+  // ── 导航到父节点（删除后使用）──
+  const navigateToNode = useCallback(async (parentId: string) => {
+    const s = useConversationStore.getState();
+    const entries = Array.from(s.childMap.entries());
+    let parentNode: GraphNode | undefined;
+    for (let i = 0; i < entries.length; i++) {
+      const found = entries[i][1].find((n: GraphNode) => n.id === parentId);
+      if (found) { parentNode = found; break; }
+    }
+    if (parentNode) {
+      const pid = parentNode.level === "partition" ? parentId : s.selectedPartitionId || parentId;
+      s.selectGraphNode(parentNode, pid);
+    } else {
+      s.loadRootNodes();
+    }
+  }, []);
+
   // ── 创建子节点 ──
   const handleCreateChild = useCallback((node: GraphNode) => {
     if (node.level === "topic") return;
@@ -60,14 +77,49 @@ export function useTreeNavigation(
 
   const confirmCreateChild = useCallback(async (name: string, emoji: string) => {
     if (!newChildTarget) return;
+    // 先保存快照，避免 setNewChildTarget(null) 后引用丢失
+    const { parent, level } = newChildTarget;
     const store = useConversationStore.getState();
     try {
-      await tree(`/tree/${newChildTarget.level}`, {
-        method: "POST", body: JSON.stringify({ parent_id: newChildTarget.parent.id, name, emoji }),
+      const resp: any = await tree(`/tree/${level}`, {
+        method: "POST", body: JSON.stringify({ parent_id: parent.id, name, emoji }),
       });
-      await store.loadChildren(newChildTarget.parent.id, newChildTarget.parent.level);
-      store.toggleExpand(newChildTarget.parent);
+      const convId = resp.conversation_id;
+      const newNodeId = resp[level]?.id;
+
+      // 1) 刷新父节点的子列表（新节点出现在侧边栏）
+      await store.loadChildren(parent.id, parent.level);
+
+      // 2) 展开父节点（条件展开，避免已展开的被折叠）
+      if (!store.expandedSet.has(parent.id)) {
+        store.toggleExpand(parent);
+      }
+
+      // 3) 加载并展开新节点自身的子数据
+      if (newNodeId) {
+        await store.loadChildren(newNodeId, level);
+        await store.reloadConversations(newNodeId);
+        // 展开新节点
+        const s2 = useConversationStore.getState();
+        if (!s2.expandedSet.has(newNodeId)) {
+          s2.toggleExpand({
+            id: newNodeId, label: name, level,
+            parent: parent.id, emoji,
+            nodeIndex: 0, path_id: name, is_visible: true,
+            node_type: "explicit", suggested_count: 0, created_at: 0, brief: "",
+          } as GraphNode);
+        }
+      }
+
       onTreeChanged?.();
+
+      // 4) 导航到自动创建的会话
+      if (convId) {
+        const partitionId = parent.level === "partition"
+          ? parent.id
+          : useConversationStore.getState().selectedPartitionId || parent.id;
+        store.selectConversation(partitionId, convId);
+      }
     } catch { /* ignore */ }
     setNewChildTarget(null);
   }, [newChildTarget, onTreeChanged]);
@@ -94,13 +146,13 @@ export function useTreeNavigation(
   }, [onTreeChanged]);
 
   // ── 重命名会话 ──
-  const handleRenameConv = useCallback(async (convId: string, name: string, topicId: string) => {
+  const handleRenameConv = useCallback(async (convId: string, name: string, parentId: string) => {
     try {
       await tree(`/tree/conversation/${convId}`, { method: "PATCH", body: JSON.stringify({ name }) });
       const store = useConversationStore.getState();
       const newCache = new Map(store.convCache);
-      const convs = newCache.get(topicId) || [];
-      newCache.set(topicId, convs.map(c => c.id === convId ? { ...c, name } : c));
+      const convs = newCache.get(parentId) || [];
+      newCache.set(parentId, convs.map(c => c.id === convId ? { ...c, name } : c));
       store.setConvCache?.(newCache);
     } catch { /* ignore */ }
     setEditingId(null);
@@ -115,9 +167,12 @@ export function useTreeNavigation(
         // 会自动智能命名（新会话、新会话2...）并复用空会话
         const result = await ensureConversationAtLevel(node.level, node.id, partitionId);
         if (result) {
-          // 刷新该节点下的对话列表，让新建的会话出现在侧边栏
-          store.toggleExpand(node);
-          await store.loadConversations(node.id);
+          // 确保节点展开（不要 toggle，避免已展开的节点被折叠）
+          if (!store.expandedSet.has(node.id)) {
+            store.toggleExpand(node);
+          }
+          // 强制重新加载该节点下的会话（忽略 loadingSet，确认包含新会话）
+          await store.reloadConversations(node.id);
           onConversationReady?.(result.partitionId, result.conversationId);
         }
       } catch (e) {
@@ -129,31 +184,62 @@ export function useTreeNavigation(
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
     const store = useConversationStore.getState();
+
+    // ── 先收集删除前信息（level + parentId + parentLevel）──
+    let level: string | undefined;
+    let parentId: string = ROOT_KEY; // 默认父键，用于 reload 父节点子列表
+
+    if (!deleteTarget.isConv) {
+      store.childMap.forEach((nodes: GraphNode[], key: string) => {
+        const found = nodes.find((n: GraphNode) => n.id === deleteTarget.id);
+        if (found) { level = found.level; parentId = key; }
+      });
+    }
+
     try {
       if (deleteTarget.isConv) {
         await tree(`/tree/conversation/${deleteTarget.id}`, { method: "DELETE" });
-        if (deleteTarget.topicId) store.loadConversations(deleteTarget.topicId);
+        if (deleteTarget.parentId) {
+          await store.reloadConversations(deleteTarget.parentId);
+        }
         onTreeChanged?.();
+        if (deleteTarget.parentId) {
+          navigateToNode(deleteTarget.parentId);
+        }
       } else {
-        // 使用 conversation tree 路由删除，而非 cognitive graph 路由
-        // 需要从 childMap 中找到节点的 level
-        let level: string | undefined;
-        store.childMap.forEach((nodes: GraphNode[]) => {
-          const found = nodes.find((n: GraphNode) => n.id === deleteTarget!.id);
-          if (found) { level = found.level; }
-        });
+        // ── 删除树节点（domain / topic / partition）──
         if (level) {
           await tree(`/tree/${level}/${deleteTarget.id}`, { method: "DELETE" });
         } else {
-          // fallback: 使用 cognitive graph 路由
+          // fallback: cognitive graph 路由
           await v2(`/graph/nodes/${deleteTarget.id}?recursive=true`, { method: "DELETE" });
         }
-        store.loadRootNodes();
+
+        // ── 刷新父节点的子列表，让被删节点从侧边栏消失 ──
+        // parentId → parentLevel 映射：用于 loadChildren 的 level 参数
+        const LEVEL_MAP: Record<string, string> = { topic: "domain", domain: "partition" };
+        const parentLevel = level ? LEVEL_MAP[level] : undefined;
+
+        if (parentId === ROOT_KEY) {
+          await store.loadRootNodes();
+        } else if (parentLevel) {
+          // 先清除父节点缓存，确保 loadChildren 强制重新加载
+          const s = useConversationStore.getState();
+          const newMap = new Map(s.childMap);
+          newMap.delete(parentId);
+          s.setChildMap(newMap);
+          await store.loadChildren(parentId, parentLevel);
+        }
+
         onTreeChanged?.();
+        // 导航到父节点
+        if (parentId !== ROOT_KEY) {
+          navigateToNode(parentId);
+        }
       }
     } catch { /* ignore */ }
     setDeleteTarget(null);
-  }, [deleteTarget, onTreeChanged]);
+  }, [deleteTarget, onTreeChanged, navigateToNode]);
 
   return {
     rootNodes, childMap, convCache, expandedSet, loadingSet,

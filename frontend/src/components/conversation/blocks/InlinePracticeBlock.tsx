@@ -4,6 +4,10 @@
 import { useState, useMemo, useCallback } from "react";
 // ===== 图标组件 =====
 import { BookOpen, Lightbulb, Check, X, Loader2 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import MathContent from "@/components/ui/MathContent";
 import { renderMath, renderMarkdown } from "@/lib/utils/math";
 import { sanitizeHtml } from "@/lib/utils/sanitize";
@@ -192,8 +196,10 @@ export default function InlinePracticeBlock({
                   <span className="text-[var(--color-text-muted)] font-mono text-xs w-5 flex-shrink-0">
                     {opt.letter}.
                   </span>
-                  <span className="text-[var(--color-text-secondary)]">
-                    {opt.text}
+                  <span className="text-[var(--color-text-secondary)] [&_p]:m-0 [&_.katex]:text-sm">
+                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} components={{ p: ({ children }) => <>{children}</> }}>
+                      {opt.text}
+                    </ReactMarkdown>
                   </span>
                 </button>
               );

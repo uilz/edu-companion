@@ -81,9 +81,9 @@ interface SidebarTreeNodeProps {
   handleNewConvClick: (node: GraphNode, pid?: string) => void;
   setEditingId: (id: string | null) => void;
   setEditValue: (v: string) => void;
-  setDeleteTarget: (target: { id: string; label: string; isConv?: boolean; topicId?: string } | null) => void;
+  setDeleteTarget: (target: { id: string; label: string; isConv?: boolean; parentId?: string } | null) => void;
   handleRename: (node: GraphNode, name: string) => void;
-  handleRenameConv: (convId: string, name: string, topicId: string) => void;
+  handleRenameConv: (convId: string, name: string, parentId: string) => void;
   onSelectConv?: (partitionId: string, conversationId: string) => void;
   onSelectGraphNode: (node: GraphNode, partitionId: string) => void;
 }
@@ -309,7 +309,7 @@ export function SidebarTreeNode({
                 <div className="flex flex-shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/conv:opacity-100 max-lg:opacity-100">
                   <button onClick={(e) => { e.stopPropagation(); setEditingId(conv.id); setEditValue(conv.name); }}
                     className="p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)]" title="重命名"><Pencil size={10} /></button>
-                  <button onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: conv.id, label: conv.name, isConv: true, topicId: node.id }); }}
+                  <button onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: conv.id, label: conv.name, isConv: true, parentId: node.id }); }}
                     className="p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-error)]" title="删除"><Trash2 size={10} /></button>
                 </div>
               </div>

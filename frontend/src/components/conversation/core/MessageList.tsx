@@ -1,7 +1,7 @@
 "use client";
 
 import React, { Fragment, useEffect, useRef, useMemo, useState, useCallback } from "react";
-import { User, Bot, ChevronDown, FileText, ImageIcon, ExternalLink } from "lucide-react";
+import { User, Bot, GraduationCap, ChevronDown, FileText, ImageIcon, ExternalLink } from "lucide-react";
 import ResponseBlockRenderer from "./../renderers/ResponseBlockRenderer";
 import QuoteBlockRenderer from "./../renderers/QuoteBlockRenderer";
 import TextSelectionToolbar from "./../input/TextSelectionToolbar";
@@ -438,10 +438,10 @@ export default function MessageList({
               {/* AI Avatar + label — above the message for assistant */}
               {!isUser && (
                 <div className="flex items-center gap-2 mb-1.5 px-1">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-[var(--color-surface)] text-[var(--color-accent)] border border-[var(--color-border)]">
-                    <Bot size={16} />
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-white bg-blue-500">
+                    <GraduationCap size={16} />
                   </div>
-                  <span className="text-xs font-medium text-[var(--color-text-muted)]">AI</span>
+                  <span className="text-xs font-medium text-[var(--color-text-muted)]">教学助手</span>
                 </div>
               )}
               <div className={`message-enter ${isUser ? "flex gap-4 flex-row-reverse" : ""}`}>

@@ -2,6 +2,10 @@
 
 import { useState, useCallback } from "react";
 import { BookOpen, Check, X, ChevronRight, Lightbulb } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import QuestionStem from "@/components/practice/components/QuestionStem";
 
 // ── 类型 ──
@@ -159,8 +163,10 @@ export default function PracticeSetBlock({
                   <span className="text-[var(--color-text-muted)] font-mono text-xs w-5 shrink-0">
                     {opt.letter}.
                   </span>
-                  <span className="text-[var(--color-text-secondary)] flex-1">
-                    {opt.text}
+                  <span className="text-[var(--color-text-secondary)] flex-1 [&_p]:m-0 [&_p]:text-sm [&_.katex]:text-sm">
+                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                      {opt.text}
+                    </ReactMarkdown>
                   </span>
                   {isSubmitted && isOptCorrect && (
                     <Check size={14} className="text-green-500 shrink-0" />
@@ -209,9 +215,11 @@ export default function PracticeSetBlock({
               </span>
             </div>
             {q.analysis && (
-              <p className="text-[11px] text-[var(--color-text-secondary)] leading-relaxed mt-1">
-                {q.analysis}
-              </p>
+              <div className="text-[11px] text-[var(--color-text-secondary)] leading-relaxed mt-1 [&_p]:m-0 [&_.katex]:text-xs">
+                <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                  {q.analysis}
+                </ReactMarkdown>
+              </div>
             )}
           </div>
         )}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, Sparkles, X } from "lucide-react";
+import QuestionStem from "@/components/practice/components/QuestionStem";
 import { getQuestionExplanation } from "@/lib/api/practice-api";
 
 interface Props {
@@ -49,8 +50,8 @@ export default function ExplanationPanel({ questionId, stem, visible, onClose }:
             <span className="text-xs text-[var(--color-text-muted)]">正在分析题目...</span>
           </div>
         ) : (
-          <div className="text-xs text-[var(--color-text)] leading-relaxed whitespace-pre-wrap">
-            {explanation || "暂无讲解内容。"}
+          <div className="text-xs text-[var(--color-text)] leading-relaxed [&_p]:m-0 [&_.katex]:text-xs">
+            <QuestionStem stem={explanation || "暂无讲解内容。"} />
           </div>
         )}
       </div>

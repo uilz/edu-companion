@@ -6,6 +6,10 @@ import {
   ChevronDown, ChevronUp, Brain, Trash2, ChevronLeft, ChevronRight,
   BarChart3, AlertTriangle, Filter,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import {
   getErrorBook, getErrorBookStats, clearMasteredErrors,
   createPracticeSession, resolveBankForNode,
@@ -204,7 +208,9 @@ export default function ErrorBookPage() {
                                   : "bg-[var(--color-bg)] text-[var(--color-text-muted)]"
                               }`}>
                               <span className="flex-shrink-0 font-medium">{opt.letter}.</span>
-                              <span>{opt.text}</span>
+                              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} components={{ p: ({ children }) => <>{children}</> }}>
+                                {opt.text}
+                              </ReactMarkdown>
                               {opt.is_correct && <CheckCircle size={10} className="flex-shrink-0 mt-0.5" />}
                             </div>
                           ))}
@@ -215,7 +221,9 @@ export default function ErrorBookPage() {
                       {item.analysis && (
                         <div className="mt-3 p-3 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)]/30">
                           <p className="text-[10px] font-medium text-[var(--color-text-muted)] mb-1">解析</p>
-                          <p className="text-xs text-[var(--color-text)] leading-relaxed">{item.analysis}</p>
+                          <div className="text-xs text-[var(--color-text)] leading-relaxed [&_p]:m-0 [&_.katex]:text-xs">
+                            <QuestionStem stem={item.analysis} />
+                          </div>
                         </div>
                       )}
 

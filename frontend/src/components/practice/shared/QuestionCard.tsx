@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Volume2, Heart, EyeOff, Eye, Lightbulb, SkipForward, Shuffle, Loader2, BookOpen, MessageSquareText } from "lucide-react";
 import QuestionStem from "@/components/practice/components/QuestionStem";
 import OptionButton from "./OptionButton";
@@ -53,10 +53,11 @@ export default function QuestionCard({
   const [skipped, setSkipped] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
   const [showReference, setShowReference] = useState(false);
+  const [fillAnswer, setFillAnswer] = useState("");
 
   const qtype = question.question_type;
   const isOptionType = qtype === "single" || qtype === "multiple" || qtype === "judge";
-  const canSubmit = isOptionType ? selected.length > 0 : false;
+  const canSubmit = isOptionType ? selected.length > 0 : fillAnswer.trim().length > 0;
 
   const handleShowHint = useCallback(async () => {
     if (showHint) return;
@@ -99,6 +100,22 @@ export default function QuestionCard({
     setSkipped(true);
     onSkip();
   };
+
+  // 提交按钮点击：选择题直接提交，填空/简答先写入答案再提交
+  const handleSubmitClick = () => {
+    if (isOptionType) {
+      onSubmit();
+    } else {
+      onSelect(fillAnswer.trim());
+      // 用微任务确保 selected 状态已更新
+      queueMicrotask(() => onSubmit());
+    }
+  };
+
+  // 切换题目时重置填空答案
+  useEffect(() => {
+    setFillAnswer("");
+  }, [question.id]);
 
   return (
     <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)] overflow-hidden">
@@ -190,6 +207,31 @@ export default function QuestionCard({
         </div>
       )}
 
+      {/* ── 填空/简答输入框 ── */}
+      {!isOptionType && !showFeedback && (
+        <div className="px-5 pb-4">
+          <textarea
+            value={fillAnswer}
+            onChange={(e) => { setFillAnswer(e.target.value); }}
+            onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && canSubmit) handleSubmitClick(); }}
+            placeholder={qtype === "fill" ? "输入你的答案...（Ctrl+Enter 提交）" : "输入你的回答...（Ctrl+Enter 提交）"}
+            rows={qtype === "fill" ? 2 : 4}
+            className="w-full px-4 py-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] text-sm resize-none focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+            disabled={showFeedback}
+          />
+        </div>
+      )}
+
+      {/* ── 填空/简答的反馈：显示用户的回答 ── */}
+      {!isOptionType && showFeedback && selected.length > 0 && (
+        <div className="px-5 pb-4">
+          <div className="p-3 rounded-xl border border-[var(--color-border)]/60 bg-[var(--color-surface)]">
+            <p className="text-[10px] text-[var(--color-text-muted)] mb-1">你的回答</p>
+            <p className="text-sm text-[var(--color-text)] whitespace-pre-wrap">{selected[0]}</p>
+          </div>
+        </div>
+      )}
+
       {/* ── 反馈 ── */}
       {showFeedback && lastResult && (
         <div className="px-5 pb-4">
@@ -226,7 +268,7 @@ export default function QuestionCard({
       <div className="px-5 py-3 border-t border-[var(--color-border)]/50 flex justify-end gap-2">
         {!showFeedback ? (
           <button
-            onClick={onSubmit}
+            onClick={handleSubmitClick}
             disabled={!canSubmit || submitting}
             className="px-5 py-2 rounded-xl bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 disabled:opacity-30 transition-all flex items-center gap-1.5"
           >

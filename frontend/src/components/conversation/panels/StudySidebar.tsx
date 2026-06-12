@@ -76,10 +76,20 @@ export default function StudySidebar({
           store.selectConversation(path.partition_id, cid);
         }
       } else if (did || tid) {
-        // 场景2：已有 domain/topic → 直接展开
+        // 场景2：已有 domain/topic → 直接展开 + 设置 selectedNode
+        useConversationStore.setState({
+          selectedNode: tid
+            ? { id: tid, level: "topic", parent: did || pid }
+            : did
+              ? { id: did, level: "domain", parent: pid }
+              : null,
+        });
         await store.expandPath(pid, did, tid);
       } else {
-        // 场景3：仅分区 → 展开分区级
+        // 场景3：仅分区 → 展开分区级 + 设置 selectedNode
+        useConversationStore.setState({
+          selectedNode: { id: pid, level: "partition", parent: null },
+        });
         await store.expandPath(pid);
       }
     };
@@ -90,11 +100,11 @@ export default function StudySidebar({
   const selectGraphNode = useConversationStore(s => s.selectGraphNode);
   const selectedNode = useConversationStore(s => s.selectedNode);
   const childMap = useConversationStore(s => s.childMap);
-  const convCache = useConversationStore(s => s.convCache);
   const convActiveConvId = useConversationStore(s => s.activeConversationId);
   const effectiveConvId = activeConversationId ?? convActiveConvId;
 
   // ── 构建 parentMap（子→父映射），用于计算祖先链 ──
+  // 补全 parentMap：用 store 中的层级 ID 填充 childMap 未覆盖的映射
   const parentMap = useMemo(() => {
     const map = new Map<string, string>();
     childMap.forEach((children, parentId) => {
@@ -102,27 +112,34 @@ export default function StudySidebar({
         map.set(child.id, parentId);
       }
     });
+    // 补全：topic → domain、domain → partition（childMap 可能未加载这些层级）
+    const s = useConversationStore.getState();
+    if (s.activeTopicId && s.activeDomainId && !map.has(s.activeTopicId)) {
+      map.set(s.activeTopicId, s.activeDomainId);
+    }
+    if (s.activeDomainId && s.selectedPartitionId && !map.has(s.activeDomainId)) {
+      map.set(s.activeDomainId, s.selectedPartitionId);
+    }
     return map;
-  }, [childMap]);
+  }, [childMap, activeDomainId, activeTopicId, _selectedNodeId]);
 
   // ── 计算祖先链 ──
+  // 有活跃会话时，直接用 store 中的层级 ID 构建祖先集，不依赖 parentMap 回溯
   const ancestorIds = useMemo(() => {
     const ids = new Set<string>();
 
-    // 先确定起始节点 ID：如果有活跃会话，从其 parent_id 开始
-    let startId: string | null = null;
     if (effectiveConvId) {
-      convCache.forEach((convs) => {
-        if (startId) return;
-        const c = convs.find((cv) => cv.id === effectiveConvId);
-        if (c?.parent_id) startId = c.parent_id;
-      });
-    }
-    // 如果没有活跃会话或没找到 parent_id，回退到 selectedNode.parent
-    if (!startId) {
-      startId = selectedNode?.parent ?? null;
+      // 有活跃会话：把 selectedNode.id + activeTopicId + activeDomainId + selectedPartitionId 全部加入
+      if (selectedNode?.id) ids.add(selectedNode.id);
+      const s = useConversationStore.getState();
+      if (s.activeTopicId) ids.add(s.activeTopicId);
+      if (s.activeDomainId) ids.add(s.activeDomainId);
+      if (s.selectedPartitionId) ids.add(s.selectedPartitionId);
+      return ids;
     }
 
+    // 无活跃会话时，用 parentMap 回溯选中节点的父链
+    let startId = selectedNode?.parent ?? null;
     if (!startId) return ids;
 
     let cur: string | null = startId;
@@ -132,7 +149,7 @@ export default function StudySidebar({
       cur = parentMap.get(cur) || null;
     }
     return ids;
-  }, [selectedNode, parentMap, effectiveConvId, convCache]);
+  }, [selectedNode, parentMap, effectiveConvId, activeDomainId, activeTopicId, _selectedNodeId]);
 
   // ── 选中+展开（交由 store 自包含处理）──
   const handleSelectGraphNode = async (node: GraphNode, partitionId: string) => {

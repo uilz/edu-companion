@@ -6,6 +6,10 @@ import {
   FileText, Send, Loader2, Trophy, Brain, BookOpen,
   BarChart3, Grid3X3,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import {
   createExam,
   getExamTime,
@@ -138,7 +142,7 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
   // ── 选择答案 ──
   const toggleAnswer = useCallback((letter: string) => {
     if (!currentQuestion) return;
-    if (currentQuestion.question_type === "single" || currentQuestion.question_type === "choice") {
+    if (currentQuestion.question_type === "single" || currentQuestion.question_type === "judge" || currentQuestion.question_type === "choice") {
       const newAns = [letter];
       setSelectedAnswers(newAns);
       setSavedAnswers((prev) => ({ ...prev, [currentQuestion.id]: newAns }));
@@ -402,7 +406,11 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
                             ? "bg-red-500 text-white"
                             : "bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)]"
                         }`}>{opt.letter}</span>
-                        <span className="text-[13px] text-[var(--color-text)] leading-relaxed pt-0.5">{opt.text}</span>
+                        <span className="text-[13px] text-[var(--color-text)] leading-relaxed pt-0.5 [&_p]:m-0 [&_.katex]:text-sm">
+                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} components={{ p: ({ children }) => <>{children}</> }}>
+                      {opt.text}
+                    </ReactMarkdown>
+                  </span>
                       </button>
                     );
                   })}

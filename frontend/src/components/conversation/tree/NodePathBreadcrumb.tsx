@@ -19,6 +19,7 @@ export default function NodePathBreadcrumb() {
   const partitions = useConversationStore((s) => s.partitions);
   const childMap = useConversationStore((s) => s.childMap);
   const convCache = useConversationStore((s) => s.convCache);
+  const selectedNode = useConversationStore((s) => s.selectedNode);
 
   // ── 从 childMap 中按 ID 找标签 ──
   function findLabel(id: string | null): string | null {
@@ -38,13 +39,17 @@ export default function NodePathBreadcrumb() {
   const domainLabel = domainId ? findLabel(domainId) : null;
   const topicLabel = topicId ? findLabel(topicId) : null;
 
-  // 从 convCache 找会话名
+  // 从 convCache 找会话名（支持 pc/pdc/pdtc：会话可挂在 partition/domain/topic 下）
   let convLabel: string | null = null;
-  if (convId && topicId) {
-    const convs = convCache.get(topicId);
-    if (convs) {
-      const found = convs.find((c) => c.id === convId);
-      convLabel = found?.name || null;
+  if (convId) {
+    // 优先从 selectedNode.id（直接父节点）查找，再回退到 topicId/domainId/partitionId
+    const parentIds = [selectedNode?.id, topicId, domainId, partitionId].filter(Boolean) as string[];
+    for (const pid of parentIds) {
+      const convs = convCache.get(pid);
+      if (convs) {
+        const found = convs.find((c) => c.id === convId);
+        if (found) { convLabel = found.name || null; break; }
+      }
     }
   }
 

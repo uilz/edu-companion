@@ -1,5 +1,9 @@
 import { useState } from "react";
 import { BookOpen } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import InlinePracticeBlock from "./InlinePracticeBlock";
 import PracticeSetBlock from "./PracticeSetBlock";
 import { useRenderedContent } from "@/lib/hooks/useRenderedContent";
@@ -68,7 +72,6 @@ function PracticeBlock({ content }: { content: Record<string, unknown> }) {
   const [submitted, setSubmitted] = useState(false);
 
   const questionHtml = useRenderedContent(question);
-  const explanationHtml = useRenderedContent(explanation);
 
   return (
     <div className="border border-[var(--color-border)] bg-[var(--color-surface)] mt-2">
@@ -110,7 +113,11 @@ function PracticeBlock({ content }: { content: Record<string, unknown> }) {
                   <span className="text-[var(--color-text-muted)] font-mono text-xs w-5 flex-shrink-0">
                     {letter}.
                   </span>
-                  <span className="text-[var(--color-text-secondary)]">{opt}</span>
+                  <span className="text-[var(--color-text-secondary)] [&_p]:m-0 [&_.katex]:text-sm">
+                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} components={{ p: ({ children }) => <>{children}</> }}>
+                      {opt}
+                    </ReactMarkdown>
+                  </span>
                 </button>
               );
             })}
@@ -144,8 +151,10 @@ function PracticeBlock({ content }: { content: Record<string, unknown> }) {
             <div className="text-[10px] text-[var(--color-accent)] font-medium mb-1">
               解析
             </div>
-            <div className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
-              {explanationHtml || explanation}
+            <div className="text-xs text-[var(--color-text-secondary)] leading-relaxed [&_p]:m-0 [&_.katex]:text-xs">
+              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} components={{ p: ({ children }) => <>{children}</> }}>
+                {explanation}
+              </ReactMarkdown>
             </div>
           </div>
         )}
