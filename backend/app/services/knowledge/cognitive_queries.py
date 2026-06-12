@@ -35,7 +35,7 @@ def get_knowledge_context(user_id: str) -> str:
         practiced.sort(key=lambda n: n.belief.proficiency_mean)
         weak = [n for n in practiced if n.belief.proficiency_mean < 0.4]
         mastered = [n for n in practiced if n.belief.proficiency_mean >= 0.8]
-        urgent = get_repo().get_urgent_nodes(5, user_id)
+        urgent = get_repo().get_urgent_nodes(user_id, 5)
 
         lines = ["【学生知识状态】"]
         if weak:
@@ -181,7 +181,7 @@ def get_skill_detail(skill_id: str, user_id: str) -> Optional[dict]:
         return None
 
 
-def get_weak_skills(limit: int = 5, user_id: str) -> list[str]:
+def get_weak_skills(user_id: str, limit: int = 5) -> list[str]:
     """获取薄弱技能列表"""
     try:
         nodes = get_repo().list_all_nodes(user_id)

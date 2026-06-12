@@ -191,7 +191,7 @@ class ClassifierService:
             except Exception:
                 pass
 
-        # 3.75 仍无候选 & 有关键词匹配 → 自动创建新节点
+        # 3.75 仍无候选 & 有关键词匹配 → 返回推荐但不创建节点
         if not candidates and text:
             try:
                 matched_keywords = self._keyword_score(text)
@@ -199,33 +199,20 @@ class ClassifierService:
                     top = matched_keywords[0]
                     partition_name = top["partition"]
                     score = top["score"]
-                    from app.services.knowledge.tree_ops import tree_ops
-                    from app.services.common import get_data_repo
-                    data = get_data_repo().load(user_id)
-                    # 找或创建 partition
-                    pid = None
-                    for p in data.partitions.values():
-                        if p.name == partition_name:
-                            pid = p.id
-                            break
-                    if not pid:
-                        p = tree_ops.create_partition(user_id, partition_name, subject=partition_name, emoji="📖")
-                        pid = p.id
-                    # 创建 domain（从关键词提取，取第一个关键词作为 domain 名）
-                    words = [w for w in partition_name.replace(" ", "").split() if len(w) >= 2]
-                    domain_name = f"{partition_name}入门" if not words else partition_name
-                    d = tree_ops.create_domain(user_id, pid, domain_name)
-                    # 创建 topic（取消息的前几个字）
-                    topic_name = text[:12] + ("..." if len(text) > 12 else "")
-                    t = tree_ops.create_topic(user_id, d.id, topic_name)
+                    # 只推荐，不创建任何节点
+                    # 可以返回一个"虚拟候选"，标记为需用户确认
                     candidates.append({
-                        "id": t.id,
-                        "label": topic_name,
-                        "path_id": f"{partition_name}.{domain_name}.{topic_name}",
+                        "id": f"_suggest_{hash(text) % 100000}",
+                        "label": text[:20],
+                        "path_id": f"{partition_name}._suggest_.{text[:12]}",
                         "score": score,
+                        "is_suggestion": True,
+                        "suggested_partition": partition_name,
+                        "suggested_domain": partition_name,
+                        "suggested_topic": text[:12],
                     })
             except Exception:
-                logger.debug("自动创建节点失败", exc_info=True)
+                logger.debug("推荐文本分类失败", exc_info=True)
 
         # 4. 去重 + 截断
         seen = set()

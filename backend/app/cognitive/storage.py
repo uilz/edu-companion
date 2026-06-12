@@ -223,7 +223,7 @@ def list_all_nodes(user_id: str) -> list[CognitiveNode]:
 
 
 def get_urgent_nodes(
-    limit: int = 10, user_id: str,
+    user_id: str, limit: int = 10,
 ) -> list[CognitiveNode]:
     """获取紧迫度最高的节点（用于调度）"""
     db = get_db()
@@ -283,9 +283,9 @@ def mark_event_processed(event_id: str) -> None:
 
 
 def query_events(
+    user_id: str,
     event_type: str | None = None,
     node_id: str | None = None,
-    user_id: str,
     limit: int = 50,
 ) -> list[CognitiveEvent]:
     """查询事件（按类型和/或节点过滤）"""

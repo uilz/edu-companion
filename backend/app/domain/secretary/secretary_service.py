@@ -23,8 +23,6 @@ from .engines.proposal_generator import ProposalGenerator
 
 logger = logging.getLogger(__name__)
 
-_USER_ID_DEFAULT
-
 
 class SecretaryService:
     """秘书系统主入口"""
@@ -41,7 +39,7 @@ class SecretaryService:
 
     async def diagnose(
         self,
-        user_id: str = _USER_ID_DEFAULT,
+        user_id: str,
         scope: ScopeSpec | None = None,
     ) -> DiagnosisReport:
         """执行诊断并返回报告"""
@@ -57,8 +55,8 @@ class SecretaryService:
 
     def suggest(
         self,
+        user_id: str,
         report: DiagnosisReport | None = None,
-        user_id: str = _USER_ID_DEFAULT,
         max_proposals: int = 5,
         multi_option: bool = False,
     ) -> list[Proposal] | list[list[Proposal]]:
@@ -73,7 +71,7 @@ class SecretaryService:
 
     async def diagnose_and_suggest(
         self,
-        user_id: str = _USER_ID_DEFAULT,
+        user_id: str,
         scope: ScopeSpec | None = None,
         max_proposals: int = 5,
     ) -> tuple[DiagnosisReport, list[Proposal]]:
@@ -131,7 +129,7 @@ class SecretaryService:
 
     async def quick_assess(
         self,
-        user_id: str = _USER_ID_DEFAULT,
+        user_id: str,
     ) -> dict[str, Any]:
         """快速学习状态评估（轻量，无 LLM）"""
         return await self.diagnosis.quick_assess(user_id=user_id)

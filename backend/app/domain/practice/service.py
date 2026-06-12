@@ -49,8 +49,8 @@ class PracticeServiceImpl:
     # ═══════════════════════════════════════════════════════
 
     async def generate_questions(
-        self, subject: str, topic: str = "", level: str = "medium",
-        count: int = 5, user_id: str,
+        self, subject: str, user_id: str, topic: str = "", level: str = "medium",
+        count: int = 5,
     ) -> list:
         """从题库查询题目（按学科/难度筛选）"""
         try:
@@ -227,13 +227,13 @@ class PracticeServiceImpl:
     # 统计
     # ═══════════════════════════════════════════════════════
 
-    def compute_practice_stats(self, time_range: str = "week", user_id: str) -> dict:
+    def compute_practice_stats(self, user_id: str, time_range: str = "week") -> dict:
         from app.services.practice.practice_service import compute_practice_stats
-        return compute_practice_stats(time_range, user_id)
+        return compute_practice_stats(user_id, time_range)
 
-    def compute_behavior_report_data(self, time_range: str = "week", user_id: str) -> dict:
+    def compute_behavior_report_data(self, user_id: str, time_range: str = "week") -> dict:
         from app.services.practice.practice_service import compute_behavior_report_data
-        return compute_behavior_report_data(time_range, user_id)
+        return compute_behavior_report_data(user_id, time_range)
 
     async def get_stats(self, user_id: str, time_range: str = "week") -> dict:
         """从 attempts 表聚合练习统计（异步版）"""

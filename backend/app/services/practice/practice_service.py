@@ -396,7 +396,7 @@ def record_attempt(
 # ═══════════════════════════════════════════
 
 
-def compute_practice_stats(time_range: str = "week", user_id: str) -> dict:
+def compute_practice_stats(user_id: str, time_range: str = "week") -> dict:
     """计算练习统计（overview + daily_trend + mastery_bars + error_distribution + heatmap）"""
     db = get_db()
     now = datetime.now()
@@ -534,7 +534,7 @@ def compute_practice_stats(time_range: str = "week", user_id: str) -> dict:
 
 
 def compute_behavior_report_data(
-    time_range: str = "week", user_id: str
+    user_id: str, time_range: str = "week"
 ) -> dict:
     """聚合行为报告所需数据，返回 dict 供 behavior_analyzer / habit_formation 消费"""
     from app.services.analytics.behavior_analyzer import behavior_analyzer

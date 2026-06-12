@@ -21,7 +21,7 @@ from app.schemas.conversation import (
 )
 from app.services.llm.llm_service import llm_service
 from app.services.common import get_data_repo
-from app.services.conversation.context_builder import _build_context_messages
+from app.services.conversation.context_pipeline import build_llm_messages
 from app.services.analytics.emotion_analyzer import emotion_analyzer
 
 logger = logging.getLogger(__name__)
@@ -135,7 +135,7 @@ async def generate_reply(
             recent_messages.append(node)
 
     # 构建上下文
-    llm_messages = _build_context_messages(partition, conversation, recent_messages, user_text, user_id)
+    llm_messages = await build_llm_messages(partition, conversation, recent_messages, user_text, user_id)
 
     # 调用 LLM（传入 user_id 以支持自定义配置）
     reply = await llm_service.generate(
@@ -179,7 +179,7 @@ async def generate_reply_stream(
             recent_messages.append(node)
 
     # 构建上下文
-    llm_messages = _build_context_messages(partition, conversation, recent_messages, user_text, user_id)
+    llm_messages = await build_llm_messages(partition, conversation, recent_messages, user_text, user_id)
 
     # 注入预执行的工具结果
     if extra_tool_context:

@@ -62,9 +62,8 @@ class TreeHierarchyMixin:
             "child_key": None,
             "parent_key": "topic_id",
             "factory": lambda name, emoji, **kw: Conversation(
-                topic_id=kw["parent_id"],
-                parent_id=kw["parent_id"],
-                parent_type="topic",
+                parent_id=kw.get("parent_id", ""),
+                parent_type="",  # 由 _create_conversation_node 正确设置
                 name=name or "新对话",
             ),
         },
@@ -133,8 +132,9 @@ class TreeHierarchyMixin:
 
         # 根节点创建
         root_id = str(uuid4())
+        # 根节点的 parent_id 为空（表示根级消息），前端据此判断可见性
         root_node = TreeNode(
-            id=root_id, parent_id=root_id,
+            id=root_id, parent_id="",
             partition_id=conv.partition_id, conversation_id=conv.id,
             role="assistant", content_blocks=[], text_summary=name or conv.name or "对话根节点",
         )
@@ -341,6 +341,20 @@ class TreeHierarchyMixin:
         collection[entity.id] = entity
 
         if level == "conversation":
+            # 旧路径：从 parent_id 反查层级 ID 和 parent_type
+            p_type, p_entity = self._resolve_parent(data, parent_id) if parent_id else ("", None)
+            entity.parent_type = p_type
+            if p_type == "partition":
+                entity.partition_id = parent_id
+            elif p_type == "domain":
+                entity.partition_id = p_entity.partition_id
+                entity.domain_id = parent_id
+            elif p_type == "topic":
+                domain = data.domains.get(p_entity.domain_id)
+                entity.partition_id = domain.partition_id if domain else ""
+                entity.domain_id = p_entity.domain_id
+                entity.topic_id = parent_id
+
             topic = data.topics.get(getattr(entity, "topic_id", ""))
             domain = data.domains.get(topic.domain_id) if topic else None
             partition = data.partitions.get(domain.partition_id) if domain else None

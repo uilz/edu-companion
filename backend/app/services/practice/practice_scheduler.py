@@ -53,7 +53,7 @@ def get_due_questions(
     db = get_db()
 
     # 查询所有活跃题目及其最近答题情况
-    conditions = ["q.deleted_at IS NULL", "q.status = 'active'", "q.is_slashed = false"]
+    conditions = ["q.deleted_at IS NULL", "q.status = 'active'", "q.is_slashed = false", "q.user_id = %s"]
     params = [user_id]
     if bank_id:
         conditions.append("q.bank_id = %s")

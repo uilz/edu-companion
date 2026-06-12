@@ -126,7 +126,7 @@ class QuestionGenerator:
         self.llm = llm_service
         self._cache: dict[str, list[Question]] = {}
 
-    def generate(
+    async def generate(
         self,
         subject: str,
         skill_id: str,
@@ -148,32 +148,58 @@ class QuestionGenerator:
             content_type: 题型 (choice/fill/free_form)
             material_context: 用户资料上下文（可选）
         """
-        # 1. 尝试从模板生成（使用LLM + 知识点模板）
         knowledge_ctx = self.TEMPLATES.get(skill_id, f"{subject} - {skill_id}")
         if material_context:
             knowledge_ctx += f"\n\n用户学习资料内容：\n{material_context[:2000]}"
 
-        # 2. 构建提示词
-        prompt = f"""请生成 {count} 道{subject}练习题。
+        bloom_labels = {"remember": "记忆", "understand": "理解", "apply": "应用", "analyze": "分析", "evaluate": "评价", "create": "创造"}
+        bloom_zh = bloom_labels.get(bloom_level.value, bloom_level.value)
+        type_zh = {"choice": "选择题（单选）", "multiple": "多选题", "fill": "填空题", "free_form": "解答题", "calculation": "计算题"}.get(content_type, content_type)
 
-知识点：{skill_id}
-Bloom认知层次：{bloom_level.value}
-目标难度：{difficulty:.1f} (0=最易, 1=最难)
-题型：{content_type}
+        prompt = f"""你是一个专业的练习题生成AI。请严格按照要求生成 {count} 道高质量的{subject}练习题。
 
-{"如果是选择题，请为每个错误选项标注distractor_type。" if content_type == "choice" else ""}
+## 知识点背景
+{knowledge_ctx}
+
+## 出题要求
+- 题型：{type_zh}
+- Bloom认知层次：{bloom_zh}
+- 目标难度：{difficulty:.1f}（0最易~1最难）
+- 题目内容要具体、有实际意义，包含真实的数值/表达式/情景
+- 支持 LaTeX 数学公式（用 $...$ 或 $$...$$）
+
+## 输出格式
+直接返回JSON数组（不要markdown代码块包裹，不要其他文字），每个题目格式：
+{{
+  "text": "题目内容（含LaTeX）",
+  "options": [
+    {{"letter": "A", "text": "选项内容", "is_correct": true/false, "distractor_type": "错因类型"}},
+    ...
+  ],
+  "correct_answer": "正确选项字母",
+  "explanation": "解析（含LaTeX）",
+  "difficulty": 0.5
+}}
 """
 
         try:
-            # 3. 调用LLM生成
-            response = self.llm.chat(
-                system_prompt=QUESTION_SYSTEM_PROMPT.format(knowledge_context=knowledge_ctx),
-                user_prompt=prompt,
-                model=settings.default_model,
+            response = await self.llm.generate(
+                messages=[{"role": "user", "content": prompt}],
+                task_type="chat",
+                temperature=0.7,
+                max_tokens=4000,
             )
 
-            # 4. 解析JSON
             questions_data = self._parse_llm_response(response)
+            if not questions_data:
+                logger.warning("LLM生成JSON解析失败，重试一次")
+                response = await self.llm.generate(
+                    messages=[{"role": "user", "content": prompt + "\n\n重要：只返回纯JSON数组，不要包含任何其他文字或markdown格式。"}],
+                    task_type="chat",
+                    temperature=0.1,
+                    max_tokens=4000,
+                )
+                questions_data = self._parse_llm_response(response)
             if not questions_data:
                 logger.warning("LLM生成失败，使用fallback模板")
                 return self._generate_fallback(skill_id, subject, count)

@@ -217,7 +217,7 @@ def get_question(question_id, user_id: str):
     return _row_to_question(row, include_answer=True) if row else None
 
 
-def search_questions(keyword="", bank_id=None, user_id, page=1, page_size=50,
+def search_questions(user_id, keyword="", bank_id=None, page=1, page_size=50,
                      question_type=None, bloom_level=None):
     """跨题库搜索题目，支持关键字、类型、Bloom层次过滤"""
     _ensure_tables()

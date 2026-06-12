@@ -30,7 +30,7 @@ async def api_import_upload(body: dict, user_id: str = Depends(current_user_id))
     bank_id = body.get("bank_id", "")
     from app.services.practice.practice_import import preview_import
     try:
-        return preview_import(file_path, file_type, user_id, bank_id)
+        return preview_import(file_path, user_id, file_type, bank_id)
     except FileNotFoundError as e:
         raise HTTPException(404, str(e))
     except ValueError as e:

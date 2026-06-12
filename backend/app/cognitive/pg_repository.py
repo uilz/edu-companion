@@ -94,19 +94,20 @@ class PgCognitiveNodeRepository:
     def append_event(self, event: CognitiveEvent) -> None:
         _s.append_event(event)
 
-    def get_unprocessed_events(self, *, limit: int = 100) -> list[CognitiveEvent]:
-        return _s.get_unprocessed_events(limit=limit)
+    def get_unprocessed_events(self, *, limit: int = 100, user_id: str = "default") -> list[CognitiveEvent]:
+        return _s.get_unprocessed_events(limit=limit, user_id=user_id)
 
     def mark_event_processed(self, event_id: str) -> None:
         _s.mark_event_processed(event_id)
 
     def query_events(
         self,
+        user_id: str,
         node_id: str | None = None,
         event_type: str | None = None,
         limit: int = 50,
     ) -> list[CognitiveEvent]:
-        return _s.query_events(node_id, event_type, limit)
+        return _s.query_events(user_id, event_type, node_id, limit)
 
     def sync_from_practice_event(
         self,

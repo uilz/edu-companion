@@ -40,9 +40,9 @@ class KnowledgeQueryServiceImpl:
         from app.services.knowledge.cognitive_queries import get_skill_detail
         return get_skill_detail(skill_id, user_id)
 
-    def get_weak_skills(self, limit: int = 5, user_id: str) -> list[str]:
+    def get_weak_skills(self, user_id: str, limit: int = 5) -> list[str]:
         from app.services.knowledge.cognitive_queries import get_weak_skills
-        return get_weak_skills(limit, user_id)
+        return get_weak_skills(user_id, limit)
 
     def get_mastered_skills(self, user_id: str) -> list[str]:
         from app.services.knowledge.cognitive_queries import get_mastered_skills

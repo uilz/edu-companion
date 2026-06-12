@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 def preview_import(
     file_path: str,
-    file_type: str = "",
     user_id: str,
+    file_type: str = "",
     bank_id: Optional[str] = None,
 ) -> dict:
     """

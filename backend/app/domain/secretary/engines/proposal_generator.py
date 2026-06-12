@@ -21,9 +21,11 @@ from ..analysis import (
 
 logger = logging.getLogger(__name__)
 
-_USER_ID_DEFAULT
+
 
 # ── 提案模板 ──
+
+
 
 REVIEW_TEMPLATE = {
     "emoji": "📖",
@@ -110,7 +112,7 @@ class ProposalGenerator:
 
     def generate_from_analysis(
         self,
-        user_id: str = _USER_ID_DEFAULT,
+        user_id: str,
         max_proposals: int = 5,
     ) -> list[Proposal]:
         """直接从分析层生成提案（不依赖诊断报告）"""

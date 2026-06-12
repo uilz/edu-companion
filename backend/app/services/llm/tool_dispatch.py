@@ -19,10 +19,11 @@ from app.schemas.conversation import (
 )
 from app.services.llm.llm_service import llm_service, _parse_tool_calls_response
 from app.services.common import get_data_repo
-from app.services.llm.tool_executor import tool_executor, predict_tools, SLOW_TOOLS
+from app.services.llm.tool_executor import tool_executor, SLOW_TOOLS
+from app.services.llm.tool_repository import get_tool_repository
 
 from app.services.llm.llm_core import _find_active_conversation, parse_sources
-from app.services.conversation.context_builder import _build_context_messages
+from app.services.conversation.context_pipeline import build_llm_messages
 
 logger = logging.getLogger(__name__)
 
@@ -143,11 +144,11 @@ async def generate_reply_with_tools(
         if msg.role == "assistant":
             last_ai_text = msg.text_summary or ""
             break
-    detected_tools = predict_tools(user_text, last_ai_text)
+    detected_tools = [intent.action for intent in get_tool_repository().detect_intent(user_text, last_ai_text) if intent.action]
     logger.info("Detected tools: %s for text: %s", detected_tools, user_text[:50])
 
     # 构建上下文
-    llm_messages = _build_context_messages(partition, conversation, recent_messages, user_text, user_id)
+    llm_messages = await build_llm_messages(partition, conversation, recent_messages, user_text, user_id)
 
     response_blocks: list[ResponseBlock] = []
     order = 0
@@ -159,7 +160,7 @@ async def generate_reply_with_tools(
             try:
                 # 构建工具参数
                 params = _build_tool_params(tool_name, user_text, partition, conversation)
-                tool_block = await tool_executor.execute(tool_name, params)
+                tool_block = await tool_executor.execute(tool_name, params, user_id=user_id)
                 tool_block.order = order
                 response_blocks.append(tool_block)
                 order += 1
@@ -221,7 +222,7 @@ async def generate_reply_with_tools(
             b.order = i
     else:
         # 无 regex 匹配 → LLM function-calling 路径
-        tools = tool_executor.get_tools_for_llm()
+        tools = get_tool_repository().to_llm_schema()
         try:
             reply = await llm_service.generate(
                 messages=llm_messages,
@@ -261,7 +262,7 @@ async def generate_reply_with_tools(
 
                 try:
                     # 使用 LLM 提供的参数执行工具
-                    tool_block = await tool_executor.execute(tool_name, args)
+                    tool_block = await tool_executor.execute(tool_name, args, user_id=user_id)
                     tool_block.order = order
                     response_blocks.append(tool_block)
                     order += 1

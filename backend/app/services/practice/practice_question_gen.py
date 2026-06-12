@@ -88,19 +88,15 @@ async def generate_and_save(
     if not gen:
         gen = QuestionGenerator(llm_service)
 
-    # 在 executor 中运行同步 LLM 调用
-    loop = asyncio.get_event_loop()
-    questions = await loop.run_in_executor(
-        None,
-        lambda: gen.generate(
-            subject=subject,
-            skill_id=skill_id or subject,
-            bloom_level=bloom_enum,
-            difficulty=difficulty,
-            count=count,
-            content_type=content_type,
-            material_context=material_context,
-        ),
+    # 直接调用 async generate
+    questions = await gen.generate(
+        subject=subject,
+        skill_id=skill_id or subject,
+        bloom_level=bloom_enum,
+        difficulty=difficulty,
+        count=count,
+        content_type=content_type,
+        material_context=material_context,
     )
 
     if not questions:

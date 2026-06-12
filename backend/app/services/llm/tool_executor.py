@@ -8,6 +8,16 @@ from app.schemas.conversation import ResponseBlock
 
 logger = logging.getLogger(__name__)
 
+# 工具名 → 前端 block type 映射
+_TOOL_TO_BLOCK_TYPE = {
+    "generate_practice": "practice",
+    "search_media": "video",
+    "generate_image": "image",
+    "generate_mindmap": "mindmap",
+    "generate_document": "document",
+    "secretary_diagnose": "tool_block",
+}
+
 # ── 意图预判规则 ──
 TOOL_RULES: dict[str, str] = {
     r"视频|bilibili|b站|讲解视频|搜.*视频|找.*视频|有.*视频吗|搜.*教程": "search_media",
@@ -123,10 +133,29 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "secretary_diagnose",
+            "description": "诊断当前学习状态（薄弱点、认知负荷、学习进度），生成学习建议。当用户询问「我学得怎么样」「我的薄弱点」「给建议」等时调用",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "scope": {
+                        "type": "string",
+                        "enum": ["full", "quick"],
+                        "description": "诊断范围: full=全量诊断(慢), quick=快速评估(快)",
+                        "default": "quick",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 # ── 工具分类 ──
-FAST_TOOLS = {"search_media", "generate_practice", "query_question_banks", "create_question_bank"}
+FAST_TOOLS = {"search_media", "generate_practice", "query_question_banks", "create_question_bank", "secretary_diagnose"}
 SLOW_TOOLS = {"generate_image", "generate_mindmap", "generate_document"}
 
 # ── 工具处理器 ──
@@ -149,13 +178,14 @@ async def _handle_generate_practice(params: dict) -> dict:
     conversation_id = params.get("conversation_id", "")
     user_text = params.get("knowledge_point", subject)
     bank_name = params.get("bank_name", "").strip() or None
+    uid = params.get("user_id", "")
 
     try:
         from app.services.practice.practice_question_gen import handle_question_generation
 
         result = await handle_question_generation(
             user_message=user_text[:200],
-            user_id,
+            user_id=uid,
             conversation_id=conversation_id or None,
             bank_name=bank_name,
         )
@@ -246,7 +276,7 @@ async def _handle_generate_mindmap(params: dict) -> dict:
     if user_id and partition_id:
         try:
             from app.services.common import get_data_repo as _mm_storage
-            _data = _mm_get_data_repo().load(user_id)
+            _data = _mm_storage().load(user_id)
             graph = _data.knowledge_graphs.get(partition_id)
             if graph and graph.nodes:
                 # 找与 topic 相关的知识点
@@ -475,6 +505,7 @@ async def _handle_create_question_bank(params: dict) -> dict:
     name = params.get("name", "").strip()
     description = params.get("description", "").strip()
     subject = params.get("subject", "").strip()
+    uid = params.get("user_id", "")
 
     if not name:
         return {"error": "题库名称不能为空", "created": False}
@@ -482,7 +513,7 @@ async def _handle_create_question_bank(params: dict) -> dict:
     from app.services.practice.practice_question_bank import create_bank
 
     bank = create_bank(
-        user_id,
+        user_id=uid,
         name=name,
         description=description,
         auto_created=False,
@@ -500,6 +531,48 @@ async def _handle_create_question_bank(params: dict) -> dict:
     return {"error": "创建题库失败", "created": False}
 
 
+async def _handle_secretary_diagnose(params: dict) -> dict:
+    """秘书诊断：分析学习状态，生成建议"""
+    scope = params.get("scope", "quick")
+    user_id = params.get("user_id", "")
+    if not user_id:
+        return {"error": "user_id required", "status": "failed"}
+
+    try:
+        from app.domain.secretary.secretary_service import SecretaryService
+        svc = SecretaryService()
+
+        if scope == "full":
+            report, proposals = await svc.diagnose_and_suggest(user_id)
+            return {
+                "status": "ready",
+                "scope": "full",
+                "summary": report.summary,
+                "weak_point_count": len(report.weak_points),
+                "cognitive_load": report.cognitive_load,
+                "proposals": [
+                    {"title": p.title, "description": p.description,
+                     "action_type": p.action_type, "priority": p.priority}
+                    for p in proposals[:5]
+                ],
+            }
+        else:
+            assess = await svc.quick_assess(user_id)
+            return {
+                "status": "ready",
+                "scope": "quick",
+                "assessment": {
+                    "summary": assess.get("summary", ""),
+                    "weak_points": assess.get("weak_points", []),
+                    "cognitive_load": assess.get("cognitive_load", 0),
+                    "recent_progress": assess.get("recent_progress", ""),
+                },
+            }
+    except Exception as e:
+        logger.warning("秘书诊断失败: %s", e)
+        return {"status": "failed", "error": str(e), "scope": scope}
+
+
 TOOL_HANDLERS = {
     "search_media": _handle_search_media,
     "generate_practice": _handle_generate_practice,
@@ -508,6 +581,7 @@ TOOL_HANDLERS = {
     "generate_image": _handle_generate_image,
     "generate_mindmap": _handle_generate_mindmap,
     "generate_document": _handle_generate_document,
+    "secretary_diagnose": _handle_secretary_diagnose,
 }
 
 
@@ -536,14 +610,17 @@ class ToolExecutor:
         """快任务：直接执行"""
         try:
             result = await handler(params)
-            return ResponseBlock(type=name, status="ready", content=result)
+            # 前端期望的 block type 映射
+            display_type = _TOOL_TO_BLOCK_TYPE.get(name, name)
+            return ResponseBlock(type=display_type, status="ready", content=result)
         except Exception as e:
             return ResponseBlock(type=name, status="failed", content={"error": str(e)})
 
     async def _create_placeholder(self, name: str, params: dict) -> ResponseBlock:
         """慢任务：创建占位符"""
+        display_type = _TOOL_TO_BLOCK_TYPE.get(name, name)
         return ResponseBlock(
-            type=name, status="generating",
+            type=display_type, status="generating",
             content={"params": params, "progress": 0}
         )
 
