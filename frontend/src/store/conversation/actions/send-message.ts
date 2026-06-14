@@ -9,6 +9,7 @@
 import type { MessageNode } from "@/types";
 import { apiFetch, fireClassify } from "../tree-helpers";
 import { getPipeline } from "@/store/pipeline";
+import { useTreeStore } from "@/store/conversation/tree-store";
 
 /**
  * 在"💬 临时"分区下创建临时对话（不创建领域→专题树）
@@ -32,9 +33,10 @@ async function ensureTempConversation(set: any, get: any): Promise<{ pId: string
         if (tempP) {
           pId = tempP.id;
         } else {
+          const rootId = useTreeStore.getState().rootId;
           const newP = await apiFetch<{ directory_node: any }>("/tree/directory", {
             method: "POST",
-            body: JSON.stringify({ node_type: "dir", kind: "temp", name: "💬 临时", emoji: "💬" }),
+            body: JSON.stringify({ node_type: "dir", kind: "temp", parent_id: rootId || undefined, name: "💬 临时", emoji: "💬" }),
           });
           pId = newP.directory_node.id;
         }
@@ -111,13 +113,37 @@ export async function sendMessageImpl(
     return;
   }
 
-  // 1. 确保目标会话（临时会话模式）
+  // 1. 确保目标会话
   let { pId, cId } = { pId: get().selectedDirId, cId: get().activeConversationId };
   if (!pId || !cId) {
-    const result = await ensureTempConversation(set, get);
-    if (!result) return;
-    pId = result.pId;
-    cId = result.cId;
+    if (pId && !cId) {
+      // 有目录无会话 → 在当前目录下新建一个会话
+      try {
+        const newC = await apiFetch<{ directory_node: { id: string } }>("/tree/directory", {
+          method: "POST",
+          body: JSON.stringify({ node_type: "conv", kind: "general", parent_id: pId, name: "" }),
+        });
+        cId = newC.directory_node.id;
+        set({
+          activeConversationId: cId,
+          convError: null,
+          postSendRedirect: cId,
+        });
+        await get().loadDirList();
+      } catch {
+        // 回退到临时目录
+        const result = await ensureTempConversation(set, get);
+        if (!result) return;
+        pId = result.pId;
+        cId = result.cId;
+      }
+    } else {
+      // 无目录无会话 → 临时目录
+      const result = await ensureTempConversation(set, get);
+      if (!result) return;
+      pId = result.pId;
+      cId = result.cId;
+    }
   }
 
   // 2. Build user message
