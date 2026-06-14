@@ -37,6 +37,16 @@ const nextConfig = {
       // 旧图谱页 → 知识树独立页面
       { source: '/graph', destination: '/knowledge-tree', permanent: true },
       { source: '/learn/graph', destination: '/knowledge-tree', permanent: true },
+      // Dashboard tab 参数 → 独立页面（原运行时重定向）
+      { source: '/dashboard', has: [{ type: 'query', key: 'tab', value: 'analytics' }], destination: '/analytics', permanent: true },
+      { source: '/dashboard', has: [{ type: 'query', key: 'tab', value: 'calendar' }], destination: '/analytics?tab=calendar', permanent: true },
+      { source: '/dashboard', has: [{ type: 'query', key: 'tab', value: 'achievements' }], destination: '/analytics?tab=achievements', permanent: true },
+      { source: '/dashboard', has: [{ type: 'query', key: 'tab', value: 'progress' }], destination: '/analytics?tab=stats', permanent: true },
+      { source: '/dashboard', has: [{ type: 'query', key: 'tab', value: 'stats' }], destination: '/analytics?tab=stats', permanent: true },
+      { source: '/dashboard', has: [{ type: 'query', key: 'tab', value: 'graph' }], destination: '/knowledge-tree', permanent: true },
+      { source: '/dashboard', has: [{ type: 'query', key: 'tab', value: 'plan' }], destination: '/study', permanent: true },
+      { source: '/dashboard', has: [{ type: 'query', key: 'tab', value: 'errors' }], destination: '/practice/errors', permanent: true },
+      { source: '/dashboard', has: [{ type: 'query', key: 'tab', value: 'quality' }], destination: '/practice', permanent: true },
     ];
   },
   async rewrites() {

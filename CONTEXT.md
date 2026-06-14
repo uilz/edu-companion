@@ -1,6 +1,6 @@
-# 智能伴学系统 (Edu-Companion)
+# 苹果果
 
-AI 驱动的个性化学习伴侣平台，覆盖自适应练习、知识追踪、多模态讲解、心理陪伴、习惯养成全链路。
+AI 驱动的个人知识体系构建工具，覆盖自主学习、知识追踪、多模态讲解、个性化陪伴、习惯养成全链路。
 
 多 Context 结构参见 [CONTEXT-MAP.md](./CONTEXT-MAP.md)。
 
@@ -27,24 +27,44 @@ _Avoid_: 小秘书
 
 ### 对话层次
 
-**Partition (分区)**:
-学习方向或科目大类（如"高等数学""大学英语"）。对话树和认知树共用 ID。
-_Avoid_: 分区组、课目
+**DirectoryNode (目录节点)**:
+目录树的通用节点, 统一表示目录和会话。`node_type` 区分结构 (`"dir"`|`"conv"`), `kind` 区分行为 (`"general"`|`"temp"`|`"practice"`|`"secretary"`)。
 
-**Domain (领域)**:
-科目下的分支（如"微积分""线性代数"）。对话树和认知树共用 ID。
-_Avoid_: 子科目、模块
+- `node_type="dir"`: 目录容器, 可挂子 dir 和子 conv (末端)
+- `node_type="conv"`: 会话, 末端节点 (不能有子节点)
+- `kind="general"`: 普通目录/会话
+- `kind="temp"`: 临时目录 (唯一, 托管 temp conv) / 临时会话 (触发分类器)
+- `kind="practice"` / `kind="secretary"`: 练习/秘书会话
 
-**Topic (专题)**:
-领域下的具体专题（如"导数""矩阵乘法"）。对话树和认知树共用 ID。
-_Avoid_: 章节、单元
+- `path: list[str]` — 从根到自身的完整路径 ID 链
+- `children_order: list[str]` — 直接子级 ID 有序列表 (dir+conv 统一)
+- `conv_message_ids: list[str]` — conv 类型专属
+- `payload: dict` — conv 类型专有数据 (原 Conversation 专有字段)
+- `name: str` — 显示用名: `user_name or ai_name or "新会话"`
+- `user_name: str | None` — 用户手动设置时写入, None 则回退 ai_name
+- `ai_name: str` — organize_conversation 时从 summary_short 截取生成
+- `summary_short: str` — 短摘要 (组织工具生成)
+- `summary_dirty: bool` — 脏标记
+_Avoid_: Partition/Domain/Topic (旧三级固定层次)
 
-**Conversation (对话)**:
-Topic 下的一个多轮对话流。用户手动创建，支持子支递归。
-_Avoid_: 分支、branch（v3 旧术语）
+**Conversation (会话)**:
+node_type=`"conv"` 的 DirectoryNode。`kind` 决定行为: `"general"`(挂载于目录下), `"temp"`(临时, 首条消息触发分类器, 确认后移入目标目录且 kind→general), `"practice"`(练习), `"secretary"`(秘书)。
 
-**Message / TreeNode (消息节点)**:
-对话中的单条消息。支持树形结构，每条消息有 role、content_blocks、版本链。
+创建方式:
+- 临时会话: 侧边栏顶部"+"按钮 或 无节点选中时的右侧对话栏 → 挂临时 `dir(kind=temp)` 下
+- 普通会话: 在某个 `dir(kind=general)` 节点下创建
+
+**Sidebar (侧边栏)**:
+递归渲染 DirectoryNode 树, 所有节点一视同仁。`node_type` 决定图标 (dir→📁, conv→💬), `kind` 决定角标/样式 (temp→角标, practice/secretary→标签)。
+
+**URL**:
+`/learn?node_id=xxx` — 单一参数, 前端通过 `DirectoryNode.path` 获取祖先链, 不再需要 p/d/t/c 多参数。
+
+Store: `selectedNodeId` + `selectedNodeType` 取代旧 `selectedPartitionId/activeDomainId/activeTopicId/activeConversationId`。
+
+**MessageNode (消息节点)**:
+对话中的单条消息。原名 TreeNode, 支持树形结构 (parent_id/children_ids), 每条消息有 role (user/assistant)、content_blocks 列表、版本链 (has_modified_version)。AI 回复含多个 ResponseBlock。不再直接引用 CognitiveNode (通过 events 表事件化)。
+- `directory_id` — 所属 conv 节点 ID (原 conversation_id)
 
 ### 认知系统
 
@@ -53,6 +73,49 @@ _Avoid_: 分支、branch（v3 旧术语）
 
 **ConceptModel (概念模型)**:
 用户对某个概念/技能的知识状态模型。含 proficiency（掌握度），integrated（是否已整合到知识体系），concept_embedding（语义向量）。
+
+### AI 分类器
+
+**ClassifierService (分类器)**:
+仅在临时会话 (kind=temp) 的首条消息时运行。执行双路匹配:
+- [A] 匹配 CognitiveNode (参考树) → 返回 path_id + score
+- [B] 匹配 DirectoryNode (name/summary_short 向量) → 返回 path + score
+合并排序后输出候选路径供用户确认。用户确认后:
+- CognitiveNode 来源 → 沿 path_id 逐级创建 DirectoryNode(node_type=dir, kind=general)
+- DirectoryNode 来源 → 已有路径直接复用
+- 对话从临时根 `dir(kind=temp)` 移到目标目录下, kind 从 temp → general
+
+用户不确认则保持 kind=temp 继续对话。
+_Avoid_: 旧 Classifier (keyword_weights 四级固, 已删除)
+
+### 事件记录系统
+
+**Events Table**:
+统一事件记录表, 独立于 cognitive 模块。含 source_type/source_id 追溯、status 状态机、payload JSONB (含 operations[].result_summary)、updated_ats 时间戳数组。支持多种 event_type: cognitive_update / conversation / practice 等。
+
+**EventsRepository**:
+独立于 cognitive 模块的存储层, 提供 insert/get/query/mark_done 方法。多个模块共用。
+
+**CognitiveOperation (认知操作)**:
+注册在 CognitiveOperationRegistry 中的命名操作。每个操作有 name/description/params_schema/handler。应用启动时 (main.py/DI) 调用 discover("cognitive/operations/") 扫描目录。
+
+各操作返回结果 → 由调用方写入 events.payload.operations[].result_summary。
+
+_Avoid_: 旧 CognitiveEvent (已废弃)
+
+### 组织工具
+
+**OrganizationService (组织服务)**:
+纯方法集合, 不自调用。三个层级:
+- `organize_message`: LLM 生成 text_summary + 发布 CognitiveUpdateEvent → 父 conv summary_dirty=True
+- `organize_conversation`: 纯合并 — 子消息 text_summary 拼接 → summary_short, 截取 → ai_name, 合并认知关联 → summary_dirty=False
+- `organize_directory`: 纯合并 — 子节点 summary_short 拼接 + 认知关联合并 → summary_dirty=False
+
+**OrganizationDetector (组织检测器)**:
+后台定时扫描 events 表, 按 source_type=conversation 或 source_type=directory 聚合事件数。
+- conv 阈值: 新增 6 条消息 → 触发 organize_conversation
+- dir 阈值: 子节点变更数达 3 → 触发 organize_directory
+- 处理后标记 events.status=done
 
 **LearnerModel (学习者模型)**:
 用户整体学习画像的顶层模型。聚合事件，产出以下三个视图：
@@ -160,6 +223,17 @@ _Avoid_: 工具注册表（旧 ToolRegistry）、工具执行器（旧 tool_exec
 **ToolIntent (工具意图)**:
 工具检测结果。含 tool_name / confidence / params_hint。用于 Agent 决定是否预执行工具。
 
+### 事件记录系统
+
+**Events Table (通用事件记录表)**:
+取代旧 `cognitive_events` 表, 统一记录所有模块的操作事件。通用字段: `id/user_id/event_type`, `source_type/source_id`（来源追溯, 如 conversation/practice/secretary）, `status`（pending→processing→done/failed）, `payload`(JSONB), `created_at`/`updated_ats`(数组)。写入即完成, status 保留给未来异步模块。
+
+**CognitiveOperation (认知操作)**:
+对 CognitiveNode 子系统的最小修改单元。由 CognitiveNode 模块统一维护, 外部模块通过名称引用并记录到 events 表。含 name/description/params_schema/handler。
+
+**CognitiveOperationRegistry (认知操作注册中心)**:
+按名注册/派发认知操作的全局注册中心, 类 ToolRepository 模式。构建时自动发现 `cognitive/operations/` 下所有注册操作。
+
 ### 对话引擎
 
 **ConversationEngine (对话引擎)**:
@@ -183,6 +257,25 @@ _Avoid_: tree_ops（旧）、mixin（旧组合模式）
 
 **DataStorage (存储适配器)**:
 `load(user_id) → UserData` / `save(user_id, data)`。三个实现：PgStorage（生产）/ JsonFileStorage（开发）/ InMemoryStorage（测试）。
+
+### Backend 代码结构
+
+```
+backend/app/
+├── api/                  # HTTP 控制器（薄路由）
+├── application/          # DI 容器（唯一装配点）
+├── domain/               # 领域层（纯业务逻辑，9 个子模块）
+├── infrastructure/       # 基础设施层（外部依赖：DB/LLM/TTS/EventBus/媒体集成）
+├── services/             # 服务编排层（聚合 domain + infrastructure 完成用例）
+├── main.py               # FastAPI 入口
+└── schemas/              # Pydantic 模型
+```
+
+分层规则:
+- `domain/` 不依赖 `infrastructure/`，保持纯业务
+- `infrastructure/` 管 I/O（数据库、LLM 调用、TTS、外部 API）
+- `services/` 胶水层，编排 domain 和 infrastructure
+- `api/` 仅解析 HTTP 参数并调用 services/application
 
 ### Flagged ambiguities
 

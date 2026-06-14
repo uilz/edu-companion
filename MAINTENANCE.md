@@ -1,6 +1,6 @@
-# 🧠 Edu-Companion 系统维护指南 v5.0
+# 🧠 苹果果 系统维护指南 v5.0
 
-> 智能伴学系统 — Next.js + FastAPI + PostgreSQL  
+> 苹果果 — Next.js + FastAPI + PostgreSQL  
 > 项目根目录：`~/edu-companion/`
 > 最后更新：2026-06-04
 > 当前版本：v7.0.14 (Phase 14.1)

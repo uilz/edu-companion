@@ -1211,7 +1211,7 @@ body {
 
     <div class="partition-select" onclick="toggleDemoHint('分区切换')">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>
-      高等数学
+      机器学习
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
     </div>
 
@@ -1293,42 +1293,42 @@ body {
           <div class="dialog-msg assistant">
             <div class="avatar">🤖</div>
             <div class="bubble">
-              这棵<strong>高等数学</strong>知识树共有 12 个节点，覆盖了<strong>极限与连续、导数与微分、积分学、多元函数、级数、微分方程</strong>六大核心领域。
+              这棵<strong>机器学习</strong>知识树共有 12 个节点，覆盖了<strong>监督学习、无监督学习、深度学习、强化学习、模型评估、特征工程</strong>六大核心领域。
               <br><br>
-              你已经掌握了 <strong style="color:var(--color-success)">极限与连续</strong> 和 <strong style="color:var(--color-success)">导数</strong>，建议下一步学习 <strong style="color:var(--color-warning)">积分学</strong>。
+              你已经掌握了 <strong style="color:var(--color-success)">监督学习</strong> 和 <strong style="color:var(--color-success)">无监督学习</strong>，建议下一步学习 <strong style="color:var(--color-warning)">深度学习</strong>。
             </div>
           </div>
           <div class="dialog-msg user">
             <div class="avatar">🧑</div>
-            <div class="bubble">帮我总结一下积分学下面有哪些子概念？</div>
+            <div class="bubble">帮我总结一下深度学习下面有哪些子概念？</div>
           </div>
           <div class="dialog-msg assistant">
             <div class="avatar">🤖</div>
             <div class="bubble">
-              「积分学」包含以下子节点：
-              <br>• 不定积分 📘
-              <br>• 定积分 📘
-              <br>• 反常积分 📘
-              <br>• 积分应用 📐
+              「深度学习」包含以下子节点：
+              <br>• CNN 📘
+              <br>• RNN 📘
+              <br>• Transformer 📘
+              <br>• 迁移学习 📐
               <br><br>
-              其中 <strong style="color:var(--color-success)">不定积分</strong> 你已掌握（82%），<strong style="color:var(--color-warning)">定积分</strong> 在学中（45%），其余尚未开始。
+              其中 <strong style="color:var(--color-success)">CNN</strong> 你已掌握（82%），<strong style="color:var(--color-warning)">RNN</strong> 在学中（45%），其余尚未开始。
               <div class="op-tag">✅ 已查询结构</div>
             </div>
           </div>
           <div class="dialog-msg user">
             <div class="avatar">🧑</div>
-            <div class="bubble">把「定积分」的优先级设为 5</div>
+            <div class="bubble">把「RNN」的优先级设为 5</div>
           </div>
           <div class="dialog-msg assistant">
             <div class="avatar">🤖</div>
-            <div class="bubble">已更新「定积分」的优先级为 5（从 3 提升）。建议你优先学习这个节点，它是后续「积分应用」的前置知识。
+            <div class="bubble">已更新「RNN」的优先级为 5（从 3 提升）。建议你优先学习这个节点，它是后续「迁移学习」的前置知识。
               <div class="op-tag">✅ 已更新节点</div>
             </div>
           </div>
         </div>
 
         <div class="context-switch" id="contextSwitch" style="display:none">
-          <span>📍 选中节点：<strong id="selectedNodeName">极限与连续</strong></span>
+          <span>📍 选中节点：<strong id="selectedNodeName">监督学习</strong></span>
           <button onclick="toggleDialogMode()">切换到节点探索</button>
         </div>
 
@@ -1357,57 +1357,57 @@ body {
         <div class="lp-tree">
           <div class="lp-tree-item" onclick="focusNode('calculus')">
             <span class="collapse-icon" onclick="event.stopPropagation();toggleCollapse(this)">▼</span>
-            <span class="node-name">📐 高等数学</span>
+            <span class="node-name">📐 机器学习</span>
             <span class="count-badge">12</span>
           </div>
           <div class="lp-tree-item level-1" onclick="focusNode('limits')">
             <span class="collapse-icon" onclick="event.stopPropagation();toggleCollapse(this)">▶</span>
-            <span class="node-name" id="treeNodeLimits">极限与连续</span>
+            <span class="node-name" id="treeNodeLimits">监督学习</span>
             <span class="count-badge" style="background:rgba(16,185,129,0.15);color:var(--color-success)">✅ 已掌握</span>
           </div>
           <div class="lp-tree-item level-1" onclick="focusNode('derivatives')">
             <span class="collapse-icon" style="visibility:hidden">▶</span>
-            <span class="node-name">导数与微分</span>
+            <span class="node-name">无监督学习</span>
             <span class="count-badge" style="background:rgba(16,185,129,0.15);color:var(--color-success)">✅ 已掌握</span>
           </div>
           <div class="lp-tree-item level-1" onclick="focusNode('integration')">
             <span class="collapse-icon" onclick="event.stopPropagation();toggleCollapse(this)">▼</span>
-            <span class="node-name">📘 积分学</span>
+            <span class="node-name">📘 深度学习</span>
             <span class="count-badge">4</span>
           </div>
           <div class="lp-tree-item level-2" onclick="focusNode('indefinite')">
             <span class="collapse-icon" style="visibility:hidden">▶</span>
-            <span class="node-name">不定积分</span>
+            <span class="node-name">CNN</span>
             <span class="count-badge" style="background:rgba(16,185,129,0.15);color:var(--color-success)">82%</span>
           </div>
           <div class="lp-tree-item level-2" onclick="focusNode('definite')">
             <span class="collapse-icon" style="visibility:hidden">▶</span>
-            <span class="node-name" id="treeNodeDefinite" style="background:rgba(245,158,11,0.1);padding:0 4px;border-radius:3px">定积分</span>
+            <span class="node-name" id="treeNodeDefinite" style="background:rgba(245,158,11,0.1);padding:0 4px;border-radius:3px">RNN</span>
             <span class="count-badge" style="background:rgba(245,158,11,0.15);color:var(--color-warning)">45%</span>
           </div>
           <div class="lp-tree-item level-2">
             <span class="collapse-icon" style="visibility:hidden">▶</span>
-            <span class="node-name">反常积分</span>
+            <span class="node-name">Transformer</span>
             <span class="count-badge">—</span>
           </div>
           <div class="lp-tree-item level-2">
             <span class="collapse-icon" style="visibility:hidden">▶</span>
-            <span class="node-name">积分应用</span>
+            <span class="node-name">迁移学习</span>
             <span class="count-badge">—</span>
           </div>
           <div class="lp-tree-item level-1" onclick="focusNode('multivariable')">
             <span class="collapse-icon" style="visibility:hidden">▶</span>
-            <span class="node-name">多元函数</span>
+            <span class="node-name">强化学习</span>
             <span class="count-badge">—</span>
           </div>
           <div class="lp-tree-item level-1">
             <span class="collapse-icon" onclick="event.stopPropagation();toggleCollapse(this)">▶</span>
-            <span class="node-name">🔢 级数</span>
+            <span class="node-name">🔢 模型评估</span>
             <span class="count-badge">3</span>
           </div>
           <div class="lp-tree-item level-1">
             <span class="collapse-icon" style="visibility:hidden">▶</span>
-            <span class="node-name">微分方程</span>
+            <span class="node-name">特征工程</span>
             <span class="count-badge">—</span>
           </div>
         </div>
@@ -1440,179 +1440,179 @@ body {
         </defs>
 
         <!-- === 边 (依赖关系) === -->
-        <!-- 高等数学 → 极限与连续 -->
+        <!-- 机器学习 → 监督学习 -->
         <path d="M 500,65 L 200,180" class="graph-edge active" marker-end="url(#arrowhead-active)"/>
-        <!-- 高等数学 → 导数与微分 -->
+        <!-- 机器学习 → 无监督学习 -->
         <path d="M 500,65 L 420,180" class="graph-edge active" marker-end="url(#arrowhead-active)"/>
-        <!-- 高等数学 → 积分学 -->
+        <!-- 机器学习 → 深度学习 -->
         <path d="M 500,65 L 600,180" class="graph-edge" marker-end="url(#arrowhead)"/>
-        <!-- 高等数学 → 多元函数 -->
+        <!-- 机器学习 → 强化学习 -->
         <path d="M 500,65 L 750,180" class="graph-edge" marker-end="url(#arrowhead)"/>
-        <!-- 高等数学 → 级数 -->
+        <!-- 机器学习 → 模型评估 -->
         <path d="M 500,65 L 840,360" class="graph-edge" marker-end="url(#arrowhead)"/>
-        <!-- 高等数学 → 微分方程 -->
+        <!-- 机器学习 → 特征工程 -->
         <path d="M 500,65 L 220,370" class="graph-edge" marker-end="url(#arrowhead)"/>
 
-        <!-- 极限与连续 → 导数 -->
+        <!-- 监督学习 → 无监督学习 -->
         <path d="M 200,180 L 420,180" class="graph-edge active" marker-end="url(#arrowhead-active)"/>
-        <!-- 导数 → 积分学 -->
+        <!-- 无监督学习 → 深度学习 -->
         <path d="M 420,180 L 600,180" class="graph-edge" marker-end="url(#arrowhead)"/>
 
-        <!-- 积分学 → 子节点 -->
+        <!-- 深度学习 → 子节点 -->
         <path d="M 600,180 L 490,300" class="graph-edge" marker-end="url(#arrowhead)"/>
         <path d="M 600,180 L 600,300" class="graph-edge active" marker-end="url(#arrowhead-active)"/>
         <path d="M 600,180 L 710,300" class="graph-edge" marker-end="url(#arrowhead)"/>
         <path d="M 600,180 L 600,420" class="graph-edge" marker-end="url(#arrowhead)"/>
 
-        <!-- 不定积分 → 定积分 -->
+        <!-- CNN → RNN -->
         <path d="M 490,300 L 600,300" class="graph-edge" marker-end="url(#arrowhead)"/>
-        <!-- 定积分 → 反常积分 -->
-        <path d="M 600,300 L 710,300" class="graph-edge" marker-end="url(#arrowhead)"/>
-        <!-- 定积分 → 积分应用 -->
+        <!-- RNN → Transformer -->
+         <path d="M 600,300 L 710,300" class="graph-edge" marker-end="url(#arrowhead)"/>
+        <!-- RNN → 迁移学习 -->
         <path d="M 600,300 L 600,420" class="graph-edge" marker-end="url(#arrowhead)"/>
 
         <!-- === 节点 === -->
 
-        <!-- 根：高等数学 -->
+        <!-- 根：机器学习 -->
         <g class="graph-node selected" transform="translate(500, 45)" id="nodeH">
           <rect class="node-card" x="-60" y="-20" width="120" height="40" rx="20"/>
-          <text class="node-label" y="1">📐 高等数学</text>
+          <text class="node-label" y="1">📐 机器学习</text>
         </g>
 
-        <!-- 极限与连续 (已掌握 92%) -->
+        <!-- 监督学习 (已掌握 92%) -->
         <g class="graph-node" transform="translate(200, 180)" id="nodeLimits"
-           onmouseenter="showTooltip(event,'极限与连续',92,'理解极限概念，掌握连续函数性质')"
+           onmouseenter="showTooltip(event,'监督学习',92,'理解监督学习核心算法')"
            onmouseleave="hideTooltip()"
            onmousedown="selectNode(this,'limits')"
-           oncontextmenu="showContextMenu(event,'极限与连续','limits')">
+           oncontextmenu="showContextMenu(event,'监督学习','limits')">
           <rect class="node-card" x="-72" y="-28" width="144" height="56" rx="10" filter="url(#shadow1)"/>
           <circle class="mastery-ring-bg" cx="56" cy="0" r="14"/>
           <circle class="mastery-ring-fg high" cx="56" cy="0" r="14" stroke-dasharray="82 100" stroke-dashoffset="-3.5" transform="rotate(-90 56 0)"/>
           <text x="56" y="0.5" text-anchor="middle" font-size="9" font-weight="600" fill="var(--color-success)">92%</text>
-          <text class="node-label" x="-8" y="-6">极限与连续</text>
-          <text class="node-desc" x="-8" y="10">极限概念 · 连续性质</text>
+          <text class="node-label" x="-8" y="-6">监督学习</text>
+          <text class="node-desc" x="-8" y="10">分类 · 回归</text>
         </g>
 
-        <!-- 导数与微分 (已掌握 85%) -->
+        <!-- 无监督学习 (已掌握 85%) -->
         <g class="graph-node" transform="translate(420, 180)" id="nodeDerivatives"
-           onmouseenter="showTooltip(event,'导数与微分',85,'理解导数定义，掌握求导法则')"
+           onmouseenter="showTooltip(event,'无监督学习',85,'理解无监督学习核心算法')"
            onmouseleave="hideTooltip()"
            onmousedown="selectNode(this,'derivatives')"
-           oncontextmenu="showContextMenu(event,'导数与微分','derivatives')">
+           oncontextmenu="showContextMenu(event,'无监督学习','derivatives')">
           <rect class="node-card" x="-72" y="-28" width="144" height="56" rx="10" filter="url(#shadow1)"/>
           <circle class="mastery-ring-bg" cx="56" cy="0" r="14"/>
           <circle class="mastery-ring-fg high" cx="56" cy="0" r="14" stroke-dasharray="85 100" stroke-dashoffset="-3.5" transform="rotate(-90 56 0)"/>
           <text x="56" y="0.5" text-anchor="middle" font-size="9" font-weight="600" fill="var(--color-success)">85%</text>
-          <text class="node-label" x="-8" y="-6">导数与微分</text>
-          <text class="node-desc" x="-8" y="10">求导法则 · 微分中值</text>
+          <text class="node-label" x="-8" y="-6">无监督学习</text>
+          <text class="node-desc" x="-8" y="10">聚类 · 降维</text>
         </g>
 
-        <!-- 积分学 (学习中 55%) -->
+        <!-- 深度学习 (学习中 55%) -->
         <g class="graph-node" transform="translate(600, 180)" id="nodeIntegration"
-           onmouseenter="showTooltip(event,'积分学',55,'理解积分概念，掌握积分方法')"
+           onmouseenter="showTooltip(event,'深度学习',55,'理解深度学习核心概念')"
            onmouseleave="hideTooltip()"
            onmousedown="selectNode(this,'integration')"
-           oncontextmenu="showContextMenu(event,'积分学','integration')">
+           oncontextmenu="showContextMenu(event,'深度学习','integration')">
           <rect class="node-card" x="-72" y="-28" width="144" height="56" rx="10" filter="url(#shadow1)"/>
           <circle class="mastery-ring-bg" cx="56" cy="0" r="14"/>
           <circle class="mastery-ring-fg mid" cx="56" cy="0" r="14" stroke-dasharray="55 100" stroke-dashoffset="-3.5" transform="rotate(-90 56 0)"/>
           <text x="56" y="0.5" text-anchor="middle" font-size="9" font-weight="600" fill="var(--color-warning)">55%</text>
-          <text class="node-label" x="-8" y="-6">📘 积分学</text>
-          <text class="node-desc" x="-8" y="10">积分方法 · 应用</text>
+          <text class="node-label" x="-8" y="-6">📘 深度学习</text>
+          <text class="node-desc" x="-8" y="10">神经网络 · 训练</text>
         </g>
 
-        <!-- 多元函数 (未接触) -->
+        <!-- 强化学习 (未接触) -->
         <g class="graph-node" transform="translate(750, 180)" id="nodeMultivariable"
-           onmouseenter="showTooltip(event,'多元函数',8,'多元函数微积分学')"
+           onmouseenter="showTooltip(event,'强化学习',8,'理解强化学习基础')"
            onmouseleave="hideTooltip()"
            onmousedown="selectNode(this,'multivariable')"
-           oncontextmenu="showContextMenu(event,'多元函数','multivariable')">
+           oncontextmenu="showContextMenu(event,'强化学习','multivariable')">
           <rect class="node-card" x="-72" y="-28" width="144" height="56" rx="10" filter="url(#shadow1)"/>
           <circle class="mastery-ring-bg" cx="56" cy="0" r="14"/>
           <circle class="mastery-ring-fg low" cx="56" cy="0" r="14" stroke-dasharray="8 100" stroke-dashoffset="-3.5" transform="rotate(-90 56 0)"/>
           <text x="56" y="0.5" text-anchor="middle" font-size="9" font-weight="600" fill="var(--color-text-muted)">8%</text>
-          <text class="node-label" x="-8" y="-6">多元函数</text>
-          <text class="node-desc" x="-8" y="10">偏导 · 重积分</text>
+          <text class="node-label" x="-8" y="-6">强化学习</text>
+          <text class="node-desc" x="-8" y="10">Q学习 · 策略</text>
         </g>
 
-        <!-- 级数 (未接触) -->
+        <!-- 模型评估 (未接触) -->
         <g class="graph-node" transform="translate(840, 360)" id="nodeSeries"
-           onmouseenter="showTooltip(event,'级数',3,'无穷级数的收敛与展开')"
+           onmouseenter="showTooltip(event,'模型评估',3,'理解模型评估方法')"
            onmouseleave="hideTooltip()"
            onmousedown="selectNode(this,'series')"
-           oncontextmenu="showContextMenu(event,'级数','series')">
+           oncontextmenu="showContextMenu(event,'模型评估','series')">
           <rect class="node-card" x="-72" y="-28" width="144" height="56" rx="10" filter="url(#shadow1)"/>
           <circle class="mastery-ring-bg" cx="56" cy="0" r="14"/>
           <circle class="mastery-ring-fg low" cx="56" cy="0" r="14" stroke-dasharray="3 100" stroke-dashoffset="-3.5" transform="rotate(-90 56 0)"/>
           <text x="56" y="0.5" text-anchor="middle" font-size="9" font-weight="600" fill="var(--color-text-muted)">3%</text>
-          <text class="node-label" x="-8" y="-6">🔢 级数</text>
-          <text class="node-desc" x="-8" y="10">收敛 · 展开</text>
+          <text class="node-label" x="-8" y="-6">🔢 模型评估</text>
+          <text class="node-desc" x="-8" y="10">交叉验证 · 指标</text>
         </g>
 
-        <!-- 微分方程 -->
+        <!-- 特征工程 -->
         <g class="graph-node" transform="translate(220, 370)" id="nodeDiffEq"
-           onmouseenter="showTooltip(event,'微分方程',12,'常微分方程的解法与应用')"
+           onmouseenter="showTooltip(event,'特征工程',12,'理解特征工程方法')"
            onmouseleave="hideTooltip()"
            onmousedown="selectNode(this,'diffeq')"
-           oncontextmenu="showContextMenu(event,'微分方程','diffeq')">
+           oncontextmenu="showContextMenu(event,'特征工程','diffeq')">
           <rect class="node-card" x="-72" y="-28" width="144" height="56" rx="10" filter="url(#shadow1)"/>
           <circle class="mastery-ring-bg" cx="56" cy="0" r="14"/>
           <circle class="mastery-ring-fg low" cx="56" cy="0" r="14" stroke-dasharray="12 100" stroke-dashoffset="-3.5" transform="rotate(-90 56 0)"/>
           <text x="56" y="0.5" text-anchor="middle" font-size="9" font-weight="600" fill="var(--color-text-muted)">12%</text>
-          <text class="node-label" x="-8" y="-6">微分方程</text>
-          <text class="node-desc" x="-8" y="10">常微分 · 解法</text>
+          <text class="node-label" x="-8" y="-6">特征工程</text>
+          <text class="node-desc" x="-8" y="10">特征选择 · 提取</text>
         </g>
 
-        <!-- 积分学子节点：不定积分 -->
+        <!-- 深度学习子节点：CNN -->
         <g class="graph-node" transform="translate(490, 300)" id="nodeIndefinite"
-           onmouseenter="showTooltip(event,'不定积分',82,'掌握基本积分公式和换元法')"
+           onmouseenter="showTooltip(event,'CNN',82,'理解CNN卷积神经网络')"
            onmouseleave="hideTooltip()"
            onmousedown="selectNode(this,'indefinite')"
-           oncontextmenu="showContextMenu(event,'不定积分','indefinite')">
+           oncontextmenu="showContextMenu(event,'CNN','indefinite')">
           <rect class="node-card" x="-62" y="-22" width="124" height="44" rx="8" filter="url(#shadow1)"/>
           <circle class="mastery-ring-bg" cx="48" cy="0" r="11"/>
           <circle class="mastery-ring-fg high" cx="48" cy="0" r="11" stroke-dasharray="82 100" stroke-dashoffset="-2.5" transform="rotate(-90 48 0)"/>
           <text x="48" y="0.5" text-anchor="middle" font-size="8" font-weight="600" fill="var(--color-success)">82%</text>
-          <text class="node-label" x="-6" y="1" font-size="10">不定积分</text>
+          <text class="node-label" x="-6" y="1" font-size="10">CNN</text>
         </g>
 
-        <!-- 定积分 (选中态演示) -->
+        <!-- RNN (选中态演示) -->
         <g class="graph-node selected" transform="translate(600, 300)" id="nodeDefinite"
-           onmouseenter="showTooltip(event,'定积分',45,'理解定积分概念，掌握微积分基本定理')"
+           onmouseenter="showTooltip(event,'RNN',45,'理解RNN循环神经网络')"
            onmouseleave="hideTooltip()"
            onmousedown="selectNode(this,'definite')"
-           oncontextmenu="showContextMenu(event,'定积分','definite')">
+           oncontextmenu="showContextMenu(event,'RNN','definite')">
           <rect class="node-card" x="-62" y="-22" width="124" height="44" rx="8" filter="url(#shadow1)"/>
           <circle class="mastery-ring-bg" cx="48" cy="0" r="11"/>
           <circle class="mastery-ring-fg mid" cx="48" cy="0" r="11" stroke-dasharray="45 100" stroke-dashoffset="-2.5" transform="rotate(-90 48 0)"/>
           <text x="48" y="0.5" text-anchor="middle" font-size="8" font-weight="600" fill="var(--color-warning)">45%</text>
-          <text class="node-label" x="-6" y="1" font-size="10">⚡ 定积分</text>
+          <text class="node-label" x="-6" y="1" font-size="10">⚡ RNN</text>
         </g>
 
-        <!-- 反常积分 -->
+        <!-- Transformer -->
         <g class="graph-node" transform="translate(710, 300)" id="nodeImproper"
-           onmouseenter="showTooltip(event,'反常积分',5,'了解反常积分的概念与审敛')"
+           onmouseenter="showTooltip(event,'Transformer',5,'理解Transformer架构')"
            onmouseleave="hideTooltip()"
            onmousedown="selectNode(this,'improper')"
-           oncontextmenu="showContextMenu(event,'反常积分','improper')">
+           oncontextmenu="showContextMenu(event,'Transformer','improper')">
           <rect class="node-card" x="-62" y="-22" width="124" height="44" rx="8" filter="url(#shadow1)"/>
           <circle class="mastery-ring-bg" cx="48" cy="0" r="11"/>
           <circle class="mastery-ring-fg low" cx="48" cy="0" r="11" stroke-dasharray="5 100" stroke-dashoffset="-2.5" transform="rotate(-90 48 0)"/>
           <text x="48" y="0.5" text-anchor="middle" font-size="8" font-weight="600" fill="var(--color-text-muted)">5%</text>
-          <text class="node-label" x="-6" y="1" font-size="10">反常积分</text>
+          <text class="node-label" x="-6" y="1" font-size="10">Transformer</text>
         </g>
 
-        <!-- 积分应用 -->
+        <!-- 迁移学习 -->
         <g class="graph-node" transform="translate(600, 420)" id="nodeIntegralApp"
-           onmouseenter="showTooltip(event,'积分应用',0,'积分在几何、物理中的应用')"
+           onmouseenter="showTooltip(event,'迁移学习',0,'理解迁移学习原理')"
            onmouseleave="hideTooltip()"
            onmousedown="selectNode(this,'integralapp')"
-           oncontextmenu="showContextMenu(event,'积分应用','integralapp')">
+           oncontextmenu="showContextMenu(event,'迁移学习','integralapp')">
           <rect class="node-card" x="-62" y="-22" width="124" height="44" rx="8" filter="url(#shadow1)"/>
           <circle class="mastery-ring-bg" cx="48" cy="0" r="11"/>
           <circle class="mastery-ring-fg low" cx="48" cy="0" r="11" stroke-dasharray="0 100" stroke-dashoffset="-2.5" transform="rotate(-90 48 0)"/>
           <text x="48" y="0.5" text-anchor="middle" font-size="8" font-weight="600" fill="var(--color-text-muted)">0%</text>
-          <text class="node-label" x="-6" y="1" font-size="10">积分应用</text>
+          <text class="node-label" x="-6" y="1" font-size="10">迁移学习</text>
         </g>
 
         <!-- === 交互标注 === -->
@@ -1622,18 +1622,18 @@ body {
 
       </svg>
 
-      <!-- 节点详情浮层 (点击"定积分"后弹出) -->
+      <!-- 节点详情浮层 (点击"RNN"后弹出) -->
       <div class="detail-popover" id="detailPopover" style="display:block; top:300px; left:640px;">
         <div class="popover-header">
           <span class="mastery-dot" style="background:var(--color-warning)"></span>
-          <h3>定积分</h3>
+          <h3>RNN</h3>
           <span class="level-tag">concept</span>
           <button onclick="document.getElementById('detailPopover').style.display='none'">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>
         </div>
         <div class="popover-body">
-          <div class="desc">理解定积分的定义与几何意义，掌握牛顿-莱布尼茨公式，能用定积分计算面积、体积。</div>
+          <div class="desc">理解RNN循环神经网络原理，掌握序列建模方法，能用RNN处理时间序列数据。</div>
           <div class="meta-grid">
             <div class="meta-item"><div class="label">掌握度</div><div class="value" style="color:var(--color-warning)">45%</div></div>
             <div class="meta-item"><div class="label">优先级</div><div class="value">⭐ 5</div></div>
@@ -1641,9 +1641,9 @@ body {
             <div class="meta-item"><div class="label">子节点</div><div class="value">2 个</div></div>
           </div>
           <div class="tags">
-            <span class="tag">微积分</span>
-            <span class="tag">核心概念</span>
-            <span class="tag">前置知识</span>
+            <span class="tag">深度学习</span>
+              <span class="tag">核心概念</span>
+              <span class="tag">前置知识</span>
           </div>
           <div class="actions">
             <button class="primary">编辑</button>
@@ -1684,11 +1684,11 @@ body {
           <div class="dp-section-title">基本信息</div>
           <div class="dp-field">
             <div class="dp-field-label">名称</div>
-            <input type="text" value="定积分" id="detailNameInput">
+            <input type="text" value="RNN" id="detailNameInput">
           </div>
           <div class="dp-field">
             <div class="dp-field-label">描述</div>
-            <textarea id="detailDescInput">理解定积分的定义与几何意义，掌握牛顿-莱布尼茨公式，能用定积分计算面积、体积。</textarea>
+            <textarea id="detailDescInput">理解RNN循环神经网络原理，掌握序列建模方法，能用RNN处理时间序列数据。</textarea>
           </div>
           <div class="dp-field">
             <div class="dp-field-label">优先级</div>
@@ -1698,7 +1698,7 @@ body {
         <div class="dp-section">
           <div class="dp-section-title">标签</div>
           <div class="dp-tags">
-            <span class="tag">微积分</span>
+            <span class="tag">深度学习</span>
             <span class="tag">核心概念</span>
             <span class="tag">前置知识</span>
           </div>
@@ -1750,12 +1750,12 @@ body {
     <div style="display:flex;gap:8px;max-width:90%">
       <div style="width:24px;height:24px;border-radius:999px;background:rgba(124,58,237,0.08);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px">🤖</div>
       <div style="padding:6px 10px;border-radius:14px;background:var(--color-page-secondary);border:1px solid var(--color-border);font-size:11px;line-height:1.6;border-bottom-left-radius:6px">
-        💡 推荐你下一步学习 <strong>积分学</strong>，它在当前树中是最高优先级的未完成节点。
+        💡 推荐你下一步学习 <strong>深度学习</strong>，它在当前树中是最高优先级的未完成节点。
       </div>
     </div>
     <div style="display:flex;gap:8px;max-width:90%;align-self:flex-end;flex-direction:row-reverse">
       <div style="width:24px;height:24px;border-radius:999px;background:rgba(16,185,129,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px">🧑</div>
-      <div style="padding:6px 10px;border-radius:14px;background:var(--color-accent);color:white;font-size:11px;border-bottom-right-radius:6px">好的，积分学需要什么前置知识？</div>
+      <div style="padding:6px 10px;border-radius:14px;background:var(--color-accent);color:white;font-size:11px;border-bottom-right-radius:6px">好的，深度学习需要什么前置知识？</div>
     </div>
     <div style="display:flex;gap:8px;max-width:90%">
       <div style="width:24px;height:24px;border-radius:999px;background:rgba(124,58,237,0.08);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px">🤖</div>

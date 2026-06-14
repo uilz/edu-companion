@@ -163,6 +163,10 @@ wait_for_url "http://127.0.0.1:18001/health" "认证网关"
 # ========================================
 echo "[$TIMESTAMP] 🚀 启动后端 (uvicorn @ :8000)..."
 cd "$PROJECT_DIR/backend"
+# 导出 config/.env 到环境变量（供 os.getenv 读取，如 JWT_SECRET）
+set -a
+source "$PROJECT_DIR/backend/config/.env"
+set +a
 nohup venv/bin/python -m uvicorn app.main:app \
   --host 0.0.0.0 --port 8000 \
   > "$LOG_DIR/backend_$TIMESTAMP.log" 2>&1 &

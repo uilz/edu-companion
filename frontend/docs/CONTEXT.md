@@ -1,6 +1,356 @@
-# Frontend — 智能伴学系统前端
+# Frontend — 苹果果前端
 
-Next.js 14 (App Router) 前端应用（23,072 行 TS/TSX），提供 AI 对话、练习中心、知识图谱、驾驶舱看板、秘书面板等学习功能界面。
+Next.js 14 (App Router) 前端应用，提供 AI 对话、练习中心、知识图谱、驾驶舱看板、秘书面板等知识管理功能界面。
+
+## Store Architecture
+
+2025-06-14: 将 God Store（ConversationStore ~100 字段）拆分为三个独立 Zustand store：
+
+- **useTreeStore** (`tree-store.ts`) — 树/图谱数据
+  - State: `childMap`, `expandedSet`, `loadingSet`, `rootLoaded`, `rootId`, `treeRefreshKey`
+  - Actions: `loadRootNodes`, `loadChildren`, `toggleExpand`, `setChildMap`
+  - 专注树节点加载和展开/折叠，不涉 UI 状态或消息数据
+  - _Avoid_: 选中状态、UI 标志
+
+- **useMessageStore** (`message-store.ts`) — 消息/响应块数据
+  - State: `messages`, `responseBlocks`, `loadingMessages`, `convError`
+  - Actions: `loadMessages`, `deleteMessage`, `editMessage`, `versionSwitch`
+  - 通过 conversation-store 的跨 store subscribe 自动同步流式更新
+  - _Avoid_: 发送消息（sendMessage 横跨 pipeline + UI）
+
+- **useConversationStore** (`conversation-store.ts`) — UI 状态 + 跨领域协调
+  - State: `dirList`, `selectedNodeId`, `isLoading`, `statusMessage`, `switchBanner`, `sidebarCollapsed`, 子分支状态等
+  - 作为 coordinator，委托树操作到 tree-store、消息操作到 message-store
+  - 向后兼容：re-export useTreeStore + useMessageStore；保留 childMap/expandedSet/loadingSet 等代理字段
+  - _Avoid_: 纯树/消息数据（应使用专用 store）
+
+迁移路径：新组件直接用 `useTreeStore` / `useMessageStore`；旧组件逐步从 `useConversationStore` 迁移。
+
+## Graph Node Actions
+
+2025-06-14: 抽取 `useGraphNodeActions` hook (`hooks/graph/useGraphNodeActions.ts`)，封装 KnowledgeTreePage / NodeDetailPanel / TreeChatPanel 之间重复的图谱节点操作：
+
+- `deleteNode(nodeId, nodeLabel)` — DELETE .../node/{id}
+- `editNode(nodeId, { label, description, tags })` — PATCH .../node/{id}
+- `createNode({ label, parent_id })` — POST .../node
+- `aiExpand(nodeId, { depth, direction })` — POST .../ai-expand
+- `aiEdit(nodeId)` — POST .../ai-edit
+- `aiChat(nodeId, message, convId?)` — POST .../ai-chat，返回 `{ response, conversationId }`
+- `generateGraph()` — POST .../graph/{partitionId}/generate
+
+### 迁移情况
+- KnowledgeTreePage.tsx: 替换了 6 处 authedFetch（delete/edit/create/aiExpand/aiEdit）
+- NodeDetailPanel.tsx: 替换了 4 处 authedFetch（edit/delete/aiExpand/aiChat）
+- TreeChatPanel.tsx: 保留 `authedFetch` 直调 ai-chat（需访问 conversation_recommendation 原始字段）
+
+## Hooks 目录约定
+
+2025-06-14: 统一 hooks 放置约定，消除 `src/lib/hooks/` 和组件内 hooks 的混乱分布。
+
+### 约定
+- **通用 hooks** → `src/hooks/*.ts`（如 `useMediaQuery`、`useCurrentUserId`、`useRenderedContent`）
+- **领域 hooks** → `src/hooks/<domain>/`（如 `src/hooks/conversation/`、`src/hooks/graph/`、`src/hooks/study/`、`src/hooks/practice/`）
+- **组件独有 hook** → 保留在组件目录内（如 `components/conversation/hooks/useTextSelection.ts`）
+
+### 迁移情况
+| Hook | 旧位置 | 新位置 |
+|------|--------|--------|
+| `useMediaQuery` | `components/conversation/hooks/` | `src/hooks/useMediaQuery.ts` |
+| `useRenderedContent` | `src/lib/hooks/` | `src/hooks/useRenderedContent.ts` |
+| `useConversation` | `components/conversation/hooks/` | `src/hooks/conversation/useConversation.ts` |
+| `useTextSelection` | 保留原位 | 组件独有 hook |
+| `useSocraticMode` | 保留原位 | 组件独有 hook |
+
+旧位置保留 `@deprecated` 重导出，保持向后兼容。
+
+## Notification System
+
+2025-06-14: 解耦通知系统 — 将非流式事件（context_switch / tree_recommendation / temp_recommendation / job_update）的 NotificationStore 写入责任从旧的 `streaming.ts` 移至 `pipeline/setup.ts`（`bindPipelineToStore`）。
+
+- **setup.ts**: 每个事件订阅中**同时**设置 conversation-store 状态（banner）和 NotificationStore 记录
+- **streaming.ts**: 移除了 6 个 notification-service 调用（handleContextSwitch / handleWSTreeRecommendation / handleTempRecommendation / handleJobUpdate / handleSecretaryInline / handleSecretaryProposalUpdate），不再依赖 notification-service
+- **notification-service.ts**: 4 个旧 handler 标记为 `@deprecated`，保留供测试用
+- **关键决策**: NotificationStore 是纯数据层（Zustand），不直接依赖 React。消息的来源从旧 SSE 路径统一到 StreamPipeline，消除双重真相源
+
+## 路由清理
+
+2025-06-14: 消除重定向迷宫，减少无效路由 6 个。
+
+### 删除的页面
+| 路由 | 原因 | 处理方式 |
+|------|------|---------|
+| `/graph` → `/knowledge-tree` | 与 `/knowledge-tree` 重复 | next.config 已重定向 + 删除 page.tsx |
+| `/learn/graph` → `/knowledge-tree` | 与 `/knowledge-tree` 重复 | next.config 已重定向 + 删除 page.tsx |
+| `/achievements` → `/analytics?tab=achievements` | 合并到 analytics | next.config 已重定向 + 提取为 `AchievementsTab` 组件 |
+| `/calendar` → `/analytics?tab=calendar` | 合并到 analytics | next.config 已重定向 + 提取为 `CalendarTab` 组件 |
+| `/stats` → `/analytics?tab=stats` | 合并到 analytics | next.config 已重定向 + 提取为 `StatsTab` 组件 |
+| `/progress` → `/analytics?tab=stats` | 与 `/stats` 重复 | next.config 已重定向 + 删除 page.tsx |
+
+### Dashboard 运行时重定向 → next.config
+原 `dashboard/page.tsx` 通过 `useEffect` + `router.replace()` 处理 9 种 `?tab=X` 参数，改为 next.config 的 `has` 条件重定向，简化页面为纯 `OverviewTab` 渲染。
+
+### 清理后的路由
+38 个 → 32 个页面路由，重定向链全部收敛为 next.config 单跳。
+
+## Conversation 目录合并
+
+2025-06-14: 合并 `renderers/` 到 `blocks/`，消除 `blocks/` 与 `renderers/` 之间的模糊边界。
+
+### 变更
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `renderers/ResponseBlockRenderer.tsx` | → `blocks/ResponseBlockRenderer.tsx` | 分发器，属于 blocks |
+| `renderers/QuoteBlockRenderer.tsx` | → `blocks/QuoteBlockRenderer.tsx` | 引文块，属于 blocks |
+| `renderers/MarkdownRenderer.tsx` | → `blocks/MarkdownRenderer.tsx` | 渲染工具，blocks 共享 |
+| `renderers/` 目录 | 🗑️ 删除 | 3 个文件全部迁移，import 更新完成 |
+
+### 更新后的 conversation 目录
+```
+conversation/
+├── banners/   5 files  — 横幅提示
+├── blocks/    19 files — 全部响应块渲染器（含原 renderers）
+├── cards/     4 files  — 知识卡片
+├── core/      7 files  — 核心组件
+├── hooks/     3 files  — 组件独有 hooks
+├── input/     3 files  — 输入组件
+├── media/     2 files  — 媒体组件
+├── panels/    4 files  — 面板布局
+└── tree/      4 files  — 侧边栏树
+```
+
+### 不做的事
+- 不拆分 `blocks/` 为子目录（过度工程，16 文件可管理）
+- 不合并 `cards/` 到 `blocks/`（语义不同：card ≠ block）
+- 不移除组件内 hooks（`useTextSelection`、`useSocraticMode` 是组件独有）
+
+## KnowledgeTreePage 重构
+
+2025-06-14: 将 KnowledgeTreePage (1581 行) 拆分为编排器 + hook + 独立子组件。
+
+### 新结构
+```
+components/knowledge-tree/
+├── KnowledgeTreePage.tsx   ← 编排器 (~200 行): 渲染 + 子组件组合
+├── TopBar.tsx              ← 从原文件提取的顶部导航栏
+├── StatusBar.tsx           ← 从原文件提取的状态栏
+├── FloatDialogWrapper.tsx  ← 从原文件提取的浮动对话气泡
+├── PanelLayout.tsx         ← AutoCollapsePanel + ResizeHandle
+├── LayerPanel.tsx          ← (不变)
+├── DialogContainer.tsx     ← (不变)
+├── ContextMenu.tsx         ← (不变)
+├── EmptyState.tsx          ← (仍留在主文件，仅此使用)
+└── index.ts                ← barrel export
+
+hooks/graph/
+├── useGraphCanvas.ts       ← 新: 图谱画布全部状态 + 逻辑 (~300 行)
+└── useTreeLayout.ts        ← 新: LayoutPreference + localStorage 持久化
+```
+
+### 编排器职责
+- 调用 `useTreeLayout()` 获取/持久化布局偏好
+- 调用 `useGraphCanvas(layoutPref, setLayoutPref)` 获取画布状态和操作
+- 根据 loading/error/empty 状态渲染对应的子组件
+- 将 hook 的输出传递给子组件
+
+### 剩余子组件（仍在主文件）
+- `LoadingSkeleton` / `EmptyState` / `NoPartitionState` / `ErrorState` — 状态占位
+- `FocusBreadcrumb` — 聚焦面包屑
+- `ZoomControls` — 缩放控件
+- `AddNodeDialog` — 添加节点弹窗
+
+## SSE 解析统一
+
+2025-06-14: 抽取共享 SSE 行解析器 `sse-parser.ts`，消除 `useChatStream` 与 `StreamPipeline` 之间的 SSE 解析重复。
+
+### 变更
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `store/pipeline/sse-parser.ts` | ✨ 新建 | 共享 `parseSSEStream()` 函数 + `SSE_EVENTS` 常量 |
+| `chat-shared/useChatStream.ts` | 🔧 修改 | 内联 SSE 解析 → `parseSSEStream()`，消除 ~30 行重复代码 |
+| `AgentFloat.tsx` | — 不变 | 接口未变，无需改动 |
+
+### parsed 的 SSE 协议
+```
+event: token\ndata: {"delta":"..."}
+event: tool_call\ndata: {"name":"...","arguments":{...}}
+event: conversation\ndata: {"conversation_id":"..."}
+```
+
+### 不做的事
+- 不统一传输层（`useChatStream` 用 `fetch POST`，`StreamPipeline` 用 `EventSource GET`，各有用途）
+- 不强制 AgentFloat 改用 StreamPipeline（事件模型不同：Agent 是 POST 请求/响应式，主对话是持久 SSE 流）
+
+## Practice 目录扁平化
+
+2025-06-14: 合并 `practice/components/` 和 `practice/shared/` 为 `practice/components/`。
+
+### 变更
+- `SecretaryProposals.tsx` → 删除（孤儿文件，0 引用）
+- `panels/ReferencePanel.tsx` → 删除（孤儿文件，0 引用）
+- `shared/*` (11 文件) → `components/`（合并）
+- 14 个外部 import `shared/` → `components/` 批量替换
+
+### 结果
+```
+components/practice/
+├── panels/        (2 文件: PracticePanel, ExamPanel)
+└── components/    (12 文件: QuestionStem, QuestionCard, OptionButton, 
+                   FeedbackPanel, HintPanel, ExplanationPanel, ReferencePanel,
+                   SummaryPanel, ProgressBar, SessionTimer,
+                   QuestionPreviewModal, QuestionEditorModal)
+```
+删除 `shared/` 目录名（无意义命名），单层结构更清晰。
+
+## FocusPage 图谱数据层共享
+
+2025-06-14: 抽取 `useGraphData` hook，消除 FocusPage 与 useGraphCanvas 之间的 graph data fetching + ResizeObserver 重复。
+
+### 变更
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `hooks/graph/useGraphData.ts` | ✨ 新建 | 共享 hook：`fetchGraphData` + 重试 + ResizeObserver |
+| `focus/FocusPage.tsx` | 🔧 修改 | 内联 fetch+retry+ResizeObserver → `useGraphData()` (-35 行) |
+| `hooks/graph/useGraphCanvas.ts` | — 不变 | 数据层与 partition 逻辑交互紧密，保持自有管理 |
+
+### useGraphData API
+```typescript
+const { graphData, loading, error, graphContainerRef, graphSize, reload }
+  = useGraphData({ partitionId?, maxRetries?, autoLoad? });
+```
+
+### 为何不强制 FocusPage 复用完整 useGraphCanvas
+- FocusPage 图谱需求简单（无 partition/搜索/缩放/对话框）
+- 完整 useGraphCanvas 携带 ~30 个 FocusPage 不需要的状态变量
+- 共享数据层（useGraphData）恰好消除重复，又不过度耦合
+
+## Agent Store → Zustand
+
+2025-06-14: 将 Agent Store 从 class + singleton 模式迁移到 Zustand。
+
+### 变更
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `store/agent/agent-store.ts` | 🔧 重写 | class singleton → `create()` from Zustand |
+| `agent/AgentFloat.tsx` | 🔧 修改 | 使用 `useAgentStore` hook 实现 reactive 订阅 |
+| `store/agent/__tests__/agent-store.test.ts` | 🔧 修改 | 使用 `createAgentStoreForTest` |
+
+### API 变化
+```typescript
+// 旧
+const store = getAgentStore();  // class singleton
+
+// 新
+const messages = useAgentStore(s => s.messages);           // reactive hook
+const store = getAgentStore();                              // backward-compat imperative access
+```
+
+### 导出说明
+- `useAgentStore` — Zustand hook，用于 reactive 订阅
+- `getAgentStore()` — `useAgentStore.getState()` 的别名，用于回调中读取最新状态
+- `createAgentStoreForTest()` — 测试用工厂函数
+
+## 图谱类型重命名（DashboardNode）
+
+2025-06-14: 将 Dashboard 的 `GraphNode` / `GraphEdge` 重命名为 `DashboardNode` / `DashboardEdge`，消除与 `graph-types.ts` 中 `GraphNode` 的命名碰撞。
+
+### 变更
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `components/dashboard/graph-layout.ts` | 🔧 修改 | `GraphNode` → `DashboardNode`, `GraphEdge` → `DashboardEdge` |
+| `components/dashboard/NodeDetailCard.tsx` | 🔧 修改 | 更新 import 和使用处 |
+
+### 两个 GraphNode 的区别
+```
+graph-types.ts:    GraphNode (level/mastery/trend/children)         — 知识图谱渲染
+graph-layout.ts:   DashboardNode (subject/confidence/blocked_by)    — 驾驶舱学习分析
+```
+
+## Conversation-store 向后兼容清理
+
+2025-06-14: 移除 ConversationStore 中的 6 个树代理字段和 2 个向后兼容 re-export。
+
+### 变更
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `store/conversation/conversation-store.ts` | 🔧 修改 | 移除 `childMap`/`expandedSet`/`loadingSet`/`rootLoaded`/`rootId`/`treeRefreshKey` 代理字段和初始值 |
+| | | 移除 `loadRootNodes`/`loadChildren`/`setChildMap` 委托方法 |
+| | | 移除 `subscribeToNavigation()`/`syncActiveRefs()` re-export |
+| | | 移除跨 store subscribe 同步 |
+| `hooks/graph/useTreeNavigation.ts` | 🔧 修改 | 树数据读取/操作从 `useConversationStore` → `useTreeStore` |
+| `components/conversation/panels/StudySidebar.tsx` | 🔧 修改 | `rootLoaded`/`loadRootNodes` 从 `useConversationStore` → `useTreeStore` |
+| `components/conversation/core/ConversationPanel.tsx` | 🔧 修改 | `treeRefreshKey` 从 `useConversationStore` → `useTreeStore` |
+| `components/conversation/tree/NodePathBreadcrumb.tsx` | 🔧 修改 | `childMap` 从 `useConversationStore` → `useTreeStore` |
+| `store/conversation/actions/nav-ops.ts` | 🔧 修改 | `childMap`/`treeRefreshKey` 从 `get()` → `useTreeStore.getState()` |
+
+### 移除的代理字段
+```
+从 ConversationState 移除:
+  childMap: Map<string, GraphNode[]>      → useTreeStore
+  expandedSet: Set<string>                → useTreeStore
+  loadingSet: Set<string>                 → useTreeStore
+  rootLoaded: boolean                     → useTreeStore
+  rootId: string                          → useTreeStore
+  treeRefreshKey: number                  → useTreeStore
+  loadRootNodes / loadChildren / setChildMap  → useTreeStore
+  subscribeToNavigation() / syncActiveRefs()  → 直接调用 streaming.ts
+  跨 store subscribe (message sync)           → 移除无必要循环同步
+```
+
+### 保留的消息代理字段
+- `messages` / `responseBlocks` / `loadingMessages` / `convError` — 仍被 FocusPage、FocusModePanel、ConversationPanel 使用，待后续阶段迁移
+
+## Token 节流共享化
+
+2025-06-14: 抽取共享 `createTokenThrottle`，消除了 StreamPipeline 和 useChatStream 之间 token flush 节流逻辑的重复。
+
+### 变更
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `store/pipeline/token-throttle.ts` | ✨ 新建 | 共享 `createTokenThrottle()` — 200ms 窗口累积 → 一次 flush |
+| `chat-shared/useChatStream.ts` | 🔧 修改 | 每个 token 直接 `onToken(delta)` → `throttle.add(delta)` |
+| `store/pipeline/StreamPipeline.ts` | — 不变 | 节流逻辑与 msgId+cache 绑定较紧，保留内联实现 |
+
+### 效果
+```
+before: useChatStream → 每个 token 触发 onToken → 高频 setState → React 重渲染
+after:  useChatStream → throttle.add(delta) → 200ms flush → 低频 onToken
+```
+
+### 不做的事
+- 不强制 useChatStream 改用 SSESource 接口（POST vs EventSource GET 传输机制不同）
+- 不将 AgentFloat 路由到 StreamPipeline（事件模型不同）
+
+## 秘书对话持久化
+
+2025-06-14: 将 AgentFloat 的秘书对话从纯内存存储改为树持久化。
+
+### 变更
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `store/agent/agent-store.ts` | 🔧 修改 | 新增 `secretaryDirId`、`secretaryConvs`、`activeConvId`、`loadingSecretary`、`loadingMessages` 状态 + 相关 actions |
+| `components/agent/AgentFloat.tsx` | 🔧 修改 | 新增 5 个辅助函数 + 打开时初始化 + 消息双向持久化 + 历史对话切换 UI |
+
+### 树结构
+```
+学习空间
+├── 📁 微 calculus               (kind: "general")
+├── 📁 线性代数                  (kind: "general")
+└── 🤖 秘书对话                  (dir, kind: "secretary")
+    ├── 💬 6/14 14:30            (conv, kind: "secretary")
+    └── 💬 6/13 10:15            (conv, kind: "secretary")
+```
+
+### 流程
+1. 打开面板 → 确保 `kind="secretary"` 的 dir 存在 → 加载 conv 列表 → 选最新 conv → 从 tree 加载消息
+2. 发送消息 → `POST /tree/conversation/{cid}/message { role:"user" }` 持久化 → SSE `/api/secretary/agent/chat` 流式回复 → `onDone` 时 `POST { role:"assistant" }` 持久化
+3. 对话切换 → `switchConv` 清空本地 messages → 从 tree 加载新 conv 的历史消息
+4. 新建对话 → `POST /tree/directory { kind:"secretary", name:日期 }` → 空消息列表
+
+### 效果
+```
+before: 纯内存 → 刷新丢失，后端有存档但前端看不到
+after:  树持久化 → 刷新恢复，侧栏可见，对话可切换，消息双向保存
+```
 
 ## Language
 
@@ -135,11 +485,25 @@ WebSocket `tree_recommendation` 事件触发的知识树推荐横幅。在对话
 
 ### 状态管理
 
-**Zustand Store (conversation-store)**:
-全局状态仓库（873 行）。管理对话状态：selectedNode / partitions / messages / responseBlocks / wsConnected / isLoading / switchBanner / treeRefreshKey 等。action 拆分到 `actions/` 目录（send-message / partition-ops / nav-ops / tree-ops / sub-branch）。
+**Zustand Stores (conversation store split)**:
+已拆分为三个独立 store（2025-06-14）：
+- `useConversationStore` — UI 状态 + 跨领域协调（详见上节 Store Architecture）
+- `useTreeStore` — 树/图谱节点数据 + 展开状态
+- `useMessageStore` — 消息/响应块数据
 
 **Streaming Refs (streaming.ts)**:
-WebSocket 流式数据和连接管理的模块级 refs（367 行）。包含：`streamBufferRef`（累积 token）、`streamingMsgIdRef`（当前流式消息 ID）、`streamingContextRef`（当前流上下文）。管理 WS 生命周期 & 重连（指数退避 1s→2s→4s→...→30s）。
+已废弃。参见 StreamPipeline。
+_Avoid_: 模块级 mutable refs（旧架构，双重真相源）
+
+**StreamPipeline (流管线)**:
+前端流输出管理深模块，取代旧 streaming.ts 的模块级 refs。封装 SSE 连接、token 累积与节流（200ms flush）、四阶段状态机（idle→streaming→paused→completing→idle）、刷新恢复缓存。通过依赖注入的 SSESource 接口解耦网络 I/O。对外通过类型化事件发射器（`subscribe<K>(event, cb)`）与 Zustand store / 通知模块通信。
+- `beginStream(convId, dirId, placeholderMsgId)` — 启动流
+- `pause() / resume() / stop()` — 流控制
+- `getPhase(): StreamPhase` — 查询当前阶段
+- `subscribe(event, cb)` — 订阅事件，返回 unsubscribe 函数
+- `recover(convId): string | null` — 刷新恢复缓存
+- **状态机**: idle → streaming ↔ paused → completing → idle（completing 后 5s 超时自动 idle）
+_Avoid_: Streaming Refs、模块级可变变量
 
 **Explain Store (explain-store)**:
 解释卡片状态管理。独立的 Zustand store，管理 explain cards 的加载/展示/操作。
