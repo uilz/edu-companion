@@ -1,12 +1,12 @@
-# Edu-Companion Design Language
+# 苹果果 Design Language
 
-> **智能伴学系统** 多风格设计语言 — 同一套交互骨架，五种视觉表达。
+> **苹果果** 多风格设计语言 — 同一套交互骨架，五种视觉表达。
 
 ---
 
 ## Overview
 
-智能伴学系统是面向深度学习的 AI 对话平台。本设计语言采用 **通用 Design Token + 风格变体** 的架构：
+苹果果是面向自主学习的个人知识体系构建平台。本设计语言采用 **通用 Design Token + 风格变体** 的架构：
 
 - **一套交互骨架** — 消息流、侧边栏、知识图、秘书面板的布局与行为在所有风格中保持一致。
 - **五套视觉风格** — 每套风格通过 Token 映射定义独立的色彩、排版、圆角、阴影、动效。
@@ -17,7 +17,7 @@
 | 风格 | 代号 | 灵感来源 | 适用场景 |
 |------|------|----------|----------|
 | 现代专业风 | `professional` | Linear, Notion | 高效学习、知识管理、专业场景 |
-| 活力趣味风 | `playful` | Duolingo, Google Material 3 | K12、轻松学习、游戏化引导 |
+| 活力趣味风 | `playful` | Duolingo, Google Material 3 | 自主学习、轻松学习、游戏化引导 |
 | 紧凑知识风 | `knowledge` | Obsidian, Logseq | 深度阅读、知识图谱、长时间沉浸 |
 | 柔和数据风 | `soft-data` | Apple Health, Apple Books | 学习数据分析、进度追踪、温和反馈 |
 | 游戏化激励风 | `gamified` | 游戏化学习平台 | 成就驱动、进度激励、强反馈场景 |

@@ -52,7 +52,7 @@
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `path_id` | str | 不变路径标识（如 `大学物理.电磁学.静电场`） |
+| `path_id` | str | 不变路径标识（如 `机器学习.监督学习.分类`） |
 | `node_type` | str | explicit / auto_generated / user_created / suggested |
 | `is_visible` | bool | 是否在侧边栏可见 |
 | `subsystems` | dict | 扩展子系统数据 |
