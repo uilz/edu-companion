@@ -1,43 +1,21 @@
 /**
  * tree-helpers — 树操作辅助函数
  * ensureConversationAtLevel, createConversationWithSmartName
+ *
+ * apiFetch / v2Fetch 委托给 @/lib/api/api 统一路径 (带 401 刷新)。
  */
 
 // ══════════════════════════════════════════════════════════════
 //  API helpers
 // ══════════════════════════════════════════════════════════════
-export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : "";
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+import { tree as _tree, v2 as _v2 } from "@/lib/api/api";
 
-  const res = await fetch(`/api/conversations${path}`, {
-    headers: { ...headers, ...(options?.headers as Record<string, string> | undefined) },
-    cache: "no-store",
-    ...options,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API error ${res.status}: ${text}`);
-  }
-  return res.json();
+export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  return _tree<T>(path, options);
 }
 
 export async function v2Fetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : "";
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-
-  const res = await fetch(`/api/v2${path}`, {
-    headers: { ...headers, ...(options?.headers as Record<string, string> | undefined) },
-    cache: "no-store",
-    ...options,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`v2 API error ${res.status}: ${text}`);
-  }
-  return res.json();
+  return _v2<T>(path, options);
 }
 
 export function fireClassify(convId: string, text: string) {
@@ -50,14 +28,12 @@ export function fireClassify(convId: string, text: string) {
 /** 智能命名：获取下一个可用的会话名称 */
 async function getNextConversationName(parentId: string): Promise<string> {
   try {
-    const data = await apiFetch<{
-      conversations: { name: string; message_count?: number }[];
-    }>(`/tree/conversation?parent_id=${parentId}`);
-    const convs = data.conversations || [];
+    const data = await apiFetch<{ directory_nodes: any[] }>(`/tree/directory?parent_id=${parentId}`);
+    const convs = (data.directory_nodes || []).filter((n: any) => n.node_type === "conv");
 
     // 检查是否已有空的新会话
     const emptyConv = convs.find(
-      (c) => (!c.message_count || c.message_count === 0) && c.name.startsWith("新会话"),
+      (c: any) => (!c.message_count || c.message_count === 0) && c.name.startsWith("新会话"),
     );
     if (emptyConv) return "__use_existing__";
 
@@ -78,14 +54,10 @@ async function getNextConversationName(parentId: string): Promise<string> {
 }
 
 /**
- * 确保在指定层级下创建对话。
+ * 确保在指定目录节点下创建对话。
  *
- * 层级含义：
- *   partition → 直接在分区下创建会话
- *   domain    → 直接在领域下创建会话
- *   topic     → 在专题下创建会话
- *
- * 不再忽略中间层自动补全——对话可以挂在 partition/domain/topic 任意层级。
+ * 新架构统一使用 DirectoryNode（node_type: "dir" | "conv"）。
+ * 对话（conv）只作为 dir 节点的子节点创建。
  */
 export async function ensureConversationAtLevel(
   level: string,
@@ -93,32 +65,17 @@ export async function ensureConversationAtLevel(
   pId: string,
 ): Promise<{ partitionId: string; conversationId: string } | null> {
   try {
-    let actualParentId = parentId;
+    // 新架构下所有非 conv 节点都是 dir，对话直接挂在 dir 下
+    const actualParentId = parentId;
 
-    // ── 1. 确定实际父节点 ID ──
-    if (level === "partition") {
-      // 对话直接挂在 partition 下
-      actualParentId = parentId; // parentId 就是 partitionId
-    } else if (level === "domain") {
-      // 对话直接挂在 domain 下
-      actualParentId = parentId;
-    } else if (level === "topic") {
-      // 对话直接挂在 topic 下
-      actualParentId = parentId;
-    } else {
-      return null;
-    }
-
-    // ── 2. 智能命名：先检查是否已存在空的「新会话」 ──
+    // ── 智能命名：先检查是否已存在空的「新会话」 ──
     const name = await getNextConversationName(actualParentId);
 
     // 如果已有空的「新会话」，直接使用它
     if (name === "__use_existing__") {
-      const cData = await apiFetch<{
-        conversations: { id: string; name: string; message_count?: number }[];
-      }>(`/tree/conversation?parent_id=${actualParentId}`);
-      const empty = (cData.conversations || []).find(
-        (c) => (!c.message_count || c.message_count === 0) && c.name.startsWith("新会话"),
+      const cData = await apiFetch<{ directory_nodes: any[] }>(`/tree/directory?parent_id=${actualParentId}`);
+      const empty = (cData.directory_nodes || []).find(
+        (c: any) => c.node_type === "conv" && (!c.message_count || c.message_count === 0) && c.name.startsWith("新会话"),
       );
       if (empty) {
         return { partitionId: pId, conversationId: empty.id };
@@ -126,16 +83,16 @@ export async function ensureConversationAtLevel(
       // 没找到空会话，回退到默认名称
     }
 
-    // ── 3. 创建新会话 ──
+    // ── 创建新会话 ──
     const convName = name === "__use_existing__" ? "新会话" : name;
-    const createData = await apiFetch<{ conversation: { id: string } }>(
-      "/tree/conversation",
+    const createData = await apiFetch<{ directory_node: { id: string }; conversation_id?: string }>(
+      "/tree/directory",
       {
         method: "POST",
-        body: JSON.stringify({ parent_id: actualParentId, name: convName }),
+        body: JSON.stringify({ node_type: "conv", kind: "general", parent_id: actualParentId, name: convName }),
       },
     );
-    const convId = createData.conversation.id;
+    const convId = createData.directory_node.id;
     return { partitionId: pId, conversationId: convId };
   } catch (e) {
     console.error("ensureConversationAtLevel failed:", e);

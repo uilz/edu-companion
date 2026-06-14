@@ -255,9 +255,8 @@ export async function fetchHistory(
 // ══════════════════════════════════════════════════════════════
 
 /**
- * 处理 context_switch WS 事件：
- * AI 检测到话题切换，记录到 NotificationStore。
- * 保留 SwitchBanner 即时横幅的现有交互，同时纳入秘书系统管理。
+ * @deprecated 通知集成已移至 pipeline/setup.ts（bindPipelineToStore）。
+ *             此函数仅保留供测试或直接调用，不再由正常 SSE 路径触发。
  */
 export function handleContextSwitch(data: {
   partition_id: string;
@@ -294,8 +293,7 @@ export function handleContextSwitch(data: {
 }
 
 /**
- * 处理 tree_recommendation WS 事件（WS 驱动版）：
- * 后端主动推送知识树推荐，记录到 NotificationStore。
+ * @deprecated 通知集成已移至 pipeline/setup.ts。此函数仅保留供测试用。
  */
 export function handleWSTreeRecommendation(data: {
   partition_id: string;
@@ -328,8 +326,7 @@ export function handleWSTreeRecommendation(data: {
 }
 
 /**
- * 处理 temp_recommendation WS 事件：
- * AI 推荐切换到学习或知识树模块，记录到 NotificationStore。
+ * @deprecated 通知集成已移至 pipeline/setup.ts。此函数仅保留供测试用。
  */
 export function handleTempRecommendation(data: {
   rec_type: string;
@@ -364,8 +361,7 @@ export function handleTempRecommendation(data: {
 }
 
 /**
- * 处理 job_update WS 事件：
- * 后台任务状态更新，记录到 NotificationStore。
+ * @deprecated 通知集成已移至 pipeline/setup.ts。此函数仅保留供测试用。
  */
 export function handleJobUpdate(data: {
   job_id: string;

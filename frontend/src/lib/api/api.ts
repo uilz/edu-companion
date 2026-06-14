@@ -95,5 +95,60 @@ export const v2 = <T,>(p: string, o?: RequestInit) => apiFetch<T>("/api/v2", p, 
 /** tree/conversations API helper — uses /api/conversations prefix */
 export const tree = <T,>(p: string, o?: RequestInit) => apiFetch<T>("/api/conversations", p, o);
 
+/** v7 practice API helper — uses /api/v7/practice prefix */
+export const v7 = <T,>(p: string, o?: RequestInit) => apiFetch<T>("/api/v7/practice", p, o);
+
 /** 通用 API 请求（带认证） */
 export const api = <T,>(path: string, o?: RequestInit) => apiFetch<T>(API_BASE, path, o);
+
+/**
+ * 带认证的 fetch 请求，返回原始 Response。
+ * 适用于需要处理非 JSON 响应（下载 blob/stream）或需要自定义状态处理的场景。
+ * 自动附加 Authorization header 并处理 401 刷新。
+ */
+export async function authedFetch(
+  path: string,
+  options: RequestInit = {},
+): Promise<Response> {
+  const authHeaders = getAuthHeaders();
+  const isFormData = options.body instanceof FormData;
+  const headers: Record<string, string> = {
+    ...authHeaders,
+    ...options?.headers as Record<string, string>,
+  };
+  if (!isFormData && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers,
+  });
+
+  // 401 → 尝试刷新令牌
+  if (res.status === 401) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) {
+      const retryHeaders: Record<string, string> = {
+        ...getAuthHeaders(),
+        ...options?.headers as Record<string, string>,
+      };
+      if (!isFormData && !retryHeaders["Content-Type"]) {
+        retryHeaders["Content-Type"] = "application/json";
+      }
+      return fetch(`${API_BASE}${path}`, {
+        ...options,
+        headers: retryHeaders,
+      });
+    }
+    // 刷新失败 → 清除认证并跳转登录
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+    localStorage.removeItem("current_user");
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+      window.location.href = "/login";
+    }
+    throw new Error("登录已过期");
+  }
+
+  return res;
+}

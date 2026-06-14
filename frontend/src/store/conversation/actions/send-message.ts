@@ -1,58 +1,85 @@
 /**
  * send-message — 发送消息（最复杂的 action）
- * 包含：auto-create 临时会话、构建消息、WS/HTTP 发送、状态管理
+ *
+ * 流程：
+ * 1. POST /tree/conversation/{cid}/message 触发后台 pipeline（立即返回）
+ * 2. StreamPipeline 自动接收 SSE 流式事件并更新 messages
+ * 3. SSE done 事件完成消息替换
  */
-import type { Partition, TreeNode } from "@/types";
+import type { MessageNode } from "@/types";
 import { apiFetch, fireClassify } from "../tree-helpers";
-import {
-  setStreamingMsgId, setStreamBuffer, setStreamingPartId, setStreamingConvId,
-  setIsSending,
-} from "../streaming";
+import { getPipeline } from "@/store/pipeline";
 
 /**
  * 在"💬 临时"分区下创建临时对话（不创建领域→专题树）
  * 第一次发消息时，自动创建或复用临时分区 + 临时会话
  */
 async function ensureTempConversation(set: any, get: any): Promise<{ pId: string; cId: string } | null> {
-  let pId = get().selectedPartitionId;
+  let pId = get().selectedDirId;
   let cId = get().activeConversationId;
   if (pId && cId) return { pId, cId };
 
   try {
     // 查找或创建临时分区
     if (!pId) {
-      const pData = await apiFetch<{ partitions: Partition[] }>("/tree/partition");
-      const tempP = (pData.partitions || []).find(p => p.is_temp);
-      if (tempP) {
-        pId = tempP.id;
-      } else {
-        const newP = await apiFetch<{ partition: Partition }>("/tree/partition", {
-          method: "POST",
-          body: JSON.stringify({ name: "💬 临时", emoji: "💬" }),
-        });
-        pId = newP.partition.id;
+      try {
+        // 优先使用新 API
+        const dirData = await apiFetch<{ directory_nodes: any[] }>("/tree/directory");
+        const tempNodes = (dirData as any).tree || dirData.directory_nodes || [];
+        const tempP = Array.isArray(tempNodes)
+          ? tempNodes.find((n: any) => n.kind === "temp")
+          : null;
+        if (tempP) {
+          pId = tempP.id;
+        } else {
+          const newP = await apiFetch<{ directory_node: any }>("/tree/directory", {
+            method: "POST",
+            body: JSON.stringify({ node_type: "dir", kind: "temp", name: "💬 临时", emoji: "💬" }),
+          });
+          pId = newP.directory_node.id;
+        }
+      } catch {
+        // 回退：旧 API
+        const pData = await apiFetch<{ partitions: any[] }>("/tree/partition");
+        const tempP = (pData.partitions || []).find(p => p.is_temp);
+        if (tempP) {
+          pId = tempP.id;
+        } else {
+          const newP = await apiFetch<{ partition: any }>("/tree/partition", {
+            method: "POST",
+            body: JSON.stringify({ name: "💬 临时", emoji: "💬" }),
+          });
+          pId = newP.partition.id;
+        }
       }
     }
 
     // 在该分区下新建一个空会话（不创建领域→专题树）
-    const newC = await apiFetch<{ conversation: { id: string } }>("/tree/conversation", {
-      method: "POST",
-      body: JSON.stringify({ parent_id: pId, name: "" }),
-    });
-    cId = newC.conversation.id;
+    try {
+      const newC = await apiFetch<{ directory_node: { id: string } }>("/tree/directory", {
+        method: "POST",
+        body: JSON.stringify({ node_type: "conv", kind: "temp", parent_id: pId, name: "" }),
+      });
+      cId = newC.directory_node.id;
+    } catch {
+      const newC = await apiFetch<{ conversation: { id: string } }>("/tree/conversation", {
+        method: "POST",
+        body: JSON.stringify({ parent_id: pId, name: "" }),
+      });
+      cId = newC.conversation.id;
+    }
 
-    // 标记发送中
-    setIsSending(true);
+    // 标记发送中 —— StreamPipeline 的 phase 会管理流状态
     set({
-      selectedPartitionId: pId,
+      selectedDirId: pId,
       activeConversationId: cId,
       convError: null,
       postSendRedirect: cId,
     });
-    await get().loadPartitions();
+    await get().loadDirList();
     return { pId, cId };
   } catch (e) {
-    set((state: { messages: TreeNode[] }) => ({
+    set((state: { messages: MessageNode[] }) => ({
       messages: [...state.messages, {
         id: "err-" + Date.now(),
         parent_id: "", children_ids: [],
@@ -85,7 +112,7 @@ export async function sendMessageImpl(
   }
 
   // 1. 确保目标会话（临时会话模式）
-  let { pId, cId } = { pId: get().selectedPartitionId, cId: get().activeConversationId };
+  let { pId, cId } = { pId: get().selectedDirId, cId: get().activeConversationId };
   if (!pId || !cId) {
     const result = await ensureTempConversation(set, get);
     if (!result) return;
@@ -96,8 +123,11 @@ export async function sendMessageImpl(
   // 2. Build user message
   const userMsgId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
   const pq = get().pendingQuote;
-  const userMsg: TreeNode = {
+  const userMsg: MessageNode = {
     id: userMsgId,
+    directory_id: cId || "",
+    content: text,
+    version: 1,
     parent_id: "",
     children_ids: [],
     partition_id: pId || "",
@@ -106,7 +136,7 @@ export async function sendMessageImpl(
       ...(pq ? [{ type: "quote" as const, quoted_text: pq.quotedText, source_message_id: pq.sourceMessageId, source_conversation_id: pq.sourceConversationId }] : []),
       { type: "text", text },
       ...(files?.map(f => ({ type: (f.type === "image" ? "image" : "file") as "image" | "file", name: f.name, material_id: f.materialId })) || []),
-    ] as TreeNode["content_blocks"],
+    ] as MessageNode["content_blocks"],
     text_summary: text,
     role: "user",
     timestamp: Date.now(),
@@ -115,14 +145,11 @@ export async function sendMessageImpl(
     is_archived: false,
   };
 
-  // 3. Assistant placeholder
+  // 3. Assistant placeholder（StreamPipeline 接收 SSE 流式事件实时更新此占位符）
   const asstId = Date.now().toString(36) + "a" + Math.random().toString(36).substr(2, 9);
-  setStreamingMsgId(asstId);
-  setStreamBuffer("");
-  setStreamingPartId(pId);
-  setStreamingConvId(cId);
+  getPipeline().beginStream(cId || "", pId || "", asstId);
 
-  set((state: { messages: TreeNode[] }) => ({
+  set((state: { messages: MessageNode[] }) => ({
     messages: [...state.messages, userMsg, {
       id: asstId, parent_id: userMsgId, children_ids: [],
       partition_id: pId || "", conversation_id: cId || "",
@@ -141,62 +168,32 @@ export async function sendMessageImpl(
     if (st === "分类中...") set({ statusMessage: "正在思考..." });
   }, 2000);
 
-  // 4. Send via WebSocket → fallback HTTP
-  const wsRef = get()._wsRef;
-  const wsPayload: Record<string, unknown> = { text, partition_id: pId, conversation_id: cId };
-  if (pq) {
-    wsPayload.pending_quote = {
-      quoted_text: pq.quotedText, source_message_id: pq.sourceMessageId,
-      source_conversation_id: pq.sourceConversationId,
-      char_start: pq.charStart, char_end: pq.charEnd,
-    };
-  }
-
-  const sent = wsRef?.send(wsPayload);
-  if (!sent) {
-    set({ statusMessage: "WebSocket 未连接，尝试 HTTP..." });
-    try {
-      const httpPayload: Record<string, unknown> = { text, partition_id: pId };
-      if (pq) {
-        httpPayload.pending_quote = {
-          quoted_text: pq.quotedText, source_message_id: pq.sourceMessageId,
-          source_conversation_id: pq.sourceConversationId,
-          char_start: pq.charStart, char_end: pq.charEnd,
-        };
-      }
-      const data = await apiFetch<any>(`/tree/conversation/${cId}/message`, {
-        method: "POST",
-        body: JSON.stringify(httpPayload),
-      });
-      const replyText = data.assistant_message?.text_summary
-        || data.assistant_message?.content_blocks?.find((b: { type: string }) => b.type === "text")?.text
-        || "（回复获取成功但没有显示内容）";
-      setStreamingMsgId(null);
-      setStreamBuffer("");
-      setStreamingPartId(null);
-      setStreamingConvId(null);
-      set((state: { messages: TreeNode[] }) => ({
-        messages: state.messages.map(m => m.id === asstId ? {
-          ...m, content_blocks: [{ type: "text" as const, text: replyText }], text_summary: replyText,
-        } : m),
-        isLoading: false,
-        statusMessage: "",
-      }));
-      setTimeout(() => get().loadPartitions(), 300);
-    } catch (httpErr: unknown) {
-      const errMsg = `无法连接服务器：${httpErr instanceof Error ? httpErr.message : "未知错误"}`;
-      set((state: { messages: TreeNode[] }) => ({
-        messages: state.messages.map(m => m.id === asstId ? {
-          ...m, id: "err-" + Date.now(),
-          content_blocks: [{ type: "text" as const, text: `❌ ${errMsg}` }],
-          text_summary: errMsg,
-        } : m),
-      }));
-      setStreamingMsgId(null);
-      setStreamBuffer("");
-      setStreamingPartId(null);
-      setStreamingConvId(null);
-      set({ isLoading: false, statusMessage: "" });
+  // 4. 通过 HTTP POST 触发后台 pipeline
+  //    SSE 会自动接收流式事件，更新占位符消息
+  try {
+    const payload: Record<string, unknown> = { text, partition_id: pId, conversation_id: cId };
+    if (pq) {
+      payload.pending_quote = {
+        quoted_text: pq.quotedText, source_message_id: pq.sourceMessageId,
+        source_conversation_id: pq.sourceConversationId,
+        char_start: pq.charStart, char_end: pq.charEnd,
+      };
     }
+    // POST 立即返回 { ok: true }，不阻塞
+    await apiFetch(`/tree/conversation/${cId}/message`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    // 注意：不在这里清除 streaming refs，StreamPipeline 的 onError 会处理
+  } catch (httpErr: unknown) {
+    const errMsg = `无法连接服务器：${httpErr instanceof Error ? httpErr.message : "未知错误"}`;
+    set((state: { messages: MessageNode[] }) => ({
+      messages: state.messages.map(m => m.id === asstId ? {
+        ...m, id: "err-" + Date.now(),
+        content_blocks: [{ type: "text" as const, text: `❌ ${errMsg}` }],
+        text_summary: errMsg,
+      } : m),
+    }));
+    set({ isLoading: false, statusMessage: "" });
   }
 }

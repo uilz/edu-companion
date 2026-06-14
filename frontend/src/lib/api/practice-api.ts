@@ -79,24 +79,10 @@ export interface V7SessionListItem {
 
 // ── API 调用 ──
 
-const V7_BASE = "/api/v7/practice";
+import { v7 } from "@/lib/api/api";
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  // 自动附加认证令牌
-  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
-  const authHeaders: Record<string, string> = {};
-  if (token) authHeaders["Authorization"] = `Bearer ${token}`;
-
-  const res = await fetch(`${V7_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...authHeaders, ...options?.headers },
-    cache: "no-store",
-    ...options,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`practice API error ${res.status}: ${text}`);
-  }
-  return res.json();
+  return v7<T>(path, options);
 }
 
 /** 根据知识点 ID 解析（或创建）题库 */

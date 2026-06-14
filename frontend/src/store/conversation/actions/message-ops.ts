@@ -2,14 +2,14 @@
  * message-ops — 消息操作
  * loadMessages, deleteMessage, editMessage, versionSwitch
  */
-import type { TreeNode, ResponseBlock } from "@/types";
+import type { MessageNode, ResponseBlock } from "@/types";
 import { apiFetch } from "../tree-helpers";
 
 export async function loadMessagesImpl(set: any, get: any, conversationId: string) {
   set({ loadingMessages: true, convError: null });
   try {
     const [msgData, blocksData] = await Promise.all([
-      apiFetch<{ messages: TreeNode[]; total: number }>(
+      apiFetch<{ messages: MessageNode[]; total: number }>(
         `/tree/conversation/${conversationId}/messages?limit=50&offset=0`,
       ),
       apiFetch<{ blocks: ResponseBlock[] }>(
@@ -17,7 +17,7 @@ export async function loadMessagesImpl(set: any, get: any, conversationId: strin
       ).catch(() => ({ blocks: [] as ResponseBlock[] })),
     ]);
     set({
-      messages: (msgData.messages || []).map((m: TreeNode & { metadata?: Record<string, unknown> }) => {
+      messages: (msgData.messages || []).map((m: MessageNode & { metadata?: Record<string, unknown> }) => {
         if (m.metadata?.follow_up_questions && !m.follow_up_questions) {
           (m as unknown as Record<string, unknown>).follow_up_questions = m.metadata.follow_up_questions;
         }
@@ -48,7 +48,7 @@ export async function deleteMessageImpl(set: any, get: any, messageId: string) {
 
 export async function editMessageImpl(set: any, get: any, messageId: string, newText: string): Promise<number> {
   try {
-    const data = await apiFetch<{ node: TreeNode; version_count: number }>(`/tree/message/${messageId}`, {
+    const data = await apiFetch<{ node: MessageNode; version_count: number }>(`/tree/message/${messageId}`, {
       method: "PUT",
       body: JSON.stringify({
         content_blocks: [{ type: "text", text: newText }],
@@ -72,7 +72,7 @@ export async function editMessageImpl(set: any, get: any, messageId: string, new
 
 export async function versionSwitchImpl(set: any, get: any, messageId: string, direction: "prev" | "next", currentIndex?: number) {
   try {
-    const data = await apiFetch<{ messages: TreeNode[]; switched_to: string; index: number; total: number }>(
+    const data = await apiFetch<{ messages: MessageNode[]; switched_to: string; index: number; total: number }>(
       `/tree/message/${messageId}/switch-version`,
       { method: "POST", body: JSON.stringify({ direction }) },
     );

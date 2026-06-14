@@ -45,7 +45,7 @@ const ACTION_ROUTES: Record<string, (payload?: Record<string, unknown>) => Navig
     const kpId = payload?.kp_id as string || "";
     const topic = payload?.topic as string || "";
     const params = new URLSearchParams();
-    if (kpId) params.set("node", kpId);
+    if (kpId) params.set("node_id", kpId);
     if (topic) params.set("negotiate", topic);
     const qs = params.toString();
     return {
@@ -59,7 +59,7 @@ const ACTION_ROUTES: Record<string, (payload?: Record<string, unknown>) => Navig
     const kpId = payload?.kp_id as string || "";
     const topic = payload?.topic as string || "";
     const params = new URLSearchParams();
-    if (kpId) params.set("node", kpId);
+    if (kpId) params.set("node_id", kpId);
     if (topic) params.set("topic", topic);
     const qs = params.toString();
     return {
@@ -73,7 +73,7 @@ const ACTION_ROUTES: Record<string, (payload?: Record<string, unknown>) => Navig
     const kpId = payload?.kp_id as string || "";
     const topic = payload?.topic as string || "";
     const params = new URLSearchParams();
-    if (kpId) params.set("node", kpId);
+    if (kpId) params.set("node_id", kpId);
     if (topic) params.set("q", topic);
     const qs = params.toString();
     return {

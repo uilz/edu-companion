@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createAgentStore, type ToolCallEvent } from "../agent-store";
+import { createAgentStoreForTest, type ToolCallEvent } from "../agent-store";
 
 const sampleToolCall: ToolCallEvent = {
   name: "start_practice",
@@ -11,10 +11,10 @@ const sampleToolCall: ToolCallEvent = {
 };
 
 describe("AgentStore", () => {
-  let store: ReturnType<typeof createAgentStore>;
+  let store: ReturnType<typeof createAgentStoreForTest>;
 
   beforeEach(() => {
-    store = createAgentStore();
+    store = createAgentStoreForTest();
   });
 
   describe("对话管理", () => {

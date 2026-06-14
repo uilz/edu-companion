@@ -1,26 +1,11 @@
 // Phase 10: 笔记/目标/探索项目 API 客户端
 // 对接后端 /api/learning/*
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+import { api } from "@/lib/api/api";
 
 // ── 带认证的 fetch 封装 ──
-function authHeaders(): Record<string, string> {
-  if (typeof window === "undefined") return {};
-  const token = localStorage.getItem("access_token");
-  if (!token) return {};
-  return { Authorization: `Bearer ${token}` };
-}
-
 async function learningFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...authHeaders(), ...options?.headers },
-    ...options,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API ${res.status}: ${text.slice(0, 100)}`);
-  }
-  return res.json();
+  return api<T>(path, options);
 }
 
 // ════════════════════════════════════════

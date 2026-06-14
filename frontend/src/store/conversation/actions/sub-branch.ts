@@ -11,7 +11,7 @@ export function setPendingQuoteImpl(set: any, quote: { sourceMessageId: string; 
 
 export function enterSubBranchImpl(set: any, get: any, subBranchConvId: string) {
   const state = get();
-  const partitionId = state.selectedPartitionId;
+  const partitionId = state.selectedDirId;
   if (!partitionId) return;
   set({ isInSubBranch: true, subBranchParentConvId: state.activeConversationId });
   state.selectConversation(partitionId, subBranchConvId);
@@ -48,7 +48,7 @@ export async function createSubBranchImpl(set: any, get: any,
       }),
     });
     const newConvId = data.conversation_id;
-    const partitionId = data.partition_id || get().selectedPartitionId;
+    const partitionId = data.partition_id || get().selectedDirId;
     set({ pendingQuote: null });
     if (partitionId) {
       set({

@@ -1,3 +1,5 @@
+import { create } from "zustand";
+
 export interface AgentMessage {
   role: "user" | "assistant";
   content: string;
@@ -12,68 +14,154 @@ export interface ToolCallEvent {
   confirmation_text: string;
 }
 
+/** 秘书对话的快照信息 */
+export interface SecretaryConvInfo {
+  id: string;
+  name: string;
+  messageCount: number;
+  createdAt: number;
+}
+
 export interface AgentState {
+  // ── 秘书对话状态 ──
   conversationId: string | null;
   messages: AgentMessage[];
   isStreaming: boolean;
   currentToolCall: ToolCallEvent | null;
   confirmMode: "smart" | "always" | "never";
   autoJumpThreshold: number;
+
+  // ── 树持久化 ──
+  secretaryDirId: string | null;
+  secretaryConvs: SecretaryConvInfo[];
+  activeConvId: string | null;
+  loadingSecretary: boolean;
+  loadingMessages: boolean;
 }
 
-export function createAgentStore() {
-  const state: AgentState = {
-    conversationId: null,
-    messages: [],
-    isStreaming: false,
-    currentToolCall: null,
-    confirmMode: "smart",
-    autoJumpThreshold: 0.85,
-  };
+export interface AgentActions {
+  setConversationId: (id: string) => void;
+  addUserMessage: (content: string) => void;
+  appendAssistantChunk: (delta: string) => void;
+  setStreaming: (v: boolean) => void;
+  setToolCall: (tc: ToolCallEvent | null) => void;
+  acceptToolCall: () => void;
+  rejectToolCall: () => void;
+  setConfirmMode: (mode: "smart" | "always" | "never") => void;
+  setAutoJumpThreshold: (t: number) => void;
 
-  return {
-    setConversationId(id: string) { state.conversationId = id; },
-    addUserMessage(content: string) {
-      state.messages.push({ role: "user", content });
-    },
-    appendAssistantChunk(delta: string) {
-      const last = state.messages[state.messages.length - 1];
+  // ── 树持久化 ──
+  setSecretaryDirId: (id: string | null) => void;
+  setSecretaryConvs: (convs: SecretaryConvInfo[]) => void;
+  setActiveConvId: (id: string | null) => void;
+  setLoadingSecretary: (v: boolean) => void;
+  setLoadingMessages: (v: boolean) => void;
+  /** 从 tree API 加载的消息替换本地 messages */
+  setMessagesFromTree: (msgs: AgentMessage[]) => void;
+  switchConv: (convId: string) => void;
+  reset: () => void;
+}
+
+const defaultState: AgentState = {
+  conversationId: null,
+  messages: [],
+  isStreaming: false,
+  currentToolCall: null,
+  confirmMode: "smart",
+  autoJumpThreshold: 0.85,
+
+  secretaryDirId: null,
+  secretaryConvs: [],
+  activeConvId: null,
+  loadingSecretary: false,
+  loadingMessages: false,
+};
+
+export const useAgentStore = create<AgentState & AgentActions>()((set) => ({
+  ...defaultState,
+
+  setConversationId: (id) => set({ conversationId: id }),
+  addUserMessage: (content) =>
+    set((s) => ({ messages: [...s.messages, { role: "user", content }] })),
+  appendAssistantChunk: (delta) =>
+    set((s) => {
+      const msgs = [...s.messages];
+      const last = msgs[msgs.length - 1];
       if (last && last.role === "assistant") {
-        last.content += delta;
+        msgs[msgs.length - 1] = { ...last, content: last.content + delta };
       } else {
-        state.messages.push({ role: "assistant", content: delta });
+        msgs.push({ role: "assistant", content: delta });
       }
-    },
-    setStreaming(v: boolean) { state.isStreaming = v; },
-    setToolCall(tc: ToolCallEvent | null) { state.currentToolCall = tc; },
-    acceptToolCall() { state.currentToolCall = null; },
-    rejectToolCall() { state.currentToolCall = null; },
-    setConfirmMode(mode: "smart" | "always" | "never") { state.confirmMode = mode; },
-    setAutoJumpThreshold(t: number) { state.autoJumpThreshold = t; },
-    reset() {
-      state.conversationId = null;
-      state.messages = [];
-      state.isStreaming = false;
-      state.currentToolCall = null;
-    },
+      return { messages: msgs };
+    }),
+  setStreaming: (v) => set({ isStreaming: v }),
+  setToolCall: (tc) => set({ currentToolCall: tc }),
+  acceptToolCall: () => set({ currentToolCall: null }),
+  rejectToolCall: () => set({ currentToolCall: null }),
+  setConfirmMode: (mode) => set({ confirmMode: mode }),
+  setAutoJumpThreshold: (t) => set({ autoJumpThreshold: t }),
+  reset: () =>
+    set({
+      conversationId: null,
+      messages: [],
+      isStreaming: false,
+      currentToolCall: null,
+    }),
 
-    get conversationId() { return state.conversationId; },
-    get messages() { return state.messages; },
-    get isStreaming() { return state.isStreaming; },
-    get currentToolCall() { return state.currentToolCall; },
-    get confirmMode() { return state.confirmMode; },
-    get autoJumpThreshold() { return state.autoJumpThreshold; },
-  };
+  setSecretaryDirId: (id) => set({ secretaryDirId: id }),
+  setSecretaryConvs: (convs) => set({ secretaryConvs: convs }),
+  setActiveConvId: (id) => set({ activeConvId: id }),
+  setLoadingSecretary: (v) => set({ loadingSecretary: v }),
+  setLoadingMessages: (v) => set({ loadingMessages: v }),
+  setMessagesFromTree: (msgs) => set({ messages: msgs }),
+  switchConv: (convId: string) =>
+    set({
+      activeConvId: convId,
+      conversationId: convId,
+      messages: [],
+      currentToolCall: null,
+    }),
+}));
+
+/** 向后兼容：回调中获取最新状态/执行动作 */
+export function getAgentStore(): AgentState & AgentActions {
+  return useAgentStore.getState();
 }
 
-export type AgentStore = ReturnType<typeof createAgentStore>;
-
-// 全局单例
-let _instance: AgentStore | null = null;
-
-export function getAgentStore(): AgentStore {
-  if (!_instance) {
-    _instance = createAgentStore();
-  }
-  return _instance;
+/** 测试用：创建独立 store 实例 */
+export function createAgentStoreForTest(): AgentState & AgentActions {
+  return create<AgentState & AgentActions>()((set) => ({
+    ...defaultState,
+    setConversationId: (id) => set({ conversationId: id }),
+    addUserMessage: (content) =>
+      set((s) => ({ messages: [...s.messages, { role: "user", content }] })),
+    appendAssistantChunk: (delta) =>
+      set((s) => {
+        const msgs = [...s.messages];
+        const last = msgs[msgs.length - 1];
+        if (last && last.role === "assistant") {
+          msgs[msgs.length - 1] = { ...last, content: last.content + delta };
+        } else {
+          msgs.push({ role: "assistant", content: delta });
+        }
+        return { messages: msgs };
+      }),
+    setStreaming: (v) => set({ isStreaming: v }),
+    setToolCall: (tc) => set({ currentToolCall: tc }),
+    acceptToolCall: () => set({ currentToolCall: null }),
+    rejectToolCall: () => set({ currentToolCall: null }),
+    setConfirmMode: (mode) => set({ confirmMode: mode }),
+    setAutoJumpThreshold: (t) => set({ autoJumpThreshold: t }),
+    setSecretaryDirId: (id) => set({ secretaryDirId: id }),
+    setSecretaryConvs: (convs) => set({ secretaryConvs: convs }),
+    setActiveConvId: (id) => set({ activeConvId: id }),
+    setLoadingSecretary: (v) => set({ loadingSecretary: v }),
+    setLoadingMessages: (v) => set({ loadingMessages: v }),
+    setMessagesFromTree: (msgs) => set({ messages: msgs }),
+    switchConv: (convId: string) =>
+      set({ activeConvId: convId, conversationId: convId, messages: [], currentToolCall: null }),
+    reset: () => set({
+      conversationId: null, messages: [], isStreaming: false, currentToolCall: null,
+    }),
+  })).getState();
 }
