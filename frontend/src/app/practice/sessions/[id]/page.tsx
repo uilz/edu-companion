@@ -10,10 +10,10 @@ import {
   startSession, pauseSession, resumeSession, cancelSession,
   type V7Session, type V7SubmitResult,
 } from "@/lib/api/practice-api";
-import QuestionCard from "@/components/practice/shared/QuestionCard";
-import ProgressBar from "@/components/practice/shared/ProgressBar";
-import SessionTimer from "@/components/practice/shared/SessionTimer";
-import SummaryPanel from "@/components/practice/shared/SummaryPanel";
+import QuestionCard from "@/components/practice/components/QuestionCard";
+import ProgressBar from "@/components/practice/components/ProgressBar";
+import SessionTimer from "@/components/practice/components/SessionTimer";
+import SummaryPanel from "@/components/practice/components/SummaryPanel";
 
 export default function PracticeSessionPage() {
   const params = useParams();

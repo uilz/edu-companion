@@ -8,8 +8,7 @@ import { Upload, FileText, Image, Search, Trash2, Loader2,
   Check, ChevronRight, Home, RefreshCw, Eye, Grid, List,
   HardDrive, Clock, Star,
 } from "lucide-react";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+import { authedFetch, API_BASE } from "@/lib/api/api";
 
 // ── 类型 ──
 
@@ -120,7 +119,7 @@ export default function ResourcesPage() {
   const [editName, setEditName] = useState("");
   const [editTags, setEditTags] = useState<string[]>([]);
   const [editTagInput, setEditTagInput] = useState("");
-  const [editLevel, setEditLevel] = useState("partition");
+  const [editLevel, setEditLevel] = useState("dir");
   const [editParentId, setEditParentId] = useState("");
   const [saving, setSaving] = useState(false);
   const [deletingBank, setDeletingBank] = useState<string | null>(null);
@@ -157,7 +156,7 @@ export default function ResourcesPage() {
       if (search) params.set("search", search);
       if (selectedTag) params.set("tag", selectedTag);
       if (tab === "files") params.set("parent_id", currentFolder);
-      const res = await fetch(`${API_BASE}/api/files?${params}`);
+      const res = await authedFetch(`/api/files?${params}`);
       const data = await res.json();
       setFiles(data.items || []);
       setTotal(data.total || 0);
@@ -172,7 +171,7 @@ export default function ResourcesPage() {
     try {
       const params = new URLSearchParams();
       if (currentFolder) params.set("parent_id", currentFolder);
-      const res = await fetch(`${API_BASE}/api/files/folders?${params}`);
+      const res = await authedFetch(`/api/files/folders?${params}`);
       const data = await res.json();
       setFolders(data.folders || []);
     } catch (e) {
@@ -182,7 +181,7 @@ export default function ResourcesPage() {
 
   const fetchTags = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/files/tags`);
+      const res = await authedFetch(`/api/files/tags`);
       const data = await res.json();
       setAllTags(data.tags || []);
     } catch (e) {
@@ -192,7 +191,7 @@ export default function ResourcesPage() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/files/stats`);
+      const res = await authedFetch(`/api/files/stats`);
       const data = await res.json();
       setStats(data);
     } catch (e) {
@@ -203,7 +202,7 @@ export default function ResourcesPage() {
   const fetchBanks = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/v7/practice/banks`);
+      const res = await authedFetch(`/api/v7/practice/banks`);
       const data = await res.json();
       setBanks(Array.isArray(data) ? data : []);
     } catch (e) {
@@ -216,7 +215,7 @@ export default function ResourcesPage() {
   const fetchTrash = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/files/trash`);
+      const res = await authedFetch(`/api/files/trash`);
       const data = await res.json();
       setTrashFiles(data.files || []);
     } catch (e) {
@@ -234,19 +233,19 @@ export default function ResourcesPage() {
   }, [tab, fetchFiles, fetchBanks, fetchStats, fetchFolders, fetchTags, fetchTrash]);
 
   const handleRestore = async (id: string) => {
-    try { await fetch(`${API_BASE}/api/files/${id}/restore`, { method: "POST" }); fetchTrash(); }
+    try { await authedFetch(`/api/files/${id}/restore`, { method: "POST" }); fetchTrash(); }
     catch (e) { console.error("Restore failed:", e); }
   };
 
   const handlePermanentDelete = async (id: string) => {
     if (!confirm("确定永久删除？此操作不可恢复！")) return;
-    try { await fetch(`${API_BASE}/api/files/${id}/permanent`, { method: "DELETE" }); fetchTrash(); }
+    try { await authedFetch(`/api/files/${id}/permanent`, { method: "DELETE" }); fetchTrash(); }
     catch (e) { console.error("Permanent delete failed:", e); }
   };
 
   const handleEmptyTrash = async () => {
     if (!confirm("确定清空回收站？所有文件将永久删除！")) return;
-    try { await fetch(`${API_BASE}/api/files/trash/empty`, { method: "POST" }); fetchTrash(); }
+    try { await authedFetch(`/api/files/trash/empty`, { method: "POST" }); fetchTrash(); }
     catch (e) { console.error("Empty trash failed:", e); }
   };
 
@@ -297,7 +296,7 @@ export default function ResourcesPage() {
   const handleDelete = async (id: string) => {
     if (!confirm("确定删除该文件？文件将移入回收站")) return;
     setDeleting(id);
-    try { await fetch(`${API_BASE}/api/files/${id}/trash`, { method: "POST" }); fetchFiles(); fetchFolders(); }
+    try { await authedFetch(`/api/files/${id}/trash`, { method: "POST" }); fetchFiles(); fetchFolders(); }
     catch (e) { console.error("Delete failed:", e); }
     finally { setDeleting(null); }
   };
@@ -306,7 +305,7 @@ export default function ResourcesPage() {
     setEditFile(f);
     setEditName(f.file_name);
     setEditTags(f.tags || []);
-    setEditLevel(f.level || "partition");
+    setEditLevel(f.level || "dir");
     setEditParentId(f.parent_id || "");
     setEditTagInput("");
   };
@@ -322,12 +321,12 @@ export default function ResourcesPage() {
     if (!editFile || !editName.trim()) return;
     setSaving(true);
     try {
-      await fetch(`${API_BASE}/api/files/${editFile.material_id}`, {
+      await authedFetch(`/api/files/${editFile.material_id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ file_name: editName.trim(), level: editLevel, parent_id: editParentId }),
       });
-      await fetch(`${API_BASE}/api/files/${editFile.material_id}/tags`, {
+      await authedFetch(`/api/files/${editFile.material_id}/tags`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tags: editTags }),
@@ -350,7 +349,7 @@ export default function ResourcesPage() {
   const handleDeleteBank = async (id: string) => {
     if (!confirm("确定删除该题库？")) return;
     setDeletingBank(id);
-    try { await fetch(`${API_BASE}/api/v7/practice/banks/${id}`, { method: "DELETE" }); fetchBanks(); }
+    try { await authedFetch(`/api/v7/practice/banks/${id}`, { method: "DELETE" }); fetchBanks(); }
     catch (e) { console.error("Delete bank failed:", e); }
     finally { setDeletingBank(null); }
   };
@@ -369,7 +368,7 @@ export default function ResourcesPage() {
   const handleBatchAction = async (action: string) => {
     if (selectedFiles.size === 0) return;
     try {
-      await fetch(`${API_BASE}/api/files/batch`, {
+      await authedFetch(`/api/files/batch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ material_ids: Array.from(selectedFiles), action, target_folder_id: action === "move" ? currentFolder : undefined }),
@@ -382,7 +381,7 @@ export default function ResourcesPage() {
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) return;
     try {
-      await fetch(`${API_BASE}/api/files/folder`, {
+      await authedFetch(`/api/files/folder`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newFolderName.trim(), parent_id: currentFolder || undefined }),
@@ -716,7 +715,7 @@ export default function ResourcesPage() {
                       <label className="text-[10px] text-[var(--color-text-muted)] block mb-1">所属层级</label>
                       <select value={editLevel} onChange={(e) => setEditLevel(e.target.value)}
                         className="w-full px-3 py-2 text-[12px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] focus:outline-none focus:border-[var(--color-accent)]">
-                        <option value="partition">分区</option>
+                        <option value="dir">目录</option>
                         <option value="node">节点</option>
                       </select>
                     </div>

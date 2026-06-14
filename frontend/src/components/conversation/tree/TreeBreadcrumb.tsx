@@ -14,11 +14,11 @@ interface Props {
   domainName?: string;
   topicName?: string;
   conversationName?: string;
-  partitions?: BreadcrumbOption[];
+  dirList?: BreadcrumbOption[];
   domains?: BreadcrumbOption[];
   topics?: BreadcrumbOption[];
   conversations?: BreadcrumbOption[];
-  selectedPartitionId?: string | null;
+  selectedDirId?: string | null;
   selectedDomainId?: string | null;
   selectedTopicId?: string | null;
   selectedConversationId?: string | null;
@@ -30,18 +30,19 @@ interface Props {
 
 /**
  * TreeBreadcrumb — 当前路径可视化
- * 显示 分区 > 领域 > 专题 > 会话
+ * 新架构：目录 > 会话（不再区分分区/领域/专题）
+ * 旧 prop 名保留用于向后兼容
  */
 export default function TreeBreadcrumb({
   partitionName,
   domainName,
   topicName,
   conversationName,
-  partitions = [],
+  dirList = [],
   domains = [],
   topics = [],
   conversations = [],
-  selectedPartitionId,
+  selectedDirId,
   selectedDomainId,
   selectedTopicId,
   selectedConversationId,
@@ -63,52 +64,38 @@ export default function TreeBreadcrumb({
     return () => window.removeEventListener("mousedown", onOutsideClick);
   }, []);
 
-  const items = useMemo(() => ([
-    {
-      key: "partition",
-      label: partitionName || "选择分区",
-      options: partitions,
-      selectedId: selectedPartitionId,
-      onSelect: onSelectPartition,
-    },
-    {
-      key: "domain",
-      label: domainName || "选择领域",
-      options: domains,
-      selectedId: selectedDomainId,
-      onSelect: onSelectDomain,
-    },
-    {
-      key: "topic",
-      label: topicName || "选择专题",
-      options: topics,
-      selectedId: selectedTopicId,
-      onSelect: onSelectTopic,
-    },
-    {
-      key: "conversation",
-      label: conversationName || "选择会话",
-      options: conversations,
-      selectedId: selectedConversationId,
-      onSelect: onSelectConversation,
-    },
-  ]), [
-    partitionName,
-    domainName,
-    topicName,
-    conversationName,
-    partitions,
-    domains,
-    topics,
-    conversations,
-    selectedPartitionId,
-    selectedDomainId,
-    selectedTopicId,
-    selectedConversationId,
-    onSelectPartition,
-    onSelectDomain,
-    onSelectTopic,
-    onSelectConversation,
+  // 合并 partition/domain/topic 为单一"目录"层级，显示非空且有值的那一级
+  const items = useMemo(() => {
+    const dirOptions = [
+      ...dirList.map(p => ({ ...p, _order: 0 })),
+      ...domains.map(d => ({ ...d, _order: 1 })),
+      ...topics.map(t => ({ ...t, _order: 2 })),
+    ].sort((a, b) => a._order - b._order);
+
+    // 使用第一个非空的名称作为目录名
+    const dirName = partitionName || domainName || topicName || "目录";
+
+    return [
+      {
+        key: "dir",
+        label: dirName,
+        options: dirOptions,
+        selectedId: selectedDirId || selectedDomainId || selectedTopicId,
+        onSelect: onSelectPartition || onSelectDomain || onSelectTopic,
+      },
+      {
+        key: "conversation",
+        label: conversationName || "选择会话",
+        options: conversations,
+        selectedId: selectedConversationId,
+        onSelect: onSelectConversation,
+      },
+    ];
+  }, [
+    partitionName, domainName, topicName, conversationName,
+    dirList, domains, topics, conversations,
+    selectedDirId, selectedDomainId, selectedTopicId, selectedConversationId,
+    onSelectPartition, onSelectDomain, onSelectTopic, onSelectConversation,
   ]);
 
   const visibleItems = items.filter((item) => item.label);

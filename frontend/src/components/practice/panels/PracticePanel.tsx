@@ -9,8 +9,8 @@ import {
   resolveBankForNode, generateQuestions, listBanks, listMaterials,
   type V7Session, type V7SubmitResult, type MaterialItem,
 } from "@/lib/api/practice-api";
-import QuestionCard from "@/components/practice/shared/QuestionCard";
-import SummaryPanel from "@/components/practice/shared/SummaryPanel";
+import QuestionCard from "@/components/practice/components/QuestionCard";
+import SummaryPanel from "@/components/practice/components/SummaryPanel";
 
 type Phase = "idle" | "loading" | "answering" | "result" | "summary" | "error";
 

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, Target } from "lucide-react";
 import Card from "@/components/ui/Card";
-import { API_BASE } from "@/lib/api/api";
+import { authedFetch, API_BASE } from "@/lib/api/api";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
 
 // ── Types ──
@@ -230,7 +230,7 @@ export default function RadarChart() {
     try {
       const params = new URLSearchParams({ user_id: userId });
       if (subj) params.set("subject", subj);
-      const res = await fetch(`${API_BASE}/api/knowledge/graph?${params}`);
+      const res = await authedFetch(`/api/knowledge/graph?${params}`);
       if (!res.ok) throw new Error("Failed");
       const json: GraphData = await res.json();
       setGraphData(json);

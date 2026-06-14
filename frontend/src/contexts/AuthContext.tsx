@@ -10,7 +10,6 @@ import {
   fetchCurrentUser,
   getAccessToken,
 } from "../lib/api/auth";
-import { initFetchInterceptor } from "../lib/api/fetch-interceptor";
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -38,7 +37,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    initFetchInterceptor();
     (async () => {
       const token = getAccessToken();
       if (token) {

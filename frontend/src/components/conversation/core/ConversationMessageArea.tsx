@@ -7,11 +7,12 @@ import SubBranchBanner from "@/components/conversation/banners/SubBranchBanner";
 import SwitchBanner from "@/components/conversation/banners/SwitchBanner";
 import ErrorBanner from "@/components/conversation/banners/ErrorBanner";
 import SecretaryInlineBanner from "@/components/notification/SecretaryInlineBanner";
-import type { TreeNode, ResponseBlock } from "@/types";
+import StreamingControls from "@/components/conversation/core/StreamingControls";
+import type { MessageNode, ResponseBlock } from "@/types";
 
 // ── Props ──
 export interface ConversationMessageAreaProps {
-  messages: TreeNode[];
+  messages: MessageNode[];
   responseBlocks: ResponseBlock[];
   isLoading: boolean;
   statusMessage?: string;
@@ -115,6 +116,13 @@ export default function ConversationMessageArea(props: ConversationMessageAreaPr
           />
         </div>
       </div>
+
+      {/* 流式控制按钮（运行时 / 暂停时显示） */}
+      {isLoading && (
+        <div className="flex-shrink-0 flex items-center justify-between px-4 border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+          <StreamingControls />
+        </div>
+      )}
 
       <div className="flex-shrink-0 border-t border-[var(--color-border)] bg-[var(--color-bg)]">
         <ConversationChatInput

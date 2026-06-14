@@ -89,18 +89,18 @@ export default function Sidebar() {
       {/* ── 品牌 Logo 与标题 ── */}
       <div className={`px-3 py-4 border-b border-divider ${collapsed ? 'flex justify-center' : 'px-5'}`}>
         {collapsed ? (
-          <Link href="/" className="flex items-center justify-center group" title="智学伴">
+          <Link href="/" className="flex items-center justify-center group" title="苹果果">
             <div className="w-8 h-8 bg-accent flex items-center justify-center rounded active:scale-[0.97] transition-transform group-hover:scale-105">
-              <span className="text-white font-semibold text-sm">学</span>
+              <span className="text-white font-semibold text-sm">果</span>
             </div>
           </Link>
         ) : (
           <Link href="/" className="flex items-center gap-3 group">
             <div className="w-8 h-8 bg-accent flex items-center justify-center rounded active:scale-[0.97] transition-transform group-hover:scale-105">
-              <span className="text-white font-semibold text-sm">学</span>
+              <span className="text-white font-semibold text-sm">果</span>
             </div>
             <span className="font-semibold text-ink-primary tracking-tight text-lg">
-              智学伴
+              苹果果
             </span>
           </Link>
         )}
@@ -206,7 +206,7 @@ export default function Sidebar() {
         {/* 版本信息 */}
         {!collapsed && (
           <div className="px-5 py-3 text-[10px] text-ink-muted tracking-wide">
-            智学伴 v1.0
+            苹果果 v1.0
           </div>
         )}
       </div>

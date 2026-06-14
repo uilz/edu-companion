@@ -8,16 +8,16 @@ import {
 import { useRouter } from "next/navigation";
 import ConversationMessageArea from "@/components/conversation/core/ConversationMessageArea";
 import PracticePanel from "@/components/practice/panels/PracticePanel";
-import { PartitionPicker } from "@/components/conversation/tree/PartitionPicker";
 import TreeBreadcrumb from "@/components/conversation/tree/TreeBreadcrumb";
 import { useConversationStore } from "@/store/conversation/conversation-store";
 import { useSocraticMode } from "@/components/conversation/hooks/useSocraticMode";
 import { apiFetch } from "@/store/conversation/tree-helpers";
-import type { Conversation, Domain, Topic } from "@/types";
+
+type LocalConv = { id: string; name: string; partition_id: string; is_active: boolean };
 
 /** FocusModePanel — 专注模式面板
  *
- * 布局：顶栏（分区选择器 + 控制按钮）
+ * 布局：顶栏（目录选择器 + 控制按钮）
  *       下方：左对话 | 可拖拽分隔线 | 右图谱
  * 苏格拉底模式设置已迁移到设置页 /settings
  */
@@ -28,19 +28,20 @@ export default function FocusModePanel({
 }) {
   const messages = useConversationStore((s) => s.messages);
   const responseBlocks = useConversationStore((s) => s.responseBlocks);
-  const activeConversationId = useConversationStore((s) => s.activeConversationId);
-  const activeDomainId = useConversationStore((s) => s.activeDomainId);
-  const activeTopicId = useConversationStore((s) => s.activeTopicId);
+  const selectedNodeId = useConversationStore((s) => s.selectedNodeId);
+  const selectedNodeType = useConversationStore((s) => s.selectedNodeType);
   const isLoading = useConversationStore((s) => s.isLoading);
   const statusMessage = useConversationStore((s) => s.statusMessage);
   const sendMessage = useConversationStore((s) => s.sendMessage);
   const deleteMessage = useConversationStore((s) => s.deleteMessage);
   const editMessage = useConversationStore((s) => s.editMessage);
   const versionSwitch = useConversationStore((s) => s.versionSwitch);
-  const partitions = useConversationStore((s) => s.partitions);
-  const selectedPartitionId = useConversationStore((s) => s.selectedPartitionId);
-  const loadPartitions = useConversationStore((s) => s.loadPartitions);
+  const dirList = useConversationStore((s) => s.dirList);
+  const loadDirList = useConversationStore((s) => s.loadDirList);
   const loadMessages = useConversationStore((s) => s.loadMessages);
+
+  // ── 从 selectedNodeId/selectedNodeType 派生 ──
+  const activeConversationId = selectedNodeType === 'conv' ? selectedNodeId : null;
 
   // ── 从设置页读取配置 ──
   const socraticEnabled = useRef(false);
@@ -70,182 +71,42 @@ export default function FocusModePanel({
   const [showPractice, setShowPractice] = useState(false);
 
   // ── 路径名称 ──
-  const [domainName, setDomainName] = useState("");
-  const [topicName, setTopicName] = useState("");
   const [conversationName, setConversationName] = useState("");
-  const [domainOptions, setDomainOptions] = useState<Domain[]>([]);
-  const [topicOptions, setTopicOptions] = useState<Topic[]>([]);
-  const [conversationOptions, setConversationOptions] = useState<Conversation[]>([]);
-  const partitionName = partitions.find(p => p.id === selectedPartitionId)?.name || "";
+  const [conversationOptions, setConversationOptions] = useState<LocalConv[]>([]);
+  const partitionName = dirList.find(p => p.id === selectedNodeId)?.name || "";
 
-  // Fetch domain/topic names when selection changes
+  // ── 加载会话信息（仅当 activeConversationId 变更时）──
   useEffect(() => {
-    if (!selectedPartitionId) {
-      setDomainName("");
-      setTopicName("");
+    if (!selectedNodeId) {
       setConversationName("");
-      setDomainOptions([]);
-      setTopicOptions([]);
       setConversationOptions([]);
       return;
     }
+    if (!activeConversationId) return;
 
     let cancelled = false;
-
-    const loadNames = async () => {
+    const load = async () => {
       try {
-        const domainsRes = await apiFetch<{ domains: Domain[] }>(
-          `/tree/domain?parent_id=${selectedPartitionId}`,
+        // 直接通过目录树 API 查询会话信息
+        const convRes = await apiFetch<{ directory_nodes?: any[] }>(
+          `/tree/directory?parent_id=${selectedNodeId}`,
         );
         if (cancelled) return;
-
-        const domains = domainsRes.domains || [];
-        setDomainOptions(domains);
-
-        let resolvedDomain: Domain | undefined = activeDomainId
-          ? domains.find((item) => item.id === activeDomainId)
-          : undefined;
-        let resolvedTopic: Topic | undefined;
-        let resolvedConversation: Conversation | undefined;
-
-        if (!resolvedDomain && (activeTopicId || activeConversationId)) {
-          for (const candidateDomain of domains) {
-            const topicsRes = await apiFetch<{ topics: Topic[] }>(
-              `/tree/topic?parent_id=${candidateDomain.id}`,
-            );
-            if (cancelled) return;
-            const candidateTopics = topicsRes.topics || [];
-            const matchedTopic = activeTopicId
-              ? candidateTopics.find((item) => item.id === activeTopicId)
-              : undefined;
-            if (matchedTopic) {
-              resolvedDomain = candidateDomain;
-              resolvedTopic = matchedTopic;
-              setTopicOptions(candidateTopics);
-              break;
-            }
-
-            if (activeConversationId) {
-              for (const candidateTopic of candidateTopics) {
-                const convRes = await apiFetch<{ conversations: Conversation[] }>(
-                  `/tree/conversation?parent_id=${candidateTopic.id}`,
-                );
-                if (cancelled) return;
-                const candidateConversations = convRes.conversations || [];
-                const matchedConversation = candidateConversations.find((item) => item.id === activeConversationId);
-                if (matchedConversation) {
-                  resolvedDomain = candidateDomain;
-                  resolvedTopic = candidateTopic;
-                  resolvedConversation = matchedConversation;
-                  setTopicOptions(candidateTopics);
-                  setConversationOptions(candidateConversations);
-                  break;
-                }
-              }
-              if (resolvedConversation) break;
-            }
-          }
-        }
-
-        if (resolvedDomain) {
-          const nextDomainId = resolvedDomain.id;
-          if (activeDomainId !== nextDomainId) {
-            useConversationStore.setState({ activeDomainId: nextDomainId });
-          }
-          setDomainName(resolvedDomain.name || "");
-
-          const topicsRes = await apiFetch<{ topics: Topic[] }>(
-            `/tree/topic?parent_id=${nextDomainId}`,
-          );
-          if (cancelled) return;
-          const topics = topicsRes.topics || [];
-          setTopicOptions(topics);
-
-          if (!resolvedTopic && activeTopicId) {
-            resolvedTopic = topics.find((item) => item.id === activeTopicId);
-          }
-          if (resolvedTopic && activeTopicId !== resolvedTopic.id) {
-            useConversationStore.setState({ activeTopicId: resolvedTopic.id });
-          }
-          setTopicName(resolvedTopic?.name || "");
-
-          if (resolvedTopic) {
-            const convRes = await apiFetch<{ conversations: Conversation[] }>(
-              `/tree/conversation?parent_id=${resolvedTopic.id}`,
-            );
-            if (cancelled) return;
-            const conversations = convRes.conversations || [];
-            setConversationOptions(conversations);
-
-            if (!resolvedConversation && activeConversationId) {
-              resolvedConversation = conversations.find((item) => item.id === activeConversationId);
-            }
-            setConversationName(resolvedConversation?.name || "");
-          } else {
-            setConversationOptions([]);
-            setConversationName("");
-          }
-          return;
-        }
-
-        if (activeDomainId) {
-          const topicsRes = await apiFetch<{ topics: Topic[] }>(
-            `/tree/topic?parent_id=${activeDomainId}`,
-          );
-          if (cancelled) return;
-          const topics = topicsRes.topics || [];
-          setTopicOptions(topics);
-          const fallbackDomain = domains.find((item) => item.id === activeDomainId);
-          setDomainName((resolvedDomain || fallbackDomain)?.name || "");
-
-          if (activeTopicId) {
-            resolvedTopic = topics.find((item) => item.id === activeTopicId);
-            setTopicName(resolvedTopic?.name || "");
-          } else {
-            setTopicName("");
-            setConversationOptions([]);
-            setConversationName("");
-          }
-
-          if (resolvedTopic) {
-            const convRes = await apiFetch<{ conversations: Conversation[] }>(
-              `/tree/conversation?parent_id=${resolvedTopic.id}`,
-            );
-            if (cancelled) return;
-            const conversations = convRes.conversations || [];
-            setConversationOptions(conversations);
-            if (activeConversationId) {
-              resolvedConversation = conversations.find((item) => item.id === activeConversationId);
-            }
-            setConversationName(resolvedConversation?.name || "");
-          }
-
-          return;
-        }
-
-        setDomainName("");
-        setTopicName("");
-        setConversationName("");
-        setDomainOptions([]);
-        setTopicOptions([]);
-        setConversationOptions([]);
+        const convs: LocalConv[] = (convRes.directory_nodes || [])
+          .filter((n: any) => n.node_type === "conv")
+          .map((c: any) => ({ id: c.id, name: c.name, partition_id: selectedNodeId, is_active: false }));
+        setConversationOptions(convs);
+        const match = convs.find((c: any) => c.id === activeConversationId);
+        setConversationName(match?.name || "");
       } catch {
         if (cancelled) return;
-        setDomainName("");
-        setTopicName("");
         setConversationName("");
-        setDomainOptions([]);
-        setTopicOptions([]);
         setConversationOptions([]);
       }
     };
-
-    loadNames();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedPartitionId, activeDomainId, activeTopicId, activeConversationId]);
+    load();
+    return () => { cancelled = true; };
+  }, [selectedNodeId, activeConversationId]);
 
   // ── 分栏 ──
   const [splitPercent, setSplitPercent] = useState(50);
@@ -363,59 +224,24 @@ export default function FocusModePanel({
           <div className="px-2 pb-1.5">
             <TreeBreadcrumb
               partitionName={partitionName}
-              domainName={domainName || undefined}
-              topicName={topicName || undefined}
               conversationName={conversationName || undefined}
-              partitions={partitions.map((partition) => ({ id: partition.id, label: partition.name, emoji: partition.emoji }))}
-              domains={domainOptions.map((domain) => ({ id: domain.id, label: domain.name, emoji: domain.emoji }))}
-              topics={topicOptions.map((topic) => ({ id: topic.id, label: topic.name, emoji: topic.emoji }))}
-              conversations={conversationOptions.map((conversation) => ({ id: conversation.id, label: conversation.name || "未命名会话" }))}
-              selectedPartitionId={selectedPartitionId}
-              selectedDomainId={activeDomainId}
-              selectedTopicId={activeTopicId}
-              selectedConversationId={activeConversationId}
+              dirList={dirList.map((p) => ({ id: p.id, label: p.name, emoji: p.emoji }))}
+              conversations={conversationOptions.map((c) => ({ id: c.id, label: c.name || "未命名会话" }))}
+              selectedDirId={selectedNodeType === 'dir' ? selectedNodeId : null}
+              selectedConversationId={selectedNodeType === 'conv' ? selectedNodeId : null}
               onSelectPartition={(pid) => {
                 useConversationStore.setState({
-                  selectedPartitionId: pid,
-                  activeDomainId: null,
-                  activeTopicId: null,
-                  activeConversationId: null,
+                  selectedNodeId: pid,
+                  selectedNodeType: 'dir',
                   messages: [],
                   responseBlocks: [],
                 });
-                loadPartitions();
-              }}
-              onSelectDomain={(did) => {
-                useConversationStore.setState({
-                  activeDomainId: did,
-                  activeTopicId: null,
-                  activeConversationId: null,
-                  messages: [],
-                  responseBlocks: [],
-                });
-              }}
-              onSelectTopic={(tid) => {
-                useConversationStore.setState({
-                  activeTopicId: tid,
-                  activeConversationId: null,
-                  messages: [],
-                  responseBlocks: [],
-                });
-                apiFetch<{ conversations: Conversation[] }>(`/tree/conversation?parent_id=${tid}`)
-                  .then((data) => {
-                    const convs = data.conversations || [];
-                    const empty = convs.find((c) => !c.message_count || c.message_count === 0);
-                    const convId = empty?.id || convs[0]?.id;
-                    if (convId) {
-                      useConversationStore.setState({ activeConversationId: convId });
-                      loadMessages(convId);
-                    }
-                  })
-                  .catch(() => { });
+                loadDirList();
               }}
               onSelectConversation={(cid) => {
                 useConversationStore.setState({
-                  activeConversationId: cid,
+                  selectedNodeId: cid,
+                  selectedNodeType: 'conv',
                 });
                 loadMessages(cid);
               }}
@@ -466,14 +292,14 @@ export default function FocusModePanel({
         <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[3px] bg-[var(--color-border)] group-hover:bg-[var(--color-accent)] transition-colors rounded-full" />
         <button
           onClick={handleLeftButtonClick}
-          onMouseDown={(e) => e.stopPropagation()} // 阻止冒泡，不触发拖拽
+          onMouseDown={(e) => e.stopPropagation()}
           className="absolute top-1/2 -left-4 -translate-y-1/2 w-6 h-12 flex items-center justify-center hover:bg-[var(--color-surface)] rounded opacity-0 group-hover:opacity-100 transition-opacity"
           title={isAtEdge(splitPercent) ? "展开左侧" : "收起左侧"}>
           {isAtEdge(splitPercent) ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
         </button>
         <button
           onClick={handleRightButtonClick}
-          onMouseDown={(e) => e.stopPropagation()} // 阻止冒泡
+          onMouseDown={(e) => e.stopPropagation()}
           className="absolute top-1/2 -right-4 -translate-y-1/2 w-6 h-12 flex items-center justify-center hover:bg-[var(--color-surface)] rounded opacity-0 group-hover:opacity-100 transition-opacity"
           title={isAtEdge(splitPercent) ? "展开右侧" : "收起右侧"}>
           {isAtEdge(splitPercent) ? <ChevronLeft size={12} /> : <ChevronRight size={12} />}
@@ -484,7 +310,7 @@ export default function FocusModePanel({
         className="flex flex-col overflow-hidden"
         style={{ width: `calc((100% - ${SPLITTER_WIDTH_PX}px) * ${(100 - splitPercent) / 100})` }}
       >
-        <KnowledgeTreeEntry activeTopicId={activeTopicId} partitionId={selectedPartitionId} />
+        <KnowledgeTreeEntry partitionId={selectedNodeId} />
       </div>
 
       {isDragging && (
@@ -495,13 +321,12 @@ export default function FocusModePanel({
 }
 
 /** 知识树入口面板 — 替代原 GraphPanel，点击跳转知识树页并智能锚定节点 */
-function KnowledgeTreeEntry({ activeTopicId, partitionId }: { activeTopicId?: string | null; partitionId?: string | null }) {
+function KnowledgeTreeEntry({ partitionId }: { partitionId?: string | null }) {
   const router = useRouter();
 
   const handleNavigate = () => {
     const params = new URLSearchParams();
-    if (partitionId) params.set("partition", partitionId);
-    if (activeTopicId) params.set("node", activeTopicId);
+    if (partitionId) params.set("node_id", partitionId);
     router.push(`/knowledge-tree?${params.toString()}`);
   };
 
@@ -523,11 +348,6 @@ function KnowledgeTreeEntry({ activeTopicId, partitionId }: { activeTopicId?: st
         <Network size={16} />
         打开知识树
       </button>
-      {activeTopicId && (
-        <p className="text-[10px] text-[var(--color-text-muted)]">
-          将自动定位到当前话题节点
-        </p>
-      )}
     </div>
   );
 }

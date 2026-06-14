@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Lightbulb, Sparkles, X, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
-import { API_BASE } from "@/lib/api/api";
+import { authedFetch, API_BASE } from "@/lib/api/api";
 
 // ── Props ──
 interface SelectionCardProps {
@@ -68,7 +68,7 @@ export default function SelectionCard({
     setLoading(true);
     setMode("explaining");
     try {
-      const res = await fetch(`${API_BASE}/api/knowledge/explain`, {
+      const res = await authedFetch(`/api/knowledge/explain`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

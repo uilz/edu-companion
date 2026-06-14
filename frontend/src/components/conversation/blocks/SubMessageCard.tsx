@@ -2,8 +2,8 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Loader2, Lightbulb, Send, X, ChevronDown, ChevronUp, Bot } from "lucide-react";
-import { API_BASE } from "@/lib/api/api";
-import MarkdownRenderer from "./../renderers/MarkdownRenderer";
+import { authedFetch, API_BASE } from "@/lib/api/api";
+import MarkdownRenderer from "./MarkdownRenderer";
 
 /**
  * SubMessageCard — 子消息卡片
@@ -74,7 +74,7 @@ export default function SubMessageCard({
   const handleExplain = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/knowledge/explain`, {
+      const res = await authedFetch(`/api/knowledge/explain`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: selectedText, style: "simple" }),
@@ -92,7 +92,7 @@ export default function SubMessageCard({
     setJudging(true);
     onSubmitAnswer?.(reply);
     try {
-      const res = await fetch(`${API_BASE}/api/knowledge/judge-answer`, {
+      const res = await authedFetch(`/api/knowledge/judge-answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: selectedText, answer: reply }),

@@ -2,20 +2,27 @@
 
 import React from "react";
 import { Layers, Plus, ChevronDown } from "lucide-react";
-import type { Partition } from "@/types";
+
+interface DirInfo {
+  id: string;
+  name: string;
+  emoji?: string;
+  kind?: string;
+  domain_count?: number;
+}
 
 /**
- * PartitionItem — 单个分区的可视化行
+ * DirItem — 单个目录的可视化行
  *
- * 共享组件：StudySidebar 和 FocusModePanel 的 PartitionTreeDropdown
- * 都使用它来渲染分区列表项。
+ * 共享组件：StudySidebar 和 FocusModePanel 的 DirTreeDropdown
+ * 都使用它来渲染目录列表项。
  */
-export function PartitionItem({
-  partition,
+export function DirItem({
+  dir,
   selected,
   onClick,
 }: {
-  partition: Partition;
+  dir: DirInfo;
   selected: boolean;
   onClick: () => void;
 }) {
@@ -28,11 +35,11 @@ export function PartitionItem({
           : "text-[var(--color-text)]"
       }`}
     >
-      <span>{partition.emoji}</span>
-      <span className="truncate flex-1">{partition.name}</span>
-      {partition.domain_count != null && (
+      <span>{dir.emoji}</span>
+      <span className="truncate flex-1">{dir.name}</span>
+      {dir.domain_count != null && (
         <span className="text-[10px] text-[var(--color-text-muted)]">
-          {partition.domain_count} 领域
+          {dir.domain_count} 领域
         </span>
       )}
     </button>
@@ -40,25 +47,25 @@ export function PartitionItem({
 }
 
 /**
- * PartitionPicker — 分区选择器
+ * DirPicker — 目录选择器
  *
- * 顶部按钮显示当前选中分区，点击展开下拉列表。
+ * 顶部按钮显示当前选中目录，点击展开下拉列表。
  * 可内嵌在侧栏标题栏或专注模式顶栏使用。
  */
-export function PartitionPicker({
-  partitions,
-  selectedPartitionId,
-  onSelectPartition,
-  onCreatePartition,
+export function DirPicker({
+  dirs,
+  selectedDirId,
+  onSelectDir,
+  onCreateDir,
 }: {
-  partitions: Partition[];
-  selectedPartitionId: string | null;
-  onSelectPartition: (id: string) => void;
-  onCreatePartition: () => void;
+  dirs: DirInfo[];
+  selectedDirId: string | null;
+  onSelectDir: (id: string) => void;
+  onCreateDir: () => void;
 }) {
   const [expanded, setExpanded] = React.useState(false);
-  const selected = selectedPartitionId
-    ? partitions.find((p) => p.id === selectedPartitionId)
+  const selected = selectedDirId
+    ? dirs.find((d) => d.id === selectedDirId)
     : undefined;
 
   return (
@@ -74,7 +81,7 @@ export function PartitionPicker({
             <span className="truncate max-w-[120px]">{selected.name}</span>
           </>
         ) : (
-          <span className="truncate max-w-[120px]">选择分区</span>
+          <span className="truncate max-w-[120px]">选择目录</span>
         )}
         <ChevronDown
           size={12}
@@ -85,18 +92,18 @@ export function PartitionPicker({
         <>
           <div className="fixed inset-0 z-10" onClick={() => setExpanded(false)} />
           <div className="absolute left-0 top-full mt-1 z-20 w-64 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg shadow-xl max-h-64 overflow-y-auto">
-            {partitions.length === 0 ? (
+            {dirs.length === 0 ? (
               <div className="px-3 py-2 text-xs text-[var(--color-text-muted)]">
-                暂无分区
+                暂无目录
               </div>
             ) : (
-              partitions.map((p) => (
-                <PartitionItem
-                  key={p.id}
-                  partition={p}
-                  selected={p.id === selectedPartitionId}
+              dirs.map((d) => (
+                <DirItem
+                  key={d.id}
+                  dir={d}
+                  selected={d.id === selectedDirId}
                   onClick={() => {
-                    onSelectPartition(p.id);
+                    onSelectDir(d.id);
                     setExpanded(false);
                   }}
                 />
@@ -106,12 +113,12 @@ export function PartitionPicker({
               <button
                 onClick={() => {
                   setExpanded(false);
-                  onCreatePartition();
+                  onCreateDir();
                 }}
                 className="w-full text-left px-2 py-1 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface)] rounded flex items-center gap-1.5"
               >
                 <Plus size={11} />
-                新建分区
+                新建目录
               </button>
             </div>
           </div>

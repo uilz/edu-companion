@@ -5,7 +5,7 @@
 // ── 类型 ──
 export interface KGNode { id: string; label: string; description?: string; mastery?: number; mastery_level?: string; priority?: number; tags?: string[]; created_by?: string; }
 export interface KGEdge { id: string; from_id: string; to_id: string; relation?: string; label?: string; }
-export interface GraphNode {
+export interface DashboardNode {
   id: string; label: string; description: string; subject: string;
   mastery: number; mastery_level: string; confidence: number;
   blocked: boolean; blocked_by: string[]; attempt_count: number;
@@ -13,13 +13,13 @@ export interface GraphNode {
   anomaly_type: string | null; anomaly_detail: string | null;
   x?: number; y?: number;
 }
-export interface GraphEdge { from: string; to: string; label: string; satisfied: boolean; edgeId?: string; }
+export interface DashboardEdge { from: string; to: string; label: string; satisfied: boolean; edgeId?: string; }
 export interface Coverage { total: number; mastered: number; learning: number; weak: number; untouched: number; }
 
 // ── 配色 ──
 export const subjectColors: Record<string, string> = {
-  "高等数学": "#0066FF", "大学物理": "var(--color-warning)",
-  "计算机": "#22c55e", "线性代数": "#a855f7", "概率论": "#ec4899",
+  "机器学习": "#0066FF", "数据科学": "var(--color-warning)",
+  "Web开发": "#22c55e", "系统设计": "#a855f7", "数据分析": "#ec4899",
 };
 export const fallbackColor = "#737373";
 
@@ -32,7 +32,7 @@ export function masteryColor(m: number): string {
 }
 
 // ── 拓扑布局 ──
-export function computeLayout(nodes: GraphNode[], edges: GraphEdge[]): GraphNode[] {
+export function computeLayout(nodes: DashboardNode[], edges: DashboardEdge[]): DashboardNode[] {
   if (nodes.length === 0) return nodes;
   const inDegree = new Map<string, number>();
   const outEdges = new Map<string, string[]>();

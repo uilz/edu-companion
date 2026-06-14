@@ -6,7 +6,7 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import InlinePracticeBlock from "./InlinePracticeBlock";
 import PracticeSetBlock from "./PracticeSetBlock";
-import { useRenderedContent } from "@/lib/hooks/useRenderedContent";
+import { useRenderedContent } from "@/hooks/useRenderedContent";
 import { sanitizeHtml } from "@/lib/utils/sanitize";
 
 /** 练习选项的数据结构：选项字母 + 文本内容 */

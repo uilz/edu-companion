@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
+import { authedFetch } from "@/lib/api/api";
 
 /**
  * SecretaryBellBadge — 秘书铃铛小红点组件
@@ -20,8 +21,7 @@ export default function SecretaryBellBadge() {
 
     const fetchCount = async () => {
       try {
-        const res = await fetch(
-          `/api/secretary/proposals/pending?user_id=${userId}`
+        const res = await authedFetch(`/api/secretary/proposals/pending?user_id=${userId}`
         );
         if (!res.ok) return;
         const data = await res.json();

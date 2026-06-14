@@ -9,8 +9,8 @@ import ClientProviders from '@/components/layout/ClientProviders';
 
 // 页面元数据配置：标题、描述、图标等（用于 SEO 和浏览器标签页展示）
 export const metadata: Metadata = {
-  title: '智学伴 - 智能学习伴侣',
-  description: 'AI驱动的个性化学习助手，助力高效学习',
+  title: '苹果果 - 个人知识体系',
+  description: 'AI驱动的个人知识体系构建工具，助力自主学习',
   icons: {
     icon: '/favicon.ico',
   },

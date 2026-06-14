@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Quote } from "lucide-react";
-import { useRenderedContent } from "@/lib/hooks/useRenderedContent";
+import { useRenderedContent } from "@/hooks/useRenderedContent";
 import { sanitizeHtml } from "@/lib/utils/sanitize";
 
 interface Props {
@@ -12,10 +12,7 @@ interface Props {
 }
 
 function QuoteBlockRenderer({ quotedText, sourceConversationId, sourceMessageId }: Props) {
-  // Render markdown content (supports formulas, code blocks, bold, etc.)
   const html = useRenderedContent(quotedText);
-
-  // For title tooltip, use plain text (strip HTML)
   const plainText = quotedText.length > 200 ? quotedText.slice(0, 200) + "…" : quotedText;
 
   return (

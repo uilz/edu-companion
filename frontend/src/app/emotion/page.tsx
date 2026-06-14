@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { authedFetch } from "@/lib/api/api";
 import {
   Heart, TrendingUp, AlertTriangle, Smile, Meh, Frown,
   Brain, Sparkles, Thermometer, Activity,
@@ -65,9 +66,9 @@ export default function EmotionDashboard() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/conversations/emotion/trend?window_hours=168").then(r => r.json()),
-      fetch("/api/conversations/emotion/stats").then(r => r.json()),
-      fetch("/api/conversations/emotion/recent?limit=20").then(r => r.json()),
+      authedFetch("/api/conversations/emotion/trend?window_hours=168").then(r => r.json()),
+      authedFetch("/api/conversations/emotion/stats").then(r => r.json()),
+      authedFetch("/api/conversations/emotion/recent?limit=20").then(r => r.json()),
     ]).then(([t, s, r]) => {
       setTrend(t);
       setStats(s);

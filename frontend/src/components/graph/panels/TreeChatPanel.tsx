@@ -3,8 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Loader2, Send, Bot, User, AlertCircle, Sparkles, ArrowRight } from "lucide-react";
 import type { GraphNode } from "@/lib/types/graph-types";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+import { authedFetch } from "@/lib/api/api";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -46,7 +45,7 @@ export default function TreeChatPanel({
     setError("");
 
     try {
-      const res = await fetch(`${API_BASE}/api/knowledge/graph/${partitionId}/ai-chat`, {
+      const res = await authedFetch(`/api/knowledge/graph/${partitionId}/ai-chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

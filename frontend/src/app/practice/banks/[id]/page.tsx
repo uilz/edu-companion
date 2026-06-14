@@ -14,8 +14,8 @@ import {
   type V7Question,
 } from "@/lib/api/practice-api";
 import QuestionStem from "@/components/practice/components/QuestionStem";
-import QuestionEditorModal, { type EditableQuestion } from "@/components/practice/shared/QuestionEditorModal";
-import QuestionPreviewModal from "@/components/practice/shared/QuestionPreviewModal";
+import QuestionEditorModal, { type EditableQuestion } from "@/components/practice/components/QuestionEditorModal";
+import QuestionPreviewModal from "@/components/practice/components/QuestionPreviewModal";
 
 const TYPE_LABELS: Record<string, string> = {
   single: "单选", multiple: "多选", judge: "判断",

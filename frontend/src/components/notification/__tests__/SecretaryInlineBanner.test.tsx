@@ -11,7 +11,7 @@ function createInlineNotif(
     id: "inline_001",
     emoji: "🤖",
     title: "秘书建议",
-    description: "你最近在微积分上花了大量时间，建议去看看线性代数。",
+    description: "你最近在数据分析上花了大量时间，建议去看看系统设计。",
     priority: 3,
     target: {
       pages: ["learn"],

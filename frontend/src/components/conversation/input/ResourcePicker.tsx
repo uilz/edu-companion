@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Search, Check, X, FileText, Image, File, Loader2, Library } from "lucide-react";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+import { authedFetch, API_BASE } from "@/lib/api/api";
 
 interface FileItem {
   material_id: string;
@@ -50,7 +49,7 @@ export default function ResourcePicker({ open, onClose, onSelect, selectedIds: i
     try {
       const params = new URLSearchParams({ page: "1", page_size: "50" });
       if (search) params.set("search", search);
-      const res = await fetch(`${API_BASE}/api/files?${params}`);
+      const res = await authedFetch(`/api/files?${params}`);
       const data = await res.json();
       setFiles((data.items || []).filter((f: FileItem) => f.status === "indexed"));
     } catch (e) {

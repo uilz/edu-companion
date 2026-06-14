@@ -2,6 +2,7 @@
 
 // ===== React Hooks =====
 import { useState, useMemo, useCallback } from "react";
+import { authedFetch } from "@/lib/api/api";
 // ===== 图标组件 =====
 import { BookOpen, Lightbulb, Check, X, Loader2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -31,7 +32,7 @@ interface InlinePracticeBlockProps {
 
 // ===== API 请求封装 =====
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, {
+  const res = await authedFetch(`/api${path}`, {
     headers: { "Content-Type": "application/json", ...options?.headers },
     ...options,
   });

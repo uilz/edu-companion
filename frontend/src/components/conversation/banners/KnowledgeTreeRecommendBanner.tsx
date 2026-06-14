@@ -6,8 +6,7 @@ import { GitGraph, X } from "lucide-react";
 import { useNotificationStore } from "@/store/notification/notification-store";
 import { dismissNotification } from "@/store/notification/notification-service";
 import type { SecretaryNotification, PageType } from "@/store/notification/types";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+import { authedFetch } from "@/lib/api/api";
 
 const DISMISSED_STORAGE_KEY = "tree_rec_dismissed_v1";
 
@@ -72,8 +71,7 @@ export default function KnowledgeTreeRecommendBanner({
 
     const fetchRecs = async () => {
       try {
-        const res = await fetch(
-          `${API_BASE}/api/knowledge/graph/recommendation?source=conversation`,
+        const res = await authedFetch("/api/knowledge/graph/recommendation?source=conversation",
         );
         if (!res.ok) return;
         const d = await res.json();

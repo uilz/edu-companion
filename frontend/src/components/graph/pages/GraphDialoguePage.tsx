@@ -14,8 +14,7 @@ import type { GraphData } from "@/lib/types/graph-types";
 import PracticePanel from "@/components/practice/panels/PracticePanel";
 import NodeDetailPanel from "@/components/graph/panels/NodeDetailPanel";
 import TreeChatPanel from "@/components/graph/panels/TreeChatPanel";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+import { authedFetch, API_BASE } from "@/lib/api/api";
 
 // ── 动态导入 ──
 const FocusGraph = dynamic(() => import("@/components/graph/graphs/FocusGraph"), { ssr: false });
@@ -75,7 +74,7 @@ function EmptyState({ onLoad, partitionId }: { onLoad: () => void; partitionId: 
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      await fetch(`${API_BASE}/api/knowledge/graph/${partitionId}/generate`, { method: "POST" });
+      await authedFetch(`/api/knowledge/graph/${partitionId}/generate`, { method: "POST" });
       onLoad();
     } catch {}
     setGenerating(false);
@@ -209,7 +208,7 @@ function GraphDialogueLayout({ ctx }: { ctx: UseGraphDialogueReturn }) {
     if (!newNodeLabel.trim()) return;
     setAddNodeLoading(true);
     try {
-      await fetch(`${API_BASE}/api/knowledge/graph/${ctx.partitionId}/node`, {
+      await authedFetch(`/api/knowledge/graph/${ctx.partitionId}/node`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ label: newNodeLabel.trim(), parent_node_id: newNodeParent || null }),

@@ -3,14 +3,14 @@
 import React from "react";
 import Card from "@/components/ui/Card";
 import { Info } from "lucide-react";
-import type { GraphNode, GraphEdge } from "./graph-layout";
+import type { DashboardNode, DashboardEdge } from "./graph-layout";
 import { masteryColor, subjectColors, fallbackColor } from "./graph-layout";
 
 interface NodeDetailCardProps {
-  selectedNode: GraphNode;
-  edges: GraphEdge[];
-  nodes: GraphNode[];
-  onSelectNode: (node: GraphNode | null) => void;
+  selectedNode: DashboardNode;
+  edges: DashboardEdge[];
+  nodes: DashboardNode[];
+  onSelectNode: (node: DashboardNode | null) => void;
 }
 
 export default function NodeDetailCard({ selectedNode, edges, nodes, onSelectNode }: NodeDetailCardProps) {

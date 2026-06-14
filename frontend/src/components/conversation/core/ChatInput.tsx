@@ -3,6 +3,7 @@
 // ===== 聊天输入框组件 =====
 // 提供文本输入、文件上传（图片/文档）以及语音转录功能，是用户与 AI 对话的核心输入入口。
 import { useState, useRef, useEffect, useCallback } from "react";
+import { authedFetch } from "@/lib/api/api";
 import { Send, Paperclip, Image, Loader2, X, Library } from "lucide-react";
 import VoiceRecorder from "./../input/VoiceRecorder";
 import QuotePreview from "./../input/QuotePreview";
@@ -71,7 +72,7 @@ export default function ConversationChatInput({
       formData.append("file", file);
       // 对话中上传的资料默认为 library（永久保留），方便后续引用
       formData.append("purpose", "library");
-      const res = await fetch("/api/files/upload", { method: "POST", body: formData });
+      const res = await authedFetch("/api/files/upload", { method: "POST", body: formData });
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.detail || "上传失败");

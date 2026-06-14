@@ -17,7 +17,7 @@ import { RetentionPanel } from "@/components/dashboard/analytics/RetentionPanel"
 import { OverviewCards } from "@/components/dashboard/analytics/OverviewCards";
 import { MasteryErrorsCard } from "@/components/dashboard/analytics/MasteryErrorsCard";
 import { SuggestionsCard } from "@/components/dashboard/analytics/SuggestionsCard";
-import { API_BASE } from "@/lib/api/api";
+import { authedFetch, API_BASE } from "@/lib/api/api";
 
 export default function AnalyticsContent() {
   const [data, setData] = useState<AnalyticsData | null>(null);
@@ -28,7 +28,7 @@ export default function AnalyticsContent() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${API_BASE}/api/practice/stats?time_range=${timeRange}`)
+    authedFetch(`/api/practice/stats?time_range=${timeRange}`)
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
@@ -42,7 +42,7 @@ export default function AnalyticsContent() {
 
   useEffect(() => {
     if (tab === "habits") {
-      fetch(`${API_BASE}/api/practice/behavior?time_range=${timeRange}`)
+      authedFetch(`/api/practice/behavior?time_range=${timeRange}`)
         .then((r) => r.json())
         .then((d) => setBehaviorData(d))
         .catch(() => {});

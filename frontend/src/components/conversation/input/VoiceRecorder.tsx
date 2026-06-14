@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Mic, MicOff, Loader2 } from "lucide-react";
+import { authedFetch } from "@/lib/api/api";
 
 // ── 组件 Props 接口 ──
 interface VoiceRecorderProps {
@@ -243,7 +244,7 @@ function MediaRecorderFallback({ onTranscription, disabled }: VoiceRecorderProps
     try {
       const formData = new FormData();
       formData.append("audio_file", blob, "recording.webm");
-      const res = await fetch("/api/multimodal/transcribe", { method: "POST", body: formData });
+      const res = await authedFetch("/api/multimodal/transcribe", { method: "POST", body: formData });
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.detail || "转写失败");

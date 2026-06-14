@@ -12,7 +12,7 @@ import {
 // 自定义 UI 组件导入
 import Card from '@/components/ui/Card';
 import UnifiedSearch from '@/components/search/UnifiedSearch';
-import { API_BASE } from "@/lib/api/api";
+import { authedFetch, API_BASE } from "@/lib/api/api";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
 
 // 学习进度概览（来自 analytics stats/overview）
@@ -104,10 +104,10 @@ export function OverviewTab() {
       if (!userId) { setLoading(false); return; }
       try {
         const [statsRes, dashRes, achieveRes, weakRes] = await Promise.all([
-          fetch(`${API_BASE}/api/v7/practice/stats/overview`),
-          fetch(`${API_BASE}/api/v2/dashboard/overview?user_id=${userId}`),
-          fetch(`${API_BASE}/api/v7/practice/achievements`),
-          fetch(`${API_BASE}/api/v7/practice/stats/weak-skills`),
+          authedFetch(`/api/v7/practice/stats/overview`),
+          authedFetch(`/api/v2/dashboard/overview?user_id=${userId}`),
+          authedFetch(`/api/v7/practice/achievements`),
+          authedFetch(`/api/v7/practice/stats/weak-skills`),
         ]);
         if (statsRes.ok) setStats(await statsRes.json());
         if (dashRes.ok) setDashboard(await dashRes.json());

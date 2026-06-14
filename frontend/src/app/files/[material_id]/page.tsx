@@ -13,8 +13,7 @@ import {
   ArrowLeft,
   Search,
 } from "lucide-react";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+import { authedFetch, API_BASE } from "@/lib/api/api";
 
 interface TocNode {
   toc_id: string;
@@ -63,9 +62,9 @@ export default function FileDetailPage() {
   useEffect(() => {
     if (!materialId) return;
     Promise.all([
-      fetch(`${API_BASE}/api/files/${materialId}`).then((r) => r.json()),
-      fetch(`${API_BASE}/api/files/${materialId}/toc`).then((r) => r.json()),
-      fetch(`${API_BASE}/api/files/${materialId}/chunks`).then((r) => r.json()),
+      authedFetch(`/api/files/${materialId}`).then((r) => r.json()),
+      authedFetch(`/api/files/${materialId}/toc`).then((r) => r.json()),
+      authedFetch(`/api/files/${materialId}/chunks`).then((r) => r.json()),
     ])
       .then(([fileData, tocData, chunksData]) => {
         setFile(fileData);

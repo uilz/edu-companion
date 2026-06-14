@@ -164,7 +164,7 @@ export default function LoginPage() {
             <BookOpen size={26} strokeWidth={2.4} />
           </div>
           <h1 className="text-xl font-semibold text-gray-900 dark:text-white tracking-tight">
-            智能学习伴侣
+            苹果果学习助手
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             {mode === "login" ? "登录以继续你的学习" : "创建账号开始学习"}
@@ -241,7 +241,10 @@ export default function LoginPage() {
 
           {/* ── Turnstile 验证控件 ── */}
           {TURNSTILE_SITE_KEY && (
-            <div className="flex justify-center">
+            <div
+              className="flex justify-center"
+              style={{ overflow: "visible", position: "relative", zIndex: 9999 }}
+            >
               <div ref={turnstileRef} />
             </div>
           )}

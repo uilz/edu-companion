@@ -309,13 +309,12 @@ export function useGraphDialogue(initialPartitionId?: string): UseGraphDialogueR
     if (!graphData) return [];
     const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
     if (!params) return [];
-    const ids = [params.get("p"), params.get("d"), params.get("t"), params.get("c")].filter(Boolean);
-    const validPath: string[] = [];
-    for (const id of ids) {
-      const node = graphData.nodes.find((n) => n.id === id);
-      if (node) validPath.push(node.id);
+    // 统一格式: ?node_id=xxx
+    const nodeId = params.get("node_id");
+    if (nodeId && graphData.nodes.find((n) => n.id === nodeId)) {
+      return [nodeId];
     }
-    return validPath;
+    return [];
   }, [selectedNode, graphData]);
 
   // ── 拖拽分隔线 ──

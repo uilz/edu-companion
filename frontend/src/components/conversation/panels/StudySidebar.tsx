@@ -7,90 +7,75 @@ import { NewNodeDialog } from "@/components/ui/NewNodeDialog";
 import { SidebarTreeNode } from "@/components/conversation/tree/SidebarTreeNode";
 import { useTreeNavigation } from "@/hooks/graph/useTreeNavigation";
 import { useConversationStore } from "@/store/conversation/conversation-store";
+import { useTreeStore } from "@/store/conversation/tree-store";
+import { apiFetch } from "@/store/conversation/tree-helpers";
 import type { GraphNode } from "@/components/conversation/tree/SidebarTreeNode";
-import { ROOT_KEY } from "@/components/conversation/tree/SidebarTreeNode";
 
 interface Props {
-  partitions?: unknown[];
-  selectedPartitionId: string | null;
+  selectedDirId: string | null;
   activeConversationId: string | null;
-  activeDomainId?: string | null;
-  activeTopicId?: string | null;
   initialConversationId?: string;
   onSelectConversation: (pid: string, cid: string) => void;
-  onCreatePartition: () => void;
-  onRenamePartition?: (id: string, name: string) => void;
+  onCreateDir: () => void;
+  onRenameDir?: (id: string, name: string) => void;
   loading?: boolean;
   compact?: boolean;
-  onNewConversation?: (level: string, parentId: string, partitionId?: string) => void;
-  onConversationReady?: (partitionId: string, conversationId: string) => void;
+  onNewConversation?: (level: string, parentId: string, dirId?: string) => void;
+  onConversationReady?: (dirId: string, conversationId: string) => void;
   onTreeChanged?: () => void;
-  onSelectConv?: (partitionId: string, conversationId: string) => void;
+  onSelectConv?: (dirId: string, conversationId: string) => void;
 }
 
 export default function StudySidebar({
-  selectedPartitionId: _selectedNodeId,
+  selectedDirId: _selectedNodeId,
   activeConversationId,
-  activeDomainId,
-  activeTopicId,
   initialConversationId,
-  onCreatePartition,
+  onCreateDir,
   loading = false, compact = false,
   onConversationReady,
   onTreeChanged,
-  onSelectConv,
 }: Props) {
-  // ── 挂载时统一导航入口：覆盖 URL 恢复的三种场景 ──
-  //  1) ?p=xxx&c=yyy (有会话、无 domain/topic) → 从后端解析路径 → 展开 + 选中
-  //  2) ?p=xxx&d=yyy&t=zzz (有 domain/topic)       → 直接 expandPath
-  //  3) ?p=xxx (仅分区)                              → 展开分区级
+  // ── 挂载时统一导航：从后端获取节点 path，交由 selectGraphNode 自动展开祖先链 ──
   useEffect(() => {
     const init = async () => {
-      const store = useConversationStore.getState();
-      if (!store.rootLoaded) {
-        await store.loadRootNodes();
+      const treeState = useTreeStore.getState();
+      if (!treeState.rootLoaded) {
+        await treeState.loadRootNodes();
       }
       const s = useConversationStore.getState();
-      const pid = s.selectedPartitionId;
+      const pid = s.selectedNodeId;
       if (!pid) return;
 
-      const cid = s.activeConversationId;
-      const did = s.activeDomainId;
-      const tid = s.activeTopicId;
-
-      if (cid && (!did || !tid)) {
-        // 场景1：有会话但缺少 domain/topic → 从后端解析完整路径
-        const path = await s.resolveConversationPath(cid);
-        if (path && path.partition_id) {
-          useConversationStore.setState({
-            selectedPartitionId: path.partition_id,
-            activeDomainId: path.domain_id || null,
-            activeTopicId: path.topic_id || null,
-            selectedNode: path.topic_id
-              ? { id: path.topic_id, level: "topic", parent: path.domain_id || path.partition_id }
-              : path.domain_id
-                ? { id: path.domain_id, level: "domain", parent: path.partition_id }
-                : null,
-          });
-          await store.expandPath(path.partition_id, path.domain_id || null, path.topic_id || null);
-          store.selectConversation(path.partition_id, cid);
-        }
-      } else if (did || tid) {
-        // 场景2：已有 domain/topic → 直接展开 + 设置 selectedNode
-        useConversationStore.setState({
-          selectedNode: tid
-            ? { id: tid, level: "topic", parent: did || pid }
-            : did
-              ? { id: did, level: "domain", parent: pid }
-              : null,
-        });
-        await store.expandPath(pid, did, tid);
-      } else {
-        // 场景3：仅分区 → 展开分区级 + 设置 selectedNode
-        useConversationStore.setState({
-          selectedNode: { id: pid, level: "partition", parent: null },
-        });
-        await store.expandPath(pid);
+      try {
+        // 从后端获取节点详情（含 path 祖先链）
+        const resp = await apiFetch<{ directory_node: any }>(`/tree/directory/${pid}`);
+        const d = resp.directory_node;
+        const node: GraphNode = {
+          id: d.id,
+          label: d.name,
+          level: d.node_type === "conv" ? "conv" : "dir",
+          parent: d.parent_id || null,
+          emoji: d.emoji || "",
+          nodeIndex: 0,
+          path_id: d.name || "",
+          is_visible: true,
+          node_type: d.node_type,
+          kind: d.kind,
+          suggested_count: 0,
+          created_at: d.created_at || 0,
+          brief: "",
+          path: d.path || [],
+        };
+        // selectGraphNode 内部会沿 path 展开所有祖先 + 加载子节点 + auto-expand
+        await s.selectGraphNode(node, pid);
+      } catch {
+        // 降级：无 path 信息时也能选中节点
+        const fallback: GraphNode = {
+          id: pid, label: "", level: "dir", parent: null,
+          nodeIndex: 0, path_id: "", is_visible: true, node_type: "dir",
+          suggested_count: 0, created_at: 0, brief: "", emoji: "", path: [],
+        };
+        await s.selectGraphNode(fallback, pid);
       }
     };
     init();
@@ -99,65 +84,17 @@ export default function StudySidebar({
   const nav = useTreeNavigation(onConversationReady, onTreeChanged);
   const selectGraphNode = useConversationStore(s => s.selectGraphNode);
   const selectedNode = useConversationStore(s => s.selectedNode);
-  const childMap = useConversationStore(s => s.childMap);
-  const convActiveConvId = useConversationStore(s => s.activeConversationId);
-  const effectiveConvId = activeConversationId ?? convActiveConvId;
 
-  // ── 构建 parentMap（子→父映射），用于计算祖先链 ──
-  // 补全 parentMap：用 store 中的层级 ID 填充 childMap 未覆盖的映射
-  const parentMap = useMemo(() => {
-    const map = new Map<string, string>();
-    childMap.forEach((children, parentId) => {
-      for (const child of children) {
-        map.set(child.id, parentId);
-      }
-    });
-    // 补全：topic → domain、domain → partition（childMap 可能未加载这些层级）
-    const s = useConversationStore.getState();
-    if (s.activeTopicId && s.activeDomainId && !map.has(s.activeTopicId)) {
-      map.set(s.activeTopicId, s.activeDomainId);
-    }
-    if (s.activeDomainId && s.selectedPartitionId && !map.has(s.activeDomainId)) {
-      map.set(s.activeDomainId, s.selectedPartitionId);
-    }
-    return map;
-  }, [childMap, activeDomainId, activeTopicId, _selectedNodeId]);
-
-  // ── 计算祖先链 ──
-  // 有活跃会话时，直接用 store 中的层级 ID 构建祖先集，不依赖 parentMap 回溯
+  // ── 祖先链：selectedNode.path 中的祖先 ID 集合 ──
   const ancestorIds = useMemo(() => {
-    const ids = new Set<string>();
-
-    if (effectiveConvId) {
-      // 有活跃会话：把 selectedNode.id + activeTopicId + activeDomainId + selectedPartitionId 全部加入
-      if (selectedNode?.id) ids.add(selectedNode.id);
-      const s = useConversationStore.getState();
-      if (s.activeTopicId) ids.add(s.activeTopicId);
-      if (s.activeDomainId) ids.add(s.activeDomainId);
-      if (s.selectedPartitionId) ids.add(s.selectedPartitionId);
-      return ids;
-    }
-
-    // 无活跃会话时，用 parentMap 回溯选中节点的父链
-    let startId = selectedNode?.parent ?? null;
-    if (!startId) return ids;
-
-    let cur: string | null = startId;
-    while (cur) {
-      if (cur === ROOT_KEY) break;
-      ids.add(cur);
-      cur = parentMap.get(cur) || null;
-    }
-    return ids;
-  }, [selectedNode, parentMap, effectiveConvId, activeDomainId, activeTopicId, _selectedNodeId]);
+    if (!selectedNode?.path || selectedNode.path.length === 0) return new Set<string>();
+    return new Set(selectedNode.path);
+  }, [selectedNode]);
 
   // ── 选中+展开（交由 store 自包含处理）──
   const handleSelectGraphNode = async (node: GraphNode, partitionId: string) => {
     await selectGraphNode(node, partitionId);
   };
-
-  // 有活跃会话时，树节点不显示选中态（会话自身的强高亮由 activeConversationId 控制）
-  const treeSelectedNode = effectiveConvId ? null : selectedNode;
 
   return (
     <div className="flex flex-col h-full bg-[var(--color-page-secondary)] border-r border-[var(--color-border)] select-none">
@@ -167,8 +104,8 @@ export default function StudySidebar({
             <FolderOpen size={15} className="text-[var(--color-accent)]" />
             <span className="text-xs font-semibold text-[var(--color-text)]">学习空间</span>
           </div>
-          <button onClick={onCreatePartition}
-            className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface)] active:scale-[0.97] transition-all rounded" title="新建分区">
+          <button onClick={onCreateDir}
+            className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface)] active:scale-[0.97] transition-all rounded" title="新建目录">
             <Plus size={15} />
           </button>
         </div>
@@ -186,19 +123,17 @@ export default function StudySidebar({
           nav.rootNodes.map(node => (
             <SidebarTreeNode
               key={node.id} node={node} depth={0}
-              partitionId={node.level === "partition" ? node.id : undefined}
+              partitionId={node.id}
               expandedSet={nav.expandedSet} loadingSet={nav.loadingSet}
               childMap={nav.childMap}
-              selectedNode={treeSelectedNode}
+              selectedNode={selectedNode}
               ancestorIds={ancestorIds}
-              convCache={nav.convCache} activeConversationId={activeConversationId}
               editingId={nav.editingId} editValue={nav.editValue}
               toggleExpand={nav.toggleExpand} handleCreateChild={nav.handleCreateChild}
               handleNewConvClick={nav.handleNewConvClick}
               setEditingId={nav.setEditingId} setEditValue={nav.setEditValue}
               setDeleteTarget={nav.setDeleteTarget}
               handleRename={nav.handleRename} handleRenameConv={nav.handleRenameConv}
-              onSelectConv={onSelectConv}
               onSelectGraphNode={handleSelectGraphNode}
             />
           ))
@@ -213,10 +148,10 @@ export default function StudySidebar({
         open={!!nav.newChildTarget}
         onClose={() => nav.setNewChildTarget(null)}
         onCreate={nav.confirmCreateChild}
-        title={nav.newChildTarget?.level === "domain" ? "新建领域" : nav.newChildTarget?.level === "topic" ? "新建专题" : "新建"}
-        namePlaceholder={nav.newChildTarget?.level === "domain" ? "例如: 分析" : nav.newChildTarget?.level === "topic" ? "例如: 微积分" : "输入名称"}
+        title="新建"
+        namePlaceholder="输入名称"
         defaultEmoji={nav.newChildTarget?.defaultEmoji || "📚"}
-        nameLabel={nav.newChildTarget?.level === "domain" ? "领域名称" : nav.newChildTarget?.level === "topic" ? "专题名称" : "名称"}
+        nameLabel="名称"
       />
     </div>
   );

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Bell, Check, Clock, X } from "lucide-react";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
+import { authedFetch } from "@/lib/api/api";
 
 interface SecretaryProposal {
   id: string;
@@ -73,8 +74,7 @@ function ProposalCard({ proposal }: { proposal: SecretaryProposal }) {
     if (!userId) return;
     setLoading(true);
     try {
-      const res = await fetch(
-        `/api/secretary/proposals/${proposal.id}/accept?user_id=${userId}`,
+      const res = await authedFetch(`/api/secretary/proposals/${proposal.id}/accept?user_id=${userId}`,
         { method: "POST" }
       );
       if (res.ok) {
@@ -89,8 +89,7 @@ function ProposalCard({ proposal }: { proposal: SecretaryProposal }) {
     if (!userId) return;
     setLoading(true);
     try {
-      const res = await fetch(
-        `/api/secretary/proposals/${proposal.id}/dismiss?user_id=${userId}`,
+      const res = await authedFetch(`/api/secretary/proposals/${proposal.id}/dismiss?user_id=${userId}`,
         { method: "POST" }
       );
       if (res.ok) {

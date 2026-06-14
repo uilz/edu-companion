@@ -6,8 +6,8 @@ import {
   Video, Search, Star, BookOpen, Target,
   BookMarked, X, ExternalLink, Copy, Send, Bot, User, Trash2,
 } from "lucide-react";
-import { API_BASE } from "@/lib/api/api";
-import MarkdownRenderer from "./../renderers/MarkdownRenderer";
+import { authedFetch, API_BASE } from "@/lib/api/api";
+import MarkdownRenderer from "./../blocks/MarkdownRenderer";
 import { useExplainStore, type ExplainCardData, type CardMessage } from "@/store/explain/explain-store";
 
 export type { ExplainCardData } from "@/store/explain/explain-store";
@@ -160,7 +160,7 @@ export default function KnowledgeExplainCard({ card }: { card: ExplainCardData }
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch(`${API_BASE}/api/knowledge/explain`, {
+        const res = await authedFetch(`/api/knowledge/explain`, {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: selected_text, node_id: context_node_id || undefined, style: "simple" }),
         });
@@ -176,7 +176,7 @@ export default function KnowledgeExplainCard({ card }: { card: ExplainCardData }
     (async () => {
       setLoadingVideos(true);
       try {
-        const res = await fetch(`${API_BASE}/api/search/media?q=${encodeURIComponent(selected_text.slice(0, 100))}&platforms=bilibili,youtube`);
+        const res = await authedFetch(`/api/search/media?q=${encodeURIComponent(selected_text.slice(0, 100))}&platforms=bilibili,youtube`);
         if (res.ok) { const d = await res.json(); if (d.results?.length) setVideos(d.results); }
       } catch { } finally { setLoadingVideos(false); }
     })();
@@ -196,7 +196,7 @@ export default function KnowledgeExplainCard({ card }: { card: ExplainCardData }
     try {
       const context = explanation ? exp : selected_text;
       const prompt = `上下文：${context}\n\n用户提问：${text}`;
-      const res = await fetch(`${API_BASE}/api/knowledge/explain`, {
+      const res = await authedFetch(`/api/knowledge/explain`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: prompt, node_id: context_node_id || undefined, style: "conversation" }),
       });

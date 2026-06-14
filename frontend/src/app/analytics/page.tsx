@@ -5,11 +5,11 @@ import {
   BarChart3, CalendarDays, Trophy, Target, Loader2,
 } from "lucide-react";
 
-// ── 子页面组件导入 ──
+// ── 子标签组件导入 ──
 import AnalyticsContent from "@/app/analytics/_content";
-import CalendarPage from "@/app/calendar/page";
-import AchievementsPage from "@/app/achievements/page";
-import StatsPage from "@/app/stats/page";
+import CalendarTab from "@/components/analytics/tabs/CalendarTab";
+import AchievementsTab from "@/components/analytics/tabs/AchievementsTab";
+import StatsTab from "@/components/analytics/tabs/StatsTab";
 
 // ── 子标签定义 ──
 type TabId = "analytics" | "calendar" | "achievements" | "stats";
@@ -114,9 +114,9 @@ export default function AnalyticsRootPage() {
         {/* ── Tab 内容 ── */}
         <div className="py-4">
           {activeTab === "analytics" && <AnalyticsContent />}
-          {activeTab === "calendar" && <CalendarPage />}
-          {activeTab === "achievements" && <AchievementsPage />}
-          {activeTab === "stats" && <StatsPage />}
+          {activeTab === "calendar" && <CalendarTab />}
+          {activeTab === "achievements" && <AchievementsTab />}
+          {activeTab === "stats" && <StatsTab />}
         </div>
       </div>
     </main>

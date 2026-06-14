@@ -883,11 +883,11 @@ function AppearanceTab({ theme, setTheme, style, setStyle }: {
 function AboutTab() {
   return (
     <div className="space-y-4">
-      <h2 className="text-base font-semibold text-[var(--color-text)]">关于智学伴</h2>
+      <h2 className="text-base font-semibold text-[var(--color-text)]">关于苹果果</h2>
       <div className="space-y-3 text-sm">
         <div className="flex justify-between py-2 border-b border-[var(--color-border)]/30">
           <span className="text-[var(--color-text-secondary)]">应用名称</span>
-          <span className="text-[var(--color-text)] font-medium">智学伴</span>
+          <span className="text-[var(--color-text)] font-medium">苹果果</span>
         </div>
         <div className="flex justify-between py-2 border-b border-[var(--color-border)]/30">
           <span className="text-[var(--color-text-secondary)]">版本</span>
@@ -899,7 +899,7 @@ function AboutTab() {
         </div>
         <div className="pt-3">
           <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">
-            智学伴是一个 AI 驱动的个性化学习助手，支持智能对话、练习题生成、
+            苹果果是一个 AI 驱动的个人知识体系构建工具，支持智能对话、练习题生成、
             知识图谱和学情分析。
           </p>
         </div>
@@ -1022,7 +1022,7 @@ function DataTab() {
     if (!confirm("再次确认：所有数据将被永久删除。")) return;
     try {
       const token = localStorage.getItem("access_token");
-      await fetch("/api/v7/data/reset", {
+      await authedFetch("/api/v7/data/reset", {
         method: "DELETE",
         headers: token ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } : {},
       });

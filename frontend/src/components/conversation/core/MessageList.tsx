@@ -2,12 +2,12 @@
 
 import React, { Fragment, useEffect, useRef, useMemo, useState, useCallback } from "react";
 import { User, Bot, GraduationCap, ChevronDown, FileText, ImageIcon, ExternalLink } from "lucide-react";
-import ResponseBlockRenderer from "./../renderers/ResponseBlockRenderer";
-import QuoteBlockRenderer from "./../renderers/QuoteBlockRenderer";
+import ResponseBlockRenderer from "./../blocks/ResponseBlockRenderer";
+import QuoteBlockRenderer from "./../blocks/QuoteBlockRenderer";
 import TextSelectionToolbar from "./../input/TextSelectionToolbar";
 import SubBranchInline from "./../blocks/SubBranchInline";
 import SpeakButton from "./../media/SpeakButton";
-import MarkdownRenderer from "./../renderers/MarkdownRenderer";
+import MarkdownRenderer from "./../blocks/MarkdownRenderer";
 import CognitiveTag from "./../cards/CognitiveTag";
 import MessageActions from "./MessageActions";
 import MessageEditArea from "./MessageEditArea";
@@ -18,7 +18,7 @@ import { useExplainStore, getCardsForMessage } from "@/store/explain/explain-sto
 import type { ExplainCardData } from "@/store/explain/explain-store";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { useConversationStore } from "@/store/conversation/conversation-store";
-import type { TreeNode, ResponseBlock, SubBranchInfo } from "@/types";
+import type { MessageNode, ResponseBlock, SubBranchInfo } from "@/types";
 
 // ── Inline explain markers — embeds badge(s) into rendered text via DOM injection ──
 function ExplainMarkers({ text, cards, messageId, onBadgeClick }: {
@@ -185,7 +185,7 @@ function FloatingExplainCard({ card }: { card: ExplainCardData }) {
 }
 
 interface MessageListProps {
-  messages: TreeNode[];
+  messages: MessageNode[];
   responseBlocks: ResponseBlock[];
   isLoading?: boolean;
   statusMessage?: string;
@@ -396,7 +396,7 @@ export default function MessageList({
   }, [responseBlocks]);
 
   // Get display text from a message
-  const getDisplayText = (msg: TreeNode) =>
+  const getDisplayText = (msg: MessageNode) =>
     editedTexts[msg.id] || msg.content_blocks?.filter(b => b.type === "text").map(b => b.text || "").join("\n\n") || "";
 
   // Loading indicator
@@ -517,7 +517,7 @@ export default function MessageList({
                           <div data-message-id={message.id} data-conversation-id={message.conversation_id} data-full-text={displayText}
                             className="text-base leading-[1.65] whitespace-pre-wrap break-words select-text"
                             onMouseDown={handleTextMouseDown} onMouseUp={handleTextMouseUp} onContextMenu={handleTextContextMenu}
-                            onClick={(e) => { e.stopPropagation(); handleTextClick(e, message.id, message.conversation_id, displayText); }}
+                            onClick={(e) => { e.stopPropagation(); handleTextClick(e, message.id, message.conversation_id || "", displayText); }}
                           >
                             <ExplainMarkers text={displayText} cards={cardsForMsg} messageId={message.id} onBadgeClick={(id) => {
                               const c = useExplainStore.getState().cards.find(c => c.id === id);

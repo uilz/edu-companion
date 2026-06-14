@@ -1,18 +1,17 @@
 "use client";
 
 import type { ResponseBlock } from "@/types";
-import { GeneratingPlaceholder } from "./../blocks/GeneratingPlaceholder";
-import { TextBlock } from "./../blocks/TextBlock";
-import { VideoBlockRouter } from "./../blocks/VideoBlockRouter";
-import { PracticeBlockRouter } from "./../blocks/PracticeBlock";
-import { ImageBlock } from "./../blocks/ImageBlock";
-import { MindMapBlock } from "./../blocks/MindMapBlock";
-import { DocumentBlock } from "./../blocks/DocumentBlock";
-import { AudioBlock } from "./../blocks/AudioBlock";
-import SecretarySuggestionsBlock from "./../blocks/SecretarySuggestionsBlock";
-import ExpandBlock from "./../blocks/ExpandBlock";
+import { GeneratingPlaceholder } from "./GeneratingPlaceholder";
+import { TextBlock } from "./TextBlock";
+import { VideoBlockRouter } from "./VideoBlockRouter";
+import { PracticeBlockRouter } from "./PracticeBlock";
+import { ImageBlock } from "./ImageBlock";
+import { MindMapBlock } from "./MindMapBlock";
+import { DocumentBlock } from "./DocumentBlock";
+import { AudioBlock } from "./AudioBlock";
+import SecretarySuggestionsBlock from "./SecretarySuggestionsBlock";
+import ExpandBlock from "./ExpandBlock";
 
-// ResponseBlockRenderer 组件的 props 类型：接收一个 ResponseBlock 数据块
 interface ResponseBlockRendererProps {
   block: ResponseBlock;
 }
@@ -21,12 +20,10 @@ interface ResponseBlockRendererProps {
 export default function ResponseBlockRenderer({ block }: ResponseBlockRendererProps) {
   const { type, status, content } = block;
 
-  // 状态：生成中 —— 显示加载占位动画
   if (status === "generating") {
     return <GeneratingPlaceholder type={type} />;
   }
 
-  // 状态：失败 —— 显示错误信息，支持重试提示
   if (status === "failed") {
     return (
       <div className="border border-[var(--color-error)] bg-[var(--color-error)]/5 px-4 py-3 mt-2">
@@ -40,7 +37,6 @@ export default function ResponseBlockRenderer({ block }: ResponseBlockRendererPr
     );
   }
 
-  // 根据内容块 type 分发到对应的渲染子组件
   switch (type) {
     case "text":
       return <TextBlock content={content} sources={block.sources} />;

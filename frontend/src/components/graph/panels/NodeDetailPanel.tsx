@@ -7,8 +7,7 @@ import {
 } from "lucide-react";
 import type { GraphNode } from "@/lib/types/graph-types";
 import { getMasteryColor, getTrendIcon } from "@/lib/types/graph-types";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+import { useGraphNodeActions } from "@/hooks/graph/useGraphNodeActions";
 
 interface NodeDetailPanelProps {
   node: GraphNode;
@@ -46,69 +45,43 @@ export default function NodeDetailPanel({
 
   const [error, setError] = useState("");
 
+  // ── 图谱节点操作（共享 hook） ──
+  const nodeActions = useGraphNodeActions(partitionId, {
+    onNodeUpdated,
+    onError: setError,
+  });
+
   // ── 保存编辑 ──
   const handleSave = useCallback(async () => {
     if (!editLabel.trim()) return;
     setSaving(true);
     setError("");
-    try {
-      const res = await fetch(`${API_BASE}/api/knowledge/graph/${partitionId}/node/${node.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          label: editLabel.trim(),
-          description: editDesc.trim(),
-          tags: editTags ? editTags.split(",").map(s => s.trim()).filter(Boolean) : [],
-        }),
-      });
-      if (!res.ok) throw new Error("保存失败");
-      setEditing(false);
-      onNodeUpdated();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setSaving(false);
-    }
-  }, [editLabel, editDesc, editTags, partitionId, node.id, onNodeUpdated]);
+    const ok = await nodeActions.editNode(node.id, {
+      label: editLabel.trim(),
+      description: editDesc.trim(),
+      tags: editTags ? editTags.split(",").map(s => s.trim()).filter(Boolean) : [],
+    });
+    if (ok) setEditing(false);
+    setSaving(false);
+  }, [editLabel, editDesc, editTags, node.id, nodeActions]);
 
   // ── 删除节点 ──
   const handleDelete = useCallback(async () => {
     if (!confirm(`确定删除「${node.label}」及其关联边？`)) return;
     setDeleting(true);
     setError("");
-    try {
-      const res = await fetch(`${API_BASE}/api/knowledge/graph/${partitionId}/node/${node.id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error("删除失败");
-      onClose();
-      onNodeUpdated();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setDeleting(false);
-    }
-  }, [node, partitionId, onClose, onNodeUpdated]);
+    const ok = await nodeActions.deleteNode(node.id, node.label);
+    if (ok) onClose();
+    setDeleting(false);
+  }, [node.id, node.label, nodeActions, onClose]);
 
   // ── AI 扩充 ──
   const handleAiExpand = useCallback(async () => {
     setExpanding(true);
     setError("");
-    try {
-      const res = await fetch(`${API_BASE}/api/knowledge/graph/${partitionId}/ai-expand`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ node_id: node.id, depth: expandDepth, direction: "children" }),
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || "AI扩充失败");
-      onNodeUpdated();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setExpanding(false);
-    }
-  }, [node.id, partitionId, expandDepth, onNodeUpdated]);
+    await nodeActions.aiExpand(node.id, { depth: expandDepth });
+    setExpanding(false);
+  }, [node.id, expandDepth, nodeActions]);
 
   // ── AI 对话编辑 ──
   const handleAiChat = useCallback(async () => {
@@ -116,35 +89,18 @@ export default function NodeDetailPanel({
     setChatLoading(true);
     setError("");
     setChatResp("");
-    try {
-      const res = await fetch(`${API_BASE}/api/knowledge/graph/${partitionId}/ai-chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          node_id: node.id,
-          message: chatMsg,
-          conversation_id: chatConvId || undefined,
-        }),
-      });
-      const data = await res.json();
-      // scope_mismatch: 提示切换到对应节点的探索会话
-      if (data.error === "scope_mismatch") {
-        setChatResp(
-          `⚠️ ${data.message}\n\n👉 请点击「${data.bound_node_label}」节点，在它的详情面板中启动探索会话。`
-        );
-        setChatMsg("");
-        setChatLoading(false);
-        return;
+    const result = await nodeActions.aiChat(node.id, chatMsg, chatConvId);
+    if (result) {
+      if (result.response.startsWith("⚠️")) {
+        setChatResp(result.response);
+      } else {
+        setChatResp(result.response);
+        if (result.conversationId) setChatConvId(result.conversationId);
       }
-      setChatResp(data.response || "");
-      if (data.conversation_id) setChatConvId(data.conversation_id);
-      setChatMsg("");
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setChatLoading(false);
     }
-  }, [chatMsg, node.id, partitionId, chatConvId]);
+    setChatMsg("");
+    setChatLoading(false);
+  }, [chatMsg, node.id, chatConvId, nodeActions]);
 
   const mColor = getMasteryColor(node.mastery);
 

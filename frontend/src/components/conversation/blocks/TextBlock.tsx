@@ -1,5 +1,5 @@
 import { BookOpen } from "lucide-react";
-import { useRenderedContent } from "@/lib/hooks/useRenderedContent";
+import { useRenderedContent } from "@/hooks/useRenderedContent";
 import { sanitizeHtml } from "@/lib/utils/sanitize";
 
 /** 纯文本块组件：渲染 Markdown/数学公式 转换后的 HTML，并显示引用来源 */

@@ -4,12 +4,12 @@ import React from "react";
 import {
   Menu, Bot, ChevronLeft, ChevronRight, BarChart3,
 } from "lucide-react";
-import type { Partition } from "@/types";
 import StudySidebar from "@/components/conversation/panels/StudySidebar";
 import ConversationMessageArea from "@/components/conversation/core/ConversationMessageArea";
 import MobileBottomSheet from "@/components/conversation/panels/MobileBottomSheet";
-import type { UseConversationReturn } from "@/components/conversation/hooks/useConversation";
+import type { UseConversationReturn } from "@/hooks/conversation/useConversation";
 import { useConversationStore } from "@/store/conversation/conversation-store";
+import { useTreeStore } from "@/store/conversation/tree-store";
 import { NewNodeDialog } from "@/components/ui/NewNodeDialog";
 import KnowledgeTreeRecommendBanner from "@/components/conversation/banners/KnowledgeTreeRecommendBanner";
 import NodePathBreadcrumb from "@/components/conversation/tree/NodePathBreadcrumb";
@@ -33,47 +33,48 @@ export default function ConversationPanel(
     return q?.quoted_text || "";
   }, [isInSubBranch, subBranchMessages]);
 
-  const activeDomainId = useConversationStore(s => s.activeDomainId);
-  const activeTopicId = useConversationStore(s => s.activeTopicId);
+
 
   const {
-    partitions,
-    selectedPartitionId,
-    activeConversationId,
+    dirList,
+    selectedNodeId,
+    selectedNodeType,
     messages,
     responseBlocks,
     isLoading,
     statusMessage,
     replyingToId,
     switchBanner,
-    showPartitionSidebar,
+    showDirSidebar,
     sidebarCollapsed,
-    showNewPartition,
-    loadingPartitions,
+    showNewDir,
+    loadingDirList,
     convError,
     isDesktop,
-    activePartition,
+    activeDir,
     handleSelectConversation,
     handleNewConversation,
     handleSend,
     handleDeleteMessage,
     handleEditMessage,
     handleVersionSwitch,
-    handleCreatePartition,
-    handleRenamePartition,
+    handleCreateDirectory,
+    handleRenameDirectory,
     handleSwitchConfirm,
     handleSwitchDismiss,
-    setShowPartitionSidebar,
-    setShowNewPartition,
+    setShowDirSidebar,
+    setShowNewDir,
     setSidebarCollapsed,
-    loadPartitions,
+    loadDirList,
   } = props;
 
+  const activeConversationId = selectedNodeType === "conv" ? selectedNodeId : null;
+
   const switchBannerPartitionName = React.useMemo(() => {
-    if (!switchBanner?.partitionId) return "";
-    const p = partitions.find((pp) => pp.id === switchBanner.partitionId);
+    if (!switchBanner?.dirId) return "";
+    const p = dirList.find((pp) => pp.id === switchBanner.dirId);
     return p ? `${(p as { emoji?: string }).emoji || ""} ${(p as { name: string }).name}` : "";
-  }, [partitions, switchBanner?.partitionId]);
+  }, [dirList, switchBanner?.dirId]);
 
   // ── Mobile layout ──
   if (!isDesktop) {
@@ -84,22 +85,22 @@ export default function ConversationPanel(
       >
         <div className="flex-shrink-0 border-b border-[var(--color-border)] px-4 py-3 flex items-center gap-3">
           <button
-            onClick={() => setShowPartitionSidebar(true)}
+            onClick={() => setShowDirSidebar(true)}
             className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
           >
             <Menu size={20} />
           </button>
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold text-[var(--color-text)] truncate">
-              {activePartition
-                ? `${activePartition.emoji} ${activePartition.name}`
+              {activeDir
+                ? `${activeDir.emoji} ${activeDir.name}`
                 : "对话"}
             </div>
           </div>
         </div>
 
         <div className="flex-1 overflow-hidden flex flex-col">
-          <KnowledgeTreeRecommendBanner partitionId={selectedPartitionId} />
+          <KnowledgeTreeRecommendBanner partitionId={selectedNodeId} />
           <ConversationMessageArea
             messages={messages}
             responseBlocks={responseBlocks}
@@ -121,31 +122,28 @@ export default function ConversationPanel(
           />
         </div>
 
-        {showPartitionSidebar && (
-          <MobileBottomSheet onClose={() => setShowPartitionSidebar(false)}>
+        {showDirSidebar && (
+          <MobileBottomSheet onClose={() => setShowDirSidebar(false)}>
             <StudySidebar
-              partitions={partitions}
-              selectedPartitionId={selectedPartitionId}
+              selectedDirId={selectedNodeId}
               activeConversationId={activeConversationId}
-              activeDomainId={activeDomainId}
-              activeTopicId={activeTopicId}
               onSelectConversation={handleSelectConversation}
-              onCreatePartition={() => {
-                setShowPartitionSidebar(false);
-                setShowNewPartition(true);
+              onCreateDir={() => {
+                setShowDirSidebar(false);
+                setShowNewDir(true);
               }}
-              loading={loadingPartitions}
+              loading={loadingDirList}
               onNewConversation={(level, parentId, partitionId) => {
-                setShowPartitionSidebar(false);
+                setShowDirSidebar(false);
                 handleNewConversation(level, parentId, partitionId);
               }}
               onConversationReady={(pid, cid) => {
-                setShowPartitionSidebar(false);
+                setShowDirSidebar(false);
                 handleSelectConversation(pid, cid);
               }}
-              onTreeChanged={loadPartitions}
+              onTreeChanged={loadDirList}
               onSelectConv={(pid, cid) => {
-                setShowPartitionSidebar(false);
+                setShowDirSidebar(false);
                 handleSelectConversation(pid, cid);
               }}
             />
@@ -153,13 +151,13 @@ export default function ConversationPanel(
         )}
 
         <NewNodeDialog
-          open={showNewPartition}
-          onClose={() => setShowNewPartition(false)}
-          onCreate={handleCreatePartition}
-          title="新建分区"
-          namePlaceholder="例如: 高等数学"
+          open={showNewDir}
+          onClose={() => setShowNewDir(false)}
+          onCreate={handleCreateDirectory}
+          title="新建目录"
+          namePlaceholder="例如: 机器学习"
           defaultEmoji="📐"
-          nameLabel="分区名称"
+          nameLabel="目录名称"
         />
       </div>
     );
@@ -196,9 +194,9 @@ export default function ConversationPanel(
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                 </button>
                 <button
-                  onClick={() => setShowNewPartition(true)}
+                  onClick={() => setShowNewDir(true)}
                   className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
-                  title="新建分区"
+                  title="新建目录"
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
                 </button>
@@ -221,20 +219,17 @@ export default function ConversationPanel(
 
             <div className="flex-1 overflow-hidden">
               <StudySidebar
-                key={`sidebar-${useConversationStore.getState().treeRefreshKey}`}
-                partitions={partitions}
-                selectedPartitionId={selectedPartitionId}
+                key={`sidebar-${useTreeStore.getState().treeRefreshKey}`}
+                selectedDirId={selectedNodeId}
                 activeConversationId={activeConversationId}
-                activeDomainId={activeDomainId}
-                activeTopicId={activeTopicId}
                 onSelectConversation={handleSelectConversation}
-                onCreatePartition={() => setShowNewPartition(true)}
-                onRenamePartition={handleRenamePartition}
-                loading={loadingPartitions}
+                onCreateDir={() => setShowNewDir(true)}
+                onRenameDir={handleRenameDirectory}
+                loading={loadingDirList}
                 compact
                 onNewConversation={handleNewConversation}
                 onConversationReady={handleSelectConversation}
-                onTreeChanged={loadPartitions}
+                onTreeChanged={loadDirList}
                 onSelectConv={handleSelectConversation}
               />
             </div>
@@ -255,7 +250,7 @@ export default function ConversationPanel(
 
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {selectedPartitionId && (
+        {selectedNodeId && (
           <div className="flex-shrink-0 border-b border-[var(--color-border)] bg-[var(--color-bg)]">
             <div className="max-w-3xl mx-auto px-6 py-3">
               <NodePathBreadcrumb />
@@ -263,7 +258,7 @@ export default function ConversationPanel(
           </div>
         )}
 
-        <KnowledgeTreeRecommendBanner partitionId={selectedPartitionId} />
+        <KnowledgeTreeRecommendBanner partitionId={selectedNodeId} />
         <ConversationMessageArea
           messages={messages}
           responseBlocks={responseBlocks}
@@ -287,13 +282,13 @@ export default function ConversationPanel(
       </div>
 
       <NewNodeDialog
-        open={showNewPartition}
-        onClose={() => setShowNewPartition(false)}
-        onCreate={handleCreatePartition}
-        title="新建分区"
-        namePlaceholder="例如: 高等数学"
+        open={showNewDir}
+        onClose={() => setShowNewDir(false)}
+        onCreate={handleCreateDirectory}
+        title="新建目录"
+        namePlaceholder="例如: 机器学习"
         defaultEmoji="📐"
-        nameLabel="分区名称"
+        nameLabel="目录名称"
       />
     </div>
   );

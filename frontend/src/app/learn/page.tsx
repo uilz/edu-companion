@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useConversation } from "@/components/conversation/hooks/useConversation";
+import { useConversation } from "@/hooks/conversation/useConversation";
 import ConversationPanel from "@/components/conversation/core/ConversationPanel";
 import FocusModePanel from "@/components/conversation/panels/FocusModePanel";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";

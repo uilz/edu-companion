@@ -8,6 +8,7 @@ import {
   HelpCircle, CheckCircle, AlertCircle, StickyNote, Lightbulb,
   ExternalLink, Youtube, BarChart3, ListTree, X, Brain,
 } from "lucide-react";
+import { authedFetch } from "@/lib/api/api";
 import CardResources from "./../panels/CardResources";
 
 interface Props {
@@ -49,7 +50,7 @@ export default function KnowledgeCardNode({
     setBbLoading(true);
     setBbError(null);
     try {
-      const res = await fetch(`/api/search/bilibili?q=${encodeURIComponent(node.label + " 讲解")}`, { signal: AbortSignal.timeout(8000) });
+      const res = await authedFetch(`/api/search/bilibili?q=${encodeURIComponent(node.label + " 讲解")}`, { signal: AbortSignal.timeout(8000) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setBbResults(data.results || data.data || []);

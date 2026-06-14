@@ -6,12 +6,12 @@ import {
   ChevronLeft, ChevronRight, ChevronDown,
 } from "lucide-react";
 import { useConversationStore } from "@/store/conversation/conversation-store";
-import { initWebSocket, subscribeToNavigation, syncActiveRefs, saveStreamCacheBeforeUnload } from "@/store/conversation/conversation-store";
-import type { Partition, Domain, Topic } from "@/types";
+import { bindPipelineToStore, getPipeline } from "@/store/pipeline";
+
 import { apiFetch } from "@/store/conversation/tree-helpers";
 import MessageList from "@/components/conversation/core/MessageList";
 import ConversationChatInput from "@/components/conversation/core/ChatInput";
-import { fetchGraphData } from "@/lib/api/graph-api";
+import { useGraphData } from "@/hooks/graph/useGraphData";
 import type { GraphData, GraphNode } from "@/lib/types/graph-types";
 import FocusGraph from "@/components/graph/graphs/FocusGraph";
 import ForceGraph from "@/components/graph/graphs/ForceGraph";
@@ -21,29 +21,52 @@ export default function FocusPage() {
   // ── Store data ──
   const messages = useConversationStore((s) => s.messages);
   const responseBlocks = useConversationStore((s) => s.responseBlocks);
-  const activeConversationId = useConversationStore((s) => s.activeConversationId);
   const isLoading = useConversationStore((s) => s.isLoading);
   const sendMessage = useConversationStore((s) => s.sendMessage);
   const deleteMessage = useConversationStore((s) => s.deleteMessage);
   const editMessage = useConversationStore((s) => s.editMessage);
   const versionSwitch = useConversationStore((s) => s.versionSwitch);
-  const partitions = useConversationStore((s) => s.partitions);
-  const selectedPartitionId = useConversationStore((s) => s.selectedPartitionId);
-  const activeDomainId = useConversationStore((s) => s.activeDomainId);
-  const activeTopicId = useConversationStore((s) => s.activeTopicId);
-  const loadPartitions = useConversationStore((s) => s.loadPartitions);
+  const dirList = useConversationStore((s) => s.dirList);
+  const selectedNodeId = useConversationStore((s) => s.selectedNodeId);
+  const selectedNodeType = useConversationStore((s) => s.selectedNodeType);
+  const loadDirList = useConversationStore((s) => s.loadDirList);
   const loadMessages = useConversationStore((s) => s.loadMessages);
   const wsConnected = useConversationStore((s) => s.wsConnected);
 
-  // ── Init: WebSocket + navigation + streams ──
+  // ── Derive IDs from selectedNode.path ──
+  const storeSelectedNode = useConversationStore((s) => s.selectedNode);
+  const activeConversationId = selectedNodeType === "conv" ? selectedNodeId : null;
+  const selectedDirId = useMemo(() => {
+    if (!selectedNodeId) return null;
+    if (selectedNodeType !== "conv") return selectedNodeId;
+    // conv 节点：父目录是 path 最后一个元素
+    const path = storeSelectedNode?.path;
+    return path && path.length > 0 ? path[path.length - 1] : null;
+  }, [selectedNodeId, selectedNodeType, storeSelectedNode]);
+
+  // ── Init: StreamPipeline + navigation + load dirs ──
   useEffect(() => {
     const cleanups: (() => void)[] = [];
-    cleanups.push(initWebSocket());
-    cleanups.push(subscribeToNavigation());
-    cleanups.push(syncActiveRefs());
-    const handler = () => saveStreamCacheBeforeUnload();
+    cleanups.push(bindPipelineToStore(useConversationStore));
+    // URL 同步订阅
+    let prevUrlNodeId: string | null = null;
+    const unsub = useConversationStore.subscribe((state: { urlInitialized: boolean; selectedNodeId: string | null; activeConversationId: string | null }) => {
+      if (!state.urlInitialized) return;
+      const nodeId = state.activeConversationId || state.selectedNodeId;
+      if (nodeId === prevUrlNodeId) return;
+      prevUrlNodeId = nodeId;
+      try {
+        const params = new URLSearchParams();
+        if (nodeId) params.set("node_id", nodeId);
+        const qs = params.toString();
+        window.history.replaceState(null, "", qs ? `${window.location.pathname}?${qs}` : window.location.pathname);
+        localStorage.setItem("learn-page-state", JSON.stringify({ nodeId }));
+      } catch { /* ignore */ }
+    });
+    cleanups.push(unsub);
+    const handler = () => getPipeline().saveCacheBeforeUnload();
     window.addEventListener("beforeunload", handler);
-    loadPartitions();
+    loadDirList();
     return () => {
       cleanups.forEach((fn) => fn?.());
       window.removeEventListener("beforeunload", handler);
@@ -171,8 +194,7 @@ export default function FocusPage() {
   const [voiceEnabled, setVoiceEnabled] = useState(true);
 
   // ── Graph data ──
-  const [graphData, setGraphData] = useState<GraphData | null>(null);
-  const [graphLoading, setGraphLoading] = useState(true);
+  const { graphData, loading: graphLoading, graphContainerRef, graphSize } = useGraphData({ maxRetries: 3 });
   const [graphMode, setGraphMode] = useState<"tree" | "force">("tree");
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   // Active path: IDs from root to selected node (for path-specific collapse)
@@ -198,97 +220,62 @@ export default function FocusPage() {
     return { nodes, edges };
   }, [graphData]);
 
-  useEffect(() => {
-    let retries = 0;
-    const maxRetries = 3;
-    const doFetch = () => {
-      setGraphLoading(true);
-      fetchGraphData()
-        .then(setGraphData)
-        .catch(() => {
-          if (retries < maxRetries) {
-            retries++;
-            setTimeout(doFetch, 1500 * retries);
-          }
-        })
-        .finally(() => setGraphLoading(false));
-    };
-    doFetch();
-  }, []);
-
-  const [graphWidth, setGraphWidth] = useState(400);
-  const graphContainerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!graphContainerRef.current) return;
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setGraphWidth(entry.contentRect.width);
-      }
-    });
-    observer.observe(graphContainerRef.current);
-    return () => observer.disconnect();
-  }, []);
-
   // ── Breadcrumb state — domain/topic data loading ──
-  const [domains, setDomains] = useState<Domain[]>([]);
-  const [topics, setTopics] = useState<Topic[]>([]);
+  const [domains, setDomains] = useState<any[]>([]);
+  const [topics, setTopics] = useState<any[]>([]);
   const [loadingDomains, setLoadingDomains] = useState(false);
   const [loadingTopics, setLoadingTopics] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<'partition' | 'domain' | 'topic' | null>(null);
 
-  // Load domains when partition changes
+  // Load sub-directories when partition changes
   useEffect(() => {
-    if (selectedPartitionId) {
+    if (selectedDirId) {
       setLoadingDomains(true);
       setOpenDropdown(null);
-      apiFetch<{ domains: Domain[] }>(`/tree/domain?parent_id=${selectedPartitionId}`)
-        .then((data) => setDomains(data.domains || []))
+      apiFetch<any>(`/tree/directory?parent_id=${selectedDirId}`)
+        .then((data) => setDomains(data.directory_nodes || []))
         .catch(() => setDomains([]))
         .finally(() => setLoadingDomains(false));
     } else {
       setDomains([]);
       setTopics([]);
     }
-  }, [selectedPartitionId]);
+  }, [selectedDirId]);
 
-  // Load topics when domain changes
+  // Load sub-directories (same API, no separate "topic" concept)
   useEffect(() => {
-    if (activeDomainId) {
+    if (selectedDirId) {
       setLoadingTopics(true);
       setOpenDropdown(null);
-      apiFetch<{ topics: Topic[] }>(`/tree/topic?parent_id=${activeDomainId}`)
-        .then((data) => setTopics(data.topics || []))
+      apiFetch<any>(`/tree/directory?parent_id=${selectedDirId}`)
+        .then((data) => setTopics(data.directory_nodes || []))
         .catch(() => setTopics([]))
         .finally(() => setLoadingTopics(false));
     } else {
       setTopics([]);
     }
-  }, [activeDomainId]);
+  }, [selectedDirId]);
 
   // ── Breadcrumb handlers ──
-  const handleSelectPartition = useCallback((pid: string) => {
+  const handleSelectDir = useCallback((pid: string) => {
     setDomains([]);
     setTopics([]);
     setOpenDropdown(null);
     useConversationStore.setState({
-      selectedPartitionId: pid,
-      activeDomainId: null,
-      activeTopicId: null,
-      activeConversationId: null,
+      selectedNodeId: pid,
+      selectedNodeType: "dir",
       messages: [],
       responseBlocks: [],
     });
-    loadPartitions();
-  }, [loadPartitions]);
+    loadDirList();
+  }, [loadDirList]);
 
   const handleSelectDomain = useCallback((did: string) => {
     setTopics([]);
     setOpenDropdown(null);
     useConversationStore.setState({
-      activeDomainId: did,
-      activeTopicId: null,
-      activeConversationId: null,
+      selectedNodeId: did,
+      selectedNodeType: "dir",
       messages: [],
       responseBlocks: [],
     });
@@ -297,8 +284,8 @@ export default function FocusPage() {
   const handleSelectTopic = useCallback((tid: string) => {
     setOpenDropdown(null);
     useConversationStore.setState({
-      activeTopicId: tid,
-      activeConversationId: null,
+      selectedNodeId: tid,
+      selectedNodeType: "dir",
       messages: [],
       responseBlocks: [],
     });
@@ -306,11 +293,14 @@ export default function FocusPage() {
     apiFetch<{ conversations: { id: string; message_count?: number }[] }>(`/tree/conversation?parent_id=${tid}`)
       .then((data) => {
         const convs = data.conversations || [];
-        const empty = convs.find((c) => !c.message_count || c.message_count === 0);
-        const convId = empty?.id || convs[0]?.id;
-        if (convId) {
-          useConversationStore.setState({ activeConversationId: convId });
-          loadMessages(convId);
+        const empty = convs.find((c: { id: string; message_count?: number }) => !c.message_count || c.message_count === 0);
+        const foundConvId = empty?.id || convs[0]?.id;
+        if (foundConvId) {
+          useConversationStore.setState({
+            selectedNodeId: foundConvId,
+            selectedNodeType: "conv",
+          });
+          loadMessages(foundConvId);
         }
       })
       .catch(() => {});
@@ -336,14 +326,14 @@ export default function FocusPage() {
           <ChevronRight size={16} className="group-hover:scale-110 transition-transform" />
           <div className="absolute inset-y-1/4 w-[2px] rounded-full bg-[var(--color-border)] opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
-        <div ref={graphContainerRef} className="flex-1 overflow-hidden p-2">
+        <div ref={graphContainerRef as React.RefObject<HTMLDivElement>} className="flex-1 overflow-hidden p-2">
           {graphLoading ? (
             <div className="flex items-center justify-center h-full text-sm text-[var(--color-text-muted)]">加载知识图谱…</div>
           ) : graphData ? (
             graphMode === "tree" ? (
-              <FocusGraph data={graphData} selectedNodeId={selectedNode?.id} onNodeSelect={setSelectedNode} activePath={activePath} width={graphWidth} height={1000} />
+              <FocusGraph data={graphData} selectedNodeId={selectedNode?.id} onNodeSelect={setSelectedNode} activePath={activePath} width={graphSize.width} height={1000} />
             ) : (
-              <ForceGraph data={forceGraphData} selectedNodeId={selectedNode?.id} onNodeSelect={setSelectedNode} width={graphWidth} height={1000} />
+              <ForceGraph data={forceGraphData} selectedNodeId={selectedNode?.id} onNodeSelect={setSelectedNode} width={graphSize.width} height={1000} />
             )
           ) : (
             <div className="flex items-center justify-center h-full text-sm text-[var(--color-text-muted)]">暂无图谱数据</div>
@@ -402,7 +392,7 @@ export default function FocusPage() {
       </div>
 
       {/* Right: Knowledge graph */}
-      <div ref={graphContainerRef} className="flex flex-col overflow-hidden" style={{ width: `${100 - splitPercent}%` }}>
+      <div ref={graphContainerRef as React.RefObject<HTMLDivElement>} className="flex flex-col overflow-hidden" style={{ width: `${100 - splitPercent}%` }}>
         <div className="flex-shrink-0 border-b border-[var(--color-border)] px-4 py-3 flex items-center gap-2">
           <Network size={16} className="text-[var(--color-accent)]" />
           <span className="text-sm font-semibold text-[var(--color-text)]">知识图谱</span>
@@ -438,9 +428,9 @@ export default function FocusPage() {
             <div className="flex items-center justify-center h-full text-sm text-[var(--color-text-muted)]">加载知识图谱…</div>
           ) : graphData ? (
             graphMode === "tree" ? (
-              <FocusGraph data={graphData} selectedNodeId={selectedNode?.id} onNodeSelect={setSelectedNode} activePath={activePath} width={graphWidth} height={1000} />
+              <FocusGraph data={graphData} selectedNodeId={selectedNode?.id} onNodeSelect={setSelectedNode} activePath={activePath} width={graphSize.width} height={1000} />
             ) : (
-              <ForceGraph data={forceGraphData} selectedNodeId={selectedNode?.id} onNodeSelect={setSelectedNode} width={graphWidth} height={1000} />
+              <ForceGraph data={forceGraphData} selectedNodeId={selectedNode?.id} onNodeSelect={setSelectedNode} width={graphSize.width} height={1000} />
             )
           ) : (
             <div className="flex items-center justify-center h-full text-sm text-[var(--color-text-muted)]">暂无图谱数据</div>
@@ -524,23 +514,23 @@ export default function FocusPage() {
         </button>
 
         <div className="flex items-center gap-0.5 flex-1 min-w-0 flex-wrap">
-          {/* Partition level */}
+          {/* Dir level */}
           {dropdown({
             level: 'partition',
-            items: partitions.map(p => ({ id: p.id, name: p.name, emoji: p.emoji, subtitle: p.domain_count ? `${p.domain_count} 领域` : undefined })),
-            currentId: selectedPartitionId,
-            onSelect: handleSelectPartition,
-            placeholder: '选择分区',
+            items: dirList.map(p => ({ id: p.id, name: p.name, emoji: p.emoji })),
+            currentId: selectedDirId,
+            onSelect: handleSelectDir,
+            placeholder: '选择',
           })}
 
           {/* Arrow + Domain level */}
-          {selectedPartitionId && (
+          {selectedDirId && (
             <>
               <ChevronRight size={10} className="flex-shrink-0 text-[var(--color-text-muted)]" />
               {dropdown({
                 level: 'domain',
                 items: domains.map(d => ({ id: d.id, name: d.name, emoji: d.emoji, subtitle: d.topic_count ? `${d.topic_count} 专题` : undefined })),
-                currentId: activeDomainId,
+                currentId: selectedDirId,
                 onSelect: handleSelectDomain,
                 placeholder: loadingDomains ? '...' : '选择领域',
                 loading: loadingDomains,
@@ -550,13 +540,13 @@ export default function FocusPage() {
           )}
 
           {/* Arrow + Topic level */}
-          {activeDomainId && (
+          {selectedDirId && (
             <>
               <ChevronRight size={10} className="flex-shrink-0 text-[var(--color-text-muted)]" />
               {dropdown({
                 level: 'topic',
                 items: topics.map(t => ({ id: t.id, name: t.name, emoji: t.emoji, subtitle: t.conversation_count ? `${t.conversation_count} 对话` : undefined })),
-                currentId: activeTopicId,
+                currentId: selectedDirId,
                 onSelect: handleSelectTopic,
                 placeholder: loadingTopics ? '...' : '选择专题',
                 loading: loadingTopics,

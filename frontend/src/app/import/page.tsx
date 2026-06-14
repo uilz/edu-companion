@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { authedFetch } from "@/lib/api/api";
 import {
   Upload, FileText, Check, X, AlertTriangle, Loader2,
   ChevronRight, Brain, BookOpen, Sparkles, Edit3, Save,
@@ -97,7 +98,7 @@ export default function ImportPage() {
     setError("");
     setImportResult(null);
     try {
-      const res = await fetch("/api/v7/practice/import/preview", {
+      const res = await authedFetch("/api/v7/practice/import/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: rawText }),
@@ -115,7 +116,7 @@ export default function ImportPage() {
 
   const loadBanks = async () => {
     try {
-      const res = await fetch("/api/v7/practice/banks");
+      const res = await authedFetch("/api/v7/practice/banks");
       const data = await res.json();
       setBanks(Array.isArray(data) ? data : []);
     } catch { setBanks([]); }
@@ -123,7 +124,7 @@ export default function ImportPage() {
 
   const loadImportHistory = async () => {
     try {
-      const res = await fetch("/api/v7/practice/import/history?limit=10");
+      const res = await authedFetch("/api/v7/practice/import/history?limit=10");
       const data = await res.json();
       setImportHistory(data?.items || data || []);
     } catch { setImportHistory([]); }
@@ -136,10 +137,10 @@ export default function ImportPage() {
     try {
       const form = new FormData();
       form.append("file", file);
-      const uploadRes = await fetch("/api/files/upload", { method: "POST", body: form });
+      const uploadRes = await authedFetch("/api/files/upload", { method: "POST", body: form });
       if (!uploadRes.ok) throw new Error("上传失败");
       const uploadData = await uploadRes.json();
-      const res = await fetch("/api/v7/practice/import/upload", {
+      const res = await authedFetch("/api/v7/practice/import/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -163,7 +164,7 @@ export default function ImportPage() {
     if (!newBankName.trim()) return;
     setCreatingBank(true);
     try {
-      const res = await fetch("/api/v7/practice/banks", {
+      const res = await authedFetch("/api/v7/practice/banks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newBankName, description: newBankDesc }),
@@ -189,7 +190,7 @@ export default function ImportPage() {
     setError("");
     try {
       const filtered = preview.questions.filter((_, i) => !removedIndices.has(i));
-      const res = await fetch("/api/v7/practice/import/confirm", {
+      const res = await authedFetch("/api/v7/practice/import/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ bank_id: selectedBank, questions: filtered }),
@@ -210,7 +211,7 @@ export default function ImportPage() {
     setCorrectingAll(true);
     setError("");
     try {
-      const res = await fetch("/api/v7/practice/import/preview", {
+      const res = await authedFetch("/api/v7/practice/import/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: rawText }),

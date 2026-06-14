@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Volume2, Pause, Play } from "lucide-react";
+import { authedFetch } from "@/lib/api/api";
 
 type PlayState = "idle" | "playing" | "paused";
 
@@ -119,7 +120,7 @@ export default function SpeakButton({ text, minLength = 50 }: SpeakButtonProps) 
     isFetchingRef.current = true;
 
     try {
-      const res = await fetch("/api/multimodal/tts", {
+      const res = await authedFetch("/api/multimodal/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: textRef.current, voice: "zh-CN-XiaoxiaoNeural" }),

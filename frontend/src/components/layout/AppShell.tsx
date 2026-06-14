@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import BottomNav from './BottomNav';
 import Sidebar from './Sidebar';
 import ActionFeedbackToast from '../notification/ActionFeedbackToast';
@@ -9,20 +9,6 @@ import AgentFloat from '../agent/AgentFloat';
 
 interface AppShellProps {
   children: React.ReactNode;
-}
-
-function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(false);
-
-  useEffect(() => {
-    const media = window.matchMedia(query);
-    setMatches(media.matches);
-    const listener = (e: MediaQueryListEvent) => setMatches(e.matches);
-    media.addEventListener('change', listener);
-    return () => media.removeEventListener('change', listener);
-  }, [query]);
-
-  return matches;
 }
 
 const FULLSCREEN_ROUTES = ['/learn', '/focus'];

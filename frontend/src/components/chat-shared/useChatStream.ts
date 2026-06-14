@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { parseSSEStream, SSE_EVENTS } from "@/store/pipeline/sse-parser";
+import { createTokenThrottle } from "@/store/pipeline/token-throttle";
 
 export interface ToolCallEvent {
   name: string;
@@ -71,49 +73,39 @@ export function useChatStream() {
         return;
       }
 
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let currentEvent = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            currentEvent = line.slice(7).trim();
-          } else if (line.startsWith("data: ")) {
-            const raw = line.slice(6);
-            try {
-              const data = JSON.parse(raw);
-              if (currentEvent === "token") {
-                config.onToken?.(data.delta || "");
-              } else if (currentEvent === "tool_call") {
-                if (data.name && data.arguments) {
-                  config.onToolCall?.({
-                    name: data.name,
-                    arguments: data.arguments,
-                    confidence: data.confidence || 0.5,
-                    require_confirmation: data.require_confirmation !== false,
-                    route: data.route,
-                    confirmation_text: data.confirmation_text || "",
-                  });
-                }
-              } else if (currentEvent === "conversation") {
-                if (data.conversation_id) {
-                  config.onConversationId?.(data.conversation_id);
-                }
+      // 使用共享的 SSE 解析器 + token 节流
+      const throttle = createTokenThrottle((text) => config.onToken?.(text));
+      await parseSSEStream(reader, {
+        onData: (data, eventType) => {
+          switch (eventType) {
+            case SSE_EVENTS.TOKEN:
+              throttle.add((data.delta as string) || "");
+              break;
+            case SSE_EVENTS.TOOL_CALL:
+              if (data.name && data.arguments) {
+                config.onToolCall?.({
+                  name: data.name as string,
+                  arguments: data.arguments as Record<string, unknown>,
+                  confidence: (data.confidence as number) || 0.5,
+                  require_confirmation: data.require_confirmation !== false,
+                  route: data.route as { target: string; params?: Record<string, string> } | undefined,
+                  confirmation_text: (data.confirmation_text as string) || "",
+                });
               }
-            } catch {
-              // skip non-JSON data lines
-            }
+              break;
+            case SSE_EVENTS.CONVERSATION:
+              if (data.conversation_id) {
+                config.onConversationId?.(data.conversation_id as string);
+              }
+              break;
           }
-        }
-      }
+        },
+        onDone: () => {
+          throttle.flush();
+          setStreaming(false);
+          config.onDone?.();
+        },
+      }, abort.signal);
     } catch (err) {
       if ((err as Error).name === "AbortError") return;
       config.onError?.("网络错误，请检查连接后重试。");

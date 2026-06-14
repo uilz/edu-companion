@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { authedFetch } from "@/lib/api/api";
 import {
   FileText, Clock, AlertTriangle, Loader2, ChevronRight,
   Brain, BookOpen,
@@ -18,7 +19,7 @@ export default function ExamPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/v7/practice/banks")
+    authedFetch("/api/v7/practice/banks")
       .then((r) => r.json())
       .then((data) => {
         setBanks(Array.isArray(data) ? data : data?.items || []);

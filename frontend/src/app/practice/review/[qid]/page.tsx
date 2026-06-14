@@ -9,7 +9,7 @@ import {
   submitAnswer, createPracticeSession, resolveBankForNode,
   type V7Question, type V7SubmitResult,
 } from "@/lib/api/practice-api";
-import QuestionCard from "@/components/practice/shared/QuestionCard";
+import QuestionCard from "@/components/practice/components/QuestionCard";
 
 export default function ReviewQuestionPage() {
   const { qid } = useParams<{ qid: string }>();

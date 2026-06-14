@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { ChevronDown, ChevronUp, Lightbulb, BookOpen, AlertTriangle, Sparkles } from "lucide-react";
-import { API_BASE } from "@/lib/api/api";
+import { authedFetch, API_BASE } from "@/lib/api/api";
 
 interface ExpandResult {
   deeper_explanation?: string;
@@ -27,7 +27,7 @@ export default function ExpandBlock({ skillName, explanation }: Props) {
   useEffect(() => {
     if (!expanded || data) return;
     setLoading(true);
-    fetch(`${API_BASE}/api/v2/expand/knowledge`, {
+    authedFetch(`/api/v2/expand/knowledge`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ skill_name: skillName, explanation: explanation || "" }),

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { BookOpen, ExternalLink, Loader2, X, Youtube } from "lucide-react";
+import { authedFetch } from "@/lib/api/api";
 
 interface Props {
   questionId: string;
@@ -29,7 +30,7 @@ export default function ReferencePanel({ questionId, query, visible, onClose }: 
     setLoading(true);
 
     // 优先通过题目 ID 搜索
-    fetch(`/api/v7/practice/references/for-question?question_id=${encodeURIComponent(questionId)}`)
+    authedFetch(`/api/v7/practice/references/for-question?question_id=${encodeURIComponent(questionId)}`)
       .then(r => r.json())
       .then(data => {
         const items = data?.results || data?.items || [];
@@ -39,7 +40,7 @@ export default function ReferencePanel({ questionId, query, visible, onClose }: 
       .catch(() => {
         // fallback: 使用题干前30字直接搜索
         if (query) {
-          return fetch(`/api/v7/practice/references/search?q=${encodeURIComponent(query.slice(0, 30))}`)
+          return authedFetch(`/api/v7/practice/references/search?q=${encodeURIComponent(query.slice(0, 30))}`)
             .then(r => r.json())
             .then(data => {
               const items = data?.results || data?.items || [];

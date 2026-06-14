@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════
 
 import { useState, useEffect } from "react";
-import { API_BASE } from "@/lib/api/api";
+import { authedFetch, API_BASE } from "@/lib/api/api";
 
 interface DailyTrendPoint {
   date: string;
@@ -28,8 +28,8 @@ export function DailySummaryCard() {
     async function load() {
       try {
         const [dailyRes, weakRes] = await Promise.all([
-          fetch(`${API_BASE}/api/v7/practice/stats/daily?days=3`),
-          fetch(`${API_BASE}/api/v7/practice/stats/weak-skills`),
+          authedFetch(`/api/v7/practice/stats/daily?days=3`),
+          authedFetch(`/api/v7/practice/stats/weak-skills`),
         ]);
         if (dailyRes.ok) {
           const trend: DailyTrendPoint[] = await dailyRes.json();

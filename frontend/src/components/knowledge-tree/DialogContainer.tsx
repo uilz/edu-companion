@@ -5,8 +5,7 @@ import { AlertCircle, Loader2, Send, Bot, MessageCircle } from "lucide-react";
 import type { GraphNode } from "@/lib/types/graph-types";
 import TreeChatPanel from "@/components/graph/panels/TreeChatPanel";
 import type { DialogState } from "./KnowledgeTreePage";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+import { authedFetch, API_BASE } from "@/lib/api/api";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -58,7 +57,7 @@ export default function DialogContainer({
     setError("");
 
     try {
-      const res = await fetch(`${API_BASE}/api/conversations/tree/conversation/${dialogState.conversationId}/message`, {
+      const res = await authedFetch(`/api/conversations/tree/conversation/${dialogState.conversationId}/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: userText, partition_id: partitionId }),
