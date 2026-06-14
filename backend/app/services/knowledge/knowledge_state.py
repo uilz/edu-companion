@@ -39,7 +39,7 @@ async def get_knowledge_state(user_id: str, skill_id: str) -> dict:
     """
     # Primary: CognitiveNode (try by ID first, then by label)
     try:
-        from app.cognitive import get_repo
+        from app.domain.cognitive import get_repo
         node = get_repo().get_node(skill_id, user_id)
         if node is None:
             node = get_repo().find_node_by_label(skill_id, user_id)

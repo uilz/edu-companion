@@ -146,7 +146,7 @@ async def get_hint(req: HintRequest):
 @router.post("/submit")
 async def submit_answer(req: SubmitAnswerRequest, user_id: str = Depends(current_user_id)):
     """独立练习 — 提交单题答案"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
 
     db = get_db()
     row = db.fetchone("SELECT * FROM questions WHERE id = %s", (req.question_id,))

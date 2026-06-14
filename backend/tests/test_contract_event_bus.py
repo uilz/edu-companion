@@ -19,7 +19,7 @@ from shared.events import (
     SessionCompleted,
     KnowledgeStateUpdated,
 )
-from infra.event_bus import EventBus
+from app.infrastructure.event_bus import EventBus
 
 
 # ── 辅助 Handler ──

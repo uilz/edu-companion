@@ -25,6 +25,7 @@ from shared.events import (
     EVENT_TYPES,
 )
 from shared.log_utils import log_event_processed, log_ripple_edge
+from shared.protocols.cognitive import CognitiveNodeRepository
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +44,17 @@ _MAX_BATCH = 20
 class EventService:
     """事件服务 — 桥接 in-memory EventBus + DB 持久化 + 后台消费"""
 
-    def __init__(self):
+    def __init__(self, repo: CognitiveNodeRepository | None = None):
         self._consumer_task: asyncio.Task | None = None
         self._running = False
         self._container = None
+        self._repo = repo
+
+    def _lazy_repo(self):
+        """Fallback: get repo from container when not injected."""
+        from app.domain.cognitive import get_repo
+        self._repo = get_repo()
+        return self._repo
 
     # ─── 持久化桥接 ──────────────────────────────
 
@@ -58,21 +66,23 @@ class EventService:
 
     @staticmethod
     def _persist_handler(event_type: str):
-        """返回一个 closure handler，将 DomainEvent 写入 cognitive_events"""
+        """返回一个 closure handler，将 DomainEvent 写入 events 表"""
 
         async def handler(event: DomainEvent) -> None:
             try:
-                from app.cognitive import get_repo
-                from app.cognitive.models import CognitiveEvent
+                from app.infrastructure.db.events_repository import Event, get_events_repo
 
-                ce = CognitiveEvent(
+                ce = Event(
                     event_type=event_type,
                     user_id=getattr(event, "user_id", ""),
-                    node_id=getattr(event, "node_id", ""),
-                    timestamp=time.time(),
-                    payload=_domain_event_to_payload(event, event_type),
+                    source_type="system",
+                    source_id=getattr(event, "event_id", ""),
+                    payload={
+                        **(_domain_event_to_payload(event, event_type)),
+                        "node_id": getattr(event, "node_id", ""),
+                    },
                 )
-                get_repo().append_event(ce)
+                get_events_repo().insert(ce)
             except Exception:
                 logger.debug("持久化事件失败 (fire-and-forget): %s", event_type, exc_info=True)
 
@@ -87,19 +97,20 @@ class EventService:
         node_id: str = "",
         payload: dict[str, Any] | None = None,
     ) -> str:
-        """直接写入 cognitive_events 表（同步，append_event 为同步操作）"""
-        from app.cognitive import get_repo
-        from app.cognitive.models import CognitiveEvent
+        """直接写入 events 表（同步）"""
+        from app.infrastructure.db.events_repository import Event, get_events_repo
 
-        ce = CognitiveEvent(
+        ce = Event(
             event_type=event_type,
             user_id=user_id,
-            node_id=node_id,
-            timestamp=time.time(),
-            payload=payload or {},
+            source_type="system",
+            payload={
+                **(payload or {}),
+                "node_id": node_id,
+            },
         )
-        get_repo().append_event(ce)
-        return ce.event_id
+        get_events_repo().insert(ce)
+        return ce.id
 
     @staticmethod
     def emit_message_classified(
@@ -205,14 +216,14 @@ class EventService:
 
     async def _consume_loop(self) -> None:
         """轮询未处理 cognitive_events，按类型分发"""
-        from app.cognitive import get_repo
+        repo = self._repo or self._lazy_repo()
 
         while self._running:
             try:
-                events = get_repo().get_unprocessed_events(limit=_MAX_BATCH)
+                events = repo.get_unprocessed_events(limit=_MAX_BATCH)
                 for evt in events:
                     await self._dispatch(evt)
-                    get_repo().mark_event_processed(evt.event_id)
+                    repo.mark_event_processed(evt.event_id)
             except asyncio.CancelledError:
                 break
             except Exception:
@@ -244,19 +255,19 @@ class EventService:
 
     # ─── Handler 实现 ────────────────────────────
 
-    @staticmethod
-    async def _handle_MessageClassified(evt) -> None:
+    async def _handle_MessageClassified(self, evt) -> None:
         """
         message.classified → 可见性级联 + 结构扩展检查
 
         1. 级联祖先可见性
         2. 统计父节点下可见子节点活动频率 → 达标则生成横向扩展提案
         """
+        repo = self._repo or self._lazy_repo()
         payload = evt.payload or {}
         node_ids = payload.get("topic_node_ids", []) + payload.get("atom_node_ids", [])
         for nid in node_ids:
             try:
-                _cascade_ancestor_visibility(nid, evt.user_id)
+                _cascade_ancestor_visibility(nid, evt.user_id, repo)
             except Exception:
                 logger.debug("级联可见性失败: %s", nid, exc_info=True)
 
@@ -264,22 +275,21 @@ class EventService:
         try:
             topic_ids = payload.get("topic_node_ids", [])
             if topic_ids:
-                from app.cognitive import get_repo
                 parent_candidates: set[str] = set()
                 for tid in topic_ids:
-                    node = get_repo().get_node(tid, evt.user_id)
+                    node = repo.get_node(tid, evt.user_id)
                     if node and node.parent:
                         parent_candidates.add(node.parent)
 
                 for pid in parent_candidates:
-                    children = get_repo().get_children(pid, evt.user_id)
+                    children = repo.get_children(pid, evt.user_id)
                     active_children = [c for c in children if c.is_visible and c.is_active]
                     if len(active_children) >= 3:
                         # 生成横向扩展提案
                         _generate_proposal(
                             user_id=evt.user_id,
                             emoji="🌿",
-                            title=f"探索「{_get_node_label(pid, evt.user_id)}」下的更多专题",
+                            title=f"探索「{_get_node_label(pid, evt.user_id, repo)}」下的更多专题",
                             description=(
                                 f"该分类下已有 {len(active_children)} 个活跃子专题。"
                                 "需要自动生成更多拓展方向吗？"
@@ -288,7 +298,7 @@ class EventService:
                             priority=2,
                             payload={
                                 "parent_id": pid,
-                                "parent_label": _get_node_label(pid, evt.user_id),
+                                "parent_label": _get_node_label(pid, evt.user_id, repo),
                                 "visible_count": len(active_children),
                             },
                             generated_by="event_handler",
@@ -297,8 +307,7 @@ class EventService:
         except Exception:
             logger.debug("结构扩展检查失败", exc_info=True)
 
-    @staticmethod
-    async def _handle_PracticeSubmitted(evt) -> None:
+    async def _handle_PracticeSubmitted(self, evt) -> None:
         """practice.submitted → 更新涉及 atom node 的掌握度（v7: 真实数据）
 
         PracticeSubmitted 是多 node batch 事件，payload 中
@@ -309,6 +318,7 @@ class EventService:
           - 更新 practice_summary.total/correct/last_practiced
           - 重新计算 proficiency_mean
         """
+        repo = self._repo or self._lazy_repo()
         payload = evt.payload or {}
         atom_ids: list[str] = payload.get("atom_node_ids", []) or []
         correctness: float = float(payload.get("correctness", 0.0) or 0.0)
@@ -320,9 +330,7 @@ class EventService:
         is_correct = correctness >= 0.5
 
         try:
-            from app.cognitive import get_repo
-            from app.cognitive.models import CognitiveNode, PracticeSummary
-            repo = get_repo()
+            from app.domain.cognitive.models import CognitiveNode, PracticeSummary
             now = time.time()
             updated = 0
             for nid in atom_ids:
@@ -366,8 +374,7 @@ class EventService:
         except Exception as e:
             logger.warning("PracticeSubmitted 掌握度更新失败: %s", e)
 
-    @staticmethod
-    async def _handle_NodeCreated(evt) -> None:
+    async def _handle_NodeCreated(self, evt) -> None:
         """
         node.created → 波纹边确认（Phase 6.2）
 
@@ -376,6 +383,7 @@ class EventService:
         3. 创建 pending_confirm 边
         4. 生成边确认提案
         """
+        repo = self._repo or self._lazy_repo()
         payload = evt.payload or {}
         node_id = evt.node_id
         user_id = evt.user_id
@@ -385,17 +393,16 @@ class EventService:
             return
 
         try:
-            from app.cognitive import get_repo
-            from app.cognitive.edge_storage import upsert_edge, get_edges_for_node
-            from app.cognitive.edge_models import KnowledgeEdge
+            from app.infrastructure.db.cognitive_edge_storage import upsert_edge, get_edges_for_node
+            from app.domain.cognitive.edge_models import KnowledgeEdge
 
-            node = get_repo().get_node(node_id, user_id)
+            node = repo.get_node(node_id, user_id)
             if not node or not node.embedding:
                 logger.debug("节点 %s 无 embedding，跳过波纹检测", node_id)
                 return
 
             # 检索语义邻居（同层级，排除自身）
-            neighbors = get_repo().vector_search(
+            neighbors = repo.vector_search(
                 node.embedding, user_id,
                 level=level, limit=5, min_similarity=0.3,
             )
@@ -477,8 +484,7 @@ class EventService:
         except Exception:
             logger.exception("波纹边检测失败: node=%s", node_id)
 
-    @staticmethod
-    async def _handle_ProposalAccepted(evt) -> None:
+    async def _handle_ProposalAccepted(self, evt) -> None:
         """
         proposal.accepted → 执行秘书提案动作
 
@@ -486,6 +492,7 @@ class EventService:
         - explore + parent_id → mark_expanded（标记已扩展抑制重复）
         - review / practice → （未来实现）
         """
+        repo = self._repo or self._lazy_repo()
         payload = evt.payload or {}
         action_type = payload.get("action_type", "")
         target_node_id = payload.get("target_node_id", "")
@@ -493,7 +500,7 @@ class EventService:
 
         if action_type == "explore" and target_node_id:
             try:
-                from app.cognitive.growth_engine import growth_engine
+                from app.domain.cognitive.growth_engine import growth_engine
                 growth_engine.mark_expanded(user_id, target_node_id)
                 logger.info("✅ 提案已执行: mark_expanded(user=%s, node=%s)", user_id, target_node_id)
             except Exception as e:
@@ -503,24 +510,22 @@ class EventService:
             # 该事件无需后续处理（processed=true），但留作历史/统计来源
             kp_id = payload.get("kp_id") or payload.get("target_node_id", "")
             try:
-                from app.cognitive import get_repo
-                from app.cognitive.models import CognitiveEvent
-                ce = CognitiveEvent(
+                from app.infrastructure.db.events_repository import Event, get_events_repo
+                ce = Event(
                     event_type=f"{action_type.capitalize()}Accepted",
                     user_id=user_id,
-                    node_id=kp_id,
-                    timestamp=time.time(),
+                    source_type="system",
                     payload={
                         "proposal_id": payload.get("proposal_id", ""),
-                        "kp_id": kp_id,
+                        "node_id": kp_id,
                         "action_type": action_type,
                         "mastery": payload.get("mastery", 0.0),
                         "urgency": payload.get("urgency", 0.0),
                     },
                 )
-                get_repo().append_event(ce)
+                repo.append_event(ce)
                 # 立即 mark 为 processed（无需 handler）
-                from app.cognitive.storage import mark_event_processed
+                from app.infrastructure.db.cognitive_storage import mark_event_processed
                 mark_event_processed(ce.event_id)
                 logger.info(
                     "✅ 提案已记录: %sAccepted(user=%s, kp=%s, mastery=%.0f%%)",
@@ -529,14 +534,14 @@ class EventService:
             except Exception as e:
                 logger.warning("记录 %s 接受事件失败: %s", action_type, e)
 
-    @staticmethod
-    async def _handle_PendingCrossTopic(evt) -> None:
+    async def _handle_PendingCrossTopic(self, evt) -> None:
         """
         v6 Phase 6.3: 深度沉浸延后处理
 
         会话结束/空闲时，读取被抑制的跨主题候选，
         生成"本次对话涉及多个话题，是否关联？"的确认提案。
         """
+        repo = self._repo or self._lazy_repo()
         payload = evt.payload or {}
         candidates = payload.get("candidates", [])
         if not candidates:
@@ -548,8 +553,7 @@ class EventService:
         )
 
         try:
-            from app.cognitive import get_repo
-            from app.cognitive.edge_storage import get_edges_for_node
+            from app.infrastructure.db.cognitive_edge_storage import get_edges_for_node
 
             user_id = evt.user_id
             for cand in candidates[:2]:
@@ -560,7 +564,7 @@ class EventService:
                     continue
 
                 # 检查候选节点是否存在
-                node = get_repo().get_node(cid, user_id)
+                node = repo.get_node(cid, user_id)
                 if not node:
                     continue
 
@@ -598,24 +602,29 @@ class EventService:
 # ─── 可见性级联 ──────────────────────────────
 
 
-def _cascade_ancestor_visibility(node_id: str, user_id: str) -> None:
+def _cascade_ancestor_visibility(
+    node_id: str, user_id: str,
+    repo: CognitiveNodeRepository | None = None,
+) -> None:
     """
     级联更新祖先可见性：向上递归查找父节点，
     若其不可见则设为可见，直到根或已可见节点。
     """
-    from app.cognitive import get_repo
+    if repo is None:
+        from app.domain.cognitive import get_repo
+        repo = get_repo()
 
     visited = set()
     current_id = node_id
     while current_id and current_id not in visited:
         visited.add(current_id)
-        node = get_repo().get_node(current_id, user_id)
+        node = repo.get_node(current_id, user_id)
         if node is None:
             break
         # CognitiveNode 是 Pydantic 对象，使用属性访问
         if node.is_visible:
             break  # 已可见 → 祖先也应该已可见
-        get_repo().set_node_visible(current_id, user_id, visible=True)
+        repo.set_node_visible(current_id, user_id, visible=True)
         current_id = node.parent
 
 
@@ -653,7 +662,7 @@ def _generate_proposal(
     """通过 ProposalStore 持久化一条提案（fire-and-forget）"""
     try:
         from app.domain.secretary.models import Proposal
-        from app.domain.secretary.proposal_store import ProposalStore
+        from app.infrastructure.db.proposal_store import ProposalStore
 
         proposal = Proposal(
             emoji=emoji,
@@ -675,12 +684,17 @@ def _generate_proposal(
         logger.debug("提案保存失败 (fire-and-forget): %s", title, exc_info=True)
 
 
-def _get_node_label(node_id: str, user_id: str) -> str:
+def _get_node_label(
+    node_id: str, user_id: str,
+    repo: CognitiveNodeRepository | None = None,
+) -> str:
     """获取节点 label（安全降级）"""
     try:
-        from app.cognitive import get_repo
+        if repo is None:
+            from app.domain.cognitive import get_repo
+            repo = get_repo()
 
-        node = get_repo().get_node(node_id, user_id)
+        node = repo.get_node(node_id, user_id)
         if node:
             return node.label or node_id
     except Exception:

@@ -229,11 +229,11 @@ async def explain_knowledge(body: dict):
     if not text.strip():
         return {"explanation": "请提供需要解释的文本"}
 
-    from app.services.llm.llm_service import llm_service
+    from app.infrastructure.llm.llm_service import llm_service
 
     if style == "conversation":
         system_prompt = (
-            "你是智能伴学助手，以苏格拉底式对话引导学生思考。"
+            "你是苹果果，以苏格拉底式对话引导用户自主思考。"
             "根据上下文，用简洁易懂的语言回答学生的问题。"
             "如果适合，可以反问引导学生深入思考。不要超过200字。"
         )
@@ -241,8 +241,8 @@ async def explain_knowledge(body: dict):
     else:
         context_hint = f"（知识点ID: {node_id}）" if node_id else ""
         system_prompt = (
-            "你是智能伴学助手。用简洁易懂的语言解释知识点，"
-            "适合中学生理解。可以适当举例子。控制在300字以内。"
+            "你是苹果果。用简洁易懂的语言解释知识点，"
+             "适合自主学习场景。可以适当举例子。控制在300字以内。"
         )
         user_prompt = f"请解释以下内容{context_hint}：\n{text}"
 

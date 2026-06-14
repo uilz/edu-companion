@@ -48,7 +48,7 @@ class ContextEngine:
         """快速评估当前情境"""
         ctx = SessionContext()
         try:
-            from app.cognitive import get_repo
+            from app.domain.cognitive import get_repo
             import asyncio
 
             nodes = await asyncio.to_thread(get_repo().list_all_nodes, user_id)

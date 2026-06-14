@@ -45,7 +45,7 @@ class BatchOperationRequest(BaseModel):
 @router.delete("/{material_id}", summary="删除文件")
 async def delete_file(material_id: str, uid: str = Depends(current_user_id)):
     """删除文件及其分块和 TOC"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     row = db.fetchone(
@@ -72,7 +72,7 @@ async def delete_file(material_id: str, uid: str = Depends(current_user_id)):
 @router.patch("/{material_id}", summary="更新文件元数据")
 async def patch_file(material_id: str, body: FilePatchRequest, uid: str = Depends(current_user_id)):
     """更新文件的所属层级"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     row = db.fetchone(
@@ -113,7 +113,7 @@ async def update_file_tags(
     uid: str = Depends(current_user_id),
 ):
     """为文件添加/更新标签"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     row = db.fetchone(
@@ -135,7 +135,7 @@ async def update_file_tags(
 @router.post("/{material_id}/trash", summary="移入回收站")
 async def move_to_trash(material_id: str, uid: str = Depends(current_user_id)):
     """软删除文件到回收站"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     row = db.fetchone(
@@ -155,7 +155,7 @@ async def move_to_trash(material_id: str, uid: str = Depends(current_user_id)):
 @router.post("/{material_id}/restore", summary="从回收站恢复")
 async def restore_from_trash(material_id: str, uid: str = Depends(current_user_id)):
     """从回收站恢复文件"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     row = db.fetchone(
@@ -175,7 +175,7 @@ async def restore_from_trash(material_id: str, uid: str = Depends(current_user_i
 @router.delete("/{material_id}/permanent", summary="永久删除")
 async def permanent_delete(material_id: str, uid: str = Depends(current_user_id)):
     """从回收站永久删除文件"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     row = db.fetchone(
@@ -201,7 +201,7 @@ async def permanent_delete(material_id: str, uid: str = Depends(current_user_id)
 @router.post("/trash/empty", summary="清空回收站")
 async def empty_trash(uid: str = Depends(current_user_id)):
     """清空回收站"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     rows = db.fetchall(
@@ -229,7 +229,7 @@ async def empty_trash(uid: str = Depends(current_user_id)):
 @router.post("/cleanup", summary="清理过期临时文件")
 async def cleanup_temp_files(uid: str = Depends(current_user_id)):
     """清理过期的 session 文件"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     rows = db.fetchall(
@@ -259,7 +259,7 @@ async def cleanup_temp_files(uid: str = Depends(current_user_id)):
 @router.post("/folder", summary="创建文件夹")
 async def create_folder(body: CreateFolderRequest, uid: str = Depends(current_user_id)):
     """创建文件夹"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     folder_id = f"folder_{uid[:8]}_{int(time.time())}"
@@ -279,7 +279,7 @@ async def update_folder(
     uid: str = Depends(current_user_id),
 ):
     """更新文件夹名称或父文件夹"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     row = db.fetchone(
@@ -311,7 +311,7 @@ async def update_folder(
 @router.delete("/folder/{folder_id}", summary="删除文件夹")
 async def delete_folder(folder_id: str, uid: str = Depends(current_user_id)):
     """删除文件夹（不删除内部文件，仅移除文件夹）"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     row = db.fetchone(
@@ -344,7 +344,7 @@ class PracticeGenerateRequest(BaseModel):
 @router.post("/generate-practice", summary="基于文件生成练习")
 async def generate_practice(body: PracticeGenerateRequest, uid: str = Depends(current_user_id)):
     """基于文件分块生成练习题"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     placeholders = ",".join(["%s"] * len(body.material_ids))
@@ -359,7 +359,7 @@ async def generate_practice(body: PracticeGenerateRequest, uid: str = Depends(cu
     context = "\n\n".join(r["text"][:1000] for r in rows[:5])
 
     try:
-        from app.services.llm.llm_service import llm_service
+        from app.infrastructure.llm.llm_service import llm_service
         prompt = (
             f"基于以下资料内容，生成{body.count}道练习题。\n"
             f"要求：题型覆盖选择题和简答题，包含答案和解析。\n\n"
@@ -400,7 +400,7 @@ async def generate_practice(body: PracticeGenerateRequest, uid: str = Depends(cu
 @router.post("/batch", summary="批量操作")
 async def batch_operation(body: BatchOperationRequest, uid: str = Depends(current_user_id)):
     """批量操作文件"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     if not body.material_ids:

@@ -77,7 +77,7 @@ async def api_list_sessions(
 @router.get("/sessions/unfinished")
 async def api_unfinished_sessions(user_id: str = Depends(current_user_id)):
     _ensure_tables()
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     rows = db.fetchall(
         """SELECT id, bank_id, session_type, mode, status, total_count, conversation_id,

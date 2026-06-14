@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.cognitive import get_repo
+from app.domain.cognitive import get_repo
 
 logger = logging.getLogger(__name__)
 
@@ -82,12 +82,26 @@ class ClassifierService:
             # 无 embedding → 降级到 keyword + ILIKE
             return self.classify_by_text(user_id, "", current_topic_id)
 
-        # 1. 分层检索
+        # 1. 分层检索 (路径[A]: CognitiveNode)
         topic_candidates = self._search_topic(user_id, query_embedding)
         child_candidates = self._search_child(user_id, query_embedding, topic_candidates)
 
         # 2. 合并打分
         seeds = self._merge_score(topic_candidates, child_candidates)
+
+        # 2b. 路径[B]: DirectoryNode 匹配 (文本匹配)
+        if text:
+            try:
+                dir_candidates = self._search_directory_nodes(user_id, text)
+                # 合并到种子列表
+                existing_ids = {s["id"] for s in seeds}
+                for dc in dir_candidates:
+                    if dc["id"] not in existing_ids:
+                        seeds.append(dc)
+                        existing_ids.add(dc["id"])
+                seeds.sort(key=lambda x: -x["score"])
+            except Exception:
+                logger.debug("DirectoryNode 匹配失败", exc_info=True)
 
         # 3. 模式决策（含沉浸感知）
         immersion_depth = self.get_immersion_depth(user_id, current_topic_id or "")
@@ -122,6 +136,54 @@ class ClassifierService:
 
         return result
 
+    # ─── 路径[B]: DirectoryNode 匹配 ────────────────────
+
+    def _search_directory_nodes(
+        self, user_id: str, text: str,
+    ) -> list[dict]:
+        """路径[B]: 按名称/summary_short 匹配用户目录树中的 DirectoryNode。
+
+        返回与路径[A]兼容的候选列表，source="directory" 标记来源。
+        """
+        from app.services.common import get_data_repo
+        data = get_data_repo().load(user_id)
+        candidates: list[dict] = []
+        words = [
+            w for w in text
+            .replace("?", "").replace("?", "").replace("，", " ")
+            .replace(" ", " ").split()
+            if len(w) >= 2
+        ]
+        if not words:
+            return candidates
+
+        for dn in data.directory_nodes.values():
+            # 只匹配非 temp 的 dir 节点
+            if dn.node_type != "dir" or dn.kind == "temp":
+                continue
+            search_text = f"{dn.name} {dn.summary_short} {dn.display_name}"
+            matched = sum(1 for w in words if w in search_text)
+            if matched == 0:
+                continue
+            score = min(matched / len(words), 0.95)
+            # 构建路径名称链
+            path_names: list[str] = []
+            pid = dn.parent_id
+            while pid and pid in data.directory_nodes:
+                p = data.directory_nodes[pid]
+                path_names.insert(0, p.display_name)
+                pid = p.parent_id
+            candidates.append({
+                "id": dn.id,
+                "label": dn.display_name,
+                "path_id": ".".join(path_names + [dn.display_name]),
+                "score": score,
+                "source": "directory",
+            })
+
+        candidates.sort(key=lambda x: -x["score"])
+        return candidates[:5]
+
     def classify_by_text(
         self,
         user_id: str,
@@ -129,92 +191,43 @@ class ClassifierService:
         current_topic_id: str | None = None,
     ) -> dict[str, Any]:
         """
-        文本降级分类：keyword + ILIKE 检索，返回与 classify() 相同格式。
+        文本降级分类：ILIKE 检索 CognitiveNode + 名称匹配 DirectoryNode。
 
-        当无 embedding 可用时使用。
+        当无 embedding 可用时使用。旧 keyword_weights 配置已删除。
         """
         candidates = []
 
+        # 1. ILIKE 搜索 CognitiveNode (topic 级)
         if text:
-            # 1. 关键词匹配 → partition 得分
-            matched_keywords = self._keyword_score(text)
-            if matched_keywords:
-                # 2. 对得分最高的 partition，用 ILIKE 找 topic 级节点
-                top_partition = matched_keywords[0]["partition"]
-                nodes = get_repo().search_by_text(top_partition, user_id, limit=10)
-                for n in nodes:
-                    if n.level == "topic":
-                        candidates.append({
-                            "id": n.id,
-                            "label": n.label,
-                            "path_id": n.path_id or "",
-                            "score": matched_keywords[0]["score"],
-                        })
-                        break
+            nodes = get_repo().search_by_text(text, user_id, limit=20)
+            for n in nodes:
+                if n.level == "topic":
+                    candidates.append({
+                        "id": n.id,
+                        "label": n.label,
+                        "path_id": n.path_id or "",
+                        "score": 0.5,
+                    })
 
-            # 3. 如果关键词没匹配到，直接 ILIKE 搜索全部节点
-            if not candidates:
-                nodes = get_repo().search_by_text(text, user_id, limit=20)
-                for n in nodes:
-                    if n.level == "topic":
-                        candidates.append({
-                            "id": n.id,
-                            "label": n.label,
-                            "path_id": n.path_id or "",
-                            "score": 0.5,
-                        })
-
-        # 3.5 ILIKE 也无结果 → 搜索对话树中的 domain/topic 名称
+        # 2. ILIKE 无结果 → 搜索 DirectoryNode 名称
         if not candidates and text:
             try:
                 from app.services.common import get_data_repo
                 data = get_data_repo().load(user_id)
-                words = [w for w in text.replace("?", "").replace("?", "").replace("，", " ").replace(" ", " ").split() if len(w) >= 2]
-                # 按名称搜索 domain
-                for d in data.domains.values():
-                    if any(w in d.name for w in words):
-                        candidates.append({
-                            "id": d.id,
-                            "label": d.name,
-                            "path_id": d.name,
-                            "score": 0.5,
-                        })
-                # 按名称搜索 topic
-                for t in data.topics.values():
-                    if any(w in t.name for w in words):
-                        candidates.append({
-                            "id": t.id,
-                            "label": t.name,
-                            "path_id": t.name,
-                            "score": 0.5,
-                        })
+                words = [w for w in text.replace("?", "").replace("，", " ").replace(" ", " ").split() if len(w) >= 2]
+                for dn in data.directory_nodes.values():
+                    if dn.node_type == "dir" and dn.kind != "temp":
+                        if any(w in dn.name for w in words):
+                            candidates.append({
+                                "id": dn.id,
+                                "label": dn.name,
+                                "path_id": dn.name,
+                                "score": 0.5,
+                            })
             except Exception:
                 pass
 
-        # 3.75 仍无候选 & 有关键词匹配 → 返回推荐但不创建节点
-        if not candidates and text:
-            try:
-                matched_keywords = self._keyword_score(text)
-                if matched_keywords:
-                    top = matched_keywords[0]
-                    partition_name = top["partition"]
-                    score = top["score"]
-                    # 只推荐，不创建任何节点
-                    # 可以返回一个"虚拟候选"，标记为需用户确认
-                    candidates.append({
-                        "id": f"_suggest_{hash(text) % 100000}",
-                        "label": text[:20],
-                        "path_id": f"{partition_name}._suggest_.{text[:12]}",
-                        "score": score,
-                        "is_suggestion": True,
-                        "suggested_partition": partition_name,
-                        "suggested_domain": partition_name,
-                        "suggested_topic": text[:12],
-                    })
-            except Exception:
-                logger.debug("推荐文本分类失败", exc_info=True)
-
-        # 4. 去重 + 截断
+        # 3. 去重 + 截断
         seen = set()
         unique = []
         for c in candidates:
@@ -223,7 +236,7 @@ class ClassifierService:
                 unique.append(c)
         candidates = unique[:5]
 
-        # 5. 用相同的模式决策逻辑
+        # 4. 模式决策
         immersion_depth = self.get_immersion_depth(user_id, current_topic_id or "")
         result = self._decide_mode(candidates, current_topic_id, immersion_depth, user_id)
         result["immersion_depth"] = immersion_depth
@@ -232,30 +245,6 @@ class ClassifierService:
             and result["mode"] == 1
         )
         return result
-
-    # ─── 关键词匹配 ────────────────────────────
-
-    @staticmethod
-    def _keyword_score(text: str) -> list[dict]:
-        """关键词匹配，复用 classifier.py 的 KEYWORD_WEIGHTS 表"""
-        try:
-            from app.services.common.classifier import KEYWORD_WEIGHTS
-        except ImportError:
-            return []
-
-        scores: list[dict] = []
-        for partition, keywords in KEYWORD_WEIGHTS.items():
-            total = 0.0
-            for keyword, weight in keywords.items():
-                if keyword in text:
-                    total += weight
-            if total > 0:
-                scores.append({
-                    "partition": partition,
-                    "score": min(total / 2.0, 0.95),
-                })
-        scores.sort(key=lambda x: -x["score"])
-        return scores
 
     # ─── 分层向量检索 ──────────────────────────
 

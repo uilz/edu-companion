@@ -56,7 +56,7 @@ async def ai_expand_nodes(partition_id: str, body: AiExpandRequest, user_id: str
     }.get(body.direction, "子节点")
 
     try:
-        from app.services.llm.llm_service import llm_service
+        from app.infrastructure.llm.llm_service import llm_service
 
         prompt = f"""你是知识图谱扩充专家。当前知识树中节点「{target_node.label}」需要扩充{direction_text}。
 
@@ -147,7 +147,7 @@ async def ai_edit_node(partition_id: str, body: AiEditRequest, user_id: str = De
     node = graph.nodes[body.node_id]
 
     try:
-        from app.services.llm.llm_service import llm_service
+        from app.infrastructure.llm.llm_service import llm_service
 
         prompt = f"""你是知识图谱编辑专家。根据用户指令修改节点信息。
 

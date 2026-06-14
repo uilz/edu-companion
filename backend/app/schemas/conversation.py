@@ -12,6 +12,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from app.schemas.directory_node import DirectoryNode
+
 
 # ── Content Blocks（多模态内容块，不变） ──
 
@@ -106,37 +108,10 @@ class SubBranchRef(BaseModel):
     created_at: float = Field(default_factory=time.time)
 
 
-# ── TreeNode（核心消息节点，branch_id → conversation_id） ──
-
-class TreeNode(BaseModel):
-    """消息节点，构成对话的树形结构。编辑时在同一父节点下产生同级兄弟节点，
-    前端自动按 parent_id+role 分组检测版本。"""
-    id: str = Field(default_factory=lambda: str(uuid4()))
-    parent_id: str  # virtual root id if top-level
-    children_ids: list[str] = Field(default_factory=list)
-    partition_id: str
-    conversation_id: str  # v4: 替换 branch_id
-    content_blocks: list[ContentBlock] = Field(default_factory=list)
-    text_summary: str = ""
-    summary: str | None = None
-    cross_partition: CrossPartitionMark | None = None
-    role: str  # "user" | "assistant"
-    timestamp: float = Field(default_factory=time.time)
-    token_count: int = 0
-    is_deleted: bool = False
-    is_archived: bool = False
-    has_modified_version: bool = False
-    links_to: list[str] = Field(default_factory=list)
-    linked_from: list[str] = Field(default_factory=list)
-    discussed_skill_ids: list[str] = Field(default_factory=list)
-    metadata: dict = Field(default_factory=dict)
-    # ── 多 Agent 体系 ──
-    agent_label: str = ""  # "orchestrator" | "tutor" | "coach" | "secretary"
-    # ── 子支相关 ──
-    has_sub_branches: bool = False
-    sub_branch_ids: list[str] = Field(default_factory=list)
-    sub_branch_summaries: list[dict] = Field(default_factory=list)
-    # 每个 summary: {"conversation_id": str, "quoted_text": str, "summary": str}
+# ── TreeNode（已迁移 → MessageNode in directory_node.py） ──
+# 保留 TreeNode 别名使旧导入兼容。引用 MessageNode 的代码应直接:
+#   from app.schemas.directory_node import MessageNode
+from app.schemas.directory_node import MessageNode as TreeNode
 
 
 # ── Link Node（不变，branch_id → conversation_id） ──
@@ -315,30 +290,28 @@ class BackgroundJob(BaseModel):
 # ── User Data Root（v4: branches→conversations, +domains, +topics） ──
 
 class UserData(BaseModel):
-    """用户数据根模型，包含 v4 完整层级结构：分区→领域→专题→对话→消息节点"""
+    """用户数据根模型 — DirectoryNode 版本 (取代 v4 partition/domain/topic)"""
     user_id: str
     role: str = "student"
     org_id: str | None = None
-    # ── v4 层级 ──
-    partitions: dict[str, Partition] = Field(default_factory=dict)
-    domains: dict[str, Domain] = Field(default_factory=dict)
-    topics: dict[str, Topic] = Field(default_factory=dict)
-    conversations: dict[str, Conversation] = Field(default_factory=dict)  # 替换旧 branches
-    nodes: dict[str, TreeNode] = Field(default_factory=dict)
+
+    # ── 统一目录 (取代 partitions/domains/topics/conversations) ──
+    directory_nodes: dict[str, 'DirectoryNode'] = Field(default_factory=dict)
+
+    # ── 消息节点 ──
+    nodes: dict[str, TreeNode] = Field(default_factory=dict)  # 消息 (保留 TreeNode 名称兼容)
     link_nodes: dict[str, LinkNode] = Field(default_factory=dict)
     files: dict[str, FileRecord] = Field(default_factory=dict)
-    active_partition_id: str | None = None
     response_blocks: dict[str, 'ResponseBlock'] = Field(default_factory=dict)
     background_jobs: dict[str, 'BackgroundJob'] = Field(default_factory=dict)
 
-    # Legacy field kept for JSONB backward compatibility; data migrated to separate table.
+    # Legacy fields
     practice_sessions: dict[str, dict] = Field(default_factory=dict)
-    # Legacy field kept for JSONB backward compatibility; data migrated to separate table.
     error_book: dict[str, list[dict]] = Field(default_factory=dict)
     knowledge_graphs: dict[str, KnowledgeGraph] = Field(default_factory=dict)
     event_log: list[dict] = Field(default_factory=list)
 
-    # ── Phase A3: 秘书系统数据（原 JSON 文件存储，现纳入 DataRepository） ──
+    # ── 秘书系统数据 ──
     secretary_prefs: dict = Field(default_factory=lambda: {
         "enabled_extensions": ["review_reminder", "fatigue_manager", "daily_brief"],
         "quiet_hours_start": "22:00",
@@ -349,3 +322,30 @@ class UserData(BaseModel):
         "ignore_counts": {},
         "accept_counts": {},
     })
+
+    # ═════════════════════════════════════════════════════════
+    # 向后兼容属性 — 从 directory_nodes 合成旧模型视图
+    # ═════════════════════════════════════════════════════════
+
+    @property
+    def partitions(self) -> dict[str, DirectoryNode]:
+        """返回顶级目录节点 (parent_id=None 的 dir 节点)。"""
+        return {nid: n for nid, n in self.directory_nodes.items()
+                if n.node_type == "dir" and n.parent_id is None}
+
+    @property
+    def domains(self) -> dict[str, DirectoryNode]:
+        """返回所有非根目录节点 (有 parent_id 的 dir 节点)。"""
+        return {nid: n for nid, n in self.directory_nodes.items()
+                if n.node_type == "dir" and n.parent_id is not None}
+
+    @property
+    def topics(self) -> dict[str, DirectoryNode]:
+        """同 domains — 在扁平模型中无法区分 domain/topic。"""
+        return self.domains
+
+    @property
+    def conversations(self) -> dict[str, DirectoryNode]:
+        """返回所有 conv 节点。"""
+        return {nid: n for nid, n in self.directory_nodes.items()
+                if n.node_type == "conv"}

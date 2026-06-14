@@ -68,7 +68,7 @@ async def api_get_bank(
         bank["total_questions"] = questions.get("total", 0)
     else:
         # 仅统计数量
-        from app.db.database import get_db
+        from app.infrastructure.db.database import get_db
         db = get_db()
         row = db.fetchone(
             "SELECT COUNT(*) as cnt FROM questions WHERE bank_id = %s AND deleted_at IS NULL",

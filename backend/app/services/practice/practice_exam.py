@@ -35,7 +35,7 @@ def create_exam(
     3. 状态机多一个 timeout 状态
     4. 所有题目一次性组好
     """
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     from app.services.practice.practice_adaptive import adaptive_select
     db = get_db()
 
@@ -125,7 +125,7 @@ def create_exam(
 
 def get_exam_time(session_id: str, user_id: str) -> dict:
     """获取考试剩余时间及状态"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     session = db.fetchone(
@@ -182,7 +182,7 @@ def get_exam_time(session_id: str, user_id: str) -> dict:
 
 def submit_all_exam(session_id: str, user_id: str) -> dict:
     """一次性提交考试所有答案，生成成绩报告"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     # 1. 检查考试状态
@@ -293,7 +293,7 @@ def submit_all_exam(session_id: str, user_id: str) -> dict:
     # 6. 触发认知模型同步
     for qr in question_results:
         if qr["is_correct"] is not None:
-            from app.db.database import get_db as _get_db
+            from app.infrastructure.db.database import get_db as _get_db
             _db2 = _get_db()
             _db2.execute(
                 """INSERT INTO practice_attempts
@@ -317,7 +317,7 @@ def submit_all_exam(session_id: str, user_id: str) -> dict:
 
 def get_exam_result(session_id: str, user_id: str) -> dict:
     """获取已完成的考试成绩报告"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     session = db.fetchone(
@@ -375,7 +375,7 @@ def get_exam_result(session_id: str, user_id: str) -> dict:
 
 def get_exam_answer_sheet(session_id: str, user_id: str) -> dict:
     """获取答题卡状态（用于前端导航）"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     session = db.fetchone(

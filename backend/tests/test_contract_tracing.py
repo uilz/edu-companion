@@ -12,7 +12,7 @@ import asyncio
 
 import pytest
 
-from infra.tracing import (
+from app.infrastructure.tracing import (
     TraceContext,
     span,
     trace_id as trace_id_var,

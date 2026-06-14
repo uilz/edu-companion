@@ -1,8 +1,8 @@
 """
-Alembic env.py — 从 app.db.database 读取连接配置
+Alembic env.py — 从 app.infrastructure.db.database 读取连接配置
 
 本项目不使用 SQLAlchemy ORM，因此：
-- 连接 URL 从 app.db.database.DB_CONFIG 动态获取
+- 连接 URL 从 app.infrastructure.db.database.DB_CONFIG 动态获取
 - 迁移脚本手写 SQL（不依赖 ORM MetaData autogenerate）
 """
 
@@ -15,7 +15,7 @@ from sqlalchemy import create_engine, pool
 # 确保 app 包可导入
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.db.database import DB_CONFIG
+from app.infrastructure.db.database import DB_CONFIG
 
 config = context.config
 

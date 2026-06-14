@@ -24,7 +24,7 @@ def get_overview(user_id: str) -> dict:
         total_sessions, study_minutes, mastered_count, weak_count,
         due_review_count, today_questions
     """
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     # 总答题统计
@@ -57,7 +57,7 @@ def get_overview(user_id: str) -> dict:
     today_questions = today["cnt"] if today else 0
 
     # 知识点掌握度 — 从 cognitive_nodes 读取
-    from app.cognitive import get_repo
+    from app.domain.cognitive import get_repo
     atoms = get_repo().get_nodes_by_level("atom", user_id) or []
     mastered = sum(1 for n in atoms if n.belief.proficiency_mean >= 0.8)
     weak = [n for n in atoms if 0 < n.belief.proficiency_mean < 0.4]
@@ -96,7 +96,7 @@ def get_daily_trend(user_id: str, days: int = 30) -> list[dict]:
     返回:
         [{date: "2026-06-01", count: 5, correct: 3, wrong: 2, minutes: 10.5}, ...]
     """
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     since = (datetime.now() - timedelta(days=days)).isoformat()
@@ -143,7 +143,7 @@ def get_session_history(user_id: str, limit: int = 10) -> list[dict]:
     返回:
         [{session_id, mode, status, total, correct, score, duration, date}, ...]
     """
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     rows = db.fetchall(
@@ -174,7 +174,7 @@ def get_session_history(user_id: str, limit: int = 10) -> list[dict]:
 
 def get_error_distribution(user_id: str) -> list[dict]:
     """错题分布（按错误次数分组）"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     rows = db.fetchall(
@@ -203,7 +203,7 @@ def get_error_distribution(user_id: str) -> list[dict]:
 
 def get_weak_skills(user_id: str) -> list[dict]:
     """从 cognitive_nodes 获取薄弱知识点"""
-    from app.cognitive import get_repo
+    from app.domain.cognitive import get_repo
     atoms = get_repo().get_nodes_by_level("atom", user_id) or []
 
     weak = []

@@ -27,7 +27,7 @@ router = APIRouter(prefix="/api/knowledge/explain-cards", tags=["解释卡片"])
 
 def _ensure_table():
     """确保 explain_cards 表存在"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     db.execute("""
         CREATE TABLE IF NOT EXISTS explain_cards (
@@ -102,7 +102,7 @@ def _row_to_dict(r: dict) -> dict:
 
 def _get_descendant_ids(card_id: str) -> list[str]:
     """递归获取所有子孙卡片 ID"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     rows = db.fetchall(
         "SELECT id FROM explain_cards WHERE parent_card_id = %s",
@@ -127,7 +127,7 @@ async def list_cards(
     """获取指定对话的所有解释卡片（含 explanation 缓存），按 created_at 升序"""
     _ensure_table()
     uid = get_user_id(user_id)
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     rows = db.fetchall(
         "SELECT * FROM explain_cards WHERE user_id = %s AND conversation_id = %s ORDER BY created_at ASC",
@@ -156,7 +156,7 @@ async def create_card(body: dict, user_id: str = Query(default=None)):
     """
     _ensure_table()
     uid = get_user_id(user_id)
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     card_id = f"explain_{datetime.now().strftime('%Y%m%d%H%M%S%f')}_{uid}"
@@ -193,7 +193,7 @@ async def create_card(body: dict, user_id: str = Query(default=None)):
 async def update_card(card_id: str, body: dict, user_id: str = Query(default=None)):
     """更新解释卡片字段（explanation, mastery, pos_x, pos_y, collapsed 等）"""
     _ensure_table()
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     # 检查是否存在
@@ -243,7 +243,7 @@ async def update_card(card_id: str, body: dict, user_id: str = Query(default=Non
 async def delete_card(card_id: str, user_id: str = Query(default=None)):
     """级联删除指定卡片及其所有子孙卡片"""
     _ensure_table()
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     # 收集所有要删除的 ID

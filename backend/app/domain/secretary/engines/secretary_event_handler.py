@@ -5,7 +5,7 @@
   - SessionCompleted    → 更新认知负荷统计 + 疲劳检查
 
 使用方式:
-    from infra.event_bus import EventBus
+    from app.infrastructure.event_bus import EventBus
     from domain.secretary.engines.secretary_event_handler import secretary_event_handler
     secretary_event_handler.subscribe(bus)
 """
@@ -28,9 +28,10 @@ logger = logging.getLogger(__name__)
 class SecretaryEventHandler:
     """秘书事件处理器 — 订阅学习事件，驱动诊断与主动服务"""
 
-    def __init__(self) -> None:
+    def __init__(self, store=None) -> None:
         self._bus = None
         self._subscribed = False
+        self._store = store
 
     def subscribe(self, bus: Any) -> None:
         """订阅 EventBus 上的相关事件"""
@@ -38,10 +39,10 @@ class SecretaryEventHandler:
             return
         self._bus = bus
 
-        from infra.event_bus import EventBus
-        if not isinstance(bus, EventBus):
-            logger.warning("传入的对象不是 EventBus 实例（%s vs %s），跳过订阅",
-                           type(bus).__module__, EventBus.__module__)
+        # 运行时类型检查（避免 import infrastructure）
+        if type(bus).__name__ != "EventBus":
+            logger.warning("传入的对象不是 EventBus 实例（%s），跳过订阅",
+                           type(bus).__module__)
             return
 
         bus.subscribe("SessionCompleted", self._on_session_completed)
@@ -81,11 +82,10 @@ class SecretaryEventHandler:
                 proposals = await fm.run_check(event.user_id, ctx)
 
                 if proposals:
-                    from ...proposal_store import ProposalStore
-                    store = ProposalStore()
-                    for p in proposals:
-                        store.save_proposal(p, user_id=event.user_id,
-                                            session_id=f"session:{event.event_id}")
+                    if self._store:
+                        for p in proposals:
+                            self._store.save_proposal(p, user_id=event.user_id,
+                                                      session_id=f"session:{event.event_id}")
                     logger.info("会话完成触发疲劳建议: user=%s %d条", event.user_id, len(proposals))
         except Exception as e:
             logger.debug("会话完成处理失败: %s", e)
@@ -100,10 +100,9 @@ class SecretaryEventHandler:
                 session_id=getattr(event, "event_id", ""),
             )
             if proposal:
-                from ...proposal_store import ProposalStore
-                store = ProposalStore()
-                store.save_proposal(proposal, user_id=event.user_id,
-                                    session_id=f"session:{getattr(event, 'event_id', '')}")
+                if self._store:
+                    self._store.save_proposal(proposal, user_id=event.user_id,
+                                              session_id=f"session:{getattr(event, 'event_id', '')}")
                 logger.info("会话完成行为触发: user=%s proposal=%s", event.user_id, proposal.title)
         except Exception as e:
             logger.debug("会话完成行为触发失败: %s", e)
@@ -127,10 +126,9 @@ class SecretaryEventHandler:
                 correctness=correctness,
             )
             if proposal:
-                from ...proposal_store import ProposalStore
-                store = ProposalStore()
-                store.save_proposal(proposal, user_id=event.user_id,
-                                    session_id=f"practice:{getattr(event, 'event_id', '')}")
+                if self._store:
+                    self._store.save_proposal(proposal, user_id=event.user_id,
+                                              session_id=f"practice:{getattr(event, 'event_id', '')}")
                 logger.info("练习行为触发: user=%s proposal=%s", event.user_id, proposal.title)
         except Exception as e:
             logger.debug("练习行为触发失败: %s", e)

@@ -174,8 +174,9 @@ def _get_tree_structure(partition_id: str, user_id: str) -> dict:
 def _sync_graph_to_cognitive(partition_id: str, user_id: str):
     """图谱节点 → CognitiveNode 同步（附属）"""
     try:
-        from app.cognitive import get_repo
-        from app.cognitive.models import CognitiveNode, MetaInfo
+        from app.domain.cognitive import get_repo
+        from app.domain.cognitive.models import CognitiveNode, MetaInfo
+        from app.services.common.event_service import EventService
 
         data = _load(user_id)
         graph = data.knowledge_graphs.get(partition_id)
@@ -195,6 +196,13 @@ def _sync_graph_to_cognitive(partition_id: str, user_id: str):
                 meta=MetaInfo(created_at=time.time()),
             )
             get_repo().upsert_node(cog, user_id)
+            EventService.emit_node_created(
+                user_id=user_id,
+                node_id=nid,
+                parent_id=partition_id,
+                level="concept",
+                created_by="system",
+            )
     except Exception:
         logger.debug("认知图谱同步跳过", exc_info=True)
 
@@ -202,7 +210,7 @@ def _sync_graph_to_cognitive(partition_id: str, user_id: str):
 def _delete_cognitive_node(node_id: str, user_id: str):
     """删除 CognitiveNode（附属清理）"""
     try:
-        from app.cognitive import get_repo
+        from app.domain.cognitive import get_repo
         get_repo().delete_node(node_id, user_id)
     except Exception:
         logger.debug("认知节点删除跳过", exc_info=True)
@@ -248,7 +256,7 @@ async def generate_graph_logic(
     domain_context = "\n".join(context_parts)
 
     try:
-        from app.services.llm.llm_service import llm_service
+        from app.infrastructure.llm.llm_service import llm_service
 
         system_prompt = f"""你是知识图谱生成专家。根据用户的学习领域生成结构化的知识图谱。
 

@@ -19,7 +19,7 @@ from typing import Optional
 
 from shared.constants import get_mastery_label
 from shared.knowledge_trace import get_cognitive_state, get_all_cognitive_states
-from app.db.database import get_db
+from app.infrastructure.db.database import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ def _ds(v):
 def get_cognitive_proficiency(user_id: str, skill_id: str) -> float | None:
     """从 CognitiveNode 读取掌握度"""
     try:
-        from app.cognitive import get_repo
+        from app.domain.cognitive import get_repo
         node = get_repo().get_node(skill_id, user_id)
         if node and node.belief:
             return round(node.belief.proficiency_mean, 4)
@@ -81,7 +81,7 @@ def update_cognitive_after_practice(
 
     # 更新 CognitiveNode
     try:
-        from app.cognitive.events import submit_practice
+        from app.domain.cognitive.events import submit_practice
         submit_practice(
             user_id=user_id,
             node_id=skill_id,
@@ -94,7 +94,7 @@ def update_cognitive_after_practice(
 
     # 读取更新后的 p_after
     try:
-        from app.cognitive import get_repo
+        from app.domain.cognitive import get_repo
         _updated = get_repo().get_node(skill_id, user_id)
         if _updated and _updated.belief:
             p_after = _updated.belief.proficiency_mean
@@ -634,4 +634,108 @@ def compute_behavior_report_data(
         "daily_goal": goal.to_dict(),
         "tiny_habits": [h.to_dict() for h in tiny_habits],
         "pomodoro": pomodoro,
+    }
+
+
+# ═══════════════════════════════════════════
+# 异步统计查询（供 domain/practice/service.py 委托）
+# ═══════════════════════════════════════════
+
+
+async def get_stats_db(user_id: str, time_range: str = "week") -> dict:
+    """异步版练习统计聚合（从 domain 层移出的 DB 代码）"""
+    from datetime import datetime, timedelta
+
+    db = get_db()
+    now = datetime.now()
+    days = {"week": 7, "month": 30, "all": 365}.get(time_range, 7)
+    cutoff = (now - timedelta(days=days)).isoformat()
+    prev_cutoff = (now - timedelta(days=days * 2)).isoformat()
+
+    rows = db.fetchall(
+        "SELECT * FROM practice_attempts WHERE user_id = %s AND created_at >= %s",
+        (user_id, cutoff))
+    total = len(rows)
+    correct = sum(1 for r in rows if r.get("is_correct"))
+
+    prev_rows = db.fetchall(
+        "SELECT * FROM practice_attempts WHERE user_id = %s "
+        "AND created_at >= %s AND created_at < %s",
+        (user_id, prev_cutoff, cutoff))
+    prev_total = len(prev_rows)
+    prev_correct = sum(1 for r in prev_rows if r.get("is_correct"))
+
+    daily = {}
+    for r in rows:
+        day = str(r.get("created_at", ""))[:10]
+        daily.setdefault(day, {"total": 0, "correct": 0})
+        daily[day]["total"] += 1
+        if r.get("is_correct"):
+            daily[day]["correct"] += 1
+
+    return {
+        "overview": {
+            "total_questions": total,
+            "correct_answers": correct,
+            "accuracy": round(correct / total, 3) if total > 0 else 0.0,
+            "prev_week": {
+                "total_questions": prev_total,
+                "correct_answers": prev_correct,
+                "accuracy": round(prev_correct / prev_total, 3) if prev_total > 0 else 0.0,
+            },
+        },
+        "daily_trend": [
+            {"date": d, **s}
+            for d, s in sorted(daily.items())
+        ],
+    }
+
+
+async def get_behavior_report_db(user_id: str, time_range: str = "week") -> dict:
+    """异步版行为报告聚合（从 domain 层移出的 DB 代码）"""
+    from datetime import datetime, timedelta
+    from app.services.analytics.behavior_analyzer import behavior_analyzer
+
+    db = get_db()
+    now = datetime.now()
+    days = {"week": 7, "month": 30, "all": 365}.get(time_range, 7)
+    cutoff = (now - timedelta(days=days)).isoformat()
+
+    rows = db.fetchall(
+        "SELECT * FROM practice_attempts WHERE user_id = %s AND created_at >= %s",
+        (user_id, cutoff))
+    sess_rows = db.fetchall(
+        "SELECT * FROM practice_sessions WHERE user_id = %s AND started_at >= %s",
+        (user_id, cutoff))
+
+    total_sessions = len(sess_rows)
+    total_minutes = sum(r.get("estimated_minutes", 0) for r in sess_rows)
+
+    daily_trend = {}
+    for r in rows:
+        day = str(r.get("created_at", ""))[:10]
+        daily_trend.setdefault(day, {"questions": 0, "correct": 0})
+        daily_trend[day]["questions"] += 1
+        if r.get("is_correct"):
+            daily_trend[day]["correct"] += 1
+
+    data = {
+        "daily_trend": [
+            {"date": d, **s} for d, s in sorted(daily_trend.items())
+        ],
+        "total_sessions": total_sessions,
+        "total_minutes": total_minutes,
+    }
+
+    report = behavior_analyzer.analyze(**data)
+    return {
+        "behavior": {
+            "current_streak": getattr(report, "current_streak", 0),
+            "longest_streak": getattr(report, "longest_streak", 0),
+            "best_study_hours": getattr(report, "best_study_hours", []),
+            "regularity_score": getattr(report, "regularity_score", 0.0),
+            "recommendations": getattr(report, "recommendations", []),
+        },
+        "total_sessions": total_sessions,
+        "total_minutes": total_minutes,
     }

@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 def _ensure_table():
     """确保 achievements 表存在"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     db.execute("""
         CREATE TABLE IF NOT EXISTS achievements (
@@ -46,7 +46,7 @@ def _ensure_table():
 
 def _build_stats(user_id: str) -> dict:
     """从 v7 数据构建 stats dict 供 achievement engine 使用"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     # 练习总数
@@ -85,7 +85,7 @@ def _build_stats(user_id: str) -> dict:
     session_count = sessions["cnt"] if sessions else 0
 
     # 已掌握知识点数 (proficiency >= 0.8)
-    from app.cognitive import get_repo
+    from app.domain.cognitive import get_repo
     atoms = get_repo().get_nodes_by_level("atom", user_id) or []
     mastered_skills = sum(1 for n in atoms if n.belief.proficiency_mean >= 0.8)
 
@@ -160,7 +160,7 @@ def check_achievements(user_id: str) -> list[dict]:
     返回新解锁的成就列表。
     """
     _ensure_table()
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     # 1. 构建 stats
@@ -204,7 +204,7 @@ def get_all_achievements(user_id: str) -> list[dict]:
     获取所有成就及进度（成就墙展示）
     """
     _ensure_table()
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     stats = _build_stats(user_id)
@@ -226,7 +226,7 @@ def get_all_achievements(user_id: str) -> list[dict]:
 def get_recent_unlocks(user_id: str, limit: int = 5) -> list[dict]:
     """最近解锁的成就"""
     _ensure_table()
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     rows = db.fetchall(
         """SELECT * FROM achievements
@@ -251,7 +251,7 @@ def get_recent_unlocks(user_id: str, limit: int = 5) -> list[dict]:
 def get_badge_stats(user_id: str) -> dict:
     """徽章统计"""
     _ensure_table()
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     total = db.fetchone("SELECT COUNT(*) as cnt FROM achievements WHERE user_id = %s", (user_id,))

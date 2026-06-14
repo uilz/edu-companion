@@ -42,8 +42,8 @@ def _compute_partition_progress_cognitive(partition_id: str, user_id: str) -> Pa
     返回 None 表示无数据 (触发备降)。
     """
     try:
-        from app.cognitive import get_repo
-        from app.cognitive.models import CognitiveNode
+        from app.domain.cognitive import get_repo
+        from app.domain.cognitive.models import CognitiveNode
 
         partition_node = get_repo().get_node(partition_id, user_id)
         if not partition_node:
@@ -194,7 +194,7 @@ def _compute_partition_progress_cognitive(partition_id: str, user_id: str) -> Pa
 
 def _collect_subtree(node_id: str, user_id: str, acc: dict) -> None:
     """递归收集子树节点"""
-    from app.cognitive import get_repo
+    from app.domain.cognitive import get_repo
     children = get_repo().get_node(node_id, user_id)
     if not children:
         return

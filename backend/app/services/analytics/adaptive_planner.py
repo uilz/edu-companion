@@ -15,10 +15,10 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 
-from app.cognitive import get_repo
+from app.domain.cognitive import get_repo
 from app.domain.knowledge.checker import PrerequisiteChecker
 from app.domain.knowledge.prerequisites import SKILL_TO_SUBJECT
-from app.db.database import get_db
+from app.infrastructure.db.database import get_db
 
 logger = logging.getLogger("adaptive_planner")
 

@@ -54,7 +54,7 @@ async def api_practice_secretary_proposals(
     user_id: str = Depends(current_user_id),
     limit: int = 5,
 ):
-    from app.domain.secretary.proposal_store import ProposalStore
+    from app.infrastructure.db.proposal_store import ProposalStore
     store = ProposalStore()
     proposals = store.get_pending_proposals(user_id, limit=limit)
     practice_types = {"practice_error_alert", "practice_mastery_stuck", "practice_review_reminder", "practice_reflection"}
@@ -76,7 +76,7 @@ async def api_practice_secretary_proposals(
 
 @router.post("/secretary/proposals/{proposal_id}/accept")
 async def api_secretary_accept_proposal(proposal_id: str, body: dict = None, user_id: str = Depends(current_user_id)):
-    from app.domain.secretary.proposal_store import ProposalStore
+    from app.infrastructure.db.proposal_store import ProposalStore
     store = ProposalStore()
     store.update_status(proposal_id, "accepted", user_id)
     return {"status": "accepted"}
@@ -84,7 +84,7 @@ async def api_secretary_accept_proposal(proposal_id: str, body: dict = None, use
 
 @router.post("/secretary/proposals/{proposal_id}/dismiss")
 async def api_secretary_dismiss_proposal(proposal_id: str, user_id: str = Depends(current_user_id)):
-    from app.domain.secretary.proposal_store import ProposalStore
+    from app.infrastructure.db.proposal_store import ProposalStore
     store = ProposalStore()
     store.update_status(proposal_id, "dismissed", user_id)
     return {"status": "dismissed"}
@@ -103,7 +103,7 @@ async def api_answer_history(
     offset: int = 0,
 ):
     _ensure_tables()
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     conditions = ["a.user_id = %s"]

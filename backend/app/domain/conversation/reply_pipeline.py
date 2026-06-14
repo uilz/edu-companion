@@ -6,7 +6,7 @@ invoke() 为单一入口，产出 ReplyEvent 流。非流式消费只需监听 d
 内部 5 阶段：
   Stage 1: auto_resolve → context_switch 事件
   Stage 2: 存用户消息 → user_message 事件
-  Stage 3: LLM tool loop（工具调用 → 文本回复）
+  Stage 3: LLM tool loop（工具调用 → 真实流式文本回复）
   Stage 4: PostProcessor 链（追问/来源/存储/sync）
   Stage 5: done 事件
 """
@@ -29,8 +29,8 @@ from app.schemas.conversation import (
 )
 from app.services.common import get_data_repo
 from app.services.knowledge.tree_ops import tree_ops
-from app.services.common.classifier import classifier
-from app.services.llm.tool_executor import tool_executor, SLOW_TOOLS
+from app.services.common.classifier_service import classifier_service
+from app.infrastructure.llm.tool_executor import tool_executor, SLOW_TOOLS
 from app.services.analytics.emotion_analyzer import emotion_analyzer
 from app.domain.knowledge import get_knowledge_query
 
@@ -121,11 +121,15 @@ class FollowUpParser(PostProcessor):
 
 
 class SourceParser(PostProcessor):
-    """来源解析 → 提取 [来源: xxx] 标注 → 写入 discussed_skill_ids"""
+    """来源解析 → 提取 [来源: xxx] 标注 → 事件化 (不再写入 MessageNode)
+    
+    skill_ids 通过类级别缓存 _skill_ids_by_node 传递给 CognitiveSyncHook。
+    """
     is_blocking = True
+    _skill_ids_by_node: dict[str, list[str]] = {}
 
     async def process(self, input: PostProcessInput) -> None:
-        from app.services.llm.llm_core import parse_sources, _resolve_skill_ids
+        from app.infrastructure.llm.llm_core import parse_sources, _resolve_skill_ids
 
         _, source_labels = parse_sources(input.reply_text)
         if not source_labels:
@@ -135,23 +139,21 @@ class SourceParser(PostProcessor):
         if not skill_ids:
             return
 
-        data = get_data_repo().load(input.user_id)
-        if input.assistant_node.id in data.nodes:
-            data.nodes[input.assistant_node.id].discussed_skill_ids = skill_ids
-            get_data_repo().save(input.user_id, data)
-            logger.info("消息 %s 标注知识点: %s", input.assistant_node.id[:8], skill_ids)
+        # 缓存 skill_ids 供 CognitiveSyncHook 消费 (不再持久化到 MessageNode)
+        SourceParser._skill_ids_by_node[input.assistant_node.id] = skill_ids
+        logger.info("消息 %s 标注知识点: %s", input.assistant_node.id[:8], skill_ids)
 
-            from app.services.analytics.learning_events import record_event
-            from app.schemas.learning_event import EventType
-            conv_id = input.conversation.id if input.conversation else None
-            for sid in skill_ids:
-                record_event(
-                    EventType.SKILL_DISCUSSED,
-                    user_id=input.user_id,
-                    partition_id=input.partition_id,
-                    conversation_id=conv_id,
-                    skill_ids=[sid],
-                )
+        from app.services.analytics.learning_events import record_event
+        from app.schemas.learning_event import EventType
+        conv_id = input.conversation.id if input.conversation else None
+        for sid in skill_ids:
+            record_event(
+                EventType.SKILL_DISCUSSED,
+                user_id=input.user_id,
+                partition_id=input.partition_id,
+                conversation_id=conv_id,
+                skill_ids=[sid],
+            )
 
 
 class SocraticCounter(PostProcessor):
@@ -194,21 +196,14 @@ class ResponseBlockSaver(PostProcessor):
 
 
 class CognitiveSyncHook(PostProcessor):
-    """对话 → CognitiveNode 联动"""
+    """对话 → CognitiveNode 联动 (通过 SourceParser 缓存读取 skill_ids)"""
     is_blocking = False
 
     async def process(self, input: PostProcessInput) -> None:
         from app.services.knowledge.cognitive_sync import _cognify_dialogue_context
 
-        skill_ids = set()
-        for block in input.response_blocks:
-            node = getattr(block, 'message_id', None)
-            if node:
-                data = get_data_repo().load(input.user_id)
-                nd = data.nodes.get(node)
-                if nd:
-                    for sid in getattr(nd, 'discussed_skill_ids', []):
-                        skill_ids.add(sid)
+        # 从 SourceParser 的类级别缓存读取 skill_ids
+        skill_ids = SourceParser._skill_ids_by_node.pop(input.assistant_node.id, [])
         if skill_ids and input.conversation:
             await _cognify_dialogue_context(
                 input.user_id, input.conversation, list(skill_ids),
@@ -291,26 +286,49 @@ class ReplyPipeline:
         pending_quote: dict | None = None,
     ) -> AsyncGenerator[ReplyEvent, None]:
         # ═══════════════════════════════════════════
-        # Stage 1: auto_resolve → context_switch
+        # Stage 1: 分类器 → context_switch
+        # 仅临时会话 (kind="temp") 首条消息运行双路匹配。
+        # 非临时会话跳过分类 — 前端 fireClassify() 已独立处理。
         # ═══════════════════════════════════════════
-        route = await asyncio.to_thread(
-            classifier.auto_resolve,
-            user_id, user_text,
-            current_partition_id=partition_id,
-            current_conversation_id=conversation_id,
-        )
-        if route["should_recommend_switch"]:
+        _stage1_route: dict | None = None
+        if conversation_id:
+            try:
+                _s1_data = get_data_repo().load(user_id)
+                _s1_conv = _s1_data.directory_nodes.get(conversation_id)
+                if _s1_conv and _s1_conv.kind == "temp":
+                    # 临时会话 → 双路匹配 (CognitiveNode + DirectoryNode)
+                    _s1_result = classifier_service.classify_by_text(
+                        user_id, user_text,
+                    )
+                    if _s1_result.get("should_switch") and _s1_result.get("candidates"):
+                        _s1_top = _s1_result["candidates"][0]
+                        _s1_route = {
+                            "should_recommend_switch": True,
+                            "switch_detail": {
+                                "source": "dual_path",
+                                "candidates": _s1_result["candidates"][:3],
+                                "reason": _s1_top.get("source", "cognitive"),
+                            },
+                            "target_partition_id": _s1_top.get("id", ""),
+                            "target_domain_name": _s1_top.get("label", ""),
+                            "target_topic_name": _s1_top.get("label", ""),
+                            "full_path": _s1_top.get("path_id", ""),
+                        }
+            except Exception:
+                logger.debug("Stage1 分类失败", exc_info=True)
+
+        if _stage1_route and _stage1_route["should_recommend_switch"]:
             yield ReplyEvent(
                 type="context_switch",
-                switch_detail=route["switch_detail"],
+                switch_detail=_stage1_route["switch_detail"],
                 data={
-                    "switch_detail": route["switch_detail"],
-                    "target_partition_id": route.get("target_partition_id", ""),
-                    "target_domain_name": route.get("target_domain_name", ""),
-                    "target_topic_name": route.get("target_topic_name", ""),
+                    "switch_detail": _stage1_route["switch_detail"],
+                    "target_partition_id": _stage1_route.get("target_partition_id", ""),
+                    "target_domain_name": _stage1_route.get("target_domain_name", ""),
+                    "target_topic_name": _stage1_route.get("target_topic_name", ""),
                     "partition_id": partition_id,
                     "conversation_id": conversation_id,
-                    "full_path": route.get("full_path", ""),
+                    "full_path": _stage1_route.get("full_path", ""),
                 },
             )
 
@@ -356,11 +374,11 @@ class ReplyPipeline:
             )
 
         # ═══════════════════════════════════════════
-        # Stage 3: LLM tool loop
+        # Stage 3: LLM tool loop（真实流式）
         # ═══════════════════════════════════════════
-        from app.services.llm.llm_service import llm_service, _parse_tool_calls_response
+        from app.infrastructure.llm.llm_service import llm_service
         from app.services.conversation.context_pipeline import build_llm_messages
-        from app.services.llm.tool_repository import get_tool_repository
+        from app.infrastructure.llm.tool_repository import get_tool_repository
 
         enriched_text = user_text
         if pending_quote:
@@ -384,25 +402,28 @@ class ReplyPipeline:
         full_reply = ""
 
         for _round in range(MAX_TOOL_ROUNDS):
+            tool_calls = None
+            full_reply = ""
             try:
-                response_text = await llm_service.generate(
+                async for ev in llm_service.generate_stream_with_tools(
                     messages=llm_messages, task_type="chat",
                     temperature=0.7, max_tokens=2048, tools=tools,
                     user_id=user_id,
-                )
+                ):
+                    if ev["type"] == "token":
+                        full_reply += ev["content"]
+                        yield ReplyEvent(type="token", content=ev["content"])
+                    elif ev["type"] == "tool_calls":
+                        tool_calls = ev["tool_calls"]
+                    # "done" type → no tool_calls, text complete
             except Exception as e:
                 logger.error("LLM tool loop failed at round %d: %s", _round, e)
                 full_reply = f"抱歉，生成回复时遇到了问题：{str(e)[:200]}"
                 yield ReplyEvent(type="token", content=full_reply)
                 break
 
-            tool_calls = _parse_tool_calls_response(response_text)
-
             if not tool_calls:
-                # ── 文本回复：流式 yield tokens，退出 loop ──
-                full_reply = response_text
-                for chunk in _chunk_text(response_text):
-                    yield ReplyEvent(type="token", content=chunk)
+                # ── 文本回复（token 已在流中 yield），退出 loop ──
                 break
 
             # ── 有 tool_calls：执行工具 ──
@@ -449,7 +470,7 @@ class ReplyPipeline:
                     )
 
                     # 追加 tool result 消息
-                    from app.services.llm.tool_dispatch import _summarize_tool_result
+                    from app.infrastructure.llm.tool_dispatch import _summarize_tool_result
                     llm_messages.append({
                         "role": "tool",
                         "tool_call_id": tc.get("id", ""),
@@ -559,11 +580,6 @@ def _get_recent_messages(conversation, data, count: int = 8) -> list[TreeNode]:
 def _clean_follow_up(text: str) -> str:
     """移除 FOLLOW_UP 标记块"""
     return FOLLOW_UP_RE.sub('', text).strip()
-
-
-def _chunk_text(text: str, size: int = 5) -> list[str]:
-    """将文本按字符拆分，模拟流式输出"""
-    return [text[i:i + size] for i in range(0, len(text), size)]
 
 
 def _default_post_processors() -> list[PostProcessor]:

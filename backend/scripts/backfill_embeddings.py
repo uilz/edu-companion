@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 def backfill(force: bool = False):
-    from app.cognitive.storage import get_db
+    from app.infrastructure.db.cognitive_storage import get_db
     from shared.constants import DEFAULT_USER_ID
 
     user_id = DEFAULT_USER_ID
@@ -36,7 +36,7 @@ def backfill(force: bool = False):
         logger.info("No messages need embedding")
         return 0
 
-    from app.services.llm.embedding_engine import compute_embedding
+    from app.infrastructure.llm.embedding_engine import compute_embedding
 
     total = len(rows)
     done = 0

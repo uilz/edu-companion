@@ -20,7 +20,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Optional
 
-from app.db.database import get_db
+from app.infrastructure.db.database import get_db
 
 logger = logging.getLogger("quality.analyzer")
 

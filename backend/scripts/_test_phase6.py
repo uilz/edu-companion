@@ -11,9 +11,9 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 async def main():
-    from app.db.database import get_db
-    from app.cognitive.storage import get_node, get_children, list_all_nodes
-    from app.cognitive.edge_storage import get_edges_for_node, get_edges_by_status
+    from app.infrastructure.db.database import get_db
+    from app.infrastructure.db.cognitive_storage import get_node, get_children, list_all_nodes
+    from app.infrastructure.db.cognitive_edge_storage import get_edges_for_node, get_edges_by_status
     
     db = get_db()
 
@@ -46,7 +46,7 @@ async def main():
         print(f"  {e.source_node_id[:8]} → {e.target_node_id[:8]} (strength={e.strength:.2f})")
 
     # ── Test 4: 检查 proposal_store 中 pending 提案 ──
-    from app.domain.secretary.proposal_store import ProposalStore
+    from app.infrastructure.db.proposal_store import ProposalStore
     store = ProposalStore()
     proposals = store.get_pending_proposals("")
     print(f"\n=== 待处理提案: {len(proposals)} ===")

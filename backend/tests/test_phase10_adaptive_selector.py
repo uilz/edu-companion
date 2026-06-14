@@ -3,7 +3,7 @@
 import pytest
 import time
 
-from app.cognitive.models import (
+from app.domain.cognitive.models import (
     CognitiveNode, Belief, Scheduling, PracticeSummary, Trend,
 )
 from app.services.analytics.adaptive_selector import AdaptiveSelector, ReviewResult

@@ -7,7 +7,7 @@ import logging
 import re
 from typing import AsyncGenerator
 
-from app.services.llm.llm_service import LLMService
+from app.infrastructure.llm.llm_service import LLMService
 
 logger = logging.getLogger(__name__)
 

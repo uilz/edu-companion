@@ -6,8 +6,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def main():
     from shared.constants import DEFAULT_USER_ID
-    from app.db.database import get_db
-    from app.domain.secretary.proposal_store import ProposalStore
+    from app.infrastructure.db.database import get_db
+    from app.infrastructure.db.proposal_store import ProposalStore
     from app.services.common.event_service import _generate_proposal
     from app.domain.secretary.models import Proposal
 

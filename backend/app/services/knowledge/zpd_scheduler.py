@@ -110,7 +110,7 @@ class ZPDScheduler:
         估计学生在某知识点的能力θ
         """
         try:
-            from app.cognitive import get_repo
+            from app.domain.cognitive import get_repo
             node = get_repo().get_node(skill_id, user_id)
             if node and node.belief:
                 return node.belief.proficiency_mean

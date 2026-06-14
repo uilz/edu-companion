@@ -157,13 +157,8 @@ async def change_password(body: ChangePasswordRequest, request: Request):
         raise HTTPException(status_code=400, detail="旧密码错误")
 
     new_hash = svc.hash_password(body.new_password)
-    from app.db.database import get_db
-    db = get_db()
-    from datetime import datetime
-    db.execute(
-        "UPDATE users SET password_hash = %s, updated_at = %s WHERE id = %s",
-        (new_hash, datetime.now().isoformat(), user["user_id"]),
-    )
+    repo = get_user_repo()
+    repo.update_password(user["user_id"], new_hash)
     return {"ok": True}
 
 
@@ -213,24 +208,15 @@ async def logout_other_devices(request: Request):
         raise HTTPException(status_code=401, detail="未登录")
 
     from app.domain.auth.login_event_repo import get_login_event_repo
-    from app.db.database import get_db
-    from datetime import datetime
     
     user_id = user["user_id"]
     
     # 递增 token_version 使其他设备的 token 失效
-    db = get_db()
-    db.execute(
-        "UPDATE users SET token_version = COALESCE(token_version, 0) + 1, updated_at = %s WHERE id = %s",
-        (datetime.now().isoformat(), user_id),
-    )
+    repo = get_user_repo()
+    repo.increment_token_version(user_id)
     
     # 清除其他设备的 is_current 标记
-    repo = get_login_event_repo()
-    db.execute(
-        "UPDATE login_events SET is_current = FALSE WHERE user_id = %s",
-        (user_id,),
-    )
+    repo.clear_login_sessions(user_id)
     
     # 重新标记当前会话为 is_current
     # 当前会话通过当前请求的 IP + UA 来识别
@@ -265,13 +251,6 @@ async def deactivate_account(body: DeactivateRequest, request: Request):
     if not svc.verify_password(body.password, full_user["password_hash"]):
         raise HTTPException(status_code=400, detail="密码错误")
 
-    from app.db.database import get_db
-    db = get_db()
-    from datetime import datetime
-    now = datetime.now().isoformat()
-    # 软删除：标记为已注销，用户名加后缀防止重复
-    db.execute(
-        "UPDATE users SET deleted_at = %s, username = %s, status = 'deactivated' WHERE id = %s",
-        (now, f"{full_user['username']}_deleted_{user['id'][:8]}", user["user_id"]),
-    )
+    repo = get_user_repo()
+    repo.deactivate_account(user["user_id"], full_user["username"])
     return {"ok": True, "message": "账号已注销"}

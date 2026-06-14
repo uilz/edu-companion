@@ -91,7 +91,7 @@ async def integrate_practice_to_branch(
 
     # P2: 练习错误时搜索关联用户资料
     try:
-        from app.services.materials.material_search import material_search as ms
+        from app.infrastructure.media.material_search import material_search as ms
         enriched = []
         for skill in (session.struggling_skills or [])[:3]:
             chunks = await ms.search_by_skill(user_id, skill, top_k=2)

@@ -9,7 +9,7 @@ from app.services.analytics.spaced_repetition import (
     MAX_EASE_FACTOR,
     INITIAL_INTERVAL,
 )
-from app.cognitive.models import (
+from app.domain.cognitive.models import (
     CognitiveNode, Belief, Scheduling, PracticeSummary, Trend,
 )
 

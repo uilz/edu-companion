@@ -1,7 +1,7 @@
 """检查 knowledge_edges 和 cognitive_events 表结构"""
 import asyncio
 async def main():
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     
     for table in ('knowledge_edges', 'cognitive_events', 'messages'):
@@ -24,7 +24,7 @@ async def main():
         print(f"  {row['column_name']:25s} {row['data_type']}")
 
     # Check vector_search function signature
-    from app.cognitive.storage import vector_search
+    from app.infrastructure.db.cognitive_storage import vector_search
     import inspect
     print(f"\n=== vector_search signature ===")
     print(inspect.signature(vector_search))

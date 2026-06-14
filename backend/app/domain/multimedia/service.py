@@ -25,7 +25,7 @@ from shared.events import (
 
 if TYPE_CHECKING:
     from shared.protocols.multimedia import AudioSynthesizer, ImageRenderer
-    from infra.event_bus import EventBus
+    from app.infrastructure.event_bus import EventBus
 
 logger = logging.getLogger("multimedia")
 
@@ -75,10 +75,9 @@ class MultimediaService:
                     logger.error("Multimedia task failed: %s", result)
 
     async def _synthesize_audio(self, event: AssistantReplied) -> None:
-        """TTS 语音合成"""
+        """TTS 语音合成（标记清理在 infrastructure 层由 AudioSynthesizer 处理）"""
         try:
-            from infra.tts_text_cleaner import strip_markdown_for_tts
-            clean_content = strip_markdown_for_tts(event.content[:1000])
+            clean_content = event.content[:1000]
 
             skill_id = event.skill_ids[0] if event.skill_ids else event.message_id[:12]
             result = await self._tts.synthesize(

@@ -14,7 +14,7 @@ import re
 
 from app.schemas.conversation import Branch, TreeNode
 from app.schemas.practice import BloomLevel
-from app.cognitive import get_repo
+from app.domain.cognitive import get_repo
 
 logger = logging.getLogger(__name__)
 

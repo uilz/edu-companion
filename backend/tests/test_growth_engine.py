@@ -18,10 +18,10 @@ class TestGrowthEngine:
         node = make_cognitive_node(
             level="atom",
             label="导数",
-            node_id="高等数学.微积分.导数",
+            node_id="数据科学.数据分析.统计学",
         )
-        node.parent = "高等数学.微积分"
-        assert node.parent == "高等数学.微积分"
+        node.parent = "数据科学.数据分析"
+        assert node.parent == "数据科学.数据分析"
 
     def test_node_hierarchy_levels(self):
         """验证节点层级顺序: partition > domain > topic > concept > atom"""

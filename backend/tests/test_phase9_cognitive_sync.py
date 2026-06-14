@@ -8,7 +8,7 @@ class TestBeliefUpdate:
 
     def test_initial_belief_default(self):
         """默认 Belief 应为均匀分布 α=2, β=2, mean=0.5"""
-        from app.cognitive.models import Belief
+        from app.domain.cognitive.models import Belief
 
         b = Belief()
         assert b.alpha == 2.0
@@ -18,7 +18,7 @@ class TestBeliefUpdate:
 
     def test_belief_after_correct(self):
         """答对后 α+1, mean 上升"""
-        from app.cognitive.models import Belief
+        from app.domain.cognitive.models import Belief
 
         b = Belief(alpha=2.0, beta=2.0)
         b.alpha += 1  # correct
@@ -33,7 +33,7 @@ class TestBeliefUpdate:
 
     def test_belief_after_wrong(self):
         """答错后 β+1, mean 下降"""
-        from app.cognitive.models import Belief
+        from app.domain.cognitive.models import Belief
 
         b = Belief(alpha=2.0, beta=2.0)
         b.beta += 1  # wrong
@@ -47,7 +47,7 @@ class TestBeliefUpdate:
 
     def test_belief_sequence(self):
         """多次答题的信念变化序列"""
-        from app.cognitive.models import Belief
+        from app.domain.cognitive.models import Belief
 
         b = Belief(alpha=2.0, beta=2.0)
 
@@ -66,7 +66,7 @@ class TestBeliefUpdate:
 
     def test_practice_summary_tracking(self):
         """PracticeSummary 应追踪练习次数和正确率"""
-        from app.cognitive.models import PracticeSummary
+        from app.domain.cognitive.models import PracticeSummary
 
         ps = PracticeSummary(total_attempts=0, correct_attempts=0)
 
@@ -88,7 +88,7 @@ class TestBeliefUpdate:
 
     def test_peak_proficiency_tracking(self):
         """peak_proficiency 应该只增不减"""
-        from app.cognitive.models import Belief
+        from app.domain.cognitive.models import Belief
 
         b = Belief(alpha=2.0, beta=2.0, peak_proficiency=0.5)
 
@@ -170,7 +170,7 @@ class TestEventBusChain:
     def test_publish_and_receive(self):
         """事件发布后，cognitive_sync handler 应被调用"""
         import asyncio
-        from infra.event_bus import EventBus
+        from app.infrastructure.event_bus import EventBus
         from shared.events import AnswerSubmitted
 
         bus = EventBus()

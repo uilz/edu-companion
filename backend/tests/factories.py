@@ -11,10 +11,10 @@ def make_cognitive_node(
     total_attempts: int = 0,
     correct_attempts: int = 0,
     is_visible: bool = False,
-    path_id: str = "高等数学.微积分.导数",
+    path_id: str = "数据科学.数据分析.统计学",
 ) -> object:
     """创建测试用 CognitiveNode"""
-    from app.cognitive.models import (
+    from app.domain.cognitive.models import (
         CognitiveNode, Belief, PracticeSummary, Trend,
         CognitiveLoad, Scheduling, Engagement,
     )

@@ -71,7 +71,7 @@ def check_and_generate_proposals(
 
 def _check_error_accumulation(user_id: str, session_id: str) -> bool:
     """检查是否有知识点的错题累积达到阈值"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     rows = db.fetchall(
@@ -104,7 +104,7 @@ def _check_error_accumulation(user_id: str, session_id: str) -> bool:
 
 def _check_mastery_stall(user_id: str, session_id: str) -> bool:
     """检查是否有知识点连续练习多次但未掌握"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     # 获取本 session 涉及的认知节点
@@ -148,8 +148,8 @@ def _check_mastery_stall(user_id: str, session_id: str) -> bool:
 
 def _generate_error_alert(user_id: str, session_id: str) -> bool:
     """生成错题诊断提案"""
-    from app.db.database import get_db
-    from app.domain.secretary.proposal_store import ProposalStore
+    from app.infrastructure.db.database import get_db
+    from app.infrastructure.db.proposal_store import ProposalStore
     from app.domain.secretary.models import Proposal
 
     db = get_db()
@@ -179,7 +179,7 @@ def _generate_error_alert(user_id: str, session_id: str) -> bool:
     # 获取知识点标签
     node_label = node_id or "当前知识点"
     try:
-        from app.cognitive import get_repo
+        from app.domain.cognitive import get_repo
         node = get_repo().get_node(node_id, user_id)
         if node and node.label:
             node_label = node.label
@@ -223,8 +223,8 @@ def _generate_error_alert(user_id: str, session_id: str) -> bool:
 
 def _generate_mastery_intervention(user_id: str, session_id: str) -> bool:
     """生成掌握度停滞干预提案"""
-    from app.db.database import get_db
-    from app.domain.secretary.proposal_store import ProposalStore
+    from app.infrastructure.db.database import get_db
+    from app.infrastructure.db.proposal_store import ProposalStore
     from app.domain.secretary.models import Proposal
 
     db = get_db()
@@ -246,7 +246,7 @@ def _generate_mastery_intervention(user_id: str, session_id: str) -> bool:
 
     node_label = node_id or "这个知识点"
     try:
-        from app.cognitive import get_repo
+        from app.domain.cognitive import get_repo
         node = get_repo().get_node(node_id, user_id) if node_id else None
         if node and node.label:
             node_label = node.label
@@ -274,8 +274,8 @@ def _generate_mastery_intervention(user_id: str, session_id: str) -> bool:
 
 def _generate_review_reminder(user_id: str) -> bool:
     """生成复习提醒提案"""
-    from app.db.database import get_db
-    from app.domain.secretary.proposal_store import ProposalStore
+    from app.infrastructure.db.database import get_db
+    from app.infrastructure.db.proposal_store import ProposalStore
     from app.domain.secretary.models import Proposal
 
     db = get_db()
@@ -323,8 +323,8 @@ def _generate_review_reminder(user_id: str) -> bool:
 
 def _generate_reflection_prompt(user_id: str, session_id: str) -> bool:
     """生成练习后反思引导"""
-    from app.db.database import get_db
-    from app.domain.secretary.proposal_store import ProposalStore
+    from app.infrastructure.db.database import get_db
+    from app.infrastructure.db.proposal_store import ProposalStore
     from app.domain.secretary.models import Proposal
 
     db = get_db()

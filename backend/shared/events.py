@@ -94,7 +94,8 @@ class SessionCompleted(DomainEvent):
 
 @dataclass(frozen=True)
 class KnowledgeStateUpdated(DomainEvent):
-    """知识状态变化事件 — BKT mastery 级别变化"""
+    """知识状态变化事件 — BKT mastery 级别变化
+    DEPRECATED: superseded by CognitiveNodeUpdated"""
     user_id: str = ""
     skill_id: str = ""
     old_mastery: str = "未接触"
@@ -190,6 +191,20 @@ class ProposalAccepted(DomainEvent):
         return "ProposalAccepted"
 
 
+@dataclass(frozen=True)
+class PendingCrossTopic(DomainEvent):
+    """跨主题探索建议事件 — 深度沉浸中被抑制的候选
+
+    由 classifier_service 在会话结束时通过 emit_v6_event 写入 DB，
+    EventService._handle_PendingCrossTopic 消费并生成关联提案。
+    """
+    user_id: str = ""
+
+    @property
+    def event_type(self) -> str:
+        return "PendingCrossTopic"
+
+
 # ──────────────────────────────────────────────
 # 认知域事件 (Phase 9)
 # ──────────────────────────────────────────────
@@ -222,12 +237,13 @@ EVENT_TYPES: dict[str, type[DomainEvent]] = {
         AnswerSubmitted,
         ErrorRecorded,
         SessionCompleted,
-        KnowledgeStateUpdated,
+        KnowledgeStateUpdated,  # DEPRECATED
         AssistantReplied,
         CognitiveNodeUpdated,
         MessageClassified,
         PracticeSubmitted,
         NodeCreated,
         ProposalAccepted,
+        PendingCrossTopic,
     ]
 }

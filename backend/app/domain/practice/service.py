@@ -20,7 +20,7 @@ if TYPE_CHECKING:
         SessionRepository,
         ErrorBookRepository,
     )
-    from infra.event_bus import EventBus
+    from app.infrastructure.event_bus import EventBus
 
 logger = logging.getLogger("domain.practice")
 
@@ -122,6 +122,18 @@ class PracticeServiceImpl:
                 user_answer=answer,
                 correct_answer=question["correct_answer"],
             ))
+
+        # 发布 PracticeSubmitted 事件 → 触发认知节点信念更新
+        try:
+            from app.services.common.event_service import event_service
+            event_service.emit_practice_submitted(
+                user_id=user_id,
+                atom_node_ids=question.get("cognitive_node_ids", []),
+                correctness=1.0 if is_correct else 0.0,
+                latency_ms=time_spent * 1000,
+            )
+        except Exception:
+            logger.warning("emit_practice_submitted failed", exc_info=True)
 
         return feedback
 
@@ -236,111 +248,14 @@ class PracticeServiceImpl:
         return compute_behavior_report_data(user_id, time_range)
 
     async def get_stats(self, user_id: str, time_range: str = "week") -> dict:
-        """从 attempts 表聚合练习统计（异步版）"""
-        from datetime import datetime, timedelta
-        from app.db.database import get_db
-
-        try:
-            db = get_db()
-            now = datetime.now()
-            days = {"week": 7, "month": 30, "all": 365}.get(time_range, 7)
-            cutoff = (now - timedelta(days=days)).isoformat()
-            prev_cutoff = (now - timedelta(days=days * 2)).isoformat()
-
-            rows = db.fetchall(
-                "SELECT * FROM practice_attempts WHERE user_id = %s AND created_at >= %s",
-                (user_id, cutoff))
-            total = len(rows)
-            correct = sum(1 for r in rows if r.get("is_correct"))
-
-            prev_rows = db.fetchall(
-                "SELECT * FROM practice_attempts WHERE user_id = %s "
-                "AND created_at >= %s AND created_at < %s",
-                (user_id, prev_cutoff, cutoff))
-            prev_total = len(prev_rows)
-            prev_correct = sum(1 for r in prev_rows if r.get("is_correct"))
-
-            daily = {}
-            for r in rows:
-                day = str(r.get("created_at", ""))[:10]
-                daily.setdefault(day, {"total": 0, "correct": 0})
-                daily[day]["total"] += 1
-                if r.get("is_correct"):
-                    daily[day]["correct"] += 1
-
-            return {
-                "overview": {
-                    "total_questions": total,
-                    "correct_answers": correct,
-                    "accuracy": round(correct / total, 3) if total > 0 else 0.0,
-                    "prev_week": {
-                        "total_questions": prev_total,
-                        "correct_answers": prev_correct,
-                        "accuracy": round(prev_correct / prev_total, 3) if prev_total > 0 else 0.0,
-                    },
-                },
-                "daily_trend": [
-                    {"date": d, **s}
-                    for d, s in sorted(daily.items())
-                ],
-            }
-        except Exception as e:
-            logger.warning("get_stats aggregation failed: %s", e)
-            return {"overview": {}}
+        """从 attempts 表聚合练习统计（异步版，委托给 services 层）"""
+        from app.services.practice.practice_service import get_stats_db
+        return await get_stats_db(user_id, time_range)
 
     async def get_behavior_report(self, user_id: str, time_range: str = "week") -> dict:
-        """学习行为分析报告（异步版）"""
-        from datetime import datetime, timedelta
-        from app.db.database import get_db
-        from app.services.analytics.behavior_analyzer import behavior_analyzer
-
-        try:
-            db = get_db()
-            now = datetime.now()
-            days = {"week": 7, "month": 30, "all": 365}.get(time_range, 7)
-            cutoff = (now - timedelta(days=days)).isoformat()
-
-            rows = db.fetchall(
-                "SELECT * FROM practice_attempts WHERE user_id = %s AND created_at >= %s",
-                (user_id, cutoff))
-            sess_rows = db.fetchall(
-                "SELECT * FROM practice_sessions WHERE user_id = %s AND started_at >= %s",
-                (user_id, cutoff))
-
-            total_sessions = len(sess_rows)
-            total_minutes = sum(r.get("estimated_minutes", 0) for r in sess_rows)
-
-            daily_trend = {}
-            for r in rows:
-                day = str(r.get("created_at", ""))[:10]
-                daily_trend.setdefault(day, {"questions": 0, "correct": 0})
-                daily_trend[day]["questions"] += 1
-                if r.get("is_correct"):
-                    daily_trend[day]["correct"] += 1
-
-            data = {
-                "daily_trend": [
-                    {"date": d, **s} for d, s in sorted(daily_trend.items())
-                ],
-                "total_sessions": total_sessions,
-                "total_minutes": total_minutes,
-            }
-
-            report = behavior_analyzer.analyze(**data)
-            return {
-                "behavior": {
-                    "current_streak": getattr(report, "current_streak", 0),
-                    "longest_streak": getattr(report, "longest_streak", 0),
-                    "best_study_hours": getattr(report, "best_study_hours", []),
-                    "regularity_score": getattr(report, "regularity_score", 0.0),
-                    "recommendations": getattr(report, "recommendations", []),
-                },
-                "total_sessions": total_sessions,
-                "total_minutes": total_minutes,
-            }
-        except Exception as e:
-            logger.warning("get_behavior_report failed: %s", e)
-            return {}
+        """学习行为分析报告（异步版，委托给 services 层）"""
+        from app.services.practice.practice_service import get_behavior_report_db
+        return await get_behavior_report_db(user_id, time_range)
 
     # ═══════════════════════════════════════════════════════
     # 自适应选题

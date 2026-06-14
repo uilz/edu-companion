@@ -111,7 +111,7 @@ def test_module_registry():
 # ═══════════════════════════════════════════
 def test_proposal_store():
     print("\n═══ 3. ProposalStore ═══")
-    from app.domain.secretary.proposal_store import ProposalStore
+    from app.infrastructure.db.proposal_store import ProposalStore
     from app.domain.secretary.models import Proposal
 
     store = ProposalStore()
@@ -162,7 +162,7 @@ def test_proposal_store():
 def test_event_handler():
     print("\n═══ 4. SecretaryEventHandler ═══")
     from app.domain.secretary.engines.secretary_event_handler import SecretaryEventHandler
-    from infra.event_bus import EventBus
+    from app.infrastructure.event_bus import EventBus
 
     handler = SecretaryEventHandler()
     test("Handler 创建", handler is not None)

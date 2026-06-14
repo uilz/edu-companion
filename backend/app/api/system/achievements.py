@@ -39,7 +39,7 @@ def _collect_stats(user_id: str) -> dict[str, Any]:
 
         # 掌握技能数
         try:
-            from app.cognitive import get_repo
+            from app.domain.cognitive import get_repo
             cog_nodes = get_repo().list_all_nodes(user_id)
         except Exception:
             cog_nodes = []

@@ -88,9 +88,14 @@ class RelationMemory:
 class PolicyEngine:
     """提案策略引擎 — 过滤/去重/限流/降级"""
 
-    def __init__(self) -> None:
+    def __init__(self, store=None):
         self._memory = RelationMemory()
         self._session_veto: dict[str, set[str]] = defaultdict(set)  # session_id → set of proposal_ids
+        self._store = store
+
+    def set_store(self, store) -> None:
+        """注入 SecretaryRepository 实现（由 main.py 启动时调用）"""
+        self._store = store
 
     async def filter(
         self,
@@ -175,7 +180,7 @@ class PolicyEngine:
     async def get_daily_usage(self, user_id: str) -> int:
         """获取用户今日已使用的提案推送数"""
         try:
-            from ..proposal_store import ProposalStore
+            from app.infrastructure.db.proposal_store import ProposalStore
             store = ProposalStore()
             return store.get_daily_usage(user_id)
         except Exception as e:

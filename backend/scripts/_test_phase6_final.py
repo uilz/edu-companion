@@ -6,11 +6,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 async def main():
     from shared.constants import DEFAULT_USER_ID
-    from app.db.database import get_db
-    from app.cognitive.storage import list_all_nodes
-    from app.cognitive.edge_storage import get_edges_by_status
+    from app.infrastructure.db.database import get_db
+    from app.infrastructure.db.cognitive_storage import list_all_nodes
+    from app.infrastructure.db.cognitive_edge_storage import get_edges_by_status
     from app.services.common.event_service import EventService
-    from app.domain.secretary.proposal_store import ProposalStore
+    from app.infrastructure.db.proposal_store import ProposalStore
 
     uid = DEFAULT_USER_ID
     db = get_db()

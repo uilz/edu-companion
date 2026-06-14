@@ -10,7 +10,7 @@ import logging
 import re
 from typing import Any
 
-from app.services.llm.llm_service import llm_service
+from app.infrastructure.llm.llm_service import llm_service
 
 logger = logging.getLogger(__name__)
 

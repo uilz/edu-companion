@@ -1,0 +1,143 @@
+"""
+SessionEngine — 纯评分逻辑和会话状态机
+
+职责:
+1. 判题逻辑 (_check_answer 等纯函数)
+2. 会话状态转换验证 (status machine)
+3. 统计计算 (不含 DB 读写)
+4. 错因分析
+
+不依赖 infrastructure/DB，可独立单元测试。
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+# ═══════════════════════════════════════════
+# 会话状态机
+# ═══════════════════════════════════════════
+
+SESSION_STATE_TRANSITIONS = {
+    "created": ["started", "cancelled"],
+    "started": ["paused", "completed", "cancelled"],
+    "paused": ["started", "cancelled"],
+    "completed": [],
+    "cancelled": [],
+}
+
+
+def validate_transition(current_status: str, target_status: str) -> bool:
+    """验证会话状态转换是否合法"""
+    allowed = SESSION_STATE_TRANSITIONS.get(current_status, [])
+    return target_status in allowed
+
+
+# ═══════════════════════════════════════════
+# 判题引擎
+# ═══════════════════════════════════════════
+
+def check_answer(
+    user_answer: Optional[list],
+    correct_answer: list,
+    question_type: str,
+) -> bool:
+    """纯判题逻辑（无 DB/I/O 依赖）"""
+    if not user_answer:
+        return False
+
+    user_set = set(str(a).strip().upper() for a in user_answer if a)
+    correct_set = set(str(a).strip().upper() for a in correct_answer if a)
+
+    if not user_set and not correct_set:
+        return True
+    if not user_set or not correct_set:
+        return False
+
+    return user_set == correct_set
+
+
+# ═══════════════════════════════════════════
+# 统计计算（纯函数）
+# ═══════════════════════════════════════════
+
+def compute_stats(total: int, correct: int) -> dict:
+    """根据答题记录计算统计数据（纯计算）"""
+    wrong = total - correct
+    score = round((correct / max(total, 1)) * 100, 1)
+    return {
+        "total": total,
+        "correct": correct,
+        "wrong": wrong,
+        "score": score,
+    }
+
+
+# ═══════════════════════════════════════════
+# 错因分类
+# ═══════════════════════════════════════════
+
+ERROR_CATEGORIES = [
+    "概念混淆",      # 对知识点理解错误
+    "计算失误",      # 计算过程出错（如加减乘除、代入错误）
+    "审题不清",      # 未正确理解题目要求
+    "公式记错",      # 公式/定理记忆错误
+    "逻辑推理错误",  # 推理过程出问题
+    "粗心大意",      # 非知识性错误（如笔误、看错数）
+    "缺少思路",      # 完全不知道如何下手
+    "时间不足",      # 时间压力导致错误
+    "其他",          # 无法归类的错误
+]
+
+
+def classify_error(question_data: dict, user_answer: Optional[list]) -> Optional[str]:
+    """基于题目类型和用户回答的简单错因分类（纯函数）"""
+    if not user_answer:
+        return "缺少思路"
+    q_type = question_data.get("question_type", "")
+    if q_type in ("fill", "calculation"):
+        return "计算失误"
+    if question_data.get("difficulty", 3) >= 4:
+        return "概念混淆"
+    return None
+
+
+# ═══════════════════════════════════════════
+# 数据安全转换（纯函数）
+# ═══════════════════════════════════════════
+
+def safe_json(val, default=None):
+    """将 JSON 字符串或原始 JSON 解析为 Python 对象"""
+    if val is None:
+        return default
+    if isinstance(val, (list, dict)):
+        return val
+    if isinstance(val, str):
+        try:
+            return json.loads(val)
+        except Exception:
+            return default
+    return default
+
+
+def safe_iso(val):
+    """将时间值转为 ISO 字符串"""
+    if val is None:
+        return None
+    if hasattr(val, "isoformat"):
+        return val.isoformat()
+    return str(val)
+
+
+def safe_int(val, default=0):
+    """将值转为 int"""
+    if val is None:
+        return default
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return default

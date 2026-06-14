@@ -82,7 +82,7 @@ def _note_row(n: dict) -> dict:
 @router.post("/notes", summary="创建笔记")
 async def create_note(body: NoteCreate, user_id: str = Query(default=None)):
     uid = get_user_id(user_id)
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     note_id = f"note_{datetime.now().strftime('%Y%m%d%H%M%S%f')}_{uid}"
@@ -110,7 +110,7 @@ async def list_notes(
     offset: int = Query(default=0),
 ):
     uid = get_user_id(user_id)
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     conditions = ["user_id = %s"]
@@ -132,7 +132,7 @@ async def list_notes(
 
 @router.get("/notes/{note_id}", summary="获取单个笔记")
 async def get_note(note_id: str):
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     row = db.fetchone("SELECT * FROM user_notes WHERE id = %s", (note_id,))
     if not row:
@@ -142,7 +142,7 @@ async def get_note(note_id: str):
 
 @router.delete("/notes/{note_id}", summary="删除笔记")
 async def delete_note(note_id: str):
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     db.execute("DELETE FROM user_notes WHERE id = %s", (note_id,))
     return {"status": "deleted", "id": note_id}
@@ -159,7 +159,7 @@ async def aggregate_notes(
     使用 LLM 将原始笔记整理为分类、有逻辑的复习材料。
     """
     uid = get_user_id(user_id)
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     params: list[Any] = [uid]
@@ -183,7 +183,7 @@ async def aggregate_notes(
 
     # ── LLM 整理 ──
     try:
-        from app.services.llm.llm_service import llm_service
+        from app.infrastructure.llm.llm_service import llm_service
 
         notes_text = "\n\n".join(
             f"[{n['type']}] {n['content']}"
@@ -259,7 +259,7 @@ def _goal_row(g: dict) -> dict:
 @router.post("/goals", summary="设定学习目标")
 async def create_goal(body: GoalCreate, user_id: str = Query(default=None)):
     uid = get_user_id(user_id)
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     goal_id = f"goal_{datetime.now().strftime('%Y%m%d%H%M%S%f')}_{uid}"
@@ -286,7 +286,7 @@ async def list_goals(
     status: str = Query(default=None),
 ):
     uid = get_user_id(user_id)
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     conditions = ["user_id = %s"]
@@ -306,7 +306,7 @@ async def list_goals(
 
 @router.put("/goals/{goal_id}", summary="更新学习目标")
 async def update_goal(goal_id: str, body: GoalUpdate):
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     updates: list[str] = []
@@ -366,7 +366,7 @@ async def generate_project(
 ):
     """基于当前知识点生成小型探索项目。"""
     uid = get_user_id(user_id)
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     # 查询选中节点的信息
@@ -406,7 +406,7 @@ async def list_projects(
     status: str = Query(default=None),
 ):
     uid = get_user_id(user_id)
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     conditions = ["user_id = %s"]

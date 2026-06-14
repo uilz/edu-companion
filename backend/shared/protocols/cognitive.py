@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Optional, Protocol, runtime_checkable
 
-from app.cognitive.models import CognitiveNode, CognitiveEvent
+from app.domain.cognitive.models import CognitiveNode
 
 
 @runtime_checkable
@@ -101,29 +101,6 @@ class CognitiveNodeRepository(Protocol):
 
     def get_urgent_nodes(self, user_id: str = "default", top_k: int = 10) -> list[dict]:
         """获取紧急度最高的节点"""
-        ...
-
-    # ── CognitiveEvent ──
-
-    def append_event(self, event: CognitiveEvent) -> None:
-        """追加认知事件"""
-        ...
-
-    def get_unprocessed_events(self, limit: int = 100) -> list[CognitiveEvent]:
-        """获取未处理事件"""
-        ...
-
-    def mark_event_processed(self, event_id: str) -> None:
-        """标记事件已处理"""
-        ...
-
-    def query_events(
-        self,
-        node_id: str | None = None,
-        event_type: str | None = None,
-        limit: int = 50,
-    ) -> list[CognitiveEvent]:
-        """查询事件"""
         ...
 
     # ── Sync ──

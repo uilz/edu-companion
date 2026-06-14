@@ -60,13 +60,16 @@ async def write_to_meta_history(user_id: str, node: TreeNode) -> None:
 
 
 def _node_to_record(node: TreeNode) -> dict:
-    """将TreeNode转为元历史记录"""
+    """将TreeNode/MessageNode转为元历史记录"""
     return {
         "id": node.id,
         "partition_id": node.partition_id,
         "conversation_id": node.conversation_id,
         "role": node.role,
-        "content_blocks": [b.model_dump() for b in node.content_blocks],
+        "content_blocks": [
+            b.model_dump() if hasattr(b, 'model_dump') else b
+            for b in node.content_blocks
+        ],
         "text_summary": node.text_summary,
         "timestamp": node.timestamp,
         "token_count": node.token_count,

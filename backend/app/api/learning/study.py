@@ -62,7 +62,7 @@ async def get_study_plan(user_id: str):
 async def complete_task(user_id: str, task_id: str) -> dict[str, Any]:
     """标记任务完成"""
     # 标记完成（计划数据从plan_snapshots表读）
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     db.upsert("plan_task_completions", {
         "user_id": user_id,
@@ -79,7 +79,7 @@ async def get_plan_progress(user_id: str) -> dict[str, Any]:
     plan_data = plan.get("plan", {})
     items = plan_data.get("items", [])
 
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     rows = db.fetchall(
         "SELECT task_id FROM plan_task_completions WHERE user_id = %s",

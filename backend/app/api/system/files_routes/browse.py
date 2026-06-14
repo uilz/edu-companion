@@ -41,7 +41,7 @@ async def list_files(
     uid: str = Depends(current_user_id),
 ):
     """获取文件列表（分页、过滤）"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     conditions = ["m.user_id = %s"]
@@ -141,7 +141,7 @@ async def list_files(
 @router.get("/tags", summary="获取所有标签")
 async def get_all_tags(uid: str = Depends(current_user_id)):
     """获取用户所有文件的标签集合"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     rows = db.fetchall(
         "SELECT tags_json FROM materials WHERE user_id = %s AND is_deleted = FALSE AND tags_json != '[]'",
@@ -159,7 +159,7 @@ async def get_all_tags(uid: str = Depends(current_user_id)):
 @router.get("/trash", summary="回收站列表")
 async def get_trash(uid: str = Depends(current_user_id)):
     """获取回收站中的文件"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     rows = db.fetchall(
         """SELECT material_id, file_name, file_type, file_size, purpose,
@@ -175,7 +175,7 @@ async def get_trash(uid: str = Depends(current_user_id)):
 @router.get("/folders", summary="文件夹列表")
 async def get_folders(uid: str = Depends(current_user_id), parent_id: str = Query("")):
     """获取文件夹列表"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     if parent_id:
         rows = db.fetchall(
@@ -201,7 +201,7 @@ async def get_folders(uid: str = Depends(current_user_id), parent_id: str = Quer
 @router.get("/stats", summary="文件统计")
 async def get_file_stats(uid: str = Depends(current_user_id)):
     """获取文件统计信息"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     total = db.fetchone(
         "SELECT COUNT(*) as count, COALESCE(SUM(file_size), 0) as total_size FROM materials WHERE user_id = %s AND is_deleted = FALSE AND is_folder = FALSE",
@@ -257,7 +257,7 @@ async def get_file_stats(uid: str = Depends(current_user_id)):
 @router.get("/{material_id}", summary="文件详情")
 async def get_file(material_id: str, uid: str = Depends(current_user_id)):
     """获取文件详情"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     row = db.fetchone(
         """SELECT m.*,
@@ -299,7 +299,7 @@ async def get_file(material_id: str, uid: str = Depends(current_user_id)):
 @router.get("/{material_id}/download", summary="下载文件")
 async def download_file(material_id: str, uid: str = Depends(current_user_id)):
     """下载文件"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     row = db.fetchone(
         "SELECT file_name, storage_path FROM materials WHERE material_id = %s AND user_id = %s",
@@ -324,7 +324,7 @@ async def download_file(material_id: str, uid: str = Depends(current_user_id)):
 @router.get("/{material_id}/toc", summary="获取目录树")
 async def get_toc(material_id: str, uid: str = Depends(current_user_id)):
     """获取文件的目录树"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     rows = db.fetchall(
         """SELECT t.* FROM material_toc t
@@ -377,7 +377,7 @@ async def get_chunks(
     uid: str = Depends(current_user_id),
 ):
     """获取文件的分块列表"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     conditions = ["material_id = %s", "user_id = %s"]
@@ -419,7 +419,7 @@ class SearchRequest(BaseModel):
 @router.post("/search", summary="搜索文件内容")
 async def search_files(body: SearchRequest, uid: str = Depends(current_user_id)):
     """语义搜索文件内容"""
-    from app.services.materials.material_search import material_search
+    from app.infrastructure.media.material_search import material_search
     results = await material_search.search(
         user_id=uid,
         query=body.query,

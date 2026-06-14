@@ -4,7 +4,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def main():
     from shared.constants import DEFAULT_USER_ID
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     # 清理上次残留
@@ -23,8 +23,8 @@ def main():
         print("❌ conversation_summaries 表不存在")
 
     # 2. 测试 boost_trust_on_activity
-    from app.cognitive.edge_storage import boost_trust_on_activity
-    from app.cognitive.edge_storage import get_edges_by_status
+    from app.infrastructure.db.cognitive_edge_storage import boost_trust_on_activity
+    from app.infrastructure.db.cognitive_edge_storage import get_edges_by_status
     from shared.constants import DEFAULT_USER_ID
 
     edges = get_edges_by_status("auto_active", DEFAULT_USER_ID)

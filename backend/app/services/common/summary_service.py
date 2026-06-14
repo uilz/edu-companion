@@ -15,7 +15,7 @@ import time
 from typing import Any
 from uuid import uuid4
 
-from app.db.database import get_db
+from app.infrastructure.db.database import get_db
 
 logger = logging.getLogger(__name__)
 

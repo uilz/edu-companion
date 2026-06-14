@@ -9,8 +9,9 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from infra.event_bus import EventBus
-from infra.resilience import CircuitBreaker
+from app.config import settings
+from app.infrastructure.event_bus import EventBus
+from app.infrastructure.resilience import CircuitBreaker
 from shared.events import DomainEvent
 
 if TYPE_CHECKING:
@@ -43,7 +44,7 @@ class AppContainer:
 
     def __init__(self):
         # ── 基础设施 ──
-        self.event_bus = EventBus(handler_timeout=5.0)
+        self.event_bus = EventBus(handler_timeout=settings.event_bus_timeout)
         self.llm_circuit = CircuitBreaker("llm", failure_threshold=3)
 
         # ── DataRepository 仓储 ──
@@ -82,10 +83,11 @@ class AppContainer:
     # ═══════════════════════════════════════════════════════
 
     def _create_cognitive_repo(self) -> CognitiveNodeRepository:
-        from app.cognitive.pg_repository import PgCognitiveNodeRepository
-        from app.cognitive import set_repo
+        from app.infrastructure.db.cognitive_repository import PgCognitiveNodeRepository
+        from app.domain.cognitive import set_repo, init_cognitive
         repo = PgCognitiveNodeRepository()
         set_repo(repo)
+        init_cognitive()  # 注册 CognitiveOperationRegistry (操作自动发现)
         return repo
 
     def _init_data_repo(self) -> None:
@@ -95,7 +97,7 @@ class AppContainer:
 
     def _create_practice(self) -> PracticeService:
         from app.domain.practice.service import PracticeServiceImpl
-        from app.db.repositories import (
+        from app.infrastructure.db.repositories import (
             PostgresQuestionRepo,
             PostgresSessionRepo,
             PostgresErrorBookRepo,
@@ -110,7 +112,7 @@ class AppContainer:
 
     def _create_conversation(self) -> ConversationService:
         from app.domain.conversation.service import ConversationServiceImpl
-        from infra.llm import LLMClient
+        from app.infrastructure.llm_client import LLMClient
         return ConversationServiceImpl(
             llm=LLMClient(),
             event_bus=self.event_bus,
@@ -118,53 +120,43 @@ class AppContainer:
         )
 
     def _create_planning(self) -> PlanningService:
-        from app.domain.planning.service import PlanningServiceImpl
-        return PlanningServiceImpl(
-            practice=self.practice_service,
-            event_bus=self.event_bus,
-        )
+        from app.services.common.planning_stub import PlanningStub
+        return PlanningStub()
 
     def _create_analytics(self) -> AnalyticsService:
-        from app.domain.analytics.service import AnalyticsServiceImpl
-        return AnalyticsServiceImpl(
-            practice=self.practice_service,
-            event_bus=self.event_bus,
-        )
+        from app.services.common.analytics_stub import AnalyticsStub
+        return AnalyticsStub()
 
     def _create_habits(self) -> HabitService:
-        from app.domain.habits.service import HabitServiceImpl
-        return HabitServiceImpl(
-            event_bus=self.event_bus,
-        )
+        from app.services.common.habits_stub import HabitsStub
+        return HabitsStub()
 
     def _create_materials(self) -> MaterialService:
-        from app.domain.materials.service import MaterialServiceImpl
-        return MaterialServiceImpl(
-            event_bus=self.event_bus,
-        )
+        from app.services.common.materials_stub import MaterialsStub
+        return MaterialsStub()
 
     def _create_knowledge(self) -> KnowledgeGraphService:
-        from app.domain.knowledge.service import KnowledgeGraphServiceImpl
+        from app.services.knowledge.knowledge_graph_service import KnowledgeGraphServiceImpl
         return KnowledgeGraphServiceImpl(
             practice=self.practice_service,
             event_bus=self.event_bus,
         )
 
     def _create_knowledge_query(self) -> KnowledgeQueryService:
-        from app.domain.knowledge.query_service import KnowledgeQueryServiceImpl
+        from app.services.knowledge.knowledge_query_service import KnowledgeQueryServiceImpl
         from app.domain.knowledge import set_knowledge_query
         svc = KnowledgeQueryServiceImpl()
         set_knowledge_query(svc)
         return svc
 
     def _create_media(self) -> MediaService:
-        from app.domain.media.service import MediaServiceImpl
-        return MediaServiceImpl()
+        from app.services.common.media_stub import MediaStub
+        return MediaStub()
 
     def _create_multimedia(self) -> MultimediaService:
         from app.domain.multimedia.service import MultimediaService
-        from infra.tts_client import EdgeTTSClient
-        from infra.svg_renderer import SVGRenderer
+        from app.infrastructure.tts_client import EdgeTTSClient
+        from app.infrastructure.svg_renderer import SVGRenderer
 
         tts = EdgeTTSClient()
         renderer = SVGRenderer()

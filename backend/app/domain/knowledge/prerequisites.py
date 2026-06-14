@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 # ═══════════════════════════════════════════════════════════
-# 高等数学 — 前置依赖链
+# 机器学习 — 前置依赖链
 # ═══════════════════════════════════════════════════════════
 
 MATH_PREREQUISITES: dict[str, list[str]] = {
@@ -38,7 +38,7 @@ MATH_PREREQUISITES: dict[str, list[str]] = {
 }
 
 # ═══════════════════════════════════════════════════════════
-# 大学物理
+# 数据科学
 # ═══════════════════════════════════════════════════════════
 
 PHYSICS_PREREQUISITES: dict[str, list[str]] = {
@@ -83,9 +83,9 @@ ALL_PREREQUISITES: dict[str, list[str]] = {
 # ── 辅助: 按学科分组 ──
 
 SUBJECT_SKILLS: dict[str, list[str]] = {
-    "高等数学": list(MATH_PREREQUISITES.keys()),
-    "大学物理": list(PHYSICS_PREREQUISITES.keys()),
-    "计算机":   list(CS_PREREQUISITES.keys()),
+    "机器学习": list(MATH_PREREQUISITES.keys()),
+    "数据科学": list(PHYSICS_PREREQUISITES.keys()),
+    "Web开发":   list(CS_PREREQUISITES.keys()),
 }
 
 # ── 辅助: 技能→所属学科 ──

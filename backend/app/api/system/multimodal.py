@@ -33,7 +33,7 @@ IMAGE_DIR = COMPANION_HOME / "images"
 def _clean_text(text: str) -> str:
     """清理 Markdown 文本，去除格式符号"""
     try:
-        from infra.tts_text_cleaner import strip_markdown_for_tts
+        from app.infrastructure.tts_text_cleaner import strip_markdown_for_tts
         return strip_markdown_for_tts(text, max_chars=400)
     except ImportError:
         return (

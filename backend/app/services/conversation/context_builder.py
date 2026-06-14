@@ -21,7 +21,7 @@ from app.schemas.conversation import (
     TextBlock,
 )
 from app.services.analytics.emotion_analyzer import emotion_analyzer
-from app.services.llm.prompts import SYSTEM_PROMPT
+from app.infrastructure.llm.prompts import SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +172,7 @@ def _build_context_messages(
 
     # ── 7.5 CognitiveNode 认知画像注入 ──
     try:
-        from app.cognitive import get_repo
+        from app.domain.cognitive import get_repo
 
         cog_node = None
         # 优先用 partition.id 直接查找
@@ -346,7 +346,7 @@ def _build_context_messages(
 
     # ── 10. Tool availability hint ──
     try:
-        from app.services.llm.tool_executor import TOOL_DEFINITIONS
+        from app.infrastructure.llm.tool_repository import TOOL_DEFINITIONS
 
         tool_hints = []
         for tool_def in TOOL_DEFINITIONS:
@@ -369,7 +369,7 @@ def _build_context_messages(
 
     # ── 11. File-based RAG context ──
     try:
-        from app.services.materials.material_search import material_search
+        from app.infrastructure.media.material_search import material_search
         rag_results = material_search.search_sync(
             user_id=data.user_id,
             query=user_text,

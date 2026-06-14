@@ -28,8 +28,9 @@ _index_event_bus = None
 def _get_index_event_bus():
     global _index_event_bus
     if _index_event_bus is None:
-        from infra.event_bus import EventBus
-        _index_event_bus = EventBus(handler_timeout=5.0)
+        from app.config import settings
+        from app.infrastructure.event_bus import EventBus
+        _index_event_bus = EventBus(handler_timeout=settings.event_bus_timeout)
     return _index_event_bus
 
 
@@ -114,7 +115,7 @@ async def upload_file(
     storage_path.write_bytes(content)
 
     # 写入 materials 表
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     db.execute(
         """INSERT INTO materials (material_id, user_id, file_name, file_type, file_size,
@@ -149,7 +150,7 @@ async def _index_background(
 ):
     """后台异步索引"""
     try:
-        from app.services.materials.material_indexer import material_indexer
+        from app.infrastructure.media.material_indexer import material_indexer
         result = await material_indexer.index_file(
             user_id, material_id, file_path, file_name,
             file_type, file_size, purpose,
@@ -173,7 +174,7 @@ async def _index_background(
     except Exception as e:
         logger.error("后台索引失败: %s — %s", material_id, e)
         try:
-            from app.db.database import get_db
+            from app.infrastructure.db.database import get_db
             db = get_db()
             db.execute(
                 "UPDATE materials SET status = 'index_failed' WHERE material_id = %s",
@@ -188,7 +189,7 @@ async def _index_background(
 @router.post("/{material_id}/reindex", summary="重新索引文件")
 async def reindex_file(material_id: str, uid: str = Depends(current_user_id)):
     """手动触发文件重新索引（用于修复 stuck 文件）"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     row = db.fetchone(
@@ -219,7 +220,7 @@ async def reindex_file(material_id: str, uid: str = Depends(current_user_id)):
 
 async def recover_stuck_files():
     """服务启动时恢复 stuck 文件（uploading → 重新索引）"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     rows = db.fetchall(

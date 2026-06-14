@@ -6,38 +6,21 @@ import pytest
 class TestClassifierService:
     """ClassifierService 的文本降级分类测试"""
 
-    def test_keyword_score_math(self):
-        """高等数学关键词应该匹配到 '高等数学' 分区"""
+    def test_classify_by_text_empty_text(self):
+        """空文本应返回 mode 3"""
         from app.services.common.classifier_service import classifier_service
 
-        result = classifier_service._keyword_score("导数的定义是什么")
-        assert len(result) >= 1
-        assert result[0]["partition"] == "高等数学"
-        assert result[0]["score"] > 0
+        result = classifier_service.classify_by_text("test_user", "", None)
+        assert result["mode"] == 3
 
-    def test_keyword_score_multi_subject(self):
-        """多学科关键词应返回多个候选"""
+    def test_classify_by_text_returns_mode3_on_no_match(self):
+        """无匹配文本应返回 mode 3（不会匹配到关键词）
+        旧 keyword_weights 已删除，无 embedding 时走 ILIKE + DirectoryNode 匹配。
+        """
         from app.services.common.classifier_service import classifier_service
 
-        result = classifier_service._keyword_score("矩阵的特征值和概率分布")
-        partitions = {r["partition"] for r in result}
-        assert "线性代数" in partitions
-        assert "概率论" in partitions
-
-    def test_keyword_score_empty(self):
-        """无关键词应返回空列表"""
-        from app.services.common.classifier_service import classifier_service
-
-        result = classifier_service._keyword_score("你好，今天天气不错")
-        assert result == []
-
-    def test_keyword_score_programming(self):
-        """编程关键词应匹配到 '程序设计'"""
-        from app.services.common.classifier_service import classifier_service
-
-        result = classifier_service._keyword_score("Python 链表反转算法")
-        assert len(result) >= 1
-        assert result[0]["partition"] == "程序设计"
+        result = classifier_service.classify_by_text("test_user", "你好，今天天气不错")
+        assert result["mode"] == 3
 
     def test_decide_mode_no_candidates(self):
         """无候选时返回 mode 3"""
@@ -52,7 +35,7 @@ class TestClassifierService:
         from app.services.common.classifier_service import classifier_service
 
         candidates = [
-            {"id": "t1", "label": "导数", "path_id": "高等数学.微积分.导数", "score": 0.85},
+            {"id": "t1", "label": "导数", "path_id": "数据科学.数据分析.统计学", "score": 0.85},
         ]
         result = classifier_service._decide_mode(candidates, "t0")
         assert result["mode"] == 2
@@ -63,7 +46,7 @@ class TestClassifierService:
         from app.services.common.classifier_service import classifier_service
 
         candidates = [
-            {"id": "t1", "label": "导数", "path_id": "高等数学.微积分.导数", "score": 0.85},
+            {"id": "t1", "label": "导数", "path_id": "数据科学.数据分析.统计学", "score": 0.85},
         ]
         result = classifier_service._decide_mode(candidates, "t1")
         assert result["mode"] == 3
@@ -74,8 +57,8 @@ class TestClassifierService:
         from app.services.common.classifier_service import classifier_service
 
         candidates = [
-            {"id": "t1", "label": "导数", "path_id": "高数.微积分.导数", "score": 0.85},
-            {"id": "t2", "label": "极限", "path_id": "高数.微积分.极限", "score": 0.72},
+            {"id": "t1", "label": "导数", "path_id": "数据科学.数据分析.统计学", "score": 0.85},
+            {"id": "t2", "label": "极限", "path_id": "数据科学.数据分析.微积分", "score": 0.72},
         ]
         # 0.72 * 1.5 > 0.85 => 接近
         result = classifier_service._decide_mode(candidates, None)
@@ -87,20 +70,13 @@ class TestClassifierService:
         from app.services.common.classifier_service import classifier_service
 
         candidates = [
-            {"id": "t1", "label": "导数", "path_id": "高数.微积分.导数", "score": 0.90},
-            {"id": "t2", "label": "线性代数", "path_id": "线性代数.矩阵", "score": 0.20},
+            {"id": "t1", "label": "导数", "path_id": "数据科学.数据分析.统计学", "score": 0.90},
+            {"id": "t2", "label": "线性代数", "path_id": "系统设计.架构.矩阵", "score": 0.20},
         ]
         # 0.20 * 1.5 < 0.90 => 单一领先
         result = classifier_service._decide_mode(candidates, "t0")
         assert result["mode"] == 2
         assert result["should_switch"] == True
-
-    def test_classify_by_text_empty_text(self):
-        """空文本应返回 mode 3"""
-        from app.services.common.classifier_service import classifier_service
-
-        result = classifier_service.classify_by_text("test_user", "", None)
-        assert result["mode"] == 3
 
     def test_classify_fallback_without_embedding(self):
         """classify() 在无 embedding 时调用 classify_by_text"""

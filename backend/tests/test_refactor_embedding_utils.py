@@ -17,7 +17,7 @@ class TestEmbeddingUtilsImports:
 
     def test_direct_import(self):
         """embedding_utils 可直接导入"""
-        from app.services.common.embedding_utils import (
+        from app.infrastructure.embedding_utils import (
             compute_embedding,
             cosine_similarity,
         )
@@ -35,35 +35,35 @@ class TestEmbeddingUtilsImports:
 
     def test_material_common_uses_embedding_utils(self):
         """material_common 从 embedding_utils 导入"""
-        import app.services.materials.material_common
+        import app.infrastructure.media.material_common
         # 验证模块没有直接引用 classifier 的 compute_embedding
         import inspect
         source = inspect.getsource(app.services.materials.material_common)
-        assert "from app.services.common.embedding_utils import" in source
+        assert "from app.infrastructure.embedding_utils import" in source
 
 
 class TestCosineSimilarity:
     """余弦相似度计算"""
 
     def test_identical_vectors(self):
-        from app.services.common.embedding_utils import cosine_similarity
+        from app.infrastructure.embedding_utils import cosine_similarity
         v = [1.0, 2.0, 3.0]
         assert cosine_similarity(v, v) == pytest.approx(1.0)
 
     def test_orthogonal(self):
-        from app.services.common.embedding_utils import cosine_similarity
+        from app.infrastructure.embedding_utils import cosine_similarity
         assert cosine_similarity([1, 0], [0, 1]) == pytest.approx(0.0)
 
     def test_opposite(self):
-        from app.services.common.embedding_utils import cosine_similarity
+        from app.infrastructure.embedding_utils import cosine_similarity
         assert cosine_similarity([1, 0], [-1, 0]) == pytest.approx(-1.0)
 
     def test_zero_vector(self):
-        from app.services.common.embedding_utils import cosine_similarity
+        from app.infrastructure.embedding_utils import cosine_similarity
         assert cosine_similarity([0, 0], [1, 0]) == pytest.approx(0.0)
 
     def test_mixed(self):
-        from app.services.common.embedding_utils import cosine_similarity
+        from app.infrastructure.embedding_utils import cosine_similarity
         sim = cosine_similarity([1, 2, 3], [4, 5, 6])
         import math
         expected = (4 + 10 + 18) / (math.sqrt(14) * math.sqrt(77))

@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     )
 
     # ── 应用基础配置 ──
-    app_name: str = Field(default="智能学习伴侣", description="应用名称")
+    app_name: str = Field(default="苹果果学习助手", description="应用名称")
     app_version: str = Field(default="0.1.0", description="版本号")
     debug: bool = Field(default=False, description="调试模式")
     host: str = Field(default="0.0.0.0", description="服务监听地址")
@@ -103,6 +103,14 @@ class Settings(BaseSettings):
     # ── 内容库（MVP 使用内存） ──
     content_store_type: str = Field(
         default="memory", description="内容存储类型: memory / db"
+    )
+
+    # ── 超时配置 ──
+    request_timeout: int = Field(
+        default=30, description="HTTP 请求超时秒数"
+    )
+    event_bus_timeout: float = Field(
+        default=5.0, description="事件总线 handler 超时秒数"
     )
 
     def load_from_yaml(self) -> "Settings":

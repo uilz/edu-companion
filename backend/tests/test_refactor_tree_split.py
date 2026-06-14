@@ -52,7 +52,7 @@ def mocked_tree_ops():
     with patch("app.services.knowledge.tree_ops.storage") as mock_stg, \
          patch("app.services.knowledge.tree_sync.upsert_node") as mock_upsert, \
          patch("app.services.knowledge.tree_sync.cog_delete_node") as mock_del, \
-         patch("app.cognitive.storage.get_node", return_value=None):
+         patch("app.infrastructure.db.cognitive_storage.get_node", return_value=None):
         from app.services.knowledge.tree_ops import TreeOpsService
         svc = TreeOpsService()
         data = DummyData()
@@ -66,9 +66,9 @@ class TestTreeHierarchy:
 
     def test_create_partition(self, mocked_tree_ops):
         svc, data, _ = mocked_tree_ops
-        p = svc.create_partition("u1", "高等数学")
+        p = svc.create_partition("u1", "机器学习")
         assert p.id in data.partitions
-        assert data.partitions[p.id].name == "高等数学"
+        assert data.partitions[p.id].name == "机器学习"
 
     def test_create_partition_auto_creates_child(self, mocked_tree_ops):
         svc, data, _ = mocked_tree_ops

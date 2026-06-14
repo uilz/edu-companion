@@ -74,7 +74,7 @@ class LearnerModelEngine:
     ) -> dict:
         """获取用户在某个知识点的状态（从 CognitiveNode 真实读取）"""
         try:
-            from app.cognitive import get_repo
+            from app.domain.cognitive import get_repo
             node = get_repo().find_node_by_label(skill_id, user_id)
             if node:
                 return {
@@ -157,7 +157,7 @@ class LearnerModelEngine:
         correct_answers = 0
         study_minutes = 0.0
         try:
-            from app.db.database import get_db
+            from app.infrastructure.db.database import get_db
             db = get_db()
             agg = db.fetchone(
                 """SELECT COUNT(*) AS total,
@@ -181,7 +181,7 @@ class LearnerModelEngine:
         mastered: list[str] = []
         struggling: list[str] = []
         try:
-            from app.cognitive import get_repo
+            from app.domain.cognitive import get_repo
             nodes = get_repo().list_all_nodes(user_id)
             for node in nodes:
                 if not node.belief or not node.practice_summary:
@@ -198,7 +198,7 @@ class LearnerModelEngine:
         # ── 3. recent_activity：从 practice_attempts 取最近 10 条 ──
         recent_activity: list[dict] = []
         try:
-            from app.db.database import get_db
+            from app.infrastructure.db.database import get_db
             db = get_db()
             rows = db.fetchall(
                 """SELECT id, question_id, is_correct, time_spent_seconds, created_at
@@ -244,7 +244,7 @@ class LearnerModelEngine:
     def get_streak_days(self, user_id: str) -> int:
         """从 PG 真实计算连续学习天数（v7: 基于 practice_attempts.created_at）"""
         try:
-            from app.db.database import get_db
+            from app.infrastructure.db.database import get_db
             db = get_db()
             # 取出最近 365 天的练习日期去重
             rows = db.fetchall(
@@ -277,7 +277,7 @@ class LearnerModelEngine:
     def get_total_sessions(self, user_id: str) -> int:
         """从 PG 真实统计 session 数（v7: 包含已完成的 practice_sessions）"""
         try:
-            from app.db.database import get_db
+            from app.infrastructure.db.database import get_db
             db = get_db()
             row = db.fetchone(
                 "SELECT COUNT(*) AS cnt FROM practice_sessions WHERE user_id = %s",

@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 def migrate():
-    from app.cognitive.storage import get_db
+    from app.infrastructure.db.cognitive_storage import get_db
     from shared.constants import DEFAULT_USER_ID
     from app.services.common.storage import storage
 

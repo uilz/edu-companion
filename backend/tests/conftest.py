@@ -10,7 +10,7 @@ if str(BACKEND) not in sys.path:
 
 import pytest
 
-from infra.event_bus import EventBus
+from app.infrastructure.event_bus import EventBus
 
 
 @pytest.fixture
@@ -22,7 +22,7 @@ def event_bus():
 @pytest.fixture
 def mock_cognitive_node():
     """创建一个默认的 CognitiveNode 用于测试"""
-    from app.cognitive.models import (
+    from app.domain.cognitive.models import (
         CognitiveNode, Belief, PracticeSummary, PracticeEvent,
     )
     import time

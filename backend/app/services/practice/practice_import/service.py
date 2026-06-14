@@ -54,7 +54,7 @@ def confirm_import(
     user_id: str,
 ) -> dict:
     """确认导入题目到题库"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     from app.services.practice.practice_question_crud import add_question
     db = get_db()
 
@@ -138,7 +138,7 @@ def get_import_history(
     offset: int = 0,
 ) -> dict:
     """获取导入历史"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     conditions = ["q.metadata->>'import_batch' IS NOT NULL", "q.deleted_at IS NULL"]

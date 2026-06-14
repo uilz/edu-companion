@@ -19,7 +19,7 @@ def get_cognitive_state(user_id: str, skill_id: str) -> KnowledgeState:
     若节点不存在则返回默认初始状态。
     """
     try:
-        from app.cognitive import get_repo
+        from app.domain.cognitive import get_repo
         node = get_repo().get_node(skill_id, user_id)
         if node and node.belief:
             ks = KnowledgeState(
@@ -38,7 +38,7 @@ def get_cognitive_state(user_id: str, skill_id: str) -> KnowledgeState:
 def get_all_cognitive_states(user_id: str) -> dict[str, KnowledgeState]:
     """从 CognitiveNode 读取所有知识点的掌握状态。"""
     try:
-        from app.cognitive import get_repo
+        from app.domain.cognitive import get_repo
         nodes = get_repo().list_all_nodes(user_id)
         result: dict[str, KnowledgeState] = {}
         for node in nodes:

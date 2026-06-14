@@ -68,7 +68,7 @@ def search_learning_memory(
     需要 pgvector 扩展 + ivfflat 索引。
     降级：如果向量检索不可用，返回空列表。
     """
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
 
     db = get_db()
     try:

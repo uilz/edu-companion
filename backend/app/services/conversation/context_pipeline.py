@@ -125,7 +125,7 @@ class TutorPersona:
     """注入基础系统提示词（苹小果人格设定）"""
 
     def __init__(self) -> None:
-        from app.services.llm.prompts import SYSTEM_PROMPT
+        from app.infrastructure.llm.prompts import SYSTEM_PROMPT
         self._system_prompt = SYSTEM_PROMPT
 
     async def build(self, input: ContextInput) -> ContextOutput | None:
@@ -281,7 +281,7 @@ class LearnerCognition:
 
         # CognitiveNode 认知画像
         try:
-            from app.cognitive import get_repo
+            from app.domain.cognitive import get_repo
 
             data = get_data_repo().load(input.user_id)
             partition = data.partitions.get(input.partition_id)
@@ -559,7 +559,7 @@ class TutorCapability:
 
         # 工具可用性提示
         try:
-            from app.services.llm.tool_executor import TOOL_DEFINITIONS
+            from app.infrastructure.llm.tool_repository import TOOL_DEFINITIONS
             tool_hints = []
             for tool_def in TOOL_DEFINITIONS:
                 name = tool_def["function"]["name"]
@@ -601,7 +601,7 @@ class TutorCapability:
 
         # RAG 资料
         try:
-            from app.services.materials.material_search import material_search
+            from app.infrastructure.media.material_search import material_search
             from app.services.common import get_data_repo
             data = get_data_repo().load(input.user_id)
             rag_results = material_search.search_sync(

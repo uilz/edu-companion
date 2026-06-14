@@ -1,7 +1,5 @@
-from .service import KnowledgeGraphServiceImpl
-from .query_service import KnowledgeQueryServiceImpl
+from app.services.knowledge.knowledge_query_service import KnowledgeQueryServiceImpl
 
-__all__ = ["KnowledgeGraphServiceImpl", "KnowledgeQueryServiceImpl"]
 
 # ── 全局访问器 ──
 

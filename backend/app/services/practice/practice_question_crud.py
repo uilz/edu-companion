@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 def add_question(bank_id, user_id, question_type, stem, answer,
                  options=None, analysis="", difficulty=3,
                  cognitive_node_ids=None, source="manual", metadata=None):
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     from app.services.practice.practice_question_bank import _ensure_tables
     _ensure_tables()
     db = get_db()
@@ -34,7 +34,7 @@ def add_question(bank_id, user_id, question_type, stem, answer,
 
 
 def update_question(question_id, user_id, **kwargs):
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     allowed = {"stem", "options", "answer", "analysis", "difficulty",
                "question_type", "cognitive_node_ids", "status", "metadata"}
@@ -54,7 +54,7 @@ def update_question(question_id, user_id, **kwargs):
 
 
 def delete_question(question_id, user_id):
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     now = datetime.now().isoformat()
     row = db.fetchone("SELECT bank_id FROM questions WHERE id = %s AND deleted_at IS NULL", (question_id,))
@@ -67,7 +67,7 @@ def delete_question(question_id, user_id):
 
 
 def toggle_favorite(question_id, user_id):
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     existing = db.fetchone("SELECT id FROM question_favorites WHERE question_id = %s AND user_id = %s",
                            (question_id, user_id))
@@ -82,7 +82,7 @@ def toggle_favorite(question_id, user_id):
 
 
 def toggle_slash(question_id, user_id):
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     existing = db.fetchone("SELECT id FROM slashed_questions WHERE question_id = %s AND user_id = %s",
                            (question_id, user_id))

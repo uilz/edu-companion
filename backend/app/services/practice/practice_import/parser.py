@@ -68,7 +68,7 @@ def parse_file(file_path: str, file_type: str = "") -> list[dict]:
 
     if ext in (".docx", ".xlsx", ".pptx", ".pdf"):
         try:
-            from app.services.materials.material_parser import material_parser
+            from app.infrastructure.media.material_parser import material_parser
             md_text = material_parser.parse(str(path), ext)
             if md_text.strip():
                 return parse_questions_from_text(md_text, ext)
@@ -219,7 +219,7 @@ def ai_correct_question(q: dict) -> dict:
         return q
 
     try:
-        from app.services.llm.llm_service import llm_service
+        from app.infrastructure.llm.llm_service import llm_service
     except ImportError:
         return q
 
@@ -246,7 +246,7 @@ def ai_correct_question(q: dict) -> dict:
 }}"""
 
     try:
-        from app.services.llm.llm_service import llm_service as llm
+        from app.infrastructure.llm.llm_service import llm_service as llm
         result = llm.generate(
             messages=[
                 {"role": "system", "content": "你是一个文档解析专家，擅长从非结构化文本中提取和修正练习题。"},
@@ -286,8 +286,8 @@ def ai_correct_question(q: dict) -> dict:
 def match_cognitive_nodes(q: dict, user_id: str, top_k: int = 3) -> list[str]:
     """将题目内容匹配到认知节点"""
     try:
-        from app.services.common.embedding_utils import compute_embedding
-        from app.db.database import get_db
+        from app.infrastructure.embedding_utils import compute_embedding
+        from app.infrastructure.db.database import get_db
         db = get_db()
 
         text = f"{q.get('stem', '')} {q.get('analysis', '')}"[:1000]
@@ -300,7 +300,7 @@ def match_cognitive_nodes(q: dict, user_id: str, top_k: int = 3) -> list[str]:
         if not keywords:
             return []
 
-        from app.cognitive import get_repo
+        from app.domain.cognitive import get_repo
         nodes = get_repo().search_by_text(query=" ".join(keywords[:10]), user_id=user_id, limit=top_k)
         return [n.id for n in nodes if hasattr(n, 'id')] or []
 

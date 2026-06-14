@@ -32,7 +32,7 @@ def get_error_book(
     返回:
         {items: [...], total, page, page_size, total_pages}
     """
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     # 聚合查询：每个错题的最新状态
@@ -128,7 +128,7 @@ def get_error_book(
 
 def get_error_session_stats(user_id: str) -> dict:
     """错题本概览统计"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     # 唯一错题数
@@ -193,8 +193,8 @@ def review_error_question(
     - 答错 → consecutive_correct 归零
     - 更新认知节点
     """
-    from app.db.database import get_db
-    from app.cognitive import get_repo
+    from app.infrastructure.db.database import get_db
+    from app.domain.cognitive import get_repo
     db = get_db()
 
     # 获取最近一次 attempt
@@ -259,7 +259,7 @@ def get_error_materials(
     limit: int = 3,
 ) -> list[dict]:
     """根据错题关联的认知节点，推荐复习资料"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     q = db.fetchone(
@@ -319,7 +319,7 @@ def get_error_materials(
 
 def clear_mastered_errors(user_id: str) -> dict:
     """清除已掌握的错题记录（标记 mastered=true 的题目不再显示在错题本）"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     # 找到所有 mastered 的题目 ID

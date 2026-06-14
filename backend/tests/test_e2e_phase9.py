@@ -87,7 +87,7 @@ if USER_ID:
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
         from app.core.learner_model import LearnerModelEngine
         lm = LearnerModelEngine()
-        state = lm.get_knowledge_state(USER_ID, "高等数学.微积分.导数")
+        state = lm.get_knowledge_state(USER_ID, "数据科学.数据分析.统计学")
         check("learner_model 真实读取", state.get("mastery", 0) > 0 or state.get("status") == "active", str(state))
     except Exception as e:
         check("learner_model 读取", False, str(e))

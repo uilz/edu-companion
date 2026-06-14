@@ -10,8 +10,8 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from app.cognitive import get_repo
-from app.cognitive.models import CognitiveNode
+from app.domain.cognitive import get_repo
+from app.domain.cognitive.models import CognitiveNode
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +123,7 @@ def get_cognitive_profile(user_id: str) -> str:
 def get_event_queue_length(user_id: str) -> int:
     """获取未处理事件队列长度"""
     try:
-        from app.db.database import get_db
+        from app.infrastructure.db.database import get_db
         db = get_db()
         row = db.fetchone(
             "SELECT COUNT(*) as cnt FROM cognitive_events WHERE user_id = %s AND processed = false",

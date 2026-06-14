@@ -198,7 +198,7 @@ async def ai_chat(partition_id: str, body: AiChatRequest, user_id: str = Depends
     }
 
     try:
-        from app.services.llm.llm_service import llm_service
+        from app.infrastructure.llm.llm_service import llm_service
 
         system_prompt = f"""你是知识树编辑助手，严格遵循作用域规则。
 
@@ -235,7 +235,7 @@ async def ai_chat(partition_id: str, body: AiChatRequest, user_id: str = Depends
 ### C. 父节点关联
 用户提及当前节点的父节点内容时，回复末尾加上：
 [RECOMMEND:parent:父节点ID:父节点标签]
-示例回复：这个知识点属于「高等数学」。[RECOMMEND:parent:yyyy-yyyy:高等数学]
+示例回复：这个知识点属于「机器学习」。[RECOMMEND:parent:yyyy-yyyy:机器学习]
 
 ## 可用操作格式
 [ACTION:add_node] 节点名: 描述

@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 
 from app.domain.auth.dependencies import current_user_id
 from app.services.common import get_data_repo, get_admin_repo
+from app.services.knowledge.tree_ops import tree_ops
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v7/data", tags=["学习数据管理"])
@@ -40,11 +41,14 @@ async def data_overview(user_id: str = Depends(current_user_id)):
     """获取用户所有学习数据的概览统计"""
     data = get_data_repo().load(user_id)
     
+    dir_nodes = data.directory_nodes or {}
+    dir_count = sum(1 for n in dir_nodes.values() if n.node_type == "dir")
+    conv_count = sum(1 for n in dir_nodes.values() if n.node_type == "conv")
+    
     overview = {
-        "partitions": len(data.partitions),
-        "domains": len(data.domains),
-        "topics": len(data.topics),
-        "conversations": len(data.conversations),
+        "directory_nodes": len(dir_nodes),
+        "dirs": dir_count,
+        "conversations": conv_count,
         "knowledge_graphs": len(data.knowledge_graphs),
         "graph_nodes": sum(len(g.nodes) for g in data.knowledge_graphs.values()),
         "graph_edges": sum(len(g.edges) for g in data.knowledge_graphs.values()),
@@ -81,33 +85,30 @@ async def data_overview(user_id: str = Depends(current_user_id)):
 
 @router.get("/partitions")
 async def list_partitions(user_id: str = Depends(current_user_id)):
-    """获取所有分区及其子结构"""
-    data = get_data_repo().load(user_id)
-    partitions = []
-    for pid, p in data.partitions.items():
-        domains = [d.model_dump(mode="json") for d in data.domains.values() if d.partition_id == pid]
-        topics = []
-        for d in data.domains.values():
-            if d.partition_id == pid:
-                for t in data.topics.values():
-                    if t.domain_id == d.id:
-                        topics.append(t.model_dump(mode="json"))
-        conversations = []
-        for t in data.topics.values():
-            for c in data.conversations.values():
-                if c.topic_id == t.id:
-                    conversations.append(c.model_dump(mode="json"))
-        
-        partitions.append({
-            "partition": p.model_dump(mode="json"),
-            "domains": domains,
-            "topics": topics,
-            "conversations": conversations,
-            "domain_count": len(domains),
-            "topic_count": len(topics),
-            "conversation_count": len(conversations),
-        })
-    return {"ok": True, "partitions": partitions}
+    """获取目录树结构"""
+    tree = tree_ops.build_tree(user_id)
+    
+    # 统计各类型节点数量
+    def count_nodes(nodes):
+        dirs = convs = 0
+        for n in nodes:
+            if n["node_type"] == "dir":
+                dirs += 1
+                cd, cc = count_nodes(n.get("children", []))
+                dirs += cd
+                convs += cc
+            else:
+                convs += 1
+        return dirs, convs
+    
+    dir_count, conv_count = count_nodes(tree)
+    
+    return {
+        "ok": True,
+        "tree": tree,
+        "dir_count": dir_count,
+        "conversation_count": conv_count,
+    }
 
 
 # ═══════════════════════════════════════════════════════════
@@ -120,10 +121,10 @@ async def list_knowledge_graphs(user_id: str = Depends(current_user_id)):
     data = get_data_repo().load(user_id)
     graphs = []
     for gid, g in data.knowledge_graphs.items():
-        partition = data.partitions.get(gid)
+        dir_node = data.directory_nodes.get(gid)
         graphs.append({
             "partition_id": gid,
-            "partition_name": partition.name if partition else "未知",
+            "partition_name": dir_node.display_name if dir_node else "未知",
             "name": g.name,
             "version": g.version,
             "node_count": len(g.nodes),
@@ -200,35 +201,20 @@ async def list_materials(user_id: str = Depends(current_user_id), page: int = Qu
 
 @router.delete("/partition/{partition_id}")
 async def delete_partition_data(partition_id: str, user_id: str = Depends(current_user_id)):
-    """删除指定分区及其所有子数据（领域、专题、对话、知识图谱）"""
+    """删除指定目录节点及其所有子数据"""
     data = get_data_repo().load(user_id)
-    if partition_id not in data.partitions:
-        raise HTTPException(status_code=404, detail="分区不存在")
+    if partition_id not in data.directory_nodes:
+        raise HTTPException(status_code=404, detail="目录节点不存在")
     
-    # 删除子领域
-    domain_ids = [d.id for d in data.domains.values() if d.partition_id == partition_id]
-    for did in domain_ids:
-        del data.domains[did]
+    node = data.directory_nodes[partition_id]
+    tree_ops.delete_node(user_id, partition_id)
     
-    # 删除子专题
-    topic_ids = [t.id for t in data.topics.values() if t.domain_id in domain_ids]
-    for tid in topic_ids:
-        del data.topics[tid]
-    
-    # 删除子对话
-    conv_ids = [c.id for c in data.conversations.values() if c.topic_id in topic_ids]
-    for cid in conv_ids:
-        del data.conversations[cid]
-    
-    # 删除知识图谱
+    # 删除关联的知识图谱
     if partition_id in data.knowledge_graphs:
         del data.knowledge_graphs[partition_id]
+        get_data_repo().save(user_id, data)
     
-    # 删除分区
-    del data.partitions[partition_id]
-    
-    get_data_repo().save(user_id, data)
-    return {"ok": True, "deleted": {"partition_id": partition_id, "domains": len(domain_ids), "topics": len(topic_ids), "conversations": len(conv_ids)}}
+    return {"ok": True, "deleted": {"node_id": partition_id, "node_type": node.node_type, "name": node.display_name}}
 
 
 # ═══════════════════════════════════════════════════════════
@@ -287,10 +273,7 @@ async def export_all_data(user_id: str = Depends(current_user_id)):
     export = {
         "exported_at": datetime.now().isoformat(),
         "user_id": user_id,
-        "partitions": {pid: p.model_dump(mode="json") for pid, p in data.partitions.items()},
-        "domains": {did: d.model_dump(mode="json") for did, d in data.domains.items()},
-        "topics": {tid: t.model_dump(mode="json") for tid, t in data.topics.items()},
-        "conversations": {cid: c.model_dump(mode="json") for cid, c in data.conversations.items()},
+        "directory_nodes": {nid: n.model_dump(mode="json") for nid, n in data.directory_nodes.items()},
         "knowledge_graphs": {gid: g.model_dump(mode="json") for gid, g in data.knowledge_graphs.items()},
     }
     

@@ -1,4 +1,4 @@
-"""对话系统领域服务 — 含 Phase 5 多媒体 WebSocket 推送"""
+"""对话系统领域服务"""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from infra.event_bus import EventBus
-    from infra.resilience import CircuitBreaker
+    from app.infrastructure.event_bus import EventBus
+    from app.infrastructure.resilience import CircuitBreaker
     from shared.events import (
         SessionCompleted,
         StudyPlanGenerated,
@@ -25,12 +25,7 @@ class ConversationServiceImpl:
         self._llm = llm
         self._bus = event_bus
         self._circuit = circuit
-        # WebSocket 管理器（延迟注入）
-        self._ws_manager: Any = None
-
-    def set_ws_manager(self, ws_manager: Any) -> None:
-        """注入 WebSocket ConnectionManager（from app.api.chat）"""
-        self._ws_manager = ws_manager
+        # WebSocket 已移除，使用 SSE/TokenBuffer 替代
 
     async def send_message(
         self, user_id: str, content: str,
@@ -163,15 +158,8 @@ class ConversationServiceImpl:
             getattr(event, "partition_id", "?"),
             len(getattr(event, "items", []) or []),
         )
-        # 如有 WS 管理器，推送通知
-        if self._ws_manager:
-            try:
-                await self._ws_manager.send_json(
-                    getattr(event, "user_id", ""),
-                    {"type": "plan_updated", "payload": {}},
-                )
-            except Exception:
-                pass
+        # WS 已移除，跳过推送通知
+        pass
 
     async def on_goal_achieved(self, event: DailyGoalAchieved) -> None:
         """目标达成 → 推送祝贺"""
@@ -181,14 +169,7 @@ class ConversationServiceImpl:
             getattr(event, "goal_type", "practice"),
             getattr(event, "progress_pct", 0.0),
         )
-        if self._ws_manager:
-            try:
-                await self._ws_manager.send_json(
-                    getattr(event, "user_id", ""),
-                    {"type": "goal_achieved", "payload": {"goal": getattr(event, "goal_type", "practice")}},
-                )
-            except Exception:
-                pass
+        # WS 已移除，跳过推送
 
 
     async def push_response_block(
@@ -202,30 +183,11 @@ class ConversationServiceImpl:
         self, user_id: str, message_id: str,
         block_type: str, content: dict,
     ) -> None:
-        """通过 WebSocket 推送 block_update 消息"""
-        if not self._ws_manager:
-            logger.warning("WS manager not injected — skipping block push")
-            return
-
-        payload = {
-            "type": "block_update",
-            "payload": {
-                "message_id": message_id,
-                "block": {
-                    "type": block_type,
-                    "status": "ready",
-                    "content": content,
-                },
-            },
-        }
-        try:
-            await self._ws_manager.send_json(user_id, payload)
-            logger.debug(
-                "📤 block_update: user=%s type=%s msg=%s",
-                user_id, block_type, message_id[:8],
-            )
-        except Exception as e:
-            logger.error("Failed to push block_update: %s", e)
+        """推送 ResponseBlock — WS 已移除，block_update 通过 TokenBuffer 推送"""
+        logger.debug(
+            "block_update (WS removed): user=%s msg=%s type=%s",
+            user_id[:8], message_id[:8], block_type,
+        )
 
     async def inject_practice_context(
         self, user_id: str, branch_id: str, context: dict,

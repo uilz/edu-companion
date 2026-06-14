@@ -5,6 +5,8 @@ AI 出题核心 — generate_and_save + handle_question_generation
 1. handle_question_generation() 解析自然语言 → 提取参数（subject/skill/bloom/difficulty/count）
 2. generate_and_save()  → 调用 QuestionGenerator → 转 v7 格式 → save → 返回
 3. generate_for_conversation() → 结合对话上下文 → 生成 + 自动归属题库
+
+格式化/校验逻辑委托给 question_formatter.py 中的纯函数。
 """
 
 import asyncio
@@ -12,46 +14,26 @@ import json
 import logging
 from typing import Optional
 
-from app.services.llm.llm_service import llm_service
-from app.services.llm.question_generator import QuestionGenerator, get_question_generator
+from app.infrastructure.llm.llm_service import llm_service
+from app.infrastructure.llm.question_generator import QuestionGenerator, get_question_generator
 from app.services.practice.practice_question_crud import add_question
 from app.services.practice.practice_question_bank import (
     _ensure_tables, resolve_bank_for_conversation, resolve_bank_for_node, get_bank,
 )
+from app.services.practice.question_formatter import (
+    parse_bloom_level,
+    parse_content_type,
+    extract_answer,
+    extract_options,
+    map_difficulty,
+    validate_question,
+    score_quality,
+    BLOOM_ZH_MAP,
+    CONTENT_TYPE_MAP,
+)
 from app.schemas.practice import BloomLevel, AnswerType
 
 logger = logging.getLogger(__name__)
-
-# ── Bloom 层级中英文映射 ──
-BLOOM_ZH_MAP = {
-    "记忆": BloomLevel.REMEMBER,
-    "remember": BloomLevel.REMEMBER,
-    "理解": BloomLevel.UNDERSTAND,
-    "understand": BloomLevel.UNDERSTAND,
-    "应用": BloomLevel.APPLY,
-    "apply": BloomLevel.APPLY,
-    "分析": BloomLevel.ANALYZE,
-    "analyze": BloomLevel.ANALYZE,
-    "评价": BloomLevel.EVALUATE,
-    "evaluate": BloomLevel.EVALUATE,
-    "创造": BloomLevel.CREATE,
-    "create": BloomLevel.CREATE,
-}
-
-# ── 题型映射 ──
-CONTENT_TYPE_MAP = {
-    "单选": "choice",
-    "choice": "choice",
-    "选择": "choice",
-    "多选": "multiple",
-    "multiple": "multiple",
-    "填空": "fill",
-    "fill": "fill",
-    "解答": "free_form",
-    "free_form": "free_form",
-    "计算": "calculation",
-    "calculation": "calculation",
-}
 
 
 # ── 核心函数 ──
@@ -147,7 +129,7 @@ async def get_material_context(
     if not material_ids:
         return None
 
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     placeholders = ",".join(["%s"] * len(material_ids))
@@ -373,43 +355,7 @@ async def _extract_generation_params(
         }
 
 
-# ── AI 质量校验 ──
-
-
-def validate_question(question_data: dict) -> list[str]:
-    """校验 AI 输出完整性，返回缺失字段列表"""
-    errors = []
-    if not question_data.get("stem"):
-        errors.append("题干为空")
-    if not question_data.get("correct_answer") and not question_data.get("answer"):
-        errors.append("答案为空")
-    qtype = question_data.get("question_type", "choice")
-    if qtype in ("choice", "single", "multiple"):
-        opts = question_data.get("options", [])
-        if len(opts) < 2:
-            errors.append("选择题选项不足")
-        else:
-            correct_count = sum(1 for o in opts if o.get("is_correct"))
-            if correct_count == 0:
-                errors.append("无正确答案标记")
-    return errors
-
-
-def score_quality(question: dict) -> float:
-    """对题目质量评分 0~1"""
-    score = 0.5
-    if question.get("analysis") or question.get("explanation"):
-        score += 0.15
-    hints = question.get("hints", [])
-    if len(hints) >= 2:
-        score += 0.1
-    tags = question.get("tags", [])
-    if len(tags) >= 2:
-        score += 0.05
-    cognitive_ids = question.get("cognitive_node_ids", [])
-    if cognitive_ids and len(cognitive_ids) > 0:
-        score += 0.1
-    return min(1.0, max(0.1, score))
+# ── (validate_question / score_quality 已移至 question_formatter.py) ──
 
 
 # ── 批量出题 ──
@@ -496,8 +442,8 @@ async def generate_similar(
     2. 用 LLM 生成相似但不同的题目（同知识点、同难度、不同问法）
     3. 保存到同一题库
     """
-    from app.db.database import get_db
-    from app.services.llm.question_generator import QuestionGenerator
+    from app.infrastructure.db.database import get_db
+    from app.infrastructure.llm.question_generator import QuestionGenerator
     db = get_db()
 
     # 1. 获取原题
@@ -608,8 +554,8 @@ async def explain_question(
     返回:
         { question, explanation, key_points, related_concepts, examples }
     """
-    from app.db.database import get_db
-    from app.services.llm.llm_service import llm_service as llm
+    from app.infrastructure.db.database import get_db
+    from app.infrastructure.llm.llm_service import llm_service as llm
     db = get_db()
 
     row = db.fetchone(
@@ -642,7 +588,7 @@ async def explain_question(
     node_labels = []
     for nid in node_ids[:3]:
         try:
-            from app.cognitive import get_repo
+            from app.domain.cognitive import get_repo
             node = get_repo().get_node(nid, user_id)
             if node and node.label:
                 node_labels.append(node.label)
@@ -718,40 +664,15 @@ async def explain_question(
 
 
 def _extract_answer(q) -> list:
-    """从 Question Pydantic 提取答案（统一为 list）"""
-    if q.options:
-        return [opt.letter for opt in q.options if opt.is_correct]
-    if q.correct_answer:
-        return [q.correct_answer]
-    return []
+    """从 Question Pydantic 提取答案（统一为 list）— 委托给 formatter"""
+    return extract_answer(q)
 
 
 def _extract_options(q) -> list[dict]:
-    """从 Question Pydantic 提取 options"""
-    if not q.options:
-        return []
-    return [
-        {
-            "letter": opt.letter,
-            "text": opt.text,
-            "is_correct": opt.is_correct,
-            "distractor_type": opt.distractor_type,
-        }
-        for opt in q.options
-    ]
+    """从 Question Pydantic 提取 options — 委托给 formatter"""
+    return extract_options(q)
 
 
 def _map_difficulty(d: float) -> int:
-    """
-    v7 用 1-5 整数难度，QuestionGenerator 返回 0-1 float。
-    映射: 0-0.2→1, 0.2-0.4→2, 0.4-0.6→3, 0.6-0.8→4, 0.8-1.0→5
-    """
-    if d <= 0.2:
-        return 1
-    if d <= 0.4:
-        return 2
-    if d <= 0.6:
-        return 3
-    if d <= 0.8:
-        return 4
-    return 5
+    """难度映射 0~1 → 1~5 — 委托给 formatter"""
+    return map_difficulty(d)

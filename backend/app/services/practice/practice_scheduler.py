@@ -49,7 +49,7 @@ def get_due_questions(
     返回:
         [{question, due_status, priority_score, next_review_days}, ...]
     """
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
 
     # 查询所有活跃题目及其最近答题情况

@@ -13,8 +13,8 @@ AdaptiveSelector — 自适应练习队列生成器
 from __future__ import annotations
 import logging
 import time
-from app.cognitive.models import CognitiveNode
-from app.cognitive import get_repo
+from app.domain.cognitive.models import CognitiveNode
+from app.domain.cognitive import get_repo
 from app.services.analytics.spaced_repetition import ReviewResult
 
 logger = logging.getLogger(__name__)

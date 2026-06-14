@@ -18,7 +18,7 @@ def _get_nodes(user_id: str, nodes: list | None = None) -> list:
     """获取节点列表（缓存优先）"""
     if nodes is not None:
         return nodes
-    from app.cognitive import get_repo
+    from app.domain.cognitive import get_repo
     return get_repo().list_all_nodes(user_id)
 
 

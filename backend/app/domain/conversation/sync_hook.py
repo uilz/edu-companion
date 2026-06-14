@@ -42,7 +42,7 @@ class SyncHook:
             if not skill_ids:
                 return
 
-            from app.services.knowledge.tree_sync import TreeSyncMixin
+            from app.services.knowledge.tree_service import TreeSyncMixin
             syncer = TreeSyncMixin()
             partition_id = getattr(event, "partition_id", "")
             conversation_id = getattr(event, "conversation_id", "")
@@ -63,7 +63,7 @@ class SyncHook:
         if not skill_ids:
             return
         try:
-            from app.services.knowledge.tree_sync import TreeSyncMixin
+            from app.services.knowledge.tree_service import TreeSyncMixin
             syncer = TreeSyncMixin()
             for skill_id in skill_ids:
                 await syncer._sync_skill(user_id, skill_id, partition_id, conversation_id)

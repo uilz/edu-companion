@@ -18,18 +18,18 @@ logger = logging.getLogger(__name__)
 class ActiveChecker:
     """主动检查器 — 基于模块注册表的周期性检查"""
 
-    def __init__(self, user_id: str) -> None:
+    def __init__(self, user_id: str, proposal_store=None) -> None:
         self._user_id = user_id
         self._running = False
         self._task: asyncio.Task | None = None
         self._check_interval = 600  # 10分钟
         self._context_engine = ContextEngine()
         self._last_proposal_count = 0
+        self._store = proposal_store
 
     async def run_check(self) -> dict[str, Any]:
         """执行一次模块化主动检查"""
         from .module_registry import module_registry
-        from ..proposal_store import ProposalStore
 
         findings: dict[str, Any] = {
             "modules_run": 0,
@@ -65,47 +65,23 @@ class ActiveChecker:
         for p in proposals:
             findings["reasons"].append(f"{p.emoji} {p.title}")
 
-        # 4. 去重 — 基于内容哈希，只推送真正新增的提案
+        # 4. 持久化（save_proposal 内部已处理指纹去重）
         from hashlib import md5
-        new_proposals = []
         for p in proposals:
-            # 用 title + insight_source + action_type 做指纹
             fingerprint = md5(
                 f"{p.title}|{p.insight_source}|{p.action_type}".encode()
             ).hexdigest()
-            # 检查是否已经存在相同指纹的 pending 提案
-            try:
-                store = ProposalStore()
-                db = store._get_db()
-                existing = db.fetchone(
-                    "SELECT id FROM secretary_proposals "
-                    "WHERE user_id = %s AND status = 'pending' "
-                    "AND metadata->>'fingerprint' = %s "
-                    "LIMIT 1",
-                    (self._user_id, fingerprint),
-                )
-                if not existing:
-                    # 新提案：标记指纹
-                    p.payload = {**(p.payload or {}), "_fingerprint": fingerprint}
-                    new_proposals.append(p)
-            except Exception:
-                new_proposals.append(p)
+            p.payload = {**(p.payload or {}), "_fingerprint": fingerprint}
 
-        if not new_proposals:
-            return findings
-
-        proposals = new_proposals
         findings["proposals_generated"] = len(proposals)
 
-        # 5. 持久化 + 推送黑板 + WS 通知
-        store = ProposalStore()
-
-        # 持久化
-        for p in proposals:
-            try:
-                store.save_proposal(p, user_id=self._user_id, session_id="_active_check")
-            except Exception as e:
-                logger.warning("Proposal save failed for active check: %s", e)
+        # 5. 持久化 + 推送黑板
+        if self._store:
+            for p in proposals:
+                try:
+                    self._store.save_proposal(p, user_id=self._user_id, session_id="_active_check")
+                except Exception as e:
+                    logger.warning("Proposal save failed for active check: %s", e)
 
         # 推送到黑板
         try:
@@ -114,20 +90,6 @@ class ActiveChecker:
             await service.push_to_blackboard("_active_check", proposals)
         except Exception as e:
             logger.debug("黑板推送失败: %s", e)
-
-        # WS 通知
-        try:
-            from app.api.conversation.ws_manager import manager as ws_manager
-            if ws_manager and hasattr(ws_manager, 'broadcast'):
-                await ws_manager.broadcast({
-                    "type": "secretary_update",
-                    "content": {
-                        "reason": findings["reasons"],
-                        "proposal_count": len(proposals),
-                    }
-                })
-        except Exception as e:
-            logger.warning("WS broadcast failed after active check: %s", e)
 
         logger.info("📋 秘书主动检查: %d 个模块执行，生成 %d 条提案", findings["modules_run"], findings["proposals_generated"])
         return findings
@@ -175,4 +137,4 @@ class ActiveChecker:
 
 
 # ── 全局实例 ──
-active_checker = ActiveChecker()
+active_checker = ActiveChecker()  # store 由 main.py 启动时注入（见 app/main.py）

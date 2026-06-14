@@ -19,7 +19,7 @@ from .models import (
     ScopeSpec,
 )
 from .engines.diagnosis import DiagnosisEngine
-from .engines.proposal_generator import ProposalGenerator
+from .engines.proposal_service import ProposalGenerator
 
 logger = logging.getLogger(__name__)
 

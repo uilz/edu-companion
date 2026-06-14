@@ -4,7 +4,7 @@ Phase 8 API 端点
 前缀：/api/v2
 功能：分类、图谱管理、会话关联、节点操作
 
-依赖 app.cognitive.storage / app.services.classifier_service / app.cognitive.growth_engine
+依赖 app.domain.cognitive.storage / app.services.classifier_service / app.domain.cognitive.growth_engine
 """
 from __future__ import annotations
 
@@ -14,13 +14,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.domain.auth.dependencies import current_user_id
-from app.cognitive.growth_engine import growth_engine
-from app.cognitive.models import CognitiveNode
-from app.cognitive import get_repo
-from app.cognitive.edge_storage import (
+from app.domain.cognitive.growth_engine import growth_engine
+from app.domain.cognitive.models import CognitiveNode
+from app.domain.cognitive import get_repo
+from app.infrastructure.db.cognitive_edge_storage import (
     get_edges_for_node, update_edge_status, delete_edge,
 )
-from app.cognitive.link_storage import (
+from app.infrastructure.db.cognitive_link_storage import (
     get_links_for_conversation, upsert_link, set_primary_link, remove_link,
     count_links_for_conversation,
 )
@@ -78,7 +78,11 @@ class ClassifyRequest(BaseModel):
 
 @router.post("/classify")
 def classify_message(req: ClassifyRequest, user_id: str = Depends(current_user_id)) -> dict:
-    """分类单条消息 — v6 Phase 5: 使用 embedding + 沉浸感知"""
+    """分类单条消息 — 使用 embedding + 沉浸感知
+
+    自动分类仅在临时会话 (kind=temp) 时由 reply_pipeline 触发。
+    此 API 为前端显式调用入口(如 fireClassify)，不做 temp-only 限制。
+    """
     text = req.message
     if not text:
         return {
@@ -89,7 +93,7 @@ def classify_message(req: ClassifyRequest, user_id: str = Depends(current_user_i
     # 尝试计算 embedding
     query_embedding = None
     try:
-        from app.services.llm.embedding_engine import compute_embedding
+        from app.infrastructure.llm.embedding_engine import compute_embedding
         query_embedding = compute_embedding(text)
     except Exception:
         logger.debug("Embedding 计算失败，降级到文本分类")
@@ -98,7 +102,7 @@ def classify_message(req: ClassifyRequest, user_id: str = Depends(current_user_i
         result = classifier_service.classify(
             user_id, query_embedding,
             current_topic_id=req.current_topic_id,
-            text=text,  # 传递给对话树回退
+            text=text,
         )
     else:
         result = classifier_service.classify_by_text(
@@ -346,7 +350,7 @@ def dashboard_overview(
     user_id: str = Depends(current_user_id),
 ) -> dict:
     """学情仪表盘概览 — 掌握度 + 队列 + 趋势 + 错误 + XP"""
-    from app.cognitive import get_repo
+    from app.domain.cognitive import get_repo
 
     all_nodes = get_repo().list_all_nodes(user_id)
 

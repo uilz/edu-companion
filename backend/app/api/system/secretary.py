@@ -17,7 +17,7 @@ from fastapi.responses import StreamingResponse
 from app.domain.auth.dependencies import current_user_id
 from app.domain.secretary.secretary_service import SecretaryService
 from app.domain.secretary.models import Proposal, ScopeSpec, SecretaryPrefs
-from app.domain.secretary.proposal_store import ProposalStore
+from app.infrastructure.db.proposal_store import ProposalStore
 
 logger = logging.getLogger(__name__)
 
@@ -230,7 +230,7 @@ async def accept_proposal(
     action_result = None
     plan_adjustment = None
     if proposal:
-        from app.domain.secretary.engines.proposal_action_handler import action_handler
+        from app.domain.secretary.engines.proposal_service import action_handler
         from app.domain.secretary.engines.policy_engine import policy_engine
         try:
             action_result = await action_handler.execute(proposal, user_id)
@@ -261,15 +261,7 @@ async def accept_proposal(
         except Exception as e:
             logger.warning("提案动作/计划调整失败: %s", e)
 
-    # 触发 WS 同步
-    try:
-        from app.api.conversation.ws_manager import manager as ws_manager
-        await ws_manager.broadcast({
-            "type": "secretary_proposal_update",
-            "content": {"id": proposal_id, "status": "accepted"},
-        })
-    except Exception:
-        pass
+    # WS 已移除，跳过广播（由 TokenBuffer 等机制取代）
 
     return {
         "status": "accepted",
@@ -288,15 +280,7 @@ async def dismiss_proposal(
     """忽略提案 — 更新状态 + 记录关系记忆"""
     store.update_status(proposal_id, "dismissed", user_id, {"action": "user_dismissed", "reason": reason})
 
-    # 触发 WS 同步
-    try:
-        from app.api.conversation.ws_manager import manager as ws_manager
-        await ws_manager.broadcast({
-            "type": "secretary_proposal_update",
-            "content": {"id": proposal_id, "status": "dismissed"},
-        })
-    except Exception:
-        pass
+    # WS 已移除，跳过广播（由 TokenBuffer 等机制取代）
 
     # 记录策略关系记忆
     try:
@@ -327,15 +311,7 @@ async def snooze_proposal(
     ok = store.snooze_proposal(proposal_id, user_id, until_timestamp=until)
     if not ok:
         raise HTTPException(404, "提案不存在")
-    # 触发 WS 同步
-    try:
-        from app.api.conversation.ws_manager import manager as ws_manager
-        await ws_manager.broadcast({
-            "type": "secretary_proposal_update",
-            "content": {"id": proposal_id, "status": "snoozed", "until": until},
-        })
-    except Exception:
-        pass
+    # WS 已移除，跳过广播（由 TokenBuffer 等机制取代）
     return {"status": "snoozed"}
 
 
@@ -349,15 +325,7 @@ async def delete_proposal(
     ok = store.delete_proposal(proposal_id, user_id)
     if not ok:
         raise HTTPException(404, "提案不存在")
-    # 触发 WS 同步
-    try:
-        from app.api.conversation.ws_manager import manager as ws_manager
-        await ws_manager.broadcast({
-            "type": "secretary_proposal_update",
-            "content": {"id": proposal_id, "status": "deleted"},
-        })
-    except Exception:
-        pass
+    # WS 已移除，跳过广播（由 TokenBuffer 等机制取代）
     return {"status": "deleted"}
 
 
@@ -371,15 +339,7 @@ async def restore_proposal(
     ok = store.restore_proposal(proposal_id, user_id)
     if not ok:
         raise HTTPException(404, "提案不存在或状态不可恢复")
-    # 触发 WS 同步
-    try:
-        from app.api.conversation.ws_manager import manager as ws_manager
-        await ws_manager.broadcast({
-            "type": "secretary_proposal_update",
-            "content": {"id": proposal_id, "status": "restored"},
-        })
-    except Exception:
-        pass
+    # WS 已移除，跳过广播（由 TokenBuffer 等机制取代）
     return {"status": "restored"}
 
 
@@ -391,16 +351,7 @@ async def batch_accept_proposals(
 ) -> dict:
     """批量采纳提案"""
     count = store.batch_update_status(ids, "accepted", user_id)
-    # 触发 WS 同步
-    try:
-        from app.api.conversation.ws_manager import manager as ws_manager
-        for pid in ids:
-            await ws_manager.broadcast({
-                "type": "secretary_proposal_update",
-                "content": {"id": pid, "status": "accepted"},
-            })
-    except Exception:
-        pass
+    # WS 已移除，跳过广播（由 TokenBuffer 等机制取代）
     return {"status": "ok", "count": count}
 
 
@@ -412,16 +363,7 @@ async def batch_dismiss_proposals(
 ) -> dict:
     """批量忽略提案"""
     count = store.batch_update_status(ids, "dismissed", user_id)
-    # 触发 WS 同步
-    try:
-        from app.api.conversation.ws_manager import manager as ws_manager
-        for pid in ids:
-            await ws_manager.broadcast({
-                "type": "secretary_proposal_update",
-                "content": {"id": pid, "status": "dismissed"},
-            })
-    except Exception:
-        pass
+    # WS 已移除，跳过广播（由 TokenBuffer 等机制取代）
     return {"status": "ok", "count": count}
 
 
@@ -442,7 +384,7 @@ async def generate_llm_proposals(
     from app.domain.secretary.engines.llm_proposal_generator import LLMProposalGenerator
     llm = None
     try:
-        from app.services.llm.llm_service import llm_service
+        from app.infrastructure.llm.llm_service import llm_service
         llm = llm_service
     except Exception as e:
         logger.warning("LLM service unavailable, proceeding without LLM: %s", e)
@@ -594,7 +536,7 @@ async def get_onboarding_status(
 ) -> dict:
     """获取冷启动状态与引导信息"""
     try:
-        from app.cognitive import get_repo
+        from app.domain.cognitive import get_repo
         nodes = get_repo().list_all_nodes(user_id)
         total_nodes = len(nodes) if nodes else 0
     except Exception:
@@ -682,7 +624,7 @@ async def export_secretary_data(user_id: str = Depends(current_user_id)) -> dict
 
     # 提案历史
     try:
-        from app.domain.secretary.proposal_store import ProposalStore
+        from app.infrastructure.db.proposal_store import ProposalStore
         store = ProposalStore()
         db = store._get_db()
         rows = db.fetchall(
@@ -717,7 +659,7 @@ async def delete_secretary_data(user_id: str = Depends(current_user_id)) -> dict
 
     # 删除提案
     try:
-        from app.domain.secretary.proposal_store import ProposalStore
+        from app.infrastructure.db.proposal_store import ProposalStore
         store = ProposalStore()
         store._get_db().execute("DELETE FROM secretary_proposals WHERE user_id = %s", (user_id,))
         deleted["proposals"] = True

@@ -112,7 +112,7 @@ async def _search_materials(q: str, limit: int, user_id: str) -> list[SearchResu
     results: list[SearchResultItem] = []
 
     try:
-        from app.services.materials.material_search import material_search as ms
+        from app.infrastructure.media.material_search import material_search as ms
         search_results = await ms.search(
             user_id=user_id, query=q, top_k=limit,
         )
@@ -140,7 +140,7 @@ async def _search_knowledge(q: str, limit: int, user_id: str) -> list[SearchResu
     results: list[SearchResultItem] = []
 
     try:
-        from app.db.database import get_db
+        from app.infrastructure.db.database import get_db
         db = get_db()
         q_lower = q.lower().strip()
 
@@ -171,7 +171,7 @@ async def _search_errors(q: str, limit: int, user_id: str) -> list[SearchResultI
     results: list[SearchResultItem] = []
 
     try:
-        from app.db.database import get_db
+        from app.infrastructure.db.database import get_db
         db = get_db()
         q_lower = q.lower().strip()
 

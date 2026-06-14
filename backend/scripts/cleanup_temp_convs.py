@@ -20,7 +20,7 @@ _BACKEND = _HERE.parent
 if str(_BACKEND) not in sys.path:
     sys.path.insert(0, str(_BACKEND))
 
-from app.db.database import get_db
+from app.infrastructure.db.database import get_db
 
 logger = logging.getLogger("cleanup_temp_convs")
 logging.basicConfig(

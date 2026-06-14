@@ -16,7 +16,7 @@ from fastapi import APIRouter
 
 from shared.learner_model import learner_engine
 from app.schemas.learner import ProgressSummary
-from app.db.database import get_db
+from app.infrastructure.db.database import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ def _build_progress_from_cognitive(user_id: str) -> ProgressSummary | None:
     返回 None 表示无认知节点数据。
     """
     try:
-        from app.cognitive import get_repo
+        from app.domain.cognitive import get_repo
         nodes = get_repo().list_all_nodes(user_id)
         if not nodes:
             return None
@@ -116,7 +116,7 @@ def _build_progress_from_cognitive(user_id: str) -> ProgressSummary | None:
 def _list_cognitive_nodes(user_id: str) -> list[dict[str, Any]]:
     """列出用户的所有 CognitiveNode，返回精简 dict 列表"""
     try:
-        from app.cognitive import get_repo
+        from app.domain.cognitive import get_repo
         nodes = get_repo().list_all_nodes(user_id)
         result = []
         for n in nodes:
@@ -141,7 +141,7 @@ def _get_weak_nodes(
 ) -> list[dict[str, Any]]:
     """获取最弱的 N 个节点（按 proficiency_mean 升序）"""
     try:
-        from app.cognitive import get_repo
+        from app.domain.cognitive import get_repo
         nodes = get_repo().list_all_nodes(user_id)
         rated = []
         for n in nodes:

@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 def _ensure_tables():
     """确保 v7 题库相关表存在（幂等）"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     possible_paths = [
         "scripts/question_bank.sql",
@@ -59,7 +59,7 @@ def _run_migrations(db):
 def list_banks(user_id: str):
     """获取用户所有题库"""
     _ensure_tables()
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     rows = db.fetchall(
         """SELECT qb.*,
@@ -74,7 +74,7 @@ def list_banks(user_id: str):
 
 def get_bank(bank_id, user_id):
     _ensure_tables()
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     row = db.fetchone(
         "SELECT * FROM question_banks WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
@@ -85,7 +85,7 @@ def get_bank(bank_id, user_id):
 
 def create_bank(user_id, name, description="", ref_node_id=None, ref_node_level=None, auto_created=False):
     _ensure_tables()
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     now = datetime.now().isoformat()
     bank_id = _generate_bank_id(user_id, ref_node_id or name)
@@ -103,7 +103,7 @@ def create_bank(user_id, name, description="", ref_node_id=None, ref_node_level=
 
 def update_bank(bank_id, user_id, name=None, description=None):
     """更新题库基本信息"""
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     row = db.fetchone(
         "SELECT * FROM question_banks WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
@@ -131,7 +131,7 @@ def update_bank(bank_id, user_id, name=None, description=None):
 
 def delete_bank(bank_id, user_id):
     _ensure_tables()
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     now = datetime.now().isoformat()
     db.execute("UPDATE question_banks SET deleted_at = %s WHERE id = %s AND user_id = %s", (now, bank_id, user_id))
@@ -142,7 +142,7 @@ def resolve_bank_for_conversation(conversation_id, user_id, user_specified_bank_
     _ensure_tables()
     if user_specified_bank_id:
         return user_specified_bank_id
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     conv = db.fetchone("SELECT source_partition_id, source_branch_id FROM conversations WHERE id = %s", (conversation_id,))
     if conv and conv.get("source_branch_id"):
@@ -160,8 +160,8 @@ def resolve_bank_for_conversation(conversation_id, user_id, user_specified_bank_
 
 def resolve_bank_for_node(node_id, user_id):
     _ensure_tables()
-    from app.db.database import get_db
-    from app.cognitive import get_repo
+    from app.infrastructure.db.database import get_db
+    from app.domain.cognitive import get_repo
     db = get_db()
     node = get_repo().get_node(node_id, user_id)
     if not node:
@@ -184,7 +184,7 @@ def resolve_bank_for_node(node_id, user_id):
 def list_questions(bank_id, user_id, page=1, page_size=50,
                    question_type=None, status=None, cognitive_node_id=None):
     _ensure_tables()
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     conditions = ["q.bank_id = %s", "q.deleted_at IS NULL"]
     params = [bank_id]
@@ -211,7 +211,7 @@ def list_questions(bank_id, user_id, page=1, page_size=50,
 
 def get_question(question_id, user_id: str):
     _ensure_tables()
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     row = db.fetchone("SELECT * FROM questions WHERE id = %s AND deleted_at IS NULL", (question_id,))
     return _row_to_question(row, include_answer=True) if row else None
@@ -221,7 +221,7 @@ def search_questions(user_id, keyword="", bank_id=None, page=1, page_size=50,
                      question_type=None, bloom_level=None):
     """跨题库搜索题目，支持关键字、类型、Bloom层次过滤"""
     _ensure_tables()
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     conditions = ["q.deleted_at IS NULL"]
     params = []
@@ -260,7 +260,7 @@ def search_questions(user_id, keyword="", bank_id=None, page=1, page_size=50,
 def _ensure_bank(db, bank_id, user_id, ref_node_id):
     if db.fetchone("SELECT id FROM question_banks WHERE id = %s", (bank_id,)):
         return
-    from app.cognitive import get_repo
+    from app.domain.cognitive import get_repo
     node = get_repo().get_node(ref_node_id, user_id)
     label = node.label if node else ref_node_id
     level = node.level if node else ""

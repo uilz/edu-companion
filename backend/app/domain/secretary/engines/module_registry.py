@@ -99,11 +99,15 @@ class SecretaryModuleRegistry:
 
     def discover_builtin(self) -> int:
         """发现并注册所有内置模块"""
-        from .builtin_review_reminder import ReviewReminderModule
-        from .builtin_fatigue_manager import FatigueManagerModule
+        from .builtin_review import ReviewReminderModule, FatigueManagerModule, LateralExpansionModule
+        from .builtin_housekeeping import TempConversationCleanupModule, SilentTaskModule
         from .builtin_daily_brief import DailyBriefModule
+
+        self.register(ReviewReminderModule())
+        self.register(FatigueManagerModule())
+
         if "exam_mode" not in self._modules:
-            from .exam_mode import ExamModeModule
+            from .builtin_review import ExamModeModule
             self.register(ExamModeModule())
         if "return_user_detection" not in self._modules:
             from .return_user_detection import ReturnUserDetectionModule
@@ -112,20 +116,15 @@ class SecretaryModuleRegistry:
             from .meta_cognitive_prompt import MetaCognitivePromptModule
             self.register(MetaCognitivePromptModule())
         if "silent_task" not in self._modules:
-            from .silent_task import SilentTaskModule
+            from .builtin_housekeeping import SilentTaskModule
             self.register(SilentTaskModule())
         if "behavior_trigger" not in self._modules:
             from .behavior_trigger import BehaviorTriggerModule
             self.register(BehaviorTriggerModule())
 
-        for cls in [ReviewReminderModule, FatigueManagerModule, DailyBriefModule]:
-            self.register(cls())
-
-        # Phase 8 模块
-        from .builtin_temp_conv_cleanup import TempConversationCleanupModule
-        from .builtin_lateral_expansion import LateralExpansionModule
-        self.register(TempConversationCleanupModule())
+        self.register(DailyBriefModule())
         self.register(LateralExpansionModule())
+        self.register(TempConversationCleanupModule())
 
         return len(self._modules)
 

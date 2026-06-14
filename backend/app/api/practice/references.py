@@ -10,7 +10,7 @@ import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
 from app.domain.auth.dependencies import current_user_id
-from app.services.materials.bilibili_search import search_bilibili
+from app.infrastructure.media.bilibili_search import search_bilibili
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v7/practice/references", tags=["参考资料"])
@@ -50,7 +50,7 @@ async def api_references_for_node(
     if not node_id:
         raise HTTPException(400, "node_id 不能为空")
 
-    from app.cognitive import get_repo
+    from app.domain.cognitive import get_repo
     node = get_repo().get_node(node_id, user_id)
     if not node:
         raise HTTPException(404, "知识点不存在")
@@ -74,7 +74,7 @@ async def api_references_for_question(
     if not question_id:
         raise HTTPException(400, "question_id 不能为空")
 
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     db = get_db()
     question = db.fetchone(
         "SELECT * FROM questions WHERE id = %s AND deleted_at IS NULL",
@@ -86,7 +86,7 @@ async def api_references_for_question(
     # 优先使用认知节点标签作为搜索词
     node_ids = question.get("cognitive_node_ids") or []
     if node_ids:
-        from app.cognitive import get_repo
+        from app.domain.cognitive import get_repo
         node = get_repo().get_node(node_ids[0], user_id)
         if node and node.label:
             query = f"{node.label} 讲解"

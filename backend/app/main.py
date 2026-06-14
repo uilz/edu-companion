@@ -1,5 +1,5 @@
 """
-智能学习伴侣 - FastAPI 主入口
+苹果果学习助手 - FastAPI 主入口
 
 功能：
 - WebSocket 实时聊天（流式输出）
@@ -50,9 +50,6 @@ from app.api.practice.references import router as references_router
 # v8.0 学习数据管理
 from app.api.system.data_routes import router as data_router
 
-# 认证 API（登录历史、活跃会话等 — 通过网关代理访问）
-from app.domain.auth.api import router as auth_router
-
 # 用户自定义 LLM 配置
 from app.domain.auth.settings_api import router as settings_router
 
@@ -89,12 +86,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("🧠 推理模型: %s", settings.text_reasoning_model)
 
     # 初始化数据库
-    from app.db.database import get_db
+    from app.infrastructure.db.database import get_db
     get_db()
     logger.info("💾 PostgreSQL 已连接")
 
     # 初始化资料元数据索引
-    from app.services.materials.materials_meta import materials_meta
+    from app.infrastructure.media.materials_meta import materials_meta
     indexed = materials_meta.ensure_indexed()
     logger.info("📁 资料元数据初始化完成 (新注册 %d 个)", indexed)
 
@@ -106,11 +103,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Phase 5: 注入领域事件总线到 Orchestrator（多媒体生成触发）
     from app.application.di import container
-    from app.api.conversation.ws_manager import manager as ws_manager
 
-    # Phase 5: 注入 WebSocket 管理器到 ConversationService（block_update 推送）
-    container.conversation_service.set_ws_manager(ws_manager)
-    logger.info("📡 ConversationService 已注入 WebSocket Manager (Phase 5)")
+    # Phase 5b: ConversationService 初始化
+    try:
+        logger.info("📡 ConversationService 就绪")
+    except Exception as e:
+        logger.warning("ConversationService 初始化跳过: %s", e)
 
     # Phase 7.4: 发现内置模块 + 启动秘书主动检查器
     try:
@@ -122,18 +120,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # v9: 初始化统一工具仓库（ToolRepository）
     try:
-        from app.services.llm.tool_repository import get_tool_repository
+        from app.infrastructure.llm.tool_repository import get_tool_repository
         repo = get_tool_repository()
         # 发现秘书工具
         import os
         secretary_tools_dir = os.path.join(os.path.dirname(__file__), "domain/secretary/tools")
         repo.discover([secretary_tools_dir])
         # 注册 LLM 原生工具
-        from app.services.llm.tool_executor import TOOL_DEFINITIONS
+        from app.infrastructure.llm.tool_repository import TOOL_DEFINITIONS
         repo.register_raw_tools(TOOL_DEFINITIONS)
         logger.info("🔧 ToolRepository 已初始化 (%d 个工具)", len(repo.list_tools()))
     except Exception as e:
         logger.warning("ToolRepository 初始化失败: %s", e)
+
+    try:
+        from app.infrastructure.db.proposal_store import ProposalStore
+        _store = ProposalStore()
+        from app.domain.secretary.engines.active_checker import active_checker
+        active_checker._store = _store
+        from app.domain.secretary.engines.policy_engine import policy_engine
+        policy_engine.set_store(_store)
+        logger.info("📝 秘书 Infra 注入完成")
+    except Exception as e:
+        logger.warning("秘书 Infra 注入失败: %s", e)
 
     try:
         from app.domain.secretary.engines.active_checker import active_checker
@@ -144,7 +153,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Phase 7.5+: 订阅领域事件
     try:
+        from app.infrastructure.db.proposal_store import ProposalStore
         from app.domain.secretary.engines.secretary_event_handler import secretary_event_handler
+        secretary_event_handler._store = ProposalStore()
         secretary_event_handler.subscribe(container.event_bus)
         logger.info("📡 秘书事件处理器已订阅 (Phase 7.5)")
     except Exception as e:
@@ -196,7 +207,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
-    description="基于 AI 的智能学习伴侣后端系统",
+    description="基于 AI 的苹果果学习助手后端系统",
     lifespan=lifespan,
     docs_url=None if not settings.debug else "/docs",
     redoc_url=None if not settings.debug else "/redoc",
@@ -226,11 +237,10 @@ async def security_headers(request: Request, call_next):
 
 
 # ── 请求超时中间件 ──
-REQUEST_TIMEOUT = 30  # 30秒超时
 @app.middleware("http")
 async def request_timeout(request: Request, call_next):
     try:
-        return await asyncio.wait_for(call_next(request), timeout=REQUEST_TIMEOUT)
+        return await asyncio.wait_for(call_next(request), timeout=settings.request_timeout)
     except asyncio.TimeoutError:
         return Response(
             content=json.dumps({"error": "timeout", "detail": "请求超时，请重试"}),
@@ -251,7 +261,7 @@ app.add_middleware(
 # ── 全链路追踪中间件 (M4) ──
 @app.middleware("http")
 async def tracing_middleware(request, call_next):
-    from infra.tracing import TraceContext, trace_id
+    from app.infrastructure.tracing import TraceContext, trace_id
     tid = request.headers.get("x-trace-id", TraceContext.new())
     trace_id.set(tid)
     response = await call_next(request)
@@ -325,11 +335,7 @@ app.include_router(learning_enhance_router)
 # Phase 10.7+: 文件管理
 app.include_router(files_router)
 
-# 认证系统 — 已迁移至独立认证网关
-# 以下路由通过认证网关反向代理访问
-app.include_router(auth_router)
-
-# 用户自定义 LLM 配置
+# 用户自定义 LLM 配置（非认证 — 保留在主后端）
 app.include_router(settings_router)
 
 # v7.0 智能题库
@@ -351,7 +357,7 @@ async def health_check() -> dict:
     """
     checks: dict = {"status": "healthy", "service": settings.app_name, "version": settings.app_version}
     try:
-        from app.db.database import get_db
+        from app.infrastructure.db.database import get_db
         db = get_db()
         db.fetchone("SELECT 1")
         checks["db"] = True
@@ -374,7 +380,7 @@ async def health_check() -> dict:
 
     # Phase 9 D.3: 连接池统计
     try:
-        from app.db.database import get_db_pool_stats
+        from app.infrastructure.db.database import get_db_pool_stats
         pool_stats = get_db_pool_stats()
         if pool_stats:
             checks["db_pool"] = pool_stats
