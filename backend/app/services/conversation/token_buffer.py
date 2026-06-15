@@ -152,15 +152,13 @@ class TokenBuffer:
                     yield evt
 
                 # 检查是否结束
+                final_events: list = []
                 async with self._lock:
                     if entry.state in (State.DONE, State.CANCELLED):
                         # yield 最后一批事件
                         final_events = entry.events[last_read_idx:]
                         last_read_idx = len(entry.events)
-                        if final_events:
-                            # 需要在锁外 yield
-                            pass
-                        else:
+                        if not final_events:
                             break
 
                 if final_events:

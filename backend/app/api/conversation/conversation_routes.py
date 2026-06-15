@@ -437,13 +437,16 @@ async def list_messages(
     for mid in msg_ids:
         node = data.nodes.get(mid)
         if node and not getattr(node, "is_deleted", False):
+            # 跳过根占位消息（parent_id 为空的空内容 assistant 消息）
+            if node.parent_id is None and node.role == "assistant" and not node.content:
+                continue
             d = node.model_dump(mode="json")
             resolved_ids.append(mid)
             messages.append(d)
     # 合并 cognitive_node_ids
     if resolved_ids:
         _merge_cognitive_ids(messages, resolved_ids)
-    total = len(conv_node.conv_message_ids) if conv_node else (len(conv.path) if conv else 0)
+    total = len(messages)
     return Response(
         content=json.dumps({"messages": messages, "total": total}),
         media_type="application/json",
