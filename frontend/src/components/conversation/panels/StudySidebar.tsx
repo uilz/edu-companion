@@ -51,31 +51,20 @@ export default function StudySidebar({
         const resp = await apiFetch<{ directory_node: any }>(`/tree/directory/${pid}`);
         const d = resp.directory_node;
         const node: GraphNode = {
-          id: d.id,
-          label: d.name,
-          level: d.node_type === "conv" ? "conv" : "dir",
-          parent: d.parent_id || null,
-          emoji: d.emoji || "",
-          nodeIndex: 0,
-          path_id: d.name || "",
-          is_visible: true,
-          node_type: d.node_type,
-          kind: d.kind,
-          suggested_count: 0,
-          created_at: d.created_at || 0,
-          brief: "",
-          path: d.path || [],
+          id: d.id, label: d.name, level: d.node_type === "conv" ? "conv" : "dir",
+          parent: d.parent_id || null, emoji: d.emoji || "", nodeIndex: 0,
+          path_id: d.name || "", is_visible: true, node_type: d.node_type,
+          kind: d.kind, suggested_count: 0, created_at: d.created_at || 0,
+          brief: "", path: d.path || [],
         };
         // selectGraphNode 内部会沿 path 展开所有祖先 + 加载子节点 + auto-expand
         await s.selectGraphNode(node, pid);
       } catch {
-        // 降级：无 path 信息时也能选中节点
-        const fallback: GraphNode = {
-          id: pid, label: "", level: "dir", parent: null,
-          nodeIndex: 0, path_id: "", is_visible: true, node_type: "dir",
-          suggested_count: 0, created_at: 0, brief: "", emoji: "", path: [],
-        };
-        await s.selectGraphNode(fallback, pid);
+        // 节点不存在（如 URL 中的 node_id 已被删除），清除 URL 回到默认
+        try {
+          window.history.replaceState(null, "", window.location.pathname);
+          localStorage.removeItem("learn-page-state");
+        } catch { /* ignore */ }
       }
     };
     init();

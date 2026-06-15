@@ -87,15 +87,17 @@ export function useConversation() {
       try {
         const res = await apiFetch<{ directory_node: { node_type: string; parent_id: string | null; name: string; ancestors?: { id: string }[] } }>(`/tree/directory/${nodeId}`);
         const dn = res.directory_node;
-        const ancestors = dn.ancestors || [];
-        const rootId = ancestors.length > 0 ? ancestors[0].id : null;
-        const parentId = dn.parent_id;
         useConversationStore.setState({
           selectedNodeId: nodeId,
           selectedNodeType: dn.node_type as "dir" | "conv",
           urlInitialized: true,
         });
       } catch {
+        // 节点不存在 — 清除 URL 中的 node_id，回到默认状态
+        try {
+          window.history.replaceState(null, "", window.location.pathname);
+          localStorage.removeItem("learn-page-state");
+        } catch { /* ignore */ }
         useConversationStore.setState({ urlInitialized: true });
       }
     }
