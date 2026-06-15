@@ -354,14 +354,19 @@ export default function MessageList({
     });
     // 2) 确定可见消息：活跃版本 + 父节点也可见（递归）
     const activeIdSet = new Set<string>();
+    // 所有消息 ID 集合（用于检测父节点是否被后端过滤，如根占位消息）
+    const allMessageIds = new Set(messages.map(m => m.id));
     // 按 path 序遍历
     for (const m of messages) {
       if (m.is_deleted) continue;
       const gk = messageGroupKey.get(m.id)!;
       const activeId = activeVersions.get(gk);
       if (m.id !== activeId) continue; // 不是活跃版本，跳过
-      // 检查父节点是否可见：父节点需要是活跃的 或者 是根级消息
-      if (!m.parent_id || activeIdSet.has(m.parent_id)) {
+      // 父节点可见条件：
+      // 1) 无父节点（根级消息），或
+      // 2) 父节点已在 activeIdSet 中，或
+      // 3) 父节点不存在于 messages 中（被后端过滤，如根占位消息）
+      if (!m.parent_id || activeIdSet.has(m.parent_id) || !allMessageIds.has(m.parent_id)) {
         activeIdSet.add(m.id);
       }
     }
