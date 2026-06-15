@@ -173,4 +173,5 @@ class TreeMessagesMixin:
             return
         node.content = text
         node.text_summary = text
+        node.content_blocks = [{"type": "text", "text": text}]
         self._get_data_repo().save(user_id, data)

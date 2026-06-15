@@ -84,23 +84,24 @@ export function bindPipelineToStore(storeApi: { setState: (partial: any) => void
       const textBlock = assistantMessage.content_blocks?.find(
         (b: { type: string }) => b.type === "text",
       );
-      const hasContent = textBlock?.text?.trim();
+      const hasContent = !!(textBlock?.text?.trim()) || !!(assistantMessage.content || "").trim() || !!(assistantMessage.text_summary || "").trim();
       storeApi.setState((state: { messages: MessageNode[] }) => {
         const idx = state.messages.findIndex(
           (m) => m.id === placeholderMsgId || m.id === assistantMessage.id,
         );
         if (idx >= 0) {
           const existing = state.messages[idx];
-          const merged = hasContent
-            ? { ...assistantMessage, parent_id: existing.parent_id }
-            : {
-                ...assistantMessage,
-                parent_id: existing.parent_id,
-                content_blocks: [
-                  { type: "text" as const, text: "（助手返回了空回复）" },
-                ],
-                text_summary: "（助手返回了空回复）",
-              };
+          // 保留 token 积累的 content_blocks（backend 可能不包含）
+          const mergedBlocks = hasContent ? (assistantMessage.content_blocks?.length ? assistantMessage.content_blocks : existing.content_blocks) : undefined;
+          const merged = {
+            ...assistantMessage,
+            parent_id: existing.parent_id,
+            ...(mergedBlocks ? { content_blocks: mergedBlocks } : {}),
+            ...(!hasContent ? {
+              content_blocks: [{ type: "text" as const, text: "（助手返回了空回复）" }],
+              text_summary: "（助手返回了空回复）",
+            } : {}),
+          };
           return { messages: Object.assign([], state.messages, { [idx]: merged }) };
         }
         const newMsg = hasContent
