@@ -36,9 +36,8 @@ export async function handleNewConversationImpl(set: any, get: any, level: strin
         });
         tempDir = { id: pData.directory_node.id, name: "临时分区", is_temp: true, emoji: "💬" } as any;
         // 刷新根目录的子节点，让临时目录显示在侧边栏
-        if (rootId) {
-          await useTreeStore.getState().loadChildren(rootId, "dir");
-        }
+        // 注意：必须用 loadRootNodes()（存到 __graph_root__ key），不能用 loadChildren(rootId)
+        await useTreeStore.getState().loadRootNodes();
       }
       pId = tempDir!.id;
       set({ selectedDirId: pId });
