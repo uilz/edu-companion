@@ -119,9 +119,16 @@ export async function sendMessageImpl(
     if (pId && !cId) {
       // 有目录无会话 → 在当前目录下新建一个会话
       try {
+        // 从 childMap 获取父节点 kind
+        let childKind = "general";
+        const cm = useTreeStore.getState().childMap;
+        cm.forEach((children) => {
+          const found = children.find((c: any) => c.id === pId);
+          if (found?.kind) childKind = found.kind;
+        });
         const newC = await apiFetch<{ directory_node: { id: string } }>("/tree/directory", {
           method: "POST",
-          body: JSON.stringify({ node_type: "conv", kind: "general", parent_id: pId, name: "" }),
+          body: JSON.stringify({ node_type: "conv", kind: childKind, parent_id: pId, name: "" }),
         });
         cId = newC.directory_node.id;
         set({

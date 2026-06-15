@@ -5,6 +5,17 @@
 import { apiFetch, ensureConversationAtLevel } from "../tree-helpers";
 import { useTreeStore } from "@/store/conversation/tree-store";
 
+function getParentKind(parentId: string): string {
+  // 从 childMap 查找父节点的 kind
+  const cm = useTreeStore.getState().childMap;
+  let kind = "general";
+  cm.forEach((children) => {
+    const found = children.find((c: any) => c.id === parentId);
+    if (found?.kind) kind = found.kind;
+  });
+  return kind;
+}
+
 export async function handleNewConversationImpl(set: any, get: any, level: string, parentId: string, dirId?: string) {
   try {
     let pId = dirId || get().selectedDirId;
@@ -24,6 +35,10 @@ export async function handleNewConversationImpl(set: any, get: any, level: strin
           }),
         });
         tempDir = { id: pData.directory_node.id, name: "临时分区", is_temp: true, emoji: "💬" } as any;
+        // 刷新根目录的子节点，让临时目录显示在侧边栏
+        if (rootId) {
+          await useTreeStore.getState().loadChildren(rootId, "dir");
+        }
       }
       pId = tempDir!.id;
       set({ selectedDirId: pId });
@@ -34,9 +49,12 @@ export async function handleNewConversationImpl(set: any, get: any, level: strin
       await get().loadDirList();
       return;
     }
-    const result = await ensureConversationAtLevel(level, parentId, pId);
+
+    // 从父节点获取 kind（temp 目录下创建的 conv 也应为 temp）
+    const childKind = getParentKind(parentId);
+    const result = await ensureConversationAtLevel(level, parentId, pId, childKind);
     if (result) {
-      // 刷新 childMap 获取新会话节点
+      // 刷新父节点的子列表
       await useTreeStore.getState().loadChildren(parentId, "dir");
       // 从 childMap 找到新会话，走 selectGraphNode 统一选中（展开祖先 + 高亮）
       const kids = useTreeStore.getState().childMap.get(parentId) || [];

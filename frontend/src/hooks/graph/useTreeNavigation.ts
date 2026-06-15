@@ -207,7 +207,9 @@ export function useTreeNavigation(
       const convStore = useConversationStore.getState();
       const treeState = useTreeStore.getState();
       try {
-        const result = await ensureConversationAtLevel(node.level, node.id, partitionId);
+        // 从父节点获取 kind（temp 目录下创建的 conv 也应为 temp）
+        const childKind = node.kind === "temp" ? "temp" : "general";
+        const result = await ensureConversationAtLevel(node.level, node.id, partitionId, childKind);
         if (result) {
           if (!treeState.expandedSet.has(node.id)) {
             treeState.toggleExpand(node);

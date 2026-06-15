@@ -56,13 +56,13 @@ async function getNextConversationName(parentId: string): Promise<string> {
 /**
  * 确保在指定目录节点下创建对话。
  *
- * 新架构统一使用 DirectoryNode（node_type: "dir" | "conv"）。
- * 对话（conv）只作为 dir 节点的子节点创建。
+ * @param kind 子节点 kind，默认 "general"，父为 temp 时应传 "temp"
  */
 export async function ensureConversationAtLevel(
   level: string,
   parentId: string,
   pId: string,
+  kind: string = "general",
 ): Promise<{ partitionId: string; conversationId: string } | null> {
   try {
     // 新架构下所有非 conv 节点都是 dir，对话直接挂在 dir 下
@@ -89,7 +89,7 @@ export async function ensureConversationAtLevel(
       "/tree/directory",
       {
         method: "POST",
-        body: JSON.stringify({ node_type: "conv", kind: "general", parent_id: actualParentId, name: convName }),
+        body: JSON.stringify({ node_type: "conv", kind, parent_id: actualParentId, name: convName }),
       },
     );
     const convId = createData.directory_node.id;
