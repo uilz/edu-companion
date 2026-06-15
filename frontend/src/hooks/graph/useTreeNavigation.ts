@@ -256,8 +256,23 @@ export function useTreeNavigation(
       }
 
       onTreeChanged?.();
-      if (parentId !== ROOT_KEY) {
-        navigateToNode(parentId);
+
+      // 删除后导航：清除选中状态 + URL
+      if (deleteTarget.id === useConversationStore.getState().selectedNodeId) {
+        if (parentId === ROOT_KEY) {
+          // 删除一级目录 → 清除选中状态 + URL
+          useConversationStore.setState({
+            selectedNodeId: null,
+            selectedNodeType: null,
+            activeConversationId: null,
+            selectedNode: null,
+            messages: [],
+            responseBlocks: [],
+          });
+          try { window.history.replaceState(null, "", window.location.pathname); } catch { /* ignore */ }
+        } else {
+          navigateToNode(parentId);
+        }
       }
     } catch { /* ignore */ }
     setDeleteTarget(null);
