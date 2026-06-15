@@ -78,6 +78,9 @@ async function ensureTempConversation(set: any, get: any): Promise<{ pId: string
       convError: null,
       postSendRedirect: cId,
     });
+    // 刷新侧边栏树
+    await useTreeStore.getState().loadRootNodes();
+    await useTreeStore.getState().loadChildren(pId, "dir");
     await get().loadDirList();
     return { pId, cId };
   } catch (e) {
@@ -136,6 +139,8 @@ export async function sendMessageImpl(
           convError: null,
           postSendRedirect: cId,
         });
+        // 刷新侧边栏该目录的子节点
+        await useTreeStore.getState().loadChildren(pId, "dir");
         await get().loadDirList();
       } catch {
         // 回退到临时目录
