@@ -159,7 +159,7 @@ def add_practice_answer_message(
             "correct_answer": correct_answer,
             "time_spent_seconds": time_spent,
             "hints_used": hints_used,
-            "analysis": analysis[:200] if analysis else "",
+            "explanation": analysis[:200] if analysis else "",
         },
     )
     data.nodes[node.id] = node
@@ -211,3 +211,22 @@ def update_conversation_on_complete(
     data.conversations[conv.id] = conv
     get_data_repo().save(user_id, data)
     logger.info("练习会话 Conversation 已更新: session=%s, score=%.1f%%", session_id, score)
+
+
+def complete_practice_conversation(
+    session_id: str,
+    user_id: str,
+    stats: dict,
+) -> None:
+    """练习完成后的 Conversation 更新入口（适配 practice_session.py 调用）。
+
+    stats 格式: {"score": ..., "total": ..., "correct": ..., "wrong": ...}
+    """
+    update_conversation_on_complete(
+        user_id=user_id,
+        session_id=session_id,
+        correct_count=stats.get("correct", 0),
+        wrong_count=stats.get("wrong", 0),
+        score=stats.get("score", 0),
+        duration_seconds=stats.get("duration_seconds"),
+    )

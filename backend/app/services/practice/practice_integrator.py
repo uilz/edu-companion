@@ -91,14 +91,13 @@ async def integrate_practice_to_branch(
 
     # P2: 练习错误时搜索关联用户资料
     try:
-        from app.infrastructure.media.material_search import material_search as ms
+        from app.infrastructure.files.search import material_search as ms
         enriched = []
         for skill in (session.struggling_skills or [])[:3]:
-            chunks = await ms.search_by_skill(user_id, skill, top_k=2)
+            chunks = await ms.search(user_id, query=skill, top_k=2)
             for c in chunks:
-                src = c["source_file"]
-                pg = c.get("page_number")
-                label = f"{src} p{pg}" if pg else src
+                src = c.get("material_name", c.get("source_file", "未知"))
+                label = src
                 enriched.append(label)
         if enriched:
             branch.practice_summary += " | 资料引用: " + "; ".join(enriched[:2])

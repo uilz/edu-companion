@@ -36,7 +36,7 @@ def create_exam(
     4. 所有题目一次性组好
     """
     from app.infrastructure.db.database import get_db
-    from app.services.practice.practice_adaptive import adaptive_select
+    from app.services.practice.practice_adaptive import adaptive_select_v2
     db = get_db()
 
     now = datetime.now()
@@ -51,8 +51,8 @@ def create_exam(
         **(config or {}),
     }
 
-    # 1. 组题（随机模式，不暴露自适应偏向）
-    questions = adaptive_select(
+    # 1. 组题（v2 自适应模式）
+    questions = adaptive_select_v2(
         bank_id=bank_id,
         user_id=user_id,
         count=count,
@@ -110,16 +110,24 @@ def create_exam(
 
     return {
         "session_id": session_id,
+        "id": session_id,
         "bank_id": bank_id,
         "mode": "exam",
         "session_type": "exam",
         "status": "active",
         "total_count": len(safe_questions),
+        "correct_count": 0,
+        "wrong_count": 0,
+        "score": None,
         "questions": safe_questions,
         "config": cfg,
+        "cognitive_node_ids": node_ids,
         "deadline": deadline.isoformat(),
         "duration_minutes": duration_minutes,
         "created_at": now_iso,
+        "started_at": now_iso,
+        "finished_at": None,
+        "duration_seconds": None,
     }
 
 
@@ -197,12 +205,15 @@ def submit_all_exam(session_id: str, user_id: str) -> dict:
         # 已交卷，返回已有成绩
         return get_exam_result(session_id, user_id)
 
-    # 2. 判分：统计已答题的对错
+    # 2. 判分：从 practice_attempts 读取答题状态
     sq_rows = db.fetchall(
-        """SELECT sq.*, q.answer as correct_answer, q.analysis,
-                  q.question_type, q.options as raw_options, q.stem
+        """SELECT sq.sort_order, sq.question_id,
+                  q.answer, q.explanation,
+                  q.question_type, q.options as raw_options, q.stem,
+                  pa.user_answer, pa.is_correct, pa.time_spent_seconds
            FROM session_questions sq
            LEFT JOIN questions q ON sq.question_id = q.id
+           LEFT JOIN practice_attempts pa ON pa.session_id = sq.session_id AND pa.question_id = sq.question_id
            WHERE sq.session_id = %s
            ORDER BY sq.sort_order""",
         (session_id,),
@@ -229,13 +240,6 @@ def submit_all_exam(session_id: str, user_id: str) -> dict:
             answered += 1
         else:
             unanswered += 1
-            # 未答算错
-            db.execute(
-                """UPDATE session_questions
-                   SET user_answer = %s, is_correct = false, time_spent_seconds = 0
-                   WHERE id = %s""",
-                (json.dumps([]), sq["id"]),
-            )
             wrong += 1
             is_correct = False
             user_answer = []
@@ -290,22 +294,6 @@ def submit_all_exam(session_id: str, user_id: str) -> dict:
     except Exception as e:
         logger.debug("考试秘书提案失败: %s", e)
 
-    # 6. 触发认知模型同步
-    for qr in question_results:
-        if qr["is_correct"] is not None:
-            from app.infrastructure.db.database import get_db as _get_db
-            _db2 = _get_db()
-            _db2.execute(
-                """INSERT INTO practice_attempts
-                   (session_id, question_id, user_id, user_answer, is_correct, time_spent_seconds,
-                    is_wrong, consecutive_correct, created_at)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                (session_id, qr["question_id"], user_id,
-                 json.dumps(qr["user_answer"] if qr["user_answer"] else []),
-                 qr["is_correct"], qr["time_spent"],
-                 not qr["is_correct"], 0, now),
-            )
-
     logger.info("考试交卷: %s, %d/%d 正确, 得分 %.1f", session_id, correct, total, score)
 
     return generate_exam_report(session_id, user_id, question_results, {
@@ -328,9 +316,12 @@ def get_exam_result(session_id: str, user_id: str) -> dict:
         return {"error": "考试不存在"}
 
     sq_rows = db.fetchall(
-        """SELECT sq.*, q.stem, q.analysis, q.question_type, q.options as raw_options
+        """SELECT sq.sort_order, sq.question_id,
+                  q.stem, q.explanation, q.question_type, q.options as raw_options,
+                  pa.user_answer, pa.is_correct, pa.time_spent_seconds
            FROM session_questions sq
            LEFT JOIN questions q ON sq.question_id = q.id
+           LEFT JOIN practice_attempts pa ON pa.session_id = sq.session_id AND pa.question_id = sq.question_id
            WHERE sq.session_id = %s
            ORDER BY sq.sort_order""",
         (session_id,),
@@ -351,7 +342,7 @@ def get_exam_result(session_id: str, user_id: str) -> dict:
             "user_answer": sq.get("user_answer"),
             "correct_answer": _extract_correct_answer(sq),
             "is_correct": is_correct if is_correct is not None else False,
-            "analysis": sq.get("analysis", ""),
+            "analysis": sq.get("explanation", ""),
             "time_spent": sq.get("time_spent_seconds", 0),
         })
         if is_correct is True:
@@ -373,6 +364,256 @@ def get_exam_result(session_id: str, user_id: str) -> dict:
     })
 
 
+def get_exam(session_id: str, user_id: str) -> dict:
+    """获取进行中的考试详情（含题目+剩余时间+答题状态）"""
+    from app.infrastructure.db.database import get_db
+    db = get_db()
+
+    session = db.fetchone(
+        "SELECT * FROM practice_sessions WHERE id = %s AND user_id = %s",
+        (session_id, user_id),
+    )
+    if not session:
+        return {"error": "考试不存在"}
+
+    cfg = session.get("config") or {}
+    if isinstance(cfg, str):
+        cfg = json.loads(cfg)
+
+    # 获取剩余时间
+    time_info = get_exam_time(session_id, user_id)
+
+    # 如果是 timeout / completed，返回结果
+    if not time_info.get("valid", True) or session["status"] != "active":
+        if session["status"] in ("completed", "timeout"):
+            return get_exam_result(session_id, user_id)
+        return {
+            "session_id": session_id,
+            "status": session["status"],
+            "error": f"考试已{session['status']}",
+        }
+
+    # 获取题目 + 答题状态（从 practice_attempts 读取）
+    sq_rows = db.fetchall(
+        """SELECT sq.sort_order, sq.question_id,
+                  q.stem, q.options as raw_options, q.question_type, q.difficulty,
+                  q.cognitive_node_ids,
+                  pa.user_answer, pa.is_correct
+           FROM session_questions sq
+           LEFT JOIN questions q ON sq.question_id = q.id
+           LEFT JOIN practice_attempts pa ON pa.session_id = sq.session_id AND pa.question_id = sq.question_id
+           WHERE sq.session_id = %s
+           ORDER BY sq.sort_order""",
+        (session_id,),
+    )
+
+    questions = []
+    for sq in sq_rows:
+        options = sq.get("raw_options") or []
+        if isinstance(options, str):
+            try:
+                options = json.loads(options)
+            except Exception:
+                options = []
+
+        answered = sq.get("user_answer") is not None
+        questions.append({
+            "id": sq["question_id"],
+            "sort_order": sq["sort_order"],
+            "stem": sq.get("stem", ""),
+            "options": options,
+            "question_type": sq.get("question_type", "single"),
+            "difficulty": sq.get("difficulty", 3),
+            "cognitive_node_ids": sq.get("cognitive_node_ids") or [],
+            "answered": answered,
+            "is_correct": sq.get("is_correct"),
+        })
+
+    return {
+        "session_id": session_id,
+        "bank_id": session.get("bank_id", ""),
+        "status": session["status"],
+        "total_count": session.get("total_count", len(questions)),
+        "questions": questions,
+        "time_info": time_info,
+        "config": cfg,
+        "deadline": cfg.get("deadline", ""),
+        "duration_minutes": cfg.get("duration_minutes", 60),
+        "created_at": session.get("created_at", "").isoformat() if hasattr(session.get("created_at"), "isoformat") else str(session.get("created_at", "")),
+    }
+
+
+def submit_exam_answer(
+    session_id: str,
+    user_id: str,
+    question_id: str,
+    answer,
+    time_spent: int = 0,
+    is_final: bool = False,
+) -> dict:
+    """考试中逐题提交答案"""
+    from app.infrastructure.db.database import get_db
+    from app.services.practice.session_engine import check_answer
+    db = get_db()
+
+    session = db.fetchone(
+        "SELECT * FROM practice_sessions WHERE id = %s AND user_id = %s",
+        (session_id, user_id),
+    )
+    if not session:
+        return {"error": "考试不存在"}
+    if session["status"] != "active":
+        return {"error": f"考试已{session['status']}，不可提交答案"}
+
+    sq = db.fetchone(
+        """SELECT sq.*, q.answer, q.explanation, q.question_type, q.options as raw_options
+           FROM session_questions sq
+           LEFT JOIN questions q ON sq.question_id = q.id
+           WHERE sq.session_id = %s AND sq.question_id = %s""",
+        (session_id, question_id),
+    )
+    if not sq:
+        return {"error": "题目不属于该考试"}
+
+    correct_answer = _extract_correct_answer(sq)
+    is_correct = check_answer(answer, correct_answer, sq.get("question_type", "single"))
+
+    user_answer_json = json.dumps(answer) if not isinstance(answer, str) else json.dumps([answer])
+
+    explanation = sq.get("explanation", "")
+    attempt_id = f"pa_{session_id}_{question_id}"
+    db.execute(
+        """INSERT INTO practice_attempts
+           (id, session_id, question_id, user_id, user_answer, is_correct,
+            time_spent_seconds, is_wrong, consecutive_correct, created_at)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+           ON CONFLICT (id) DO UPDATE SET
+               user_answer = EXCLUDED.user_answer,
+               is_correct = EXCLUDED.is_correct,
+               time_spent_seconds = EXCLUDED.time_spent_seconds""",
+        (attempt_id, session_id, question_id, user_id, user_answer_json,
+         is_correct, time_spent, not is_correct, 0,
+         datetime.now().isoformat()),
+    )
+
+    db.execute(
+        """UPDATE practice_sessions
+           SET correct_count = (SELECT COUNT(*) FROM practice_attempts
+                                WHERE session_id = %s AND is_correct = true),
+               wrong_count = (SELECT COUNT(*) FROM practice_attempts
+                              WHERE session_id = %s AND is_correct = false)
+           WHERE id = %s""",
+        (session_id, session_id, session_id),
+    )
+
+    result = {
+        "question_id": question_id,
+        "is_correct": is_correct,
+        "correct_answer": correct_answer,
+        "explanation": explanation,
+        "time_spent": time_spent,
+    }
+
+    if is_final:
+        result["final_submit"] = True
+        result["exam_result"] = submit_all_exam(session_id, user_id)
+
+    return result
+
+
+def auto_submit_exam(session_id: str, user_id: str) -> Optional[dict]:
+    """超时自动交卷（公开入口）"""
+    from app.infrastructure.db.database import get_db
+    db = get_db()
+
+    session = db.fetchone(
+        "SELECT * FROM practice_sessions WHERE id = %s AND user_id = %s",
+        (session_id, user_id),
+    )
+    if not session:
+        return None
+    if session["status"] not in ("active",):
+        return {"status": session["status"], "message": f"考试已{session['status']}"}
+
+    _auto_submit_exam(session_id, db)
+    return {"status": "timeout", "message": "考试时间到，已自动交卷", "session_id": session_id}
+
+
+def grade_exam(session_id: str, user_id: str) -> Optional[dict]:
+    """考试判分（生成完整成绩报告）"""
+    from app.infrastructure.db.database import get_db
+    db = get_db()
+
+    session = db.fetchone(
+        "SELECT * FROM practice_sessions WHERE id = %s AND user_id = %s",
+        (session_id, user_id),
+    )
+    if not session:
+        return None
+
+    if session["status"] == "completed":
+        return get_exam_result(session_id, user_id)
+
+    if session["status"] == "active":
+        _auto_submit_exam(session_id, db)
+
+    sq_rows = db.fetchall(
+        """SELECT sq.sort_order, sq.question_id,
+                  q.answer, q.explanation,
+                  q.question_type, q.options as raw_options, q.stem,
+                  pa.user_answer, pa.is_correct, pa.time_spent_seconds
+           FROM session_questions sq
+           LEFT JOIN questions q ON sq.question_id = q.id
+           LEFT JOIN practice_attempts pa ON pa.session_id = sq.session_id AND pa.question_id = sq.question_id
+           WHERE sq.session_id = %s
+           ORDER BY sq.sort_order""",
+        (session_id,),
+    )
+
+    total = len(sq_rows)
+    correct = sum(1 for sq in sq_rows if sq.get("is_correct") is True)
+    wrong = sum(1 for sq in sq_rows if sq.get("is_correct") is False)
+    unanswered = sum(1 for sq in sq_rows if sq.get("is_correct") is None)
+    score = round((correct / total) * 100, 1) if total > 0 else 0
+
+    now = datetime.now().isoformat()
+    duration = _calc_duration(session.get("started_at"), now)
+
+    question_results = []
+    for sq in sq_rows:
+        question_results.append({
+            "sort_order": sq.get("sort_order"),
+            "question_id": sq["question_id"],
+            "stem": (sq.get("stem") or "")[:80],
+            "question_type": sq.get("question_type", ""),
+            "user_answer": sq.get("user_answer"),
+            "correct_answer": _extract_correct_answer(sq),
+            "is_correct": sq.get("is_correct") if sq.get("is_correct") is not None else False,
+            "analysis": sq.get("explanation", ""),
+            "time_spent": sq.get("time_spent_seconds", 0),
+        })
+
+    db.execute(
+        """UPDATE practice_sessions
+           SET status = 'completed', correct_count = %s, wrong_count = %s,
+               score = %s, finished_at = %s, duration_seconds = %s
+           WHERE id = %s""",
+        (correct, wrong, score, now, duration, session_id),
+    )
+
+    try:
+        from app.services.analytics.achievement_service import check_achievements
+        check_achievements(user_id)
+    except Exception:
+        pass
+
+    return generate_exam_report(session_id, user_id, question_results, {
+        "total": total, "answered": correct + wrong, "correct": correct,
+        "wrong": wrong, "unanswered": unanswered, "score": score,
+        "duration": duration, "finished_at": now,
+    })
+
+
 def get_exam_answer_sheet(session_id: str, user_id: str) -> dict:
     """获取答题卡状态（用于前端导航）"""
     from app.infrastructure.db.database import get_db
@@ -386,8 +627,10 @@ def get_exam_answer_sheet(session_id: str, user_id: str) -> dict:
         return {"error": "考试不存在"}
 
     sq_rows = db.fetchall(
-        """SELECT sq.sort_order, sq.question_id, sq.is_correct, sq.user_answer
+        """SELECT sq.sort_order, sq.question_id,
+                  pa.is_correct, pa.user_answer
            FROM session_questions sq
+           LEFT JOIN practice_attempts pa ON pa.session_id = sq.session_id AND pa.question_id = sq.question_id
            WHERE sq.session_id = %s
            ORDER BY sq.sort_order""",
         (session_id,),
@@ -424,16 +667,26 @@ def _auto_submit_exam(session_id: str, db) -> None:
            WHERE id = %s AND status = 'active'""",
         (now, session_id),
     )
-    # 未答的题标记为错误
+    # 未答的题标记为错误（写入 practice_attempts）
     unanswered = db.fetchall(
-        """SELECT id FROM session_questions
-           WHERE session_id = %s AND is_correct IS NULL""",
+        """SELECT sq.question_id, sq.sort_order
+           FROM session_questions sq
+           WHERE sq.session_id = %s
+             AND NOT EXISTS (
+               SELECT 1 FROM practice_attempts pa
+               WHERE pa.session_id = sq.session_id AND pa.question_id = sq.question_id
+             )""",
         (session_id,),
     )
     for uq in unanswered:
         db.execute(
-            "UPDATE session_questions SET user_answer = %s, is_correct = false, time_spent_seconds = 0 WHERE id = %s",
-            (json.dumps([]), uq["id"]),
+            """INSERT INTO practice_attempts
+               (id, session_id, question_id, user_id, user_answer, is_correct,
+                time_spent_seconds, is_wrong, consecutive_correct, created_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               ON CONFLICT DO NOTHING""",
+            (f"pa_{session_id}_{uq['question_id']}", session_id, uq["question_id"],
+             "", json.dumps([]), False, 0, True, 0, now),
         )
     logger.info("自动交卷: %s, %d 题未答", session_id, len(unanswered))
 

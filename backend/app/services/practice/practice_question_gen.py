@@ -9,7 +9,6 @@ AI 出题核心 — generate_and_save + handle_question_generation
 格式化/校验逻辑委托给 question_formatter.py 中的纯函数。
 """
 
-import asyncio
 import json
 import logging
 from typing import Optional
@@ -49,16 +48,17 @@ async def generate_and_save(
     count: int = 3,
     content_type: str = "choice",
     material_context: Optional[str] = None,
+    material_ids: Optional[list[str]] = None,
     cognitive_node_ids: Optional[list[str]] = None,
+    reference_mode: Optional[str] = None,
 ) -> list[dict]:
     """
     AI 出题并保存到题库。
 
-    流程：
-    1. 解析 bloom_level → BloomLevel 枚举
-    2. 异步调用 sync QuestionGenerator.generate()（通过 run_in_executor）
-    3. Question Pydantic → v7 题目 dict
-    4. 逐题调用 add_question() 保存
+    reference_mode: 参考资料模式
+        - "inspiration" (灵感参考): 资料仅供启发，可自由拓展
+        - "reference" (一般参考): 题目与资料相关但不完全限制
+        - "strict" (严格参照): 题目必须完全基于资料内容
     """
     _ensure_tables()
 
@@ -79,6 +79,7 @@ async def generate_and_save(
         count=count,
         content_type=content_type,
         material_context=material_context,
+        reference_mode=reference_mode,
     )
 
     if not questions:
@@ -108,6 +109,9 @@ async def generate_and_save(
                 "source_detail": q.source,
             },
         )
+        # 记录资料-题目关联（R2-4）
+        if material_ids and saved_q and saved_q.get("id"):
+            _record_material_question(material_ids, saved_q["id"], user_id)
         saved.append(saved_q)
 
     logger.info("AI 出题完成: bank=%s, count=%d, skill=%s", bank_id, len(saved), skill_id)
@@ -166,6 +170,7 @@ async def handle_question_generation(
     node_id: Optional[str] = None,
     conversation_context: Optional[list[dict]] = None,
     material_ids: Optional[list[str]] = None,
+    reference_mode: Optional[str] = None,
 ) -> dict:
     """
     高阶入口：自然语言 → 意图提取 → 出题 → 自动归属 → 返回结果。
@@ -229,7 +234,7 @@ async def handle_question_generation(
         if material_context:
             logger.info("注入参考资料上下文: %d 个资料, %d 字符", len(ids), len(material_context))
 
-    # 5. 生成并保存（注入 material_context）
+    # 5. 生成并保存（注入 material_context + reference_mode）
     saved = await generate_and_save(
         bank_id=resolved_bank_id,
         user_id=user_id,
@@ -241,6 +246,7 @@ async def handle_question_generation(
         content_type=content_type,
         material_context=material_context,
         cognitive_node_ids=[skill_id] if skill_id and skill_id != subject else None,
+        reference_mode=reference_mode,
     )
 
     # 6. 返回友好结果
@@ -268,6 +274,7 @@ async def generate_for_conversation(
     user_id: str,
     conversation_context: Optional[list[dict]] = None,
     material_ids: Optional[list[str]] = None,
+    reference_mode: Optional[str] = None,
 ) -> dict:
     """对话场景下出题：自动解析对话 → 归属题库 → 生成"""
     bank_id = resolve_bank_for_conversation(conversation_id, user_id)
@@ -278,6 +285,7 @@ async def generate_for_conversation(
         conversation_id=conversation_id,
         conversation_context=conversation_context,
         material_ids=material_ids,
+        reference_mode=reference_mode,
     )
 
 
@@ -486,18 +494,14 @@ async def generate_similar(
     )
 
     try:
-        loop = asyncio.get_event_loop()
-        questions = await loop.run_in_executor(
-            None,
-            lambda: gen.generate(
-                subject=metadata.get("subject", "通用"),
-                skill_id=node_ids[0] if node_ids else "通用",
-                bloom_level=metadata.get("bloom_level", "apply"),
-                difficulty=difficulty / 5.0,
-                count=count,
-                content_type=qtype,
-                material_context=prompt,
-            ),
+        questions = await gen.generate(
+            subject=metadata.get("subject", "通用"),
+            skill_id=node_ids[0] if node_ids else "通用",
+            bloom_level=metadata.get("bloom_level", "apply"),
+            difficulty=difficulty / 5.0,
+            count=count,
+            content_type=qtype,
+            material_context=prompt,
         )
     except Exception as e:
         logger.warning("同类变体生成失败: %s", e)
@@ -581,7 +585,7 @@ async def explain_question(
             answer = json.loads(answer)
         except Exception:
             answer = [answer]
-    analysis = row.get("analysis", "")
+    analysis = row.get("explanation", "") or row.get("analysis", "")
     node_ids = row.get("cognitive_node_ids") or []
 
     # 获取知识点标签
@@ -656,7 +660,7 @@ async def explain_question(
         "question_id": question_id,
         "stem": stem[:200],
         "answer": answer,
-        "analysis": analysis,
+        "explanation": analysis,
         "node_labels": node_labels,
         "style": style,
         **explanation_data,
@@ -676,3 +680,23 @@ def _extract_options(q) -> list[dict]:
 def _map_difficulty(d: float) -> int:
     """难度映射 0~1 → 1~5 — 委托给 formatter"""
     return map_difficulty(d)
+
+
+def _record_material_question(material_ids: list[str], question_id: str, user_id: str) -> None:
+    """记录资料-题目关联（R2-4）"""
+    from app.infrastructure.db.database import get_db
+    try:
+        db = get_db()
+        rows = db.fetchall(
+            "SELECT material_id FROM materials WHERE material_id = ANY(%s) AND user_id = %s",
+            (material_ids, user_id),
+        )
+        for r in rows:
+            db.execute(
+                "INSERT INTO practice_material_questions (material_id, question_id, user_id, created_at) "
+                "VALUES (%s, %s, %s, NOW()) ON CONFLICT DO NOTHING",
+                (r["material_id"], question_id, user_id),
+            )
+        logger.debug("关联资料-题目: q=%s, materials=%d", question_id, len(rows))
+    except Exception as e:
+        logger.warning("资料-题目关联失败（不影响出题）: %s", e)

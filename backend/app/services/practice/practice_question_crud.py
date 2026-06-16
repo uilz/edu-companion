@@ -21,7 +21,7 @@ def add_question(bank_id, user_id, question_type, stem, answer,
     seq = (count["cnt"] if count else 0) + 1
     qid = f"q_{bank_id}_{seq}"
     db.execute(
-        "INSERT INTO questions (id, bank_id, user_id, question_type, stem, options, answer, analysis, "
+        "INSERT INTO questions (id, bank_id, user_id, question_type, stem, options, answer, explanation, "
         "difficulty, cognitive_node_ids, source, metadata, status, created_at, updated_at) "
         "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
         (qid, bank_id, user_id, question_type, stem,
@@ -36,7 +36,7 @@ def add_question(bank_id, user_id, question_type, stem, answer,
 def update_question(question_id, user_id, **kwargs):
     from app.infrastructure.db.database import get_db
     db = get_db()
-    allowed = {"stem", "options", "answer", "analysis", "difficulty",
+    allowed = {"stem", "options", "answer", "explanation", "analysis", "difficulty",
                "question_type", "cognitive_node_ids", "status", "metadata"}
     updates, params = [], []
     for k, v in kwargs.items():
@@ -103,7 +103,7 @@ def batch_import_questions(bank_id, user_id, questions):
             bank_id=bank_id, user_id=user_id,
             question_type=q.get("question_type", "single"),
             stem=q.get("stem", ""), answer=q.get("answer", []),
-            options=q.get("options"), analysis=q.get("analysis", ""),
+            options=q.get("options"), explanation=q.get("explanation", "") or q.get("analysis", ""),
             difficulty=q.get("difficulty", 3),
             cognitive_node_ids=q.get("cognitive_node_ids"),
             source=q.get("source", "import"),
@@ -111,12 +111,66 @@ def batch_import_questions(bank_id, user_id, questions):
     return saved
 
 
+def copy_questions_to_bank(target_bank_id, user_id, question_ids=None, source_bank_id=None):
+    """复制题目到目标题库。支持指定题目ID列表或复制整个源题库。"""
+    from app.infrastructure.db.database import get_db
+    db = get_db()
+
+    target_questions = []
+    if question_ids:
+        for qid in question_ids:
+            row = db.fetchone(
+                "SELECT * FROM questions WHERE id = %s AND deleted_at IS NULL",
+                (qid,),
+            )
+            if row:
+                target_questions.append(row)
+    elif source_bank_id:
+        rows = db.fetchall(
+            "SELECT * FROM questions WHERE bank_id = %s AND deleted_at IS NULL ORDER BY created_at ASC",
+            (source_bank_id,),
+        )
+        target_questions = rows or []
+
+    saved = []
+    for q in target_questions:
+        saved.append(add_question(
+            bank_id=target_bank_id, user_id=user_id,
+            question_type=q.get("question_type", "single"),
+            stem=q.get("stem", ""),
+            answer=q.get("answer", []),
+            options=q.get("options"),
+            analysis=q.get("explanation", "") or q.get("analysis", ""),
+            difficulty=q.get("difficulty", 3),
+            cognitive_node_ids=q.get("cognitive_node_ids"),
+            source="copied",
+            metadata={"copied_from": q["id"], "original_bank_id": q["bank_id"]},
+        ))
+    return saved
+
+
+def reorder_questions_in_bank(bank_id, question_ids, user_id):
+    """按 question_ids 顺序调整题库中的题目顺序（更新 updated_at 时间戳排序）"""
+    from app.infrastructure.db.database import get_db
+    from datetime import datetime
+    db = get_db()
+    now = datetime.now()
+    for i, qid in enumerate(question_ids):
+        ts = now.timestamp() + i
+        dt = datetime.fromtimestamp(ts)
+        db.execute(
+            "UPDATE questions SET updated_at = %s WHERE id = %s AND bank_id = %s AND deleted_at IS NULL",
+            (dt.isoformat(), qid, bank_id),
+        )
+    return True
+
+
 def _row_to_question(row):
     from app.services.practice.practice_question_bank import _safe_json, _safe_iso
     return {
         "id": row["id"], "bank_id": row["bank_id"], "question_type": row["question_type"],
         "stem": row["stem"], "options": _safe_json(row.get("options"), []),
-        "answer": _safe_json(row.get("answer"), []), "analysis": row.get("analysis", ""),
+        "answer": _safe_json(row.get("answer"), []), "explanation": row.get("explanation", "") or row.get("analysis", ""),
         "difficulty": row.get("difficulty", 3),
         "cognitive_node_ids": row.get("cognitive_node_ids") or [],
         "source": row.get("source", "manual"),

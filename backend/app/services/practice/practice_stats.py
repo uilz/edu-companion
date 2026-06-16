@@ -70,8 +70,23 @@ def get_overview(user_id: str) -> dict:
     accuracy = round(correct / max(total, 1) * 100, 1)
     study_minutes = round(total_seconds / 60, 1)
 
-    # 冷启动判断：练习量少时给出引导提示
-    cold_start = total < 5
+    # 冷启动判断
+    question_count = db.fetchone(
+        "SELECT COUNT(*) as cnt FROM questions WHERE bank_id IN "
+        "(SELECT id FROM question_banks WHERE user_id = %s)",
+        (user_id,),
+    )
+    total_questions = question_count["cnt"] if question_count else 0
+
+    if total_questions > 0 and total < 1:
+        cold_start = True
+        cold_start_hint = "选个题库开始你的第一次练习吧！"
+    elif total < 5:
+        cold_start = True
+        cold_start_hint = "开始你的第一次练习吧！"
+    else:
+        cold_start = False
+        cold_start_hint = ""
 
     return {
         "total_questions": total,
@@ -85,7 +100,7 @@ def get_overview(user_id: str) -> dict:
         "due_review_count": due_now,
         "today_questions": today_questions,
         "cold_start": cold_start,
-        "cold_start_hint": "开始你的第一次练习吧！" if cold_start else "",
+        "cold_start_hint": cold_start_hint,
     }
 
 
@@ -221,6 +236,70 @@ def get_weak_skills(user_id: str) -> list[dict]:
 
     weak.sort(key=lambda x: x["mastery"])
     return weak
+
+
+def get_recommendations(user_id: str, limit: int = 5) -> dict:
+    """
+    综合推荐：基于用户薄弱点推荐练习内容。
+
+    返回:
+        weak_skills: 薄弱知识点
+        due_questions: 待复习题目
+        suggested_banks: 推荐练习的题库
+        study_suggestions: 学习建议
+    """
+    from app.infrastructure.db.database import get_db
+    from app.services.practice.practice_scheduler import get_due_questions, get_review_stats
+    from app.services.practice.practice_question_bank import list_banks
+    db = get_db()
+
+    # 1. 薄弱知识点
+    weak_skills = get_weak_skills(user_id)
+    weak_skill_ids = [s["skill_id"] for s in weak_skills[:5]]
+
+    # 2. 待复习题目
+    due = get_due_questions(user_id, limit=limit)
+    rev_stats = get_review_stats(user_id)
+
+    # 3. 推荐题库（基于薄弱知识点的话题匹配）
+    banks = list_banks(user_id) or []
+    suggested_banks = []
+    # 优先推荐有薄弱知识点题目的题库
+    if weak_skill_ids:
+        for b in banks[:5]:
+            bank_questions = db.fetchone(
+                """SELECT COUNT(*) as cnt FROM questions
+                   WHERE bank_id = %s AND deleted_at IS NULL
+                     AND cognitive_node_ids && %s""",
+                (b["id"], weak_skill_ids),
+            )
+            if bank_questions and bank_questions["cnt"] > 0:
+                suggested_banks.append({
+                    "id": b["id"],
+                    "name": b.get("name", ""),
+                    "matching_questions": bank_questions["cnt"],
+                })
+
+    # 4. 学习建议
+    suggestions = []
+    if weak_skills:
+        top_weak = weak_skills[0]
+        suggestions.append(f"建议重点复习「{top_weak['label']}」，当前掌握度仅 {top_weak['mastery']*100:.0f}%")
+    if rev_stats.get("due_now", 0) > 0:
+        suggestions.append(f"有 {rev_stats['due_now']} 道题目待复习，及时复习可提升长期记忆效果")
+    if suggested_banks:
+        suggestions.append(f"推荐在「{suggested_banks[0]['name']}」中练习薄弱知识点")
+    if not weak_skills and not due:
+        suggestions.append("尝试 AI 出题探索新知识点，或开始一次自适应练习")
+
+    return {
+        "weak_skills": weak_skills[:5],
+        "due_questions": due[:limit],
+        "due_review_count": rev_stats.get("due_now", 0),
+        "suggested_banks": suggested_banks[:3],
+        "study_suggestions": suggestions,
+        "total_weak": len(weak_skills),
+    }
 
 
 def _safe_iso(val):

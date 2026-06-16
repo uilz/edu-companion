@@ -1,9 +1,10 @@
 """
-练习会话管理 — 全生命周期（门面模式）
+练习会话管理 — 全生命周期 (门面模式 v2)
 
-公共 API 保持向后兼容，内部实现委托给:
-- session_engine.py — 纯评分/状态机逻辑
-- session_repository.py — 持久化操作
+变更:
+- D3: 上下文使用 PracticeSession Pydantic 对象
+- D9: submit_answer 不再写 session_questions 状态, 走 practice_attempts
+- D5: analysis → explanation
 """
 
 import json
@@ -25,7 +26,34 @@ from app.services.practice import session_repository as repo
 logger = logging.getLogger(__name__)
 
 
-def create_session(
+def _session_to_dict(session) -> dict:
+    """将 PracticeSession 转为前端 dict (兼容 API 响应)"""
+    if session is None:
+        return None
+    return {
+        "session_id": session.id,
+        "id": session.id,
+        "bank_id": session.bank_id,
+        "user_id": session.user_id,
+        "session_type": session.session_type,
+        "mode": session.mode,
+        "total_count": session.total_count,
+        "correct_count": session.correct_count,
+        "wrong_count": session.wrong_count,
+        "score": session.score,
+        "status": session.status,
+        "node_ids": session.cognitive_node_ids,
+        "cognitive_node_ids": session.cognitive_node_ids,
+        "config": session.config,
+        "conversation_id": session.conversation_id,
+        "created_at": safe_iso(session.created_at),
+        "started_at": safe_iso(session.started_at),
+        "finished_at": safe_iso(session.finished_at),
+        "duration_seconds": session.duration_seconds,
+    }
+
+
+async def create_session(
     bank_id: str,
     user_id: str,
     session_type: str = "practice",
@@ -34,15 +62,19 @@ def create_session(
     config: Optional[dict] = None,
     exclude_ids: Optional[list[str]] = None,
     cognitive_node_ids: Optional[list[str]] = None,
+    sources: Optional[dict] = None,
+    question_ids: Optional[list[str]] = None,
 ) -> dict:
     """
-    创建练习会话。
+    创建练习会话，支持多来源混合组卷。
 
-    流程:
-    1. 自适应选题
-    2. 创建会话记录 (status=created)
-    3. 写入会话题目关联
-    4. 返回会话信息（含题目列表，不含答案）
+    sources 配置 (可选，不传则全部从题库自适应选题):
+        {
+            "bank": 6,      # 从题库选题
+            "errors": 2,    # 从错题本选题
+            "variants": 1,  # 从已有题目生成变式
+            "new": 1,       # AI 生成新题
+        }
     """
     from app.infrastructure.db.database import get_db
     from app.services.practice.practice_adaptive import adaptive_select_v2
@@ -53,27 +85,39 @@ def create_session(
         "mode": mode,
         "question_count": question_count,
         "cognitive_node_ids": cognitive_node_ids or [],
+        "sources": sources or {"bank": question_count},
         **(config or {}),
     }
 
-    # 1. 自适应选题
-    questions = adaptive_select_v2(
+    questions = await _collect_questions_from_sources(
         bank_id=bank_id,
         user_id=user_id,
         count=question_count,
         mode=mode,
+        sources=sources or {"bank": question_count},
         exclude_ids=exclude_ids,
         cognitive_node_ids=cognitive_node_ids,
     )
+
+    # 强制包含指定题目（复习单题、错题回顾时使用）
+    if question_ids:
+        existing_ids = {q.get("id") for q in questions if q.get("id")}
+        for qid in question_ids:
+            if qid not in existing_ids:
+                row = db.fetchone("SELECT * FROM questions WHERE id = %s AND deleted_at IS NULL", (qid,))
+                if row:
+                    questions.insert(0, dict(row))
+                    existing_ids.add(qid)
+        # 裁剪到目标数量
+        questions = questions[:question_count]
+
     if not questions:
         logger.warning("无可用题目，创建空会话 bank=%s", bank_id)
 
-    # 2. 创建会话
     now = datetime.now().isoformat()
     session_id = f"ses_{bank_id}_{int(datetime.now().timestamp())}"
     node_ids = list(set(nid for q in questions for nid in (q.get("cognitive_node_ids") or [])))
 
-    # 获取题库名称
     bank_name = ""
     try:
         bank_row = db.fetchone("SELECT name FROM question_banks WHERE id = %s", (bank_id,))
@@ -85,17 +129,18 @@ def create_session(
     repo.insert_session(db, session_id, bank_id, user_id, node_ids, session_type, mode, question_count, cfg, now)
     repo.insert_session_questions(db, session_id, questions, now)
 
-    # 3. 可选：创建对话（从题库名称生成标题）
     if config and config.get("create_conversation", True):
         title = f"{bank_name or '练习'} · {mode}"
         create_practice_conversation(user_id, session_id, title, config.get("tree_node_id"))
 
-    # 4. 返回（移除答案）
+    # 返回（移除答案和解析）
     for q in questions:
         q.pop("answer", None)
+        q.pop("explanation", None)
         q.pop("analysis", None)
 
     return {
+        "session_id": session_id,
         "id": session_id,
         "bank_id": bank_id,
         "bank_name": bank_name,
@@ -103,16 +148,302 @@ def create_session(
         "session_type": session_type,
         "mode": mode,
         "question_count": question_count,
+        "total_count": question_count,
         "status": "created",
         "questions": questions,
         "node_ids": node_ids,
+        "cognitive_node_ids": node_ids,
         "config": cfg,
+        "sources": sources,
         "created_at": now,
+        "started_at": now,
+        "finished_at": None,
+        "correct_count": 0,
+        "wrong_count": 0,
+        "score": None,
+        "duration_seconds": None,
     }
 
 
+async def _collect_questions_from_sources(
+    bank_id: str,
+    user_id: str,
+    count: int,
+    mode: str,
+    sources: dict,
+    exclude_ids: Optional[list[str]] = None,
+    cognitive_node_ids: Optional[list[str]] = None,
+) -> list[dict]:
+    """
+    从多个来源收集题目，按 sources 配置的比例混合。
+
+    来源:
+    - bank: 从题库自适应选题
+    - errors: 从错题本选题 (错最多的优先)
+    - variants: 从已有题目生成变式
+    - new: AI 生成新题
+    """
+    from app.services.practice.practice_adaptive import adaptive_select_v2
+
+    all_questions = []
+    exclude = set(exclude_ids or [])
+
+    # 1. 题库选题
+    bank_count = sources.get("bank", 0)
+    if bank_count > 0:
+        bank_questions = adaptive_select_v2(
+            bank_id=bank_id,
+            user_id=user_id,
+            count=bank_count,
+            mode=mode,
+            exclude_ids=list(exclude),
+            cognitive_node_ids=cognitive_node_ids,
+        )
+        for q in bank_questions:
+            q["_source"] = "bank"
+        all_questions.extend(bank_questions)
+        exclude.update(q["id"] for q in bank_questions)
+        logger.info("题库选题: %d", len(bank_questions))
+
+    # 2. 错题本选题
+    error_count = sources.get("errors", 0)
+    if error_count > 0:
+        error_questions = await _collect_from_error_book(
+            bank_id=bank_id,
+            user_id=user_id,
+            count=error_count,
+            exclude_ids=list(exclude),
+            cognitive_node_ids=cognitive_node_ids,
+        )
+        for q in error_questions:
+            q["_source"] = "errors"
+        all_questions.extend(error_questions)
+        exclude.update(q["id"] for q in error_questions)
+        logger.info("错题选题: %d", len(error_questions))
+
+    # 3. 变式生成
+    variant_count = sources.get("variants", 0)
+    if variant_count > 0:
+        variant_questions = await _collect_variants(
+            bank_id=bank_id,
+            user_id=user_id,
+            count=variant_count,
+            exclude_ids=list(exclude),
+            cognitive_node_ids=cognitive_node_ids,
+        )
+        for q in variant_questions:
+            q["_source"] = "variants"
+        all_questions.extend(variant_questions)
+        exclude.update(q["id"] for q in variant_questions)
+        logger.info("变式选题: %d", len(variant_questions))
+
+    # 4. AI 新题
+    new_count = sources.get("new", 0)
+    if new_count > 0:
+        new_questions = await _collect_new_questions(
+            bank_id=bank_id,
+            user_id=user_id,
+            count=new_count,
+            cognitive_node_ids=cognitive_node_ids,
+        )
+        for q in new_questions:
+            q["_source"] = "new"
+        all_questions.extend(new_questions)
+        logger.info("AI 新题: %d", len(new_questions))
+
+    # 如果指定来源不够，题库补足
+    total = len(all_questions)
+    if total < count:
+        shortage = count - total
+        logger.info("来源不足 %d 题，题库补足", shortage)
+        extra = adaptive_select_v2(
+            bank_id=bank_id,
+            user_id=user_id,
+            count=shortage,
+            mode=mode,
+            exclude_ids=list(exclude),
+            cognitive_node_ids=cognitive_node_ids,
+        )
+        for q in extra:
+            q["_source"] = "bank"
+        all_questions.extend(extra)
+
+    return all_questions[:count]
+
+
+def _collect_from_error_book(
+    bank_id: str,
+    user_id: str,
+    count: int,
+    exclude_ids: list[str],
+    cognitive_node_ids: Optional[list[str]] = None,
+) -> list[dict]:
+    """从错题本选取错题（错最多的优先）"""
+    from app.infrastructure.db.database import get_db
+    db = get_db()
+
+    conditions = ["att.user_id = %s", "att.is_wrong = true", "q.bank_id = %s"]
+    params = [user_id, bank_id]
+
+    if cognitive_node_ids:
+        conditions.append("q.cognitive_node_ids && %s")
+        params.append(cognitive_node_ids)
+
+    if exclude_ids:
+        placeholders = ",".join(["%s"] * len(exclude_ids))
+        conditions.append(f"att.question_id NOT IN ({placeholders})")
+        params.extend(exclude_ids)
+
+    where = " AND ".join(conditions)
+
+    rows = db.fetchall(
+        f"""SELECT att.question_id, q.bank_id, q.stem, q.options, q.question_type,
+                  q.difficulty, q.cognitive_node_ids,
+                  COUNT(*) as wrongs
+           FROM practice_attempts att
+           JOIN questions q ON att.question_id = q.id AND q.deleted_at IS NULL
+           WHERE {where}
+           GROUP BY att.question_id, q.bank_id, q.stem, q.options, q.question_type,
+                    q.difficulty, q.cognitive_node_ids
+           ORDER BY wrongs DESC
+           LIMIT %s""",
+        tuple(params) + (count,),
+    )
+
+    result = []
+    for r in rows:
+        options = r.get("options") or []
+        if isinstance(options, str):
+            try:
+                options = json.loads(options)
+            except Exception:
+                options = []
+        result.append({
+            "id": r["question_id"],
+            "bank_id": r["bank_id"],
+            "question_type": r["question_type"],
+            "stem": r["stem"],
+            "options": options,
+            "difficulty": r.get("difficulty", 3),
+            "cognitive_node_ids": r.get("cognitive_node_ids") or [],
+            "_wrongs": r.get("wrongs", 0),
+        })
+    return result
+
+
+async def _collect_variants(
+    bank_id: str,
+    user_id: str,
+    count: int,
+    exclude_ids: list[str],
+    cognitive_node_ids: Optional[list[str]] = None,
+) -> list[dict]:
+    """从题库现有题目生成变式"""
+    from app.infrastructure.db.database import get_db
+    db = get_db()
+
+    # 随机选一道题做变式
+    conditions = ["q.bank_id = %s", "q.deleted_at IS NULL", "q.status = 'active'"]
+    params = [bank_id]
+
+    if cognitive_node_ids:
+        conditions.append("q.cognitive_node_ids && %s")
+        params.append(cognitive_node_ids)
+
+    if exclude_ids:
+        placeholders = ",".join(["%s"] * len(exclude_ids))
+        conditions.append(f"q.id NOT IN ({placeholders})")
+        params.extend(exclude_ids)
+
+    where = " AND ".join(conditions)
+
+    row = db.fetchone(
+        f"SELECT id FROM questions WHERE {where} ORDER BY RANDOM() LIMIT 1",
+        tuple(params),
+    )
+
+    if not row:
+        return []
+
+    try:
+        from app.services.practice.practice_question_gen import generate_similar
+        variants = await generate_similar(
+            question_id=row["id"],
+            user_id=user_id,
+            count=min(count, 3),
+        )
+        result = []
+        for v in variants:
+            result.append({
+                "id": v["id"],
+                "bank_id": bank_id,
+                "question_type": v.get("question_type", "single"),
+                "stem": v.get("stem", ""),
+                "options": v.get("options", []),
+                "difficulty": v.get("difficulty", 3),
+                "cognitive_node_ids": v.get("cognitive_node_ids") or [],
+            })
+        return result
+    except Exception as e:
+        logger.warning("变式生成失败: %s", e)
+        return []
+
+
+async def _collect_new_questions(
+    bank_id: str,
+    user_id: str,
+    count: int,
+    cognitive_node_ids: Optional[list[str]] = None,
+) -> list[dict]:
+    """AI 生成新题"""
+    try:
+        from app.services.practice.practice_question_gen import generate_and_save
+
+        skill_id = cognitive_node_ids[0] if cognitive_node_ids else ""
+
+        subject = ""
+        try:
+            from app.infrastructure.db.database import get_db
+            db = get_db()
+            bank = db.fetchone("SELECT metadata FROM question_banks WHERE id = %s", (bank_id,))
+            if bank:
+                meta = bank.get("metadata") or {}
+                if isinstance(meta, str):
+                    import json as _j
+                    meta = _j.loads(meta)
+                subject = meta.get("subject", "") or ""
+        except Exception:
+            pass
+        if not subject:
+            subject = "通用"
+
+        saved = await generate_and_save(
+            bank_id=bank_id,
+            user_id=user_id,
+            subject=subject,
+            skill_id=skill_id,
+            count=min(count, 5),
+            content_type="choice",
+        )
+        result = []
+        for q in saved:
+            result.append({
+                "id": q["id"],
+                "bank_id": bank_id,
+                "question_type": q.get("question_type", "single"),
+                "stem": q.get("stem", ""),
+                "options": q.get("options", []),
+                "difficulty": q.get("difficulty", 3),
+                "cognitive_node_ids": q.get("cognitive_node_ids") or [],
+            })
+        return result
+    except Exception as e:
+        logger.warning("AI 新题生成失败: %s", e)
+        return []
+
+
 def get_session(session_id: str, user_id: str) -> Optional[dict]:
-    """获取会话详情（含答题状态）"""
+    """获取会话详情 (含答题状态, D9: 从 practice_attempts 聚合)"""
     from app.infrastructure.db.database import get_db
     db = get_db()
 
@@ -120,38 +451,52 @@ def get_session(session_id: str, user_id: str) -> Optional[dict]:
     if not session:
         return None
 
-    # 获取题目列表（含用户答题状态）
+    # 获取题目列表 (无状态 session_questions)
+    sq_rows = repo.get_session_questions(db, session_id)
+    question_ids = [r["question_id"] for r in sq_rows]
+
+    # 获取答题状态 (从 practice_attempts 聚合)
+    question_map = {r["question_id"]: r for r in sq_rows}
+    if question_ids:
+        attempt_rows = db.fetchall(
+            """SELECT question_id, user_answer, is_correct, time_spent_seconds
+               FROM practice_attempts WHERE session_id = %s AND question_id = ANY(%s)""",
+            (session_id, question_ids),
+        )
+        attempt_map = {r["question_id"]: r for r in attempt_rows}
+    else:
+        attempt_map = {}
+
     questions = db.fetchall(
-        """SELECT sq.*, q.question_type, q.bloom_level, q.difficulty, q.content, q.options, q.analysis
-           FROM session_questions sq
-           JOIN questions q ON q.id = sq.question_id
-           WHERE sq.session_id = %s
-           ORDER BY sq.created_at""",
-        (session_id,),
+        """SELECT q.id, q.question_type, q.stem, q.options, q.explanation,
+                  q.difficulty, q.source
+           FROM questions q
+           WHERE q.id = ANY(%s) AND q.deleted_at IS NULL""",
+        (question_ids,),
     )
+    # 按 session_questions 排序
+    q_data = {q["id"]: q for q in questions}
+    ordered = []
+    for sq in sq_rows:
+        qid = sq["question_id"]
+        if qid in q_data:
+            q = dict(q_data[qid])
+            q["options"] = safe_json(q.get("options"), [])
+            q["sort_order"] = sq.get("sort_order", 0)
+            # 注入答题状态
+            att = attempt_map.get(qid)
+            answered = att is not None
+            q["answered"] = answered
+            q["correct"] = att["is_correct"] if att else None
+            q["user_answer"] = safe_json(att["user_answer"], None) if att else None
+            q["is_correct"] = att["is_correct"] if att else None
+            q["time_spent"] = att["time_spent_seconds"] if att else 0
+            q["hints_used"] = 0
+            ordered.append(q)
 
-    for q in questions:
-        q["options"] = safe_json(q.get("options"), [])
-        q["user_answer"] = safe_json(q.get("user_answer"), None)
-
-    return {
-        "id": session["id"],
-        "bank_id": session["bank_id"],
-        "user_id": session["user_id"],
-        "session_type": session["session_type"],
-        "mode": session["mode"],
-        "question_count": safe_int(session["question_count"]),
-        "correct_count": safe_int(session["correct_count"]),
-        "wrong_count": safe_int(session["wrong_count"]),
-        "score": float(session.get("score", 0) or 0),
-        "status": session["status"],
-        "node_ids": safe_json(session.get("node_ids"), []),
-        "config": safe_json(session.get("config"), {}),
-        "questions": questions,
-        "created_at": safe_iso(session.get("created_at")),
-        "started_at": safe_iso(session.get("started_at")),
-        "finished_at": safe_iso(session.get("finished_at")),
-    }
+    result = _session_to_dict(session)
+    result["questions"] = ordered
+    return result
 
 
 def submit_answer(
@@ -163,28 +508,43 @@ def submit_answer(
     hints_used: int = 0,
 ) -> dict:
     """
-    提交答题。
+    提交答题 (D9: session_questions 不再存状态, 仅 practice_attempts).
 
     流程:
     1. 验证会话 & 题目归属
     2. 判对错
-    3. 更新 session_questions
-    4. 写入 practice_attempts（含错因分析）
-    5. 更新会话统计
-    6. 认知节点联动 — sync_from_practice_event()
+    3. 写入 practice_attempts (含错因分析)
+    4. 更新会话统计
+    5. 认知节点联动
     """
     from app.infrastructure.db.database import get_db
     from app.domain.cognitive import get_repo
     db = get_db()
 
-    # 1. 验证
+    # 1. 验证 (D9: 从 practice_attempts 检查是否已答)
     sq = repo.get_session_question(db, session_id, question_id)
     if not sq:
         return {"error": "题目不属于该会话", "is_correct": False}
-    if sq.get("user_answer") is not None:
+    existing = db.fetchone(
+        "SELECT is_correct, user_answer FROM practice_attempts WHERE session_id = %s AND question_id = %s",
+        (session_id, question_id),
+    )
+    if existing:
+        # 已答过，返回之前的结果而不是报错
+        question = db.fetchone(
+            "SELECT * FROM questions WHERE id = %s AND deleted_at IS NULL",
+            (question_id,),
+        )
+        correct_answer = safe_json(question.get("answer"), []) if question else []
+        explanation = (question.get("explanation", "") or question.get("analysis", "")) if question else ""
         return {
-            "error": "题目已作答，不可重复提交",
-            "is_correct": sq.get("is_correct"),
+            "is_correct": existing["is_correct"],
+            "correct_answer": correct_answer,
+            "analysis": explanation,
+            "explanation": explanation,
+            "consecutive_correct": 0,
+            "mastered": existing["is_correct"],
+            "wrong_count_increased": not existing["is_correct"],
             "already_answered": True,
         }
 
@@ -196,17 +556,17 @@ def submit_answer(
         return {"error": "题目不存在", "is_correct": False}
 
     correct_answer = safe_json(question.get("answer"), [])
-    analysis = question.get("analysis", "")
+    explanation = question.get("explanation", "") or question.get("analysis", "")
 
-    # 2. 判对错（纯函数）
+    # 2. 判对错
     is_correct = check_answer(user_answer, correct_answer, question.get("question_type", "single"))
     now = datetime.now().isoformat()
 
-    # 3. 错因分类
-    error_type = ""
-    error_detail = ""
+    # 3. 错因分析
+    error_pattern = ""
+    error_analysis = {}
     if not is_correct:
-        error_type = classify_error(question, user_answer) or ""
+        error_pattern = classify_error(question, user_answer) or ""
         try:
             from app.services.analytics.error_attribution import classify_llm
             error_detail = classify_llm(
@@ -214,21 +574,18 @@ def submit_answer(
                 user_answer=user_answer,
                 correct_answer=correct_answer,
             )
+            error_analysis = {"llm_detail": error_detail} if error_detail else {}
         except Exception:
             pass
 
-    # 4. 更新会话题目
-    repo.update_session_question(db, session_id, question_id, is_correct, user_answer or [],
-                                  time_spent, hints_used, error_type, now)
-
-    # 5. 写入答题记录
+    # 4. 写入答题记录 (D9: 唯一记录源)
     repo.insert_attempt(db, session_id, question_id, user_id, is_correct, user_answer or [],
-                         time_spent, hints_used, error_type, error_detail, analysis, now)
+                         time_spent, hints_used, error_pattern, error_analysis, now)
 
-    # 6. 更新会话统计
+    # 5. 更新会话统计
     repo.update_session_stats(db, session_id)
 
-    # 7. 认知节点联动
+    # 6. 认知节点联动
     try:
         cognitive_node_ids = safe_json(question.get("cognitive_node_ids"), [])
         for node_id in cognitive_node_ids:
@@ -246,75 +603,74 @@ def submit_answer(
     return {
         "is_correct": is_correct,
         "correct_answer": correct_answer,
-        "analysis": analysis,
-        "error_type": error_type,
-        "error_detail": error_detail,
+        "analysis": explanation,
+        "explanation": explanation,
+        "consecutive_correct": 0,
+        "mastered": is_correct,
+        "wrong_count_increased": not is_correct,
+        "error_type": error_pattern,
+        "error_detail": error_analysis.get("llm_detail", ""),
     }
 
 
 def start_session(session_id: str, user_id: str) -> Optional[dict]:
-    """开始会话（created → started）"""
     from app.infrastructure.db.database import get_db
     db = get_db()
 
     session = repo.get_session(db, session_id, user_id)
     if not session:
         return None
-    if not validate_transition(session["status"], "started"):
+    if not validate_transition(session.status, "started"):
         return None
 
     now = datetime.now().isoformat()
     repo.update_session_status(db, session_id, "started", {"started_at": now})
-    return {"id": session_id, "status": "started", "started_at": now}
+    return {"session_id": session_id, "id": session_id, "status": "started", "started_at": now}
 
 
 def pause_session(session_id: str, user_id: str) -> Optional[dict]:
-    """暂停会话（started → paused）"""
     from app.infrastructure.db.database import get_db
     db = get_db()
 
     session = repo.get_session(db, session_id, user_id)
     if not session:
         return None
-    if not validate_transition(session["status"], "paused"):
+    if not validate_transition(session.status, "paused"):
         return None
 
     repo.update_session_status(db, session_id, "paused")
-    return {"id": session_id, "status": "paused"}
+    return {"session_id": session_id, "id": session_id, "status": "paused"}
 
 
 def resume_session(session_id: str, user_id: str) -> Optional[dict]:
-    """恢复会话（paused → started）"""
     from app.infrastructure.db.database import get_db
     db = get_db()
 
     session = repo.get_session(db, session_id, user_id)
     if not session:
         return None
-    if not validate_transition(session["status"], "started"):
+    if not validate_transition(session.status, "started"):
         return None
 
     repo.update_session_status(db, session_id, "started")
-    return {"id": session_id, "status": "started"}
+    return {"session_id": session_id, "id": session_id, "status": "started"}
 
 
 def cancel_session(session_id: str, user_id: str) -> Optional[dict]:
-    """取消会话（任一状态 → cancelled）"""
     from app.infrastructure.db.database import get_db
     db = get_db()
 
     session = repo.get_session(db, session_id, user_id)
     if not session:
         return None
-    if not validate_transition(session["status"], "cancelled"):
+    if not validate_transition(session.status, "cancelled"):
         return None
 
     repo.update_session_status(db, session_id, "cancelled")
-    return {"id": session_id, "status": "cancelled"}
+    return {"session_id": session_id, "id": session_id, "status": "cancelled"}
 
 
 def get_session_result(session_id: str, user_id: str) -> Optional[dict]:
-    """获取会话结果统计"""
     from app.infrastructure.db.database import get_db
     db = get_db()
 
@@ -324,20 +680,20 @@ def get_session_result(session_id: str, user_id: str) -> Optional[dict]:
 
     stats = repo.update_session_stats(db, session_id)
     return {
-        "id": session_id,
-        "status": session["status"],
+        "session_id": session.id,
+        "id": session.id,
+        "status": session.status,
         "score": stats["score"],
         "total": stats["total"],
         "correct": stats["correct"],
         "wrong": stats["wrong"],
-        "created_at": safe_iso(session.get("created_at")),
-        "started_at": safe_iso(session.get("started_at")),
-        "finished_at": safe_iso(session.get("finished_at")),
+        "created_at": safe_iso(session.created_at),
+        "started_at": safe_iso(session.started_at),
+        "finished_at": safe_iso(session.finished_at),
     }
 
 
 def complete_session(session_id: str, user_id: str) -> Optional[dict]:
-    """完成会话（started → completed）"""
     from app.infrastructure.db.database import get_db
     from app.services.practice.practice_conversation import complete_practice_conversation
     db = get_db()
@@ -345,21 +701,21 @@ def complete_session(session_id: str, user_id: str) -> Optional[dict]:
     session = repo.get_session(db, session_id, user_id)
     if not session:
         return None
-    if not validate_transition(session["status"], "completed"):
+    if not validate_transition(session.status, "completed"):
         return None
 
     now = datetime.now().isoformat()
     stats = repo.update_session_stats(db, session_id)
     repo.update_session_status(db, session_id, "completed", {"finished_at": now})
 
-    # 完成关联练习对话
     try:
         complete_practice_conversation(session_id, user_id, stats)
     except Exception as e:
         logger.debug("练习对话完成失败: %s", e)
 
     return {
-        "id": session_id,
+        "session_id": session.id,
+        "id": session.id,
         "status": "completed",
         "score": stats["score"],
         "total": stats["total"],
@@ -373,17 +729,34 @@ def list_sessions(
     user_id: str,
     bank_id: str = None,
     status: str = None,
+    session_type: str = None,
+    mode: str = None,
+    date_from: str = None,
+    date_to: str = None,
+    score_min: float = None,
+    score_max: float = None,
     limit: int = 50,
     offset: int = 0,
-) -> list[dict]:
-    """列出用户练习会话"""
+) -> dict:
+    """列出用户练习会话 → {items, total, has_more} for API"""
     from app.infrastructure.db.database import get_db
     db = get_db()
-    return repo.list_sessions(db, user_id, bank_id, status, limit, offset)
+    sessions, total = repo.list_sessions(
+        db, user_id, bank_id, status, session_type,
+        mode=mode, date_from=date_from, date_to=date_to,
+        score_min=score_min, score_max=score_max,
+        limit=limit, offset=offset,
+    )
+    items = [_session_to_dict(s) for s in sessions]
+    return {
+        "items": items,
+        "total": total,
+        "has_more": (offset + len(items)) < total,
+        "next_cursor": None,
+    }
 
 
 def delete_session(session_id: str, user_id: str) -> bool:
-    """删除练习会话及关联数据"""
     from app.infrastructure.db.database import get_db
     db = get_db()
     return repo.delete_session(db, session_id, user_id)

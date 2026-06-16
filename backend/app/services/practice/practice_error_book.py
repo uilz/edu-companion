@@ -74,7 +74,7 @@ def get_error_book(
     rows = db.fetchall(
         f"""SELECT att.question_id,
                   q.bank_id, q.stem, q.options, q.question_type, q.difficulty,
-                  q.cognitive_node_ids, q.analysis,
+                  q.cognitive_node_ids, q.explanation,
                   COUNT(*) as total_attempts,
                   SUM(CASE WHEN att.is_wrong THEN 1 ELSE 0 END) as wrongs,
                   MAX(CASE WHEN att.is_wrong THEN att.created_at ELSE NULL END) as last_wrong,
@@ -84,7 +84,7 @@ def get_error_book(
            JOIN questions q ON att.question_id = q.id AND q.deleted_at IS NULL
            WHERE {where}
            GROUP BY att.question_id, q.bank_id, q.stem, q.options,
-                    q.question_type, q.difficulty, q.cognitive_node_ids, q.analysis
+                    q.question_type, q.difficulty, q.cognitive_node_ids, q.explanation
            ORDER BY {order_sql}
            LIMIT %s OFFSET %s""",
         tuple(params + [page_size, offset]),
@@ -106,7 +106,7 @@ def get_error_book(
             "question_type": r["question_type"],
             "difficulty": r["difficulty"],
             "cognitive_node_ids": r.get("cognitive_node_ids") or [],
-            "analysis": r.get("analysis", ""),
+            "explanation": r.get("explanation", "") or r.get("analysis", ""),
             "total_attempts": total_att,
             "wrong_count": wrongs,
             "wrong_rate": round(wrongs / max(total_att, 1) * 100, 1),
@@ -275,12 +275,15 @@ def get_error_materials(
 
     recommendations = []
 
-    # 1. 查用户上传的资料中关联了这些节点的
+    # 1. 查用户上传的资料中关联了这些知识点的
     try:
         rows = db.fetchall(
-            """SELECT m.id, m.filename, m.file_type, m.file_size, m.created_at
-               FROM material_meta m
-               WHERE m.user_id = %s AND m.skills_covered && %s
+            """SELECT m.material_id as id, m.file_name as filename,
+                      m.file_type, m.file_size, m.created_at
+               FROM materials m
+               WHERE m.user_id = %s AND m.status = 'indexed'
+                 AND m.skills_covered_json IS NOT NULL
+                 AND m.skills_covered_json ?| %s::text[]
                ORDER BY m.created_at DESC LIMIT %s""",
             (user_id, node_ids, limit),
         )

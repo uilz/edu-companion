@@ -50,7 +50,7 @@ def validate_question(question_data: dict) -> list[str]:
     errors = []
     if not question_data.get("stem"):
         errors.append("题干为空")
-    if not question_data.get("correct_answer") and not question_data.get("answer"):
+    if not question_data.get("answer"):
         errors.append("答案为空")
     qtype = question_data.get("question_type", "choice")
     if qtype in ("choice", "single", "multiple"):
@@ -84,15 +84,15 @@ def score_quality(question: dict) -> float:
 def extract_answer(question_data) -> list:
     """从 AI 输出或 Question 对象提取答案列表"""
     q = question_data
-    if hasattr(q, "correct_answer"):
-        ans = q.correct_answer
+    if hasattr(q, "answer"):
+        ans = q.answer
         if ans is None:
             return []
         if isinstance(ans, list):
             return ans
         return [ans]
     if isinstance(q, dict):
-        ans = q.get("correct_answer") or q.get("answer") or []
+        ans = q.get("answer") or []
         if isinstance(ans, list):
             return ans
         return [ans]

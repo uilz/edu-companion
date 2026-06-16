@@ -68,7 +68,7 @@ def parse_file(file_path: str, file_type: str = "") -> list[dict]:
 
     if ext in (".docx", ".xlsx", ".pptx", ".pdf"):
         try:
-            from app.infrastructure.media.material_parser import material_parser
+            from app.infrastructure.files.parser import material_parser
             md_text = material_parser.parse(str(path), ext)
             if md_text.strip():
                 return parse_questions_from_text(md_text, ext)

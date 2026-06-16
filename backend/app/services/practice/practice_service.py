@@ -131,17 +131,26 @@ def update_cognitive_after_practice(
 # ═══════════════════════════════════════════
 
 
-def check_answer(user_answer: str, correct_answer: str) -> bool:
-    """标准化比较答案"""
-    return user_answer.strip().upper() == correct_answer.strip().upper()
+def check_answer(user_answer, correct_answer) -> bool:
+    """标准化比较答案 — 支持 list[str] 和 str"""
+    if isinstance(user_answer, list):
+        user_answer = [str(a).strip().upper() for a in user_answer]
+    else:
+        user_answer = [str(user_answer).strip().upper()]
+    if isinstance(correct_answer, list):
+        correct_answer = [str(a).strip().upper() for a in correct_answer]
+    else:
+        correct_answer = [str(correct_answer).strip().upper()]
+    return set(user_answer) == set(correct_answer)
 
 
-def build_reply_text(is_correct: bool, correct_label: str, explanation: str) -> str:
+def build_reply_text(is_correct: bool, correct_label, explanation: str) -> str:
     """构建内联回复文本"""
+    label = ", ".join(correct_label) if isinstance(correct_label, list) else str(correct_label)
     if is_correct:
         return f"✅ 正确！{explanation}" if explanation else "✅ 正确！"
     else:
-        base = f"❌ 不对哦。正确答案是 **{correct_label}**"
+        base = f"❌ 不对哦。正确答案是 **{label}**"
         return f"{base}。{explanation}" if explanation else f"{base}。"
 
 
@@ -153,7 +162,7 @@ def build_reply_text(is_correct: bool, correct_label: str, explanation: str) -> 
 def get_hint_for_question(question_id: str, current_level: int) -> dict:
     """获取题目提示（逐级提示 → 最终解释）"""
     db = get_db()
-    row = db.fetchone("SELECT * FROM questions WHERE question_id = %s", (question_id,))
+    row = db.fetchone("SELECT * FROM questions WHERE id = %s", (question_id,))
     if not row:
         return None
 
@@ -333,7 +342,7 @@ def complete_practice_session(session_id: str) -> Optional[dict]:
 
     # 获取薄弱知识点
     attempts = db.fetchall(
-        "SELECT skill_id, is_correct FROM practice_attempts WHERE session_id = %s AND is_correct = false",
+        "SELECT unnest(cognitive_node_ids) as skill_id FROM practice_attempts WHERE session_id = %s AND is_correct = false",
         (session_id,),
     )
     struggling = list(set(a["skill_id"] for a in attempts)) if attempts else []
@@ -356,12 +365,11 @@ def record_attempt(
     time_spent_seconds: float,
     hints_used: int,
 ) -> None:
-    """记录一次答题到 practice_attempts 表（主表）+ attempts 表（兼容旧查询）"""
+    """记录一次答题到 practice_attempts 表（唯一表）"""
     db = get_db()
     now = datetime.now().isoformat()
     is_wrong = not is_correct
 
-    # 写入主表 practice_attempts
     try:
         import uuid
         attempt_id = str(uuid.uuid4())
@@ -377,18 +385,7 @@ def record_attempt(
              [], now),
         )
     except Exception as e:
-        logger.debug("Failed to record attempt to practice_attempts: %s", e)
-
-    # 兼容旧表 attempts
-    try:
-        db.execute(
-            "INSERT INTO attempts (user_id, session_id, question_id, answer, is_correct, time_spent, hints_used, submitted_at) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-            (user_id, session_id, question_id, answer,
-             is_correct, time_spent_seconds, hints_used, now),
-        )
-    except Exception:
-        logger.debug("Failed to record attempt to attempts (legacy)")
+        logger.debug("记录答题失败: %s", e)
 
 
 # ═══════════════════════════════════════════

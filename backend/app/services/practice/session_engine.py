@@ -50,14 +50,38 @@ def check_answer(
     if not user_answer:
         return False
 
-    user_set = set(str(a).strip().upper() for a in user_answer if a)
-    correct_set = set(str(a).strip().upper() for a in correct_answer if a)
+    # 选择题 / 判断题：精确集合匹配（选项字母）
+    if question_type in ("single", "multiple", "judge", "choice"):
+        user_set = set(str(a).strip().upper() for a in user_answer if a)
+        correct_set = set(str(a).strip().upper() for a in correct_answer if a)
+        if not user_set and not correct_set:
+            return True
+        if not user_set or not correct_set:
+            return False
+        return user_set == correct_set
 
-    if not user_set and not correct_set:
-        return True
-    if not user_set or not correct_set:
+    # 填空题：去除首尾空格后精确匹配（不区分大小写）
+    if question_type == "fill":
+        user_text = str(user_answer[0]).strip() if user_answer else ""
+        correct_text = str(correct_answer[0]).strip() if correct_answer else ""
+        return user_text.upper() == correct_text.upper()
+
+    # 简答题 / free_form / essay：关键词包含匹配
+    # 如果参考答案为空，则标记为正确（待人工批阅）
+    if question_type in ("free_form", "essay"):
+        if not correct_answer or not any(a and str(a).strip() for a in correct_answer):
+            return True  # 无标准答案，默认通过（待人工批阅）
+        user_text = str(user_answer[0]).strip().lower() if user_answer else ""
+        # 检查用户答案是否包含参考答案中的关键词
+        for ref in correct_answer:
+            ref_text = str(ref).strip().lower()
+            if ref_text and ref_text in user_text:
+                return True
         return False
 
+    # 兜底：精确匹配
+    user_set = set(str(a).strip().upper() for a in user_answer if a)
+    correct_set = set(str(a).strip().upper() for a in correct_answer if a)
     return user_set == correct_set
 
 

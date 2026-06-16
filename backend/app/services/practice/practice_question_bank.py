@@ -11,13 +11,13 @@ logger = logging.getLogger(__name__)
 
 
 def _ensure_tables():
-    """确保 v7 题库相关表存在（幂等）"""
+    """确保练习系统所有表存在（幂等），统一从 practice_schema.sql 读取"""
     from app.infrastructure.db.database import get_db
     db = get_db()
     possible_paths = [
-        "scripts/question_bank.sql",
-        "backend/scripts/question_bank.sql",
-        os.path.join(os.path.dirname(__file__), "../../scripts/question_bank.sql"),
+        "app/infrastructure/db/practice_schema.sql",
+        "backend/app/infrastructure/db/practice_schema.sql",
+        os.path.join(os.path.dirname(__file__), "../../infrastructure/db/practice_schema.sql"),
     ]
     sql_path = None
     for p in possible_paths:
@@ -25,7 +25,7 @@ def _ensure_tables():
             sql_path = p
             break
     if not sql_path:
-        logger.error("找不到建表 SQL 文件")
+        logger.error("找不到 practice_schema.sql 建表文件")
         return
     with open(sql_path) as f:
         sql = f.read()
@@ -36,24 +36,6 @@ def _ensure_tables():
                 db.execute(s)
             except Exception as e:
                 logger.warning("建表异常: %s", e)
-    _run_migrations(db)
-
-
-def _run_migrations(db):
-    migrations = [
-        "ALTER TABLE question_banks ADD COLUMN IF NOT EXISTS ref_node_id TEXT",
-        "ALTER TABLE question_banks ADD COLUMN IF NOT EXISTS ref_node_level VARCHAR(20)",
-        "ALTER TABLE question_banks ADD COLUMN IF NOT EXISTS auto_created BOOLEAN DEFAULT false",
-        "ALTER TABLE question_banks ADD COLUMN IF NOT EXISTS question_count INT DEFAULT 0",
-        "ALTER TABLE questions ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'",
-        "ALTER TABLE questions ADD COLUMN IF NOT EXISTS cognitive_node_ids TEXT[] DEFAULT '{}'",
-        "ALTER TABLE practice_attempts ADD COLUMN IF NOT EXISTS error_pattern VARCHAR(50)",
-    ]
-    for sql in migrations:
-        try:
-            db.execute(sql)
-        except Exception:
-            pass
 
 
 def list_banks(user_id: str):
@@ -199,7 +181,7 @@ def list_questions(bank_id, user_id, page=1, page_size=50,
     total = db.fetchone(f"SELECT COUNT(*) as cnt FROM questions q WHERE {where}", tuple(params))
     total_count = total["cnt"] if total else 0
     rows = db.fetchall(
-        f"SELECT q.* FROM questions q WHERE {where} ORDER BY q.created_at DESC LIMIT %s OFFSET %s",
+        f"SELECT q.* FROM questions q WHERE {where} ORDER BY q.updated_at ASC, q.created_at ASC LIMIT %s OFFSET %s",
         tuple(params + [page_size, offset]),
     )
     return {
@@ -215,6 +197,93 @@ def get_question(question_id, user_id: str):
     db = get_db()
     row = db.fetchone("SELECT * FROM questions WHERE id = %s AND deleted_at IS NULL", (question_id,))
     return _row_to_question(row, include_answer=True) if row else None
+
+
+def get_question_preview(question_id, user_id: str, include_similar: bool = True, include_materials: bool = True) -> dict:
+    """获取题目富预览：题目详情 + 相似题 + 关联资料 + 知识点信息"""
+    _ensure_tables()
+    from app.infrastructure.db.database import get_db
+    db = get_db()
+
+    # 1. 题目基础信息
+    row = db.fetchone("SELECT * FROM questions WHERE id = %s AND deleted_at IS NULL", (question_id,))
+    if not row:
+        return {"error": "题目不存在"}
+    question = _row_to_question(row, include_answer=True)
+
+    # 2. 知识点名称
+    node_ids = question.get("cognitive_node_ids") or []
+    node_labels = []
+    for nid in node_ids[:3]:
+        try:
+            from app.domain.cognitive import get_repo
+            node = get_repo().get_node(nid, user_id)
+            if node:
+                node_labels.append({"id": nid, "label": getattr(node, "label", nid) or nid})
+        except Exception:
+            pass
+    question["knowledge_nodes"] = node_labels
+
+    # 3. 相似题（同知识点、同题型，排除自身）
+    similar = []
+    if include_similar and node_ids:
+        similar_rows = db.fetchall(
+            """SELECT id, stem, difficulty, question_type
+               FROM questions
+               WHERE id != %s AND bank_id = %s AND deleted_at IS NULL
+                 AND cognitive_node_ids && %s
+                 AND question_type = %s
+               ORDER BY RANDOM() LIMIT 3""",
+            (question_id, row["bank_id"], node_ids, row["question_type"]),
+        )
+        similar = [
+            {"id": r["id"], "stem": (r.get("stem") or "")[:80],
+             "difficulty": r.get("difficulty", 3), "question_type": r.get("question_type", "")}
+            for r in similar_rows
+        ]
+    question["similar_questions"] = similar
+
+    # 4. 关联资料（基于知识点匹配）
+    related_materials = []
+    if include_materials and node_ids:
+        try:
+            from app.infrastructure.db.database import get_db as _gdb
+            _db = _gdb()
+            material_rows = _db.fetchall(
+                """SELECT DISTINCT m.material_id, m.file_name, m.file_type
+                   FROM materials m
+                   JOIN material_chunks mc ON mc.material_id = m.material_id
+                   WHERE m.user_id = %s AND m.status = 'indexed'
+                   ORDER BY m.created_at DESC LIMIT 5""",
+                (user_id,),
+            )
+            related_materials = [
+                {"id": r["material_id"], "name": r.get("file_name", ""),
+                 "type": r.get("file_type", "")}
+                for r in material_rows
+            ]
+        except Exception:
+            pass
+    question["related_materials"] = related_materials
+
+    # 5. 答题统计
+    try:
+        stats_row = db.fetchone(
+            """SELECT COUNT(*) as total_attempts,
+                      SUM(CASE WHEN is_correct THEN 1 ELSE 0 END) as correct_count
+               FROM practice_attempts
+               WHERE question_id = %s AND user_id = %s""",
+            (question_id, user_id),
+        )
+        question["attempt_stats"] = {
+            "total": stats_row["total_attempts"] if stats_row else 0,
+            "correct": stats_row["correct_count"] if stats_row else 0,
+            "correct_rate": round(stats_row["correct_count"] / max(stats_row["total_attempts"], 1), 3) if stats_row else 0,
+        }
+    except Exception:
+        question["attempt_stats"] = {"total": 0, "correct": 0, "correct_rate": 0}
+
+    return question
 
 
 def search_questions(user_id, keyword="", bank_id=None, page=1, page_size=50,
@@ -321,7 +390,7 @@ def _row_to_question(row, include_answer=False):
     }
     if include_answer:
         result["answer"] = _safe_json(row.get("answer"), [])
-        result["analysis"] = row.get("analysis", "")
+        result["explanation"] = row.get("explanation", "") or row.get("analysis", "")
     return result
 
 
