@@ -9,11 +9,11 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from app.domain.auth.dependencies import current_user_id
 from app.services.practice.practice_question_crud import (
     add_question, update_question, delete_question,
-    toggle_favorite, toggle_slash, batch_import_questions,
+    toggle_favorite, toggle_slash, batch_import_questions, copy_questions_to_bank, reorder_questions_in_bank,
 )
 from app.services.practice.practice_question_bank import (
     _ensure_tables, list_banks, get_bank, create_bank, update_bank, delete_bank,
-    list_questions, get_question, search_questions,
+    list_questions, get_question, get_question_preview, search_questions,
     resolve_bank_for_conversation, resolve_bank_for_node,
 )
 
@@ -187,6 +187,34 @@ async def api_add_question(bank_id: str, body: dict, user_id: str = Depends(curr
     )
 
 
+@router.post("/banks/{bank_id}/questions/copy")
+async def api_copy_questions(bank_id: str, body: dict, user_id: str = Depends(current_user_id)):
+    """从其他题库复制题目到当前题库"""
+    _ensure_tables()
+    question_ids = body.get("question_ids", [])
+    source_bank_id = body.get("source_bank_id")
+    if not question_ids and not source_bank_id:
+        raise HTTPException(400, "question_ids 或 source_bank_id 必填")
+    result = copy_questions_to_bank(
+        target_bank_id=bank_id,
+        user_id=user_id,
+        question_ids=question_ids,
+        source_bank_id=source_bank_id,
+    )
+    return {"copied": len(result), "questions": result}
+
+
+@router.put("/banks/{bank_id}/questions/reorder")
+async def api_reorder_questions(bank_id: str, body: dict, user_id: str = Depends(current_user_id)):
+    """批量调整题目顺序 (question_ids 按新顺序排列)"""
+    _ensure_tables()
+    question_ids = body.get("question_ids", [])
+    if not question_ids:
+        raise HTTPException(400, "question_ids 不能为空")
+    ok = reorder_questions_in_bank(bank_id, question_ids, user_id)
+    return {"ok": ok}
+
+
 @router.get("/questions/{question_id}")
 async def api_get_question(question_id: str, user_id: str = Depends(current_user_id)):
     _ensure_tables()
@@ -194,6 +222,25 @@ async def api_get_question(question_id: str, user_id: str = Depends(current_user
     if not q:
         raise HTTPException(404, "题目不存在")
     return q
+
+
+@router.get("/questions/{question_id}/preview")
+async def api_preview_question(
+    question_id: str,
+    user_id: str = Depends(current_user_id),
+    include_similar: bool = True,
+    include_materials: bool = True,
+):
+    """题目富预览：详情 + 相似题 + 关联资料 + 答题统计 + 知识点"""
+    _ensure_tables()
+    preview = get_question_preview(
+        question_id, user_id,
+        include_similar=include_similar,
+        include_materials=include_materials,
+    )
+    if "error" in preview:
+        raise HTTPException(404, preview["error"])
+    return preview
 
 
 @router.patch("/questions/{question_id}")

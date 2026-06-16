@@ -28,7 +28,7 @@ async def api_create_session(body: dict, user_id: str = Depends(current_user_id)
     bank_id = body.get("bank_id", "")
     if not bank_id:
         raise HTTPException(400, "bank_id 不能为空")
-    return create_session(
+    return await create_session(
         bank_id=bank_id,
         user_id=user_id,
         session_type=body.get("session_type", "practice"),
@@ -37,6 +37,8 @@ async def api_create_session(body: dict, user_id: str = Depends(current_user_id)
         config=body.get("config"),
         exclude_ids=body.get("exclude_ids"),
         cognitive_node_ids=body.get("cognitive_node_ids"),
+        sources=body.get("sources"),
+        question_ids=body.get("question_ids"),
     )
 
 
@@ -63,14 +65,10 @@ async def api_list_sessions(
     _ensure_tables()
     return list_sessions(
         user_id=user_id, bank_id=bank_id, status=status,
-        session_type=session_type, mode=mode,
-        date_from=date_from, date_to=date_to,
+        session_type=session_type,
+        mode=mode, date_from=date_from, date_to=date_to,
         score_min=score_min, score_max=score_max,
-        duration_min=duration_min, duration_max=duration_max,
-        question_count_min=question_count_min,
-        sort_by=sort_by, sort_order=sort_order,
         limit=min(limit, 100), offset=max(offset, 0),
-        cursor=cursor,
     )
 
 
@@ -80,18 +78,23 @@ async def api_unfinished_sessions(user_id: str = Depends(current_user_id)):
     from app.infrastructure.db.database import get_db
     db = get_db()
     rows = db.fetchall(
-        """SELECT id, bank_id, session_type, mode, status, total_count, conversation_id,
-                  (SELECT COUNT(*) FROM session_questions sq
-                   WHERE sq.session_id = practice_sessions.id AND sq.user_answer IS NOT NULL
+        """SELECT ps.id, ps.bank_id, ps.session_type, ps.mode, ps.status, ps.total_count, ps.conversation_id,
+                  (SELECT COUNT(*) FROM practice_attempts pa
+                   WHERE pa.session_id = ps.id
                   ) as answered_count,
-                  created_at
-           FROM practice_sessions
-           WHERE user_id = %s AND status IN ('created', 'active', 'paused')
-           ORDER BY created_at DESC LIMIT 10""",
+                  ps.created_at
+           FROM practice_sessions ps
+           WHERE ps.user_id = %s AND ps.status IN ('created', 'active', 'paused')
+             AND ps.total_count > 0
+           ORDER BY ps.created_at DESC LIMIT 10""",
         (user_id,),
     )
     items = []
     for r in rows:
+        # 跳过 created 状态但没有任何答题记录的空 session（用户从未真正开始）
+        answered = r.get("answered_count", 0) or 0
+        if r["status"] == "created" and answered == 0:
+            continue
         items.append({
             "session_id": r["id"],
             "bank_id": r["bank_id"],
@@ -100,7 +103,7 @@ async def api_unfinished_sessions(user_id: str = Depends(current_user_id)):
             "status": r["status"],
             "total_count": r["total_count"],
             "conversation_id": r.get("conversation_id", ""),
-            "answered_count": r.get("answered_count", 0),
+            "answered_count": answered,
             "created_at": r["created_at"].isoformat() if hasattr(r["created_at"], "isoformat") else str(r["created_at"]),
         })
     return {"items": items, "total": len(items)}
@@ -205,13 +208,15 @@ async def api_create_exam(body: dict, user_id: str = Depends(current_user_id)):
     if not bank_id:
         raise HTTPException(400, "bank_id 不能为空")
     from app.services.practice.practice_exam import create_exam
+    config = body.get("config") or {}
+    if isinstance(config, dict):
+        config["exam_type"] = body.get("exam_type", "standard")
     return create_exam(
-        bank_id=bank_id,
         user_id=user_id,
-        exam_type=body.get("exam_type", "standard"),
-        question_count=body.get("count", 20),
-        time_limit_minutes=body.get("time_limit", 60),
-        config=body.get("config"),
+        bank_id=bank_id,
+        count=body.get("count", 20),
+        duration_minutes=body.get("duration_minutes", body.get("time_limit", 60)),
+        config=config,
     )
 
 
@@ -264,3 +269,30 @@ async def api_exam_answer_sheet(session_id: str, user_id: str = Depends(current_
     _ensure_tables()
     from app.services.practice.practice_exam import get_exam_answer_sheet
     return get_exam_answer_sheet(session_id, user_id)
+
+
+@router.get("/exam/{session_id}/time")
+async def api_exam_time(session_id: str, user_id: str = Depends(current_user_id)):
+    _ensure_tables()
+    from app.services.practice.practice_exam import get_exam_time
+    return get_exam_time(session_id, user_id)
+
+
+@router.post("/exam/{session_id}/submit-all")
+async def api_submit_all_exam(session_id: str, user_id: str = Depends(current_user_id)):
+    _ensure_tables()
+    from app.services.practice.practice_exam import submit_all_exam
+    result = submit_all_exam(session_id, user_id)
+    if not result:
+        raise HTTPException(404, "考试不存在")
+    return result
+
+
+@router.get("/exam/{session_id}/result")
+async def api_exam_result(session_id: str, user_id: str = Depends(current_user_id)):
+    _ensure_tables()
+    from app.services.practice.practice_exam import get_exam_result
+    result = get_exam_result(session_id, user_id)
+    if not result:
+        raise HTTPException(404, "考试不存在")
+    return result

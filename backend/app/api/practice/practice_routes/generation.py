@@ -29,6 +29,7 @@ async def api_generate(body: dict, user_id: str = Depends(current_user_id)):
     conversation_id = body.get("conversation_id")
     node_id = body.get("node_id")
     material_ids = body.get("material_ids")
+    reference_mode = body.get("reference_mode")
     result = await handle_question_generation(
         user_message=user_message,
         user_id=user_id,
@@ -37,6 +38,7 @@ async def api_generate(body: dict, user_id: str = Depends(current_user_id)):
         conversation_id=conversation_id,
         node_id=node_id,
         material_ids=material_ids,
+        reference_mode=reference_mode,
     )
     return result
 
@@ -63,6 +65,8 @@ async def api_generate_from_materials(body: dict, user_id: str = Depends(current
     from app.services.practice.practice_question_gen import get_material_context
     material_context = await get_material_context(material_ids, user_id)
 
+    reference_mode = body.get("reference_mode", "reference")
+
     saved = await generate_and_save(
         bank_id=bank_id,
         user_id=user_id,
@@ -73,6 +77,7 @@ async def api_generate_from_materials(body: dict, user_id: str = Depends(current
         count=count,
         content_type=content_type,
         material_context=material_context,
+        reference_mode=reference_mode,
     )
 
     bank = get_bank(bank_id, user_id)
@@ -144,5 +149,6 @@ async def api_generate_from_conversation(body: dict, user_id: str = Depends(curr
         user_id=user_id,
         conversation_context=context,
         material_ids=body.get("material_ids"),
+        reference_mode=body.get("reference_mode"),
     )
     return result

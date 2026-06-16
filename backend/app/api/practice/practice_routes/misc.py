@@ -1,4 +1,4 @@
-"""自适应组题 + 秘书联动 + 答题历史"""
+"""自适应组题 + 秘书联动 + 答题历史 + 推荐"""
 from __future__ import annotations
 
 import json as _json
@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from app.domain.auth.dependencies import current_user_id
 from app.services.practice.practice_question_bank import _ensure_tables
 from app.services.practice.practice_adaptive import adaptive_select_v2
+from app.services.practice.practice_stats import get_recommendations
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -129,7 +130,7 @@ async def api_answer_history(
                    a.is_correct, a.time_spent_seconds, a.is_wrong,
                    a.wrong_count, a.consecutive_correct, a.cognitive_node_ids,
                    a.created_at,
-                   q.stem, q.options, q.question_type, q.difficulty, q.answer as correct_answer
+                   q.stem, q.options, q.question_type, q.difficulty, q.answer
             FROM practice_attempts a
             LEFT JOIN questions q ON a.question_id = q.id
             WHERE {where}
@@ -155,7 +156,7 @@ async def api_answer_history(
             "question_stem": (r.get("stem") or "")[:120],
             "question_type": r.get("question_type", ""),
             "difficulty": r.get("difficulty", 3),
-            "correct_answer": _json.loads(r["correct_answer"]) if isinstance(r.get("correct_answer"), str) else (r.get("correct_answer") or []),
+            "correct_answer": _json.loads(r["answer"]) if isinstance(r.get("answer"), str) else (r.get("answer") or []),
         })
 
     return {
@@ -164,3 +165,17 @@ async def api_answer_history(
         "limit": limit,
         "offset": offset,
     }
+
+
+# ═══════════════════════════════════════════════
+# 练习推荐
+# ═══════════════════════════════════════════════
+
+@router.get("/recommendations")
+async def api_practice_recommendations(
+    user_id: str = Depends(current_user_id),
+    limit: int = 5,
+):
+    """综合推荐：薄弱知识点 + 待复习题目 + 推荐题库 + 学习建议"""
+    _ensure_tables()
+    return get_recommendations(user_id, limit=min(limit, 20))
