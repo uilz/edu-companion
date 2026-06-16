@@ -28,14 +28,24 @@ export default function PracticeSessionPage() {
   const [lastResult, setLastResult] = useState<V7SubmitResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [skipped, setSkipped] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const questionStartRef = useRef(Date.now());
 
   const loadSession = useCallback(async () => {
     try {
       const data = await getSession(sessionId);
       setSession(data);
-      const firstUn = data.questions?.findIndex((q: any) => !q.answered) ?? 0;
-      setCurrentIdx(firstUn >= 0 ? firstUn : 0);
+      // 自动开始"created"状态的会话（跳过确认页）
+      if (data.status === "created") {
+        await startSession(sessionId);
+        const started = await getSession(sessionId);
+        setSession(started);
+        const firstUn = started.questions?.findIndex((q: any) => !q.answered) ?? 0;
+        setCurrentIdx(firstUn >= 0 ? firstUn : 0);
+      } else {
+        const firstUn = data.questions?.findIndex((q: any) => !q.answered) ?? 0;
+        setCurrentIdx(firstUn >= 0 ? firstUn : 0);
+      }
     } catch { router.push("/practice"); }
     finally { setLoading(false); }
   }, [sessionId, router]);
@@ -61,22 +71,26 @@ export default function PracticeSessionPage() {
   const handleSelect = (label: string) => {
     if (showFeedback || submitting) return;
     const t = currentQuestion?.question_type;
-    if (t === "single" || t === "judge") setSelected([label]);
-    else setSelected(p => p.includes(label) ? p.filter(l => l !== label) : [...p, label]);
+    if (t === "single" || t === "judge" || t === "choice") setSelected([label]);
+    else if (t === "multiple") setSelected(p => p.includes(label) ? p.filter(l => l !== label) : [...p, label]);
+    else setSelected([label]); // fill/free_form/essay: 直接替换
   };
 
-  const handleSubmit = async () => {
-    const answer = selected;
-    if (!answer.length || submitting) return;
+  const handleSubmit = async (answer?: string[]) => {
+    const finalAnswer = answer || selected;
+    if (!finalAnswer.length || submitting) return;
     setSubmitting(true);
+    setSubmitError("");
     const ts = Math.floor((Date.now() - questionStartRef.current) / 1000);
     try {
-      const r = await submitAnswer(sessionId, currentQuestion!.id, answer, ts);
+      const r = await submitAnswer(sessionId, currentQuestion!.id, finalAnswer, ts);
       setLastResult(r); setShowFeedback(true);
       setSession(p => p ? { ...p, questions: p.questions?.map((q: any, i: number) =>
         i === currentIdx ? { ...q, answered: true } : q
       )} : p);
-    } catch {}
+    } catch (e: any) {
+      setSubmitError(e?.message || "提交失败");
+    }
     setSubmitting(false);
   };
 
@@ -110,6 +124,23 @@ export default function PracticeSessionPage() {
     </div>
   );
   if (!session) return null;
+
+  // ── 空会话 ──
+  if (!session.questions || session.questions.length === 0) {
+    return (
+      <div className="max-w-lg mx-auto px-4 py-20 text-center space-y-4">
+        <BookOpen size={36} className="mx-auto text-[var(--color-text-muted)]" />
+        <h2 className="text-base font-semibold text-[var(--color-text)]">此会话暂无题目</h2>
+        <p className="text-xs text-[var(--color-text-muted)]">
+          该题库没有可用题目，请先在对话中学习或创建题目。
+        </p>
+        <button onClick={() => router.push("/practice")}
+          className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-xs font-medium">
+          返回练习
+        </button>
+      </div>
+    );
+  }
 
   // ── 完成态 ──
   if (session.status === "completed" || session.status === "timeout" || session.status === "cancelled") {
@@ -203,6 +234,13 @@ export default function PracticeSessionPage() {
         )}
       </div>
 
+      {/* 错误提示 */}
+      {submitError && (
+        <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-[11px] text-red-600">
+          {submitError}
+        </div>
+      )}
+
       {/* 题目卡片 */}
       {currentQuestion && (
         <QuestionCard
@@ -219,6 +257,7 @@ export default function PracticeSessionPage() {
           onNext={handleNext}
           isLast={isLastQuestion}
           isExam={isExam}
+          submitError={submitError}
         />
       )}
     </div>

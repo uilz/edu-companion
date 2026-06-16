@@ -19,12 +19,13 @@ import QuestionPreviewModal from "@/components/practice/components/QuestionPrevi
 
 const TYPE_LABELS: Record<string, string> = {
   single: "单选", multiple: "多选", judge: "判断",
-  fill: "填空", free_form: "简答", essay: "简答",
+  choice: "单选", fill: "填空", free_form: "简答", essay: "简答",
 };
 const TYPE_COLORS: Record<string, string> = {
   single: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
   multiple: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
   judge: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+  choice: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
   fill: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
   free_form: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
   essay: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
@@ -178,6 +179,7 @@ export default function BankDetailPage() {
           <option value="single">单选</option>
           <option value="multiple">多选</option>
           <option value="judge">判断</option>
+          <option value="choice">单选(兼容)</option>
           <option value="fill">填空</option>
           <option value="free_form">简答</option>
         </select>
@@ -188,6 +190,10 @@ export default function BankDetailPage() {
         <button onClick={() => router.push(`/practice?tab=practice&bank=${bankId}`)}
           className="px-3 py-2 rounded-lg bg-[var(--color-accent)] text-white text-xs font-medium hover:opacity-90 flex items-center gap-1.5">
           <Sparkles size={14} />练习
+        </button>
+        <button onClick={() => router.push(`/practice/banks/${bankId}/compose`)}
+          className="px-3 py-2 rounded-lg border border-red-300 text-red-500 text-xs font-medium hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-1.5">
+          <Edit3 size={14} />组卷
         </button>
       </div>
 

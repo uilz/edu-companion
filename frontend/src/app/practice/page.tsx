@@ -12,6 +12,7 @@ import Link from "next/link";
 
 import PracticePanel from "@/components/practice/panels/PracticePanel";
 import ExamPanel from "@/components/practice/panels/ExamPanel";
+import QuestionStem from "@/components/practice/components/QuestionStem";
 import { api } from "@/lib/api/api";
 import { getWeakSkills, getErrorBookStats } from "@/lib/api/practice-api";
 
@@ -319,9 +320,9 @@ export default function PracticeHomePage() {
                         <RotateCcw size={13} className={isColdStart ? "text-blue-500" : "text-orange-500"} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-[var(--color-text)] truncate">
-                          {stem.slice(0, 60)}
-                        </p>
+                        <div className="text-xs font-medium text-[var(--color-text)] line-clamp-2">
+                          <QuestionStem stem={stem} />
+                        </div>
                         <p className="text-[10px] text-[var(--color-text-muted)]">
                           {isColdStart
                             ? "尚未练习过"

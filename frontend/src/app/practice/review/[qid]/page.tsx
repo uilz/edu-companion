@@ -6,7 +6,7 @@ import {
   RotateCcw, Check, X, Loader2, ChevronLeft,
 } from "lucide-react";
 import {
-  submitAnswer, createPracticeSession, resolveBankForNode,
+  submitAnswer, createPracticeSession, getQuestion,
   type V7Question, type V7SubmitResult,
 } from "@/lib/api/practice-api";
 import QuestionCard from "@/components/practice/components/QuestionCard";
@@ -30,13 +30,15 @@ export default function ReviewQuestionPage() {
     const init = async () => {
       setLoading(true);
       try {
-        // 创建一个复习会话来答这道题
-        const bank = await resolveBankForNode(qid).catch(() => null);
-        const bankId = bank?.bank_id || "bnk_default";
+        // 1. 直接获取题目信息，拿到 bank_id
+        const question = await getQuestion(qid);
+        const bankId = question.bank_id || "bnk_default";
+        // 2. 为该题库创建单题复习会话
         const sess = await createPracticeSession(bankId, {
           mode: "review",
           count: 1,
-          cognitive_node_ids: [qid],
+          cognitive_node_ids: question.cognitive_node_ids ?? [],
+          question_ids: [qid],
         });
         setSessionId(sess.session_id);
         const q = sess.questions?.[0];
@@ -58,7 +60,7 @@ export default function ReviewQuestionPage() {
   const handleSelect = (label: string) => {
     if (showFeedback || submitting) return;
     const t = question?.question_type;
-    if (t === "single" || t === "judge") setSelected([label]);
+    if (t === "single" || t === "judge" || t === "choice") setSelected([label]);
     else setSelected(p => p.includes(label) ? p.filter(l => l !== label) : [...p, label]);
   };
 

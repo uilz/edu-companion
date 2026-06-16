@@ -188,9 +188,9 @@ export default function SessionReviewPage() {
                  <span className="text-[10px] text-[var(--color-text-muted)]">{d.index + 1}</span>}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[11px] text-[var(--color-text)] truncate">
-                  {d.stem || `题目 ${d.index + 1}`}
-                </p>
+                <div className="text-[11px] text-[var(--color-text)] line-clamp-1">
+                  <QuestionStem stem={d.stem || `题目 ${d.index + 1}`} />
+                </div>
                 <p className="text-[9px] text-[var(--color-text-muted)] mt-0.5">
                   {d.difficulty ? `难度 ${d.difficulty}` : ""}
                   {d.time_spent ? ` · ${d.time_spent}秒` : ""}

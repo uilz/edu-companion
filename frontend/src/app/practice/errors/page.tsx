@@ -66,8 +66,9 @@ export default function ErrorBookPage() {
         bankId = resolved.bank_id;
       }
       const sess = await createPracticeSession(bankId, {
-        mode: "review", count: 5,
+        mode: "review", count: 1,
         cognitive_node_ids: nodeId ? [nodeId] : undefined,
+        question_ids: [item.question_id],
       });
       window.location.href = `/practice/sessions/${sess.session_id}`;
     } catch { /* ignore */ }
