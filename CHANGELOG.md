@@ -4,6 +4,69 @@
 
 ---
 
+## [8.4.2] - 2026-06-16
+
+### 🛠️ 练习系统体验修复 + 组卷功能
+
+> 修复选择题显示为填空框、提示/讲解/参考资料异常、错题本流程体验问题；新增组卷编辑器。
+
+#### 后端 — 错题本 & 会话
+
+| 修复 | 文件 | 说明 |
+|------|------|------|
+| 错题复习传递 question_ids | `practice_session.py` | 创建复习会话时强制包含目标错题，避免自适应选题漏题 |
+| 练习历史分页格式修复 | `session_repository.py` | 返回 `{items, total, has_more}` 格式，前端正确渲染 |
+| 错题复习 count 修复 | `errors/page.tsx` | `count:5` → `count:1`，只复习选中的那一道题 |
+| 跳过确认页自动开始 | `sessions/[id]/page.tsx` | `created` 状态会话自动调用 `startSession`，直接答题 |
+
+#### 后端 — 参考资料 & AI
+
+| 修复 | 文件 | 说明 |
+|------|------|------|
+| B站搜索关键词改进 | `references.py` | 改用 LLM 从题目提取核心知识点生成搜索词，全学科通用；LLM 失败时退化为认知节点标签+题干回退 |
+
+#### 后端 — 题型支持
+
+| 修复 | 文件 | 说明 |
+|------|------|------|
+| choice 题型统一映射 | `ExamPanel.tsx` 等多处 | 数据库 `choice` 类型映射为单选题显示，修复显示为填空框 |
+
+#### 前端 — 提示 & 讲解
+
+| 修复 | 文件 | 说明 |
+|------|------|------|
+| 提示按钮调用错误 API | `QuestionCard.tsx` | `handleShowHint` 改为调用 `getQuestionHint`（原错误调用 `getQuestionExplanation`） |
+| 新增 getQuestionHint API | `practice-api.ts` | 封装 `POST /api/practice/hint`，自动使用 `authedFetch` 访问正确路径 |
+
+#### 前端 — 新建功能
+
+| 新增 | 文件 | 说明 |
+|------|------|------|
+| 组卷编辑器 | `banks/[id]/compose/page.tsx` | 从题库选题、新建题目、批量导入、自由排序、实时保存 |
+| 练习创建页增强 | `PracticePanel.tsx` / `ExamPanel.tsx` | 题库选择、题型标签显示、填空/简答支持 |
+
+#### 文件变更
+
+| 文件 | 变更 |
+|------|------|
+| `frontend/src/components/practice/panels/ExamPanel.tsx` | **修改** choice 题型映射 + 填空/简答支持 |
+| `frontend/src/components/practice/panels/PracticePanel.tsx` | **修改** 创建页题库选择增强 |
+| `frontend/src/components/practice/components/QuestionCard.tsx` | **修改** 提示按钮修复 + import getQuestionHint |
+| `frontend/src/lib/api/practice-api.ts` | **修改** 新增 getQuestionHint |
+| `frontend/src/app/practice/errors/page.tsx` | **修改** count:5→count:1 |
+| `frontend/src/app/practice/sessions/[id]/page.tsx` | **修改** 自动开始 created 态会话 |
+| `frontend/src/app/practice/banks/[id]/compose/page.tsx` | **新增** 组卷编辑器 |
+| `backend/app/api/practice/references.py` | **修改** LLM 生成搜索关键词 |
+| `backend/app/services/practice/practice_session.py` | **修改** question_ids 参数支持 |
+| `backend/app/services/practice/session_repository.py` | **修改** 分页返回格式 |
+| `docs/practice-system-round2.md` | **新增** 练习系统全景文档 |
+| `docs/adr/0008-system-architecture-round2.md` | **新增** 架构决策记录 |
+| `docs/adr/0010-practice-data-structure-refactor.md` | **新增** 数据结构重构 ADR |
+| `docs/adr/0011-practice-tools-expansion.md` | **新增** 工具增强 ADR |
+| `docs/adr/0012-practice-experience-chain-optimization.md` | **新增** 体验链优化 ADR |
+
+---
+
 ## [8.4.1] - 2026-06-10
 
 ### 🔐 上线安全加固
