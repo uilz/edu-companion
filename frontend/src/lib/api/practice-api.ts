@@ -7,7 +7,7 @@
 export interface V7Question {
   id: string;
   bank_id: string;
-  question_type: "single" | "multiple" | "judge" | "fill" | "free_form";
+  question_type: "single" | "multiple" | "judge" | "choice" | "fill" | "free_form";
   stem: string;
   options: V7Option[];
   difficulty: number;
@@ -79,7 +79,7 @@ export interface V7SessionListItem {
 
 // ── API 调用 ──
 
-import { v7 } from "@/lib/api/api";
+import { v7, authedFetch } from "@/lib/api/api";
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   return v7<T>(path, options);
@@ -101,17 +101,20 @@ export async function createPracticeSession(
     count?: number;
     cognitive_node_ids?: string[];
     config?: Record<string, any>;
+    question_ids?: string[];
   }
 ): Promise<V7Session> {
+  const body: Record<string, any> = {
+    bank_id: bankId,
+    mode: options?.mode ?? "adaptive",
+    count: options?.count ?? 5,
+  };
+  if (options?.cognitive_node_ids) body.cognitive_node_ids = options.cognitive_node_ids;
+  if (options?.config) body.config = options.config;
+  if (options?.question_ids) body.question_ids = options.question_ids;
   return apiFetch("/sessions", {
     method: "POST",
-    body: JSON.stringify({
-      bank_id: bankId,
-      mode: options?.mode ?? "adaptive",
-      count: options?.count ?? 5,
-      cognitive_node_ids: options?.cognitive_node_ids,
-      config: options?.config,
-    }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -306,6 +309,19 @@ export async function getSessionHistory(limit: number = 10): Promise<V7SessionLi
 /** 获取薄弱知识点 */
 export async function getWeakSkills(): Promise<{ skill_id: string; label: string; mastery: number; attempts: number; trend: string; load: number }[]> {
   return apiFetch("/stats/weak-skills");
+}
+
+/** 综合推荐：薄弱知识点 + 待复习题目 + 推荐题库 + 学习建议 */
+export interface PracticeRecommendation {
+  weak_skills: { skill_id: string; label: string; mastery: number; attempts: number; trend: string }[];
+  due_questions: DueQuestion[];
+  due_review_count: number;
+  suggested_banks: { id: string; name: string; matching_questions: number }[];
+  study_suggestions: string[];
+  total_weak: number;
+}
+export async function getRecommendations(limit: number = 5): Promise<PracticeRecommendation> {
+  return apiFetch(`/recommendations?limit=${limit}`);
 }
 
 // ── 错题本 ──
@@ -590,6 +606,25 @@ export async function getExamTime(sessionId: string): Promise<ExamTimeInfo> {
   return apiFetch(`/exam/${sessionId}/time`);
 }
 
+/** 提交考试单题答案 */
+export async function submitExamAnswer(
+  sessionId: string,
+  questionId: string,
+  answer: string[],
+  timeSpent?: number,
+  isFinal?: boolean,
+): Promise<{ is_correct: boolean; correct_answer: string[]; explanation: string }> {
+  return apiFetch(`/exam/${sessionId}/submit`, {
+    method: "POST",
+    body: JSON.stringify({
+      question_id: questionId,
+      answer,
+      time_spent: timeSpent ?? 0,
+      is_final: isFinal ?? false,
+    }),
+  });
+}
+
 /** 提交考试所有答案 */
 export async function submitAllExam(sessionId: string): Promise<ExamResult> {
   return apiFetch(`/exam/${sessionId}/submit-all`, { method: "POST" });
@@ -606,6 +641,21 @@ export async function getExamAnswerSheet(sessionId: string): Promise<AnswerSheet
 }
 
 // ── 题目辅助 ──
+
+/** 获取题目提示（渐进式） */
+export async function getQuestionHint(
+  questionId: string,
+  currentLevel: number = 0
+): Promise<{
+  hint: { level: number; text: string; type: string };
+  next_level_available: boolean;
+}> {
+  const res = await authedFetch("/api/practice/hint", {
+    method: "POST",
+    body: JSON.stringify({ question_id: questionId, current_level: currentLevel }),
+  });
+  return res.json();
+}
 
 /** AI 深入讲解某道题 */
 export async function getQuestionExplanation(
@@ -884,6 +934,24 @@ export async function getQuestion(questionId: string): Promise<V7Question & { an
   return apiFetch(`/questions/${questionId}`);
 }
 
+/** 题目富预览：详情 + 相似题 + 关联资料 + 答题统计 + 知识点 */
+export interface QuestionPreview extends V7Question {
+  knowledge_nodes: { id: string; label: string }[];
+  similar_questions: { id: string; stem: string; difficulty: number; question_type: string }[];
+  related_materials: { id: string; name: string; type: string }[];
+  attempt_stats: { total: number; correct: number; correct_rate: number };
+}
+export async function getQuestionPreview(
+  questionId: string,
+  options?: { include_similar?: boolean; include_materials?: boolean }
+): Promise<QuestionPreview> {
+  const params = new URLSearchParams();
+  if (options?.include_similar !== undefined) params.set("include_similar", String(options.include_similar));
+  if (options?.include_materials !== undefined) params.set("include_materials", String(options.include_materials));
+  const qs = params.toString();
+  return apiFetch(`/questions/${questionId}/preview${qs ? `?${qs}` : ""}`);
+}
+
 /** 更新题目 */
 export async function updateQuestion(
   questionId: string,
@@ -906,6 +974,32 @@ export async function updateQuestion(
 /** 删除题目 */
 export async function deleteQuestion(questionId: string): Promise<{ deleted: string }> {
   return apiFetch(`/questions/${questionId}`, { method: "DELETE" });
+}
+
+/** 批量复制题目到题库 */
+export async function copyQuestionsToBank(
+  bankId: string,
+  questionIds?: string[],
+  sourceBankId?: string,
+): Promise<{ copied: number; questions: V7Question[] }> {
+  const body: Record<string, any> = {};
+  if (questionIds?.length) body.question_ids = questionIds;
+  if (sourceBankId) body.source_bank_id = sourceBankId;
+  return apiFetch(`/banks/${bankId}/questions/copy`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** 重排题库题目顺序 */
+export async function reorderQuestionsInBank(
+  bankId: string,
+  questionIds: string[],
+): Promise<{ ok: boolean }> {
+  return apiFetch(`/banks/${bankId}/questions/reorder`, {
+    method: "PUT",
+    body: JSON.stringify({ question_ids: questionIds }),
+  });
 }
 
 // ── 题库解析 ──
