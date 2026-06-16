@@ -31,20 +31,34 @@ export default function PracticePanel({ nodeId, nodeLabel, bankId, onClose }: Pr
   const [submitting, setSubmitting] = useState(false);
   const [skipped, setSkipped] = useState(false);
   const [error, setError] = useState("");
+  const [submitError, setSubmitError] = useState("");
   const [mode, setMode] = useState<"adaptive" | "review" | "challenge">("adaptive");
   const [count, setCount] = useState(5);
   const [difficulty, setDifficulty] = useState<"auto" | "easy" | "medium" | "hard">("auto");
   const [questionStart, setQuestionStart] = useState(0);
   const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([]);
   const [results, setResults] = useState<V7SubmitResult[]>([]);
+  const [banks, setBanks] = useState<{ id: string; name: string }[]>([]);
+  const [selectedBankId, setSelectedBankId] = useState(bankId || "");
 
   const question = session?.questions?.[currentIdx] ?? null;
+
+  // 加载题库列表
+  useEffect(() => {
+    if (phase !== "idle") return;
+    listBanks().then(items => {
+       const raw = Array.isArray(items) ? items : (items as any)?.items || [];
+       const list = raw.map((b: any) => ({ id: b.id, name: b.name }));
+       setBanks(list);
+       if (!selectedBankId && list.length > 0) setSelectedBankId(list[0].id);
+    }).catch(() => {});
+  }, [phase, selectedBankId]);
 
   // ── 开始练习 ──
   const handleStart = useCallback(async () => {
     setPhase("loading"); setError(""); setResults([]); setCurrentIdx(0);
     try {
-      const resolvedBankId = bankId || (nodeId ? (await resolveBankForNode(nodeId)).bank_id : (await listBanks())?.[0]?.id || "bnk_default");
+      const resolvedBankId = selectedBankId || bankId || (nodeId ? (await resolveBankForNode(nodeId)).bank_id : (await listBanks())?.[0]?.id || "bnk_default");
       const config: Record<string, any> = {};
       if (difficulty !== "auto") config.difficulty = difficulty;
       const sess = await createPracticeSession(resolvedBankId, { mode, count, config, cognitive_node_ids: nodeId ? [nodeId] : undefined });
@@ -69,18 +83,23 @@ export default function PracticePanel({ nodeId, nodeLabel, bankId, onClose }: Pr
   const handleSelect = (label: string) => {
     if (showFeedback || submitting) return;
     const t = question?.question_type;
-    if (t === "single" || t === "judge") setSelected([label]);
-    else setSelected(p => p.includes(label) ? p.filter(l => l !== label) : [...p, label]);
+    if (t === "single" || t === "judge" || t === "choice") setSelected([label]);
+    else if (t === "multiple") setSelected(p => p.includes(label) ? p.filter(l => l !== label) : [...p, label]);
+    else setSelected([label]); // fill/free_form/essay: 直接替换
   };
 
-  const handleSubmit = async () => {
-    if (!session || !question || !selected.length || submitting) return;
+  const handleSubmit = async (answer?: string[]) => {
+    const finalAnswer = answer || selected;
+    if (!session || !question || !finalAnswer.length || submitting) return;
     setSubmitting(true);
+    setSubmitError("");
     const ts = Math.floor((Date.now() - questionStart) / 1000);
     try {
-      const r = await submitAnswer(session.session_id, question.id, selected, ts);
+      const r = await submitAnswer(session.session_id, question.id, finalAnswer, ts);
       setLastResult(r); setShowFeedback(true); setResults(p => [...p, r]); setPhase("result");
-    } catch { setPhase("answering"); }
+    } catch (e: any) {
+      setSubmitError(e?.message || "提交失败，请重试");
+    }
     setSubmitting(false);
   };
 
@@ -110,7 +129,7 @@ export default function PracticePanel({ nodeId, nodeLabel, bankId, onClose }: Pr
 
   const handleRetry = () => {
     setPhase("idle"); setSession(null); setCurrentIdx(0); setResults([]); setError(""); setSelected([]);
-    setShowFeedback(false); setSkipped(false);
+    setShowFeedback(false); setSkipped(false); setSubmitError("");
   };
 
   // 键盘快捷键
@@ -156,6 +175,7 @@ export default function PracticePanel({ nodeId, nodeLabel, bankId, onClose }: Pr
         difficulty={difficulty} setDifficulty={setDifficulty}
         selectedMaterialIds={selectedMaterialIds} setSelectedMaterialIds={setSelectedMaterialIds}
         nodeLabel={nodeLabel} onStart={handleStart}
+        banks={banks} selectedBankId={selectedBankId} setSelectedBankId={setSelectedBankId}
       />
     );
   }
@@ -181,6 +201,11 @@ export default function PracticePanel({ nodeId, nodeLabel, bankId, onClose }: Pr
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pb-4">
+        {submitError && (
+          <div className="mb-3 p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-[11px] text-red-600">
+            {submitError}
+          </div>
+        )}
         {question && (
           <QuestionCard
             question={question}
@@ -195,6 +220,7 @@ export default function PracticePanel({ nodeId, nodeLabel, bankId, onClose }: Pr
             onSkip={handleSkip}
             onNext={handleNext}
             isLast={currentIdx + 1 >= session!.total_count}
+            submitError={submitError}
           />
         )}
       </div>
@@ -229,12 +255,13 @@ function ErrorScreen({ message, onRetry }: { message: string; onRetry: () => voi
 function IdleScreen({
   mode, setMode, count, setCount, difficulty, setDifficulty,
   selectedMaterialIds, setSelectedMaterialIds,
-  nodeLabel, onStart,
+  nodeLabel, onStart, banks, selectedBankId, setSelectedBankId,
 }: {
   mode: string; setMode: (m: any) => void; count: number; setCount: (n: number) => void;
   difficulty: string; setDifficulty: (d: any) => void;
   selectedMaterialIds: string[]; setSelectedMaterialIds: (ids: string[]) => void;
   nodeLabel?: string; onStart: () => void;
+  banks: { id: string; name: string }[]; selectedBankId: string; setSelectedBankId: (id: string) => void;
 }) {
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [showPicker, setShowPicker] = useState(false);
@@ -262,8 +289,18 @@ function IdleScreen({
         <h3 className="text-sm font-semibold text-[var(--color-text)]">
           {nodeLabel || "智能练习"}
         </h3>
-        <p className="text-[10px] text-[var(--color-text-muted)] mt-1">自适应出题 · 薄弱优先</p>
       </div>
+
+      {/* 题库选择 */}
+      {banks.length > 1 && (
+        <div className="w-full mb-4">
+          <p className="text-[10px] text-[var(--color-text-muted)] mb-2 font-medium">选择题库</p>
+          <select value={selectedBankId} onChange={e => setSelectedBankId(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-xs">
+            {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        </div>
+      )}
 
       {/* 参考资料选择 */}
       <div className="w-full mb-4">

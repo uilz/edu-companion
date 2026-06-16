@@ -11,11 +11,11 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import {
-  createExam,
+  createExam, listBanks,
   getExamTime,
   submitAllExam,
   getExamAnswerSheet,
-  submitAnswer,
+  submitExamAnswer,
   type ExamQuestion,
   type ExamResult,
   type ExamTimeInfo,
@@ -23,6 +23,8 @@ import {
 import QuestionStem from "@/components/practice/components/QuestionStem";
 
 type Phase = "setup" | "answering" | "submitting" | "result";
+
+const OPTION_TYPES = ["single", "multiple", "judge", "choice"];
 
 interface Props {
   bankId: string;
@@ -41,22 +43,37 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
   const [currentIdx, setCurrentIdx] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<string[]>([]);
   const [savedAnswers, setSavedAnswers] = useState<Record<string, string[]>>({});
+  const [fillAnswer, setFillAnswer] = useState("");
   const [showAnswerSheet, setShowAnswerSheet] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const [examResult, setExamResult] = useState<ExamResult | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [banks, setBanks] = useState<{ id: string; name: string }[]>([]);
+  const [selectedBankId, setSelectedBankId] = useState(bankId || "");
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const startedRef = useRef(false);
 
   const currentQuestion = questions[currentIdx] ?? null;
+
+  // 加载题库列表
+  useEffect(() => {
+    if (phase !== "setup") return;
+    listBanks().then(items => {
+      const raw = Array.isArray(items) ? items : (items as any)?.items || [];
+      const list = raw.map((b: any) => ({ id: b.id, name: b.name }));
+      setBanks(list);
+      if (!selectedBankId && list.length > 0) setSelectedBankId(list[0].id);
+    }).catch(() => {});
+  }, [phase, selectedBankId]);
 
   // ── 创建考试 ──
   const handleStart = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const exam = await createExam(bankId, {
+      const bid = selectedBankId || bankId;
+      const exam = await createExam(bid, {
         count,
         duration_minutes: duration,
         cognitive_node_ids: nodeId ? [nodeId] : undefined,
@@ -74,7 +91,7 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
     } finally {
       setLoading(false);
     }
-  }, [bankId, count, duration, nodeId]);
+  }, [selectedBankId, bankId, count, duration, nodeId]);
 
   // ── 计时器 ──
   useEffect(() => {
@@ -142,11 +159,12 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
   // ── 选择答案 ──
   const toggleAnswer = useCallback((letter: string) => {
     if (!currentQuestion) return;
-    if (currentQuestion.question_type === "single" || currentQuestion.question_type === "judge" || currentQuestion.question_type === "choice") {
+    const qt = currentQuestion.question_type;
+    if (qt === "single" || qt === "judge" || qt === "choice") {
       const newAns = [letter];
       setSelectedAnswers(newAns);
       setSavedAnswers((prev) => ({ ...prev, [currentQuestion.id]: newAns }));
-    } else {
+    } else if (qt === "multiple") {
       setSelectedAnswers((prev) => {
         const next = prev.includes(letter)
           ? prev.filter((a) => a !== letter)
@@ -157,15 +175,41 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
     }
   }, [currentQuestion]);
 
+  // ── 保存填空/简答答案 ──
+  const saveFillAnswer = useCallback((text: string) => {
+    if (!currentQuestion) return;
+    setFillAnswer(text);
+    const trimmed = text.trim();
+    if (trimmed) {
+      setSavedAnswers((prev) => ({ ...prev, [currentQuestion.id]: [trimmed] }));
+    } else {
+      setSavedAnswers((prev) => {
+        const next = { ...prev };
+        delete next[currentQuestion.id];
+        return next;
+      });
+    }
+  }, [currentQuestion]);
+
   // ── 导航 ──
   const goToQuestion = useCallback((idx: number) => {
     // 保存当前题答案
-    if (currentQuestion && selectedAnswers.length > 0) {
-      setSavedAnswers((prev) => ({ ...prev, [currentQuestion.id]: selectedAnswers }));
+    if (currentQuestion) {
+      const isFillType = !OPTION_TYPES.includes(currentQuestion.question_type);
+      if (isFillType && fillAnswer.trim()) {
+        setSavedAnswers((prev) => ({ ...prev, [currentQuestion.id]: [fillAnswer.trim()] }));
+      } else if (selectedAnswers.length > 0) {
+        setSavedAnswers((prev) => ({ ...prev, [currentQuestion.id]: selectedAnswers }));
+      }
     }
     setCurrentIdx(idx);
-    setSelectedAnswers(savedAnswers[questions[idx]?.id] || []);
-  }, [currentQuestion, selectedAnswers, savedAnswers, questions]);
+    const nextQ = questions[idx];
+    const saved = savedAnswers[nextQ?.id] || [];
+    setSelectedAnswers(saved);
+    // 恢复填空答案
+    const isFillType = nextQ && !OPTION_TYPES.includes(nextQ.question_type);
+    setFillAnswer(isFillType && saved.length > 0 ? saved[0] : "");
+  }, [currentQuestion, selectedAnswers, savedAnswers, questions, fillAnswer]);
 
   const handleNext = useCallback(() => {
     if (currentIdx < questions.length - 1) goToQuestion(currentIdx + 1);
@@ -185,11 +229,11 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
 
     setPhase("submitting");
     try {
-      // 先逐题提交答案（调用已有 submit_answer 路由）
+      // 先逐题提交答案（调用考试 submit 路由）
       for (const q of questions) {
         const userAns = savedAnswers[q.id];
         if (userAns && userAns.length > 0) {
-          await submitAnswer(session.session_id, q.id, userAns, 0).catch(() => {});
+          await submitExamAnswer(session.session_id, q.id, userAns, 0).catch(() => {});
         }
       }
       // 批量交卷
@@ -238,6 +282,17 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
         <p className="text-[11px] text-[var(--color-text-muted)] text-center mb-6 leading-relaxed">
           计时答题 · 答题卡导航 · 自动交卷 · 成绩报告
         </p>
+
+        {/* 题库选择 */}
+        {banks.length > 1 && (
+          <div className="w-full mb-4">
+            <p className="text-[10px] text-[var(--color-text-muted)] mb-2 font-medium">选择题库</p>
+            <select value={selectedBankId} onChange={e => setSelectedBankId(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-xs">
+              {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </div>
+        )}
 
         {/* 时长选择 */}
         <div className="w-full mb-4">
@@ -380,8 +435,11 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
               <>
                 <div className="mb-1 flex items-center gap-2">
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)]/50 text-[var(--color-text-muted)]">
-                    {currentQuestion.question_type === "single" ? "单选题" :
-                     currentQuestion.question_type === "multiple" ? "多选题" : "选择题"}
+                    {currentQuestion.question_type === "single" || currentQuestion.question_type === "choice" ? "单选题" :
+                     currentQuestion.question_type === "multiple" ? "多选题" :
+                     currentQuestion.question_type === "judge" ? "判断题" :
+                     currentQuestion.question_type === "fill" ? "填空题" :
+                     currentQuestion.question_type === "free_form" || currentQuestion.question_type === "essay" ? "简答题" : "选择题"}
                   </span>
                   <span className="text-[9px] text-[var(--color-text-muted)]">
                     难度 {"★".repeat(currentQuestion.difficulty).padEnd(5, "☆")}
@@ -390,10 +448,12 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
 
                 <QuestionStem stem={currentQuestion.stem} className="text-base leading-relaxed mb-4" />
 
-                {/* 选项 */}
+                {/* 选项类型 */}
+                {OPTION_TYPES.includes(currentQuestion.question_type) && (
                 <div className="space-y-2">
                   {currentQuestion.options?.map((opt) => {
                     const isSelected = selectedAnswers.includes(opt.letter);
+                    const isMultiple = currentQuestion.question_type === "multiple";
                     return (
                       <button key={opt.letter} onClick={() => toggleAnswer(opt.letter)}
                         className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-all ${
@@ -401,7 +461,9 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
                             ? "border-red-500 bg-red-500/10"
                             : "border-[var(--color-border)]/60 bg-[var(--color-surface)] hover:border-red-500/30"
                         }`}>
-                        <span className={`flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-[11px] font-medium ${
+                        <span className={`flex-shrink-0 w-6 h-6 flex items-center justify-center text-[11px] font-medium ${
+                          isMultiple ? "rounded-md" : "rounded-full"
+                        } ${
                           isSelected
                             ? "bg-red-500 text-white"
                             : "bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)]"
@@ -415,6 +477,20 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
                     );
                   })}
                 </div>
+                )}
+
+                {/* 填空/简答类型 */}
+                {!OPTION_TYPES.includes(currentQuestion.question_type) && (
+                <div>
+                  <textarea
+                    value={fillAnswer}
+                    onChange={(e) => saveFillAnswer(e.target.value)}
+                    placeholder={currentQuestion.question_type === "fill" ? "输入你的答案..." : "输入你的回答..."}
+                    rows={currentQuestion.question_type === "fill" ? 2 : 4}
+                    className="w-full px-4 py-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] text-sm resize-none focus:outline-none focus:border-red-500 transition-colors"
+                  />
+                </div>
+                )}
               </>
             )}
 

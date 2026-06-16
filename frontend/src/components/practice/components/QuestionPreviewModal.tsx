@@ -10,12 +10,13 @@ import QuestionStem from "@/components/practice/components/QuestionStem";
 
 const TYPE_LABELS: Record<string, string> = {
   single: "单选", multiple: "多选", judge: "判断",
-  fill: "填空", free_form: "简答", essay: "简答",
+  choice: "单选", fill: "填空", free_form: "简答", essay: "简答",
 };
 const TYPE_COLORS: Record<string, string> = {
   single: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
   multiple: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
   judge: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+  choice: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
   fill: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
   free_form: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
   essay: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",

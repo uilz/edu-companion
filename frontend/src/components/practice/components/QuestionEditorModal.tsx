@@ -24,7 +24,7 @@ interface Props {
 /** 题目编辑弹窗 — 浮层覆盖，不推内容 */
 export default function QuestionEditorModal({ question: initial, isNew, onSave, onClose }: Props) {
   const [q, setQ] = useState<EditableQuestion>(initial);
-  const isOption = q.question_type === "single" || q.question_type === "multiple" || q.question_type === "judge";
+  const isOption = q.question_type === "single" || q.question_type === "multiple" || q.question_type === "judge" || q.question_type === "choice";
 
   const updateOpt = (letter: string, field: "text" | "is_correct", value: string | boolean) => {
     setQ({
@@ -63,6 +63,7 @@ export default function QuestionEditorModal({ question: initial, isNew, onSave, 
             <option value="single">单选</option>
             <option value="multiple">多选</option>
             <option value="judge">判断</option>
+            <option value="choice">单选(兼容)</option>
             <option value="fill">填空</option>
             <option value="free_form">简答</option>
           </select>
