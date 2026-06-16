@@ -54,8 +54,9 @@ class PracticeService(Protocol):
         user_id: str,
         question_ids: list[str],
         mode: str = "adaptive",
+        sources: dict | None = None,
     ) -> PracticeSession:
-        """创建练习会话"""
+        """创建练习会话（sources 可选：{bank: N, errors: N, variants: N, new: N}）"""
         ...
 
     async def submit_answer(
@@ -227,8 +228,10 @@ class PracticeService(Protocol):
         difficulty: int = 3,
         count: int = 5,
         question_type: str = "choice",
+        material_context: str | None = None,
+        reference_mode: str | None = None,
     ) -> list[dict]:
-        """AI 生成题目并保存"""
+        """AI 生成题目并保存（reference_mode: inspiration/reference/strict）"""
         ...
 
     # ── 题库管理 ──

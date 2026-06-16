@@ -72,9 +72,10 @@ class PracticeServiceImpl:
 
     async def create_session(
         self, user_id: str, question_ids: list[str], mode: str = "adaptive",
+        sources: dict | None = None,
     ) -> dict:
         session_id = await self._sessions.create(user_id, question_ids)
-        return {"session_id": session_id, "question_ids": question_ids, "mode": mode}
+        return {"session_id": session_id, "question_ids": question_ids, "mode": mode, "sources": sources}
 
     async def submit_answer(
         self,
@@ -93,11 +94,23 @@ class PracticeServiceImpl:
         if not question:
             raise ValueError(f"Question not found: {question_id}")
 
-        is_correct = answer.strip().upper() == question["correct_answer"].strip().upper()
+        # 从 options 推导正确答案, fallback 到 answer 字段
+        options = question.get("options") or []
+        if isinstance(options, list) and any(o.get("is_correct") for o in options):
+            correct_answers = [o["letter"] for o in options if o.get("is_correct")]
+        else:
+            correct_answers = question.get("answer") or []
+            if isinstance(correct_answers, str):
+                correct_answers = [correct_answers]
+
+        user_answers = [answer] if isinstance(answer, str) else (answer or [])
+        user_set = set(str(a).strip().upper() for a in user_answers)
+        correct_set = set(str(a).strip().upper() for a in correct_answers)
+        is_correct = user_set == correct_set
 
         feedback = {
             "is_correct": is_correct,
-            "correct_answer": question["correct_answer"],
+            "correct_answer": correct_answers,
             "explanation": question.get("explanation", ""),
         }
 
@@ -105,10 +118,10 @@ class PracticeServiceImpl:
             user_id=user_id,
             session_id=session_id,
             question_id=question_id,
-            skill_id=question["skill_id"],
+            skill_id=question.get("skill_id", ""),
             is_correct=is_correct,
             answer=answer,
-            correct_answer=question["correct_answer"],
+            correct_answer=correct_answers,
             time_spent=time_spent,
             hints_used=hints_used,
         ))
@@ -117,10 +130,10 @@ class PracticeServiceImpl:
             await self._bus.publish(ErrorRecorded(
                 user_id=user_id,
                 question_id=question_id,
-                skill_id=question["skill_id"],
+                skill_id=question.get("skill_id", ""),
                 error_type="careless",
                 user_answer=answer,
-                correct_answer=question["correct_answer"],
+                correct_answer=correct_answers,
             ))
 
         # 发布 PracticeSubmitted 事件 → 触发认知节点信念更新
@@ -267,11 +280,12 @@ class PracticeServiceImpl:
         target_difficulty: int | None = None,
         cognitive_node_ids: list[str] | None = None,
         bloom_distribution: dict[str, int] | None = None,
+        sources: dict | None = None,
     ) -> list[dict]:
-        from app.services.practice.practice_adaptive import adaptive_select
-        return adaptive_select(
+        from app.services.practice.practice_adaptive import adaptive_select_v2
+        return adaptive_select_v2(
             bank_id, user_id, count, mode, exclude_ids,
-            target_difficulty, cognitive_node_ids, bloom_distribution,
+            cognitive_node_ids=cognitive_node_ids,
         )
 
     # ═══════════════════════════════════════════════════════
@@ -282,15 +296,17 @@ class PracticeServiceImpl:
         self, bank_id: str, user_id: str,
         subject: str = "", skill: str = "", bloom: str = "understand",
         difficulty: int = 3, count: int = 5, question_type: str = "choice",
+        material_context: str | None = None,
+        reference_mode: str | None = None,
     ) -> list[dict]:
         from app.services.practice.practice_question_gen import generate_and_save
-        # 映射参数名：skill → skill_id, bloom → bloom_level,
-        # difficulty: int → float (0-1), question_type → content_type
         diff_float = difficulty / 5.0 if difficulty > 1 else float(difficulty)
         return await generate_and_save(
             bank_id=bank_id, user_id=user_id, subject=subject,
             skill_id=skill, bloom_level=bloom,
             difficulty=diff_float, count=count, content_type=question_type,
+            material_context=material_context,
+            reference_mode=reference_mode,
         )
 
     # ═══════════════════════════════════════════════════════
