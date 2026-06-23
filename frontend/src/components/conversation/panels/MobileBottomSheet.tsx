@@ -19,7 +19,7 @@ export default function MobileBottomSheet({
       <div className="relative bg-[var(--color-bg)] border-t border-[var(--color-border)] max-h-[70vh] flex flex-col rounded-t-xl">
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
           <span className="text-sm font-semibold text-[var(--color-text)]">导航</span>
-          <button onClick={onClose} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
+          <button onClick={onClose} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]" style={{ minWidth: 44, minHeight: 44 }}>
             <X size={18} />
           </button>
         </div>

@@ -15,6 +15,9 @@ import PracticePanel from "@/components/practice/panels/PracticePanel";
 import NodeDetailPanel from "@/components/graph/panels/NodeDetailPanel";
 import TreeChatPanel from "@/components/graph/panels/TreeChatPanel";
 import { authedFetch, API_BASE } from "@/lib/api/api";
+import { knowledgeNodesApi } from "@/lib/api/knowledge-tree-api";
+import { useIsMobile } from '@/hooks/useMediaQuery';
+import { useGraphNodeActions } from "@/hooks/graph/useGraphNodeActions";
 
 // ── 动态导入 ──
 const FocusGraph = dynamic(() => import("@/components/graph/graphs/FocusGraph"), { ssr: false });
@@ -69,12 +72,12 @@ function NoPartitionState() {
 }
 
 // ── 空状态 ──
-function EmptyState({ onLoad, partitionId }: { onLoad: () => void; partitionId: string }) {
+function EmptyState({ onLoad, onGenerate }: { onLoad: () => void; onGenerate: () => Promise<boolean> }) {
   const [generating, setGenerating] = useState(false);
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      await authedFetch(`/api/knowledge/graph/${partitionId}/generate`, { method: "POST" });
+      await onGenerate();
       onLoad();
     } catch {}
     setGenerating(false);
@@ -118,6 +121,11 @@ export type LeftTab = "dialogue" | "practice" | "notes" | "resources" | "project
 
 export default function GraphDialoguePage() {
   const ctx = useGraphDialogue();
+  const nodeActions = useGraphNodeActions({
+    onNodeUpdated: ctx.loadGraph,
+  });
+
+  const generateGraph = nodeActions.generateGraph;
 
   // ── 加载骨架屏 ──
   if (ctx.loading) return <LoadingSkeleton />;
@@ -140,7 +148,7 @@ export default function GraphDialoguePage() {
     if (!ctx.partitionId) {
       return <NoPartitionState />;
     }
-    return <EmptyState onLoad={ctx.loadGraph} partitionId={ctx.partitionId} />;
+    return <EmptyState onLoad={ctx.loadGraph} onGenerate={generateGraph} />;
   }
 
   return <GraphDialogueLayout ctx={ctx} />;
@@ -156,6 +164,8 @@ function GraphDialogueLayout({ ctx }: { ctx: UseGraphDialogueReturn }) {
   const [newNodeLabel, setNewNodeLabel] = useState("");
   const [newNodeParent, setNewNodeParent] = useState("");
   const [addNodeLoading, setAddNodeLoading] = useState(false);
+  const isMobile = useIsMobile();
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
 
   const stats = useMemo(() => {
     if (!ctx.graphData || !ctx.graphData.nodes.length) return { total: 0, mastered: 0, learning: 0, avgMastery: 0 };
@@ -208,10 +218,9 @@ function GraphDialogueLayout({ ctx }: { ctx: UseGraphDialogueReturn }) {
     if (!newNodeLabel.trim()) return;
     setAddNodeLoading(true);
     try {
-      await authedFetch(`/api/knowledge/graph/${ctx.partitionId}/node`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label: newNodeLabel.trim(), parent_node_id: newNodeParent || null }),
+      await knowledgeNodesApi.create({
+        label: newNodeLabel.trim(),
+        parent_id: newNodeParent || undefined,
       });
       setAddNodeOpen(false);
       setNewNodeLabel("");
@@ -350,107 +359,204 @@ function GraphDialogueLayout({ ctx }: { ctx: UseGraphDialogueReturn }) {
     );
   }
 
+  // ── 左侧面板内容（桌面侧栏 / 移动端底部弹出） ──
+  const leftPanelInner = (
+    <>
+      <div className="flex-shrink-0 border-b border-[var(--color-border)] px-4 pt-3 pb-0 flex items-center gap-4 overflow-x-auto">
+        {tabBtn("dialogue", ctx.selectedNode ? "探索会话" : "学习对话", <MessageSquare size={12} />)}
+        {tabBtn("practice", "练习", <Play size={12} />, ctx.practiceStats.total)}
+        {tabBtn("notes", "笔记", <FileText size={12} />, ctx.relatedNotes.length)}
+        {tabBtn("resources", "资源", <Sparkles size={12} />)}
+        {tabBtn("projects", "项目", <Rocket size={12} />)}
+      </div>
+
+      <div className="flex-1 overflow-y-auto" onMouseUp={ctx.handleTextSelect}>
+        <div className="p-4">
+          {ctx.selectedNode && (
+            <div className="mb-4 p-3 rounded-lg bg-[var(--color-accent)]/5 border border-[var(--color-accent)]/20 animate-fadeIn">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: getMasteryColor(ctx.selectedNode.mastery) }} />
+                <span className="text-sm font-medium">{ctx.selectedNode.label}</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] ml-auto">{ctx.selectedNode.level}</span>
+              </div>
+              <div className="flex items-center gap-3 mt-2 text-[11px] text-[var(--color-text-muted)]">
+                <span>掌握度: {Math.round(ctx.selectedNode.mastery * 100)}%</span>
+                <button onClick={() => ctx.handleRequestExplain(ctx.selectedNode!.id)} className="text-[var(--color-accent)] hover:underline ml-auto">请求讲解 →</button>
+              </div>
+            </div>
+          )}
+
+          {ctx.leftTab === "dialogue" && (
+            <div className="animate-fadeIn h-full">
+              {ctx.cardLoading ? (
+                <div className="flex items-center justify-center py-8"><Loader2 size={16} className="animate-spin text-[var(--color-text-muted)]" /></div>
+              ) : ctx.selectedNode ? (
+                <div className="h-[calc(100vh-280px)] min-h-[400px] -mx-4 -mb-4">
+                  <TreeChatPanel
+                    node={ctx.selectedNode}
+                    partitionId={ctx.partitionId}
+                    onNodeUpdated={() => ctx.loadGraph()}
+                  />
+                </div>
+              ) : (
+                <DialogueCardList cards={ctx.relatedCards} selectedNode={ctx.selectedNode} />
+              )}
+            </div>
+          )}
+
+          {ctx.leftTab === "practice" && (
+            <PracticePanel nodeId={ctx.selectedNode?.id} nodeLabel={ctx.selectedNode?.label} onClose={() => ctx.setLeftTab("dialogue")} />
+          )}
+
+          {ctx.leftTab === "notes" && (
+            <div className="space-y-3 animate-fadeIn">
+              <p className="text-xs text-[var(--color-text-muted)]">所有高亮、自我解释、反思自动汇聚为个人笔记流</p>
+              {ctx.relatedNotes.length === 0 ? (
+                <div className="text-center py-6"><FileText size={24} className="mx-auto mb-2 text-[var(--color-text-muted)] opacity-30" /><p className="text-xs text-[var(--color-text-muted)]">选中文本后使用工具栏添加笔记</p></div>
+              ) : (
+                ctx.relatedNotes.map(note => (
+                  <div key={note.id} className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] transition-all hover:border-[var(--color-border-hover)]">
+                    <div className="flex items-center gap-1 mb-1">
+                      {note.type === "explain" ? <Lightbulb size={10} className="text-[var(--color-accent)]" />
+                        : note.type === "reflect" ? <Brain size={10} className="text-[var(--color-accent)]" />
+                        : <StickyNote size={10} className="text-[var(--color-success)]" />}
+                      <span className="text-[9px] text-[var(--color-text-muted)]">
+                        {note.type === "explain" ? "自我解释" : note.type === "reflect" ? "反思" : "笔记"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[var(--color-text)] leading-relaxed">{note.content}</p>
+                  </div>
+                ))
+              )}
+              {ctx.relatedNotes.length > 0 && (
+                <button onClick={() => ctx.setAggregateOpen(true)} className="flex items-center gap-1 text-xs text-[var(--color-accent)] hover:underline mx-auto"><Sparkles size={12} /> AI整理笔记</button>
+              )}
+            </div>
+          )}
+
+          {ctx.leftTab === "resources" && (
+            <div className="space-y-3 animate-fadeIn">
+              <p className="text-xs text-[var(--color-text-muted)]">
+                {ctx.selectedNode ? `围绕「${ctx.selectedNode.label}」的学习资源` : "选择知识点查看关联资源"}
+              </p>
+              {ctx.selectedNode ? (
+                <>
+                  <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-center">
+                    <Sparkles size={24} className="mx-auto mb-2 text-[var(--color-accent)]" />
+                    <p className="text-xs text-[var(--color-text-muted)]">视频讲解功能正在接入中</p>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-6"><Sparkles size={24} className="mx-auto mb-2 text-[var(--color-text-muted)] opacity-30" /><p className="text-xs text-[var(--color-text-muted)]">点击图谱中的节点查看资源</p></div>
+              )}
+            </div>
+          )}
+
+          {ctx.leftTab === "projects" && (
+            <ProjectsPanel open selectedNodeId={ctx.selectedNode?.id} selectedNodeLabel={ctx.selectedNode?.label} onClose={() => ctx.setLeftTab("dialogue")} />
+          )}
+        </div>
+      </div>
+    </>
+  );
+
+  // ── 移动端布局 ──
+  if (isMobile) {
+    return (
+      <div className="flex flex-col h-full min-h-[600px]">
+        <div className="flex-1 min-w-0 overflow-hidden relative">{graphPanel}</div>
+
+        <div className="fixed bottom-20 right-4 z-40">
+          <button onClick={() => setMobilePanelOpen(!mobilePanelOpen)}
+            className="w-12 h-12 rounded-full bg-accent text-white shadow-lg flex items-center justify-center active:scale-95 transition-transform"
+            style={{minWidth:44,minHeight:44}}>
+            {mobilePanelOpen ? <X size={20} /> : <MessageCircle size={20} />}
+          </button>
+        </div>
+
+        {mobilePanelOpen && (
+          <>
+            <div className="fixed inset-0 z-30 bg-black/30" onClick={() => setMobilePanelOpen(false)} />
+            <div className="fixed bottom-0 left-0 right-0 z-30 bg-[var(--color-bg)] border-t border-[var(--color-border)] rounded-t-xl max-h-[75vh] flex flex-col animate-slideUp shadow-2xl">
+              <div className="flex flex-col overflow-hidden">
+                {leftPanelInner}
+              </div>
+
+              {hasNode && (
+                <div className="flex-shrink-0 border-t border-[var(--color-border)] p-4">
+                  <NodeDetailPanel
+                    node={ctx.selectedNode!}
+                    partitionId={ctx.partitionId}
+                    onClose={() => ctx.setSelectedNode(null)}
+                    onNodeUpdated={() => ctx.loadGraph()}
+                    onStartPractice={ctx.handleStartPractice}
+                    onRequestExplain={ctx.handleRequestExplain}
+                  />
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {addNodeOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+            <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-5 w-80 space-y-3 shadow-xl">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-[var(--color-text)]">添加知识节点</h3>
+                <button onClick={() => setAddNodeOpen(false)}><X size={14} className="text-[var(--color-text-muted)]" /></button>
+              </div>
+              <input value={newNodeLabel} onChange={e => setNewNodeLabel(e.target.value)}
+                placeholder="节点名称" autoFocus
+                className="w-full px-3 py-2 text-sm bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] rounded-lg focus:outline-none focus:border-[var(--color-accent)]"
+                onKeyDown={e => e.key === "Enter" && handleAddNode()} />
+              <select value={newNodeParent} onChange={e => setNewNodeParent(e.target.value)}
+                className="w-full px-3 py-2 text-xs bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] rounded-lg focus:outline-none focus:border-[var(--color-accent)]">
+                <option value="">无父节点（根节点）</option>
+                {ctx.graphData?.nodes?.map(n => (
+                  <option key={n.id} value={n.id}>{n.label}</option>
+                ))}
+              </select>
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setAddNodeOpen(false)} className="px-3 py-1.5 text-xs border border-[var(--color-border)] rounded-lg text-[var(--color-text-muted)]">取消</button>
+                <button onClick={handleAddNode} disabled={addNodeLoading || !newNodeLabel.trim()}
+                  className="px-3 py-1.5 text-xs bg-[var(--color-accent)] text-white rounded-lg hover:opacity-90 disabled:opacity-50">
+                  {addNodeLoading ? <Loader2 size={11} className="animate-spin" /> : "添加"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <DeepReadToolbar position={ctx.toolbar.position} visible={ctx.toolbar.visible}
+          selectedText={ctx.toolbar.text} level={ctx.toolbar.level as any}
+          onHighlight={() => {}} onQuote={() => {}} onExplain={ctx.handleExplain}
+          onNote={ctx.handleNote} onClose={() => ctx.setToolbar({ ...ctx.toolbar, visible: false })} />
+        <ExplainModal open={ctx.explainModal} originalText={ctx.selectedText}
+          onClose={() => ctx.setExplainModal(false)} onSave={ctx.handleExplainSave} />
+        <NoteSidebar open={ctx.noteSidebar} onClose={() => ctx.setNoteSidebar(false)}
+          sourceText={ctx.selectedText} nodeId={ctx.selectedNode?.id} nodeLabel={ctx.selectedNode?.label} />
+        <ReflectionModal open={ctx.reflectionOpen} trigger={ctx.reflectionTrigger}
+          relatedNodes={ctx.selectedNode ? [ctx.selectedNode.label] : []}
+          context={ctx.selectedNode ? `围绕 "${ctx.selectedNode.label}" 的当前学习对话` : undefined}
+          onClose={() => ctx.setReflectionOpen(false)} onSave={ctx.handleReflectionSave} />
+        {ctx.selectedNode && (
+          <GoalSettingModal open={ctx.goalModalOpen} nodeId={ctx.selectedNode.id}
+            nodeLabel={ctx.selectedNode.label} currentMastery={ctx.selectedNode.mastery}
+            onClose={() => ctx.setGoalModalOpen(false)} onSaved={() => ctx.loadGraph()} />
+        )}
+        <AggregateNotesModal open={ctx.aggregateOpen}
+          nodeIds={ctx.selectedNode ? [ctx.selectedNode.id] : undefined}
+          onClose={() => ctx.setAggregateOpen(false)} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full min-h-[600px] transition-all duration-200">
       {/* 左侧面板 */}
       <div className="flex flex-col overflow-hidden border-r border-[var(--color-border)]"
         style={{ width: hasNode ? "calc(50% - 160px)" : "50%" }}>
-        <div className="flex-shrink-0 border-b border-[var(--color-border)] px-4 pt-3 pb-0 flex items-center gap-4 overflow-x-auto">
-          {tabBtn("dialogue", ctx.selectedNode ? "探索会话" : "学习对话", <MessageSquare size={12} />)}
-          {tabBtn("practice", "练习", <Play size={12} />, ctx.practiceStats.total)}
-          {tabBtn("notes", "笔记", <FileText size={12} />, ctx.relatedNotes.length)}
-          {tabBtn("resources", "资源", <Sparkles size={12} />)}
-          {tabBtn("projects", "项目", <Rocket size={12} />)}
-        </div>
-
-        <div className="flex-1 overflow-y-auto" onMouseUp={ctx.handleTextSelect}>
-          <div className="p-4">
-            {/* 选中节点摘要 */}
-            {ctx.selectedNode && (
-              <div className="mb-4 p-3 rounded-lg bg-[var(--color-accent)]/5 border border-[var(--color-accent)]/20 animate-fadeIn">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: getMasteryColor(ctx.selectedNode.mastery) }} />
-                  <span className="text-sm font-medium">{ctx.selectedNode.label}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] ml-auto">{ctx.selectedNode.level}</span>
-                </div>
-                <div className="flex items-center gap-3 mt-2 text-[11px] text-[var(--color-text-muted)]">
-                  <span>掌握度: {Math.round(ctx.selectedNode.mastery * 100)}%</span>
-                  <button onClick={() => ctx.handleRequestExplain(ctx.selectedNode!.id)} className="text-[var(--color-accent)] hover:underline ml-auto">请求讲解 →</button>
-                </div>
-              </div>
-            )}
-
-            {ctx.leftTab === "dialogue" && (
-              <div className="animate-fadeIn h-full">
-                {ctx.cardLoading ? (
-                  <div className="flex items-center justify-center py-8"><Loader2 size={16} className="animate-spin text-[var(--color-text-muted)]" /></div>
-                ) : ctx.selectedNode ? (
-                  <div className="h-[calc(100vh-280px)] min-h-[400px] -mx-4 -mb-4">
-                    <TreeChatPanel
-                      node={ctx.selectedNode}
-                      partitionId={ctx.partitionId}
-                      onNodeUpdated={() => ctx.loadGraph()}
-                    />
-                  </div>
-                ) : (
-                  <DialogueCardList cards={ctx.relatedCards} selectedNode={ctx.selectedNode} />
-                )}
-              </div>
-            )}
-
-            {ctx.leftTab === "practice" && (
-              <PracticePanel nodeId={ctx.selectedNode?.id} nodeLabel={ctx.selectedNode?.label} onClose={() => ctx.setLeftTab("dialogue")} />
-            )}
-
-            {ctx.leftTab === "notes" && (
-              <div className="space-y-3 animate-fadeIn">
-                <p className="text-xs text-[var(--color-text-muted)]">所有高亮、自我解释、反思自动汇聚为个人笔记流</p>
-                {ctx.relatedNotes.length === 0 ? (
-                  <div className="text-center py-6"><FileText size={24} className="mx-auto mb-2 text-[var(--color-text-muted)] opacity-30" /><p className="text-xs text-[var(--color-text-muted)]">选中文本后使用工具栏添加笔记</p></div>
-                ) : (
-                  ctx.relatedNotes.map(note => (
-                    <div key={note.id} className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] transition-all hover:border-[var(--color-border-hover)]">
-                      <div className="flex items-center gap-1 mb-1">
-                        {note.type === "explain" ? <Lightbulb size={10} className="text-[var(--color-accent)]" />
-                          : note.type === "reflect" ? <Brain size={10} className="text-[var(--color-accent)]" />
-                          : <StickyNote size={10} className="text-[var(--color-success)]" />}
-                        <span className="text-[9px] text-[var(--color-text-muted)]">
-                          {note.type === "explain" ? "自我解释" : note.type === "reflect" ? "反思" : "笔记"}
-                        </span>
-                      </div>
-                      <p className="text-xs text-[var(--color-text)] leading-relaxed">{note.content}</p>
-                    </div>
-                  ))
-                )}
-                {ctx.relatedNotes.length > 0 && (
-                  <button onClick={() => ctx.setAggregateOpen(true)} className="flex items-center gap-1 text-xs text-[var(--color-accent)] hover:underline mx-auto"><Sparkles size={12} /> AI整理笔记</button>
-                )}
-              </div>
-            )}
-
-            {ctx.leftTab === "resources" && (
-              <div className="space-y-3 animate-fadeIn">
-                <p className="text-xs text-[var(--color-text-muted)]">
-                  {ctx.selectedNode ? `围绕「${ctx.selectedNode.label}」的学习资源` : "选择知识点查看关联资源"}
-                </p>
-                {ctx.selectedNode ? (
-                  <>
-                    <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-center">
-                      <Sparkles size={24} className="mx-auto mb-2 text-[var(--color-accent)]" />
-                      <p className="text-xs text-[var(--color-text-muted)]">视频讲解功能正在接入中</p>
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-center py-6"><Sparkles size={24} className="mx-auto mb-2 text-[var(--color-text-muted)] opacity-30" /><p className="text-xs text-[var(--color-text-muted)]">点击图谱中的节点查看资源</p></div>
-                )}
-              </div>
-            )}
-
-            {ctx.leftTab === "projects" && (
-              <ProjectsPanel open selectedNodeId={ctx.selectedNode?.id} selectedNodeLabel={ctx.selectedNode?.label} onClose={() => ctx.setLeftTab("dialogue")} />
-            )}
-          </div>
-        </div>
+        {leftPanelInner}
       </div>
 
       {/* 图谱面板 */}

@@ -65,6 +65,7 @@ export default function BottomNav() {
                 }
               `}
               aria-label={item.label}
+              style={{ minWidth: 44, minHeight: 44 }}
             >
               {active && (
                 <div

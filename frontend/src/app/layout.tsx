@@ -2,6 +2,8 @@
 import type { Metadata, Viewport } from 'next';
 // 导入全局样式
 import './globals.css';
+// 导入 KaTeX CSS（数学公式渲染）
+import 'katex/dist/katex.min.css';
 // 导入应用外壳布局组件（导航栏/侧边栏等）
 import AppShell from '@/components/layout/AppShell';
 // 导入客户端 Providers 包裹组件（主题、状态管理等）

@@ -15,3 +15,24 @@ export function useMediaQuery(query: string): boolean {
   }, [query]);
   return matches;
 }
+
+/**
+ * useIsMobile — 快捷检测是否为移动端 (< 640px)
+ */
+export function useIsMobile(): boolean {
+  return useMediaQuery("(max-width: 639px)");
+}
+
+/**
+ * useIsTablet — 快捷检测是否为平板端 (640-1023px)
+ */
+export function useIsTablet(): boolean {
+  return useMediaQuery("(min-width: 640px) and (max-width: 1023px)");
+}
+
+/**
+ * useIsDesktop — 快捷检测是否为桌面端 (≥ 1024px)
+ */
+export function useIsDesktop(): boolean {
+  return useMediaQuery("(min-width: 1024px)");
+}

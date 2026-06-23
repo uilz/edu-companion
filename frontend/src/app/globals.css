@@ -57,6 +57,9 @@
   /* ── Layout ── */
   --sidebar-width: 280px;
   --bottom-nav-height: 64px;
+
+  /* ── Mobile Touch / Typography (v2) ── */
+  --touch-target-min: 44px;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -945,6 +948,33 @@
   50% { box-shadow: 0 0 16px 4px var(--color-accent-glow); }
 }
 
+/* ── 知识树扫描线动画 ── */
+@keyframes kt-scan {
+  0% { top: 0%; opacity: 0; }
+  10% { opacity: 1; }
+  50% { top: 100%; opacity: 0.6; }
+  90% { opacity: 0; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* ── 知识树节点浮入动画 ── */
+@keyframes kt-node-enter {
+  from { opacity: 0; transform: scale(0.9) translateY(4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ── 知识树面板玻璃态动画 ── */
+@keyframes kt-glass-pulse {
+  0%, 100% { border-color: rgba(99, 102, 241, 0.08); }
+  50% { border-color: rgba(99, 102, 241, 0.15); }
+}
+
+/* ── 脉冲光点 ── */
+@keyframes kt-particle {
+  0%, 100% { opacity: 0; transform: translateY(0) scale(0.5); }
+  50% { opacity: 0.6; transform: translateY(-6px) scale(1); }
+}
+
 .message-enter {
   animation: messageEnter var(--motion-normal) var(--ease-out) both;
 }
@@ -993,4 +1023,64 @@
 /* Prevent 300ms tap delay on mobile */
 [data-message-id] {
   touch-action: manipulation;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE OVERRIDES — Mobile-first overrides
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── 移动端触摸热区 < 640px ── */
+@media (max-width: 639px) {
+  .swiss-btn, button, a, [role="button"], select, input[type="submit"] {
+    min-height: var(--touch-target-min);
+  }
+
+  /* 移动端缩小页面边距 */
+  .swiss-container {
+    padding: var(--space-3) var(--space-2) !important;
+  }
+
+  /* 移动端缩小 h1/h2/h3 字号 */
+  h1 { font-size: calc(var(--text-hero-size) * 0.85); }
+  h2 { font-size: calc(var(--text-title-size) * 0.9); }
+  h3 { font-size: var(--text-heading-size); }
+
+  /* 移动端 body 用 caption 大小增强可读性 */
+  p, .text-body {
+    font-size: var(--text-caption-size);
+    line-height: 1.6;
+  }
+
+  /* 移动端缩小卡片间距 */
+  .swiss-card {
+    padding: var(--space-3);
+  }
+
+  /* 移动端表格 → 卡片模式 */
+  table { display: block; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* 移动端 grid 最小列宽 */
+  .grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 160px), 1fr)) !important; }
+
+  /* 移动端对话框全宽 */
+  [role="dialog"] > div, .modal-content {
+    max-width: 95vw !important;
+    margin: 0 auto;
+  }
+}
+
+/* ── 平板端微调 640-1023px ── */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .swiss-container {
+    padding: var(--space-4) var(--space-3);
+  }
+
+  h1 { font-size: calc(var(--text-hero-size) * 0.9); }
+}
+
+/* ── 安全区域 ── */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
 }

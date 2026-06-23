@@ -1,22 +1,23 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { Plus, X, Check, AlertCircle, Sparkles, Loader2, ZoomIn, ZoomOut, Maximize, RefreshCw } from "lucide-react";
 import type { GraphData, GraphNode } from "@/lib/types/graph-types";
-import { filterByLevel, subtreeFilter, findNodeById } from "@/lib/types/graph-types";
+import { filterByLevel, subtreeFilter, findNodeById, getNodeAncestors } from "@/lib/types/graph-types";
 import FocusGraph from "@/components/graph/graphs/FocusGraph";
 import ForceGraph from "@/components/graph/graphs/ForceGraph";
 import DAGGraph from "@/components/graph/graphs/DAGGraph";
 import NodeDetailPanel from "@/components/graph/panels/NodeDetailPanel";
-import FloatingNodeCard from "@/components/graph/panels/FloatingNodeCard";
+import NodeDetailPopup from "@/components/graph/panels/NodeDetailPopup";
 import LayerPanel from "./LayerPanel";
 import DialogContainer from "./DialogContainer";
 import ContextMenu, { getDefaultContextMenuItems } from "./ContextMenu";
-import { TopBar, StatusBar, FloatDialogWrapper, AutoCollapsePanel, ResizeHandle } from "./index";
+import { TopBar, StatusBar, FloatDialogWrapper, ResizeHandle } from "./index";
 import { useTreeLayout } from "@/hooks/graph/useTreeLayout";
 import { useGraphCanvas } from "@/hooks/graph/useGraphCanvas";
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import { authedFetch } from "@/lib/api/api";
+import { useIsMobile, useIsTablet } from "@/hooks/useMediaQuery";
 
 // ── 导出类型（供外部引用） ──
 export type GraphMode = "mindmap" | "force" | "dag";
@@ -51,18 +52,15 @@ function LoadingSkeleton() {
   );
 }
 
-function EmptyState({ partitionId, onLoad }: { partitionId: string; onLoad: () => void }) {
+function EmptyState({ onGenerate, onLoad }: { onGenerate: () => Promise<boolean>; onLoad: () => void }) {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const handleGenerate = async () => {
     setGenerating(true);
     setGenError(null);
     try {
-      const res = await authedFetch(`/api/knowledge/graph/${partitionId}/generate`, { method: "POST" });
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(text || `服务返回 ${res.status}`);
-      }
+      const ok = await onGenerate();
+      if (!ok) throw new Error("生成失败");
       onLoad();
     } catch (e: any) {
       setGenError(e.message || "生成失败，请重试");
@@ -230,49 +228,37 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
 }
 
 // ══════════════════════════════════════════════════════════════
-//  子组件 — FocusBreadcrumb / ZoomControls / AddNodeDialog
+//  子组件 — ZoomControls / AddNodeDialog
 // ══════════════════════════════════════════════════════════════
-
-function FocusBreadcrumb({ focusRootId, graphData, focusBreadcrumb, onClearFocus, onSetFocus }: {
-  focusRootId: string; graphData: GraphData; focusBreadcrumb: GraphNode[];
-  onClearFocus: () => void; onSetFocus: (id: string) => void;
-}) {
-  return (
-    <div className="flex-shrink-0 flex items-center gap-1.5 px-4 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-page-secondary)] text-[11px] text-[var(--color-text-muted)]">
-      <button onClick={onClearFocus} className="text-[var(--color-accent)] hover:underline font-medium">全局视图</button>
-      <span className="text-[var(--color-text-muted)] mx-0.5">›</span>
-      {focusBreadcrumb.map(ancestor => (
-        <span key={ancestor.id} className="flex items-center gap-1">
-          <button onClick={() => onSetFocus(ancestor.id)} className="hover:text-[var(--color-accent)] hover:underline transition-colors">{ancestor.label}</button>
-          <span className="text-[var(--color-text-muted)] mx-0.5">›</span>
-        </span>
-      ))}
-      <span className="text-[var(--color-text)] font-medium">{findNodeById(graphData, focusRootId)?.label || "当前聚焦"}</span>
-    </div>
-  );
-}
 
 function ZoomControls({ zoomLevel, graphFullscreen, onZoomIn, onZoomOut, onReset, onToggleFullscreen }: {
   zoomLevel: number; graphFullscreen: boolean;
   onZoomIn: () => void; onZoomOut: () => void; onReset: () => void; onToggleFullscreen: () => void;
 }) {
   return (
-    <div className="absolute bottom-4 right-4 flex items-center gap-0.5 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-md p-1 z-20">
+    <div className="absolute bottom-4 right-4 flex items-center gap-0.5 p-1 rounded-xl z-20"
+      style={{
+        background: "rgba(15,15,22,0.75)",
+        backdropFilter: "blur(16px) saturate(160%)",
+        WebkitBackdropFilter: "blur(16px) saturate(160%)",
+        border: "1px solid rgba(255,255,255,0.06)",
+        boxShadow: "0 4px 24px rgba(0,0,0,0.3)",
+      }}>
       <button onClick={onZoomOut} disabled={zoomLevel <= 0.3}
-        className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] disabled:opacity-30 transition-colors" title="缩小 (Ctrl+-)">
+        className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/5 disabled:opacity-20 transition-all" title="缩小 (Ctrl+-)">
         <ZoomOut size={14} />
       </button>
       <button onClick={onReset}
-        className="px-2 py-1 text-[10px] font-medium text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] rounded transition-colors" title="重置缩放 (Ctrl+0)">
+        className="px-2 py-1 text-[10px] font-medium text-white/50 hover:text-white hover:bg-white/5 rounded-lg transition-all font-mono" title="重置缩放 (Ctrl+0)">
         {Math.round(zoomLevel * 100)}%
       </button>
       <button onClick={onZoomIn} disabled={zoomLevel >= 3}
-        className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] disabled:opacity-30 transition-colors" title="放大 (Ctrl++)">
+        className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/5 disabled:opacity-20 transition-all" title="放大 (Ctrl++)">
         <ZoomIn size={14} />
       </button>
-      <div className="w-px h-4 bg-[var(--color-border)] mx-0.5" />
+      <div className="w-px h-4 bg-white/[0.06] mx-0.5" />
       <button onClick={onToggleFullscreen}
-        className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors" title={graphFullscreen ? "退出全屏" : "全屏"}>
+        className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/5 transition-all" title={graphFullscreen ? "退出全屏" : "全屏"}>
         <Maximize size={14} />
       </button>
     </div>
@@ -341,6 +327,40 @@ export default function KnowledgeTreePage() {
   const { layoutPref, setLayoutPref } = useTreeLayout();
   const canvas = useGraphCanvas(layoutPref, setLayoutPref);
 
+  const isMobile = useIsMobile();
+  const isTablet = useIsTablet();
+
+  // 计算经过层级/聚焦过滤的显示数据，与图组件保持一致（必须在所有 early return 之前）
+  const displayData = useMemo(
+    () => canvas.graphData ? filterByLevel(subtreeFilter(canvas.graphData, canvas.focusRootId), canvas.maxDisplayLevel) : null,
+    [canvas.graphData, canvas.focusRootId, canvas.maxDisplayLevel],
+  );
+
+  // ── 面包屑（统一从 graphData 派生） ──
+  const focusBreadcrumbs = useMemo(() => {
+    if (!canvas.focusRootId || !canvas.graphData) return [];
+    return getNodeAncestors(canvas.graphData, canvas.focusRootId);
+  }, [canvas.focusRootId, canvas.graphData]);
+  const focusRootLabel = useMemo(() => {
+    if (!canvas.focusRootId || !canvas.graphData) return undefined;
+    const node = findNodeById(canvas.graphData, canvas.focusRootId);
+    return node?.label;
+  }, [canvas.focusRootId, canvas.graphData]);
+
+  // ── 稳定的 ResizeHandle 回调（避免每帧重新注册事件） ──
+  const onDialogResize = useCallback((dx: number) => {
+    setLayoutPref(p => ({ ...p, dialogWidth: Math.max(200, Math.min(600, p.dialogWidth + dx)) }));
+  }, []);
+  const onDialogAutoCollapse = useCallback(() => {
+    setLayoutPref(p => ({ ...p, showDialogPanel: false }));
+  }, []);
+  const onDetailResize = useCallback((dx: number) => {
+    setLayoutPref(p => ({ ...p, detailWidth: Math.max(200, Math.min(600, p.detailWidth - dx)) }));
+  }, []);
+  const onDetailAutoCollapse = useCallback(() => {
+    setLayoutPref(p => ({ ...p, showDetailPanel: false }));
+  }, []);
+
   if (canvas.loading) return <LoadingSkeleton />;
   if (canvas.error) return <ErrorState message={canvas.error} onRetry={canvas.loadGraph} />;
 
@@ -348,7 +368,16 @@ export default function KnowledgeTreePage() {
     if (!canvas.partitionId) {
       return <NoPartitionState onPartitionCreated={canvas.setPartitionId} onStartTemporary={canvas.handleStartTemporary} />;
     }
-    return <EmptyState partitionId={canvas.partitionId} onLoad={canvas.loadGraph} />;
+    return <EmptyState onGenerate={canvas.generateGraph} onLoad={canvas.loadGraph} />;
+  }
+
+  // Early returns 之后 displayData 保证非 null
+  const displayDataNonNull = displayData!;
+
+  // ── 响应式面板覆盖 ──
+  if (isMobile) {
+    layoutPref.showDialogPanel = false;
+    layoutPref.showDetailPanel = false;
   }
 
   return (
@@ -371,23 +400,17 @@ export default function KnowledgeTreePage() {
         graphFullscreen={canvas.graphFullscreen}
         layerOpen={layoutPref.layerOpen}
         onToggleLayer={() => setLayoutPref(p => ({ ...p, layerOpen: !p.layerOpen }))}
+        breadcrumbs={focusBreadcrumbs}
+        focusRootId={canvas.focusRootId}
+        onClearFocus={canvas.handleClearFocus}
+        onSetFocus={canvas.handleSetFocus}
+        rootLabel={focusRootLabel}
       />
 
-      {canvas.focusRootId && (
-        <FocusBreadcrumb
-          focusRootId={canvas.focusRootId}
-          graphData={canvas.graphData!}
-          focusBreadcrumb={canvas.focusBreadcrumb}
-          onClearFocus={canvas.handleClearFocus}
-          onSetFocus={canvas.handleSetFocus}
-        />
-      )}
-
       <div className="flex flex-1 overflow-hidden">
-        {layoutPref.showDialogPanel && (
+        {!isMobile && layoutPref.showDialogPanel && (
           <>
-            <AutoCollapsePanel side="left" width={layoutPref.dialogWidth}
-              onCollapse={() => setLayoutPref(p => ({ ...p, showDialogPanel: false }))}>
+            <div style={{ width: `${layoutPref.dialogWidth}px` }} className="flex-shrink-0 overflow-hidden">
               <DialogContainer
                 dialogState={canvas.dialogState}
                 onDialogStateChange={canvas.setDialogState}
@@ -397,107 +420,166 @@ export default function KnowledgeTreePage() {
                 width={layoutPref.dialogWidth}
                 onWidthChange={(w) => setLayoutPref(p => ({ ...p, dialogWidth: w }))}
               />
-            </AutoCollapsePanel>
-            <ResizeHandle side="left" onResize={(dx) => setLayoutPref(p => ({ ...p, dialogWidth: Math.max(200, Math.min(600, p.dialogWidth + dx)) }))} />
+            </div>
+            <ResizeHandle side="left" onResize={onDialogResize} onAutoCollapse={onDialogAutoCollapse} />
           </>
         )}
-
-        <div ref={canvas.canvasRef as React.RefObject<HTMLDivElement>}
-          className="flex-1 min-w-0 relative overflow-hidden bg-[var(--color-bg)]"
-          style={{ backgroundImage: "radial-gradient(circle at 1px 1px, var(--color-border) 1px, transparent 0)", backgroundSize: "24px 24px" }}>
-          {layoutPref.layerOpen && canvas.graphData && (
-            <LayerPanel
-              graphData={canvas.graphData}
-              searchQuery={canvas.graphSearch}
-              onSearchChange={canvas.setGraphSearch}
-              matchedNodeIds={canvas.matchedNodeIds}
-              selectedNodeId={canvas.selectedNode?.id}
-              onNodeSelect={canvas.handleNodeSelect}
-              maxDisplayLevel={canvas.maxDisplayLevel}
-              onMaxLevelChange={(l) => setLayoutPref(p => ({ ...p, maxDisplayLevel: l }))}
-              onClose={() => setLayoutPref(p => ({ ...p, layerOpen: false }))}
-              masteryFilter={canvas.masteryFilter}
-              onMasteryFilterChange={canvas.setMasteryFilter}
-            />
-          )}
-          <div ref={canvas.graphContainerRef as React.RefObject<HTMLDivElement>} className="absolute inset-0">
-            <div className="w-full h-full transition-transform duration-200 ease-out origin-top-left"
-              style={{ transform: `scale(${canvas.zoomLevel})`, transformOrigin: "top left" }}>
-              {canvas.graphMode === "mindmap" && (
-                <FocusGraph
-                  data={filterByLevel(subtreeFilter(canvas.graphData, canvas.focusRootId), canvas.maxDisplayLevel)}
-                  selectedNodeId={canvas.selectedNode?.id} onNodeSelect={canvas.handleNodeSelect}
-                  onFocusNode={canvas.handleSetFocus} onNodeContextMenu={canvas.handleNodeContextMenu}
-                  activePath={[]} width={canvas.graphSize.width} height={canvas.graphSize.height}
-                  searchQuery={canvas.graphSearch} matchedNodeIds={canvas.matchedNodeIds}
-                />
-              )}
-              {canvas.graphMode === "force" && (
-                <ForceGraph
-                  data={filterByLevel(subtreeFilter(canvas.graphData, canvas.focusRootId), canvas.maxDisplayLevel)}
-                  selectedNodeId={canvas.selectedNode?.id} onNodeSelect={canvas.handleNodeSelect}
-                  onNodeContextMenu={canvas.handleNodeContextMenu}
-                  width={canvas.graphSize.width} height={canvas.graphSize.height}
-                />
-              )}
-              {canvas.graphMode === "dag" && (
-                <DAGGraph
-                  data={filterByLevel(subtreeFilter(canvas.graphData, canvas.focusRootId), canvas.maxDisplayLevel)}
-                  selectedNodeId={canvas.selectedNode?.id} onNodeSelect={canvas.handleNodeSelect}
-                  onNodeContextMenu={canvas.handleNodeContextMenu} activePath={[]}
-                  width={canvas.graphSize.width} height={canvas.graphSize.height}
-                  searchQuery={canvas.graphSearch} matchedNodeIds={canvas.matchedNodeIds}
-                />
-              )}
+        {/* 移动端 Dialog 覆盖层 */}
+        {isMobile && layoutPref.showDialogPanel && (
+          <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setLayoutPref(p => ({...p, showDialogPanel: false}))}>
+            <div className="absolute bottom-0 left-0 right-0 max-h-[70vh] bg-[var(--color-page)] rounded-t-xl overflow-y-auto animate-[slideUp_0.2s_ease-out]"
+              onClick={e => e.stopPropagation()}>
+              <DialogContainer
+                dialogState={canvas.dialogState}
+                onDialogStateChange={canvas.setDialogState}
+                partitionId={canvas.partitionId}
+                selectedNode={canvas.selectedNode}
+                onNodeUpdated={canvas.loadGraph}
+                width={layoutPref.dialogWidth}
+                onWidthChange={(w) => setLayoutPref(p => ({ ...p, dialogWidth: w }))}
+              />
             </div>
-            <ZoomControls zoomLevel={canvas.zoomLevel} graphFullscreen={canvas.graphFullscreen}
-              onZoomIn={() => canvas.setZoomLevel(z => Math.min(3, z + 0.15))}
-              onZoomOut={() => canvas.setZoomLevel(z => Math.max(0.3, z - 0.15))}
-              onReset={() => canvas.setZoomLevel(1)}
-              onToggleFullscreen={() => canvas.setGraphFullscreen(!canvas.graphFullscreen)}
-            />
           </div>
+        )}
+
+        {/* ── 中间列（画布 + StatusBar） ── */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <div ref={canvas.canvasRef as React.RefObject<HTMLDivElement>}
+            className="flex-1 relative overflow-hidden"
+            style={{
+              background: "linear-gradient(180deg, rgba(10,10,15,1) 0%, rgba(15,15,22,1) 100%)",
+              backgroundImage: `
+                radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 0.5px, transparent 0),
+                radial-gradient(ellipse at 50% 0%, rgba(99,102,241,0.04) 0%, transparent 70%)
+              `,
+              backgroundSize: "24px 24px, 100% 100%",
+            }}>
+            {layoutPref.layerOpen && canvas.graphData && (
+              <LayerPanel
+                graphData={canvas.graphData}
+                searchQuery={canvas.graphSearch}
+                onSearchChange={canvas.setGraphSearch}
+                matchedNodeIds={canvas.matchedNodeIds}
+                selectedNodeId={canvas.selectedNode?.id}
+                onNodeSelect={canvas.handleNodeSelect}
+                maxDisplayLevel={canvas.maxDisplayLevel}
+                onMaxLevelChange={(l) => setLayoutPref(p => ({ ...p, maxDisplayLevel: l }))}
+                onClose={() => setLayoutPref(p => ({ ...p, layerOpen: false }))}
+                masteryFilter={canvas.masteryFilter}
+                onMasteryFilterChange={canvas.setMasteryFilter}
+              />
+            )}
+            <div ref={canvas.graphContainerRef as React.RefObject<HTMLDivElement>} className="absolute inset-0">
+              <div className="w-full h-full transition-transform duration-200 ease-out origin-top-left"
+                style={{ transform: `scale(${canvas.zoomLevel})`, transformOrigin: "top left" }}>
+                {canvas.graphMode === "mindmap" && (
+                  <FocusGraph
+                    key={canvas.focusRootId || "__root__"}
+                    data={displayDataNonNull}
+                    selectedNodeId={canvas.selectedNode?.id} onNodeSelect={canvas.handleNodeSelect}
+                    onFocusNode={canvas.handleSetFocus} onNodeContextMenu={canvas.handleNodeContextMenu}
+                    activePath={[]} width={canvas.graphSize.width} height={canvas.graphSize.height}
+                    searchQuery={canvas.graphSearch} matchedNodeIds={canvas.matchedNodeIds}
+                    renderNodePopup={canvas.selectedNode ? (pos) => (
+                      <NodeDetailPopup
+                        node={canvas.selectedNode!}
+                        nodePosition={pos}
+                        onClose={() => canvas.setSelectedNode(null)}
+                      />
+                    ) : undefined}
+                  />
+                )}
+                {canvas.graphMode === "force" && (
+                  <ForceGraph
+                    key={canvas.focusRootId || "__root__"}
+                    data={displayDataNonNull}
+                    selectedNodeId={canvas.selectedNode?.id} onNodeSelect={canvas.handleNodeSelect}
+                    onNodeContextMenu={canvas.handleNodeContextMenu}
+                    width={canvas.graphSize.width} height={canvas.graphSize.height}
+                  />
+                )}
+                {canvas.graphMode === "dag" && (
+                  <DAGGraph
+                    key={canvas.focusRootId || "__root__"}
+                    data={displayDataNonNull}
+                    selectedNodeId={canvas.selectedNode?.id} onNodeSelect={canvas.handleNodeSelect}
+                    onNodeContextMenu={canvas.handleNodeContextMenu} activePath={[]}
+                    width={canvas.graphSize.width} height={canvas.graphSize.height}
+                    searchQuery={canvas.graphSearch} matchedNodeIds={canvas.matchedNodeIds}
+                  />
+                )}
+              </div>
+              <ZoomControls zoomLevel={canvas.zoomLevel} graphFullscreen={canvas.graphFullscreen}
+                onZoomIn={() => canvas.setZoomLevel(z => Math.min(3, z + 0.15))}
+                onZoomOut={() => canvas.setZoomLevel(z => Math.max(0.3, z - 0.15))}
+                onReset={() => canvas.setZoomLevel(1)}
+                onToggleFullscreen={() => canvas.setGraphFullscreen(!canvas.graphFullscreen)}
+              />
+            </div>
+          </div>
+
+          <StatusBar stats={canvas.stats}
+            activeFilter={canvas.masteryFilter.size === 3 ? "all" : canvas.masteryFilter.size === 1 ? Array.from(canvas.masteryFilter)[0] : "custom"}
+            onStatClick={(filter) => {
+              if (filter === "all") canvas.setMasteryFilter(new Set(["mastered", "learning", "untouched"]));
+              else canvas.setMasteryFilter(new Set([filter]));
+            }}
+          />
         </div>
 
-        {layoutPref.showDetailPanel && canvas.selectedNode && (
+        {!isMobile && layoutPref.showDetailPanel && canvas.selectedNode && (
           <>
-            <ResizeHandle side="right" onResize={(dx) => setLayoutPref(p => ({ ...p, detailWidth: Math.max(200, Math.min(600, p.detailWidth - dx)) }))} />
-            <AutoCollapsePanel side="right" width={layoutPref.detailWidth}
-              onCollapse={() => { canvas.setSelectedNode(null); setLayoutPref(p => ({ ...p, showDetailPanel: false })); }}>
-              <div className="border-l border-[var(--color-border)] bg-[var(--color-surface)] overflow-y-auto h-full" style={{ width: `${layoutPref.detailWidth}px` }}>
-                <NodeDetailPanel
-                  node={canvas.selectedNode} partitionId={canvas.partitionId}
-                  onClose={() => canvas.setSelectedNode(null)} onNodeUpdated={canvas.loadGraph}
-                  onStartPractice={() => {}} onRequestExplain={() => {}}
-                  parentNode={canvas.selectedNode?.parent ? canvas.graphData?.nodes.find(n => n.id === canvas.selectedNode!.parent) ?? null : null}
-                  onNavigateToParent={(parent) => canvas.setSelectedNode(parent)}
-                />
-              </div>
-            </AutoCollapsePanel>
+            <ResizeHandle side="right" onResize={onDetailResize} onAutoCollapse={onDetailAutoCollapse} />
+            <div className="border-l border-[var(--color-border)] bg-[var(--color-surface)] overflow-y-auto h-full" style={{ width: `${layoutPref.detailWidth}px` }}>
+              <NodeDetailPanel
+                node={canvas.selectedNode} partitionId={canvas.partitionId}
+                onClose={() => canvas.setSelectedNode(null)} onNodeUpdated={canvas.loadGraph}
+                onStartPractice={() => {}} onRequestExplain={() => {}}
+                parentNode={canvas.selectedNode?.parent ? canvas.graphData?.nodes.find(n => n.id === canvas.selectedNode!.parent) ?? null : null}
+                onNavigateToParent={(parent) => canvas.setSelectedNode(parent)}
+              />
+            </div>
           </>
         )}
+        {/* 移动端 Detail 覆盖层 */}
+        {isMobile && layoutPref.showDetailPanel && canvas.selectedNode && (
+          <div className="fixed inset-0 z-40 bg-black/30" onClick={() => {
+            setLayoutPref(p => ({...p, showDetailPanel: false}));
+            canvas.setSelectedNode(null);
+          }}>
+            <div className="absolute bottom-0 left-0 right-0 max-h-[70vh] bg-[var(--color-page)] rounded-t-xl overflow-y-auto animate-[slideUp_0.2s_ease-out]"
+              onClick={e => e.stopPropagation()}>
+              <NodeDetailPanel
+                node={canvas.selectedNode} partitionId={canvas.partitionId}
+                onClose={() => {
+                  setLayoutPref(p => ({...p, showDetailPanel: false}));
+                  canvas.setSelectedNode(null);
+                }}
+                onNodeUpdated={canvas.loadGraph}
+                onStartPractice={() => {}} onRequestExplain={() => {}}
+                parentNode={canvas.selectedNode?.parent ? canvas.graphData?.nodes.find(n => n.id === canvas.selectedNode!.parent) ?? null : null}
+                onNavigateToParent={(parent) => canvas.setSelectedNode(parent)}
+              />
+            </div>
+          </div>
+        )}
       </div>
-
-      {!layoutPref.showDetailPanel && canvas.selectedNode && (
-        <FloatingNodeCard node={canvas.selectedNode} partitionId={canvas.partitionId}
-          onClose={() => canvas.setSelectedNode(null)} onNodeUpdated={canvas.loadGraph}
-          onStartPractice={() => {}} onRequestExplain={() => {}}
-          parentNode={canvas.selectedNode?.parent ? canvas.graphData?.nodes.find(n => n.id === canvas.selectedNode!.parent) ?? null : null}
-          onNavigateToParent={(parent) => canvas.setSelectedNode(parent)}
-        />
-      )}
-
-      <StatusBar stats={canvas.stats}
-        activeFilter={canvas.masteryFilter.size === 3 ? "all" : canvas.masteryFilter.size === 1 ? Array.from(canvas.masteryFilter)[0] : "custom"}
-        onStatClick={(filter) => {
-          if (filter === "all") canvas.setMasteryFilter(new Set(["mastered", "learning", "untouched"]));
-          else canvas.setMasteryFilter(new Set([filter]));
-        }}
-      />
 
       {!layoutPref.showDialogPanel && (
         <FloatDialogWrapper dialogState={canvas.dialogState} onDialogStateChange={canvas.setDialogState}
           partitionId={canvas.partitionId} selectedNode={canvas.selectedNode} onNodeUpdated={canvas.loadGraph} />
+      )}
+
+      {isMobile && (
+        <div className="fixed bottom-20 right-4 z-40 flex flex-col gap-2">
+          {!layoutPref.showDialogPanel && (
+            <button onClick={() => setLayoutPref(p => ({...p, showDialogPanel: true}))}
+              className="w-12 h-12 rounded-full bg-[var(--color-accent)] text-white shadow-lg flex items-center justify-center active:scale-95 transition-transform"
+              style={{minWidth:44, minHeight:44}}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </button>
+          )}
+        </div>
       )}
 
       {canvas.addNodeOpen && <AddNodeDialog

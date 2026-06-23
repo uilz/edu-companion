@@ -13,6 +13,7 @@ import { useTreeStore } from "@/store/conversation/tree-store";
 import { NewNodeDialog } from "@/components/ui/NewNodeDialog";
 import KnowledgeTreeRecommendBanner from "@/components/conversation/banners/KnowledgeTreeRecommendBanner";
 import NodePathBreadcrumb from "@/components/conversation/tree/NodePathBreadcrumb";
+import { useBreakpoint } from "@/hooks/useBreakpoint";
 
 /**
  * ConversationPanel — 对话面板主布局组件
@@ -50,7 +51,6 @@ export default function ConversationPanel(
     showNewDir,
     loadingDirList,
     convError,
-    isDesktop,
     activeDir,
     handleSelectConversation,
     handleNewConversation,
@@ -67,6 +67,8 @@ export default function ConversationPanel(
     setSidebarCollapsed,
     loadDirList,
   } = props;
+
+  const { isDesktop } = useBreakpoint();
 
   const activeConversationId = selectedNodeType === "conv" ? selectedNodeId : null;
 
@@ -87,6 +89,7 @@ export default function ConversationPanel(
           <button
             onClick={() => setShowDirSidebar(true)}
             className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            style={{ minWidth: 44, minHeight: 44 }}
           >
             <Menu size={20} />
           </button>
@@ -100,7 +103,7 @@ export default function ConversationPanel(
         </div>
 
         <div className="flex-1 overflow-hidden flex flex-col">
-          <KnowledgeTreeRecommendBanner partitionId={selectedNodeId} />
+          <KnowledgeTreeRecommendBanner />
           <ConversationMessageArea
             messages={messages}
             responseBlocks={responseBlocks}
@@ -243,6 +246,7 @@ export default function ConversationPanel(
           onClick={() => setSidebarCollapsed(false)}
           className="flex-shrink-0 w-7 border-r border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
           title="展开侧栏"
+          style={{ minWidth: 44, minHeight: 44 }}
         >
           <ChevronRight size={14} />
         </button>
@@ -258,7 +262,7 @@ export default function ConversationPanel(
           </div>
         )}
 
-        <KnowledgeTreeRecommendBanner partitionId={selectedNodeId} />
+        <KnowledgeTreeRecommendBanner />
         <ConversationMessageArea
           messages={messages}
           responseBlocks={responseBlocks}
