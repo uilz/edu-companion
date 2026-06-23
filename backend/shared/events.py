@@ -195,10 +195,12 @@ class ProposalAccepted(DomainEvent):
 class PendingCrossTopic(DomainEvent):
     """跨主题探索建议事件 — 深度沉浸中被抑制的候选
 
-    由 classifier_service 在会话结束时通过 emit_v6_event 写入 DB，
-    EventService._handle_PendingCrossTopic 消费并生成关联提案。
+    由 classifier_service 在会话结束时通过 EventBus 发布，
+    PersistentEventBus 持久化到 events 表，handler 消费并生成关联提案。
     """
     user_id: str = ""
+    candidates: list[dict] = field(default_factory=list)
+    suppressed_at_depth: int = 0
 
     @property
     def event_type(self) -> str:

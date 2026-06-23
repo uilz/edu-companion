@@ -1,6 +1,6 @@
 # 事件系统 v2 — 架构设计文档
 
-> 版本: 2.0 | 日期: 2026-06-22 | 状态: 实现中
+> 版本: 2.1 | 日期: 2026-06-22 | 状态: 已完成
 
 ## 一、设计目标
 
@@ -8,16 +8,60 @@
 
 **核心理念**: 所有用户能感知到的系统操作，都作为不可变事件写入 EventStore，形成用户学习旅程的完整时间线。AI 通过查询这段记忆来理解上下文、做出决策。
 
-## 二、当前问题诊断
+## 二、当前问题诊断 (已解决)
 
-| 问题 | 现状 | 影响 |
+| 问题 | 现状 | 修复 |
 |------|------|------|
-| 双路径并存 | `event_bus.publish()` + `EventService.emit()` 两条路径 | 无单一真相源，事件分散 |
-| 事件无归属 | events 表有 `source_type`/`source_id` 但无流式查询 | 无法回答"这个对话里发生过什么" |
-| 无记忆层级 | LLM 上下文只注入当前认知快照 | AI 是"瞎子"，不知道刚才发生了什么 |
-| 无聚合能力 | SessionCompleted 存在但无聚合机制 | 无法生成"本周学习报告" |
-| 认知域孤岛 | `cognitive/events.py` 独立于主事件系统 | 认知事件不进入事件总线 |
-| 三份 embedding 代码 | `files/embedding.py`, `llm/embedding_engine.py`, `embedding_utils.py` | 代码重复，pooling 策略不一致 |
+| 双路径并存 | `event_bus.publish()` + `EventService.emit()` 两条路径 | ✅ 5个旧事件全部迁移到 EventBus |
+| 事件无归属 | events 表有 `source_type`/`source_id` 但无流式查询 | ✅ EventStore.stream() 支持按流查询 |
+| 无记忆层级 | LLM 上下文只注入当前认知快照 | ✅ EventMemory 四级记忆 |
+| 无聚合能力 | SessionCompleted 存在但无聚合机制 | ✅ EventAggregator 消息→对话→日聚合 |
+| 认知域孤岛 | `cognitive/events.py` 独立于主事件系统 | ✅ 统一通过 EventBus 发布 |
+| 跨模块盲区 | 认知↔练习↔对话↔秘书无反馈 | ✅ 6个跨模块 handler 桥梁 |
+
+## 三、事件流架构 (v2.1)
+
+```
+业务层 (API / Services)
+    │
+    ├── event_bus.publish(DomainEvent)  ← 唯一入口
+    │
+    ▼
+PersistentEventBus
+    ├──▶ 立即 dispatch 到所有 handlers
+    ├──▶ EventStore.append()  → PostgreSQL (不可变持久化)
+    ├──▶ EventMemory.remember() → 内存 RingBuffer
+    └──▶ (后台轮询恢复残留 pending 事件)
+
+DI _wire_events() — 11 个事件类型，20+ 个订阅:
+
+┌──────────────────────────────────────────────────────┐
+│ AnswerSubmitted    → analytics, habit, knowledge      │
+│ ErrorRecorded      → knowledge, media                 │
+│ SessionCompleted   → session_bridge, planning,        │
+│                       event_memory, knowledge_tree     │
+│ AssistantReplied   → multimedia, aggregator,          │
+│                       secretary (新)                  │
+│ CognitiveNodeUpdated → planning, ZPD,                 │
+│                       practice_service (新)           │
+│ MessageClassified  → visibility_cascade, proposals    │
+│ PracticeSubmitted  → cognitive_bayesian_update        │
+│ NodeCreated        → ripple_edge_detection            │
+│ ProposalAccepted   → mark_expanded                    │
+│ PendingCrossTopic  → cross_topic_proposals            │
+└──────────────────────────────────────────────────────┘
+```
+
+## 四、跨模块桥梁 (新增)
+
+| 桥接 | 方向 | 事件 | 效果 |
+|------|------|------|------|
+| 认知→练习 | CognitiveNodeUpdated | proficiency 变化 | 练习系统自适应调整难度 |
+| 对话→秘书 | AssistantReplied | 对话活动 | 秘书感知对话上下文 |
+| 练习→知识树 | SessionCompleted | 练习完成 | 刷新知识树掌握度展示 |
+| 练习→认知 | PracticeSubmitted | 答题结果 | 贝叶斯信念更新 |
+| 对话→认知 | MessageClassified | 消息分类 | 级联可见性 + 结构扩展 |
+| 知识树→秘书 | NodeCreated | 新节点 | 波纹边检测 + 关联提案 |
 
 ## 三、架构设计
 

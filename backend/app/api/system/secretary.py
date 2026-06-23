@@ -244,18 +244,18 @@ async def accept_proposal(
                 from app.domain.secretary.engines.secretary_plan_bridge import plan_bridge
                 plan_adjustment = await plan_bridge.on_proposal_accepted(proposal, user_id)
 
-            # v6: 发射 ProposalAccepted 事件，触发 mark_expanded 等后续动作
+            # v6: 发射 ProposalAccepted 事件 → EventBus
             try:
-                from app.services.common.event_service import EventService
+                from app.application.di import get_event_bus
+                from shared.events import ProposalAccepted
                 target_node_id = (proposal.payload or {}).get("parent_id", "") or \
                                  (proposal.payload or {}).get("target_node_id", "")
-                EventService.emit_proposal_accepted(
+                await get_event_bus().publish(ProposalAccepted(
                     user_id=user_id,
                     proposal_id=proposal_id,
                     action_type=proposal.action_type,
                     target_node_id=target_node_id,
-                    payload=proposal.payload,
-                )
+                ))
             except Exception as e:
                 logger.debug("ProposalAccepted 事件发射失败: %s", e)
         except Exception as e:
@@ -686,6 +686,134 @@ async def delete_secretary_data(user_id: str = Depends(current_user_id)) -> dict
 # ══════════════════════════════════════════════════════════════
 
 from pydantic import BaseModel, Field
+
+
+# ══════════════════════════════════════════════════════════════
+#  事件流 — EventSystem v2
+# ══════════════════════════════════════════════════════════════
+
+
+@router.get("/events/stream")
+async def get_event_stream(
+    user_id: str = Depends(current_user_id),
+    stream_type: str = "",
+    stream_id: str = "",
+    event_type: str = "",
+    limit: int = 50,
+    since: float = 0.0,
+    until: float = 0.0,
+) -> list[dict]:
+    """获取用户事件流 (EventSystem v2)
+
+    支持按 stream_type, stream_id, event_type 过滤，
+    按时间倒序排列，支持时间范围查询。
+
+    Query params:
+        stream_type: conversation | practice | knowledge | secretary | system
+        stream_id: 流内实体ID
+        event_type: 事件类型名
+        limit: 返回条数 (默认50, 最大200)
+        since: 起始时间戳 (epoch float)
+        until: 结束时间戳
+    """
+    from app.infrastructure.event_store import get_event_store
+    store = get_event_store()
+    events = await store.query(
+        user_id,
+        stream_type=stream_type,
+        stream_id=stream_id,
+        event_type=event_type,
+        limit=min(limit, 200),
+        since=since,
+        until=until,
+    )
+    return [e.to_dict() for e in events]
+
+
+@router.get("/events/stream/{stream_type}/{stream_id}")
+async def get_specific_stream(
+    stream_type: str,
+    stream_id: str,
+    user_id: str = Depends(current_user_id),
+    limit: int = 100,
+) -> list[dict]:
+    """获取指定流的所有事件 (时间正序)
+
+    Path params:
+        stream_type: conversation | practice | knowledge | secretary | system
+        stream_id: 流内实体ID
+    """
+    from app.infrastructure.event_store import get_event_store
+    store = get_event_store()
+    events = await store.stream(stream_type, stream_id, limit=min(limit, 200))
+    return [e.to_dict() for e in events]
+
+
+@router.get("/events/recent")
+async def get_recent_events(
+    user_id: str = Depends(current_user_id),
+    limit: int = 10,
+) -> list[dict]:
+    """获取最近事件 (Dashboard 跨系统时间线)
+
+    返回按时间倒序的最近事件，包含摘要和来源信息。
+    """
+    import time
+    from app.infrastructure.event_store import get_event_store
+    store = get_event_store()
+
+    # 默认最近 24 小时
+    since = time.time() - 86400
+    events = await store.replay(user_id, since=since, limit=min(limit, 50))
+    return [
+        {
+            "event_type": e.event_type,
+            "occurred_at": e.created_at or "",
+            "summary": e.summary or e.event_type,
+            "stream_type": e.stream_type or "system",
+            "stream_id": e.stream_id or "",
+        }
+        for e in events
+    ]
+
+
+@router.get("/events/summary")
+async def get_event_summary(
+    user_id: str = Depends(current_user_id),
+) -> dict:
+    """获取事件系统摘要统计
+
+    返回各类事件计数、最近活动时间、每日事件趋势。
+    """
+    from app.infrastructure.event_store import get_event_store
+    store = get_event_store()
+
+    # 统计各类型事件数量
+    types = ["AssistantReplied", "AnswerSubmitted", "SessionCompleted",
+             "CognitiveNodeUpdated", "NodeCreated", "ConversationDigest",
+             "PracticeSessionSummary", "DailyDigest"]
+    counts = {}
+    for t in types:
+        counts[t] = await store.count(user_id, event_type=t)
+
+    total = sum(counts.values())
+
+    # 最近事件时间
+    latest = await store.get_latest(user_id)
+    last_active = latest.created_at if latest else 0
+
+    # 最近24小时事件数
+    import time
+    day_ago = time.time() - 86400
+    recent_24h = await store.query(user_id, since=day_ago, limit=1)
+    recent_count = len(recent_24h)
+
+    return {
+        "total_events": total,
+        "counts": counts,
+        "last_active": last_active,
+        "recent_24h": recent_count,
+    }
 
 
 class AgentChatRequest(BaseModel):

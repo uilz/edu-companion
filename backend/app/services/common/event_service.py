@@ -541,14 +541,13 @@ class EventService:
         生成"本次对话涉及多个话题，是否关联？"的确认提案。
         """
         repo = self._repo or self._lazy_repo()
-        payload = evt.payload or {}
-        candidates = payload.get("candidates", [])
+        candidates = evt.candidates if hasattr(evt, "candidates") else (evt.payload or {}).get("candidates", [])
         if not candidates:
             return
 
         logger.info(
             "📌 深度沉浸抑制跨主题建议: %d 个候选 (depth>=%d)",
-            len(candidates), payload.get("suppressed_at_depth", 16),
+            len(candidates), getattr(evt, "suppressed_at_depth", 0) or (evt.payload or {}).get("suppressed_at_depth", 16),
         )
 
         try:

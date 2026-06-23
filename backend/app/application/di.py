@@ -239,6 +239,224 @@ class AppContainer:
         # AI 回复 → 多媒体生成
         bus.subscribe("AssistantReplied", self.multimedia_service.on_assistant_replied)
 
+        # ═══ v2 EventSystem: 旧事件迁移 → EventBus 统一订阅 ═══
+
+        # MessageClassified → 可见性级联 + 结构扩展检查
+        async def _on_message_classified(event: DomainEvent) -> None:
+            from shared.events import MessageClassified
+            if not isinstance(event, MessageClassified):
+                return
+            try:
+                from app.domain.cognitive import get_repo
+                from app.infrastructure.db.proposal_store import ProposalStore
+                from app.domain.secretary.models import Proposal
+                repo = get_repo()
+                node_ids = event.topic_node_ids + event.atom_node_ids
+                for nid in node_ids:
+                    try:
+                        _cascade_ancestor_visibility(nid, event.user_id, repo)
+                    except Exception:
+                        pass
+                # 结构扩展建议
+                if event.topic_node_ids:
+                    parent_candidates: set = set()
+                    for tid in event.topic_node_ids:
+                        node = repo.get_node(tid, event.user_id)
+                        if node and node.parent:
+                            parent_candidates.add(node.parent)
+                    for pid in parent_candidates:
+                        try:
+                            children = repo.get_children(pid, event.user_id)
+                            active = [c for c in children if c.is_visible and c.is_active]
+                            if len(active) >= 3:
+                                label = _get_node_label(pid, event.user_id, repo)
+                                ProposalStore().save_proposal(
+                                    Proposal(emoji="🌿", title=f"探索「{label}」下的更多专题",
+                                        description=f"该分类下已有 {len(active)} 个活跃子专题，需要生成更多拓展方向吗？",
+                                        action_type="explore", priority=2,
+                                        payload={"parent_id": pid, "parent_label": label, "visible_count": len(active)},
+                                        generated_by="event_handler", insight_source="structure_expansion"),
+                                    user_id=event.user_id)
+                        except Exception:
+                            pass
+            except Exception:
+                logger.debug("MessageClassified handler failed", exc_info=True)
+        bus.subscribe("MessageClassified", _on_message_classified)
+
+        # PracticeSubmitted → 认知节点信念更新 (贝叶斯)
+        async def _on_practice_submitted(event: DomainEvent) -> None:
+            from shared.events import PracticeSubmitted
+            if not isinstance(event, PracticeSubmitted):
+                return
+            import time
+            try:
+                from app.domain.cognitive import get_repo
+                from app.domain.cognitive.models import CognitiveNode
+                repo = get_repo()
+                is_correct = event.correctness >= 0.5
+                now = time.time()
+                updated = 0
+                for nid in event.atom_node_ids:
+                    if not nid:
+                        continue
+                    node = repo.get_node(nid, event.user_id)
+                    if node is None:
+                        node = CognitiveNode(id=nid, label=nid, level="atom")
+                    belief = node.belief
+                    if is_correct:
+                        belief.alpha = float(belief.alpha) + 1.0
+                    else:
+                        belief.beta = float(belief.beta) + 1.0
+                    alpha, beta = float(belief.alpha), float(belief.beta)
+                    belief.proficiency_mean = max(0.0, min(1.0, alpha / (alpha + beta)))
+                    belief.peak_proficiency = max(float(belief.peak_proficiency), belief.proficiency_mean)
+                    belief.last_updated = now
+                    ps = node.practice_summary
+                    ps.total_attempts = int(ps.total_attempts) + 1
+                    if is_correct:
+                        ps.correct_attempts = int(ps.correct_attempts) + 1
+                    ps.total_time_spent = float(ps.total_time_spent) + (event.latency_ms / 1000.0)
+                    ps.last_practiced = now
+                    repo.upsert_node(node, event.user_id)
+                    updated += 1
+                logger.debug("PracticeSubmitted 信念更新: user=%s nodes=%d correct=%s", event.user_id, updated, is_correct)
+            except Exception:
+                logger.debug("PracticeSubmitted handler failed", exc_info=True)
+        bus.subscribe("PracticeSubmitted", _on_practice_submitted)
+
+        # NodeCreated → 波纹边检测 + 提案生成
+        async def _on_node_created(event: DomainEvent) -> None:
+            from shared.events import NodeCreated
+            if not isinstance(event, NodeCreated):
+                return
+            try:
+                from app.domain.cognitive import get_repo
+                from app.infrastructure.db.cognitive_edge_storage import upsert_edge, get_edges_for_node
+                from app.domain.cognitive.edge_models import KnowledgeEdge
+                from datetime import datetime, timezone
+                repo = get_repo()
+                node = repo.get_node(event.node_id, event.user_id)
+                if not node or not node.embedding:
+                    return
+                neighbors = repo.vector_search(node.embedding, event.user_id, level=event.level, limit=5, min_similarity=0.3)
+                neighbors = [n for n in neighbors if n.get("id") != event.node_id]
+                existing_edges = get_edges_for_node(event.node_id, event.user_id)
+                existing_targets = {e.target_node_id if e.source_node_id == event.node_id else e.source_node_id for e in existing_edges}
+                pending_edges = []
+                for nbr in neighbors[:3]:
+                    nid = nbr.get("id")
+                    if nid in existing_targets:
+                        continue
+                    sim = nbr.get("similarity", 0.5)
+                    edge = KnowledgeEdge(user_id=event.user_id, source_node_id=event.node_id,
+                        target_node_id=nid, edge_type="related_to", strength=sim,
+                        trust_score=sim * 0.8, edge_status="pending_confirm", created_by="system")
+                    upsert_edge(edge)
+                    pending_edges.append({"edge_id": edge.id, "source_label": node.label,
+                        "target_label": nbr.get("label", nid), "similarity": sim, "target_node_id": nid})
+                if pending_edges:
+                    from app.infrastructure.db.proposal_store import ProposalStore
+                    from app.domain.secretary.models import Proposal
+                    top = pending_edges[0]
+                    ProposalStore().save_proposal(
+                        Proposal(emoji="🔗", title=f"关联知识点「{top['target_label']}」",
+                            description=f"新知识点「{top['source_label']}」与已学「{top['target_label']}」语义相似度 {top['similarity']:.0%}，是否建立关联？",
+                            action_type="explore", priority=3,
+                            payload={"edge_id": top["edge_id"], "source_node_id": event.node_id,
+                                "target_node_id": top["target_node_id"], "source_label": top["source_label"],
+                                "target_label": top["target_label"], "similarity": top["similarity"], "pending_count": len(pending_edges)},
+                            generated_by="event_handler", insight_source="ripple_edge"),
+                        user_id=event.user_id)
+            except Exception:
+                logger.debug("NodeCreated handler failed", exc_info=True)
+        bus.subscribe("NodeCreated", _on_node_created)
+
+        # ProposalAccepted → 执行秘书提案动作
+        async def _on_proposal_accepted(event: DomainEvent) -> None:
+            from shared.events import ProposalAccepted
+            if not isinstance(event, ProposalAccepted):
+                return
+            try:
+                if event.action_type == "explore" and event.target_node_id:
+                    from app.domain.cognitive.growth_engine import growth_engine
+                    growth_engine.mark_expanded(event.user_id, event.target_node_id)
+            except Exception:
+                logger.debug("ProposalAccepted handler failed", exc_info=True)
+        bus.subscribe("ProposalAccepted", _on_proposal_accepted)
+
+        # PendingCrossTopic → 跨主题关联提案
+        async def _on_pending_cross_topic(event: DomainEvent) -> None:
+            from shared.events import PendingCrossTopic
+            if not isinstance(event, PendingCrossTopic):
+                return
+            try:
+                from app.domain.cognitive import get_repo
+                from app.infrastructure.db.cognitive_edge_storage import get_edges_for_node
+                from app.infrastructure.db.proposal_store import ProposalStore
+                from app.domain.secretary.models import Proposal
+                repo = get_repo()
+                for cand in event.candidates[:2]:
+                    cid = cand.get("id", "")
+                    clabel = cand.get("label", "")
+                    cscore = cand.get("score", 0)
+                    if not cid:
+                        continue
+                    node = repo.get_node(cid, event.user_id)
+                    if not node:
+                        continue
+                    edges = get_edges_for_node(cid, event.user_id)
+                    if edges:
+                        continue
+                    ProposalStore().save_proposal(
+                        Proposal(emoji="🔀", title=f"关联新话题「{clabel}」",
+                            description=f"本次对话涉及了「{clabel}」相关内容（匹配度 {cscore:.0%}），是否需要关联到当前知识图谱？",
+                            action_type="explore", priority=2,
+                            payload={"candidate_node_id": cid, "candidate_label": clabel, "score": cscore, "source": "deep_immersion_deferred"},
+                            generated_by="event_handler", insight_source="pending_cross_topic"),
+                        user_id=event.user_id)
+            except Exception:
+                logger.debug("PendingCrossTopic handler failed", exc_info=True)
+        bus.subscribe("PendingCrossTopic", _on_pending_cross_topic)
+
+        # ═══ 跨模块反馈桥梁 ═══
+
+        # CognitiveNodeUpdated → 练习系统: 掌握度变化 → 调整练习难度
+        async def _on_cognitive_to_practice(event: DomainEvent) -> None:
+            from shared.events import CognitiveNodeUpdated
+            if not isinstance(event, CognitiveNodeUpdated):
+                return
+            try:
+                # 通知练习系统节点掌握度已变化，下次选题时自适应调整
+                await self.practice_service.on_knowledge_updated(event)
+            except Exception:
+                logger.debug("Practice service failed to handle CognitiveNodeUpdated")
+        bus.subscribe("CognitiveNodeUpdated", _on_cognitive_to_practice)
+
+        # AssistantReplied → 秘书系统: 对话内容 → 更新秘书上下文
+        async def _on_assistant_to_secretary(event: DomainEvent) -> None:
+            from shared.events import AssistantReplied
+            if not isinstance(event, AssistantReplied):
+                return
+            try:
+                from app.domain.secretary.engines.policy_engine import policy_engine
+                # 秘书感知对话活动，记录交互
+                policy_engine.record_interaction(event.user_id, None, "conversation_active")
+            except Exception:
+                logger.debug("Secretary policy engine not available")
+        bus.subscribe("AssistantReplied", _on_assistant_to_secretary)
+
+        # SessionCompleted → 知识树: 练习完成 → 刷新知识树掌握度展示
+        async def _on_practice_to_knowledge_tree(event: DomainEvent) -> None:
+            from shared.events import SessionCompleted
+            if not isinstance(event, SessionCompleted):
+                return
+            try:
+                from app.services.knowledge.zpd_scheduler import zpd_scheduler
+                zpd_scheduler.on_session_completed(event.user_id, event.session_id)
+            except Exception:
+                logger.debug("ZPD scheduler not available")
+        bus.subscribe("SessionCompleted", _on_practice_to_knowledge_tree)
+
         # ── v2 EventSystem: 工作记忆生命周期 + 聚合 ──
         async def _on_session_completed(event: DomainEvent) -> None:
             from shared.events import SessionCompleted
@@ -295,3 +513,53 @@ class AppContainer:
 
 # ── 全局容器实例（应用唯一单例） ──
 container = AppContainer()
+
+
+def get_event_bus():
+    """获取全局事件总线 (供 API 层 / services 层懒加载)"""
+    return container.event_bus
+
+
+def get_event_store():
+    """获取全局事件存储"""
+    return container.event_store
+
+
+def get_event_memory():
+    """获取全局事件记忆"""
+    return container.event_memory
+
+
+# ── 事件处理辅助函数 ──
+
+
+def _cascade_ancestor_visibility(node_id: str, user_id: str, repo=None) -> None:
+    """级联更新祖先可见性"""
+    if repo is None:
+        from app.domain.cognitive import get_repo
+        repo = get_repo()
+    visited = set()
+    current_id = node_id
+    while current_id and current_id not in visited:
+        visited.add(current_id)
+        node = repo.get_node(current_id, user_id)
+        if node is None:
+            break
+        if node.is_visible:
+            break
+        repo.set_node_visible(current_id, user_id, visible=True)
+        current_id = node.parent
+
+
+def _get_node_label(node_id: str, user_id: str, repo=None) -> str:
+    """获取节点 label（安全降级）"""
+    try:
+        if repo is None:
+            from app.domain.cognitive import get_repo
+            repo = get_repo()
+        node = repo.get_node(node_id, user_id)
+        if node:
+            return node.label or node_id
+    except Exception:
+        pass
+    return node_id or "unknown"

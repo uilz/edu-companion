@@ -138,15 +138,15 @@ class PracticeServiceImpl:
 
         # 发布 PracticeSubmitted 事件 → 触发认知节点信念更新
         try:
-            from app.services.common.event_service import event_service
-            event_service.emit_practice_submitted(
+            from shared.events import PracticeSubmitted
+            await self._bus.publish(PracticeSubmitted(
                 user_id=user_id,
                 atom_node_ids=question.get("cognitive_node_ids", []),
                 correctness=1.0 if is_correct else 0.0,
                 latency_ms=time_spent * 1000,
-            )
+            ))
         except Exception:
-            logger.warning("emit_practice_submitted failed", exc_info=True)
+            logger.warning("publish PracticeSubmitted failed", exc_info=True)
 
         return feedback
 
@@ -366,3 +366,7 @@ class PracticeServiceImpl:
         if result is None:
             return None
         return {"node_id": result.id} if hasattr(result, "id") else {"status": "ok"}
+
+    async def on_knowledge_updated(self, event) -> None:
+        """认知节点掌握度变化 → 通知练习系统调整难度 (noop stub)"""
+        logger.debug("Practice received knowledge update: %s", getattr(event, "node_id", ""))

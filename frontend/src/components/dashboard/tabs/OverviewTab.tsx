@@ -7,7 +7,7 @@ import Link from 'next/link';
 import {
   BookOpen, Brain, Target, TrendingUp, MessageCircle,
   Loader2, Dumbbell, Trophy, AlertCircle, Sparkles,
-  CheckCircle2, Clock, Flame,
+  CheckCircle2, Clock, Flame, Bell, GitGraph, History,
 } from 'lucide-react';
 // 自定义 UI 组件导入
 import Card from '@/components/ui/Card';
@@ -82,6 +82,30 @@ const QUICK_ACTIONS = [
   { emoji: '🧠', title: '知识图谱', desc: '补充薄弱', href: '/knowledge-tree' },
 ];
 
+// 跨系统数据接口
+interface ConversationSummary {
+  id: string;
+  title: string;
+  last_message: string;
+  updated_at: string;
+}
+
+interface SecretaryProposal {
+  id: string;
+  emoji: string;
+  title: string;
+  action_type: string;
+  priority: number;
+  description: string;
+}
+
+interface RecentEvent {
+  event_type: string;
+  occurred_at: number | string;
+  summary: string;
+  stream_type: string;
+}
+
 export function OverviewTab() {
   const greeting = useMemo(() => {
     const h = new Date().getHours();
@@ -97,17 +121,23 @@ export function OverviewTab() {
   const [dashboard, setDashboard] = useState<DashboardOverview | null>(null);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [weakSkills, setWeakSkills] = useState<WeakSkill[]>([]);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [proposals, setProposals] = useState<SecretaryProposal[]>([]);
+  const [recentEvents, setRecentEvents] = useState<RecentEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
       if (!userId) { setLoading(false); return; }
       try {
-        const [statsRes, dashRes, achieveRes, weakRes] = await Promise.all([
+        const [statsRes, dashRes, achieveRes, weakRes, convRes, propRes, eventRes] = await Promise.all([
           authedFetch(`/api/v7/practice/stats/overview`),
           authedFetch(`/api/v2/dashboard/overview?user_id=${userId}`),
           authedFetch(`/api/v7/practice/achievements`),
           authedFetch(`/api/v7/practice/stats/weak-skills`),
+          authedFetch(`/api/conversations?limit=3`),
+          authedFetch(`/api/secretary/proposals/pending?limit=3`),
+          authedFetch(`/api/events/recent?limit=5`),
         ]);
         if (statsRes.ok) setStats(await statsRes.json());
         if (dashRes.ok) setDashboard(await dashRes.json());
@@ -118,6 +148,18 @@ export function OverviewTab() {
         if (weakRes.ok) {
           const wData = await weakRes.json();
           setWeakSkills(wData.weak_skills || wData || []);
+        }
+        if (convRes.ok) {
+          const cData = await convRes.json();
+          setConversations(Array.isArray(cData) ? cData : (cData.conversations || []));
+        }
+        if (propRes.ok) {
+          const pData = await propRes.json();
+          setProposals(Array.isArray(pData) ? pData : (pData.proposals || []));
+        }
+        if (eventRes.ok) {
+          const eData = await eventRes.json();
+          setRecentEvents(Array.isArray(eData) ? eData : (eData.events || []));
         }
       } catch (e) {
       } finally {
@@ -383,6 +425,133 @@ export function OverviewTab() {
             })()}
           </Card>
         </div>
+
+        {/* ═══ 跨系统数据聚合 ═══ */}
+
+        {/* 最近对话 */}
+        <div>
+          <Card title="💬 最近对话">
+            {loading ? (
+              <div className="py-4 text-center"><Loader2 size={14} className="animate-spin mx-auto" /></div>
+            ) : conversations.length > 0 ? (
+              <div className="space-y-1">
+                {conversations.map((conv) => (
+                  <Link
+                    key={conv.id}
+                    href={`/learn?conversation=${conv.id}`}
+                    className="flex items-center gap-2 px-3 py-2.5 bg-[var(--color-surface)] text-xs hover:bg-[var(--color-accent)]/10 active:scale-[0.97] transition-colors group"
+                  >
+                    <MessageCircle size={13} className="text-[var(--color-info)] flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[var(--color-text-secondary)] group-hover:text-[var(--color-accent)] truncate font-medium">
+                        {conv.title || '未命名对话'}
+                      </div>
+                      <div className="text-[10px] text-[var(--color-text-muted)] mt-0.5 truncate">
+                        {conv.last_message || '—'}
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+                <Link
+                  href="/learn"
+                  className="block text-center text-xs text-[var(--color-accent)] hover:underline mt-2"
+                >
+                  开始新对话 →
+                </Link>
+              </div>
+            ) : (
+              <div className="py-4 text-center text-xs text-[var(--color-text-muted)]">
+                <MessageCircle size={16} className="mx-auto mb-1 text-[var(--color-info)]" />
+                暂无对话记录
+              </div>
+            )}
+          </Card>
+        </div>
+
+        {/* 秘书提案 */}
+        <div>
+          <Card title="🔔 秘书提案">
+            {loading ? (
+              <div className="py-4 text-center"><Loader2 size={14} className="animate-spin mx-auto" /></div>
+            ) : proposals.length > 0 ? (
+              <div className="space-y-1">
+                {proposals.map((p) => (
+                  <Link
+                    key={p.id}
+                    href="/secretary"
+                    className="flex items-center gap-2 px-3 py-2.5 bg-[var(--color-surface)] text-xs hover:bg-[var(--color-accent)]/10 active:scale-[0.97] transition-colors group"
+                  >
+                    <span className="flex-shrink-0 text-sm">{p.emoji || '📋'}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[var(--color-text-secondary)] group-hover:text-[var(--color-accent)] truncate font-medium">
+                        {p.title}
+                      </div>
+                      <div className="text-[10px] text-[var(--color-text-muted)] mt-0.5 truncate">
+                        {p.description}
+                      </div>
+                    </div>
+                    {p.priority >= 3 && (
+                      <span className="text-[10px] text-[var(--color-error)] font-semibold flex-shrink-0">高优</span>
+                    )}
+                  </Link>
+                ))}
+                <Link
+                  href="/secretary"
+                  className="block text-center text-xs text-[var(--color-accent)] hover:underline mt-2"
+                >
+                  查看全部提案 →
+                </Link>
+              </div>
+            ) : (
+              <div className="py-4 text-center text-xs text-[var(--color-text-muted)]">
+                <Bell size={16} className="mx-auto mb-1 text-[var(--color-text-muted)]" />
+                暂无待处理提案
+              </div>
+            )}
+          </Card>
+        </div>
+
+        {/* 最近事件时间线 */}
+        {recentEvents.length > 0 && (
+          <div className="lg:col-span-2">
+            <Card title="📋 最近动态">
+              <div className="space-y-1">
+                {recentEvents.map((evt, i) => {
+                  const typeLabel: Record<string, string> = {
+                    conversation: '对话',
+                    practice: '练习',
+                    knowledge: '知识树',
+                    secretary: '秘书',
+                    system: '系统',
+                  };
+                  const typeColor: Record<string, string> = {
+                    conversation: 'text-[var(--color-info)]',
+                    practice: 'text-[var(--color-accent)]',
+                    knowledge: 'text-[var(--color-warning)]',
+                    secretary: 'text-[var(--color-success)]',
+                    system: 'text-[var(--color-text-muted)]',
+                  };
+                  const label = typeLabel[evt.stream_type] || evt.stream_type;
+                  const color = typeColor[evt.stream_type] || 'text-[var(--color-text-muted)]';
+                  return (
+                    <div key={i} className="flex items-center gap-2 px-3 py-2 bg-[var(--color-surface)] text-xs">
+                      <span className={`text-[10px] font-semibold flex-shrink-0 w-10 ${color}`}>{label}</span>
+                      <span className="text-[var(--color-text-secondary)] flex-1 truncate">
+                        {evt.summary || evt.event_type}
+                      </span>
+                      <span className="text-[10px] text-[var(--color-text-muted)] flex-shrink-0">
+                        {evt.occurred_at
+                          ? new Date(typeof evt.occurred_at === 'number' ? evt.occurred_at * 1000 : evt.occurred_at)
+                              .toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+                          : ''}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          </div>
+        )}
 
         {/* 成就（原有） */}
         {achievements.length > 0 && (

@@ -373,20 +373,20 @@ class ClassifierService:
 
     @staticmethod
     def _queue_pending_cross_topic(candidates: list[dict], user_id: str) -> None:
-        """深度沉浸下将跨主题候选写入 cognitive_events，供秘书延后处理"""
+        """深度沉浸下将跨主题候选通过 EventBus 发布，供秘书延后处理"""
         try:
-            from app.services.common.event_service import event_service
-            event_service.emit_v6_event(
-                event_type="PendingCrossTopic",
+            from app.application.di import get_event_bus
+            from shared.events import PendingCrossTopic
+            import asyncio
+            bus = get_event_bus()
+            asyncio.ensure_future(bus.publish(PendingCrossTopic(
                 user_id=user_id,
-                payload={
-                    "candidates": [
-                        {"id": c["id"], "label": c["label"], "score": c.get("score", 0)}
-                        for c in candidates[:3]
-                    ],
-                    "suppressed_at_depth": _DEEP_IMMERSION_THRESHOLD,
-                },
-            )
+                candidates=[
+                    {"id": c["id"], "label": c["label"], "score": c.get("score", 0)}
+                    for c in candidates[:3]
+                ],
+                suppressed_at_depth=_DEEP_IMMERSION_THRESHOLD,
+            )))
         except Exception:
             logger.debug("PendingCrossTopic 事件写入失败", exc_info=True)
 
