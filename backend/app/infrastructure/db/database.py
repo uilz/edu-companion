@@ -16,7 +16,7 @@ from typing import Any, Optional
 from dotenv import load_dotenv
 
 # 从 config/.env 加载环境变量
-_env_path = Path(__file__).resolve().parent.parent.parent / "config" / ".env"
+_env_path = Path(__file__).resolve().parent.parent.parent.parent / "config" / ".env"
 if _env_path.exists():
     load_dotenv(dotenv_path=str(_env_path), override=False)
 
@@ -46,6 +46,13 @@ if not DB_CONFIG["password"]:
 # ── 建表 SQL ──
 
 SCHEMA_SQL = """
+
+-- pgvector 扩展（可选安装）
+DO $$ BEGIN
+    CREATE EXTENSION IF NOT EXISTS vector;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'pgvector not available, skipping vector extension';
+END $$;
 
 
 -- 题库
@@ -176,6 +183,28 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_column THEN NULL;
 END $$;
 
+-- pgvector 向量列（新建，旧 embedding 列将被废弃）
+DO $$ BEGIN
+    ALTER TABLE material_chunks ADD COLUMN IF NOT EXISTS embedding_vec vector(384);
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+
+-- 清理 material_chunks 未使用的预留列（第二轮回购）
+DO $$ BEGIN
+    ALTER TABLE material_chunks DROP COLUMN IF EXISTS image_urls_json;
+    ALTER TABLE material_chunks DROP COLUMN IF EXISTS skill_ids_json;
+    ALTER TABLE material_chunks DROP COLUMN IF EXISTS bloom_level;
+    ALTER TABLE material_chunks DROP COLUMN IF EXISTS difficulty_estimate;
+    ALTER TABLE material_chunks DROP COLUMN IF EXISTS page_number;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+-- 清理 materials 未使用的预留列
+DO $$ BEGIN
+    ALTER TABLE materials DROP COLUMN IF EXISTS question_count;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
 -- 资料目录树（TOC）
 CREATE TABLE IF NOT EXISTS material_toc (
     toc_id          TEXT PRIMARY KEY,
@@ -186,10 +215,13 @@ CREATE TABLE IF NOT EXISTS material_toc (
     chunk_start     INTEGER DEFAULT 0,
     chunk_end       INTEGER DEFAULT 0,
     page_start      INTEGER,
+    heading_line_index INTEGER DEFAULT 0,
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_toc_material ON material_toc(material_id);
 CREATE INDEX IF NOT EXISTS idx_toc_parent ON material_toc(parent_toc_id);
+-- 兼容已有表（无 heading_line_index 列的旧表补上）
+ALTER TABLE material_toc ADD COLUMN IF NOT EXISTS heading_line_index INTEGER DEFAULT 0;
 
 
 CREATE INDEX IF NOT EXISTS idx_questions_skill ON questions(skill_id);
@@ -197,6 +229,27 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user ON practice_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_started ON practice_sessions(started_at);
 CREATE INDEX IF NOT EXISTS idx_materials_user ON materials(user_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_material ON material_chunks(material_id);
+
+-- 资料-题目关联表（R2-4: practice_material_questions）
+CREATE TABLE IF NOT EXISTS practice_material_questions (
+    id SERIAL PRIMARY KEY,
+    material_id TEXT NOT NULL REFERENCES materials(material_id) ON DELETE CASCADE,
+    question_id TEXT NOT NULL,
+    chunk_index INTEGER,
+    user_id TEXT NOT NULL,
+    session_id TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(material_id, question_id)
+);
+CREATE INDEX IF NOT EXISTS idx_pmq_material ON practice_material_questions(material_id);
+CREATE INDEX IF NOT EXISTS idx_pmq_question ON practice_material_questions(question_id);
+
+-- pgvector HNSW 索引（仅当 vector 扩展可用时；空 safety 检查避免 pgvector 缺失时崩溃）
+DO $$ BEGIN
+    CREATE INDEX IF NOT EXISTS idx_chunks_embedding_vec ON material_chunks USING hnsw (embedding_vec vector_cosine_ops) WITH (m=16, ef_construction=200);
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'HNSW index not created (pgvector missing or column not ready)';
+END $$;
 """
 
 
@@ -262,7 +315,7 @@ class Database:
             cur.execute(SCHEMA_SQL)
 
             from pathlib import Path
-            for sql_file in ["events_schema.sql", "conversation_schema.sql", "cognitive_schema.sql", "learning_schema.sql"]:
+            for sql_file in ["events_schema.sql", "conversation_schema.sql", "cognitive_schema.sql", "learning_schema.sql", "practice_schema.sql"]:
                 sql_path = Path(__file__).parent / sql_file
                 if sql_path.exists():
                     with open(sql_path) as f:

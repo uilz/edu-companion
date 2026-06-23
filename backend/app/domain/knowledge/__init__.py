@@ -1,5 +1,11 @@
 from app.services.knowledge.knowledge_query_service import KnowledgeQueryServiceImpl
 
+from app.domain.knowledge.knowledge_atom import (
+    KnowledgeAtom,
+    KnowledgeAtomRegistry,
+    get_atom_registry,
+    reset_atom_registry,
+)
 
 # ── 全局访问器 ──
 

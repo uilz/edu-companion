@@ -28,8 +28,8 @@ from app.services.conversation.message_repository import update_message_cognitiv
 from app.services.common.classifier_service import classifier_service
 from app.services.analytics.adaptive_selector import adaptive_selector
 from app.services.common import get_data_repo
-from app.services.knowledge.tree_ops import TreeOpsService
-from app.schemas.conversation import Partition, Domain, Topic
+from app.services.knowledge.tree_service import TreeOpsService
+from app.schemas.directory_node import DirectoryNode
 
 tree_ops = TreeOpsService()
 logger = logging.getLogger(__name__)
@@ -42,11 +42,11 @@ router = APIRouter(prefix="/api/v2")
 
 
 def _entity_to_node(
-    entity: Partition | Domain | Topic,
+    entity: DirectoryNode,
     level: str,
     user_id: str,
 ) -> dict:
-    """将 Partition/Domain/Topic 转为 frontend graph node 格式"""
+    """将 DirectoryNode 转为 frontend graph node 格式"""
     label = (entity.emoji + " " + entity.name) if getattr(entity, "emoji", None) else entity.name
     # 从认知图谱查询对应节点的分析指标
     cog = get_repo().get_node(entity.id, user_id)
@@ -191,7 +191,7 @@ def get_graph_nodes(
     data = get_data_repo().load(user_id)
 
     def _enrich(
-        entity: Partition | Domain | Topic,
+        entity: DirectoryNode,
         level_name: str,
         parent: str | None,
     ) -> dict:
@@ -223,47 +223,47 @@ def get_graph_nodes(
 
     result: list[dict] = []
 
-    # 1. 指定层级
-    if level:
-        if level == "partition":
-            for p in data.partitions.values():
-                result.append(_enrich(p, "partition", None))
-        elif level == "domain":
-            for d in data.domains.values():
-                pid = getattr(d, "partition_id", "")
-                if pid and not getattr(data.partitions.get(pid), "is_temp", False):
-                    result.append(_enrich(d, "domain", pid))
-        elif level == "topic":
-            for t in data.topics.values():
-                did = getattr(t, "domain_id", "")
-                if did:
-                    d = data.domains.get(did)
-                    p = data.partitions.get(getattr(d, "partition_id", "")) if d else None
-                    if p and not getattr(p, "is_temp", False):
-                        result.append(_enrich(t, "topic", did))
+    # DirectoryNode 版本：遍历 directory_nodes 构建树
+    # level 映射: partition = 根目录, domain/topic = 非根目录
+    if level == "partition":
+        for dn in data.directory_nodes.values():
+            if dn.node_type == "dir" and dn.parent_id is None:
+                result.append(_enrich(dn, "partition", None))
+        return result
+    elif level == "domain":
+        for dn in data.directory_nodes.values():
+            if dn.node_type == "dir" and dn.parent_id is not None:
+                parent = data.directory_nodes.get(dn.parent_id)
+                if parent and parent.kind != "temp":
+                    result.append(_enrich(dn, "domain", dn.parent_id))
+        return result
+    elif level == "topic":
+        for dn in data.directory_nodes.values():
+            if dn.node_type == "dir" and dn.parent_id is not None:
+                parent = data.directory_nodes.get(dn.parent_id)
+                if parent and parent.kind != "temp":
+                    result.append(_enrich(dn, "topic", dn.parent_id))
         return result
 
     # 2. 指定父节点
     if parent_id:
-        for d in data.domains.values():
-            if d.partition_id == parent_id:
-                result.append(_enrich(d, "domain", d.partition_id))
-        for t in data.topics.values():
-            if t.domain_id == parent_id:
-                result.append(_enrich(t, "topic", t.domain_id))
+        for dn in data.directory_nodes.values():
+            if dn.parent_id == parent_id and dn.node_type == "dir":
+                result.append(_enrich(dn, "domain", parent_id))
+        for dn in data.directory_nodes.values():
+            if dn.parent_id == parent_id and dn.node_type == "conv":
+                result.append(_enrich(dn, "topic", parent_id))
         return result
 
-    # 3. 无参数 → 返回完整树（包含 temp 分区，让前端决定过滤）
-    for p in data.partitions.values():
-        result.append(_enrich(p, "partition", None))
-    for d in data.domains.values():
-        p = data.partitions.get(getattr(d, "partition_id", ""))
-        if p:
-            result.append(_enrich(d, "domain", d.partition_id))
-    for t in data.topics.values():
-        d = data.domains.get(getattr(t, "domain_id", ""))
-        if d:
-            result.append(_enrich(t, "topic", t.domain_id))
+    # 3. 无参数 → 返回完整树
+    for dn in data.directory_nodes.values():
+        if dn.node_type == "dir":
+            if dn.parent_id is None:
+                result.append(_enrich(dn, "partition", None))
+            else:
+                result.append(_enrich(dn, "domain", dn.parent_id))
+        else:
+            result.append(_enrich(dn, "topic", dn.parent_id))
 
     return result
 
@@ -282,19 +282,18 @@ def create_graph_node(req: CreateNodeRequest, user_id: str = Depends(current_use
     内部调 tree_ops，自动同步到对话树 + 认知图谱
     """
     level, name = req.level, req.name
-    if level not in ("partition", "domain", "topic"):
-        raise HTTPException(400, f"Unsupported level: {level}")
     try:
         if level == "partition":
-            entity = tree_ops.create_partition(user_id, name, subject=name, emoji=req.emoji)
-        elif level == "domain":
-            if not req.parent_id:
-                raise HTTPException(400, "parent_id required for domain")
-            entity = tree_ops.create_domain(user_id, req.parent_id, name, req.emoji)
-        else:  # topic
-            if not req.parent_id:
-                raise HTTPException(400, "parent_id required for topic")
-            entity = tree_ops.create_topic(user_id, req.parent_id, name, req.emoji)
+            data = get_data_repo().load(user_id)
+            root = next((dn for dn in data.directory_nodes.values() if dn.node_type == "dir" and dn.parent_id is None), None)
+            if not root:
+                raise HTTPException(500, "No root directory found")
+            parent_id = root.id
+        else:
+            parent_id = req.parent_id
+            if not parent_id:
+                raise HTTPException(400, f"parent_id required for {level}")
+        entity = tree_ops.create_dir(user_id, parent_id, name, "general")
         return {"node": _entity_to_node(entity, level, user_id), "id": entity.id}
     except ValueError as e:
         raise HTTPException(404, str(e))
@@ -317,16 +316,11 @@ def remove_graph_node(
     concept/atom → 仅删认知图谱
     """
     data = get_data_repo().load(user_id)
-    # 判断层级：partition > domain > topic > cognitive-only
-    if node_id in data.partitions:
-        tree_ops.delete_partition(user_id, node_id)
-        return {"status": "ok", "deleted_id": node_id, "level": "partition"}
-    elif node_id in data.domains:
-        tree_ops.delete_domain(user_id, node_id)
-        return {"status": "ok", "deleted_id": node_id, "level": "domain"}
-    elif node_id in data.topics:
-        tree_ops.delete_topic(user_id, node_id)
-        return {"status": "ok", "deleted_id": node_id, "level": "topic"}
+    if node_id in data.directory_nodes:
+        tree_ops.delete_node(user_id, node_id)
+        node = data.directory_nodes.get(node_id)
+        level = node.node_type if node else "unknown"
+        return {"status": "ok", "deleted_id": node_id, "level": level}
 
     # concept/atom → 仅认知图谱
     node = get_repo().get_node(node_id, user_id)

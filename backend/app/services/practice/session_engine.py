@@ -12,9 +12,10 @@ SessionEngine — 纯评分逻辑和会话状态机
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Optional
+
+from shared.utils import safe_json, safe_iso, safe_int
 
 logger = logging.getLogger(__name__)
 
@@ -134,34 +135,7 @@ def classify_error(question_data: dict, user_answer: Optional[list]) -> Optional
 # 数据安全转换（纯函数）
 # ═══════════════════════════════════════════
 
-def safe_json(val, default=None):
-    """将 JSON 字符串或原始 JSON 解析为 Python 对象"""
-    if val is None:
-        return default
-    if isinstance(val, (list, dict)):
-        return val
-    if isinstance(val, str):
-        try:
-            return json.loads(val)
-        except Exception:
-            return default
-    return default
 
 
-def safe_iso(val):
-    """将时间值转为 ISO 字符串"""
-    if val is None:
-        return None
-    if hasattr(val, "isoformat"):
-        return val.isoformat()
-    return str(val)
 
 
-def safe_int(val, default=0):
-    """将值转为 int"""
-    if val is None:
-        return default
-    try:
-        return int(val)
-    except (ValueError, TypeError):
-        return default

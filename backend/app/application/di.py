@@ -13,11 +13,12 @@ from app.config import settings
 from app.infrastructure.event_bus import EventBus
 from app.infrastructure.resilience import CircuitBreaker
 from shared.events import DomainEvent
+from dataclasses import asdict
+from app.infrastructure.event_store import EventRecord
 
 if TYPE_CHECKING:
     from shared.protocols import (
         PracticeService,
-        ConversationService,
         PlanningService,
         AnalyticsService,
         HabitService,
@@ -42,10 +43,24 @@ class AppContainer:
     3. 注册事件处理器（wire events）
     """
 
-    def __init__(self):
+    def __init__(self, use_persistent: bool = True):
         # ── 基础设施 ──
-        self.event_bus = EventBus(handler_timeout=settings.event_bus_timeout)
+        if use_persistent:
+            from app.infrastructure.persistent_event_bus import PersistentEventBus
+            self.event_bus = PersistentEventBus(
+                handler_timeout=settings.event_bus_timeout,
+            )
+        else:
+            self.event_bus = EventBus(handler_timeout=settings.event_bus_timeout)
         self.llm_circuit = CircuitBreaker("llm", failure_threshold=3)
+
+        # ── v2 EventSystem: 统一事件存储 + 记忆 + 聚合 ──
+        from app.infrastructure.event_store import EventStore
+        from app.infrastructure.event_memory import EventMemory
+        from app.infrastructure.event_aggregator import EventAggregator
+        self.event_store = EventStore()
+        self.event_memory = EventMemory()
+        self.event_aggregator = EventAggregator()
 
         # ── DataRepository 仓储 ──
         self._init_data_repo()
@@ -55,7 +70,7 @@ class AppContainer:
 
         # ── 领域服务（先创建无依赖的） ──
         self.practice_service: PracticeService = self._create_practice()
-        self.conversation_service: ConversationService = self._create_conversation()
+        self.session_bridge = self._create_session_bridge()
         self.planning_service: PlanningService = self._create_planning()
         self.analytics_service: AnalyticsService = self._create_analytics()
         self.habit_service: HabitService = self._create_habits()
@@ -65,18 +80,22 @@ class AppContainer:
         self.media_service: MediaService = self._create_media()
         self.multimedia_service: MultimediaService = self._create_multimedia()
 
+        # ── Knowledge v5 服务 (四实体解耦架构) ──
+        self.knowledge_v5 = self._create_knowledge_v5()
+
         # ── 注册事件处理器 ──
         self._wire_events()
 
-        # v6 Phase 4: 事件持久化桥接
-        try:
-            from app.services.common.event_service import event_service
-            event_service.subscribe_persist(self.event_bus)
-        except Exception:
-            logger.debug("EventService 持久化桥接失败", exc_info=True)
+        # v6 Phase 4: 事件持久化桥接 (仅内存 EventBus 需要)
+        if not use_persistent:
+            try:
+                from app.services.common.event_service import event_service
+                event_service.subscribe_persist(self.event_bus)
+            except Exception:
+                logger.debug("EventService 持久化桥接失败", exc_info=True)
 
         logger.info("✅ AppContainer 初始化完成 (%d 个服务, %d 个事件订阅)",
-                    9, len(self.event_bus._handlers))
+                    10, len(self.event_bus._handlers))
 
     # ═══════════════════════════════════════════════════════
     # 服务工厂方法
@@ -110,14 +129,9 @@ class AppContainer:
             event_bus=self.event_bus,
         )
 
-    def _create_conversation(self) -> ConversationService:
-        from app.domain.conversation.service import ConversationServiceImpl
-        from app.infrastructure.llm_client import LLMClient
-        return ConversationServiceImpl(
-            llm=LLMClient(),
-            event_bus=self.event_bus,
-            circuit=self.llm_circuit,
-        )
+    def _create_session_bridge(self):
+        from app.domain.conversation.session_bridge import SessionBridge
+        return SessionBridge()
 
     def _create_planning(self) -> PlanningService:
         from app.services.common.planning_stub import PlanningStub
@@ -166,6 +180,19 @@ class AppContainer:
             event_bus=self.event_bus,
         )
 
+    def _create_knowledge_v5(self) -> dict:
+        """创建 Knowledge v5 服务层 (四实体解耦架构)"""
+        from app.services.knowledge_v2 import (
+            KnowledgeNodeService, ConversationService,
+            NavigationService, MessageService,
+        )
+        return {
+            "knowledge_node": KnowledgeNodeService(),
+            "conversation": ConversationService(),
+            "navigation": NavigationService(),
+            "message": MessageService(),
+        }
+
     # ═══════════════════════════════════════════════════════
     # 事件订阅 — 模块联动的唯一配置点
     # ═══════════════════════════════════════════════════════
@@ -183,7 +210,7 @@ class AppContainer:
         bus.subscribe("ErrorRecorded", self.media_service.on_error_recorded)
 
         # 会话完成 → 对话记忆写回 + 计划更新
-        bus.subscribe("SessionCompleted", self.conversation_service.on_session_completed)
+        bus.subscribe("SessionCompleted", self.session_bridge.on_session_completed)
         bus.subscribe("SessionCompleted", self.planning_service.on_session_completed)
 
         # CognitiveNode 更新 → 计划重调 + ZPD 调度
@@ -211,6 +238,57 @@ class AppContainer:
 
         # AI 回复 → 多媒体生成
         bus.subscribe("AssistantReplied", self.multimedia_service.on_assistant_replied)
+
+        # ── v2 EventSystem: 工作记忆生命周期 + 聚合 ──
+        async def _on_session_completed(event: DomainEvent) -> None:
+            from shared.events import SessionCompleted
+            if not isinstance(event, SessionCompleted):
+                return
+            user_id = event.user_id
+            session_id = event.session_id
+            try:
+                # 结束工作记忆
+                self.event_memory.working_end(user_id, session_id)
+                # 触发聚合
+                agg_record = await self.event_aggregator.aggregate_practice_session(
+                    user_id, session_id
+                )
+                if agg_record:
+                    await self.event_store.append(
+                        agg_record,
+                        stream_type="practice",
+                        stream_id=session_id,
+                    )
+            except Exception:
+                logger.debug("EventMemory/Aggregator hook failed", exc_info=True)
+        bus.subscribe("SessionCompleted", _on_session_completed)
+
+        async def _on_assistant_replied(event: DomainEvent) -> None:
+            from shared.events import AssistantReplied
+            if not isinstance(event, AssistantReplied):
+                return
+            user_id = event.user_id
+            conversation_id = event.conversation_id
+            try:
+                # 检查对话聚合阈值
+                agg_record = await self.event_aggregator.on_event(
+                    EventRecord(
+                        user_id=user_id,
+                        event_type="AssistantReplied",
+                        stream_type="conversation",
+                        stream_id=conversation_id,
+                        payload=asdict(event),
+                    )
+                )
+                if agg_record:
+                    await self.event_store.append(
+                        agg_record,
+                        stream_type="conversation",
+                        stream_id=conversation_id,
+                    )
+            except Exception:
+                logger.debug("EventAggregator hook failed", exc_info=True)
+        bus.subscribe("AssistantReplied", _on_assistant_replied)
 
         logger.info("🔗 注册 %d 个事件订阅", sum(len(v) for v in bus._handlers.values()))
 

@@ -1,11 +1,12 @@
 """
 题库解析器 — 对话→题库自动映射 + 建表维护
 """
-import json
 import logging
 import os
 from datetime import datetime
 from typing import Optional
+
+from shared.utils import safe_json as _safe_json, safe_iso as _safe_iso
 
 logger = logging.getLogger(__name__)
 
@@ -394,16 +395,4 @@ def _row_to_question(row, include_answer=False):
     return result
 
 
-def _safe_json(val, default=None):
-    if val is None: return default
-    if isinstance(val, (list, dict)): return val
-    if isinstance(val, str):
-        try: return json.loads(val)
-        except Exception: return default
-    return default
 
-
-def _safe_iso(val):
-    if val is None: return None
-    if hasattr(val, "isoformat"): return val.isoformat()
-    return str(val)

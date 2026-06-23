@@ -36,6 +36,7 @@ class TempConversationCleanupModule(SecretaryModule):
     async def run_check(
         self, user_id: str, ctx: SessionContext | None = None,
     ) -> list[Proposal]:
+        # TODO: 这些 infrastructure 导入应通过 DI 注入，而非在方法内懒加载
         from app.services.common import get_data_repo
         from app.infrastructure.db.cognitive_link_storage import get_links_for_conversation, remove_link
 

@@ -124,7 +124,7 @@ class PgCognitiveNodeRepository:
         values = list(fields.values())
         values.extend([node_id, user_id])
         db.execute(
-            f"UPDATE cognitive_nodes SET {set_expr} WHERE id = %s AND user_id = %s",
+            f"UPDATE knowledge_nodes SET {set_expr} WHERE id = %s AND user_id = %s",
             values,
         )
 
@@ -132,7 +132,7 @@ class PgCognitiveNodeRepository:
         import json as _json
         db = _s.get_db()
         db.execute(
-            "UPDATE cognitive_nodes SET children = children || %s::jsonb, "
+            "UPDATE knowledge_nodes SET children = children || %s::jsonb, "
             "updated_at = NOW() WHERE id = %s AND user_id = %s "
             "AND NOT (children @> %s::jsonb)",
             (_json.dumps([node_id]), parent_id, user_id, _json.dumps([node_id])),

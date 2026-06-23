@@ -22,7 +22,7 @@ from app.domain.cognitive.models import (
     UserCognitiveState,
 )
 from app.domain.cognitive.operation_registry import get_registry
-from app.infrastructure.db.cognitive_storage import get_node, upsert_node
+from app.domain.cognitive import get_repo
 from . import constants as C
 
 logger = logging.getLogger(__name__)
@@ -57,10 +57,10 @@ def set_events_repo(repo: Any) -> None:
 
 
 def _get_repo():
+    global _events_repo
     if _events_repo is None:
         from app.application.di import container
         # 使用 container 获取事件仓库（见 application/di.py）
-        global _events_repo
         _events_repo = container.event_bus  # fallback
     return _events_repo
 
@@ -152,7 +152,7 @@ def handle_practice_response(event: CognitiveEventRecord) -> dict[str, Any]:
     consecutive = payload.get("consecutive", False)
 
     # Load node or create stub
-    node = get_node(node_id, user_id) or CognitiveNode(id=node_id, label=node_id, level="atom")
+    node = get_repo().get_node(node_id, user_id) or CognitiveNode(id=node_id, label=node_id, level="atom")
 
     # ─── 1–3. 遗忘衰减 → 快速重学 → 证据融合 (via Registry) ───
     belief_result = _registry.execute(
@@ -256,7 +256,7 @@ def handle_practice_response(event: CognitiveEventRecord) -> dict[str, Any]:
     node.activation = new_activation
     node.cognitive_load = new_load
     node.engagement = new_engagement or node.engagement
-    upsert_node(node, user_id)
+    get_repo().upsert_node(node, user_id)
 
     # ─── 16. 快速下降检测 ───
     decline_signal = _check_decline(node, new_belief)
@@ -350,12 +350,12 @@ def _aggregate_to_parent(node: CognitiveNode, user_id: str) -> None:
     """聚合到父节点（仅更新调度）"""
     if not node.parent:
         return
-    parent = get_node(node.parent, user_id)
+    parent = get_repo().get_node(node.parent, user_id)
     if not parent:
         return
     if parent.scheduling and node.scheduling:
         parent.scheduling.urgency = max(parent.scheduling.urgency, node.scheduling.urgency)
-        upsert_node(parent, user_id)
+        get_repo().upsert_node(parent, user_id)
 
 
 # ════════════════════════════════════════════
@@ -370,7 +370,7 @@ def handle_dialogue_context_update(event: Event) -> dict[str, Any]:
     user_id = event.user_id
     payload = event.payload or {}
 
-    node = get_node(node_id, user_id) or CognitiveNode(id=node_id, label=node_id, level="atom")
+    node = get_repo().get_node(node_id, user_id) or CognitiveNode(id=node_id, label=node_id, level="atom")
 
     ctx = DialogueContext(
         session_id=payload.get("session_id", ""),
@@ -388,7 +388,7 @@ def handle_dialogue_context_update(event: Event) -> dict[str, Any]:
         contexts = contexts[-C.CONTEXT_HISTORY_MAX:]
     node.dialogue_contexts = contexts
 
-    upsert_node(node, user_id)
+    get_repo().upsert_node(node, user_id)
 
     # 记录事件
     _repo.insert(Event(
@@ -429,7 +429,7 @@ def handle_conversation_assessment(event: CognitiveEventRecord) -> dict[str, Any
     payload = event.payload or {}
     success = payload.get("assessment", 0.5) > 0.5
 
-    node = get_node(node_id, user_id) or CognitiveNode(id=node_id, label=node_id, level="atom")
+    node = get_repo().get_node(node_id, user_id) or CognitiveNode(id=node_id, label=node_id, level="atom")
 
     # 使用 Registry: 遗忘衰减 + 低权重证据
     belief_input = node.belief.model_dump() if node.belief else Belief().model_dump()
@@ -457,7 +457,7 @@ def handle_conversation_assessment(event: CognitiveEventRecord) -> dict[str, Any
 
     node.belief = new_belief
     node.trend = new_trend
-    upsert_node(node, user_id)
+    get_repo().upsert_node(node, user_id)
 
     # 记录事件
     _get_repo().insert(CognitiveEventRecord(

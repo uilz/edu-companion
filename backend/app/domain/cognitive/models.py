@@ -374,10 +374,12 @@ class CognitiveNode(BaseModel):
     embedding: list[float] | None = None
     is_active: bool = True
 
-    # ─── 结构字段（从 user_meta JSONB 迁移） ───
+    # ─── 结构字段（从 user_meta JSONB 迁移） ──
     emoji: str = ""
     color: str = ""
     sort_order: int = 0
+    tags: list[str] = Field(default_factory=list)
+    created_by: str = "user"
 
     def update_timestamp(self):
         self.meta.updated_at = time.time()

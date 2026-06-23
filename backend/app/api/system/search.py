@@ -112,7 +112,7 @@ async def _search_materials(q: str, limit: int, user_id: str) -> list[SearchResu
     results: list[SearchResultItem] = []
 
     try:
-        from app.infrastructure.media.material_search import material_search as ms
+        from app.infrastructure.files.search import material_search as ms
         search_results = await ms.search(
             user_id=user_id, query=q, top_k=limit,
         )
@@ -146,7 +146,7 @@ async def _search_knowledge(q: str, limit: int, user_id: str) -> list[SearchResu
 
         rows = db.fetchall(
             "SELECT node_id, label, description, subject "
-            "FROM cognitive_nodes "
+            "FROM knowledge_nodes "
             "WHERE user_id = %s "
             "  AND (LOWER(label) LIKE %s OR LOWER(description) LIKE %s) "
             "LIMIT %s",

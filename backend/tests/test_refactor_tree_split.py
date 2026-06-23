@@ -1,9 +1,9 @@
 """验证 tree_crud.py 拆分为 4 个子模块的正确性
 
 确保：
-- tree_ops.py 仍然导出 TreeOpsService 和 tree_ops 全局实例
+- tree_service.py 仍然导出 TreeOpsService 和 tree_ops 全局实例
 - 所有公开方法可通过 tree_ops 调用
-- 调用方 import from tree_ops 不受影响
+- 调用方 import from tree_service 不受影响
 """
 
 import sys
@@ -46,19 +46,30 @@ class DummyData:
         self.active_partition_id = ""
 
 
+class DummyDataRepo:
+    """模拟 DataRepository — 返回 DummyData"""
+    def __init__(self, data):
+        self._data = data
+
+    def load(self, user_id):
+        return self._data
+
+    def save(self, user_id, data):
+        pass
+
+
 @pytest.fixture
 def mocked_tree_ops():
-    """创建 TreeOpsService 并将 _storage 和 cognitive sync 替换为 mock"""
-    with patch("app.services.knowledge.tree_ops.storage") as mock_stg, \
+    """创建 TreeOpsService 并将 DataRepository 和 cognitive sync 替换为 mock"""
+    data = DummyData()
+    mock_repo = DummyDataRepo(data)
+    with patch("app.services.common.get_data_repo", return_value=mock_repo), \
          patch("app.services.knowledge.tree_sync.upsert_node") as mock_upsert, \
          patch("app.services.knowledge.tree_sync.cog_delete_node") as mock_del, \
          patch("app.infrastructure.db.cognitive_storage.get_node", return_value=None):
-        from app.services.knowledge.tree_ops import TreeOpsService
+        from app.services.knowledge.tree_service import TreeOpsService
         svc = TreeOpsService()
-        data = DummyData()
-        mock_stg.load.return_value = data
-        mock_stg.save.return_value = None
-        yield svc, data, mock_stg
+        yield svc, data, mock_repo
 
 
 class TestTreeHierarchy:

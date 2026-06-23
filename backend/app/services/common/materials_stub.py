@@ -16,7 +16,7 @@ class MaterialsStub:
         if not query.strip():
             return []
         try:
-            from app.infrastructure.media.material_search import material_search
+            from app.infrastructure.files.search import material_search
             results = await material_search.search(
                 user_id=user_id, query=query, top_k=top_k,
             )

@@ -81,6 +81,8 @@ def upsert_node(node: CognitiveNode, user_id: str) -> None:
         "emoji", "color", "sort_order",
         # 简介
         "brief",
+        # 标签与来源
+        "tags", "created_by",
     ]
     # 确保所有 JSONB 值为合法 JSON 字符串
     vals = {c: _to_json(getattr(node, c, None)) for c in columns}
@@ -102,13 +104,16 @@ def upsert_node(node: CognitiveNode, user_id: str) -> None:
         "emoji": node.emoji or "",
         "color": node.color or "",
         "sort_order": node.sort_order or 0,
+        # 标签与来源
+        "tags": _to_json(node.tags),
+        "created_by": node.created_by or "user",
     })
 
     placeholders = ", ".join(f"%({k})s" for k in vals)
     update_cols = [k for k in vals if k != "id"]
     update_clause = ", ".join(f"{k} = %({k})s" for k in update_cols)
     sql = (
-        f"INSERT INTO cognitive_nodes ({', '.join(vals.keys())}) "
+        f"INSERT INTO knowledge_nodes ({', '.join(vals.keys())}) "
         f"VALUES ({placeholders}) "
         f"ON CONFLICT (id) DO UPDATE SET {update_clause}"
     )
@@ -130,7 +135,7 @@ def get_node(node_id: str, user_id: str) -> Optional[CognitiveNode]:
     """通过 ID 获取 CognitiveNode"""
     db = get_db()
     row = db.fetchone(
-        "SELECT * FROM cognitive_nodes WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
+        "SELECT * FROM knowledge_nodes WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
         (node_id, user_id),
     )
     if not row:
@@ -144,7 +149,7 @@ def get_nodes_by_level(
     """获取某一层级的所有节点"""
     db = get_db()
     rows = db.fetchall(
-        "SELECT * FROM cognitive_nodes WHERE level = %s AND user_id = %s AND deleted_at IS NULL ORDER BY id",
+        "SELECT * FROM knowledge_nodes WHERE level = %s AND user_id = %s AND deleted_at IS NULL ORDER BY id",
         (level, user_id),
     )
     return [_row_to_node(r) for r in rows]
@@ -154,7 +159,7 @@ def get_children(parent_id: str, user_id: str) -> list[CognitiveNode]:
     """获取某节点的直接子节点"""
     db = get_db()
     rows = db.fetchall(
-        "SELECT * FROM cognitive_nodes WHERE parent = %s AND user_id = %s AND deleted_at IS NULL ORDER BY id",
+        "SELECT * FROM knowledge_nodes WHERE parent = %s AND user_id = %s AND deleted_at IS NULL ORDER BY id",
         (parent_id, user_id),
     )
     return [_row_to_node(r) for r in rows]
@@ -167,10 +172,10 @@ def get_subtree(root_id: str, user_id: str) -> dict[str, CognitiveNode]:
     rows = db.fetchall(
         """
         WITH RECURSIVE subtree AS (
-            SELECT * FROM cognitive_nodes
+            SELECT * FROM knowledge_nodes
             WHERE id = %s AND user_id = %s
             UNION ALL
-            SELECT cn.* FROM cognitive_nodes cn
+            SELECT cn.* FROM knowledge_nodes cn
             JOIN subtree ON cn.parent = subtree.id
             WHERE cn.user_id = %s AND cn.deleted_at IS NULL
         )
@@ -185,12 +190,12 @@ def delete_node(node_id: str, user_id: str) -> None:
     """删除节点（含子节点级联）"""
     db = get_db()
     db.execute(
-        "DELETE FROM cognitive_nodes WHERE id = %s AND user_id = %s",
+        "DELETE FROM knowledge_nodes WHERE id = %s AND user_id = %s",
         (node_id, user_id),
     )
     # 清理子节点的 parent 引用和父节点的 children 引用
     db.execute(
-        "UPDATE cognitive_nodes SET parent = NULL, "
+        "UPDATE knowledge_nodes SET parent = NULL, "
         "children = (children::jsonb - %s)::jsonb "
         "WHERE children::jsonb ? %s AND user_id = %s",
         (node_id, node_id, user_id),
@@ -204,7 +209,7 @@ def search_nodes(
     db = get_db()
     pattern = f"%{query}%"
     rows = db.fetchall(
-        "SELECT * FROM cognitive_nodes WHERE user_id = %s AND deleted_at IS NULL "
+        "SELECT * FROM knowledge_nodes WHERE user_id = %s AND deleted_at IS NULL "
         "AND (label ILIKE %s OR id ILIKE %s) "
         "ORDER BY length(id) LIMIT %s",
         (user_id, pattern, pattern, limit),
@@ -216,7 +221,7 @@ def list_all_nodes(user_id: str) -> list[CognitiveNode]:
     """获取用户所有节点"""
     db = get_db()
     rows = db.fetchall(
-        "SELECT * FROM cognitive_nodes WHERE user_id = %s AND deleted_at IS NULL ORDER BY id",
+        "SELECT * FROM knowledge_nodes WHERE user_id = %s AND deleted_at IS NULL ORDER BY id",
         (user_id,),
     )
     return [_row_to_node(r) for r in rows]
@@ -228,7 +233,7 @@ def get_urgent_nodes(
     """获取紧迫度最高的节点（用于调度）"""
     db = get_db()
     rows = db.fetchall(
-        "SELECT * FROM cognitive_nodes WHERE user_id = %s AND deleted_at IS NULL "
+        "SELECT * FROM knowledge_nodes WHERE user_id = %s AND deleted_at IS NULL "
         "AND scheduling->>'urgency' IS NOT NULL "
         "ORDER BY (scheduling->>'urgency')::float DESC LIMIT %s",
         (user_id, limit),
@@ -320,6 +325,8 @@ def _row_to_node(row: dict) -> CognitiveNode:
         color=raw.get("color") or "",
         sort_order=raw.get("sort_order") or 0,
         brief=raw.get("brief") or "",
+        tags=_parse_json_list(raw.get("tags")),
+        created_by=raw.get("created_by") or "user",
     )
 
 
@@ -357,7 +364,7 @@ def find_node_by_path(path_id: str, user_id: str) -> Optional[CognitiveNode]:
     """通过 path_id 查找节点"""
     db = get_db()
     row = db.fetchone(
-        "SELECT * FROM cognitive_nodes WHERE path_id = %s AND user_id = %s AND deleted_at IS NULL",
+        "SELECT * FROM knowledge_nodes WHERE path_id = %s AND user_id = %s AND deleted_at IS NULL",
         (path_id, user_id),
     )
     if not row:
@@ -389,7 +396,7 @@ def vector_search(
     rows = db.fetchall(
         f"""
         SELECT id, label, path_id, level, is_visible, embedding
-        FROM cognitive_nodes
+        FROM knowledge_nodes
         WHERE user_id = %s
           AND embedding IS NOT NULL
           AND deleted_at IS NULL
@@ -450,7 +457,7 @@ def get_visible_children(parent_id: str, user_id: str) -> list[CognitiveNode]:
     """获取某节点下可见的直接子节点"""
     db = get_db()
     rows = db.fetchall(
-        "SELECT * FROM cognitive_nodes "
+        "SELECT * FROM knowledge_nodes "
         "WHERE parent = %s AND user_id = %s AND is_visible = true AND deleted_at IS NULL "
         "ORDER BY label",
         (parent_id, user_id),
@@ -465,7 +472,7 @@ def find_node_by_label(
     db = get_db()
     # 精确匹配
     row = db.fetchone(
-        "SELECT * FROM cognitive_nodes WHERE label = %s AND user_id = %s AND deleted_at IS NULL",
+        "SELECT * FROM knowledge_nodes WHERE label = %s AND user_id = %s AND deleted_at IS NULL",
         (label, user_id),
     )
     if row:
@@ -473,7 +480,7 @@ def find_node_by_label(
     # 降级：模糊匹配取最相似的
     pattern = f"%{label}%"
     rows = db.fetchall(
-        "SELECT * FROM cognitive_nodes WHERE user_id = %s AND deleted_at IS NULL "
+        "SELECT * FROM knowledge_nodes WHERE user_id = %s AND deleted_at IS NULL "
         "AND label ILIKE %s "
         "ORDER BY length(label) DESC LIMIT 1",
         (user_id, pattern),
@@ -482,7 +489,7 @@ def find_node_by_label(
         return _row_to_node(rows[0])
     # 终极降级：按 id 精确匹配
     row = db.fetchone(
-        "SELECT * FROM cognitive_nodes WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
+        "SELECT * FROM knowledge_nodes WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
         (label, user_id),
     )
     if row:
@@ -499,7 +506,7 @@ def sync_from_practice_event(
     time_spent: float = 0.0,
     hints_used: int = 0,
 ) -> None:
-    """练习事件 → 更新 cognitive_nodes 的 belief + practice_summary
+    """练习事件 → 更新 knowledge_nodes 的 belief + practice_summary
 
     这是 Phase 9 的核心数据通路：将练习系统的 BKT 后验结果
     同步到 CognitiveNode 的 Beta 分布信念。
@@ -509,7 +516,7 @@ def sync_from_practice_event(
     if not node:
         db = get_db()
         row = db.fetchone(
-            "SELECT * FROM cognitive_nodes WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
+            "SELECT * FROM knowledge_nodes WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
             (skill_id, user_id),
         )
         if row:
@@ -667,7 +674,7 @@ def get_suggested_count(parent_id: str, user_id: str) -> int:
     """获取某节点下的建议/隐藏子节点数量（用于预览计数）"""
     db = get_db()
     row = db.fetchone(
-        "SELECT COUNT(*) as cnt FROM cognitive_nodes "
+        "SELECT COUNT(*) as cnt FROM knowledge_nodes "
         "WHERE parent = %s AND user_id = %s AND is_visible = false AND deleted_at IS NULL "
         "AND node_type IN ('auto_generated', 'suggested')",
         (parent_id, user_id),
@@ -679,7 +686,7 @@ def get_child_count(parent_id: str, user_id: str) -> int:
     """获取某节点下的可见子节点总数"""
     db = get_db()
     row = db.fetchone(
-        "SELECT COUNT(*) as cnt FROM cognitive_nodes "
+        "SELECT COUNT(*) as cnt FROM knowledge_nodes "
         "WHERE parent = %s AND user_id = %s AND is_visible = true AND deleted_at IS NULL",
         (parent_id, user_id),
     )
@@ -693,7 +700,7 @@ def set_node_visible(node_id: str, user_id: str) -> None:
         return
     db = get_db()
     db.execute(
-        "UPDATE cognitive_nodes SET is_visible = true, updated_at = now() WHERE id = %s AND user_id = %s",
+        "UPDATE knowledge_nodes SET is_visible = true, updated_at = now() WHERE id = %s AND user_id = %s",
         (node_id, user_id),
     )
     # 级联设置父节点可见
@@ -702,11 +709,11 @@ def set_node_visible(node_id: str, user_id: str) -> None:
     while parent_id and parent_id not in visited:
         visited.add(parent_id)
         db.execute(
-            "UPDATE cognitive_nodes SET is_visible = true, updated_at = now() WHERE id = %s AND user_id = %s",
+            "UPDATE knowledge_nodes SET is_visible = true, updated_at = now() WHERE id = %s AND user_id = %s",
             (parent_id, user_id),
         )
         parent_row = db.fetchone(
-            "SELECT parent FROM cognitive_nodes WHERE id = %s AND user_id = %s",
+            "SELECT parent FROM knowledge_nodes WHERE id = %s AND user_id = %s",
             (parent_id, user_id),
         )
         parent_id = parent_row["parent"] if parent_row else None

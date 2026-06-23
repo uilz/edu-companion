@@ -15,7 +15,7 @@ from datetime import datetime
 from app.schemas.conversation import TextBlock, TreeNode
 from app.schemas.practice import PracticeSession
 from app.services.common import get_data_repo
-from app.services.knowledge.tree_ops import tree_ops
+from app.services.knowledge.tree_service import tree_ops
 
 logger = logging.getLogger(__name__)
 

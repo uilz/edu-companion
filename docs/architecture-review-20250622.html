@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>架构审查 — 苹果果学习助手</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+  </script>
+  <style>
+    .seam { stroke-dasharray: 4 4; }
+    .leak { stroke: #dc2626; stroke-width: 2px; }
+    .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+    .shallow-stripe { background: repeating-linear-gradient(45deg, #f1f5f9, #f1f5f9 4px, #e2e8f0 4px, #e2e8f0 8px); }
+  </style>
+</head>
+<body class="bg-stone-50 text-slate-800 font-sans">
+  <main class="max-w-5xl mx-auto px-6 py-12 space-y-14">
+
+    <!-- ====== HEADER ====== -->
+    <header class="space-y-4">
+      <h1 class="text-3xl font-bold tracking-tight text-slate-900">架构审查</h1>
+      <div class="flex items-center gap-6 text-sm text-slate-500">
+        <span class="font-mono">edu-companion / backend</span>
+        <span>2026-06-22</span>
+        <span>Python FastAPI · PostgreSQL · pgvector · LiteLLM</span>
+      </div>
+      <div class="flex flex-wrap gap-3 text-xs">
+        <span class="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-100 border border-slate-300">
+          <svg width="14" height="14"><rect width="14" height="14" rx="2" class="fill-slate-700"/></svg> 模块
+        </span>
+        <span class="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-100 border border-dashed border-slate-400">
+          <svg width="14" height="4"><line x1="0" y1="2" x2="14" y2="2" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 2"/></svg> 接口/Seam
+        </span>
+        <span class="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-100 border border-red-300">
+          <svg width="14" height="4"><line x1="0" y1="2" x2="14" y2="2" stroke="#dc2626" stroke-width="2"/></svg> 泄漏
+        </span>
+        <span class="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-900 text-white">
+          <svg width="14" height="14"><rect width="14" height="14" rx="2" fill="#fff"/></svg> 深化模块
+        </span>
+      </div>
+      <p class="text-sm text-slate-500 max-w-2xl">
+        基于 <strong>删除测试</strong>、<strong>接口深度</strong> 和 <strong>Seam 泄漏</strong> 三个维度识别。
+        覆盖 120+ 源文件、151 条 API 路由、9 个领域模块、6 个服务编排模块。
+      </p>
+    </header>
+
+    <!-- ====== CANDIDATE 1: domain/ 层泄漏 ====== -->
+    <article id="c1" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+      <div class="flex items-start justify-between">
+        <div>
+          <h2 class="text-xl font-semibold text-slate-900">1. domain/ 层违反分层契约 — 基础设施泄漏</h2>
+          <p class="text-sm text-slate-500 mt-1">domain/cognitive/ · domain/auth/ → 直查 PostgreSQL</p>
+        </div>
+        <div class="flex gap-2">
+          <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700">Strong</span>
+          <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-slate-100 text-slate-600">ports &amp; adapters</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-6">
+        <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+          <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">当前</p>
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <pre class="mermaid text-xs">
+flowchart TB
+  subgraph domain["domain/ (声称纯业务)"]
+    COG["CognitiveNode 15 子系统"]
+    AUTH["Auth 领域 中间件 / 设置"]
+  end
+  subgraph infra["infrastructure/ (I/O)"]
+    DB[("PostgreSQL")]
+    LLM["LiteLLM"]
+  end
+  COG -.->|"pg_repository.py 直查"| DB
+  AUTH -.->|"user_llm_configs 直查"| DB
+  AUTH -->|"加密"| LLM
+  classDef leak fill:#fef2f2,stroke:#dc2626,stroke-width:2px,stroke-dasharray:4 4
+  class COG,AUTH leak
+            </pre>
+          </div>
+          <p class="text-xs text-red-600 mt-2">
+            CONTEXT.md 声明"domain/ 不 import infrastructure/"<br/>
+            但 pg_repository.py 直接 import psycopg2，auth 内联建表 SQL
+          </p>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+          <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">目标</p>
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <pre class="mermaid text-xs">
+flowchart TB
+  subgraph domain["domain/ (纯业务)"]
+    COG2["CognitiveNode 纯计算 + 操作"]
+    AUTH2["Auth 领域 纯验证逻辑"]
+  end
+  subgraph infra["infrastructure/ (I/O)"]
+    DB2[("PostgreSQL")]
+    COG_REPO["CognitiveNodeRepository 适配器"]
+    AUTH_REPO["UserLLMConfigRepo 适配器"]
+  end
+  COG2 -->|"Protocol 接口"| COG_REPO
+  COG_REPO --> DB2
+  AUTH2 -->|"Protocol 接口"| AUTH_REPO
+  AUTH_REPO --> DB2
+  classDef deep fill:#0f172a,color:#fff,stroke:#0f172a
+  class COG2,AUTH2 deep
+            </pre>
+          </div>
+          <p class="text-xs text-emerald-600 mt-2">
+            Protocol 定义在 shared/protocols/<br/>
+            仓储适配器迁入 infrastructure/db/
+          </p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-4 text-sm">
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-1">问题</h3>
+          <p class="text-slate-500">CONTEXT.md 明确声明"domain/ 不 import infrastructure/"，但 cognitive 和 auth 模块直接 import psycopg2 并内联建表 SQL。分层契约形同虚设。</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-1">方案</h3>
+          <p class="text-slate-500">pg_repository 迁入 infrastructure/db/，auth 直查 SQL 迁入 infrastructure 仓储适配器。domain/ 通过 shared/protocols/ 的 Protocol 定义依赖。</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-1">收益</h3>
+          <ul class="list-disc list-inside space-y-0.5 text-slate-500">
+            <li>Locality：DB 操作集中于 infrastructure/</li>
+            <li>Leverage：一个 Protocol，两个适配器（Pg + InMemory）</li>
+            <li>测试面清晰：测试只穿过 Protocol Seam</li>
+            <li>删除 2 个内联建表</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
+    <!-- ====== CANDIDATE 2: 练习系统碎片化 ====== -->
+    <article id="c2" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+      <div class="flex items-start justify-between">
+        <div>
+          <h2 class="text-xl font-semibold text-slate-900">2. 练习系统碎片化 — 14 个服务文件 + 60 条路由</h2>
+          <p class="text-sm text-slate-500 mt-1">services/practice/ · api/practice/ · domain/practice/</p>
+        </div>
+        <div class="flex gap-2">
+          <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700">Strong</span>
+          <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-slate-100 text-slate-600">in-process</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-6">
+        <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+          <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">当前 — 跨层碎片化</p>
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <pre class="mermaid text-xs">
+flowchart LR
+  API["api/practice/ 60 条路由"]
+  SVC["services/practice/ 14 个文件"]
+  DOM["domain/practice/ service.py"]
+  API -->|"session_engine"| SVC
+  API -->|"question_gen"| SVC
+  API -->|"error_book"| SVC
+  API -->|"scheduler"| SVC
+  API -->|"stats"| SVC
+  API -->|"exam"| SVC
+  API -->|"adaptive"| SVC
+  SVC --> DOM
+  classDef shallow fill:#fefce8,stroke:#eab308
+  class SVC shallow
+            </pre>
+          </div>
+          <p class="text-xs text-amber-600 mt-2">
+            路由层直接知道 14 个子模块的内部结构<br/>
+            每个子模块接口 ≈ 实现 —— 删除测试：删除后复杂度只是迁移
+          </p>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+          <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">目标 — 单一深模块</p>
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <pre class="mermaid text-xs">
+flowchart LR
+  API2["api/practice/ 薄路由"]
+  ENGINE["PracticeEngine 单一接口"]
+  API2 -->|"practice.xxx()"| ENGINE
+  subgraph internal["内部 (不暴露)"]
+    S["session"]
+    Q["questions"]
+    E["errors"]
+    ST["stats"]
+    A["adaptive"]
+  end
+  ENGINE -.-> internal
+  classDef deep fill:#0f172a,color:#fff,stroke:#0f172a
+  class ENGINE deep
+  classDef internal fill:#f1f5f9,stroke:#cbd5e1,stroke-dasharray:2 2
+  class internal internal
+            </pre>
+          </div>
+          <p class="text-xs text-emerald-600 mt-2">
+            外部接口：start_session / submit_answer / get_stats / get_errors<br/>
+            14 个子模块变为内部实现细节
+          </p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-4 text-sm">
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-1">问题</h3>
+          <p class="text-slate-500">练习系统被拆成 14 个浅模块，每个接口几乎等于其实现。路由层需要知道所有子模块。改动一个流程需跨 3 层协调。</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-1">方案</h3>
+          <p class="text-slate-500">深化为 PracticeEngine 单一模块。session_engine / question_gen / error_book 等变为内部组件，外部只通过 4-5 个方法交互。</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-1">收益</h3>
+          <ul class="list-disc list-inside space-y-0.5 text-slate-500">
+            <li>Leverage：1 个接口，60 条路由复用</li>
+            <li>Locality：练习状态机逻辑集中一处</li>
+            <li>接口缩小：14 个公开接口 → 5 个</li>
+            <li>Harness 测试只需 mock 一个 Seam</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
+    <!-- ====== CANDIDATE 3: 对话双路径 ====== -->
+    <article id="c3" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+      <div class="flex items-start justify-between">
+        <div>
+          <h2 class="text-xl font-semibold text-slate-900">3. 对话系统双路径 — ConversationServiceImpl vs ConversationEngine</h2>
+          <p class="text-sm text-slate-500 mt-1">domain/conversation/service.py · domain/conversation/engine.py</p>
+        </div>
+        <div class="flex gap-2">
+          <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700">Strong</span>
+          <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-slate-100 text-slate-600">in-process</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-6">
+        <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+          <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">当前 — 双路径并存</p>
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <pre class="mermaid text-xs">
+flowchart TB
+  API["api/conversation/"]
+  OLD["ConversationServiceImpl (旧路径, 仍在用)"]
+  NEW["ConversationEngine (vNext, 部分就绪)"]
+  CTX["ContextPipeline 6 Provider"]
+  REP["ReplyPipeline 7 阶段"]
+  API -->|"部分路由"| OLD
+  API -->|"部分路由"| NEW
+  OLD --> CTX
+  OLD --> REP
+  NEW --> CTX
+  NEW --> REP
+  classDef stale fill:#fef2f2,stroke:#f87171
+  class OLD stale
+            </pre>
+          </div>
+          <p class="text-xs text-red-600 mt-2">
+            CONTEXT.md 标注 ConversationEngine 为 vNext<br/>
+            但 ConversationServiceImpl 仍被大量路由使用
+          </p>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+          <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">目标 — 单一路径</p>
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <pre class="mermaid text-xs">
+flowchart TB
+  API2["api/conversation/ 全部路由"]
+  ENG["ConversationEngine process() → AsyncGenerator"]
+  ADAPT["ConnectionAdapter HTTP / WS 双适配器"]
+  API2 --> ADAPT
+  ADAPT -->|"统一入口"| ENG
+  subgraph internal["内部管线"]
+    CTX2["ContextPipeline"]
+    REP2["ReplyPipeline"]
+  end
+  ENG -.-> internal
+  classDef deep fill:#0f172a,color:#fff,stroke:#0f172a
+  class ENG deep
+  classDef adapter fill:#e0f2fe,stroke:#0284c7
+  class ADAPT adapter
+            </pre>
+          </div>
+          <p class="text-xs text-emerald-600 mt-2">
+            删除 ConversationServiceImpl<br/>
+            ConnectionAdapter 提供 HTTP/WS 双适配器
+          </p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-4 text-sm">
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-1">问题</h3>
+          <p class="text-slate-500">ConversationServiceImpl 和 ConversationEngine 是两条并行路径，各自被不同路由使用。ContextPipeline 和 ReplyPipeline 被两者共享，但接口不一致。</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-1">方案</h3>
+          <p class="text-slate-500">完成 vNext 迁移：删除 ConversationServiceImpl，全部路由走 ConversationEngine + ConnectionAdapter。管线作为引擎内部组件。</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-1">收益</h3>
+          <ul class="list-disc list-inside space-y-0.5 text-slate-500">
+            <li>Locality：对话入口仅一处</li>
+            <li>删除 ~500 行旧代码</li>
+            <li>接口统一：所有路由同一 Seam</li>
+            <li>Harness 只需 mock ConversationEngine</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
+    <!-- ====== CANDIDATE 4: 知识三套模型 ====== -->
+    <article id="c4" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+      <div class="flex items-start justify-between">
+        <div>
+          <h2 class="text-xl font-semibold text-slate-900">4. 知识表示三套模型 — CognitiveNode / KnowledgeNode / KGNode</h2>
+          <p class="text-sm text-slate-500 mt-1">domain/cognitive/ · schemas/knowledge.py · domain/knowledge/</p>
+        </div>
+        <div class="flex gap-2">
+          <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-700">Worth exploring</span>
+          <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-slate-100 text-slate-600">ports &amp; adapters</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-6">
+        <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+          <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">当前 — 三套模型并行</p>
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <pre class="mermaid text-xs">
+flowchart LR
+  COG["CognitiveNode 15 子系统 认知状态追踪"]
+  KN["KnowledgeNode v5 四实体 知识树 CRUD"]
+  KG["KGNode 知识图谱 可视化载体"]
+  COG -.->|"id 关联"| KN
+  KN -.->|"id 关联"| KG
+  COG -.->|"id 关联"| KG
+  classDef model fill:#fefce8,stroke:#eab308
+  class COG,KN,KG model
+            </pre>
+          </div>
+          <p class="text-xs text-amber-600 mt-2">
+            CONTEXT.md 明确区分三者角色，但三套 id 体系松散关联<br/>
+            同一"知识点"在三处有不同 id，同步靠事件间接维护
+          </p>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+          <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">目标 — 单一知识源 + 投影</p>
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <pre class="mermaid text-xs">
+flowchart TB
+  KNOW["KnowledgeAtom 单一知识源 统一 id"]
+  COG_V["认知投影 mastery + ACT-R"]
+  TREE_V["树投影 label + children"]
+  GRAPH_V["图谱投影 nodes + edges"]
+  KNOW --> COG_V
+  KNOW --> TREE_V
+  KNOW --> GRAPH_V
+  classDef deep fill:#0f172a,color:#fff,stroke:#0f172a
+  class KNOW deep
+  classDef view fill:#e0f2fe,stroke:#0284c7
+  class COG_V,TREE_V,GRAPH_V view
+            </pre>
+          </div>
+          <p class="text-xs text-emerald-600 mt-2">
+            一个 KnowledgeAtom 维护统一 id<br/>
+            三个投影是同一数据的只读视图，无需同步
+          </p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-4 text-sm">
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-1">问题</h3>
+          <p class="text-slate-500">CognitiveNode、KnowledgeNode、KGNode 三套模型独立维护，通过 id 松散关联。同步靠事件系统和多模块协调，一致性难以保证。</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-1">方案</h3>
+          <p class="text-slate-500">引入 KnowledgeAtom 为单一知识源，CognitiveNode / KnowledgeNode / KGNode 降级为只读投影。写操作统一走 KnowledgeAtom。</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-1">收益</h3>
+          <ul class="list-disc list-inside space-y-0.5 text-slate-500">
+            <li>Locality：知识状态一处写入</li>
+            <li>删除事件同步链</li>
+            <li>AI 训练数据一致性提升</li>
+            <li>个性化引擎有单一真相源</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
+    <!-- ====== CANDIDATE 5: services/ 过浅 ====== -->
+    <article id="c5" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+      <div class="flex items-start justify-between">
+        <div>
+          <h2 class="text-xl font-semibold text-slate-900">5. services/ 编排层过浅 — 多数是 Pass-through</h2>
+          <p class="text-sm text-slate-500 mt-1">services/common/ · services/knowledge/ · services/analytics/</p>
+        </div>
+        <div class="flex gap-2">
+          <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-700">Worth exploring</span>
+          <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-slate-100 text-slate-600">in-process</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-6">
+        <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+          <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">当前 — 跨层横切面</p>
+          <div class="space-y-1">
+            <div class="flex items-center gap-2">
+              <div class="h-7 border-l-4 border-slate-300 flex items-center px-2 text-xs bg-white w-full">api/ 路由</div>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="h-7 shallow-stripe flex items-center px-2 text-xs w-full">services/ (pass-through)</div>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="h-7 border-l-4 border-slate-600 flex items-center px-2 text-xs bg-white w-full">domain/ 业务逻辑</div>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="h-7 border-l-4 border-slate-600 flex items-center px-2 text-xs bg-white w-full">infrastructure/ I/O</div>
+            </div>
+          </div>
+          <p class="text-xs text-amber-600 mt-2">
+            删除测试：删除 classifier_service.py 之后<br/>
+            分类逻辑仍在 domain/ 和 infrastructure/ 中，只是少了一层委托
+          </p>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+          <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">目标 — 吸收到 domain 或 infrastructure</p>
+          <div class="space-y-1">
+            <div class="flex items-center gap-2">
+              <div class="h-7 border-l-4 border-slate-300 flex items-center px-2 text-xs bg-white w-full">api/ 路由</div>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="h-16 deep flex items-center px-2 text-xs text-white w-full rounded">
+                <div>
+                  <strong>深化后的 domain/ 模块</strong><br/>
+                  <span class="opacity-70">业务逻辑 + 编排 + 仓储适配器调用</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="h-7 border-l-4 border-slate-600 flex items-center px-2 text-xs bg-white w-full">infrastructure/ I/O</div>
+            </div>
+          </div>
+          <p class="text-xs text-emerald-600 mt-2">
+            有编排价值的（ContextPipeline、ReplyPipeline）吸收到 domain/<br/>
+            纯 pass-through 删除
+          </p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-4 text-sm">
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-1">问题</h3>
+          <p class="text-slate-500">services/ 层中多个模块是纯 pass-through：classifier_service 委托到 domain，knowledge_state 委托到 infrastructure。接口几乎等于实现。</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-1">方案</h3>
+          <p class="text-slate-500">有编排价值的模块（ContextPipeline、ReplyPipeline）吸收到 domain/conversation/。纯 pass-through 删除，api/ 直接调用 domain/。</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-1">收益</h3>
+          <ul class="list-disc list-inside space-y-0.5 text-slate-500">
+            <li>减少一层间接调用</li>
+            <li>删除 4-6 个浅模块</li>
+            <li>Locality：编排逻辑与业务逻辑同处</li>
+            <li>API 路由减少依赖跳数</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
+    <!-- ====== CANDIDATE 6: EventBus 不可靠 ====== -->
+    <article id="c6" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+      <div class="flex items-start justify-between">
+        <div>
+          <h2 class="text-xl font-semibold text-slate-900">6. EventBus 内存实现 — 无持久化保证</h2>
+          <p class="text-sm text-slate-500 mt-1">infrastructure/event_bus.py · shared/events.py</p>
+        </div>
+        <div class="flex gap-2">
+          <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-700">Worth exploring</span>
+          <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-slate-100 text-slate-600">ports &amp; adapters</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-6">
+        <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+          <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">当前 — 内存事件总线</p>
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <pre class="mermaid text-xs">
+flowchart TB
+  PUB["发布者 domain/ 模块"]
+  BUS["EventBus asyncio.Queue 内存实现"]
+  SUB1["AnalyticsService 订阅者"]
+  SUB2["HabitService 订阅者"]
+  SUB3["MultimediaService 订阅者"]
+  PUB -->|"publish()"| BUS
+  BUS -->|"异步"| SUB1
+  BUS -->|"异步"| SUB2
+  BUS -->|"异步"| SUB3
+  BUS -.->|"❌ 进程崩溃 事件丢失"| LOST["丢失"]
+  classDef lost fill:#fef2f2,stroke:#dc2626,stroke-dasharray:2 2
+  class LOST lost
+            </pre>
+          </div>
+          <p class="text-xs text-red-600 mt-2">
+            events 表有持久化但没有被 EventBus 消费链路使用<br/>
+            进程重启后，内存中的事件丢失
+          </p>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+          <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">目标 — 事件表驱动的可靠总线</p>
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <pre class="mermaid text-xs">
+flowchart TB
+  PUB2["发布者"]
+  EVT[("events 表 持久化")]
+  BUS2["EventBus 轮询 events 表 消费 status"]
+  SUB["订阅者"]
+  PUB2 -->|"INSERT"| EVT
+  EVT -->|"poll pending"| BUS2
+  BUS2 -->|"dispatch"| SUB
+  SUB -->|"mark done"| EVT
+  classDef deep fill:#0f172a,color:#fff,stroke:#0f172a
+  class BUS2 deep
+            </pre>
+          </div>
+          <p class="text-xs text-emerald-600 mt-2">
+            events 表已有的 status 字段（pending→processing→done）<br/>
+            直接作为 EventBus 的持久化队列
+          </p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-4 text-sm">
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-1">问题</h3>
+          <p class="text-slate-500">EventBus 是 asyncio.Queue 内存实现。进程崩溃事件丢失。events 表有持久化和 status 状态机，但 EventBus 没有消费它。两套机制各跑各的。</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-1">方案</h3>
+          <p class="text-slate-500">EventBus 改为消费 events 表。publish() → INSERT 到 events 表，后台轮询 pending 事件分发。events 表已有的 status 状态机直接复用。</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-1">收益</h3>
+          <ul class="list-disc list-inside space-y-0.5 text-slate-500">
+            <li>事件不丢失：进程崩溃可恢复</li>
+            <li>删除内存队列与 events 表的双写</li>
+            <li>事件可审计、可重放</li>
+            <li>Harness 测试：直接查 events 表验证</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
+    <!-- ====== CANDIDATE 7: CognitiveNode 过宽 ====== -->
+    <article id="c7" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+      <div class="flex items-start justify-between">
+        <div>
+          <h2 class="text-xl font-semibold text-slate-900">7. CognitiveNode 15 子系统 — 接口过宽</h2>
+          <p class="text-sm text-slate-500 mt-1">domain/cognitive/models.py · domain/cognitive/equations.py</p>
+        </div>
+        <div class="flex gap-2">
+          <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-slate-100 text-slate-600">Speculative</span>
+          <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-slate-100 text-slate-600">in-process</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-6">
+        <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+          <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">当前 — 15 子系统单体</p>
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <pre class="mermaid text-xs">
+flowchart TB
+  COG["CognitiveNode 单一巨型模型"]
+  COG --> S1["Belief (Beta)"]
+  COG --> S2["ACT-R Activation"]
+  COG --> S3["PracticeSummary"]
+  COG --> S4["Trend"]
+  COG --> S5["CognitiveLoad"]
+  COG --> S6["Scheduling (SM-2)"]
+  COG --> S7["Engagement"]
+  COG --> S8["GoalAlignment"]
+  COG --> S9["Diagnosis"]
+  COG --> S10["Metacognition"]
+  COG --> S11["KnowledgeCompilation"]
+  COG --> S12["PredictionCoding"]
+  COG --> S13["DepthThinking"]
+  COG --> S14["ConversationContext"]
+  COG --> S15["Motivation"]
+  classDef wide fill:#fef2f2,stroke:#f87171
+  class COG wide
+            </pre>
+          </div>
+          <p class="text-xs text-red-600 mt-2">
+            调用方需要理解 15 个子系统的字段语义<br/>
+            大部分子系统在对话场景中未被实际使用
+          </p>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+          <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">目标 — 按使用场景拆分</p>
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <pre class="mermaid text-xs">
+flowchart TB
+  CORE["MasteryAtom 核心：mastery + belief"]
+  PRAC["PracticeProfile 练习场景"]
+  PLAN["PlanningProfile 调度场景"]
+  DIAG["DiagnosisProfile 诊断场景"]
+  api["API 按需加载"]
+  api -->|"对话注入"| CORE
+  api -->|"练习反馈"| PRAC
+  api -->|"学习计划"| PLAN
+  api -->|"秘书诊断"| DIAG
+  classDef deep fill:#0f172a,color:#fff,stroke:#0f172a
+  class CORE deep
+  classDef profile fill:#e0f2fe,stroke:#0284c7
+  class PRAC,PLAN,DIAG profile
+            </pre>
+          </div>
+          <p class="text-xs text-emerald-600 mt-2">
+            核心字段（mastery、belief）必备<br/>
+            场景字段（scheduling、diagnosis）按需加载
+          </p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-4 text-sm">
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-1">问题</h3>
+          <p class="text-slate-500">CognitiveNode 包含 15 个子系统，接口宽度约 50+ 字段。对话注入时只需 mastery+belief，但不得不加载全部。大部分子系统从未被实际决策使用。</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-1">方案</h3>
+          <p class="text-slate-500">拆分为 MasteryAtom（核心）+ 按场景懒加载的 Profile（PracticeProfile / PlanningProfile / DiagnosisProfile）。API 按需查询。</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-1">收益</h3>
+          <ul class="list-disc list-inside space-y-0.5 text-slate-500">
+            <li>接口缩小：50+ 字段 → 5 核心字段</li>
+            <li>Leverage：每个场景只学自己的接口</li>
+            <li>AI 个性化：按场景注入精确数据</li>
+            <li>Harness 可独立测试各 Profile</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
+    <!-- ====== TOP RECOMMENDATION ====== -->
+    <section class="rounded-xl border-2 border-emerald-300 bg-emerald-50 p-6 space-y-4">
+      <h2 class="text-lg font-semibold text-emerald-800">Top Recommendation</h2>
+      <div class="flex gap-6">
+        <div class="flex-1">
+          <p class="text-2xl font-bold text-emerald-900 mb-2">
+            <a href="#c1" class="hover:underline">#1 domain/ 层泄漏修复</a>
+          </p>
+          <p class="text-emerald-700 leading-relaxed">
+            这是所有后续优化的前提。当前 domain/cognitive/ 和 domain/auth/ 直查数据库，破坏了分层契约。
+            修复后，所有模块通过 shared/protocols/ 的 Protocol 定义依赖 —— 这是 Harness 可测试性的基础。
+          </p>
+          <p class="text-emerald-700 mt-2">
+            <strong>解决了这个泄漏，Candidate #2-#7 的深化才有干净的 Seam 可以走。</strong>
+          </p>
+        </div>
+        <div class="flex-1 space-y-2">
+          <p class="text-sm font-semibold text-emerald-800">建议执行顺序</p>
+          <ol class="list-decimal list-inside text-sm text-emerald-700 space-y-1">
+            <li><strong>domain/ 泄漏修复</strong> — 基础设施就位</li>
+            <li><strong>对话系统双路径合并</strong> — 删除旧 ConversationServiceImpl</li>
+            <li><strong>练习系统深化</strong> — 14 文件 → PracticeEngine</li>
+            <li><strong>知识模型统一</strong> — 三套 → 单一 KnowledgeAtom</li>
+            <li><strong>EventBus 可靠化</strong> — 内存 → events 表驱动</li>
+            <li><strong>services/ 层精简</strong> — 删除 pass-through</li>
+            <li><strong>CognitiveNode 场景化拆分</strong> — 按需加载</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====== SUMMARY TABLE ====== -->
+    <section class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
+      <h2 class="text-lg font-semibold text-slate-900">汇总 — 深度提升路径</h2>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 text-left text-slate-500">
+              <th class="py-2 pr-4 font-medium">候选</th>
+              <th class="py-2 pr-4 font-medium">当前深度</th>
+              <th class="py-2 pr-4 font-medium">目标深度</th>
+              <th class="py-2 pr-4 font-medium">影响模块数</th>
+              <th class="py-2 pr-4 font-medium">强度</th>
+            </tr>
+          </thead>
+          <tbody class="text-slate-700">
+            <tr class="border-b border-slate-100">
+              <td class="py-2 pr-4 font-mono"><a href="#c1" class="text-emerald-600 hover:underline">#1 domain/ 泄漏</a></td>
+              <td class="py-2 pr-4">浅 — 接口与实现耦合</td>
+              <td class="py-2 pr-4">深 — Protocol Seam + 适配器</td>
+              <td class="py-2 pr-4">2 领域模块</td>
+              <td class="py-2 pr-4"><span class="px-2 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-700">Strong</span></td>
+            </tr>
+            <tr class="border-b border-slate-100">
+              <td class="py-2 pr-4 font-mono"><a href="#c2" class="text-emerald-600 hover:underline">#2 练习碎片化</a></td>
+              <td class="py-2 pr-4">浅 — 14 个公开接口</td>
+              <td class="py-2 pr-4">深 — 5 个公开接口</td>
+              <td class="py-2 pr-4">14 服务文件 + 60 路由</td>
+              <td class="py-2 pr-4"><span class="px-2 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-700">Strong</span></td>
+            </tr>
+            <tr class="border-b border-slate-100">
+              <td class="py-2 pr-4 font-mono"><a href="#c3" class="text-emerald-600 hover:underline">#3 对话双路径</a></td>
+              <td class="py-2 pr-4">浅 — 两条并行路径</td>
+              <td class="py-2 pr-4">深 — 单一引擎入口</td>
+              <td class="py-2 pr-4">2 服务 + 管线</td>
+              <td class="py-2 pr-4"><span class="px-2 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-700">Strong</span></td>
+            </tr>
+            <tr class="border-b border-slate-100">
+              <td class="py-2 pr-4 font-mono"><a href="#c4" class="text-amber-600 hover:underline">#4 知识三模型</a></td>
+              <td class="py-2 pr-4">浅 — 三套 id 体系</td>
+              <td class="py-2 pr-4">深 — 单一源 + 投影</td>
+              <td class="py-2 pr-4">3 领域模块</td>
+              <td class="py-2 pr-4"><span class="px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700">Worth exploring</span></td>
+            </tr>
+            <tr class="border-b border-slate-100">
+              <td class="py-2 pr-4 font-mono"><a href="#c5" class="text-amber-600 hover:underline">#5 services/ 过浅</a></td>
+              <td class="py-2 pr-4">浅 — pass-through</td>
+              <td class="py-2 pr-4">深 — 吸收到 domain/</td>
+              <td class="py-2 pr-4">4-6 服务文件</td>
+              <td class="py-2 pr-4"><span class="px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700">Worth exploring</span></td>
+            </tr>
+            <tr class="border-b border-slate-100">
+              <td class="py-2 pr-4 font-mono"><a href="#c6" class="text-amber-600 hover:underline">#6 EventBus 不可靠</a></td>
+              <td class="py-2 pr-4">浅 — 内存队列</td>
+              <td class="py-2 pr-4">深 — 持久化事件表</td>
+              <td class="py-2 pr-4">1 基础设施 + 事件系统</td>
+              <td class="py-2 pr-4"><span class="px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700">Worth exploring</span></td>
+            </tr>
+            <tr>
+              <td class="py-2 pr-4 font-mono"><a href="#c7" class="text-slate-600 hover:underline">#7 CognitiveNode 过宽</a></td>
+              <td class="py-2 pr-4">浅 — 50+ 字段接口</td>
+              <td class="py-2 pr-4">深 — 5 核心 + 按需 Profile</td>
+              <td class="py-2 pr-4">1 认知模块</td>
+              <td class="py-2 pr-4"><span class="px-2 py-0.5 text-xs rounded-full bg-slate-100 text-slate-600">Speculative</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="text-xs text-slate-400 border-t border-slate-200 pt-4">
+      <p>分析基于 backend/app/ 120+ Python 源文件 · 151 条 API 路由 · 9 个领域模块 · 6 个服务编排模块</p>
+      <p class="mt-1">文件路径：/home/deploy/edu-companion/docs/architecture-review-20250622.html</p>
+    </footer>
+
+  </main>
+</body>
+</html>

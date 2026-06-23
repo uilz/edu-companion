@@ -31,25 +31,24 @@ logger = logging.getLogger(__name__)
 class RelationMemory:
     """关系记忆 — 记录用户对各类提案的忽略/采纳历史
 
-    Phase A3: 改用 DataRepository 持久化（policy_memory JSONB 字段），替代 JSON 文件存储。
+    D16: 改用 UserSettingsRepo 直接读写，替代 DataRepository → policy_memory 路径。
     """
 
     def __init__(self) -> None:
         pass
 
     def _load(self, user_id: str) -> dict:
-        from app.services.common import get_data_repo
-        data = get_data_repo().load(user_id)
-        return data.policy_memory or {
+        # TODO: 这些 infrastructure 导入应通过 DI 注入
+        from app.infrastructure.db.user_settings_repo import get_user_settings_repo
+        return get_user_settings_repo().get_key(user_id, "policy_memory", {
             "ignore_counts": {}, "accept_counts": {}, "updated_at": time.time(),
-        }
+        })
 
     def _save(self, user_id: str, data: dict) -> None:
         data["updated_at"] = time.time()
-        from app.services.common import get_data_repo
-        user_data = get_data_repo().load(user_id)
-        user_data.policy_memory = data
-        get_data_repo().save(user_id, user_data)
+        # TODO: 这些 infrastructure 导入应通过 DI 注入
+        from app.infrastructure.db.user_settings_repo import get_user_settings_repo
+        get_user_settings_repo().set_key(user_id, "policy_memory", data)
 
     def record_accept(self, user_id: str, action_type: str, kp_id: str) -> None:
         """记录采纳"""
@@ -180,6 +179,7 @@ class PolicyEngine:
     async def get_daily_usage(self, user_id: str) -> int:
         """获取用户今日已使用的提案推送数"""
         try:
+            # TODO: 这些 infrastructure 导入应通过 DI 注入
             from app.infrastructure.db.proposal_store import ProposalStore
             store = ProposalStore()
             return store.get_daily_usage(user_id)

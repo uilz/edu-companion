@@ -37,7 +37,7 @@ def get_links_for_conversation(conversation_id: str) -> list[dict]:
     rows = db.fetchall(
         """SELECT l.*, n.label as node_label, n.path_id, n.level
            FROM conversation_node_links l
-           LEFT JOIN cognitive_nodes n ON l.node_id = n.id
+           LEFT JOIN knowledge_nodes n ON l.node_id = n.id
            WHERE l.conversation_id = %s
            ORDER BY l.is_primary DESC, l.added_at""",
         (conversation_id,),

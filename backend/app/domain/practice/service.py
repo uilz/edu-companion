@@ -171,7 +171,7 @@ class PracticeServiceImpl:
     def update_cognitive_after_practice(
         self, user_id: str, skill_id: str, is_correct: bool, latency_ms: int = 0,
     ) -> dict:
-        from app.services.practice.practice_service import update_cognitive_after_practice
+        from app.services.practice.engine import update_cognitive_after_practice
         return update_cognitive_after_practice(user_id, skill_id, is_correct, latency_ms)
 
     # ═══════════════════════════════════════════════════════
@@ -183,7 +183,7 @@ class PracticeServiceImpl:
         return check_answer(user_answer, correct_answer)
 
     def build_reply_text(self, is_correct: bool, correct_label: str, explanation: str) -> str:
-        from app.services.practice.practice_service import build_reply_text
+        from app.services.practice.engine import build_reply_text
         return build_reply_text(is_correct, correct_label, explanation)
 
     # ═══════════════════════════════════════════════════════
@@ -191,11 +191,11 @@ class PracticeServiceImpl:
     # ═══════════════════════════════════════════════════════
 
     def get_hint_for_question(self, question_id: str, current_level: int) -> dict | None:
-        from app.services.practice.practice_service import get_hint_for_question
+        from app.services.practice.engine import get_hint_for_question
         return get_hint_for_question(question_id, current_level)
 
     def get_inline_hint(self, block_id: str, user_id: str) -> dict | None:
-        from app.services.practice.practice_service import get_inline_hint
+        from app.services.practice.engine import get_inline_hint
         return get_inline_hint(block_id, user_id)
 
     # ═══════════════════════════════════════════════════════
@@ -207,26 +207,26 @@ class PracticeServiceImpl:
         cognitive_node_id: str | None = None, min_wrongs: int = 1,
         sort_by: str = "wrongs_desc", page: int = 1, page_size: int = 20,
     ) -> dict:
-        from app.services.practice.practice_error_book import get_error_book
+        from app.services.practice.engine import get_error_book
         return get_error_book(user_id, bank_id, cognitive_node_id, min_wrongs, sort_by, page, page_size)
 
     def get_error_session_stats(self, user_id: str) -> dict:
-        from app.services.practice.practice_error_book import get_error_session_stats
+        from app.services.practice.engine import get_error_session_stats
         return get_error_session_stats(user_id)
 
     def review_error_question(
         self, question_id: str, user_id: str,
         is_correct: bool = False, time_spent: int = 0,
     ) -> dict:
-        from app.services.practice.practice_error_book import review_error_question
+        from app.services.practice.engine import review_error_question
         return review_error_question(question_id, user_id, is_correct, time_spent)
 
     def clear_mastered_errors(self, user_id: str) -> dict:
-        from app.services.practice.practice_error_book import clear_mastered_errors
+        from app.services.practice.engine import clear_mastered_errors
         return clear_mastered_errors(user_id)
 
     def get_error_materials(self, question_id: str, user_id: str, limit: int = 3) -> list[dict]:
-        from app.services.practice.practice_error_book import get_error_materials
+        from app.services.practice.engine import get_error_materials
         return get_error_materials(question_id, user_id, limit)
 
     # ═══════════════════════════════════════════════════════
@@ -234,18 +234,18 @@ class PracticeServiceImpl:
     # ═══════════════════════════════════════════════════════
 
     def list_practice_sessions(self, user_id: str, limit: int = 20) -> dict:
-        from app.services.practice.practice_service import list_practice_sessions
+        from app.services.practice.engine import list_practice_sessions
         return list_practice_sessions(user_id, limit)
 
     def complete_practice_session(self, session_id: str) -> dict | None:
-        from app.services.practice.practice_service import complete_practice_session
+        from app.services.practice.engine import complete_practice_session
         return complete_practice_session(session_id)
 
     def record_attempt(
         self, user_id: str, session_id: str, question_id: str,
         answer: str, is_correct: bool, time_spent_seconds: float, hints_used: int,
     ) -> None:
-        from app.services.practice.practice_service import record_attempt
+        from app.services.practice.engine import record_attempt
         return record_attempt(user_id, session_id, question_id, answer, is_correct, time_spent_seconds, hints_used)
 
     # ═══════════════════════════════════════════════════════
@@ -253,21 +253,21 @@ class PracticeServiceImpl:
     # ═══════════════════════════════════════════════════════
 
     def compute_practice_stats(self, user_id: str, time_range: str = "week") -> dict:
-        from app.services.practice.practice_service import compute_practice_stats
+        from app.services.practice.engine import compute_practice_stats
         return compute_practice_stats(user_id, time_range)
 
     def compute_behavior_report_data(self, user_id: str, time_range: str = "week") -> dict:
-        from app.services.practice.practice_service import compute_behavior_report_data
+        from app.services.practice.engine import compute_behavior_report_data
         return compute_behavior_report_data(user_id, time_range)
 
     async def get_stats(self, user_id: str, time_range: str = "week") -> dict:
         """从 attempts 表聚合练习统计（异步版，委托给 services 层）"""
-        from app.services.practice.practice_service import get_stats_db
+        from app.services.practice.engine import get_stats_db
         return await get_stats_db(user_id, time_range)
 
     async def get_behavior_report(self, user_id: str, time_range: str = "week") -> dict:
         """学习行为分析报告（异步版，委托给 services 层）"""
-        from app.services.practice.practice_service import get_behavior_report_db
+        from app.services.practice.engine import get_behavior_report_db
         return await get_behavior_report_db(user_id, time_range)
 
     # ═══════════════════════════════════════════════════════
@@ -282,7 +282,7 @@ class PracticeServiceImpl:
         bloom_distribution: dict[str, int] | None = None,
         sources: dict | None = None,
     ) -> list[dict]:
-        from app.services.practice.practice_adaptive import adaptive_select_v2
+        from app.services.practice.engine import adaptive_select_v2
         return adaptive_select_v2(
             bank_id, user_id, count, mode, exclude_ids,
             cognitive_node_ids=cognitive_node_ids,
@@ -299,7 +299,7 @@ class PracticeServiceImpl:
         material_context: str | None = None,
         reference_mode: str | None = None,
     ) -> list[dict]:
-        from app.services.practice.practice_question_gen import generate_and_save
+        from app.services.practice.engine import generate_and_save
         diff_float = difficulty / 5.0 if difficulty > 1 else float(difficulty)
         return await generate_and_save(
             bank_id=bank_id, user_id=user_id, subject=subject,
@@ -314,11 +314,11 @@ class PracticeServiceImpl:
     # ═══════════════════════════════════════════════════════
 
     def resolve_bank_for_conversation(self, partition_id: str, topic: str = "") -> str:
-        from app.services.practice.practice_question_bank import resolve_bank_for_conversation
+        from app.services.practice.engine import resolve_bank_for_conversation
         return resolve_bank_for_conversation(partition_id, topic)
 
     def resolve_bank_for_node(self, node_id: str) -> str:
-        from app.services.practice.practice_question_bank import resolve_bank_for_node
+        from app.services.practice.engine import resolve_bank_for_node
         return resolve_bank_for_node(node_id)
 
     # ═══════════════════════════════════════════════════════
@@ -326,7 +326,7 @@ class PracticeServiceImpl:
     # ═══════════════════════════════════════════════════════
 
     def get_due_reviews(self, user_id: str, limit: int = 10) -> list[dict]:
-        from app.services.practice.practice_scheduler import get_due_questions
+        from app.services.practice.engine import get_due_questions
         return get_due_questions(user_id, limit)
 
     # ═══════════════════════════════════════════════════════
@@ -339,7 +339,7 @@ class PracticeServiceImpl:
         config: dict | None = None,
         cognitive_node_ids: list[str] | None = None,
     ) -> dict:
-        from app.services.practice.practice_exam import create_exam
+        from app.services.practice.engine import create_exam
         return create_exam(user_id, bank_id, count, duration_minutes, config, cognitive_node_ids)
 
     # ═══════════════════════════════════════════════════════
@@ -350,7 +350,7 @@ class PracticeServiceImpl:
         self, user_id: str, session_id: str, skill_id: str = "",
         is_correct: bool = True, proficiency: float = 0.5,
     ) -> list[dict]:
-        from app.services.practice.practice_secretary_integration import check_and_generate_proposals
+        from app.services.practice.engine import check_and_generate_proposals
         count = check_and_generate_proposals(user_id, session_id)
         return [{"generated_count": count}]
 
@@ -361,7 +361,7 @@ class PracticeServiceImpl:
     async def integrate_practice_to_branch(
         self, user_id: str, session, partition_id: str, branch_id: str,
     ) -> dict | None:
-        from app.services.practice.practice_integrator import integrate_practice_to_branch
+        from app.services.practice.engine import integrate_practice_to_branch
         result = await integrate_practice_to_branch(user_id, session, partition_id, branch_id)
         if result is None:
             return None

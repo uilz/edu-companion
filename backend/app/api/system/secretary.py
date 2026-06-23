@@ -702,7 +702,7 @@ async def agent_chat(body: AgentChatRequest, user_id: str = Depends(current_user
     """
     from app.domain.secretary.tools.tool_registry import ToolRegistry
     from app.services.common import get_data_repo
-    from app.services.knowledge.tree_ops import tree_ops
+    from app.services.knowledge.tree_service import tree_ops
     from app.schemas.conversation import Conversation
     import uuid
 

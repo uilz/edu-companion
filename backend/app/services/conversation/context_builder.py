@@ -1,16 +1,12 @@
-"""对话上下文构建器
-
-构建发送给 LLM 的消息列表，集成以下上下文注入：
-- 系统提示（苹小果人格设定）
-- 多维情绪感知
-- 统一知识状态
-- 练习上下文（进行中 + 回顾）
-- 知识图谱（已掌握/薄弱/未接触）
-- 认知画像（CognitiveNode 掌握度/趋势/负荷/错误模式）
-- 上下文感知选题建议
 """
-
+DEPRECATED: This module is the old monolithic version of context building.
+Use app.domain.conversation.context_pipeline (ContextPipeline with Providers) instead.
+Will be removed in next major version.
+"""
 from __future__ import annotations
+
+import warnings
+warnings.warn("services/conversation/context_builder is deprecated, use app.domain.conversation.context_pipeline instead", DeprecationWarning, stacklevel=2)
 
 import logging
 
@@ -367,24 +363,7 @@ def _build_context_messages(
     except Exception:
         logger.debug("Tool availability hint injection skipped", exc_info=True)
 
-    # ── 11. File-based RAG context ──
-    try:
-        from app.infrastructure.media.material_search import material_search
-        rag_results = material_search.search_sync(
-            user_id=data.user_id,
-            query=user_text,
-            top_k=3,
-        )
-        if rag_results and material_search.should_inject_rag(rag_results):
-            rag_ctx = material_search.format_rag_context(rag_results)
-            system_content += (
-                "\n\n📚 以下是你可引用的资料内容（来自用户的知识库）：\n"
-                + rag_ctx
-                + "\n\n请基于以上资料回答。如果资料中没有相关信息，按自己的知识回答，不要编造。"
-                "引用资料时标注 [来源：文件名]。"
-            )
-    except Exception:
-        logger.debug("File-based RAG context injection skipped", exc_info=True)
+    # ── 11. RAG context (已迁移至 context_pipeline TutorCapability Provider6) ──
 
     messages.append({"role": "system", "content": system_content})
 

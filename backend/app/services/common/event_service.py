@@ -25,7 +25,6 @@ from shared.events import (
     EVENT_TYPES,
 )
 from shared.log_utils import log_event_processed, log_ripple_edge
-from shared.protocols.cognitive import CognitiveNodeRepository
 
 logger = logging.getLogger(__name__)
 
@@ -44,16 +43,16 @@ _MAX_BATCH = 20
 class EventService:
     """事件服务 — 桥接 in-memory EventBus + DB 持久化 + 后台消费"""
 
-    def __init__(self, repo: CognitiveNodeRepository | None = None):
+    def __init__(self, repo=None):
         self._consumer_task: asyncio.Task | None = None
         self._running = False
         self._container = None
         self._repo = repo
 
     def _lazy_repo(self):
-        """Fallback: get repo from container when not injected."""
-        from app.domain.cognitive import get_repo
-        self._repo = get_repo()
+        """Fallback: get events repo from container when not injected."""
+        from app.infrastructure.db.events_repository import get_events_repo
+        self._repo = get_events_repo()
         return self._repo
 
     # ─── 持久化桥接 ──────────────────────────────
@@ -223,7 +222,7 @@ class EventService:
                 events = repo.get_unprocessed_events(limit=_MAX_BATCH)
                 for evt in events:
                     await self._dispatch(evt)
-                    repo.mark_event_processed(evt.event_id)
+                    repo.mark_event_processed(evt.id)
             except asyncio.CancelledError:
                 break
             except Exception:
@@ -241,7 +240,7 @@ class EventService:
                 await handler(evt)
                 dur = (_time.time() - start) * 1000
                 log_event_processed(
-                    evt.event_type, evt.event_id,
+                    evt.event_type, evt.id,
                     handler_name, dur, success=True,
                 )
             else:
@@ -249,7 +248,7 @@ class EventService:
         except Exception:
             dur = (_time.time() - start) * 1000
             log_event_processed(
-                evt.event_type, evt.event_id,
+                evt.event_type, evt.id,
                 handler_name, dur, success=False,
             )
 

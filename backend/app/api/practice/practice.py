@@ -12,10 +12,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.domain.auth.dependencies import current_user_id
-from app.services.practice.practice_service import (
+from app.services.practice.engine import (
     get_hint_for_question,
     get_inline_hint,
-    check_answer,
     build_reply_text,
     update_cognitive_after_practice,
     get_cognitive_proficiency,
@@ -25,6 +24,7 @@ from app.services.practice.practice_service import (
     compute_practice_stats,
     compute_behavior_report_data,
 )
+from app.services.practice.practice_service import check_answer
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/practice", tags=["practice"])
@@ -85,7 +85,7 @@ async def complete_session(
     # 写入对话branch
     if partition_id and branch_id:
         try:
-            from app.services.practice.practice_integrator import integrate_practice_to_branch
+            from app.services.practice.engine import integrate_practice_to_branch
             from app.schemas.practice import PracticeSession
             from datetime import datetime as dt
 

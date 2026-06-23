@@ -26,7 +26,7 @@ class TestEmbeddingUtilsImports:
 
     def test_classifier_reimport(self):
         """旧 classifier.py 保留 compute_embedding / cosine_similarity 的 re-export"""
-        from app.services.common.classifier import (
+        from app.infrastructure.embedding_utils import (
             compute_embedding,
             cosine_similarity,
         )

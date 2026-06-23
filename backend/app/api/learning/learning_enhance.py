@@ -372,7 +372,7 @@ async def generate_project(
     # 查询选中节点的信息
     projects = []
     for nid in body.node_ids:
-        node = db.fetchone("SELECT id, label FROM cognitive_nodes WHERE id = %s AND user_id = %s", (nid, uid))
+        node = db.fetchone("SELECT id, label FROM knowledge_nodes WHERE id = %s AND user_id = %s", (nid, uid))
 
         # 构造一个基于模板的项目
         project_id = f"proj_{datetime.now().strftime('%Y%m%d%H%M%S%f')}_{uid}_{nid.split('.')[-1]}"

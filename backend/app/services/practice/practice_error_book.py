@@ -9,6 +9,8 @@ import logging
 from datetime import datetime
 from typing import Optional
 
+from shared.utils import safe_iso as _safe_iso
+
 logger = logging.getLogger(__name__)
 
 
@@ -339,9 +341,3 @@ def clear_mastered_errors(user_id: str) -> dict:
     return {"cleared": count, "message": f"已清除 {count} 道已掌握的错题记录"}
 
 
-def _safe_iso(val):
-    if val is None:
-        return None
-    if hasattr(val, "isoformat"):
-        return val.isoformat()
-    return str(val)

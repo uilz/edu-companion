@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 
 from app.domain.auth.dependencies import current_user_id
 from app.services.common import get_data_repo, get_admin_repo
-from app.services.knowledge.tree_ops import tree_ops
+from app.services.knowledge.tree_service import tree_ops
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v7/data", tags=["学习数据管理"])
@@ -62,7 +62,6 @@ async def data_overview(user_id: str = Depends(current_user_id)):
                 (SELECT COUNT(*) FROM practice_sessions) AS practice_sessions,
                 (SELECT COUNT(*) FROM question_banks) AS question_banks,
                 (SELECT COUNT(*) FROM questions) AS questions,
-                (SELECT COUNT(*) FROM explain_cards) AS explain_cards,
                 (SELECT COUNT(*) FROM messages) AS messages,
                 (SELECT COUNT(*) FROM materials) AS materials
         """)
@@ -71,7 +70,6 @@ async def data_overview(user_id: str = Depends(current_user_id)):
                 "practice_sessions": rows[0].get("practice_sessions", 0),
                 "question_banks": rows[0].get("question_banks", 0),
                 "questions": rows[0].get("questions", 0),
-                "explain_cards": rows[0].get("explain_cards", 0),
                 "messages": rows[0].get("messages", 0),
                 "materials": rows[0].get("materials", 0),
             })
@@ -161,18 +159,24 @@ async def list_practice_sessions(user_id: str = Depends(current_user_id), page: 
 
 @router.get("/explain-cards")
 async def list_explain_cards(user_id: str = Depends(current_user_id), page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100)):
-    """获取解释卡片列表"""
-    repo = _get_admin_repo()
-    if not repo:
-        return {"ok": True, "cards": [], "total": 0, "page": page, "page_size": page_size}
-    offset = (page - 1) * page_size
-    rows = repo.query(
-        "SELECT * FROM explain_cards ORDER BY created_at DESC LIMIT %s OFFSET %s",
-        [page_size, offset]
-    )
-    total = repo.query("SELECT COUNT(*) as cnt FROM explain_cards")
-    total = total[0]["cnt"] if total else 0
-    return {"ok": True, "cards": rows, "total": total, "page": page, "page_size": page_size}
+    """D14: 从 messages 表读取解释卡片"""
+    from app.services.conversation.message_repository import get_message_repo
+    repo = get_message_repo()
+    all_messages = repo.load_all(user_id)
+
+    all_cards = []
+    for node in all_messages.values():
+        cards = node.metadata.get("explain_cards", []) if node.metadata else []
+        if isinstance(cards, list):
+            for card in cards:
+                card["message_id"] = card.get("message_id", node.id)
+                all_cards.append(card)
+
+    all_cards.sort(key=lambda c: c.get("created_at", ""), reverse=True)
+    total = len(all_cards)
+    start = (page - 1) * page_size
+    paged = all_cards[start:start + page_size]
+    return {"ok": True, "cards": paged, "total": total, "page": page, "page_size": page_size}
 
 
 # ═══════════════════════════════════════════════════════════
@@ -253,12 +257,21 @@ async def delete_practice_session(session_id: str, user_id: str = Depends(curren
 
 @router.delete("/explain-card/{card_id}")
 async def delete_explain_card(card_id: str, user_id: str = Depends(current_user_id)):
-    """删除指定解释卡片"""
-    repo = _get_admin_repo()
-    if not repo:
-        raise HTTPException(status_code=400, detail="PostgreSQL 模式不可用")
-    repo.execute("DELETE FROM explain_cards WHERE id = %s", [card_id])
-    return {"ok": True}
+    """D14: 从 messages.metadata.explain_cards 中删除"""
+    from app.services.conversation.message_repository import get_message_repo
+    repo = get_message_repo()
+    all_messages = repo.load_all(user_id)
+
+    for msg_id, node in all_messages.items():
+        cards = node.metadata.get("explain_cards", []) if node.metadata else []
+        for card in cards:
+            if card.get("id") == card_id:
+                remaining = [c for c in cards if c.get("id") != card_id]
+                node.metadata["explain_cards"] = remaining
+                repo.update(node, user_id)
+                return {"ok": True}
+
+    raise HTTPException(status_code=404, detail="解释卡片不存在")
 
 
 # ═══════════════════════════════════════════════════════════
@@ -281,7 +294,6 @@ async def export_all_data(user_id: str = Depends(current_user_id)):
     repo = _get_admin_repo()
     export.update({
         "practice_sessions": repo.query("SELECT * FROM practice_sessions") if repo else [],
-        "explain_cards": repo.query("SELECT * FROM explain_cards") if repo else [],
         "materials": repo.query("SELECT * FROM materials") if repo else [],
         "question_banks": repo.query("SELECT * FROM question_banks") if repo else [],
     })

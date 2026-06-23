@@ -10,15 +10,13 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
-import mimetypes
-from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, Request, Response, UploadFile, File, Form, Query, Depends  # type: ignore
 from pydantic import BaseModel, Field  # type: ignore
 
 from app.schemas.conversation import TextBlock
 from app.services.common import get_data_repo
-from app.services.knowledge.tree_ops import tree_ops
+from app.services.knowledge.tree_service import tree_ops
 from app.domain.auth.dependencies import current_user_id
 
 router = APIRouter()
@@ -32,24 +30,6 @@ class SendMessageRequest(BaseModel):
     partition_id: str | None = None
     pending_quote: dict | None = None  # 引用数据
 
-
-class CreatePartitionRequest(BaseModel):
-    name: str
-    subject: str = ""
-    direction: str = "subject"
-    emoji: str = "💬"
-
-
-class CreateDomainRequest(BaseModel):
-    partition_id: str
-    name: str
-    emoji: str = "📚"
-
-
-class CreateTopicRequest(BaseModel):
-    domain_id: str
-    name: str
-    emoji: str = "📝"
 
 
 class CreateConversationRequest(BaseModel):
@@ -110,11 +90,9 @@ def _check_etag(request: Request, user_id: str) -> str | None:
 
 
 # ══════════════════ 辅助：递归找到最底层对话 ══════════════════
-def _find_default_conversation(user_id: str, level: str, entity_id: str) -> str | None:
+def _find_default_conversation(user_id: str, entity_id: str) -> str | None:
     """DirectoryNode 版：遍历 directory_nodes 树找第一个 conv 节点。"""
     data = get_data_repo().load(user_id)
-    if level == "conversation":
-        return entity_id
     # 在 directory_nodes 中查找 entity_id 的子 conv 节点
     for dn in data.directory_nodes.values():
         if dn.parent_id == entity_id and dn.node_type == "conv":
@@ -125,41 +103,18 @@ def _find_default_conversation(user_id: str, level: str, entity_id: str) -> str 
 # ══════════════════ 通用树节点 CRUD ══════════════════
 @router.get("/tree/{level}")
 async def list_nodes(level: str, request: Request, user_id: str = Depends(current_user_id), parent_id: str = Query(None), type: str = Query(None)):
+    if level != "directory":
+        raise HTTPException(400, f"Unsupported level: {level}")
     data = get_data_repo().load(user_id)
-    if level == "directory":
-        # 支持 parent_id 过滤 → 返回 directory_nodes 格式
-        nodes = []
-        for n in data.directory_nodes.values():
-            if parent_id and n.parent_id != parent_id:
-                continue
-            nodes.append(n.model_dump(mode="json"))
-        return Response(
-            content=json.dumps({"directory_nodes": nodes}),
-            media_type="application/json",
-            headers={"Cache-Control": "no-cache"},
-        )
-    if level not in tree_ops.LEVELS:
-        raise HTTPException(400, f"Invalid level: {level}")
-    etag = _check_etag(request, user_id)
-    # DirectoryNode 兼容：所有层级都来自 directory_nodes
     nodes = []
     for n in data.directory_nodes.values():
-        d = n.model_dump(mode="json")
-        # 根据 level 过滤 node_type
-        if level == "conversation" and n.node_type != "conv":
+        if parent_id and n.parent_id != parent_id:
             continue
-        if level in ("partition", "domain", "topic") and n.node_type != "dir":
-            continue
-        nodes.append(d)
-    # 对话按 updated_at 降序排列
-    if level == "conversation":
-        nodes.sort(key=lambda n: n.get("updated_at", 0) or 0, reverse=True)
-    if parent_id:
-        nodes = [n for n in nodes if n.get("parent_id") == parent_id]
+        nodes.append(n.model_dump(mode="json"))
     return Response(
         content=json.dumps({"directory_nodes": nodes}),
         media_type="application/json",
-        headers={"ETag": etag, "Cache-Control": "no-cache"},
+        headers={"Cache-Control": "no-cache"},
     )
 
 
@@ -176,45 +131,12 @@ async def create_directory_node(body: dict, user_id: str = Depends(current_user_
             entity = tree_ops.create_conv(user_id, parent_id, name, kind=kind)
         else:
             entity = tree_ops.create_dir(user_id, parent_id, name, kind=kind)
-        conv_id = _find_default_conversation(user_id, node_type, entity.id)
+        conv_id = _find_default_conversation(user_id, entity.id)
         return {"directory_node": entity.model_dump(mode="json"), "conversation_id": conv_id}
     except ValueError as e:
         raise HTTPException(404, str(e))
     except Exception:
         logger.exception("Failed to create directory node")
-        raise HTTPException(500, "Internal server error")
-
-
-@router.post("/tree/{level}")
-async def create_node(level: str, body: dict, user_id: str = Depends(current_user_id)):
-    if level not in tree_ops.LEVELS:
-        raise HTTPException(400, f"Invalid level: {level}")
-    try:
-        parent_id = body.get("parent_id")
-        name = body.get("name")
-        emoji = body.get("emoji", "")
-        if name is None:
-            raise HTTPException(400, "Name is required")
-        if level == "partition":
-            entity = tree_ops.create_partition(user_id, name, subject=name, emoji=emoji)
-        elif level == "domain":
-            entity = tree_ops.create_domain(user_id, parent_id, name, emoji)
-        elif level == "topic":
-            entity = tree_ops.create_topic(user_id, parent_id, name, emoji)
-        elif level == "conversation":
-            entity = tree_ops.create_conversation(
-                user_id, parent_id=parent_id, name=name, type=body.get("type", "normal"),
-            )
-        else:
-            raise HTTPException(400, "Unsupported level")
-        conv_id = _find_default_conversation(user_id, level, entity.id)
-        return {level: entity, "conversation_id": conv_id}
-    except HTTPException:
-        raise
-    except ValueError as e:
-        raise HTTPException(404, str(e))
-    except Exception:
-        logger.exception(f"Failed to create {level}")
         raise HTTPException(500, "Internal server error")
 
 
@@ -324,9 +246,6 @@ async def get_conversation(conv_id: str, user_id: str = Depends(current_user_id)
     data = get_data_repo().load(user_id)
     conv = data.directory_nodes.get(conv_id)
     if not conv or conv.node_type != "conv":
-        # 兼容旧数据
-        conv = data.conversations.get(conv_id)
-    if not conv:
         raise HTTPException(404, "Conversation not found")
     result = conv.model_dump(mode="json")
     # 构建祖先链
@@ -340,57 +259,13 @@ async def get_conversation(conv_id: str, user_id: str = Depends(current_user_id)
     return {"conversation": result}
 
 
-@router.patch("/tree/{level}/{node_id}")
-async def rename_node(level: str, node_id: str, req: RenameRequest, user_id: str = Depends(current_user_id)):
-    if level not in tree_ops.LEVELS:
-        raise HTTPException(400, f"Invalid level: {level}")
-    try:
-        if level == "partition":
-            entity = tree_ops.rename_partition(user_id, node_id, req.name)
-        elif level == "domain":
-            entity = tree_ops.rename_domain(user_id, node_id, req.name)
-        elif level == "topic":
-            entity = tree_ops.rename_topic(user_id, node_id, req.name)
-        elif level == "conversation":
-            entity = tree_ops.rename_conversation(user_id, node_id, req.name)
-        else:
-            raise HTTPException(400)
-        return {level: entity.model_dump(mode="json")}
-    except HTTPException:
-        raise
-    except ValueError as e:
-        raise HTTPException(404, str(e))
-    except Exception:
-        logger.exception(f"Failed to rename {level}")
-        raise HTTPException(500, "Internal server error")
-
 
 @router.delete("/tree/{level}/{node_id}")
 async def delete_node(level: str, node_id: str, user_id: str = Depends(current_user_id)):
     if level == "message":
         tree_ops.delete_message(user_id, node_id)
         return {"ok": True}
-    if level not in tree_ops.LEVELS:
-        raise HTTPException(400, f"Invalid level: {level}")
-    try:
-        if level == "partition":
-            tree_ops.delete_partition(user_id, node_id)
-        elif level == "domain":
-            tree_ops.delete_domain(user_id, node_id)
-        elif level == "topic":
-            tree_ops.delete_topic(user_id, node_id)
-        elif level == "conversation":
-            tree_ops.delete_conversation(user_id, node_id)
-        else:
-            raise HTTPException(400)
-        return {"ok": True}
-    except HTTPException:
-        raise
-    except ValueError as e:
-        raise HTTPException(404, str(e))
-    except Exception:
-        logger.exception(f"Failed to delete {level}")
-        raise HTTPException(500, "Internal server error")
+    raise HTTPException(400, f"Unsupported level: {level}")
 
 
 def _merge_cognitive_ids(messages: list[dict], msg_ids: list[str]) -> None:
@@ -421,17 +296,10 @@ async def list_messages(
 ):
     etag = _check_etag(request, user_id)
     data = get_data_repo().load(user_id)
-    # DirectoryNode 版：从 directory_nodes 取 conv 节点
     conv_node = data.directory_nodes.get(conv_id)
     if not conv_node or conv_node.node_type != "conv":
-        # 兼容旧数据
-        conv = data.conversations.get(conv_id)
-        if conv:
-            msg_ids = conv.path[offset: offset + limit]
-        else:
-            raise HTTPException(404, "Conversation not found")
-    else:
-        msg_ids = conv_node.conv_message_ids[offset: offset + limit]
+        raise HTTPException(404, "Conversation not found")
+    msg_ids = conv_node.conv_message_ids[offset: offset + limit]
     messages = []
     resolved_ids = []
     for mid in msg_ids:
@@ -458,13 +326,9 @@ async def list_messages(
 async def get_conversation_blocks(conv_id: str, user_id: str = Depends(current_user_id), limit: int = 100):
     data = get_data_repo().load(user_id)
     conv_node = data.directory_nodes.get(conv_id)
-    path = []
-    if conv_node and conv_node.node_type == "conv":
-        path = conv_node.conv_message_ids
-    else:
-        conv = data.conversations.get(conv_id)
-        if conv:
-            path = conv.path
+    if not conv_node or conv_node.node_type != "conv":
+        return {"blocks": []}
+    path = conv_node.conv_message_ids
     blocks = []
     if path:
         asst_ids = {
@@ -488,16 +352,10 @@ async def send_message_in_conversation(conv_id: str, req: SendMessageRequest, us
         pid = req.partition_id
         if not pid:
             data = get_data_repo().load(user_id)
-            # DirectoryNode 版：从 conv 节点取 parent_id 作为 partition_id
             conv_node = data.directory_nodes.get(conv_id)
-            if conv_node and conv_node.node_type == "conv":
-                pid = conv_node.parent_id
-            else:
-                # 兼容旧数据
-                conv = data.conversations.get(conv_id)
-                if not conv:
-                    raise HTTPException(404, "Conversation not found")
-                pid = conv.partition_id or conv.parent_id
+            if not conv_node or conv_node.node_type != "conv":
+                raise HTTPException(404, "Conversation not found")
+            pid = conv_node.parent_id
         if not pid:
             raise HTTPException(400, "Cannot determine partition")
 
@@ -557,20 +415,20 @@ async def switch_version(message_id: str, req: dict | None = None, user_id: str 
     if not node:
         raise HTTPException(404, "Message not found")
 
-    conv_id = node.conversation_id or getattr(node, "directory_id", "")
-    conv = data.conversations.get(conv_id)
-    if not conv:
+    conv_id_val = node.conversation_id or getattr(node, "directory_id", "")
+    conv = data.directory_nodes.get(conv_id_val)
+    if not conv or conv.node_type != "conv":
         raise HTTPException(400, "No conversation found")
 
-    # 1) 在 conv.path 中找到当前活跃的版本节点（同父同角色）
+    # 1) 在 conv.conv_message_ids 中找到当前活跃的版本节点（同父同角色）
     parent = data.nodes.get(node.parent_id) if node.parent_id else None
     if not parent:
         raise HTTPException(400, "No parent found")
 
-    # 当前活跃版本 = path 中与 node 同父同角色的那个
+    # 当前活跃版本 = conv_message_ids 中与 node 同父同角色的那个
     cur_version_id = None
     version_point_idx = None
-    for i, nid in enumerate(conv.path):
+    for i, nid in enumerate(conv.conv_message_ids):
         n = data.nodes.get(nid)
         if n and n.parent_id == node.parent_id and n.role == node.role:
             cur_version_id = nid
@@ -606,16 +464,16 @@ async def switch_version(message_id: str, req: dict | None = None, user_id: str 
 
     target_id = versions[new_idx]
 
-    # 4) 重建 conv.path = prefix + DFS(目标版本)
-    prefix = conv.path[:version_point_idx]
-    conv_id = conv.id  # 限制只收集同一会话的节点，防止子支混入
+    # 4) 重建 conv.conv_message_ids = prefix + DFS(目标版本)
+    prefix = conv.conv_message_ids[:version_point_idx]
+    conv_for_dfs = conv.id  # 限制只收集同一会话的节点，防止子支混入
 
     def dfs(nid: str, acc: list):
         nd = data.nodes.get(nid)
         if not nd or nd.is_deleted:
             return
         # 只收集属于当前会话的节点，跳过子支（属于其他会话）
-        if nd.conversation_id != conv_id:
+        if nd.conversation_id != conv_for_dfs:
             return
         acc.append(nid)
         for cid in nd.children_ids:
@@ -625,7 +483,7 @@ async def switch_version(message_id: str, req: dict | None = None, user_id: str 
     dfs(target_id, new_path)
 
     # 5) 保存并返回
-    conv.path = new_path
+    conv.conv_message_ids = new_path
     conv.summary_dirty = True
     get_data_repo().save(user_id, data)
 
@@ -683,12 +541,8 @@ async def reply_to_edited_message(message_id: str, user_id: str = Depends(curren
             raise HTTPException(400, "Can only reply to user messages")
 
         conv_id = node.conversation_id or getattr(node, "directory_id", "")
-        # DirectoryNode 版：从 directory_nodes 查找 conv
         conv = data.directory_nodes.get(conv_id)
         if not conv or conv.node_type != "conv":
-            # 兼容旧数据
-            conv = data.conversations.get(conv_id)
-        if not conv:
             raise HTTPException(404, "Conversation not found")
 
         pid = getattr(node, "partition_id", None) or conv.parent_id or conv_id
@@ -742,7 +596,6 @@ async def reply_to_edited_message(message_id: str, user_id: str = Depends(curren
         raise HTTPException(500, "Internal server error")
 
 
-
 @router.get("/tree/stream/active/{conversation_id}")
 async def check_stream_active(conversation_id: str):
     """检测指定对话是否正在后台流式生成（TokenBuffer）"""
@@ -772,37 +625,8 @@ async def check_stream_active(conversation_id: str):
 
 
 # ═══════════════════════════════════════════
-# 工作空间（v4: conversation 级）
+# 文件上传（R2-5: 统一到 /api/files/upload，不再使用独立 workspace）
 # ═══════════════════════════════════════════
-
-WORKSPACE_BASE = Path.home() / ".companion" / "uploads"
-
-
-def _workspace_dir(user_id: str, conv_id: str) -> Path:
-    return WORKSPACE_BASE / user_id / conv_id
-
-
-def _file_type_dir(base: Path, file_type: str) -> Path:
-    mapping = {
-        "image": "images",
-        "audio": "audio",
-        "video": "video",
-        "document": "documents",
-    }
-    d = base / mapping.get(file_type, "others")
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
-def _guess_file_type(mime: str) -> str:
-    if mime.startswith("image/"):
-        return "image"
-    if mime.startswith("audio/"):
-        return "audio"
-    if mime.startswith("video/"):
-        return "video"
-    return "document"
-
 
 @router.post("/workspace/upload")
 async def upload_workspace_file(
@@ -810,49 +634,32 @@ async def upload_workspace_file(
     conversation_id: str = Form(...),
     user_id: str = Depends(current_user_id),
 ):
-    """上传文件到对话工作空间"""
+    """上传文件到对话（已迁移到 /api/files/upload + 记录 conversation_id）"""
     if not file.filename:
         raise HTTPException(400, "No file selected")
 
+    # 验证对话存在
     data = get_data_repo().load(user_id)
     conv = data.directory_nodes.get(conversation_id)
     if not conv or conv.node_type != "conv":
-        conv = data.conversations.get(conversation_id)
-    if not conv:
         raise HTTPException(404, "Conversation not found")
 
-    mime = (
-        file.content_type
-        or mimetypes.guess_type(file.filename)[0]
-        or "application/octet-stream"
+    # 委托给 /api/files/upload 的核心逻辑
+    from app.api.system.files_routes.upload import _do_upload
+    result = await _do_upload(
+        file=file,
+        purpose="session",
+        upload_source="conversation",
+        level="partition",
+        parent_id=conversation_id,
+        uid=user_id,
     )
-    file_type = _guess_file_type(mime)
-    ws_dir = _workspace_dir(user_id, conversation_id)
-    type_dir = _file_type_dir(ws_dir, file_type)
-
-    file_id = str(uuid.uuid4())
-    ext = Path(file.filename).suffix
-    storage_name = f"{file_id}{ext}"
-    storage_path = type_dir / storage_name
-
-    content = await file.read()
-    storage_path.write_bytes(content)
-
-    from app.schemas.conversation import FileRecord
-
-    record = FileRecord(
-        id=file_id,
-        user_id=user_id,
-        original_name=file.filename,
-        storage_path=str(storage_path),
-        mime_type=mime,
-        file_size=len(content),
-        file_type=file_type,
-    )
-    data.files[file_id] = record
-    get_data_repo().save(user_id, data)
-
-    return {"file_id": file_id, "original_name": file.filename, "file_type": file_type}
+    # 返回与旧 workspace 兼容的格式
+    return {
+        "file_id": result["material_id"],
+        "original_name": result["file_name"],
+        "file_type": result.get("file_type", "document"),
+    }
 
 
 # ══════════════════ 子支操作 ══════════════════

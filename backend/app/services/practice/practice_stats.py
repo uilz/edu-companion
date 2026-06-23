@@ -12,6 +12,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
+from shared.utils import safe_iso as _safe_iso
+
 logger = logging.getLogger(__name__)
 
 
@@ -302,9 +304,3 @@ def get_recommendations(user_id: str, limit: int = 5) -> dict:
     }
 
 
-def _safe_iso(val):
-    if val is None:
-        return None
-    if hasattr(val, "isoformat"):
-        return val.isoformat()
-    return str(val)

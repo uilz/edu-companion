@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from app.domain.auth.dependencies import current_user_id
@@ -296,6 +296,22 @@ async def get_file(material_id: str, uid: str = Depends(current_user_id)):
 
 # ── 下载 ──
 
+# 扩展名 → MIME 映射（用于预览时正确渲染）
+EXT_MEDIA_TYPE = {
+    ".pdf": "application/pdf",
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".png": "image/png", ".gif": "image/gif",
+    ".bmp": "image/bmp", ".webp": "image/webp",
+    ".svg": "image/svg+xml",
+    ".ico": "image/x-icon", ".tiff": "image/tiff", ".tif": "image/tiff", ".avif": "image/avif",
+    ".html": "text/html", ".htm": "text/html",
+    ".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4", ".ogg": "audio/ogg",
+    ".mp4": "video/mp4", ".webm": "video/webm", ".mkv": "video/x-matroska",
+    ".mov": "video/quicktime", ".avi": "video/x-msvideo",
+    ".md": "text/markdown", ".txt": "text/plain",
+    ".csv": "text/csv", ".json": "application/json", ".xml": "application/xml",
+}
+
 @router.get("/{material_id}/download", summary="下载文件")
 async def download_file(material_id: str, uid: str = Depends(current_user_id)):
     """下载文件"""
@@ -312,11 +328,104 @@ async def download_file(material_id: str, uid: str = Depends(current_user_id)):
     if not storage_path or not Path(storage_path).exists():
         raise HTTPException(status_code=404, detail="文件已丢失")
 
+    # 根据文件扩展名设置正确的 Content-Type，使浏览器能正确渲染预览
+    ext = Path(row["file_name"]).suffix.lower()
+    media_type = EXT_MEDIA_TYPE.get(ext, "application/octet-stream")
+
     return FileResponse(
         path=storage_path,
         filename=row["file_name"],
-        media_type="application/octet-stream",
+        media_type=media_type,
     )
+
+
+# ── 预览 ──
+
+# 浏览器原生可渲染的媒体类型（直接返回原文件，流式加载）
+PREVIEW_INLINE_EXTS = frozenset({
+    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg", ".ico", ".tiff", ".tif", ".avif",
+    ".pdf",
+    ".html", ".htm",
+    ".mp3", ".wav", ".m4a", ".ogg",
+    ".mp4", ".webm", ".mkv", ".mov", ".avi",
+})
+
+# MarkItDown 处理的文件类型（返回 chunks 的 markdown 文本）
+PREVIEW_MARKDOWN_EXTS = frozenset({
+    ".pptx", ".xlsx", ".xls", ".zip", ".doc", ".drawio", ".xmind", ".opml", ".vsdx", ".vsd",
+})
+
+# 纯文本类型（返回原文件内容）
+PREVIEW_TEXT_EXTS = frozenset({
+    ".txt", ".md", ".csv", ".json", ".xml", ".yaml", ".yml", ".toml", ".ini", ".log",
+    ".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".cpp", ".c", ".h", ".hpp",
+    ".sql", ".rs", ".go", ".rb", ".php", ".swift", ".kt", ".scala", ".r", ".lua", ".sh",
+    ".vue", ".svelte", ".dart", ".gradle", ".cmake", ".tex", ".m", ".mm", ".pl", ".pm",
+})
+
+@router.get("/{material_id}/preview", summary="统一预览")
+async def preview_file(material_id: str, uid: str = Depends(current_user_id)):
+    """
+    统一预览端点：根据文件类型返回不同格式。
+    - 图片/PDF/HTML/音视频 → 返回原文件（Content-Disposition: inline），浏览器直接渲染
+    - DOCX → 返回原文件（前端 mammoth.js 渲染）
+    - PPTX/XLSX/ZIP → 返回 MarkItDown 分块 markdown 文本
+    - 代码/文本 → 返回文件内容
+    """
+    from app.infrastructure.db.database import get_db
+    db = get_db()
+    row = db.fetchone(
+        "SELECT file_name, storage_path, file_type FROM materials WHERE material_id = %s AND user_id = %s",
+        (material_id, uid),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    storage_path = row.get("storage_path", "")
+    if not storage_path or not Path(storage_path).exists():
+        raise HTTPException(status_code=404, detail="文件已丢失")
+
+    ext = Path(row["file_name"]).suffix.lower()
+
+    # ── 浏览器原生渲染：直接返回原文件 ──
+    if ext in PREVIEW_INLINE_EXTS:
+        media_type = EXT_MEDIA_TYPE.get(ext, "application/octet-stream")
+        return FileResponse(
+            path=storage_path,
+            media_type=media_type,
+            headers={"Content-Disposition": "inline", "Cache-Control": "public, max-age=3600"},
+        )
+
+    # ── DOCX：返回原文件，前端用 mammoth.js 渲染 ──
+    if ext == ".docx":
+        return FileResponse(
+            path=storage_path,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": "inline", "Cache-Control": "public, max-age=3600"},
+        )
+
+    # ── MarkItDown 处理后的文件：返回分块 markdown ──
+    if ext in PREVIEW_MARKDOWN_EXTS:
+        chunks = db.fetchall(
+            "SELECT text FROM material_chunks WHERE material_id = %s AND user_id = %s ORDER BY chunk_index",
+            (material_id, uid),
+        )
+        if chunks:
+            text = "\n\n---\n\n".join(c["text"] for c in chunks)
+            return JSONResponse({"type": "markdown_chunks", "content": text, "from_chunks": True})
+        return JSONResponse({"type": "empty", "content": "", "from_chunks": True})
+
+    # ── 纯文本/代码 ──
+    if ext in PREVIEW_TEXT_EXTS:
+        try:
+            with open(storage_path, "r", encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except Exception:
+            text = ""
+        return JSONResponse({"type": "text", "content": text, "from_chunks": False, "lang": ext.lstrip(".")})
+
+    # ── 不支持的类型 ──
+    raise HTTPException(status_code=415, detail=f"不支持预览该文件类型: {ext}")
 
 
 # ── TOC ──
@@ -330,7 +439,7 @@ async def get_toc(material_id: str, uid: str = Depends(current_user_id)):
         """SELECT t.* FROM material_toc t
            JOIN materials m ON t.material_id = m.material_id
            WHERE t.material_id = %s AND m.user_id = %s
-           ORDER BY t.created_at ASC""",
+           ORDER BY t.chunk_start ASC""",
         (material_id, uid),
     )
 
@@ -357,7 +466,7 @@ async def get_toc(material_id: str, uid: str = Depends(current_user_id)):
             roots.append(node)
 
     def sort_key(n):
-        return (n["level"], n["heading"])
+        return n.get("chunk_start", 0)
 
     for node in node_map.values():
         node["children"].sort(key=sort_key)
@@ -390,7 +499,7 @@ async def get_chunks(
             params.extend([toc["chunk_start"], toc["chunk_end"]])
 
     offset = (page - 1) * page_size
-    sql = f"SELECT chunk_index, text, chunk_type, page_number, heading_path FROM material_chunks WHERE {' AND '.join(conditions)} ORDER BY chunk_index ASC LIMIT %s OFFSET %s"
+    sql = f"SELECT chunk_index, text, chunk_type, heading_path FROM material_chunks WHERE {' AND '.join(conditions)} ORDER BY chunk_index ASC LIMIT %s OFFSET %s"
     params.extend([page_size, offset])
     rows = db.fetchall(sql, tuple(params))
 
@@ -419,7 +528,7 @@ class SearchRequest(BaseModel):
 @router.post("/search", summary="搜索文件内容")
 async def search_files(body: SearchRequest, uid: str = Depends(current_user_id)):
     """语义搜索文件内容"""
-    from app.infrastructure.media.material_search import material_search
+    from app.infrastructure.files.search import material_search
     results = await material_search.search(
         user_id=uid,
         query=body.query,
@@ -428,3 +537,80 @@ async def search_files(body: SearchRequest, uid: str = Depends(current_user_id))
         top_k=body.top_k,
     )
     return {"results": results}
+
+
+# ── 搜索扩展 R2-3: 文件内搜索 + 单 chunk 全文 + 相似分块 ──
+
+
+@router.post("/{material_id}/search", summary="在文件内搜索")
+async def search_within_file(
+    material_id: str,
+    body: SearchRequest,
+    uid: str = Depends(current_user_id),
+):
+    """在指定文件内语义搜索"""
+    from app.infrastructure.files.search import material_search
+    results = await material_search.search(
+        user_id=uid,
+        query=body.query,
+        material_ids=[material_id],
+        top_k=body.top_k,
+    )
+    return {"results": results}
+
+
+@router.get("/{material_id}/chunks/{chunk_index}/full", summary="获取分块全文")
+async def get_chunk_full(
+    material_id: str,
+    chunk_index: int,
+    uid: str = Depends(current_user_id),
+):
+    """获取单个分块的完整文本（无截断）"""
+    from app.infrastructure.db.database import get_db
+    db = get_db()
+
+    row = db.fetchone(
+        "SELECT chunk_index, text, heading_path, source_file, chunk_type "
+        "FROM material_chunks "
+        "WHERE material_id = %s AND chunk_index = %s AND user_id = %s",
+        (material_id, chunk_index, uid),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="分块不存在")
+
+    return {
+        "chunk_index": row["chunk_index"],
+        "text": row.get("text", ""),
+        "heading_path": row.get("heading_path", ""),
+        "source_file": row.get("source_file", ""),
+        "chunk_type": row.get("chunk_type", "text"),
+    }
+
+
+@router.post("/chunks/{chunk_id}/similar", summary="搜索相似分块")
+async def search_similar_chunks(
+    chunk_id: str,
+    top_k: int = Query(default=5, le=20),
+    uid: str = Depends(current_user_id),
+):
+    """以指定 chunk 为 query 搜索语义相似的分块"""
+    from app.infrastructure.db.database import get_db
+    db = get_db()
+
+    source = db.fetchone(
+        "SELECT text, material_id, user_id FROM material_chunks WHERE chunk_id = %s",
+        (chunk_id,),
+    )
+    if not source:
+        raise HTTPException(status_code=404, detail="分块不存在")
+    if source["user_id"] != uid:
+        raise HTTPException(status_code=403, detail="无权限")
+
+    from app.infrastructure.files.search import material_search
+    results = await material_search.search(
+        user_id=uid,
+        query=source["text"][:500],
+        material_ids=[source["material_id"]] if source["material_id"] else None,
+        top_k=top_k,
+    )
+    return {"query_chunk": chunk_id, "results": results}

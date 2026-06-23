@@ -69,7 +69,7 @@ class TreeQuery:
     def _ops(self):
         """懒加载 tree_ops，避免循环导入"""
         if self._tree_ops is None:
-            from app.services.knowledge.tree_ops import tree_ops
+            from app.services.knowledge.tree_service import tree_ops
             self._tree_ops = tree_ops
         return self._tree_ops
 
@@ -146,20 +146,6 @@ class TreeQuery:
         """查找目录下最新活跃对话。"""
         return self._ops.find_active_conv(user_id, dir_id)
 
-    # ── 旧接口兼容桩 ──
-
-    def get_conversation(self, user_id: str, cid: str) -> Any | None:
-        return self.get_node(user_id, cid)
-
-    def get_partition(self, user_id: str, pid: str) -> Any | None:
-        return self.get_node(user_id, pid)
-
-    def get_domain(self, user_id: str, did: str) -> Any | None:
-        return self.get_node(user_id, did)
-
-    def get_topic(self, user_id: str, tid: str) -> Any | None:
-        return self.get_node(user_id, tid)
-
 
 # ═══════════════════════════════════════════════
 # TreeMutate — 写操作（产出事件）
@@ -235,55 +221,12 @@ class TreeMutate:
         except ValueError:
             return False
 
-    # ── 旧接口兼容桩 ──
-
     @property
     def _ops(self):
         if not hasattr(self, "_tree_ops"):
-            from app.services.knowledge.tree_ops import tree_ops
+            from app.services.knowledge.tree_service import tree_ops
             self._tree_ops = tree_ops
         return self._tree_ops
-
-    def create_partition(self, user_id, name, subject="", emoji=""):
-        from app.services.knowledge.tree_ops import tree_ops
-        root = tree_ops._ensure_root(user_id, tree_ops._get_data_repo().load(user_id))
-        # save 后再拉起
-        data = tree_ops._get_data_repo().load(user_id)
-        root = tree_ops._ensure_root(user_id, data)
-        node = tree_ops.create_dir(user_id, root.id, name, "general")
-        return node
-
-    def create_domain(self, user_id, partition_id, name, emoji=""):
-        node = self._ops.create_dir(user_id, partition_id, name, "general")
-        return node
-
-    def create_topic(self, user_id, domain_id, name, emoji=""):
-        node = self._ops.create_dir(user_id, domain_id, name, "general")
-        return node
-
-    def create_conversation(self, user_id, topic_id="", parent_id="", name="", type="normal"):
-        pid = parent_id or topic_id
-        if not pid:
-            data = self._data_repo.load(user_id)
-            # 找个根目录
-            for dn in data.directory_nodes.values():
-                if dn.node_type == "dir" and dn.parent_id is None:
-                    pid = dn.id
-                    break
-        node = self._ops.create_conv(user_id, pid, name, "general")
-        return node
-
-    def delete_conversation(self, user_id, conv_id):
-        return self.delete_node(user_id, conv_id)
-
-    def rename_partition(self, user_id, pid, name):
-        return self.rename_node(user_id, pid, name)
-
-    def rename_domain(self, user_id, did, name):
-        return self.rename_node(user_id, did, name)
-
-    def rename_topic(self, user_id, tid, name):
-        return self.rename_node(user_id, tid, name)
 
 
 # ═══════════════════════════════════════════════
@@ -301,22 +244,6 @@ class TreeStore:
     @property
     def get_node(self):
         return self.query.get_node
-
-    @property
-    def get_conversation(self):
-        return self.query.get_conversation
-
-    @property
-    def list_path(self):
-        return self.query.list_path
-
-    @property
-    def find_active_conversation(self):
-        return self.query.find_active_conversation
-
-    @property
-    def auto_resolve(self):
-        return self.query.auto_resolve
 
 
 # 全局单例（兼容旧 tree_ops 模式）

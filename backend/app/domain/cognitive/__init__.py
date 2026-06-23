@@ -14,6 +14,16 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from shared.protocols.cognitive import CognitiveNodeRepository
 
+from app.domain.cognitive.profiles import (
+    MasteryAtom,
+    PracticeProfile,
+    PlanningProfile,
+    DiagnosisProfile,
+    extract_mastery_atom,
+    extract_practice_profile,
+    extract_planning_profile,
+    extract_diagnosis_profile,
+)
 from app.domain.cognitive.operation_registry import (
     CognitiveOperationRegistry,
     get_registry,
@@ -47,4 +57,7 @@ def init_cognitive() -> None:
 __all__ = [
     "get_repo", "set_repo",
     "CognitiveOperationRegistry", "get_registry", "init_registry", "init_cognitive",
+    "MasteryAtom", "PracticeProfile", "PlanningProfile", "DiagnosisProfile",
+    "extract_mastery_atom", "extract_practice_profile",
+    "extract_planning_profile", "extract_diagnosis_profile",
 ]

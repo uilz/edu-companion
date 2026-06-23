@@ -281,58 +281,54 @@ class LoginEventRepo:
             "total": total["cnt"] if total else 0,
         }
 
+    def mark_current_session(self, user_id: str, ip_address: str, user_agent: str) -> None:
+        """将匹配 IP + UA 的最新登录事件标记为当前会话"""
+        self._db.execute(
+            """UPDATE login_events SET is_current = TRUE
+               WHERE user_id = %s AND ip_address = %s AND user_agent = %s
+               AND created_at = (
+                   SELECT MAX(created_at) FROM login_events
+                   WHERE user_id = %s AND ip_address = %s AND user_agent = %s
+               )""",
+            (user_id, ip_address, user_agent, user_id, ip_address, user_agent),
+        )
+
 
 class UserLlmConfigRepo:
-    """用户 LLM 配置数据仓储"""
+    """用户 LLM 配置数据仓储 — D16: 迁移至 user_settings 统一表"""
 
     def __init__(self):
         from app.infrastructure.db.database import get_db
+        from app.infrastructure.db.user_settings_repo import get_user_settings_repo
         self._db = get_db()
-
-    def ensure_table(self) -> None:
-        """确保 user_llm_configs 表存在"""
-        self._db.execute("""
-            CREATE TABLE IF NOT EXISTS user_llm_configs (
-                user_id          TEXT PRIMARY KEY,
-                api_base         TEXT DEFAULT '',
-                api_key_encrypted TEXT DEFAULT '',
-                model_name       TEXT DEFAULT '',
-                is_active        BOOLEAN DEFAULT TRUE,
-                updated_at       TIMESTAMP NOT NULL DEFAULT NOW()
-            )
-        """)
+        self._settings = get_user_settings_repo()
 
     def get(self, user_id: str) -> Optional[dict]:
         """获取用户 LLM 配置（解密 api_key）"""
-        row = self._db.fetchone(
-            "SELECT user_id, api_base, api_key_encrypted, model_name, is_active, updated_at "
-            "FROM user_llm_configs WHERE user_id = %s",
-            (user_id,),
-        )
-        if not row:
+        config = self._settings.get_key(user_id, "llm_config")
+        if not config or not config.get("model_name"):
             return None
-        # 解密 api_key
-        row["api_key"] = decrypt(row.get("api_key_encrypted", ""))
-        row.pop("api_key_encrypted", None)
-        return row
+        config = dict(config)
+        config["api_key"] = decrypt(config.get("api_key_encrypted", ""))
+        config.pop("api_key_encrypted", None)
+        config.setdefault("api_base", "")
+        config.setdefault("is_active", True)
+        return config
 
     def set(self, user_id: str, api_base: str = "", api_key: str = "", model_name: str = "") -> None:
         """设置用户 LLM 配置（加密 api_key）"""
         encrypted = encrypt(api_key) if api_key else ""
-        self._db.execute(
-            """INSERT INTO user_llm_configs (user_id, api_base, api_key_encrypted, model_name, updated_at)
-               VALUES (%s, %s, %s, %s, NOW())
-               ON CONFLICT (user_id) DO UPDATE SET
-                   api_base = EXCLUDED.api_base,
-                   api_key_encrypted = EXCLUDED.api_key_encrypted,
-                   model_name = EXCLUDED.model_name,
-                   updated_at = NOW()""",
-            (user_id, api_base, encrypted, model_name),
-        )
+        self._settings.set_key(user_id, "llm_config", {
+            "api_base": api_base,
+            "api_key_encrypted": encrypted,
+            "model_name": model_name,
+            "is_active": True,
+        })
+
+    def save(self, user_id: str = "", api_base: str = "", api_key: str = "", model_name: str = "") -> None:
+        """保存用户 LLM 配置（settings_api.py 兼容别名）"""
+        self.set(user_id, api_base, api_key, model_name)
 
     def delete(self, user_id: str) -> None:
         """删除用户 LLM 配置"""
-        self._db.execute(
-            "DELETE FROM user_llm_configs WHERE user_id = %s",
-            (user_id,),
-        )
+        self._settings.delete_key(user_id, "llm_config")

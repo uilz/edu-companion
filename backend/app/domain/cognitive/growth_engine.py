@@ -14,7 +14,7 @@ from uuid import uuid4
 from app.domain.cognitive import get_repo
 from app.domain.cognitive.models import CognitiveNode
 from app.domain.cognitive.edge_models import KnowledgeEdge
-from app.infrastructure.db.cognitive_edge_storage import upsert_edge
+# edge storage accessed lazily via get_repo or direct infrastructure call
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +120,7 @@ class GrowthEngine:
         1. 语义检索高度相似节点 → 按置信度创建边
         2. 信任度 > 0.9 设为 auto_active，否则 pending_confirm
         """
-        node = get_node(node_id, user_id)
+        node = get_repo().get_node(node_id, user_id)
         if not node or not node.embedding:
             return
 
@@ -144,19 +144,20 @@ class GrowthEngine:
                 edge_status="auto_active" if sim["similarity"] > 0.9 else "pending_confirm",
             )
             try:
-                upsert_edge(edge)
+                from app.infrastructure.db.cognitive_edge_storage import upsert_edge as _upsert_edge
+                _upsert_edge(edge)
             except Exception as e:
                 logger.debug(f"波纹建边失败: {e}")
 
     def mark_expanded(self, user_id: str, parent_node_id: str) -> None:
         """标记父节点已扩展过（抑制重复提案）"""
-        node = get_node(parent_node_id, user_id)
+        node = get_repo().get_node(parent_node_id, user_id)
         if not node:
             return
         subs = dict(node.subsystems)
         subs["growth"] = {"state": "expanded"}
         node.subsystems = subs
-        upsert_node(node, user_id)
+        get_repo().upsert_node(node, user_id)
 
 
 # 全局实例

@@ -2,7 +2,7 @@
 Conversation Service Protocol — 对话模块对外契约
 
 其他模块只能通过此接口调用对话功能。
-实现类: domain/conversation/service.py ConversationServiceImpl
+实现: domain/conversation/session_bridge.py SessionBridge (on_session_completed)
 """
 
 from __future__ import annotations

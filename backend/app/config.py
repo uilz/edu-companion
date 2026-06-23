@@ -5,11 +5,12 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 import os
@@ -53,7 +54,7 @@ class Settings(BaseSettings):
     # ── CORS 配置 ──
     cors_origins: list[str] = Field(
         default=["http://localhost:3000", "http://127.0.0.1:3000"],
-        description="允许的跨域来源（env: CORS_ORIGINS，逗号分隔）",
+        description="允许的跨域来源（env: CORS_ORIGINS，逗号分隔或JSON数组）",
     )
 
     # ── LLM 模型配置（OpenAI 兼容格式） ──

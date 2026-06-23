@@ -28,7 +28,6 @@ from app.api.system.achievements import router as achievements_router
 from app.api.system.search import router as search_router
 from app.api.system.secretary import router as secretary_router
 from app.api.learning.cognitive import router as learning_router
-from app.api.knowledge.knowledge_routes import router as knowledge_graph_router
 from app.api.system.summaries import router as summaries_router
 
 # Phase 10: 笔记/目标/探索项目
@@ -50,6 +49,11 @@ from app.api.practice.references import router as references_router
 # v8.0 学习数据管理
 from app.api.system.data_routes import router as data_router
 
+# v5.0 知识树系统 (四实体解耦架构)
+from app.api.knowledge_tree_v5 import router as knowledge_tree_v5_router
+from app.api.knowledge_tree_sse import router as knowledge_tree_sse_router
+from app.api.knowledge_tree_ai import router as knowledge_tree_ai_router
+
 # 用户自定义 LLM 配置
 from app.domain.auth.settings_api import router as settings_router
 
@@ -66,6 +70,69 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+
+async def _migrate_pgvector():
+    """pgvector 批量迁移：扫描所有 status='indexed' 但 embedding_vec 为空的文件，异步重索引"""
+    from app.infrastructure.db.database import get_db
+    db = get_db()
+
+    # 检查是否已有 pgvector 数据(避免重复迁移)
+    has_vec = db.fetchone(
+        "SELECT 1 FROM material_chunks WHERE embedding_vec IS NOT NULL LIMIT 1"
+    )
+    if has_vec:
+        logger.info("pgvector 数据已存在，跳过批量迁移")
+        return
+
+    rows = db.fetchall(
+        "SELECT * FROM materials WHERE status = 'indexed'"
+    )
+    if not rows:
+        return
+
+    logger.info("🧬 pgvector 迁移: %d 个文件需要重索引...", len(rows))
+    from app.api.system.files_routes.upload import _index_background
+    import asyncio
+    for row in rows:
+        from pathlib import Path
+        storage_path = row.get("storage_path", "")
+        if storage_path and Path(storage_path).exists():
+            asyncio.ensure_future(_index_background(
+                row["user_id"], row["material_id"], storage_path,
+                row["file_name"], row["file_type"],
+                row.get("file_size", 0), row["purpose"],
+            ))
+            logger.debug("  pgvector 迁移: %s", row["file_name"])
+    logger.info("🧬 pgvector 迁移: %d 个文件已加入重索引队列", len(rows))
+
+
+async def _retry_index_failed():
+    """启动时重试 index_failed 文件（S3-Q3: 定时重试）"""
+    from app.infrastructure.db.database import get_db
+    db = get_db()
+
+    rows = db.fetchall(
+        "SELECT * FROM materials WHERE status = 'index_failed'"
+    )
+    if not rows:
+        return
+
+    logger.info("🔄 重试 index_failed: %d 个文件...", len(rows))
+    from app.api.system.files_routes.upload import _index_background
+    for row in rows:
+        from pathlib import Path
+        storage_path = row.get("storage_path", "")
+        if storage_path and Path(storage_path).exists():
+            asyncio.ensure_future(_index_background(
+                row["user_id"], row["material_id"], storage_path,
+                row["file_name"], row["file_type"],
+                row.get("file_size", 0), row["purpose"],
+            ))
+            logger.debug("  重试: %s", row["file_name"])
+        else:
+            logger.warning("  跳过(文件丢失): %s", row.get("file_name", ""))
+    logger.info("🔄 index_failed 重试完成")
 
 
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -90,10 +157,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     get_db()
     logger.info("💾 PostgreSQL 已连接")
 
-    # 初始化资料元数据索引
-    from app.infrastructure.media.materials_meta import materials_meta
-    indexed = materials_meta.ensure_indexed()
-    logger.info("📁 资料元数据初始化完成 (新注册 %d 个)", indexed)
+    # 资料元数据索引已废弃(v3: materials_meta.json → PG materials 表)
+    # 旧 ensure_indexed() 调用已移除
 
     # 恢复 stuck 文件（uploading → 重新索引）
     try:
@@ -101,14 +166,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning("stuck 文件恢复跳过: %s", e)
 
+    # pgvector 批量迁移：为旧 indexed 文件填充 embedding_vec
+    try:
+        await _migrate_pgvector()
+    except Exception as e:
+        logger.warning("pgvector 批量迁移跳过: %s", e)
+
+    # 重试 index_failed 文件（S3-Q3: 定时重试）
+    try:
+        await _retry_index_failed()
+    except Exception as e:
+        logger.warning("index_failed 重试跳过: %s", e)
+
     # Phase 5: 注入领域事件总线到 Orchestrator（多媒体生成触发）
     from app.application.di import container
 
-    # Phase 5b: ConversationService 初始化
-    try:
-        logger.info("📡 ConversationService 就绪")
-    except Exception as e:
-        logger.warning("ConversationService 初始化跳过: %s", e)
+    # v6: 启动 PersistentEventBus 后台轮询（崩溃恢复）
+    if hasattr(container.event_bus, 'start'):
+        await container.event_bus.start()
+        logger.info("📡 PersistentEventBus 后台轮询已启动")
 
     # Phase 7.4: 发现内置模块 + 启动秘书主动检查器
     try:
@@ -129,6 +205,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # 注册 LLM 原生工具
         from app.infrastructure.llm.tool_repository import TOOL_DEFINITIONS
         repo.register_raw_tools(TOOL_DEFINITIONS)
+        # 注册知识树操作工具
+        from app.infrastructure.llm.knowledge_ops_tools import TOOL_DEFINITIONS as KTOOL_DEFINITIONS
+        repo.register_raw_tools(KTOOL_DEFINITIONS)
         logger.info("🔧 ToolRepository 已初始化 (%d 个工具)", len(repo.list_tools()))
     except Exception as e:
         logger.warning("ToolRepository 初始化失败: %s", e)
@@ -168,6 +247,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning("事件消费者启动失败: %s", e)
 
+    # v2 EventSystem: 标记 EventStore/EventMemory/Aggregator 就绪
+    try:
+        logger.info("📦 EventStore v2 就绪 (stream/query/replay/search)")
+        logger.info("🧠 EventMemory v2 就绪 (ShortTerm/Working/LongTerm/Episodic)")
+        logger.info("📊 EventAggregator v2 就绪 (ConversationDigest/PracticeSessionSummary/DailyDigest)")
+    except Exception:
+        pass
+
     # Phase 8: 初始化对话摘要表
     try:
         from app.services.common.summary_service import ensure_summaries_table
@@ -200,6 +287,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:
         logger.debug("事件消费者停止失败", exc_info=True)
 
+    # v6: 停止 PersistentEventBus 后台轮询
+    try:
+        from app.application.di import container
+        if hasattr(container.event_bus, 'stop'):
+            await container.event_bus.stop()
+            logger.info("📡 PersistentEventBus 后台轮询已停止")
+    except Exception:
+        logger.debug("PersistentEventBus 停止失败", exc_info=True)
+
     logger.info("👋 应用关闭")
 
 
@@ -229,7 +325,9 @@ async def security_headers(request: Request, call_next):
         "img-src 'self' data: blob:; "
         "connect-src 'self' ws: wss:; "
         "font-src 'self'; "
-        "frame-ancestors 'none'; "
+        "frame-src 'self' blob:; "
+        "media-src 'self' blob:; "
+        "frame-ancestors 'self'; "
         "base-uri 'self'"
     )
     response.headers["Content-Security-Policy"] = csp
@@ -326,7 +424,6 @@ app.include_router(search_router)
 app.include_router(secretary_router)
 # 认知图驱动分类
 app.include_router(learning_router)
-app.include_router(knowledge_graph_router)
 app.include_router(summaries_router)
 
 # Phase 10: 笔记/目标/探索项目
@@ -347,6 +444,11 @@ app.include_router(explain_cards_router)
 
 # v8.0 学习数据管理
 app.include_router(data_router)
+
+# v5.0 知识树系统 (四实体解耦架构)
+app.include_router(knowledge_tree_v5_router)
+app.include_router(knowledge_tree_sse_router)
+app.include_router(knowledge_tree_ai_router)
 
 
 # ── 健康检查 ──

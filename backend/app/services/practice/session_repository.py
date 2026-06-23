@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import Optional
 
 from app.schemas.practice import PracticeSession, SessionQuestion
+from shared.utils import safe_iso as _safe_iso
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +26,6 @@ logger = logging.getLogger(__name__)
 # ── 会话 CRUD ──
 
 
-def _safe_iso(val):
-    """将 datetime 或时间值转为 ISO 字符串（防止 Pydantic str 字段收到 datetime 对象报错）"""
-    if val is None:
-        return None
-    if hasattr(val, "isoformat"):
-        return val.isoformat()
-    return str(val)
 
 
 def _row_to_session(row: dict) -> PracticeSession:

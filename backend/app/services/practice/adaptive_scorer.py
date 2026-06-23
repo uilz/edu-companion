@@ -6,10 +6,11 @@ AdaptiveScorer — 精通度/掌握度计算（纯函数）
 
 from __future__ import annotations
 
-import json
 import logging
 import random
 from typing import Optional
+
+from shared.utils import safe_json
 
 logger = logging.getLogger(__name__)
 
@@ -344,14 +345,3 @@ def _avg_mastery(q: dict, node_mastery: dict[str, float]) -> Optional[float]:
     return sum(scores) / len(scores)
 
 
-def safe_json(val, default=None):
-    if val is None:
-        return default
-    if isinstance(val, (list, dict)):
-        return val
-    if isinstance(val, str):
-        try:
-            return json.loads(val)
-        except Exception:
-            return default
-    return default

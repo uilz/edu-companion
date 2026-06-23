@@ -129,7 +129,7 @@ async def update_me(body: UpdateProfileRequest, request: Request):
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
 
-    from domain.auth.repository import get_user_repo
+    from app.domain.auth.repository import get_user_repo
     repo = get_user_repo()
     repo.update_profile(
         user_id=user["user_id"],
@@ -147,7 +147,7 @@ async def change_password(body: ChangePasswordRequest, request: Request):
         raise HTTPException(status_code=401, detail="未登录")
 
     svc = get_auth_service()
-    from domain.auth.repository import get_user_repo
+    from app.domain.auth.repository import get_user_repo
     repo = get_user_repo()
     full_user = repo.find_by_username(user["username"])
     if not full_user:
@@ -212,6 +212,7 @@ async def logout_other_devices(request: Request):
     user_id = user["user_id"]
     
     # 递增 token_version 使其他设备的 token 失效
+    from app.domain.auth.repository import get_user_repo
     repo = get_user_repo()
     repo.increment_token_version(user_id)
     
@@ -224,12 +225,9 @@ async def logout_other_devices(request: Request):
     if not ip:
         ip = request.client.host if request.client else ""
     ua = request.headers.get("user-agent", "")
-    db.execute(
-        """UPDATE login_events SET is_current = TRUE 
-           WHERE user_id = %s AND ip_address = %s AND user_agent = %s
-           ORDER BY created_at DESC LIMIT 1""",
-        (user_id, ip, ua[:500]),
-    )
+    from app.domain.auth.login_event_repo import get_login_event_repo
+    login_repo = get_login_event_repo()
+    login_repo.mark_current_session(user_id, ip, ua[:500])
     
     return {"ok": True, "message": "其他设备已下线"}
 
@@ -242,7 +240,7 @@ async def deactivate_account(body: DeactivateRequest, request: Request):
         raise HTTPException(status_code=401, detail="未登录")
 
     svc = get_auth_service()
-    from domain.auth.repository import get_user_repo
+    from app.domain.auth.repository import get_user_repo
     repo = get_user_repo()
     full_user = repo.find_by_username(user["username"])
     if not full_user:

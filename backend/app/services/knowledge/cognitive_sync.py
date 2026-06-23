@@ -86,16 +86,9 @@ def _trigger_graph_update(user_id: str, conversation_id: str, new_branch_name: s
             if not root_dir_id:
                 return
 
-            # 已存在的图谱 → 增量合并；不存在 → 新建
-            data.knowledge_graphs.get(root_dir_id)
-
-            from app.api.knowledge.knowledge_routes import generate_graph_logic
-            await generate_graph_logic(
-                user_id=user_id,
-                partition_id=root_dir_id,
-                data=data,
-                branch_name=new_branch_name,
-            )
+            # v5: 图谱更新已迁移到 /api/knowledge-tree/ai/generate
+            # 旧逻辑 generate_graph_logic 已删除，此处仅记录日志
+            logger.debug(f"知识图谱更新触发: root_dir_id={root_dir_id}, branch={new_branch_name}")
         except Exception as e:
             logger.debug(f"异步图谱更新跳过: {e}")
 

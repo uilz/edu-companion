@@ -21,27 +21,30 @@ router = APIRouter(prefix="/api/files", tags=["文件管理"])
 # 上传目录
 UPLOAD_DIR = COMPANION_HOME / "uploads"
 
-# 模块级 EventBus（供 _index_background 复用）
-_index_event_bus = None
-
-
-def _get_index_event_bus():
-    global _index_event_bus
-    if _index_event_bus is None:
-        from app.config import settings
-        from app.infrastructure.event_bus import EventBus
-        _index_event_bus = EventBus(handler_timeout=settings.event_bus_timeout)
-    return _index_event_bus
-
 
 # 支持的文件类型
 ALLOWED_EXTENSIONS = {
-    ".pdf", ".docx", ".pptx", ".xlsx",
-    ".md", ".txt", ".html", ".htm",
-    ".csv", ".json", ".xml",
-    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp",
+    # 文档
+    ".pdf", ".docx", ".doc", ".pptx", ".ppt", ".xlsx", ".xls",
+    ".md", ".txt", ".html", ".htm", ".csv", ".json", ".xml",
+    # 图片
+    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg", ".ico", ".tiff", ".tif", ".avif",
+    # 音频
     ".mp3", ".wav", ".m4a", ".ogg",
+    # 视频
+    ".mp4", ".avi", ".mov", ".mkv", ".webm",
+    # 压缩
     ".zip",
+    # 代码
+    ".py", ".js", ".ts", ".jsx", ".tsx",
+    ".java", ".cpp", ".c", ".h", ".hpp",
+    ".sql", ".yaml", ".yml", ".toml", ".ini",
+    ".rs", ".go", ".rb", ".php", ".swift",
+    ".kt", ".scala", ".r", ".lua", ".sh",
+    ".vue", ".svelte", ".dart", ".gradle", ".cmake",
+    ".tex", ".m", ".mm", ".pl", ".pm",
+    # 流程图/思维导图
+    ".drawio", ".xmind", ".opml",
 }
 
 # 最大文件大小限制（50MB）
@@ -63,36 +66,46 @@ def file_type(ext: str) -> str:
     """扩展名 → 文件类型"""
     if ext in (".pdf",):
         return "pdf"
-    if ext in (".docx",):
+    if ext in (".docx", ".doc"):
         return "docx"
-    if ext in (".pptx",):
+    if ext in (".pptx", ".ppt"):
         return "pptx"
-    if ext in (".xlsx",):
+    if ext in (".xlsx", ".xls"):
         return "xlsx"
-    if ext in (".md", ".txt"):
+    if ext in (".md", ".txt", ".html", ".htm"):
         return "document"
-    if ext in (".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"):
+    if ext in (".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg", ".ico", ".tiff", ".tif", ".avif"):
         return "image"
     if ext in (".mp3", ".wav", ".m4a", ".ogg"):
         return "audio"
+    if ext in (".mp4", ".avi", ".mov", ".mkv", ".webm"):
+        return "video"
+    if ext in (
+        ".py", ".js", ".ts", ".jsx", ".tsx",
+        ".java", ".cpp", ".c", ".h", ".hpp",
+        ".sql", ".yaml", ".yml", ".toml", ".ini",
+        ".rs", ".go", ".rb", ".php", ".swift",
+        ".kt", ".scala", ".r", ".lua", ".sh",
+        ".vue", ".svelte", ".dart", ".gradle", ".cmake",
+        ".tex", ".m", ".mm", ".pl", ".pm",
+    ):
+        return "code"
+    if ext in (".drawio", ".xmind", ".opml"):
+        return "diagram"
     return "other"
 
 
 # ── 上传 ──
 
-@router.post("/upload", summary="上传文件")
-async def upload_file(
-    file: UploadFile = File(...),
-    purpose: str = Form(default="auto"),
-    upload_source: str = Form(default="files_page"),
-    level: str = Form(default="partition"),
-    parent_id: str = Form(default=""),
-    uid: str = Depends(current_user_id),
-):
-    """上传文件，自动解析+索引。"""
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="未选择文件")
-
+async def _do_upload(
+    file: UploadFile,
+    purpose: str,
+    upload_source: str,
+    level: str,
+    parent_id: str,
+    uid: str,
+) -> dict:
+    """上传核心逻辑（可被 API 路由和 workspace 入口共用）"""
     ext = Path(file.filename).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail=f"不支持的文件格式: {ext}")
@@ -138,8 +151,25 @@ async def upload_file(
         "file_name": file.filename,
         "file_size": len(content),
         "purpose": actual_purpose,
+        "file_type": file_type(ext),
         "status": "uploading",
     }
+
+
+@router.post("/upload", summary="上传文件")
+async def upload_file(
+    file: UploadFile = File(...),
+    purpose: str = Form(default="auto"),
+    upload_source: str = Form(default="files_page"),
+    level: str = Form(default="partition"),
+    parent_id: str = Form(default=""),
+    uid: str = Depends(current_user_id),
+):
+    """上传文件，自动解析+索引。"""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="未选择文件")
+
+    return await _do_upload(file, purpose, upload_source, level, parent_id, uid)
 
 
 # ── 后台索引 ──
@@ -150,27 +180,12 @@ async def _index_background(
 ):
     """后台异步索引"""
     try:
-        from app.infrastructure.media.material_indexer import material_indexer
+        from app.infrastructure.files.indexer import material_indexer
         result = await material_indexer.index_file(
             user_id, material_id, file_path, file_name,
             file_type, file_size, purpose,
         )
         logger.info("后台索引完成: %s → %s", material_id, result["status"])
-
-        chunk_count = result.get("chunk_count", 0)
-        if chunk_count > 0:
-            try:
-                from domain.materials.service import MaterialServiceImpl
-
-                class _IndexEvent:
-                    user_id = user_id
-                    material_id = material_id
-                    chunk_count = chunk_count
-
-                svc = MaterialServiceImpl(event_bus=_get_index_event_bus())
-                await svc.on_indexed(_IndexEvent)
-            except Exception as post_err:
-                logger.warning("资料后处理跳过: %s — %s", material_id, post_err)
     except Exception as e:
         logger.error("后台索引失败: %s — %s", material_id, e)
         try:

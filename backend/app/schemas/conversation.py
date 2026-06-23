@@ -1,6 +1,6 @@
 """
 对话系统数据模型 v4.0
-层级：分区 → 领域 → 专题 → 对话 → 消息节点
+层级：DirectoryNode 统一模型 → 对话 → 消息节点
 树形消息结构，支持内联分支导航，不再有独立分支实体
 """
 
@@ -86,15 +86,6 @@ class FileRecord(BaseModel):
     created_at: float = Field(default_factory=time.time)
 
 
-# ── Cross Partition Mark（不变） ──
-
-class CrossPartitionMark(BaseModel):
-    """跨分区标记，记录消息是否关联到其他分区"""
-    is_cross: bool = False
-    primary_partition: str = ""
-    linked_partitions: list[str] = Field(default_factory=list)
-
-
 # ── SubBranchRef（子支引用锚点） ──
 
 class SubBranchRef(BaseModel):
@@ -114,16 +105,14 @@ class SubBranchRef(BaseModel):
 from app.schemas.directory_node import MessageNode as TreeNode
 
 
-# ── Link Node（不变，branch_id → conversation_id） ──
+# ── Link Node ──
 
 class LinkNode(BaseModel):
-    """链接节点，记录跨对话/跨分区的消息引用关系"""
+    """链接节点，记录跨对话的消息引用关系"""
     id: str = Field(default_factory=lambda: str(uuid4()))
     type: Literal["link"] = "link"
     target_message_id: str
-    target_partition_id: str
     target_conversation_id: str
-    source_partition_id: str
     source_conversation_id: str
     preview_summary: str | None = None
     timestamp: float = Field(default_factory=time.time)
@@ -132,18 +121,11 @@ class LinkNode(BaseModel):
 # ── Conversation（v4: 替换旧 Branch） ──
 
 class Conversation(BaseModel):
-    """对话线程，可挂载到任意层级节点（partition / domain / topic）下。
+    """对话线程，可挂载到任意 DirectoryNode 层级下。
     type 字段区分对话类型：normal（对话系统）/ tree_exploration（知识树探索）/ temporary（临时）。
-    parent_id + parent_type 记录直接父级，补全 ID 字段方便跨级查找。"""
+    直接父级通过 DirectoryNode.parent_id 确定，不再在 Conversation 中冗余存储。"""
     id: str = Field(default_factory=lambda: str(uuid4()))
-    # ── 挂载信息 ──
-    parent_id: str = ""        # 直接父级 ID（partition_id / domain_id / topic_id）
-    parent_type: str = ""      # "partition" | "domain" | "topic"
     type: str = "normal"       # "normal" | "tree_exploration" | "temporary"
-    # ── 补全 ID（跨级查找用，避免递归遍历） ──
-    partition_id: str = ""
-    domain_id: str = ""
-    topic_id: str = ""         # 向下兼容旧数据
     # ── 对话属性 ──
     name: str = ""
     path: list[str] = Field(default_factory=list)  # ordered message ids
@@ -168,56 +150,7 @@ class Conversation(BaseModel):
     metadata: dict = Field(default_factory=dict)  # 通用元数据（如 socratic_question_count）
 
 
-# ── Topic（v4 新增） ──
-
-class Topic(BaseModel):
-    """领域下的专题，例如「微积分」「线性代数」"""
-    id: str = Field(default_factory=lambda: str(uuid4()))
-    domain_id: str = ""
-    partition_id: str = ""  # 临时分区下直接挂载时使用
-    name: str
-    emoji: str = "📝"
-    active_conversation_id: str = ""
-    created_at: float = Field(default_factory=time.time)
-    updated_at: float = Field(default_factory=time.time)
-
-
-# ── Domain（v4 新增） ──
-
-class Domain(BaseModel):
-    """分区下的领域，例如「分析」「代数」「几何」"""
-    id: str = Field(default_factory=lambda: str(uuid4()))
-    partition_id: str
-    name: str
-    emoji: str = "📚"
-    created_at: float = Field(default_factory=time.time)
-    updated_at: float = Field(default_factory=time.time)
-
-
-# ── Partition（清理 active_branch_id） ──
-
-class Partition(BaseModel):
-    """顶层分区，代表一个学习方向或科目大类。包含虚拟根节点和上下文摘要。"""
-    id: str = Field(default_factory=lambda: str(uuid4()))
-    name: str
-    subject: str = ""
-    direction: str = "subject"
-    emoji: str = "💬"
-    color: str = "#0066FF"
-    root_id: str  # virtual root node id
-    context_summary: str = ""
-    tags: list[str] = Field(default_factory=list)
-    is_temp: bool = False  # True = 临时分区（不可重命名，不接入图谱）
-    created_at: float = Field(default_factory=time.time)
-    updated_at: float = Field(default_factory=time.time)
-    last_active_at: float = Field(default_factory=time.time)
-    message_count: int = 0
-    total_tokens: int = 0
-    domain_tags: list[str] = Field(default_factory=list)
-    domain_confidence: float = 0.0
-
-
-# ── Knowledge Graph（不变） ──
+# ── Knowledge Graph ──
 
 class KGNode(BaseModel):
     """知识图谱节点，代表一个知识点概念"""
@@ -242,9 +175,8 @@ class KGEdge(BaseModel):
     weight: float = 1.0
 
 class KnowledgeGraph(BaseModel):
-    """知识图谱，按分区组织的知识点网络"""
+    """知识图谱，由directory_node (dir/conv) 关联组织，不再依赖 partition_id"""
     id: str = Field(default_factory=lambda: str(uuid4()))
-    partition_id: str
     name: str = ""
     nodes: dict[str, KGNode] = Field(default_factory=dict)
     edges: list[KGEdge] = Field(default_factory=list)
@@ -254,13 +186,12 @@ class KnowledgeGraph(BaseModel):
     updated_at: float = Field(default_factory=time.time)
 
 
-# ── Response Block（branch_id → conversation_id） ──
+# ── Response Block ──
 
 class ResponseBlock(BaseModel):
     """助教回复块，包含各类多模态回复内容（文本/练习/视频/思维导图等）"""
     id: str = Field(default_factory=lambda: str(uuid4()))
     message_id: str = ""
-    partition_id: str = ""
     conversation_id: str = ""
     type: str  # text | practice | video | image | audio | mindmap | document
     status: str = "ready"
@@ -280,14 +211,13 @@ class BackgroundJob(BaseModel):
     result: dict | None = None
     progress: float = 0.0
     block_id: str = ""
-    partition_id: str = ""
     conversation_id: str = ""
     created_at: float = Field(default_factory=time.time)
     completed_at: float | None = None
     error: str | None = None
 
 
-# ── User Data Root（v4: branches→conversations, +domains, +topics） ──
+# ── User Data Root（DirectoryNode 版本） ──
 
 class UserData(BaseModel):
     """用户数据根模型 — DirectoryNode 版本 (取代 v4 partition/domain/topic)"""

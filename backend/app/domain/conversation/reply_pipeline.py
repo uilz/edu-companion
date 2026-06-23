@@ -9,6 +9,11 @@ invoke() 为单一入口，产出 ReplyEvent 流。非流式消费只需监听 d
   Stage 3: LLM tool loop（工具调用 → 真实流式文本回复）
   Stage 4: PostProcessor 链（追问/来源/存储/sync）
   Stage 5: done 事件
+
+注意：本模块位于 domain/conversation/ 但包含对 app.infrastructure.llm 和
+app.services 的导入。这些是领域编排层（domain orchestration）对基础设施的合法调用，
+因为 LLM 调用、工具执行和持久化存储是领域逻辑运行所必需的运行时依赖。
+这些导入采用方法内懒加载（lazy import）模式以最小化模块加载时的耦合。
 """
 
 from __future__ import annotations
@@ -28,7 +33,7 @@ from app.schemas.conversation import (
     QuoteBlock,
 )
 from app.services.common import get_data_repo
-from app.services.knowledge.tree_ops import tree_ops
+from app.services.knowledge.tree_service import tree_ops
 from app.services.common.classifier_service import classifier_service
 from app.infrastructure.llm.tool_executor import tool_executor, SLOW_TOOLS
 from app.services.analytics.emotion_analyzer import emotion_analyzer
@@ -162,7 +167,9 @@ class SocraticCounter(PostProcessor):
 
     async def process(self, input: PostProcessInput) -> None:
         data = get_data_repo().load(input.user_id)
-        conv = data.conversations.get(input.conversation_id)
+        conv = data.directory_nodes.get(input.conversation_id)
+        if conv and conv.node_type != "conv":
+            conv = None
         if not conv:
             return
         meta = getattr(conv, 'metadata', None) or {}
@@ -377,7 +384,7 @@ class ReplyPipeline:
         # Stage 3: LLM tool loop（真实流式）
         # ═══════════════════════════════════════════
         from app.infrastructure.llm.llm_service import llm_service
-        from app.services.conversation.context_pipeline import build_llm_messages
+        from app.domain.conversation.context_pipeline import build_llm_messages
         from app.infrastructure.llm.tool_repository import get_tool_repository
 
         enriched_text = user_text
@@ -387,7 +394,7 @@ class ReplyPipeline:
                 enriched_text = f"（引用上文：「{qt}」）\n{user_text}"
 
         data = get_data_repo().load(user_id)
-        partition = data.partitions.get(partition_id)
+        partition = data.directory_nodes.get(partition_id)
         conversation = _find_conversation(data, partition_id, conversation_id)
         recent = _get_recent_messages(conversation, data, 8)
 
@@ -395,6 +402,38 @@ class ReplyPipeline:
             partition, conversation, recent, enriched_text, user_id,
             agent_label=self.agent_label,
         )
+
+        # ── 知识树探索会话：注入节点上下文 ──
+        if conversation and conversation.metadata.get("type") == "tree_exploration":
+            knowledge_node_id = conversation.metadata.get("knowledge_node_id", "")
+            if knowledge_node_id:
+                try:
+                    from app.services.knowledge_v2.knowledge_node_service import kn_svc
+                    bound_node = kn_svc.get_node(user_id, knowledge_node_id)
+                    if bound_node:
+                        scope_ids = _get_descendant_ids(user_id, knowledge_node_id)
+                        scope_labels = {}
+                        for sid in scope_ids:
+                            sn = kn_svc.get_node(user_id, sid)
+                            if sn:
+                                scope_labels[sid] = sn.label
+                        ctx_prompt = (
+                            f"## 当前知识树探索上下文\n"
+                            f"- 绑定节点: {bound_node.label}（ID: {knowledge_node_id}）\n"
+                            f"- 层级: {bound_node.level}\n"
+                            f"- 描述: {bound_node.brief or '无'}\n"
+                            f"- 作用域内节点（你可通过 knowledge_* 工具操作）:\n"
+                            + "\n".join(f"  [{sid}] {label}" for sid, label in scope_labels.items()) +
+                            "\n\n## 严格规则\n"
+                            f"1. 你只能编辑、扩充、删除上列作用域内的节点。\n"
+                            f"2. 如果用户提及作用域外的节点，告知其不在当前探索范围内。\n"
+                            f"3. 使用 knowledge_* 工具来执行操作，不要用 [ACTION:] 标记。\n"
+                            f"4. 如果用户完成探索，可以建议他们回到知识树视图查看变更。\n"
+                        )
+                        llm_messages.insert(0, {"role": "system", "content": ctx_prompt})
+                except Exception as e:
+                    logger.debug("知识树上下文注入失败: %s", e)
+
         tools = get_tool_repository().to_llm_schema()
 
         response_blocks: list[ResponseBlock] = []
@@ -553,16 +592,28 @@ class ReplyPipeline:
 def _find_conversation(data, partition_id: str, conversation_id: str = ""):
     """查找活跃对话"""
     if conversation_id:
-        return data.conversations.get(conversation_id)
-    partition = data.partitions.get(partition_id)
-    if partition:
-        for topic in data.topics.values():
-            domain = data.domains.get(topic.domain_id)
-            if domain and domain.partition_id == partition_id:
-                cid = topic.active_conversation_id
-                if cid and cid in data.conversations:
-                    return data.conversations[cid]
-    return None
+        return data.directory_nodes.get(conversation_id)
+    # Find the most recent conv node under the given directory
+    convs = sorted(
+        (dn for dn in data.directory_nodes.values()
+         if dn.node_type == "conv" and dn.parent_id == partition_id),
+        key=lambda x: x.updated_at,
+        reverse=True,
+    )
+    return convs[0] if convs else None
+
+
+def _get_descendant_ids(user_id: str, node_id: str) -> list[str]:
+    """获取节点的所有子孙节点 ID"""
+    try:
+        from app.services.knowledge_v2.knowledge_node_service import kn_svc
+        result = [node_id]
+        children = kn_svc.get_children(user_id, node_id)
+        for child in children:
+            result.extend(_get_descendant_ids(user_id, child.id))
+        return result
+    except Exception:
+        return [node_id]
 
 
 def _get_recent_messages(conversation, data, count: int = 8) -> list[TreeNode]:
@@ -570,7 +621,7 @@ def _get_recent_messages(conversation, data, count: int = 8) -> list[TreeNode]:
     if not conversation:
         return []
     messages = []
-    for nid in conversation.path[-count:]:
+    for nid in conversation.conv_message_ids[-count:]:
         node = data.nodes.get(nid)
         if node and not node.is_deleted:
             messages.append(node)
