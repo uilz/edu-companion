@@ -27,7 +27,7 @@ export default function ExpandBlock({ skillName, explanation }: Props) {
   useEffect(() => {
     if (!expanded || data) return;
     setLoading(true);
-    authedFetch(`/api/v2/expand/knowledge`, {
+    authedFetch(`/api/expand/knowledge`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ skill_name: skillName, explanation: explanation || "" }),

@@ -650,7 +650,7 @@ export async function getQuestionHint(
   hint: { level: number; text: string; type: string };
   next_level_available: boolean;
 }> {
-  const res = await authedFetch("/api/practice/hint", {
+  const res = await authedFetch("/api/v7/practice/hint", {
     method: "POST",
     body: JSON.stringify({ question_id: questionId, current_level: currentLevel }),
   });

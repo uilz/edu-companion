@@ -132,7 +132,7 @@ export function OverviewTab() {
       try {
         const [statsRes, dashRes, achieveRes, weakRes, convRes, propRes, eventRes] = await Promise.all([
           authedFetch(`/api/v7/practice/stats/overview`),
-          authedFetch(`/api/v2/dashboard/overview?user_id=${userId}`),
+          authedFetch(`/api/dashboard/overview?user_id=${userId}`),
           authedFetch(`/api/v7/practice/achievements`),
           authedFetch(`/api/v7/practice/stats/weak-skills`),
           authedFetch(`/api/conversations?limit=3`),

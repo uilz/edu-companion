@@ -58,7 +58,7 @@ export function usePracticeSession(initialSkill: string | null) {
     setLoading(true);
     try {
       const data = await api<Session & { questions?: Question[] }>(
-        `/api/practice/sessions`,
+        `/api/v7/practice/sessions`,
         {
           method: "POST",
           body: JSON.stringify({
@@ -87,7 +87,7 @@ export function usePracticeSession(initialSkill: string | null) {
     try {
       const timeSpent = (Date.now() - startTime) / 1000;
       const data = await api<SubmitResult>(
-        `/api/practice/sessions/${session.session_id}/submit`,
+        `/api/v7/practice/sessions/${session.session_id}/submit`,
         {
           method: "POST",
           body: JSON.stringify({
@@ -108,7 +108,7 @@ export function usePracticeSession(initialSkill: string | null) {
     if (!q) return;
     try {
       const data = await api<{ hint: HintResult }>(
-        `/api/practice/hint`,
+        `/api/v7/practice/hint`,
         {
           method: "POST",
           body: JSON.stringify({ question_id: q.question_id, current_level: hintLevel }),

@@ -18,10 +18,10 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.learning.study import router as study_router
-from app.api.practice.practice import router as practice_router
+# practice_router 已迁移到 v7 (practice_routes_router)
 from app.api.learning.progress import router as progress_router
 from app.api.conversation.conversation import router as conversation_router
-from app.api.knowledge.knowledge import router as knowledge_router
+# knowledge_router 已迁移到 v5 (knowledge_tree_v5_router) — explain/retention/graph 均在 v5 中
 from app.api.learning.partition_progress import router as partition_progress_router
 from app.api.system.multimodal import router as multimodal_router
 from app.api.system.achievements import router as achievements_router
@@ -405,14 +405,10 @@ app.add_middleware(AuthMiddleware)
 # chat_router 已删除 — WS 端点在 conversation.py
 # 学习计划
 app.include_router(study_router)
-# 练习题
-app.include_router(practice_router)
 # 学习进度
 app.include_router(progress_router)
 # 对话系统（树结构 + WebSocket）
 app.include_router(conversation_router, prefix="/api/conversations", tags=["conversations"])
-# 知识图谱 + 前置卡控
-app.include_router(knowledge_router)
 # 学习画像 (v3.0 PartitionProgress)
 app.include_router(partition_progress_router)
 # 多模态（STT 转写）

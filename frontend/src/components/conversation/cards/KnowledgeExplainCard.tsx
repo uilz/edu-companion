@@ -160,7 +160,7 @@ export default function KnowledgeExplainCard({ card }: { card: ExplainCardData }
     (async () => {
       setLoading(true);
       try {
-        const res = await authedFetch(`/api/knowledge/explain`, {
+        const res = await authedFetch(`/api/knowledge-tree/explain`, {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: selected_text, node_id: context_node_id || undefined, style: "simple" }),
         });
@@ -196,7 +196,7 @@ export default function KnowledgeExplainCard({ card }: { card: ExplainCardData }
     try {
       const context = explanation ? exp : selected_text;
       const prompt = `上下文：${context}\n\n用户提问：${text}`;
-      const res = await authedFetch(`/api/knowledge/explain`, {
+      const res = await authedFetch(`/api/knowledge-tree/explain`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: prompt, node_id: context_node_id || undefined, style: "conversation" }),
       });

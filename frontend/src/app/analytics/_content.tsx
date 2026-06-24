@@ -28,7 +28,7 @@ export default function AnalyticsContent() {
 
   useEffect(() => {
     setLoading(true);
-    authedFetch(`/api/practice/stats?time_range=${timeRange}`)
+    authedFetch(`/api/v7/practice/stats?time_range=${timeRange}`)
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
@@ -42,7 +42,7 @@ export default function AnalyticsContent() {
 
   useEffect(() => {
     if (tab === "habits") {
-      authedFetch(`/api/practice/behavior?time_range=${timeRange}`)
+      authedFetch(`/api/v7/practice/behavior?time_range=${timeRange}`)
         .then((r) => r.json())
         .then((d) => setBehaviorData(d))
         .catch(() => {});

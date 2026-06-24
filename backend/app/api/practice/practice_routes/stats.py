@@ -11,6 +11,10 @@ from app.services.practice.practice_stats import (
     get_overview, get_daily_trend, get_session_history,
     get_error_distribution, get_weak_skills,
 )
+from app.services.practice.engine import (
+    compute_practice_stats,
+    compute_behavior_report_data,
+)
 from app.services.analytics.achievement_service import (
     check_achievements, get_all_achievements, get_recent_unlocks, get_badge_stats,
 )
@@ -80,3 +84,20 @@ async def api_check_achievements(user_id: str = Depends(current_user_id)):
     _ensure_tables()
     newly = check_achievements(user_id)
     return {"newly_unlocked": newly, "count": len(newly)}
+
+
+# ═══════════════════════════════════════════════
+# 综合统计 + 学习行为分析（旧版兼容）
+# ═══════════════════════════════════════════════
+
+
+@router.get("/stats")
+async def get_stats(user_id: str = Depends(current_user_id), time_range: str = "week"):
+    """获取练习统计"""
+    return compute_practice_stats(time_range=time_range, user_id=user_id)
+
+
+@router.get("/behavior")
+async def get_behavior_report(user_id: str = Depends(current_user_id), time_range: str = "week"):
+    """学习行为分析报告"""
+    return compute_behavior_report_data(time_range=time_range, user_id=user_id)

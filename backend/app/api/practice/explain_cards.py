@@ -20,7 +20,7 @@ from fastapi import APIRouter, HTTPException, Query
 from shared.constants import get_user_id
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/knowledge/explain-cards", tags=["解释卡片"])
+router = APIRouter(prefix="/api/knowledge-tree/explain-cards", tags=["解释卡片"])
 
 
 # ── 数据模型 ──

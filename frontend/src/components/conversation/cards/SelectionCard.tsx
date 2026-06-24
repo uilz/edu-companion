@@ -68,7 +68,7 @@ export default function SelectionCard({
     setLoading(true);
     setMode("explaining");
     try {
-      const res = await authedFetch(`/api/knowledge/explain`, {
+      const res = await authedFetch(`/api/knowledge-tree/explain`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

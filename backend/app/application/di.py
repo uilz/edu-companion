@@ -182,7 +182,7 @@ class AppContainer:
 
     def _create_knowledge_v5(self) -> dict:
         """创建 Knowledge v5 服务层 (四实体解耦架构)"""
-        from app.services.knowledge_v2 import (
+        from app.services.knowledge_tree import (
             KnowledgeNodeService, ConversationService,
             NavigationService, MessageService,
         )

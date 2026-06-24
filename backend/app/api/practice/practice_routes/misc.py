@@ -1,4 +1,4 @@
-"""自适应组题 + 秘书联动 + 答题历史 + 推荐"""
+"""自适应组题 + 秘书联动 + 答题历史 + 推荐 + 提示 + 内联练习"""
 from __future__ import annotations
 
 import json as _json
@@ -6,11 +6,18 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
 
 from app.domain.auth.dependencies import current_user_id
 from app.services.practice.practice_question_bank import _ensure_tables
 from app.services.practice.practice_adaptive import adaptive_select_v2
 from app.services.practice.practice_stats import get_recommendations
+from app.services.practice.engine import (
+    get_hint_for_question,
+    get_inline_hint,
+    build_reply_text,
+    update_cognitive_after_practice,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -179,3 +186,85 @@ async def api_practice_recommendations(
     """综合推荐：薄弱知识点 + 待复习题目 + 推荐题库 + 学习建议"""
     _ensure_tables()
     return get_recommendations(user_id, limit=min(limit, 20))
+
+
+# ═══════════════════════════════════════════════
+# 提示 + 内联练习
+# ═══════════════════════════════════════════════
+
+
+class _HintRequest(BaseModel):
+    question_id: str
+    current_level: int = 0
+
+
+class _InlineAnswerRequest(BaseModel):
+    block_id: str
+    answer: str
+
+
+class _InlineHintRequest(BaseModel):
+    block_id: str
+
+
+@router.post("/hint")
+async def get_hint(req: _HintRequest):
+    """获取提示"""
+    result = get_hint_for_question(req.question_id, req.current_level)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Question not found")
+    return result
+
+
+@router.post("/inline/answer")
+async def inline_answer(req: _InlineAnswerRequest, user_id: str = Depends(current_user_id)):
+    """对话内联练习 — 提交答案，读取 response_block 内容校验"""
+    from app.services.common import get_data_repo
+    from shared.knowledge_trace import get_cognitive_state
+    from shared.constants import get_mastery_label
+
+    data = get_data_repo().load(user_id)
+    block = data.response_blocks.get(req.block_id)
+    if not block:
+        raise HTTPException(404, "Practice block not found")
+
+    content = block.content or {}
+    correct_answer = content.get("correct_answer", "").strip().upper()
+    explanation = content.get("explanation") or content.get("reply_expected", "") or ""
+    skill_id = content.get("skill_id", "")
+    is_correct = req.answer.strip().upper() == correct_answer
+
+    # 更新知识状态
+    knowledge_update = {}
+    if skill_id:
+        state = get_cognitive_state(user_id, skill_id)
+        cog = update_cognitive_after_practice(
+            user_id=user_id,
+            skill_id=skill_id,
+            is_correct=is_correct,
+        )
+        knowledge_update = {
+            "skill_id": skill_id,
+            "p_known_before": cog["p_before"],
+            "p_known_after": cog["p_after"],
+            "mastery_level": get_mastery_label(state.p_known, state.attempt_count),
+            "cognitive_proficiency": cog["cognitive_proficiency"],
+        }
+
+    correct_label = content.get("correct_answer", "")
+    reply_text = build_reply_text(is_correct, correct_label, explanation)
+
+    return {
+        "is_correct": is_correct,
+        "reply_text": reply_text,
+        "knowledge_update": knowledge_update,
+    }
+
+
+@router.post("/inline/hint")
+async def inline_hint(req: _InlineHintRequest, user_id: str = Depends(current_user_id)):
+    """对话内联练习 — 获取提示"""
+    result = get_inline_hint(req.block_id, user_id)
+    if result is None:
+        raise HTTPException(404, "Practice block not found")
+    return result

@@ -408,7 +408,7 @@ class ReplyPipeline:
             knowledge_node_id = conversation.metadata.get("knowledge_node_id", "")
             if knowledge_node_id:
                 try:
-                    from app.services.knowledge_v2.knowledge_node_service import kn_svc
+                    from app.services.knowledge_tree.knowledge_node_service import kn_svc
                     bound_node = kn_svc.get_node(user_id, knowledge_node_id)
                     if bound_node:
                         scope_ids = _get_descendant_ids(user_id, knowledge_node_id)
@@ -606,7 +606,7 @@ def _find_conversation(data, partition_id: str, conversation_id: str = ""):
 def _get_descendant_ids(user_id: str, node_id: str) -> list[str]:
     """获取节点的所有子孙节点 ID"""
     try:
-        from app.services.knowledge_v2.knowledge_node_service import kn_svc
+        from app.services.knowledge_tree.knowledge_node_service import kn_svc
         result = [node_id]
         children = kn_svc.get_children(user_id, node_id)
         for child in children:

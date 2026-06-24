@@ -16,7 +16,7 @@ export function RetentionPanel() {
   // 请求遗忘曲线数据
   useEffect(() => {
     if (!userId) { setLoading(false); return; }
-    authedFetch(`/api/knowledge/retention?user_id=${userId}`)
+    authedFetch(`/api/knowledge-tree/retention?user_id=${userId}`)
       .then((r) => r.json())
       .then(setData)
       .catch(() => {})

@@ -34,7 +34,7 @@ from app.schemas.directory_node import DirectoryNode
 tree_ops = TreeOpsService()
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v2")
+router = APIRouter(prefix="/api")
 
 # ═══════════════════════════════════════════════
 # 辅助：将 UserData 实体转为 graph node dict
@@ -118,7 +118,7 @@ class CognitiveConfirmRequest(BaseModel):
 
 
 @router.post("/messages/{message_id}/cognitive-confirm")
-def confirm_message_cognitive(message_id: str, req: CognitiveConfirmRequest, user_id: str = Depends(current_user_id)) -> dict:
+async def confirm_message_cognitive(message_id: str, req: CognitiveConfirmRequest, user_id: str = Depends(current_user_id)) -> dict:
     """用户确认消息的认知分类归属后回写 messages 表"""
     node_ids = req.cognitive_node_ids
     if not node_ids:
@@ -147,21 +147,21 @@ def confirm_message_cognitive(message_id: str, req: CognitiveConfirmRequest, use
     except Exception:
         logger.debug("沉浸深度更新失败", exc_info=True)
 
-    # v6 Phase 4: 发布 message.classified 事件（同步写入 cognitive_events）
+    # v6 Phase 4: 发布 message.classified 事件 (→ EventBus)
     try:
-        from app.services.common.event_service import event_service
+        from app.application.di import get_event_bus
+        from shared.events import MessageClassified
         conv_id = get_message_conversation_id(message_id, user_id)
-        # 按 level 区分 topic/atom
         topic_ids = [n["id"] for n in nodes if n.get("level") in ("topic", "domain", "partition")]
         atom_ids = [n["id"] for n in nodes if n.get("level") == "atom"]
-        event_service.emit_message_classified(
+        await get_event_bus().publish(MessageClassified(
             user_id=user_id,
             message_id=message_id,
             conversation_id=conv_id or "",
             topic_node_ids=topic_ids,
             atom_node_ids=atom_ids,
             mode="confirm",
-        )
+        ))
     except Exception:
         logger.debug("v6 事件发布失败", exc_info=True)
 
