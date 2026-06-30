@@ -29,6 +29,7 @@ export default function PracticeSessionPage() {
   const [submitting, setSubmitting] = useState(false);
   const [skipped, setSkipped] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [confidenceBefore, setConfidenceBefore] = useState<number | null>(null);
   const questionStartRef = useRef(Date.now());
 
   const loadSession = useCallback(async () => {
@@ -65,6 +66,7 @@ export default function PracticeSessionPage() {
 
   const resetQuestion = () => {
     setShowFeedback(false); setSelected([]); setLastResult(null); setSkipped(false);
+    setConfidenceBefore(null);
     questionStartRef.current = Date.now();
   };
 
@@ -83,7 +85,7 @@ export default function PracticeSessionPage() {
     setSubmitError("");
     const ts = Math.floor((Date.now() - questionStartRef.current) / 1000);
     try {
-      const r = await submitAnswer(sessionId, currentQuestion!.id, finalAnswer, ts);
+      const r = await submitAnswer(sessionId, currentQuestion!.id, finalAnswer, ts, undefined, confidenceBefore ?? undefined);
       setLastResult(r); setShowFeedback(true);
       setSession(p => p ? { ...p, questions: p.questions?.map((q: any, i: number) =>
         i === currentIdx ? { ...q, answered: true } : q
@@ -258,6 +260,8 @@ export default function PracticeSessionPage() {
           isLast={isLastQuestion}
           isExam={isExam}
           submitError={submitError}
+          confidenceBefore={confidenceBefore}
+          onConfidenceChange={setConfidenceBefore}
         />
       )}
     </div>

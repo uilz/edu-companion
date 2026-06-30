@@ -162,7 +162,7 @@ class TestEnsurePartition:
         assert node.level == "partition"
         assert node.label == "文科"
 
-    def test_ensure_partition_idempotent(self, repo, writer):
+    def test_ensure_dir_idempotent(self, repo, writer):
         """ensure_partition 幂等"""
         p1 = writer.ensure_partition(label="语言学")
         p2 = writer.ensure_partition(label="语言学")

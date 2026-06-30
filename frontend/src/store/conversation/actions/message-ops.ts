@@ -1,46 +1,23 @@
 /**
  * message-ops — 消息操作
  * loadMessages, deleteMessage, editMessage, versionSwitch
+ *
+ * 所有操作直接写入 useMessageStore，不再通过 conversation-store 代理。
  */
 import type { MessageNode, ResponseBlock } from "@/types";
 import { apiFetch } from "../tree-helpers";
+import { getActiveConvId } from "../conversation-store";
+import { useMessageStore } from "../message-store";
 
 export async function loadMessagesImpl(set: any, get: any, conversationId: string) {
-  set({ loadingMessages: true, convError: null });
-  try {
-    const [msgData, blocksData] = await Promise.all([
-      apiFetch<{ messages: MessageNode[]; total: number }>(
-        `/tree/conversation/${conversationId}/messages?limit=50&offset=0`,
-      ),
-      apiFetch<{ blocks: ResponseBlock[] }>(
-        `/tree/conversation/${conversationId}/blocks?limit=100`,
-      ).catch(() => ({ blocks: [] as ResponseBlock[] })),
-    ]);
-    set({
-      messages: (msgData.messages || []).map((m: MessageNode & { metadata?: Record<string, unknown> }) => {
-        if (m.metadata?.follow_up_questions && !m.follow_up_questions) {
-          (m as unknown as Record<string, unknown>).follow_up_questions = m.metadata.follow_up_questions;
-        }
-        return m;
-      }),
-      responseBlocks: blocksData.blocks || [],
-      loadingMessages: false,
-    });
-  } catch (e: unknown) {
-    if (e instanceof Error && e.message.includes("404")) {
-      set({ convError: "该对话已被删除", activeConversationId: null });
-    } else {
-      set({ convError: "加载失败" });
-    }
-    set({ messages: [], responseBlocks: [], loadingMessages: false });
-  }
+  await useMessageStore.getState().loadMessages(conversationId);
 }
 
 export async function deleteMessageImpl(set: any, get: any, messageId: string) {
   try {
     await apiFetch(`/tree/message/${messageId}`, { method: "DELETE" });
-    const cId = get().activeConversationId;
-    if (cId) await get().loadMessages(cId);
+    const cId = getActiveConvId(get());
+    if (cId) await useMessageStore.getState().loadMessages(cId);
   } catch (e) {
     console.error("删除消息失败:", e);
   }
@@ -56,13 +33,11 @@ export async function editMessageImpl(set: any, get: any, messageId: string, new
       }),
     });
     const newVersionId = data.node?.id || messageId;
-    // 触发 AI 重新回复，后端通过 WS 流式输出，不手动设 loading（WS 自行管理占位消息）
     try {
       await apiFetch(`/tree/message/${newVersionId}/reply`, { method: "POST" });
     } catch { /* ignore reply errors */ }
-    // 刷新消息列表：WS 流完成后 onDone 会再次替换占位，loadMessages 幂等
-    const cId = get().activeConversationId;
-    if (cId) await get().loadMessages(cId);
+    const cId = getActiveConvId(get());
+    if (cId) await useMessageStore.getState().loadMessages(cId);
     return data.version_count || 0;
   } catch (e) {
     console.error("编辑消息失败:", e);
@@ -71,20 +46,5 @@ export async function editMessageImpl(set: any, get: any, messageId: string, new
 }
 
 export async function versionSwitchImpl(set: any, get: any, messageId: string, direction: "prev" | "next", currentIndex?: number) {
-  try {
-    const data = await apiFetch<{ messages: MessageNode[]; switched_to: string; index: number; total: number }>(
-      `/tree/message/${messageId}/switch-version`,
-      { method: "POST", body: JSON.stringify({ direction }) },
-    );
-    if (!data.messages || data.messages.length === 0) return null;
-    set((state: { responseBlocks: ResponseBlock[] }) => {
-      const newMsgIds = new Set(data.messages.map(m => m.id));
-      const newBlocks = state.responseBlocks.filter(b => newMsgIds.has(b.message_id));
-      return { messages: data.messages, responseBlocks: newBlocks };
-    });
-    return { index: data.index, total: data.total, switchedTo: data.switched_to };
-  } catch (e) {
-    console.error("版本切换失败:", e);
-    return null;
-  }
+  return useMessageStore.getState().versionSwitch(messageId, direction, currentIndex);
 }

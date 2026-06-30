@@ -87,7 +87,7 @@ class ConversationService(Protocol):
 
     async def send_message(
         self, user_id: str, content: str,
-        partition_id: str | None = None,
+        dir_id: str | None = None,
         branch_id: str | None = None,
     ) -> dict:  # → Message
         """发送消息 → LLM 回复"""
@@ -104,7 +104,7 @@ class ConversationService(Protocol):
         ...
 
     async def create_branch(
-        self, partition_id: str, name: str
+        self, dir_id: str, name: str
     ) -> dict:  # → Branch
         """在分区下创建分支"""
         ...

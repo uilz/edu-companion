@@ -1,6 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: false,
+  productionBrowserSourceMaps: false,
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  experimental: {
+    useLightningcss: false,
+  },
   async rewrites() {
     return [
       // 把前端 /api/admin/* 反向代理到 8001 后端

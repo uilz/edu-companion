@@ -20,7 +20,7 @@ class MessageService:
     """消息服务 — messages 表 CRUD"""
 
     def create_message(
-        self, user_id: str, conversation_id: str, role: str,
+        self, user_id: str, conv_id: str, role: str,
         content: str = "", content_blocks: list[dict] | None = None,
         text_summary: str = "", parent_id: str | None = None,
         knowledge_node_ids: list[str] | None = None,
@@ -29,11 +29,11 @@ class MessageService:
         msg_id = f"msg_{uuid4().hex[:12]}"
         db = get_db()
         db.execute(
-            """INSERT INTO messages (id, user_id, conversation_id, role, content, content_blocks,
+            """INSERT INTO messages (id, user_id, conv_id, role, content, content_blocks,
                text_summary, parent_id, knowledge_node_ids, timestamp)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())""",
             (
-                msg_id, user_id, conversation_id, role, content,
+                msg_id, user_id, conv_id, role, content,
                 json.dumps(content_blocks or []), text_summary, parent_id,
                 json.dumps(knowledge_node_ids or []),
             ),
@@ -94,22 +94,22 @@ class MessageService:
         return True
 
     def list_messages(
-        self, user_id: str, conversation_id: str,
+        self, user_id: str, conv_id: str,
         limit: int = 50, offset: int = 0,
     ) -> list[MessageSchema]:
         """列出会话消息"""
         db = get_db()
         rows = db.fetchall(
             """SELECT * FROM messages
-               WHERE user_id = %s AND conversation_id = %s AND is_deleted = false
+               WHERE user_id = %s AND conv_id = %s AND is_deleted = false
                ORDER BY timestamp ASC LIMIT %s OFFSET %s""",
-            (user_id, conversation_id, limit, offset),
+            (user_id, conv_id, limit, offset),
         )
         return [self._row_to_schema(r) for r in rows]
 
-    def get_message_tree(self, user_id: str, conversation_id: str) -> list[MessageSchema]:
+    def get_message_tree(self, user_id: str, conv_id: str) -> list[MessageSchema]:
         """获取会话的消息树 (按 parent_id 构建)"""
-        messages = self.list_messages(user_id, conversation_id, limit=500)
+        messages = self.list_messages(user_id, conv_id, limit=500)
         # 按树结构排序
         msg_map = {m.id: m for m in messages}
         root = [m for m in messages if m.parent_id is None or m.parent_id not in msg_map]
@@ -152,7 +152,7 @@ class MessageService:
             "sub_branch_summaries = sub_branch_summaries || %s::jsonb WHERE id = %s AND user_id = %s",
             (
                 json.dumps(msg.sub_branch_ids),
-                json.dumps([{"conversation_id": child_conv_id, "quoted_text": quoted_text, "summary": ""}]),
+                json.dumps([{"conv_id": child_conv_id, "quoted_text": quoted_text, "summary": ""}]),
                 source_msg_id, user_id,
             ),
         )
@@ -184,7 +184,7 @@ class MessageService:
 
         return MessageSchema(
             id=row["id"],
-            conversation_id=row["conversation_id"],
+            conv_id=row["conv_id"],
             role=row.get("role", "user"),
             content=row.get("content") or "",
             content_blocks=_json_list(row.get("content_blocks")),

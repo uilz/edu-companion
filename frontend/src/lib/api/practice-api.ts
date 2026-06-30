@@ -54,6 +54,7 @@ export interface V7SubmitResult {
   consecutive_correct: number;
   mastered: boolean;
   wrong_count_increased: boolean;
+  metacognition_feedback?: string;
 }
 
 export interface V7Bank {
@@ -79,10 +80,11 @@ export interface V7SessionListItem {
 
 // ── API 调用 ──
 
-import { v7, authedFetch } from "@/lib/api/api";
+import { practiceApi, authedFetch } from "@/lib/api/api";
+import type { SelfExplainRequest, SelfExplainResult } from "@/types";
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  return v7<T>(path, options);
+  return practiceApi<T>(path, options);
 }
 
 /** 根据知识点 ID 解析（或创建）题库 */
@@ -124,7 +126,8 @@ export async function submitAnswer(
   questionId: string,
   answer: string[],
   timeSpent?: number,
-  hintsUsed?: number
+  hintsUsed?: number,
+  confidenceBefore?: number
 ): Promise<V7SubmitResult> {
   return apiFetch(`/sessions/${sessionId}/submit`, {
     method: "POST",
@@ -133,6 +136,7 @@ export async function submitAnswer(
       answer,
       time_spent: timeSpent ?? 0,
       hints_used: hintsUsed ?? 0,
+      confidence_before: confidenceBefore,
     }),
   });
 }
@@ -168,7 +172,7 @@ export async function generateQuestions(
   message: string,
   options?: {
     bank_id?: string;
-    conversation_id?: string;
+    conv_id?: string;
     node_id?: string;
     material_ids?: string[];
   }
@@ -650,7 +654,7 @@ export async function getQuestionHint(
   hint: { level: number; text: string; type: string };
   next_level_available: boolean;
 }> {
-  const res = await authedFetch("/api/v7/practice/hint", {
+  const res = await authedFetch("/api/practice/hint", {
     method: "POST",
     body: JSON.stringify({ question_id: questionId, current_level: currentLevel }),
   });
@@ -710,7 +714,7 @@ export async function generateFromConversation(
   return apiFetch("/generate-from-conversation", {
     method: "POST",
     body: JSON.stringify({
-      conversation_id: conversationId,
+      conv_id: conversationId,
       message,
       context,
       material_ids: materialIds,
@@ -1012,7 +1016,7 @@ export async function resolveBankForConversation(
   return apiFetch("/resolve/conversation", {
     method: "POST",
     body: JSON.stringify({
-      conversation_id: conversationId,
+      conv_id: conversationId,
       bank_id: userSpecifiedBankId,
     }),
   });
@@ -1156,7 +1160,7 @@ export async function getImportHistory(options?: {
 
 // ── 自适应选题 ──
 
-/** 基于掌握度自适应选题 */
+/** 自适应选题 */
 export async function adaptiveSelect(
   bankId: string,
   options?: {
@@ -1175,5 +1179,43 @@ export async function adaptiveSelect(
       cognitive_node_ids: options?.cognitive_node_ids,
       exclude_ids: options?.exclude_ids,
     }),
+  });
+}
+
+// ── 自信度校准报告 ──
+
+export interface ConfidenceReportSubject {
+  subject: string;
+  sample_count: number;
+  mean_bias: number;
+  direction: "overconfident" | "underconfident" | "accurate";
+}
+
+export interface ConfidenceReport {
+  user_id: string;
+  days: number;
+  overall_bias: number;
+  by_subject: ConfidenceReportSubject[];
+  suggestion: string;
+}
+
+/** 获取自信度校准报告 */
+export async function fetchConfidenceReport(
+  options?: { subject?: string; days?: number }
+): Promise<ConfidenceReport> {
+  const params = new URLSearchParams();
+  if (options?.subject) params.set("subject", options.subject);
+  if (options?.days) params.set("days", String(options.days ?? 30));
+  const qs = params.toString();
+  return apiFetch(`/confidence-report${qs ? `?${qs}` : ""}`);
+}
+
+// ── 自我解释评估（P0-R03）─
+
+/** 提交自我解释并获取评估结果 */
+export async function submitSelfExplain(req: SelfExplainRequest): Promise<SelfExplainResult> {
+  return apiFetch<SelfExplainResult>("/self-explain", {
+    method: "POST",
+    body: JSON.stringify(req),
   });
 }

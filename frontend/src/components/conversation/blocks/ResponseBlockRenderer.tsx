@@ -11,6 +11,7 @@ import { DocumentBlock } from "./DocumentBlock";
 import { AudioBlock } from "./AudioBlock";
 import SecretarySuggestionsBlock from "./SecretarySuggestionsBlock";
 import ExpandBlock from "./ExpandBlock";
+import QuestionBlock from "./QuestionBlock";
 
 interface ResponseBlockRendererProps {
   block: ResponseBlock;
@@ -61,7 +62,19 @@ export default function ResponseBlockRenderer({ block }: ResponseBlockRendererPr
           explanation={(content.explanation as string) || ""}
         />
       );
+    case "question":
+      return <QuestionBlock content={content} convId={block.conv_id} dirId={block.dir_id} />;
     default:
-      return null;
+      // Fallback for unhandled tool block types — show raw content
+      return (
+        <div className="p-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
+          <div className="text-xs font-medium text-[var(--color-text-muted)] mb-1">
+            {type === "tool_block" ? "🔧 工具调用结果" : `📦 ${type}`}
+          </div>
+          <div className="text-sm text-[var(--color-text)] whitespace-pre-wrap">
+            {typeof content === "string" ? content : JSON.stringify(content, null, 2)}
+          </div>
+        </div>
+      );
   }
 }

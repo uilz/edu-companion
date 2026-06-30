@@ -20,7 +20,7 @@ export interface Note {
   source_text: string;
   node_ids: string[];
   message_id: string | null;
-  conversation_id: string | null;
+  conv_id: string | null;
   metadata: Record<string, any>;
   created_at: string;
 }
@@ -64,7 +64,7 @@ export async function createNote(data: {
   source_text?: string;
   node_ids?: string[];
   message_id?: string;
-  conversation_id?: string;
+  conv_id?: string;
   metadata?: Record<string, any>;
 }): Promise<{ id: string; status: string }> {
   return learningFetch("/api/learning/notes", {

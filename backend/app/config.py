@@ -60,17 +60,17 @@ class Settings(BaseSettings):
     # ── LLM 模型配置（OpenAI 兼容格式） ──
     # 文本模型 — 通用对话/讲解
     text_model: str = Field(
-        default="openai/gpt-4o-mini",
+        default="deepseek-v4-flash",
         description="文本模型 — 通用对话与讲解（env: TEXT_MODEL）",
     )
     # 文本推理模型 — 复杂题讲解/错题分析/学习规划
     text_reasoning_model: str = Field(
-        default="openai/gpt-4o",
+        default="deepseek-v4-flash",
         description="推理模型 — 复杂问题分析（env: TEXT_REASONING_MODEL）",
     )
     # 文本轻量模型 — 意图识别/情绪分析/分类
     text_fast_model: str = Field(
-        default="openai/gpt-4o-mini",
+        default="deepseek-v4-flash",
         description="轻量模型 — 意图分类/情绪识别（env: TEXT_FAST_MODEL）",
     )
 
@@ -80,11 +80,11 @@ class Settings(BaseSettings):
         description="Whisper 语音识别模型（env: WHISPER_MODEL）",
     )
 
-    # OpenAI 兼容 API 配置（唯一 API 格式）
-    openai_api_key: str | None = Field(default=None, description="OpenAI API Key（env: OPENAI_API_KEY）")
+    # DeepSeek 兼容 API 配置（唯一 API 格式）
+    openai_api_key: str | None = Field(default=None, description="DeepSeek API Key（env: OPENAI_API_KEY）")
     openai_api_base: str | None = Field(
         default=None,
-        description="OpenAI 兼容 API 端点（env: OPENAI_API_BASE）",
+        description="DeepSeek 兼容 API 端点（env: OPENAI_API_BASE）",
     )
 
     # ── LiteLLM 代理配置 ──

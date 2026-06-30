@@ -1,14 +1,6 @@
 // ══════════════════════════════════════════════════════════════
-//  StreamPipeline — barrel export
+//  SSE 工具 — parseSSEStream / token_throttle
 // ══════════════════════════════════════════════════════════════
 
-export { StreamPipeline } from "./StreamPipeline";
-export { EventSourceSSE, MockSSE } from "./SSESource";
-export { getPipeline, bindPipelineToStore } from "./setup";
-export type {
-  StreamPhase,
-  SSESource,
-  StreamEventMap,
-  StreamEventCallback,
-  Unsubscribe,
-} from "./types";
+export { parseSSEStream, SSE_EVENTS } from "./sse-parser";
+export { createTokenThrottle } from "./token-throttle";

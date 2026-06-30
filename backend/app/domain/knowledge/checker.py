@@ -7,7 +7,7 @@
 3. 推荐该技能的最优学习路径
 
 数据源优先级:
-  1. UserData.knowledge_graphs[partition_id].edges  ← 用户知识树边（动态）
+  1. UserData.knowledge_graphs[dir_id].edges  ← 用户知识树边（动态）
   2. ALL_PREREQUISITES                            ← 硬编码回退（兼容旧逻辑）
 """
 from __future__ import annotations
@@ -63,7 +63,7 @@ class PrerequisiteChecker:
     使用方式:
       checker = PrerequisiteChecker(practice_service)
       # 动态加载用户知识树前置
-      checker.load_from_knowledge_tree(user_id, partition_id)
+      checker.load_from_knowledge_tree(user_id, dir_id)
       result = await checker.can_practice(user_id, "node_abc")
       if not result.can_practice:
           print(f"需要先学: {result.blocked_by}")
@@ -79,25 +79,25 @@ class PrerequisiteChecker:
     # 动态加载：从知识树边读取前置关系
     # ═══════════════════════════════════════════════════════════
 
-    def load_from_knowledge_tree(self, user_id: str, partition_id: str) -> bool:
+    def load_from_knowledge_tree(self, user_id: str, dir_id: str) -> bool:
         """
-        从 UserData.knowledge_graphs[partition_id] 加载前置关系。
+        从 UserData.knowledge_graphs[dir_id] 加载前置关系。
 
         返回 True 表示成功加载了知识树数据，False 表示回退到硬编码。
         """
         try:
             from app.services.common import get_data_repo
             data = get_data_repo().load(user_id)
-            graph = data.knowledge_graphs.get(partition_id)
+            graph = data.knowledge_graphs.get(dir_id)
             if not graph or not graph.nodes:
-                logger.info(f"[checker] 分区 {partition_id} 无知识树，使用硬编码回退")
+                logger.info(f"[checker] 分区 {dir_id} 无知识树，使用硬编码回退")
                 return False
 
             # 从知识树边构建前置关系
             dynamic_prereqs: dict[str, list[str]] = {}
             node_labels: dict[str, str] = {}
-            partition = data.partitions.get(partition_id)
-            subject = partition.subject if partition else ""
+            partition = data.directory_nodes.get(dir_id)
+            subject = partition.name if partition else ""
 
             for nid, node in graph.nodes.items():
                 dynamic_prereqs.setdefault(nid, [])
@@ -114,7 +114,7 @@ class PrerequisiteChecker:
 
             logger.info(
                 f"[checker] 从知识树加载前置关系: {len(dynamic_prereqs)} 节点, "
-                f"{len(graph.edges)} 边, 分区={partition_id}"
+                f"{len(graph.edges)} 边, 分区={dir_id}"
             )
             return True
         except Exception as e:

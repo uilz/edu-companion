@@ -28,8 +28,8 @@ export function DailySummaryCard() {
     async function load() {
       try {
         const [dailyRes, weakRes] = await Promise.all([
-          authedFetch(`/api/v7/practice/stats/daily?days=3`),
-          authedFetch(`/api/v7/practice/stats/weak-skills`),
+          authedFetch(`/api/practice/stats/daily?days=3`),
+          authedFetch(`/api/practice/stats/weak-skills`),
         ]);
         if (dailyRes.ok) {
           const trend: DailyTrendPoint[] = await dailyRes.json();

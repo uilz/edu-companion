@@ -1,5 +1,5 @@
 """
-对话系统 REST API 路由 v5.0 归一化
+对话系统 REST API 路由
 层级：分区 → 领域 → 专题 → 对话 → 消息
 所有 CRUD 统一在 /tree/{level} 下，消息操作挂在 /tree/conversation/{conv_id}/message 和 /tree/message/{id}
 
@@ -8,10 +8,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
 from fastapi import APIRouter, HTTPException, Request, Response, UploadFile, File, Form, Query, Depends  # type: ignore
+from fastapi.responses import StreamingResponse  # type: ignore
 from pydantic import BaseModel, Field  # type: ignore
 
 from app.schemas.conversation import TextBlock
@@ -24,11 +26,29 @@ logger = logging.getLogger(__name__)
 
 
 # ══════════════════ 请求模型 ══════════════════
+class ToolResultRequest(BaseModel):
+    """ask_question 工具的结果提交"""
+    tool_call_id: str
+    answers: str  # 用户回答文本
+    dir_id: str | None = None
+
+
 class SendMessageRequest(BaseModel):
     text: str
     content_blocks: list[dict] = Field(default_factory=list)
-    partition_id: str | None = None
+    dir_id: str | None = None
     pending_quote: dict | None = None  # 引用数据
+    knowledge_node_id: str | None = None  # 知识树探索会话绑定的节点 ID
+
+
+class StreamMessageRequest(BaseModel):
+    """统一消息端点请求体"""
+    action: str = "send"  # "send" | "replay" | "stop"
+    text: str = ""
+    dir_id: str | None = None
+    pending_quote: dict | None = None
+    knowledge_node_id: str | None = None
+    content_blocks: list[dict] = Field(default_factory=list)
 
 
 
@@ -38,24 +58,21 @@ class CreateConversationRequest(BaseModel):
     parent_type: str = ""
     type: str = "normal"
     name: str = ""
+    mode: str = "tutor"  # tutor | feynman | peer
 
 
 class MigrateConversationRequest(BaseModel):
-    target_partition_id: str
+    target_dir_id: str
     target_type: str = "normal"
 
 
 class SwitchConfirmRequest(BaseModel):
     """用户确认 SwitchBanner 后，迁移节点的请求"""
-    source_conversation_id: str
+    source_conv_id: str
     source_node_id: str          # 触发分类的用户消息节点 ID
-    target_partition_id: str     # 目标分区 ID
+    target_dir_id: str     # 目标分区 ID
     target_domain_name: str = "" # 目标领域名（跨分区/同分区专题切换）
     target_topic_name: str = ""  # 目标专题名
-
-
-class TemporaryConversationRequest(BaseModel):
-    pass
 
 
 class ExploreRequest(BaseModel):
@@ -89,17 +106,6 @@ def _check_etag(request: Request, user_id: str) -> str | None:
     return etag
 
 
-# ══════════════════ 辅助：递归找到最底层对话 ══════════════════
-def _find_default_conversation(user_id: str, entity_id: str) -> str | None:
-    """DirectoryNode 版：遍历 directory_nodes 树找第一个 conv 节点。"""
-    data = get_data_repo().load(user_id)
-    # 在 directory_nodes 中查找 entity_id 的子 conv 节点
-    for dn in data.directory_nodes.values():
-        if dn.parent_id == entity_id and dn.node_type == "conv":
-            return dn.id
-    return None
-
-
 # ══════════════════ 通用树节点 CRUD ══════════════════
 @router.get("/tree/{level}")
 async def list_nodes(level: str, request: Request, user_id: str = Depends(current_user_id), parent_id: str = Query(None), type: str = Query(None)):
@@ -127,12 +133,12 @@ async def create_directory_node(body: dict, user_id: str = Depends(current_user_
         kind = body.get("kind", "general")
         parent_id = body.get("parent_id")
         name = body.get("name", "新目录")
+
         if node_type == "conv":
             entity = tree_ops.create_conv(user_id, parent_id, name, kind=kind)
         else:
             entity = tree_ops.create_dir(user_id, parent_id, name, kind=kind)
-        conv_id = _find_default_conversation(user_id, entity.id)
-        return {"directory_node": entity.model_dump(mode="json"), "conversation_id": conv_id}
+        return {"directory_node": entity.model_dump(mode="json")}
     except ValueError as e:
         raise HTTPException(404, str(e))
     except Exception:
@@ -171,24 +177,12 @@ async def delete_directory_node(node_id: str, user_id: str = Depends(current_use
         raise HTTPException(500, "Internal server error")
 
 
-# ══════════════════ 临时对话端点 ══════════════════
-@router.post("/tree/conversation/temporary")
-async def create_temporary_conversation(user_id: str = Depends(current_user_id)):
-    """创建临时对话（空状态直接对话）。"""
-    try:
-        conv = tree_ops.create_temporary_conversation(user_id)
-        return {"conversation": conv.model_dump(mode="json")}
-    except Exception:
-        logger.exception("Failed to create temporary conversation")
-        raise HTTPException(500, "Internal server error")
-
-
 @router.post("/tree/conversation/{conv_id}/migrate")
 async def migrate_conversation(conv_id: str, body: MigrateConversationRequest, user_id: str = Depends(current_user_id)):
     """将临时对话迁移到正式分区。"""
     try:
         conv = tree_ops.migrate_temporary_conversation(
-            user_id, conv_id, body.target_partition_id, body.target_type,
+            user_id, conv_id, body.target_dir_id, body.target_type,
         )
         return {"ok": True, "conversation": conv.model_dump(mode="json")}
     except ValueError as e:
@@ -207,8 +201,8 @@ async def switch_conversation(body: SwitchConfirmRequest, user_id: str = Depends
             source_node_id=body.source_node_id,
             target_domain_name=body.target_domain_name,
             target_topic_name=body.target_topic_name,
-            source_conversation_id=body.source_conversation_id,
-            target_partition_id=body.target_partition_id,
+            source_conv_id=body.source_conv_id,
+            target_dir_id=body.target_dir_id,
         )
         return result
     except ValueError as e:
@@ -259,6 +253,36 @@ async def get_conversation(conv_id: str, user_id: str = Depends(current_user_id)
     return {"conversation": result}
 
 
+@router.get("/tree/conversations/recent")
+async def list_recent_conversations(user_id: str = Depends(current_user_id), limit: int = Query(50)):
+    """扁平模式下获取最近活跃对话列表。返回所有 conv 节点按 last_active 降序排列。"""
+    data = get_data_repo().load(user_id)
+    convs = []
+    for dn in data.directory_nodes.values():
+        if dn.node_type == "conv" and not dn.metadata.get("is_deleted", False):
+            last_active = dn.metadata.get("last_active", dn.updated_at)
+            convs.append({
+                "id": dn.id,
+                "name": dn.display_name,
+                "kind": dn.kind,
+                "parent_id": dn.parent_id,
+                "last_active": last_active,
+                "message_count": len(dn.conv_message_ids),
+            })
+    convs.sort(key=lambda x: x["last_active"], reverse=True)
+    convs = convs[:limit]
+    # Attach ancestor path for display (skip virtual root)
+    for c in convs:
+        pid = c["parent_id"]
+        ancestors = []
+        while pid and pid in data.directory_nodes:
+            p = data.directory_nodes[pid]
+            if p.parent_id is not None:  # skip the virtual root node
+                ancestors.append({"id": p.id, "name": p.display_name})
+            pid = p.parent_id
+        c["ancestors"] = list(reversed(ancestors))
+    return {"conversations": convs}
+
 
 @router.delete("/tree/{level}/{node_id}")
 async def delete_node(level: str, node_id: str, user_id: str = Depends(current_user_id)):
@@ -292,8 +316,14 @@ def _merge_cognitive_ids(messages: list[dict], msg_ids: list[str]) -> None:
 # ══════════════════ 消息操作（归一化到 /tree/conversation/{conv_id}/message 和 /tree/message/{id}）══
 @router.get("/tree/conversation/{conv_id}/messages")
 async def list_messages(
-    conv_id: str, request: Request, user_id: str = Depends(current_user_id), limit: int = 50, offset: int = 0
+    conv_id: str, request: Request, user_id: str = Depends(current_user_id),
+    limit: int = 50, offset: int = 0,
 ):
+    """获取会话消息骨架列表（仅 id/parent_id/role/version 等结构字段，无正文）。
+    
+    正文通过 GET /tree/message/{id} 逐条懒加载。
+    前端据此构建消息树，然后按需拉取完整消息。
+    """
     etag = _check_etag(request, user_id)
     data = get_data_repo().load(user_id)
     conv_node = data.directory_nodes.get(conv_id)
@@ -301,19 +331,28 @@ async def list_messages(
         raise HTTPException(404, "Conversation not found")
     msg_ids = conv_node.conv_message_ids[offset: offset + limit]
     messages = []
-    resolved_ids = []
     for mid in msg_ids:
         node = data.nodes.get(mid)
         if node and not getattr(node, "is_deleted", False):
             # 跳过根占位消息（parent_id 为空的空内容 assistant 消息）
             if node.parent_id is None and node.role == "assistant" and not node.content:
                 continue
-            d = node.model_dump(mode="json")
-            resolved_ids.append(mid)
+            d = {
+                "id": node.id,
+                "directory_id": getattr(node, "directory_id", ""),
+                "parent_id": node.parent_id,
+                "children_ids": node.children_ids,
+                "role": node.role,
+                "version": node.version,
+                "timestamp": getattr(node, "timestamp", 0),
+                "token_count": getattr(node, "token_count", 0),
+                "has_sub_branches": getattr(node, "has_sub_branches", False),
+                "sub_branch_ids": getattr(node, "sub_branch_ids", []),
+                "content": "",
+                "content_blocks": [],
+                "text_summary": "",
+            }
             messages.append(d)
-    # 合并 cognitive_node_ids
-    if resolved_ids:
-        _merge_cognitive_ids(messages, resolved_ids)
     total = len(messages)
     return Response(
         content=json.dumps({"messages": messages, "total": total}),
@@ -344,38 +383,114 @@ async def get_conversation_blocks(conv_id: str, user_id: str = Depends(current_u
     return {"blocks": blocks}
 
 @router.post("/tree/conversation/{conv_id}/message")
-async def send_message_in_conversation(conv_id: str, req: SendMessageRequest, user_id: str = Depends(current_user_id)):
-    """在指定对话中发送消息 — 触发后台 pipeline，通过 SSE 接收流式事件"""
-    from app.domain.conversation.conversation_processor import start_background_pipeline
+async def handle_message(
+    conv_id: str,
+    req: StreamMessageRequest,
+    user_id: str = Depends(current_user_id),
+):
+    """统一消息端点 — action=send/replay 返回 SSE 流，action=stop 返回 JSON
 
-    try:
-        pid = req.partition_id
+    send:   启动 Pipeline → StreamingResponse（从事件 0 开始）
+    replay: 重连已有 Pipeline → StreamingResponse（从事件 0 回放 + 继续）
+    stop:   取消 Pipeline → { ok: true }
+    """
+    from app.domain.conversation.conversation_processor import start_background_pipeline
+    from app.services.conversation.stream_buffer import stream_buffer
+
+    if req.action == "stop":
+        ok = await stream_buffer.cancel(conv_id)
+        return {"ok": ok}
+
+    if req.action == "replay":
+        if not await stream_buffer.has_active(conv_id):
+            return {"ok": True, "stream_ended": True}
+        return StreamingResponse(
+            _sse_generator(conv_id),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    if req.action == "send":
+        pid = req.dir_id
         if not pid:
             data = get_data_repo().load(user_id)
             conv_node = data.directory_nodes.get(conv_id)
             if not conv_node or conv_node.node_type != "conv":
                 raise HTTPException(404, "Conversation not found")
-            pid = conv_node.parent_id
-        if not pid:
-            raise HTTPException(400, "Cannot determine partition")
+            pid = conv_node.parent_id or conv_id
 
-        # 在后台启动 pipeline（不等待完成），事件通过 TokenBuffer → SSE 推送
         await start_background_pipeline(
             user_id, req.text, pid,
-            conversation_id=conv_id,
+            conv_id=conv_id,
             pending_quote=req.pending_quote,
+            knowledge_node_id=req.knowledge_node_id,
         )
 
-        return {
-            "ok": True,
-            "conversation_id": conv_id,
-            "partition_id": pid,
-        }
-    except HTTPException:
-        raise
-    except Exception:
-        logger.exception("send_message_in_conversation 失败")
-        raise HTTPException(500, "Internal server error")
+        return StreamingResponse(
+            _sse_generator(conv_id),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    raise HTTPException(400, f"Unknown action: {req.action}")
+
+
+@router.post("/tree/conversation/{conv_id}/tool-result")
+async def handle_tool_result(
+    conv_id: str,
+    req: ToolResultRequest,
+    user_id: str = Depends(current_user_id),
+):
+    """提交 ask_question 工具的结果（用户回答），恢复挂起的管线继续执行
+
+    与方案B不同：不启动新管线，而是恢复同一管线中挂起的 ToolLoopStage while 循环。
+    工具结果直接注入 llm_messages，LLM 在原有上下文中继续推理。
+    原 SSE 连接保持打开，恢复后继续接收事件。
+    """
+    from app.domain.conversation.conversation_processor import resume_background_pipeline
+    from app.domain.conversation.pipeline_stages import ToolResult
+
+    tool_result = ToolResult(
+        tool_call_id=req.tool_call_id,
+        answers=req.answers,
+    )
+
+    # 恢复挂起的管线（而非启动新管线）
+    ok = await resume_background_pipeline(conv_id, tool_result)
+    if not ok:
+        raise HTTPException(404, "No suspended pipeline found for this conversation")
+
+    # 返回简单 JSON（原 SSE 连接保持打开，继续接收恢复后的事件）
+    return {"ok": True, "message": "答案已提交，AI 正在继续回复"}
+
+
+async def _sse_generator(conv_id: str):
+    """SSE 事件生成器 — 从 StreamBuffer 读取，格式化为 SSE"""
+    import asyncio as _asyncio
+    from app.services.conversation.stream_buffer import stream_buffer as _buf
+
+    event_counter = 0
+    try:
+        async for event in _buf.stream(conv_id):
+            event_counter += 1
+            data = json.dumps(event, ensure_ascii=False, default=str)
+            yield f"id: {event_counter}\ndata: {data}\n\n"
+
+        # 流正常结束
+        yield "data: {\"type\":\"stream_end\"}\n\n"
+    except _asyncio.CancelledError:
+        # 客户端断开 → 不影响 pipeline 继续运行
+        pass
+    except Exception as e:
+        logger.error("SSE 生成器异常 [%s]: %s", conv_id[:8], e)
+        error_data = json.dumps({"type": "error", "message": str(e)}, ensure_ascii=False)
+        yield f"data: {error_data}\n\n"
 
 
 @router.get("/tree/message/{message_id}")
@@ -415,7 +530,7 @@ async def switch_version(message_id: str, req: dict | None = None, user_id: str 
     if not node:
         raise HTTPException(404, "Message not found")
 
-    conv_id_val = node.conversation_id or getattr(node, "directory_id", "")
+    conv_id_val = getattr(node, "directory_id", getattr(node, "conv_id", ""))
     conv = data.directory_nodes.get(conv_id_val)
     if not conv or conv.node_type != "conv":
         raise HTTPException(400, "No conversation found")
@@ -473,7 +588,8 @@ async def switch_version(message_id: str, req: dict | None = None, user_id: str 
         if not nd or nd.is_deleted:
             return
         # 只收集属于当前会话的节点，跳过子支（属于其他会话）
-        if nd.conversation_id != conv_for_dfs:
+        nd_conv = getattr(nd, "directory_id", getattr(nd, "conv_id", None))
+        if nd_conv != conv_for_dfs:
             return
         acc.append(nid)
         for cid in nd.children_ids:
@@ -540,12 +656,12 @@ async def reply_to_edited_message(message_id: str, user_id: str = Depends(curren
         if not node or node.role != "user":
             raise HTTPException(400, "Can only reply to user messages")
 
-        conv_id = node.conversation_id or getattr(node, "directory_id", "")
+        conv_id = getattr(node, "directory_id", getattr(node, "conv_id", ""))
         conv = data.directory_nodes.get(conv_id)
         if not conv or conv.node_type != "conv":
             raise HTTPException(404, "Conversation not found")
 
-        pid = getattr(node, "partition_id", None) or conv.parent_id or conv_id
+        pid = getattr(node, "directory_id", None) or conv.parent_id or conv_id
 
         # 获取编辑后的消息文本
         text = ""
@@ -573,7 +689,7 @@ async def reply_to_edited_message(message_id: str, user_id: str = Depends(curren
         assistant_node = tree_ops.add_message(
             user_id, pid, "assistant",
             [TextBlock(text=reply_text)], reply_text,
-            conversation_id=conv_id,
+            conv_id=conv_id,
         )
 
         # 回填 message_id
@@ -585,7 +701,7 @@ async def reply_to_edited_message(message_id: str, user_id: str = Depends(curren
 
         return {
             "assistant_message": assistant_node.model_dump(mode="json"),
-            "conversation_id": conv_id,
+            "conv_id": conv_id,
         }
     except HTTPException:
         raise
@@ -596,12 +712,12 @@ async def reply_to_edited_message(message_id: str, user_id: str = Depends(curren
         raise HTTPException(500, "Internal server error")
 
 
-@router.get("/tree/stream/active/{conversation_id}")
-async def check_stream_active(conversation_id: str):
-    """检测指定对话是否正在后台流式生成（TokenBuffer）"""
-    from app.services.conversation.token_buffer import token_buffer
-    active = await token_buffer.is_active(conversation_id)
-    return {"active": active, "conversation_id": conversation_id}
+@router.get("/tree/stream/active/{conv_id}")
+async def check_stream_active(conv_id: str):
+    """检测指定对话是否正在后台流式生成"""
+    from app.services.conversation.stream_buffer import stream_buffer
+    active = await stream_buffer.has_active(conv_id)
+    return {"active": active, "conv_id": conv_id}
 
 
 # ═══════════════════════════════════════════
@@ -631,16 +747,16 @@ async def check_stream_active(conversation_id: str):
 @router.post("/workspace/upload")
 async def upload_workspace_file(
     file: UploadFile = File(...),
-    conversation_id: str = Form(...),
+    conv_id: str = Form(...),
     user_id: str = Depends(current_user_id),
 ):
-    """上传文件到对话（已迁移到 /api/files/upload + 记录 conversation_id）"""
+    """上传文件到对话（已迁移到 /api/files/upload + 记录 conv_id）"""
     if not file.filename:
         raise HTTPException(400, "No file selected")
 
     # 验证对话存在
     data = get_data_repo().load(user_id)
-    conv = data.directory_nodes.get(conversation_id)
+    conv = data.directory_nodes.get(conv_id)
     if not conv or conv.node_type != "conv":
         raise HTTPException(404, "Conversation not found")
 
@@ -651,7 +767,7 @@ async def upload_workspace_file(
         purpose="session",
         upload_source="conversation",
         level="partition",
-        parent_id=conversation_id,
+        parent_id=conv_id,
         uid=user_id,
     )
     # 返回与旧 workspace 兼容的格式
@@ -665,12 +781,13 @@ async def upload_workspace_file(
 # ══════════════════ 子支操作 ══════════════════
 
 class SubBranchCreateRequest(BaseModel):
-    source_conversation_id: str
+    source_conv_id: str
     source_message_id: str
     char_start: int = 0
     char_end: int = 0
     quoted_text: str = ""
     initial_message: str = ""
+    mode: str = "tutor"  # tutor | feynman | peer
 
 
 @router.post("/sub-branch")
@@ -679,11 +796,12 @@ async def create_sub_branch(req: SubBranchCreateRequest, user_id: str = Depends(
     try:
         conv, ref = tree_ops.create_sub_branch(
             user_id,
-            req.source_conversation_id,
+            req.source_conv_id,
             req.source_message_id,
             req.char_start,
             req.char_end,
             req.quoted_text,
+            mode=req.mode,
         )
         return {
             "conversation": conv.model_dump(mode="json"),

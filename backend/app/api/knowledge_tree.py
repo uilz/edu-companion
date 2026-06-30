@@ -1,5 +1,5 @@
 """
-Knowledge Tree API v5 — 四实体解耦架构
+Knowledge Tree API — 四实体解耦架构
 
 统一前缀: /api/knowledge-tree
 """
@@ -17,7 +17,7 @@ from app.services.knowledge_tree.navigation_service import nav_svc
 from app.services.knowledge_tree.message_service import msg_svc
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/knowledge-tree", tags=["知识树 v5"])
+router = APIRouter(prefix="/api/knowledge-tree", tags=["知识树"])
 
 
 # ═══════════════════════════════════════════
@@ -55,7 +55,7 @@ class CreateNavigationNodeRequest(BaseModel):
     name: str
     node_type: str = "dir"  # dir | conv
     kind: str = "general"
-    conversation_id: str | None = None
+    conv_id: str | None = None
     knowledge_area_id: str | None = None
 
 class UpdateNavigationNodeRequest(BaseModel):
@@ -65,7 +65,7 @@ class UpdateNavigationNodeRequest(BaseModel):
     knowledge_area_id: str | None = None
 
 class CreateMessageRequest(BaseModel):
-    conversation_id: str
+    conv_id: str
     role: str = "user"
     content: str = ""
     content_blocks: list[dict] = Field(default_factory=list)
@@ -310,11 +310,11 @@ async def create_navigation_node(body: CreateNavigationNodeRequest, user_id: str
     """创建导航节点 (目录或会话引用)"""
     try:
         if body.node_type == "conv":
-            if not body.conversation_id:
-                raise HTTPException(400, "会话引用需要 conversation_id")
+            if not body.conv_id:
+                raise HTTPException(400, "会话引用需要 conv_id")
             node = nav_svc.create_conv_ref(
                 user_id=user_id, parent_id=body.parent_id,
-                conversation_id=body.conversation_id,
+                conv_id=body.conv_id,
                 name=body.name, kind=body.kind,
             )
         else:
@@ -392,7 +392,7 @@ async def create_message(body: CreateMessageRequest, user_id: str = Depends(curr
     """创建消息"""
     try:
         msg = msg_svc.create_message(
-            user_id=user_id, conversation_id=body.conversation_id,
+            user_id=user_id, conv_id=body.conv_id,
             role=body.role, content=body.content,
             content_blocks=body.content_blocks,
             text_summary=body.text_summary,
@@ -400,7 +400,7 @@ async def create_message(body: CreateMessageRequest, user_id: str = Depends(curr
             knowledge_node_ids=body.knowledge_node_ids,
         )
         # 同步更新会话的 message_ids
-        conv_svc.add_message(user_id, body.conversation_id, msg.id)
+        conv_svc.add_message(user_id, body.conv_id, msg.id)
         return {"message": msg.model_dump(mode="json")}
     except Exception:
         logger.exception("创建消息失败")

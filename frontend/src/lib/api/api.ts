@@ -89,14 +89,14 @@ async function tryRefreshToken(): Promise<boolean> {
   return _refreshPromise;
 }
 
-/** v2 API helper — uses /api/v2 prefix */
-export const v2 = <T,>(p: string, o?: RequestInit) => apiFetch<T>("/api/v2", p, o);
+/** 认知/图谱 API helper — uses /api prefix */
+export const cognitiveApi = <T,>(p: string, o?: RequestInit) => apiFetch<T>("/api", p, o);
 
 /** tree/conversations API helper — uses /api/conversations prefix */
 export const tree = <T,>(p: string, o?: RequestInit) => apiFetch<T>("/api/conversations", p, o);
 
-/** v7 practice API helper — uses /api/v7/practice prefix */
-export const v7 = <T,>(p: string, o?: RequestInit) => apiFetch<T>("/api/v7/practice", p, o);
+/** 练习 API helper — uses /api/practice prefix */
+export const practiceApi = <T,>(p: string, o?: RequestInit) => apiFetch<T>("/api/practice", p, o);
 
 /** 通用 API 请求（带认证） */
 export const api = <T,>(path: string, o?: RequestInit) => apiFetch<T>(API_BASE, path, o);

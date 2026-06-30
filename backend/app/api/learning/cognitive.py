@@ -1,8 +1,5 @@
 """
-Phase 8 API 端点
-
-前缀：/api/v2
-功能：分类、图谱管理、会话关联、节点操作
+分类、图谱管理、会话关联、节点操作
 
 依赖 app.domain.cognitive.storage / app.services.classifier_service / app.domain.cognitive.growth_engine
 """
@@ -24,7 +21,7 @@ from app.infrastructure.db.cognitive_link_storage import (
     get_links_for_conversation, upsert_link, set_primary_link, remove_link,
     count_links_for_conversation,
 )
-from app.services.conversation.message_repository import update_message_cognitive, get_message_conversation_id
+from app.services.conversation.message_repository import update_message_cognitive, get_message_conv_id
 from app.services.common.classifier_service import classifier_service
 from app.services.analytics.adaptive_selector import adaptive_selector
 from app.services.common import get_data_repo
@@ -71,9 +68,9 @@ def _entity_to_node(
 
 
 class ClassifyRequest(BaseModel):
-    conversation_id: str = ""
+    conv_id: str = ""
     message: str = ""
-    current_topic_id: str | None = None  # v6 Phase 5: 当前 topic 的 node id
+    current_topic_id: str | None = None  # 当前 topic 的 node id
 
 
 @router.post("/classify")
@@ -139,7 +136,7 @@ async def confirm_message_cognitive(message_id: str, req: CognitiveConfirmReques
 
     update_message_cognitive(message_id, node_ids, user_id)
 
-    # v6 Phase 5: 沉浸深度更新 — 确认的 topic 增加沉浸计数
+    # 沉浸深度更新 — 确认的 topic 增加沉浸计数
     try:
         topic_ids_for_immersion = [n["id"] for n in nodes if n.get("level") in ("topic", "domain", "partition")]
         for tid in topic_ids_for_immersion:
@@ -147,23 +144,23 @@ async def confirm_message_cognitive(message_id: str, req: CognitiveConfirmReques
     except Exception:
         logger.debug("沉浸深度更新失败", exc_info=True)
 
-    # v6 Phase 4: 发布 message.classified 事件 (→ EventBus)
+    # 发布 message.classified 事件 (→ EventBus)
     try:
         from app.application.di import get_event_bus
         from shared.events import MessageClassified
-        conv_id = get_message_conversation_id(message_id, user_id)
+        conv_id = get_message_conv_id(message_id, user_id)
         topic_ids = [n["id"] for n in nodes if n.get("level") in ("topic", "domain", "partition")]
         atom_ids = [n["id"] for n in nodes if n.get("level") == "atom"]
         await get_event_bus().publish(MessageClassified(
             user_id=user_id,
             message_id=message_id,
-            conversation_id=conv_id or "",
+            conv_id=conv_id or "",
             topic_node_ids=topic_ids,
             atom_node_ids=atom_ids,
             mode="confirm",
         ))
     except Exception:
-        logger.debug("v6 事件发布失败", exc_info=True)
+        logger.debug("事件发布失败", exc_info=True)
 
     return {
         "status": "ok",
@@ -233,16 +230,12 @@ def get_graph_nodes(
     elif level == "domain":
         for dn in data.directory_nodes.values():
             if dn.node_type == "dir" and dn.parent_id is not None:
-                parent = data.directory_nodes.get(dn.parent_id)
-                if parent and parent.kind != "temp":
-                    result.append(_enrich(dn, "domain", dn.parent_id))
+                result.append(_enrich(dn, "domain", dn.parent_id))
         return result
     elif level == "topic":
         for dn in data.directory_nodes.values():
             if dn.node_type == "dir" and dn.parent_id is not None:
-                parent = data.directory_nodes.get(dn.parent_id)
-                if parent and parent.kind != "temp":
-                    result.append(_enrich(dn, "topic", dn.parent_id))
+                result.append(_enrich(dn, "topic", dn.parent_id))
         return result
 
     # 2. 指定父节点
@@ -347,6 +340,8 @@ def dashboard_overview(
     from app.domain.cognitive import get_repo
 
     all_nodes = get_repo().list_all_nodes(user_id)
+    # 排除虚拟分区根节点（系统自动创建的 partition 级别节点）
+    all_nodes = [n for n in all_nodes if not (n.level == "partition" and n.created_by == "system")]
 
     # 1. 掌握度热力图
     partition_means: dict[str, float] = {}

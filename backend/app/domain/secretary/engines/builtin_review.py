@@ -225,3 +225,137 @@ class LateralExpansionModule(SecretaryModule):
                     logger.debug("横向扩展扫描异常[%s/%s]: %s", level, parent.id, e)
 
         return proposals
+
+
+# ═══════════════════════════════════════════
+# 5. 错因模式识别 (ErrorPattern) — ADR 0011 S5
+# ═══════════════════════════════════════════
+
+class ErrorPatternModule(SecretaryModule):
+    """错因模式识别模块 — 分析最近错题的错误类型分布，发现集中错因"""
+
+    @property
+    def meta(self) -> ModuleMeta:
+        return ModuleMeta(
+            name="error_pattern",
+            display_name="错因模式识别",
+            emoji="🔍",
+            description="分析最近错题的错误类型分布，发现集中错因并给出建议",
+            default_enabled=True,
+            run_interval_seconds=600,
+        )
+
+    async def run_check(
+        self, user_id: str, ctx: SessionContext | None = None,
+    ) -> list[Proposal]:
+        proposals: list[Proposal] = []
+
+        try:
+            patterns = self._analyze_error_patterns(user_id)
+            if not patterns:
+                return proposals
+
+            # 检查是否有错因占比 > 40%
+            total = sum(patterns.values())
+            if total < 5:
+                return proposals  # 错题太少，不够分析
+
+            for error_type, count in sorted(patterns.items(), key=lambda x: -x[1]):
+                ratio = count / total if total > 0 else 0
+                if ratio < 0.4:
+                    continue
+
+                suggestion = self._get_suggestion(error_type, ratio)
+                category_label = self._get_category_label(error_type)
+
+                proposals.append(Proposal(
+                    emoji="🔍",
+                    title=f"错因集中: {category_label}",
+                    description=(
+                        f"最近 {total} 道错题中，{category_label}占 {ratio:.0%}（{count} 道）。"
+                        f"{suggestion}"
+                    ),
+                    action_type="practice_error_pattern",
+                    priority=3 if ratio > 0.6 else 4,
+                    payload={
+                        "error_type": error_type,
+                        "count": count,
+                        "total": total,
+                        "ratio": ratio,
+                        "suggestion": suggestion,
+                    },
+                    insight_source="error_pattern_analysis",
+                ))
+        except Exception as e:
+            logger.debug("错因模式分析失败: %s", e)
+
+        return proposals
+
+    def _analyze_error_patterns(self, user_id: str) -> dict[str, int]:
+        """统计最近 20 道错题的 error_type 分布"""
+        from app.infrastructure.db.database import get_db
+        db = get_db()
+        try:
+            rows = db.fetchall(
+                """SELECT error_pattern, error_analysis
+                   FROM practice_attempts
+                   WHERE user_id = %s AND is_correct = FALSE
+                   ORDER BY created_at DESC
+                   LIMIT 20""",
+                (user_id,),
+            )
+        except Exception:
+            return {}
+
+        patterns: dict[str, int] = {}
+        for row in rows:
+            error_type = (row.get("error_pattern") or "").strip()
+            if not error_type:
+                # 尝试从 error_analysis JSON 提取
+                ea = row.get("error_analysis") or {}
+                if isinstance(ea, str):
+                    import json
+                    try:
+                        ea = json.loads(ea)
+                    except Exception:
+                        ea = {}
+                error_type = (ea.get("error_type") or ea.get("distractor_type") or "").strip()
+
+            if error_type:
+                patterns[error_type] = patterns.get(error_type, 0) + 1
+
+        return patterns
+
+    def _get_category_label(self, error_type: str) -> str:
+        """错误类型 → 中文标签"""
+        labels = {
+            "conceptual": "概念混淆",
+            "concept_confusion": "概念混淆",
+            "procedural": "步骤错误",
+            "computation": "计算失误",
+            "calculation_error": "计算失误",
+            "sign_error": "符号错误",
+            "reading": "审题不清",
+            "careless": "粗心大意",
+            "transfer": "知识迁移困难",
+            "meta": "元认知问题",
+        }
+        return labels.get(error_type, error_type or "未知错因")
+
+    def _get_suggestion(self, error_type: str, ratio: float) -> str:
+        """根据错因类型给出建议"""
+        suggestions = {
+            "conceptual": "建议先复习相关概念，再做概念辨析练习。",
+            "concept_confusion": "建议先复习相关概念，再做概念辨析练习。",
+            "procedural": "建议放慢解题速度，每步都写下推理过程。",
+            "computation": "建议练习计算基本功，可以从简单数值开始。",
+            "calculation_error": "建议练习计算基本功，可以从简单数值开始。",
+            "sign_error": "建议重点练习符号处理，注意正负号。",
+            "reading": "建议仔细审题，圈出关键词。",
+            "careless": "建议放慢速度，养成检查习惯。",
+            "transfer": "建议多做变式题，对比不同题型的共同点。",
+            "meta": "建议反思解题策略，思考是否有更优解法。",
+        }
+        # 如果占比很高，加大建议力度
+        intense = "这个问题比较突出，" if ratio > 0.6 else ""
+        return intense + suggestions.get(error_type, "建议针对性练习该知识点的同类题。")

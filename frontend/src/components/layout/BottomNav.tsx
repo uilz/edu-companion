@@ -19,7 +19,7 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { href: '/learn', label: '学习空间', icon: MessageSquare },
+  { href: '/conversation', label: '学习空间', icon: MessageSquare },
   { href: '/practice', label: '练习', icon: Dumbbell },
   { href: '/knowledge-tree', label: '知识树', icon: GitGraph },
   { href: '/resources', label: '资源', icon: Library },

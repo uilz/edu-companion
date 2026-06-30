@@ -34,7 +34,7 @@ function QuestionPicker({ bankId, onPick, onClose }: {
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    fetch("/api/v7/practice/banks").then(r => r.json()).then(data => {
+    fetch("/api/practice/banks").then(r => r.json()).then(data => {
       const items = Array.isArray(data) ? data : (data?.items || []);
       setBanks(items.filter((b: any) => b.id !== bankId));
       if (items.length > 0) setSelectedBank(items[0].id);

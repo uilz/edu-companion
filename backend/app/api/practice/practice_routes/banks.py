@@ -282,11 +282,11 @@ async def api_toggle_slash(question_id: str, user_id: str = Depends(current_user
 @router.post("/resolve/conversation")
 async def api_resolve_conversation(body: dict, user_id: str = Depends(current_user_id)):
     _ensure_tables()
-    conversation_id = body.get("conversation_id", "")
-    if not conversation_id:
-        raise HTTPException(400, "conversation_id 不能为空")
+    conv_id = body.get("conv_id", "")
+    if not conv_id:
+        raise HTTPException(400, "conv_id 不能为空")
     bank_id = resolve_bank_for_conversation(
-        conversation_id, user_id,
+        conv_id, user_id,
         user_specified_bank_id=body.get("bank_id"),
     )
     bank = get_bank(bank_id, user_id)

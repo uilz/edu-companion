@@ -1,0 +1,402 @@
+"use client";
+
+import React, { useState, useCallback } from "react";
+import { Send, ChevronLeft, ChevronRight, Check } from "lucide-react";
+import { getChatStreamAPI } from "@/store/conversation/actions/send-message";
+
+interface QuestionItem {
+  question: string;
+  options?: string[];
+}
+
+interface QuestionBlockProps {
+  content: Record<string, unknown>;
+  convId?: string;
+  dirId?: string;
+}
+
+// ──────────────── 提交工具结果（恢复挂起的管线） ────────────────
+
+async function submitToolResult(
+  toolCallId: string,
+  answers: string,
+  convId: string,
+  dirId: string,
+) {
+  const chatStream = getChatStreamAPI();
+  if (!chatStream?.submitToolResult) return;
+
+  // 方案A：不创建新的 assistant 占位消息。
+  // 原 send() 的 streamingId 仍活跃，恢复后事件继续流入同一流式消息。
+  await chatStream.submitToolResult(toolCallId, answers, convId, dirId);
+}
+
+// ──────────────── 选择题（多选交互） ────────────────
+
+function ChoiceQuestion({
+  question, options, selected, onToggle,
+}: {
+  question: string; options: string[]; selected: string[]; onToggle: (v: string) => void;
+}) {
+  const [showCustom, setShowCustom] = useState(false);
+  const [customValue, setCustomValue] = useState("");
+
+  const confirmCustom = () => {
+    if (customValue.trim()) { onToggle(customValue.trim()); setCustomValue(""); }
+  };
+
+  if (showCustom) {
+    return (
+      <div>
+        <p className="text-sm font-medium text-[var(--color-text)] mb-3">{question}</p>
+        <div className="flex items-center gap-2">
+          <input
+            value={customValue}
+            onChange={(e) => setCustomValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); confirmCustom(); } }}
+            placeholder="输入你的回答..."
+            className="flex-1 px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]
+              focus:outline-none focus:border-[var(--color-accent)] focus:ring-1 focus:ring-[var(--color-accent)]/30
+              text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]"
+            autoFocus
+          />
+          <button
+            onClick={confirmCustom}
+            disabled={!customValue.trim()}
+            className="p-2 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-30 transition-opacity"
+          >
+            <Send size={16} />
+          </button>
+        </div>
+        <button
+          onClick={() => setShowCustom(false)}
+          className="mt-2 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+        >
+          返回选项
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p className="text-sm font-medium text-[var(--color-text)] mb-3">{question}</p>
+      <div className="flex flex-col gap-1.5">
+        {options.map((opt, i) => {
+          const isSel = selected.includes(opt);
+          return (
+            <button
+              key={i}
+              onClick={() => onToggle(opt)}
+              className={`flex items-center gap-3 px-3.5 py-2 rounded-lg border text-left transition-all duration-150 text-sm cursor-pointer
+                ${isSel
+                  ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
+                  : "border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 text-[var(--color-text)]"
+                }`}
+            >
+              <span className={`flex-shrink-0 w-5 h-5 rounded flex items-center justify-center text-xs font-bold
+                ${isSel ? "bg-[var(--color-accent)] text-white" : "border border-[var(--color-border)] text-transparent"}`}>
+                {isSel ? <Check size={12} /> : null}
+              </span>
+              <span>{opt}</span>
+            </button>
+          );
+        })}
+        <button
+          onClick={() => setShowCustom(true)}
+          className="flex items-center gap-3 px-3.5 py-2 rounded-lg border border-dashed border-[var(--color-border)]
+            text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)]
+            hover:bg-[var(--color-accent)]/5 transition-all duration-150 cursor-pointer"
+        >
+          <span className="flex-shrink-0 w-5 h-5 rounded border border-dashed flex items-center justify-center text-xs text-[var(--color-text-muted)]">+</span>
+          <span>其他（自定义回答）</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ──────────────── 开放题（输入交互） ────────────────
+
+function OpenQuestion({
+  question, value, onChange,
+}: {
+  question: string; value: string; onChange: (v: string) => void;
+}) {
+  return (
+    <div>
+      <p className="text-sm font-medium text-[var(--color-text)] mb-3">{question}</p>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="输入你的回答..."
+        className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]
+          focus:outline-none focus:border-[var(--color-accent)] focus:ring-1 focus:ring-[var(--color-accent)]/30
+          text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]"
+        autoFocus
+      />
+    </div>
+  );
+}
+
+// ──────────────── 只读摘要（提交后的浏览模式） ────────────────
+
+function ReadOnlySummary({ questions, answers }: { questions: QuestionItem[]; answers: string[][]; }) {
+  return (
+    <div className="mt-3 mb-2 rounded-lg border border-[var(--color-border)]/40 bg-[var(--color-surface)]/30 overflow-hidden">
+      <div className="px-4 py-2 text-xs text-[var(--color-text-muted)] border-b border-[var(--color-border)]/20">
+        已作答
+      </div>
+      {questions.map((q, i) => (
+        <div key={i} className="px-4 py-2 flex items-baseline gap-2 text-sm">
+          <span className="text-[var(--color-text-muted)] flex-shrink-0">{q.question}</span>
+          <span className="text-[var(--color-text)]">—</span>
+          <span className="text-[var(--color-text)]">
+            {answers[i]?.length > 0 ? answers[i].join("、") : "未回答"}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ──────────────── 单问题卡片（交互 + 只读两种状态） ────────────────
+
+function SingleQuestionCard({
+  question, options, qType, onAnswer,
+}: {
+  question: string; options: string[]; qType: string; onAnswer: (answer: string) => void;
+}) {
+  const [selected, setSelected] = useState<string[]>([]);
+  const [inputValue, setInputValue] = useState("");
+  const [sent, setSent] = useState(false);
+
+  if (sent) {
+    return (
+      <ReadOnlySummary
+        questions={[{ question, options: qType === "choice" ? options : undefined }]}
+        answers={[qType === "choice" ? selected : (inputValue ? [inputValue] : [])]}
+      />
+    );
+  }
+
+  // 选择题
+  if (qType === "choice" && options.length > 0) {
+    return (
+      <div className="mt-3 mb-2 rounded-xl border border-[var(--color-accent)]/20 bg-[var(--color-accent)]/5 overflow-hidden">
+        <div className="flex items-center gap-2 px-4 pt-3 pb-2">
+          <span className="w-6 h-6 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center text-xs flex-shrink-0">❓</span>
+          <span className="text-sm font-medium text-[var(--color-text)]">{question}</span>
+        </div>
+        <div className="px-4 pb-3">
+          <ChoiceQuestion
+            question={question}
+            options={options}
+            selected={selected}
+            onToggle={(v) => setSelected(prev => prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v])}
+          />
+        </div>
+        <div className="px-4 pb-4">
+          <button
+            onClick={() => { onAnswer(selected.join("、")); setSent(true); }}
+            disabled={selected.length === 0}
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium
+              bg-[var(--color-accent)] text-white hover:opacity-90
+              disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
+          >
+            <Check size={16} />
+            提交
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 开放题
+  return (
+    <div className="mt-3 mb-2 rounded-xl border border-[var(--color-accent)]/20 bg-[var(--color-accent)]/5 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 pt-3 pb-2">
+        <span className="w-6 h-6 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center text-xs flex-shrink-0">❓</span>
+        <span className="text-sm font-medium text-[var(--color-text)]">{question}</span>
+      </div>
+      <div className="px-4 pb-4 flex items-center gap-2">
+        <input
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (inputValue.trim()) { onAnswer(inputValue.trim()); setSent(true); } } }}
+          placeholder="输入你的回答..."
+          className="flex-1 px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]
+            focus:outline-none focus:border-[var(--color-accent)] focus:ring-1 focus:ring-[var(--color-accent)]/30
+            text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]"
+          autoFocus
+        />
+        <button
+          onClick={() => { if (inputValue.trim()) { onAnswer(inputValue.trim()); setSent(true); } }}
+          disabled={!inputValue.trim()}
+          className="p-2 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-30 transition-opacity"
+        >
+          <Send size={16} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ──────────────── 多问题分组（逐步导航 + 统一提交 + 只读浏览） ────────────────
+
+function MultiQuestionGroup({
+  questions, qType, onAnswer,
+}: {
+  questions: QuestionItem[]; qType: string; onAnswer: (answer: string) => void;
+}) {
+  const total = questions.length;
+  const [step, setStep] = useState(0);
+  const [answers, setAnswers] = useState<string[][]>(() => questions.map(() => []));
+  const [submitted, setSubmitted] = useState(false);
+
+  const toggleAnswer = useCallback((val: string) => {
+    setAnswers(prev => {
+      const next = prev.map(a => [...a]);
+      const cur = next[step];
+      const idx = cur.indexOf(val);
+      if (idx >= 0) cur.splice(idx, 1);
+      else cur.push(val);
+      return next;
+    });
+  }, [step]);
+
+  const setAnswer = useCallback((val: string) => {
+    setAnswers(prev => {
+      const next = prev.map(a => [...a]);
+      next[step] = val ? [val] : [];
+      return next;
+    });
+  }, [step]);
+
+  const handleSubmit = () => {
+    const lines = questions.map((q, i) => {
+      const ans = answers[i];
+      if (!ans || ans.length === 0) return `问题${i + 1}：未回答`;
+      return `问题${i + 1}：${ans.join("、")}`;
+    });
+    onAnswer(lines.join("\n"));
+    setSubmitted(true);
+  };
+
+  // ── 已提交 → 只读浏览 ──
+  if (submitted) {
+    return <ReadOnlySummary questions={questions} answers={answers} />;
+  }
+
+  const q = questions[step];
+  const hasAnswer = answers[step]?.length > 0;
+  const isFirst = step === 0;
+  const isLast = step === total - 1;
+
+  return (
+    <div className="mt-3 mb-2 rounded-xl border border-[var(--color-accent)]/20 bg-[var(--color-accent)]/5 overflow-hidden">
+      {/* 头部 + 进度 */}
+      <div className="flex items-center justify-between px-4 pt-3 pb-1">
+        <div className="flex items-center gap-2">
+          <span className="w-6 h-6 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center text-xs flex-shrink-0">❓</span>
+          <span className="text-sm font-medium text-[var(--color-text)]">提问</span>
+        </div>
+        <span className="text-xs text-[var(--color-text-muted)]">{step + 1}/{total}</span>
+      </div>
+
+      {/* 进度条 */}
+      <div className="px-4 pt-1 pb-2">
+        <div className="flex gap-1">
+          {questions.map((_, i) => (
+            <div
+              key={i}
+              className={`h-1 flex-1 rounded-full transition-colors duration-200 cursor-pointer
+                ${i === step ? "bg-[var(--color-accent)]" : answers[i]?.length > 0 ? "bg-[var(--color-accent)]/40" : "bg-[var(--color-border)]"}`}
+              onClick={() => setStep(i)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* 题目 */}
+      <div className="px-4 pb-4">
+        {qType === "choice" || q.options?.length ? (
+          <ChoiceQuestion
+            question={q.question}
+            options={q.options || []}
+            selected={answers[step] || []}
+            onToggle={(v) => toggleAnswer(v)}
+          />
+        ) : (
+          <OpenQuestion
+            question={q.question}
+            value={answers[step]?.[0] || ""}
+            onChange={(v) => setAnswer(v)}
+          />
+        )}
+      </div>
+
+      {/* 导航按钮 */}
+      <div className="flex items-center justify-between px-4 pb-4">
+        <button
+          onClick={() => !isFirst && setStep(s => s - 1)}
+          disabled={isFirst}
+          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm
+            text-[var(--color-text-muted)] hover:text-[var(--color-text)]
+            disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        >
+          <ChevronLeft size={16} />
+          上一题
+        </button>
+
+        {isLast ? (
+          <button
+            onClick={handleSubmit}
+            disabled={!hasAnswer}
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium
+              bg-[var(--color-accent)] text-white hover:opacity-90
+              disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
+          >
+            <Check size={16} />
+            提交{total}题
+          </button>
+        ) : (
+          <button
+            onClick={() => !isLast && setStep(s => s + 1)}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm
+              text-[var(--color-text)] hover:bg-[var(--color-accent)]/10 transition-colors"
+          >
+            下一题
+            <ChevronRight size={16} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ──────────────── 入口组件 ────────────────
+
+export default function QuestionBlock({ content, convId, dirId }: QuestionBlockProps) {
+  const qType = (content.type as string) || "choice";
+  const questions = (content.questions as QuestionItem[]) || [];
+  const singleQuestion = (content.question as string) || "";
+  const singleOptions = (content.options as string[]) || [];
+  const toolCallId = (content.tool_call_id as string) || "";
+
+  const handleAnswer = useCallback((answerText: string) => {
+    if (!toolCallId || !convId || !dirId) {
+      console.warn("[QuestionBlock] 缺少 tool_call_id / convId / dirId，无法提交工具结果");
+      return;
+    }
+    submitToolResult(toolCallId, answerText, convId, dirId);
+  }, [toolCallId, convId, dirId]);
+
+  if (questions.length > 0) {
+    return <MultiQuestionGroup questions={questions} qType={qType} onAnswer={handleAnswer} />;
+  }
+
+  if (!singleQuestion) return null;
+
+  return <SingleQuestionCard question={singleQuestion} options={singleOptions} qType={qType} onAnswer={handleAnswer} />;
+}

@@ -30,7 +30,7 @@ function getDc(depth: number) {
 export default function KnowledgeExplainCard({ card }: { card: ExplainCardData }) {
   const {
     id, depth, selected_text, context_node_id, collapsed, explanation, mastery,
-    conversation_id, message_id, pos_x, pos_y, conversation,
+    conv_id, message_id, pos_x, pos_y, conversation,
   } = card;
   const updateCard = useExplainStore((s) => s.updateCard);
   const deleteCard = useExplainStore((s) => s.deleteCard);
@@ -221,7 +221,7 @@ export default function KnowledgeExplainCard({ card }: { card: ExplainCardData }
   const mkChild = useCallback(() => {
     if (!selectedInside) return;
     createCard({
-      conversation_id, message_id, depth: depth + 1, parent_card_id: id,
+      conv_id, message_id, depth: depth + 1, parent_card_id: id,
       selected_text: selectedInside,
       pos_x: (pos_x ?? 0) + 26,
       pos_y: (pos_y ?? 0) + 26,
@@ -229,7 +229,7 @@ export default function KnowledgeExplainCard({ card }: { card: ExplainCardData }
     });
     setToolbar(null); setSelectedInside("");
     window.getSelection()?.removeAllRanges();
-  }, [selectedInside, conversation_id, message_id, depth, id, createCard, pos_x, pos_y]);
+  }, [selectedInside, conv_id, message_id, depth, id, createCard, pos_x, pos_y]);
 
   // 修改掌握状态
   const handleMastery = (m: "learning" | "mastered") => { setLocMastery(m); updateCard(id, { mastery: m }); };

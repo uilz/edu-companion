@@ -1,9 +1,9 @@
 """简洁版：后台流活跃检测
 
 设计：
-- _active_streams: set[conversation_id] 记录正在运行的后台流
+- _active_streams: set[conv_id] 记录正在运行的后台流
 - WS 断开后流仍在后台跑，持续写入 DB
-- 前端通过 GET /api/v2/stream/active/{conv_id} 检测活跃状态
+- 前端通过 GET /api/stream/active/{conv_id} 检测活跃状态
 - 活跃时轮询 loadMessages() 拿到增量内容
 """
 
@@ -22,19 +22,19 @@ class ActiveStreamTracker:
         self._active: set[str] = set()
         self._lock = asyncio.Lock()
 
-    async def mark_start(self, conversation_id: str) -> None:
+    async def mark_start(self, conv_id: str) -> None:
         async with self._lock:
-            self._active.add(conversation_id)
-            logger.info(f"Stream active [{conversation_id[:8]}]")
+            self._active.add(conv_id)
+            logger.info(f"Stream active [{conv_id[:8]}]")
 
-    async def mark_done(self, conversation_id: str) -> None:
+    async def mark_done(self, conv_id: str) -> None:
         async with self._lock:
-            self._active.discard(conversation_id)
-            logger.info(f"Stream done [{conversation_id[:8]}]")
+            self._active.discard(conv_id)
+            logger.info(f"Stream done [{conv_id[:8]}]")
 
-    async def is_active(self, conversation_id: str) -> bool:
+    async def is_active(self, conv_id: str) -> bool:
         async with self._lock:
-            return conversation_id in self._active
+            return conv_id in self._active
 
 
 active_streams = ActiveStreamTracker()

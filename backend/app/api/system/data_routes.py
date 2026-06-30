@@ -14,7 +14,7 @@ from app.services.common import get_data_repo, get_admin_repo
 from app.services.knowledge.tree_service import tree_ops
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v7/data", tags=["学习数据管理"])
+router = APIRouter(prefix="/api/data", tags=["学习数据管理"])
 
 
 
@@ -121,7 +121,7 @@ async def list_knowledge_graphs(user_id: str = Depends(current_user_id)):
     for gid, g in data.knowledge_graphs.items():
         dir_node = data.directory_nodes.get(gid)
         graphs.append({
-            "partition_id": gid,
+            "dir_id": gid,
             "partition_name": dir_node.display_name if dir_node else "未知",
             "name": g.name,
             "version": g.version,
@@ -203,35 +203,35 @@ async def list_materials(user_id: str = Depends(current_user_id), page: int = Qu
 # DELETE /partition/{id} — 删除分区（含所有子数据）
 # ═══════════════════════════════════════════════════════════
 
-@router.delete("/partition/{partition_id}")
-async def delete_partition_data(partition_id: str, user_id: str = Depends(current_user_id)):
+@router.delete("/partition/{dir_id}")
+async def delete_partition_data(dir_id: str, user_id: str = Depends(current_user_id)):
     """删除指定目录节点及其所有子数据"""
     data = get_data_repo().load(user_id)
-    if partition_id not in data.directory_nodes:
+    if dir_id not in data.directory_nodes:
         raise HTTPException(status_code=404, detail="目录节点不存在")
     
-    node = data.directory_nodes[partition_id]
-    tree_ops.delete_node(user_id, partition_id)
+    node = data.directory_nodes[dir_id]
+    tree_ops.delete_node(user_id, dir_id)
     
     # 删除关联的知识图谱
-    if partition_id in data.knowledge_graphs:
-        del data.knowledge_graphs[partition_id]
+    if dir_id in data.knowledge_graphs:
+        del data.knowledge_graphs[dir_id]
         get_data_repo().save(user_id, data)
     
-    return {"ok": True, "deleted": {"node_id": partition_id, "node_type": node.node_type, "name": node.display_name}}
+    return {"ok": True, "deleted": {"node_id": dir_id, "node_type": node.node_type, "name": node.display_name}}
 
 
 # ═══════════════════════════════════════════════════════════
-# DELETE /knowledge-graph/{partition_id} — 删除知识图谱
+# DELETE /knowledge-graph/{dir_id} — 删除知识图谱
 # ═══════════════════════════════════════════════════════════
 
-@router.delete("/knowledge-graph/{partition_id}")
-async def delete_knowledge_graph(partition_id: str, user_id: str = Depends(current_user_id)):
+@router.delete("/knowledge-graph/{dir_id}")
+async def delete_knowledge_graph(dir_id: str, user_id: str = Depends(current_user_id)):
     """删除指定分区的知识图谱"""
     data = get_data_repo().load(user_id)
-    if partition_id not in data.knowledge_graphs:
+    if dir_id not in data.knowledge_graphs:
         raise HTTPException(status_code=404, detail="知识图谱不存在")
-    del data.knowledge_graphs[partition_id]
+    del data.knowledge_graphs[dir_id]
     get_data_repo().save(user_id, data)
     return {"ok": True}
 

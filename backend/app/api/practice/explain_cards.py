@@ -30,7 +30,7 @@ def _card_to_dict(card: dict) -> dict:
     return {
         "id": card.get("id", ""),
         "user_id": card.get("user_id", ""),
-        "conversation_id": card.get("conversation_id", ""),
+        "conv_id": card.get("conv_id", ""),
         "message_id": card.get("message_id", ""),
         "depth": int(card.get("depth", 1)),
         "parent_card_id": card.get("parent_card_id"),
@@ -95,7 +95,7 @@ def _get_descendant_card_ids(message_id: str, card_id: str) -> list[str]:
 
 @router.get("", summary="获取对话的解释卡片列表")
 async def list_cards(
-    conversation_id: str = Query(...),
+    conv_id: str = Query(...),
     user_id: str = Query(default=None),
 ):
     """
@@ -105,14 +105,14 @@ async def list_cards(
     uid = get_user_id(user_id)
     from app.services.conversation.message_repository import get_message_repo
     repo = get_message_repo()
-    all_messages = repo.load_by_directory(uid, conversation_id)
+    all_messages = repo.load_by_directory(uid, conv_id)
 
     all_cards = []
     for node in all_messages.values():
         cards = node.metadata.get("explain_cards", []) if node.metadata else []
         if isinstance(cards, list):
             for card in cards:
-                if card.get("conversation_id") == conversation_id:
+                if card.get("conv_id") == conv_id:
                     all_cards.append(_card_to_dict(card))
 
     all_cards.sort(key=lambda c: c.get("created_at", ""))
@@ -128,7 +128,7 @@ async def create_card(body: dict, user_id: str = Query(default=None)):
 
     请求体:
     {
-        "conversation_id": "...",
+        "conv_id": "...",
         "message_id": "...",
         "depth": 1,
         "parent_card_id": null,
@@ -150,7 +150,7 @@ async def create_card(body: dict, user_id: str = Query(default=None)):
     card = {
         "id": card_id,
         "user_id": uid,
-        "conversation_id": body.get("conversation_id", ""),
+        "conv_id": body.get("conv_id", ""),
         "message_id": message_id,
         "depth": int(body.get("depth", 1)),
         "parent_card_id": body.get("parent_card_id") or None,

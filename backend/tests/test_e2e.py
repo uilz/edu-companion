@@ -115,7 +115,7 @@ if pid:
 # ══════════════════════════════════
 print("\n── 2. 领域 CRUD ──")
 if pid:
-    r = POST("/domains", {"partition_id": pid, "name": f"领域_{uid}", "emoji": "📚"})
+    r = POST("/domains", {"dir_id": pid, "name": f"领域_{uid}", "emoji": "📚"})
     check("POST /domains", r, '"id"')
     did = None
     try: did = json.loads(r).get("domain", json.loads(r)).get("id") or json.loads(r).get("id")
@@ -178,7 +178,7 @@ try:
     if cid:
         # Persist a user message
         r = POST("/messages/persist", {
-            "conversation_id": cid, "role": "user",
+            "conv_id": cid, "role": "user",
             "content": "测试消息：极限的定义是什么？",
             "source": "user",
             "metadata": {"test": True}
@@ -190,7 +190,7 @@ try:
         
         # Persist an assistant response
         r = POST("/messages/persist", {
-            "conversation_id": cid, "role": "assistant",
+            "conv_id": cid, "role": "assistant",
             "content": "极限是微积分的基础概念...",
             "source": "assistant",
             "metadata": {"test": True}
@@ -231,16 +231,16 @@ try:
             ["curl", "-s", "-w", "%{http_code}", "-X", "POST",
              f"http://localhost:8000/api/conversations/workspace/upload",
              "-F", "file=@/etc/hostname",
-             "-F", f"conversation_id={cid}"],
+             "-F", f"conv_id={cid}"],
             capture_output=True, text=True, timeout=15
         )
         out = result.stdout.strip()
         print(f"  Upload 响应: {out[:100]}")
-        check("Upload file (conversation_id)", out, "200")
+        check("Upload file (conv_id)", out, "200")
         
         # List files
         result = subprocess.run(
-            ["curl", "-s", f"http://localhost:8000/api/conversations/workspace/files?conversation_id={cid}"],
+            ["curl", "-s", f"http://localhost:8000/api/conversations/workspace/files?conv_id={cid}"],
             capture_output=True, text=True, timeout=15
         )
         r = result.stdout.strip()
@@ -253,7 +253,7 @@ try:
             if files:
                 fname = files[0].get("name", "")
                 result2 = subprocess.run(
-                    ["curl", "-s", f"http://localhost:8000/api/conversations/workspace/files/detail?conversation_id={cid}"],
+                    ["curl", "-s", f"http://localhost:8000/api/conversations/workspace/files/detail?conv_id={cid}"],
                     capture_output=True, text=True, timeout=10
                 )
                 r2 = result2.stdout.strip()

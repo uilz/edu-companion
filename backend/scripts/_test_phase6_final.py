@@ -31,7 +31,7 @@ async def main():
         )
         print(f"  NodeCreated → {node.label}")
     
-    EventService.emit_v6_event(
+    EventService.emit_event(
         event_type="PendingCrossTopic", user_id=uid,
         payload={
             "candidates": [{"id": t.id, "label": t.label, "score": 0.85} for t in topics[:2]],

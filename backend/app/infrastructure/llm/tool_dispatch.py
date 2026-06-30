@@ -23,7 +23,7 @@ from app.infrastructure.llm.tool_executor import tool_executor, SLOW_TOOLS
 from app.infrastructure.llm.tool_repository import get_tool_repository
 
 from app.infrastructure.llm.llm_core import _find_active_conversation, parse_sources
-from app.services.conversation.context_pipeline import build_llm_messages
+from app.domain.conversation.context_pipeline import build_llm_messages
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 def _build_tool_params(tool_name: str, user_text: str, partition, conversation=None) -> dict:
     """根据工具类型从用户输入构建参数"""
-    subject = getattr(partition, "subject", "") or "通用"
+    subject = getattr(partition, "display_name", "") or "通用"
     if tool_name == "search_media":
         return {"query": user_text, "platforms": ["bilibili", "zhihu", "youtube"]}
     elif tool_name == "generate_practice":
@@ -43,7 +43,7 @@ def _build_tool_params(tool_name: str, user_text: str, partition, conversation=N
             "knowledge_point": user_text[:80],
             "difficulty": "进阶",
             "count": 2,
-            "conversation_id": conversation.id if conversation else "",
+            "conv_id": conversation.id if conversation else "",
             "bank_name": "",  # LLM 可指定
         }
     elif tool_name == "query_question_banks":
@@ -70,6 +70,12 @@ def _build_tool_params(tool_name: str, user_text: str, partition, conversation=N
 def _summarize_tool_result(tool_name: str, block: ResponseBlock) -> str:
     """提取工具结果中的关键信息，供 LLM 引用"""
     content = block.content or {}
+
+    # 通用失败检查：确保 LLM 感知到工具执行失败
+    if block.status == "failed":
+        error_msg = content.get("error", "未知错误")
+        return f"工具{tool_name}执行失败: {error_msg}"
+
     if tool_name == "search_media":
         platforms = content.get("platforms", [])
         links_count = sum(len(p.get("links", [])) for p in platforms)
@@ -93,6 +99,16 @@ def _summarize_tool_result(tool_name: str, block: ResponseBlock) -> str:
         return "已生成思维导图"
     elif tool_name == "generate_document":
         return "已生成文档"
+    elif tool_name == "ask_question":
+        q_type = content.get("type", "choice")
+        questions = content.get("questions", [])
+        if not questions:
+            return "已向用户提问，等待回答"
+        qs = [q.get("question", "") for q in questions]
+        count = len(qs)
+        if count == 1:
+            return f"已向用户提出{'选择题' if q_type == 'choice' else '开放问题'}：{qs[0]}，等待回答后继续"
+        return f"已向用户提出{count}个{'选择题' if q_type == 'choice' else '开放问题'}：{' / '.join(qs[:3])}{'...' if count > 3 else ''}，等待回答后继续"
     return f"工具{tool_name}执行完成"
 
 
@@ -114,7 +130,7 @@ def _build_tool_context(tool_results: list[dict]) -> str:
 
 async def generate_reply_with_tools(
     user_id: str,
-    partition_id: str,
+    dir_id: str,
     user_text: str,
 ) -> list[ResponseBlock]:
     """生成助手回复，集成工具调用（非流式）。
@@ -123,17 +139,17 @@ async def generate_reply_with_tools(
     返回 ResponseBlock 列表：text block（首位） + tool result blocks。
     """
     data = get_data_repo().load(user_id)
-    partition = data.partitions.get(partition_id)
-    if not partition:
-        raise ValueError(f"Partition {partition_id} not found")
+    partition = data.directory_nodes.get(dir_id)
+    if not partition or partition.node_type != "dir":
+        raise ValueError(f"Directory {dir_id} not found")
 
-    conversation = _find_active_conversation(data, partition_id)
+    conversation = _find_active_conversation(data, dir_id)
     if not conversation:
         raise ValueError(f"Active conversation not found")
 
     # 获取最近消息
     recent_messages = []
-    for nid in conversation.path[-8:]:
+    for nid in conversation.conv_message_ids[-8:]:
         node = data.nodes.get(nid)
         if node and not node.is_deleted:
             recent_messages.append(node)
@@ -179,8 +195,8 @@ async def generate_reply_with_tools(
                         tool_name=tool_name,
                         params=params,
                         block_id=tool_block.id,
-                        partition_id=partition_id,
-                        conversation_id=conversation.id if conversation else "",
+                        dir_id=dir_id,
+                        conv_id=conversation.id if conversation else "",
                     )
                     data.response_blocks[tool_block.id] = tool_block
                     get_data_repo().save(user_id, data)
@@ -280,8 +296,8 @@ async def generate_reply_with_tools(
                             tool_name=tool_name,
                             params=args,
                             block_id=tool_block.id,
-                            partition_id=partition_id,
-                            conversation_id=conversation.id if conversation else "",
+                            dir_id=dir_id,
+                            conv_id=conversation.id if conversation else "",
                         )
                         data.response_blocks[tool_block.id] = tool_block
                         get_data_repo().save(user_id, data)

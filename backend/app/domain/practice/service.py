@@ -127,11 +127,20 @@ class PracticeServiceImpl:
         ))
 
         if not is_correct:
+            # A1: 选项级错因标记 — 从选中的干扰项提取 distractor_type
+            selected_option = None
+            if options:
+                for o in options:
+                    if o.get("letter", "").strip().upper() == answer.strip().upper():
+                        selected_option = o
+                        break
+            distractor_type = selected_option.get("distractor_type") if selected_option else None
+
             await self._bus.publish(ErrorRecorded(
                 user_id=user_id,
                 question_id=question_id,
                 skill_id=question.get("skill_id", ""),
-                error_type="careless",
+                error_type=distractor_type or "careless",
                 user_answer=answer,
                 correct_answer=correct_answers,
             ))
@@ -282,8 +291,8 @@ class PracticeServiceImpl:
         bloom_distribution: dict[str, int] | None = None,
         sources: dict | None = None,
     ) -> list[dict]:
-        from app.services.practice.engine import adaptive_select_v2
-        return adaptive_select_v2(
+        from app.services.practice.engine import adaptive_select
+        return adaptive_select(
             bank_id, user_id, count, mode, exclude_ids,
             cognitive_node_ids=cognitive_node_ids,
         )
@@ -313,9 +322,9 @@ class PracticeServiceImpl:
     # 题库管理
     # ═══════════════════════════════════════════════════════
 
-    def resolve_bank_for_conversation(self, partition_id: str, topic: str = "") -> str:
+    def resolve_bank_for_conversation(self, dir_id: str, topic: str = "") -> str:
         from app.services.practice.engine import resolve_bank_for_conversation
-        return resolve_bank_for_conversation(partition_id, topic)
+        return resolve_bank_for_conversation(dir_id, topic)
 
     def resolve_bank_for_node(self, node_id: str) -> str:
         from app.services.practice.engine import resolve_bank_for_node
@@ -359,10 +368,10 @@ class PracticeServiceImpl:
     # ═══════════════════════════════════════════════════════
 
     async def integrate_practice_to_branch(
-        self, user_id: str, session, partition_id: str, branch_id: str,
+        self, user_id: str, session, dir_id: str, branch_id: str,
     ) -> dict | None:
         from app.services.practice.engine import integrate_practice_to_branch
-        result = await integrate_practice_to_branch(user_id, session, partition_id, branch_id)
+        result = await integrate_practice_to_branch(user_id, session, dir_id, branch_id)
         if result is None:
             return None
         return {"node_id": result.id} if hasattr(result, "id") else {"status": "ok"}

@@ -36,7 +36,7 @@ def create_exam(
     4. 所有题目一次性组好
     """
     from app.infrastructure.db.database import get_db
-    from app.services.practice.practice_adaptive import adaptive_select_v2
+    from app.services.practice.practice_adaptive import adaptive_select
     db = get_db()
 
     now = datetime.now()
@@ -51,8 +51,8 @@ def create_exam(
         **(config or {}),
     }
 
-    # 1. 组题（v2 自适应模式）
-    questions = adaptive_select_v2(
+    # 1. 组题（自适应模式）
+    questions = adaptive_select(
         bank_id=bank_id,
         user_id=user_id,
         count=count,

@@ -18,10 +18,8 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.learning.study import router as study_router
-# practice_router 已迁移到 v7 (practice_routes_router)
 from app.api.learning.progress import router as progress_router
 from app.api.conversation.conversation import router as conversation_router
-# knowledge_router 已迁移到 v5 (knowledge_tree_v5_router) — explain/retention/graph 均在 v5 中
 from app.api.learning.partition_progress import router as partition_progress_router
 from app.api.system.multimodal import router as multimodal_router
 from app.api.system.achievements import router as achievements_router
@@ -30,29 +28,32 @@ from app.api.system.secretary import router as secretary_router
 from app.api.learning.cognitive import router as learning_router
 from app.api.system.summaries import router as summaries_router
 
-# Phase 10: 笔记/目标/探索项目
+# 笔记/目标/探索项目
 from app.api.learning.learning_enhance import router as learning_enhance_router
 
-# Phase 10.7+: 文件管理
+# 文件管理
 from app.api.system.files_routes import router as files_router, recover_stuck_files
 
-# 认证系统 — 已迁移至独立认证网关 (auth-gateway:8001)
-# 主后端仅保留认证中间件，用于调用网关验证令牌
-
-# 解释卡片 CRUD
+# 解释卡片
 from app.api.practice.explain_cards import router as explain_cards_router
 
 # 智能题库
 from app.api.practice.practice_routes import router as practice_routes_router
 from app.api.practice.references import router as references_router
 
-# v8.0 学习数据管理
+# 学习数据管理
 from app.api.system.data_routes import router as data_router
 
-# v5.0 知识树系统 (四实体解耦架构)
-from app.api.knowledge_tree_v5 import router as knowledge_tree_v5_router
+# 事件系统（客户端驱动聚合）+ 工具定义 API
+from app.infrastructure.scheduler.events_api import router as events_router, _tools_router
+
+# 知识树系统 (四实体解耦架构)
+from app.api.knowledge_tree import router as knowledge_tree_router
 from app.api.knowledge_tree_sse import router as knowledge_tree_sse_router
 from app.api.knowledge_tree_ai import router as knowledge_tree_ai_router
+
+# 管理员系统
+from app.api.admin.admin_routes import router as admin_router
 
 # 用户自定义 LLM 配置
 from app.domain.auth.settings_api import router as settings_router
@@ -60,7 +61,7 @@ from app.domain.auth.settings_api import router as settings_router
 from app.config import settings
 from shared.learner_model import learner_engine
 
-# Phase 9 D.3: 请求追踪
+# 请求追踪
 from app.middleware.trace import TraceMiddleware
 
 # 配置日志
@@ -70,41 +71,6 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
-
-
-async def _migrate_pgvector():
-    """pgvector 批量迁移：扫描所有 status='indexed' 但 embedding_vec 为空的文件，异步重索引"""
-    from app.infrastructure.db.database import get_db
-    db = get_db()
-
-    # 检查是否已有 pgvector 数据(避免重复迁移)
-    has_vec = db.fetchone(
-        "SELECT 1 FROM material_chunks WHERE embedding_vec IS NOT NULL LIMIT 1"
-    )
-    if has_vec:
-        logger.info("pgvector 数据已存在，跳过批量迁移")
-        return
-
-    rows = db.fetchall(
-        "SELECT * FROM materials WHERE status = 'indexed'"
-    )
-    if not rows:
-        return
-
-    logger.info("🧬 pgvector 迁移: %d 个文件需要重索引...", len(rows))
-    from app.api.system.files_routes.upload import _index_background
-    import asyncio
-    for row in rows:
-        from pathlib import Path
-        storage_path = row.get("storage_path", "")
-        if storage_path and Path(storage_path).exists():
-            asyncio.ensure_future(_index_background(
-                row["user_id"], row["material_id"], storage_path,
-                row["file_name"], row["file_type"],
-                row.get("file_size", 0), row["purpose"],
-            ))
-            logger.debug("  pgvector 迁移: %s", row["file_name"])
-    logger.info("🧬 pgvector 迁移: %d 个文件已加入重索引队列", len(rows))
 
 
 async def _retry_index_failed():
@@ -157,7 +123,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     get_db()
     logger.info("💾 PostgreSQL 已连接")
 
-    # 资料元数据索引已废弃(v3: materials_meta.json → PG materials 表)
+    # 资料元数据索引已废弃
     # 旧 ensure_indexed() 调用已移除
 
     # 恢复 stuck 文件（uploading → 重新索引）
@@ -166,11 +132,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning("stuck 文件恢复跳过: %s", e)
 
-    # pgvector 批量迁移：为旧 indexed 文件填充 embedding_vec
-    try:
-        await _migrate_pgvector()
-    except Exception as e:
-        logger.warning("pgvector 批量迁移跳过: %s", e)
+    # pgvector 迁移已移除 — 需要时手动触发 reindex
 
     # 重试 index_failed 文件（S3-Q3: 定时重试）
     try:
@@ -178,23 +140,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning("index_failed 重试跳过: %s", e)
 
-    # Phase 5: 注入领域事件总线到 Orchestrator（多媒体生成触发）
+    # 注入领域事件总线到 Orchestrator（多媒体生成触发）
     from app.application.di import container
 
-    # v6: 启动 PersistentEventBus 后台轮询（崩溃恢复）
-    if hasattr(container.event_bus, 'start'):
-        await container.event_bus.start()
-        logger.info("📡 PersistentEventBus 后台轮询已启动")
-
-    # Phase 7.4: 发现内置模块 + 启动秘书主动检查器
+    # 发现内置模块 + 初始化秘书系统
     try:
         from app.domain.secretary.engines.module_registry import module_registry
         count = module_registry.discover_builtin()
-        logger.info("🔌 秘书模块注册: %d 个内置模块 (Phase 7.4)", count)
+        logger.info("🔌 秘书模块注册: %d 个内置模块", count)
     except Exception as e:
         logger.warning("秘书模块注册失败: %s", e)
 
-    # v9: 初始化统一工具仓库（ToolRepository）
+    # 初始化统一工具仓库（ToolRepository）
     try:
         from app.infrastructure.llm.tool_repository import get_tool_repository
         repo = get_tool_repository()
@@ -223,43 +180,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning("秘书 Infra 注入失败: %s", e)
 
-    try:
-        from app.domain.secretary.engines.active_checker import active_checker
-        active_checker.start()
-        logger.info("🔍 秘书主动检查器已启动 (Phase 7.4)")
-    except Exception as e:
-        logger.warning("秘书主动检查器启动失败: %s", e)
-
-    # Phase 7.5+: 订阅领域事件
+    # 订阅领域事件
     try:
         from app.infrastructure.db.proposal_store import ProposalStore
         from app.domain.secretary.engines.secretary_event_handler import secretary_event_handler
         secretary_event_handler._store = ProposalStore()
         secretary_event_handler.subscribe(container.event_bus)
-        logger.info("📡 秘书事件处理器已订阅 (Phase 7.5)")
+        logger.info("📡 秘书事件处理器已订阅")
     except Exception as e:
         logger.warning("秘书事件处理器订阅失败: %s", e)
 
-    # v6 Phase 4: 启动事件消费者（轮询 cognitive_events）
-    try:
-        from app.services.common.event_service import event_service
-        event_service.start_consumer()
-    except Exception as e:
-        logger.warning("事件消费者启动失败: %s", e)
-
-    # v2 EventSystem: 标记 EventStore/EventMemory/Aggregator 就绪
-    try:
-        logger.info("📦 EventStore v2 就绪 (stream/query/replay/search)")
-        logger.info("🧠 EventMemory v2 就绪 (ShortTerm/Working/LongTerm/Episodic)")
-        logger.info("📊 EventAggregator v2 就绪 (ConversationDigest/PracticeSessionSummary/DailyDigest)")
-    except Exception:
-        pass
-
-    # Phase 8: 初始化对话摘要表
+    # ── 初始化对话摘要表 ──
     try:
         from app.services.common.summary_service import ensure_summaries_table
         ensure_summaries_table()
-        logger.info("📋 conversation_summaries 表已就绪 (Phase 8)")
+        logger.info("📋 conversation_summaries 表已就绪")
     except Exception as e:
         logger.warning("对话摘要表初始化失败: %s", e)
 
@@ -267,34 +202,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if cleaned > 0:
         logger.info("🧹 清理了 %d 个过期会话", cleaned)
 
+    # ═══════════════════════════════════════════
+    # 中央调度器 — 统一管理所有服务端后台任务
+    # ═══════════════════════════════════════════
+    from app.infrastructure.scheduler import BackgroundScheduler
+    from app.infrastructure.scheduler.tasks import event_bus_poll, event_consumer
+
+    app.state.scheduler = BackgroundScheduler()
+    app.state.scheduler.add_task("event_bus", 0.5, event_bus_poll)
+    app.state.scheduler.add_task("event_consumer", 5.0, event_consumer)
+
+    await app.state.scheduler.start_all()
+    logger.info("✅ 中央调度器已启动: %d 个后台任务", len(app.state.scheduler._tasks))
+
     logger.info("✅ 应用启动完成")
 
     yield
 
-    # Phase 7.3: 停止秘书主动检查器
-    try:
-        from app.domain.secretary.engines.active_checker import active_checker
-        await active_checker.stop()
-        logger.info("🔍 秘书主动检查器已停止")
-    except Exception:
-        logger.debug("秘书主动检查器停止失败", exc_info=True)
-
-    # v6 Phase 4: 停止事件消费者
-    try:
-        from app.services.common.event_service import event_service
-        await event_service.stop_consumer()
-        logger.info("🔄 事件消费者已停止")
-    except Exception:
-        logger.debug("事件消费者停止失败", exc_info=True)
-
-    # v6: 停止 PersistentEventBus 后台轮询
-    try:
-        from app.application.di import container
-        if hasattr(container.event_bus, 'stop'):
-            await container.event_bus.stop()
-            logger.info("📡 PersistentEventBus 后台轮询已停止")
-    except Exception:
-        logger.debug("PersistentEventBus 停止失败", exc_info=True)
+    # ═══════════════════════════════════════════
+    # 中央调度器关闭
+    # ═══════════════════════════════════════════
+    if hasattr(app.state, 'scheduler'):
+        await app.state.scheduler.stop_all()
+        logger.info("👋 中央调度器已停止，所有后台任务已关闭")
 
     logger.info("👋 应用关闭")
 
@@ -335,8 +265,19 @@ async def security_headers(request: Request, call_next):
 
 
 # ── 请求超时中间件 ──
+# 对 SSE 流式端点跳过超时，其余请求受 settings.request_timeout 约束
+_STREAMING_PATH_SUFFIXES = ("/message",)
+
+
 @app.middleware("http")
 async def request_timeout(request: Request, call_next):
+    # SSE 流式端点（POST /tree/conversation/{cid}/message）需要长连接，跳过超时
+    path = request.url.path
+    if any(path.endswith(suffix) for suffix in _STREAMING_PATH_SUFFIXES):
+        # 但只跳过实际产生 stream 的（即 POST 且 action 非 stop）
+        # 简化：message 后缀的长连接全跳过，不超时
+        return await call_next(request)
+
     try:
         return await asyncio.wait_for(call_next(request), timeout=settings.request_timeout)
     except asyncio.TimeoutError:
@@ -382,8 +323,9 @@ async def global_exception_handler(request: Request, exc: Exception):
 
     # 未知异常 — 记录完整堆栈后返回通用错误
     logger.exception(
-        "未处理异常 [%s] %s %s: %s",
-        request.method, request.url.path, exc, extra={"trace_id": request.headers.get("x-trace-id", "")},
+        "未处理异常 [%s] %s: %s",
+        request.method, request.url.path, exc,
+        extra={"trace_id": request.headers.get("x-trace-id", "")},
     )
     return JSONResponse(
         status_code=500,
@@ -409,7 +351,7 @@ app.include_router(study_router)
 app.include_router(progress_router)
 # 对话系统（树结构 + WebSocket）
 app.include_router(conversation_router, prefix="/api/conversations", tags=["conversations"])
-# 学习画像 (v3.0 PartitionProgress)
+# 学习画像 (PartitionProgress)
 app.include_router(partition_progress_router)
 # 多模态（STT 转写）
 app.include_router(multimodal_router)
@@ -422,27 +364,34 @@ app.include_router(secretary_router)
 app.include_router(learning_router)
 app.include_router(summaries_router)
 
-# Phase 10: 笔记/目标/探索项目
+# 笔记/目标/探索项目
 app.include_router(learning_enhance_router)
 
-# Phase 10.7+: 文件管理
+# 文件管理
 app.include_router(files_router)
+
+# 管理员系统
+app.include_router(admin_router)
 
 # 用户自定义 LLM 配置（非认证 — 保留在主后端）
 app.include_router(settings_router)
 
-# v7.0 智能题库
+# 智能题库
 app.include_router(practice_routes_router)
 app.include_router(references_router)
 
-# 解释卡片 CRUD
+# 解释卡片
 app.include_router(explain_cards_router)
 
-# v8.0 学习数据管理
+# 学习数据管理
 app.include_router(data_router)
 
-# v5.0 知识树系统 (四实体解耦架构)
-app.include_router(knowledge_tree_v5_router)
+# 事件系统（客户端驱动聚合）
+app.include_router(events_router)
+app.include_router(_tools_router)
+
+# 知识树系统 (四实体解耦架构)
+app.include_router(knowledge_tree_router)
 app.include_router(knowledge_tree_sse_router)
 app.include_router(knowledge_tree_ai_router)
 
@@ -464,7 +413,7 @@ async def health_check() -> dict:
         checks["status"] = "degraded"
         logger.warning("Health check DB failed: %s", e)
 
-    # Phase 7: 事件队列监控
+    # 事件队列监控
     try:
         event_count = db.fetchone(
             "SELECT COUNT(*) as cnt FROM cognitive_events WHERE processed = false"
@@ -476,7 +425,7 @@ async def health_check() -> dict:
     except Exception:
         checks["event_queue_pending"] = -1
 
-    # Phase 9 D.3: 连接池统计
+    # 连接池统计
     try:
         from app.infrastructure.db.database import get_db_pool_stats
         pool_stats = get_db_pool_stats()

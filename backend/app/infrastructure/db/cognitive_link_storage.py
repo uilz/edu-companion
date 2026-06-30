@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def upsert_link(
-    conversation_id: str,
+    conv_id: str,
     node_id: str,
     is_primary: bool = False,
     added_by: str = "system",
@@ -22,25 +22,25 @@ def upsert_link(
     lid = str(uuid4())
     db.execute("""
         INSERT INTO conversation_node_links
-            (id, conversation_id, node_id, added_by, is_primary, added_at)
+            (id, conv_id, node_id, added_by, is_primary, added_at)
         VALUES (%s, %s, %s, %s, %s, %s)
-        ON CONFLICT (conversation_id, node_id)
+        ON CONFLICT (conv_id, node_id)
         DO UPDATE SET is_primary = EXCLUDED.is_primary
-    """, (lid, conversation_id, node_id, added_by, is_primary, now_iso))
-    return {"id": lid, "conversation_id": conversation_id, "node_id": node_id,
+    """, (lid, conv_id, node_id, added_by, is_primary, now_iso))
+    return {"id": lid, "conv_id": conv_id, "node_id": node_id,
             "is_primary": is_primary, "added_by": added_by}
 
 
-def get_links_for_conversation(conversation_id: str) -> list[dict]:
+def get_links_for_conversation(conv_id: str) -> list[dict]:
     """获取会话的所有关联 topic"""
     db = get_db()
     rows = db.fetchall(
         """SELECT l.*, n.label as node_label, n.path_id, n.level
            FROM conversation_node_links l
            LEFT JOIN knowledge_nodes n ON l.node_id = n.id
-           WHERE l.conversation_id = %s
+           WHERE l.conv_id = %s
            ORDER BY l.is_primary DESC, l.added_at""",
-        (conversation_id,),
+        (conv_id,),
     )
     return rows
 
@@ -51,20 +51,20 @@ def get_conversations_for_node(node_id: str) -> list[dict]:
     rows = db.fetchall(
         """SELECT l.*, c.title as conversation_title
            FROM conversation_node_links l
-           LEFT JOIN conversations c ON l.conversation_id = c.id
+           LEFT JOIN conversations c ON l.conv_id = c.id
            WHERE l.node_id = %s""",
         (node_id,),
     )
     return rows
 
 
-def set_primary_link(conversation_id: str, link_id: str) -> None:
+def set_primary_link(conv_id: str, link_id: str) -> None:
     """设某一关联为主归属（其他关联自动设非主）"""
     db = get_db()
     db.execute(
         "UPDATE conversation_node_links SET is_primary = false "
-        "WHERE conversation_id = %s",
-        (conversation_id,),
+        "WHERE conv_id = %s",
+        (conv_id,),
     )
     db.execute(
         "UPDATE conversation_node_links SET is_primary = true WHERE id = %s",
@@ -79,11 +79,11 @@ def remove_link(link_id: str) -> bool:
     return True
 
 
-def count_links_for_conversation(conversation_id: str) -> int:
+def count_links_for_conversation(conv_id: str) -> int:
     """统计会话的关联数"""
     db = get_db()
     row = db.fetchone(
-        "SELECT COUNT(*) as cnt FROM conversation_node_links WHERE conversation_id = %s",
-        (conversation_id,),
+        "SELECT COUNT(*) as cnt FROM conversation_node_links WHERE conv_id = %s",
+        (conv_id,),
     )
     return row["cnt"] if row else 0

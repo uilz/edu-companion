@@ -32,6 +32,7 @@ export default function PracticePanel({ nodeId, nodeLabel, bankId, onClose }: Pr
   const [skipped, setSkipped] = useState(false);
   const [error, setError] = useState("");
   const [submitError, setSubmitError] = useState("");
+  const [confidenceBefore, setConfidenceBefore] = useState<number | null>(null);
   const [mode, setMode] = useState<"adaptive" | "review" | "challenge">("adaptive");
   const [count, setCount] = useState(5);
   const [difficulty, setDifficulty] = useState<"auto" | "easy" | "medium" | "hard">("auto");
@@ -95,7 +96,7 @@ export default function PracticePanel({ nodeId, nodeLabel, bankId, onClose }: Pr
     setSubmitError("");
     const ts = Math.floor((Date.now() - questionStart) / 1000);
     try {
-      const r = await submitAnswer(session.session_id, question.id, finalAnswer, ts);
+      const r = await submitAnswer(session.session_id, question.id, finalAnswer, ts, undefined, confidenceBefore ?? undefined);
       setLastResult(r); setShowFeedback(true); setResults(p => [...p, r]); setPhase("result");
     } catch (e: any) {
       setSubmitError(e?.message || "提交失败，请重试");
@@ -221,6 +222,8 @@ export default function PracticePanel({ nodeId, nodeLabel, bankId, onClose }: Pr
             onNext={handleNext}
             isLast={currentIdx + 1 >= session!.total_count}
             submitError={submitError}
+            confidenceBefore={confidenceBefore}
+            onConfidenceChange={setConfidenceBefore}
           />
         )}
       </div>

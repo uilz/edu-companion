@@ -54,7 +54,7 @@ export default function PracticeHistoryPage() {
 
   // 加载题单
   useEffect(() => {
-    api<any[]>("/api/v7/practice/banks").then(data => {
+    api<any[]>("/api/practice/banks").then(data => {
       setBanks(Array.isArray(data) ? data : []);
     }).catch(() => {});
   }, []);
@@ -101,7 +101,7 @@ export default function PracticeHistoryPage() {
     }
 
     try {
-      const data = await api<any>(`/api/v7/practice/sessions?${qp}`);
+      const data = await api<any>(`/api/practice/sessions?${qp}`);
 
       if (isLoadMore) {
         setItems(prev => [...prev, ...(data.items || [])]);
@@ -127,7 +127,7 @@ export default function PracticeHistoryPage() {
   // 删除记录
   const handleDelete = async (sessionId: string) => {
     if (!confirm("确认删除此练习记录？删除后不可恢复。")) return;
-    await api(`/api/v7/practice/sessions/${sessionId}`, { method: "DELETE" });
+    await api(`/api/practice/sessions/${sessionId}`, { method: "DELETE" });
     setItems(prev => prev.filter(s => s.session_id !== sessionId));
     if (total !== null) setTotal(total - 1);
   };

@@ -1,5 +1,5 @@
 """
-Knowledge v5 — 四实体解耦架构服务层
+Knowledge — 四实体解耦架构服务层
 
 KnowledgeNodeService: 知识点 CRUD (封装 CognitiveNode 仓储)
 ConversationService: 会话 CRUD (独立 PG 表)

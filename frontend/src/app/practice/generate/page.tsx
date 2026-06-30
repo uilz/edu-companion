@@ -21,7 +21,7 @@ export default function GenerateQuestionsPage() {
     setError("");
     setResult(null);
     try {
-      const data = await api<any>("/api/v7/practice/generate", {
+      const data = await api<any>("/api/practice/generate", {
         method: "POST",
         body: JSON.stringify({ message: topic.trim(), count }),
       });

@@ -13,7 +13,7 @@ from app.domain.auth.dependencies import current_user_id
 from app.infrastructure.media.bilibili_search import search_bilibili
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v7/practice/references", tags=["参考资料"])
+router = APIRouter(prefix="/api/practice/references", tags=["参考资料"])
 
 
 @router.get("/search")

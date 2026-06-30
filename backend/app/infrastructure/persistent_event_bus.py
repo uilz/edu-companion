@@ -118,44 +118,52 @@ class PersistentEventBus:
         repo.mark_done(db_event.id)
         return db_event.id
 
-    async def _poll_and_dispatch(self):
-        """后台轮询 pending 事件并分发"""
+    async def poll_once(self) -> int:
+        """单次轮询 pending 事件并分发，返回处理的事件数
+
+        同步 DB 调用通过 run_in_executor 放入线程池。
+        供 BackgroundScheduler 周期调用。
+        """
+        import asyncio
         from app.infrastructure.db.events_repository import EventsRepository
 
+        loop = asyncio.get_event_loop()
         repo = EventsRepository()
+        count = 0
 
-        while self._running:
-            try:
-                events = repo.get_pending_events(limit=10)
-                for row in events:
-                    event_type = row["event_type"]
-                    payload = row.get("payload", {}) or {}
-                    handlers = self._handlers.get(event_type, [])
-                    if not handlers:
-                        repo.mark_done(row["id"])
+        try:
+            events = await loop.run_in_executor(None, repo.get_pending_events, 10)
+            for row in events:
+                event_type = row["event_type"]
+                payload = row.get("payload", {}) or {}
+                handlers = self._handlers.get(event_type, [])
+                if not handlers:
+                    await loop.run_in_executor(None, repo.mark_done, row["id"])
+                    continue
+
+                # 从 payload 重建 DomainEvent
+                event_cls = self._resolve_event_class(event_type)
+                if event_cls is not None:
+                    try:
+                        domain_event = event_cls(**payload)
+                    except TypeError:
+                        logger.warning(
+                            "无法从 payload 重建 %s，跳过", event_type
+                        )
+                        await loop.run_in_executor(None, repo.mark_done, row["id"])
                         continue
+                else:
+                    await loop.run_in_executor(None, repo.mark_done, row["id"])
+                    continue
 
-                    # 从 payload 重建 DomainEvent
-                    event_cls = self._resolve_event_class(event_type)
-                    if event_cls is not None:
-                        try:
-                            domain_event = event_cls(**payload)
-                        except TypeError:
-                            logger.warning(
-                                "无法从 payload 重建 %s，跳过", event_type
-                            )
-                            repo.mark_done(row["id"])
-                            continue
-                    else:
-                        repo.mark_done(row["id"])
-                        continue
+                # 并行 dispatch 所有 handler
+                await self._dispatch_to_handlers(event_type, domain_event)
+                await loop.run_in_executor(None, repo.mark_done, row["id"])
+                count += 1
+        except Exception as e:
+            logger.error(f"Poll error: {e}")
 
-                    # 并行 dispatch 所有 handler
-                    await self._dispatch_to_handlers(event_type, domain_event)
-                    repo.mark_done(row["id"])
-            except Exception as e:
-                logger.error(f"Poll error: {e}")
-            await asyncio.sleep(self._poll_interval)
+        return count
 
     async def _dispatch_to_handlers(
         self, event_type: str, event: DomainEvent
@@ -195,9 +203,9 @@ class PersistentEventBus:
         return EVENT_TYPES.get(event_type)
 
     async def start(self):
-        """启动后台轮询"""
+        """启动后台轮询（保留兼容，推荐由中央调度器管理）"""
         self._running = True
-        self._task = asyncio.create_task(self._poll_and_dispatch())
+        self._task = asyncio.create_task(self._legacy_loop())
 
     async def stop(self):
         """停止后台轮询"""
@@ -208,3 +216,10 @@ class PersistentEventBus:
                 await self._task
             except asyncio.CancelledError:
                 pass
+            self._task = None
+
+    async def _legacy_loop(self):
+        """保留的旧版循环（仅当未使用调度器时生效）"""
+        while self._running:
+            await self.poll_once()
+            await asyncio.sleep(self._poll_interval)

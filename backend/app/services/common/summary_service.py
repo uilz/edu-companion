@@ -2,7 +2,7 @@
 对话摘要存储 — conversation_summaries 表适配
 
 现有表结构：
-  id, conversation_id, user_id, round_number,
+  id, conv_id, user_id, round_number,
   summary, involved_node_ids, token_count, created_at
 
 每 N 轮对话生成一次结构化摘要，用于长上下文裁剪。
@@ -23,7 +23,7 @@ _SUMMARY_INTERVAL = 10  # 每 10 轮对话生成一次摘要
 
 
 def save_summary(
-    conversation_id: str,
+    conv_id: str,
     summary: str,
     user_id: str = "",
     round_number: int = 0,
@@ -35,10 +35,10 @@ def save_summary(
     sid = str(uuid4())[:12]
     db.execute(
         """INSERT INTO conversation_summaries
-           (id, conversation_id, user_id, round_number, summary, involved_node_ids, token_count)
+           (id, conv_id, user_id, round_number, summary, involved_node_ids, token_count)
            VALUES (%s, %s, %s, %s, %s, %s, %s)""",
         (
-            sid, conversation_id, user_id, round_number, summary,
+            sid, conv_id, user_id, round_number, summary,
             involved_node_ids or [],
             token_count,
         ),
@@ -47,16 +47,16 @@ def save_summary(
 
 
 def get_recent_summaries(
-    conversation_id: str, limit: int = 5,
+    conv_id: str, limit: int = 5,
 ) -> list[dict[str, Any]]:
     """获取最近的摘要（旧 → 新）"""
     db = get_db()
     rows = db.fetchall(
         """SELECT id, summary, involved_node_ids, round_number, token_count
            FROM conversation_summaries
-           WHERE conversation_id = %s
+           WHERE conv_id = %s
            ORDER BY round_number DESC LIMIT %s""",
-        (conversation_id, limit),
+        (conv_id, limit),
     )
     result = []
     for r in reversed(rows):
@@ -73,7 +73,7 @@ def get_recent_summaries(
 
 
 def build_condensed_context(
-    conversation_id: str,
+    conv_id: str,
     recent_turns: list[dict[str, str]],
     max_recent: int = 5,
 ) -> str:
@@ -81,7 +81,7 @@ def build_condensed_context(
     构建裁剪后的 LLM 上下文：
       最近 max_recent 轮完整消息 + 之前摘要
     """
-    summaries = get_recent_summaries(conversation_id, limit=5)
+    summaries = get_recent_summaries(conv_id, limit=5)
     parts = []
 
     if summaries:
@@ -100,7 +100,7 @@ def build_condensed_context(
 
 
 def should_generate_summary(
-    conversation_id: str, current_round: int,
+    conv_id: str, current_round: int,
 ) -> bool:
     """检查当前轮数是否需要进行摘要生成"""
     if current_round < _SUMMARY_INTERVAL:
@@ -109,8 +109,8 @@ def should_generate_summary(
         db = get_db()
         row = db.fetchone(
             "SELECT id FROM conversation_summaries "
-            "WHERE conversation_id = %s AND round_number = %s",
-            (conversation_id, current_round),
+            "WHERE conv_id = %s AND round_number = %s",
+            (conv_id, current_round),
         )
         return row is None
     return False
@@ -126,17 +126,17 @@ def ensure_summaries_table() -> None:
     ddl = """
     CREATE TABLE IF NOT EXISTS conversation_summaries (
         id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        conversation_id TEXT NOT NULL,
+        conv_id TEXT NOT NULL,
         user_id         TEXT NOT NULL,
         round_number    INT NOT NULL,
         summary         TEXT NOT NULL,
         involved_node_ids TEXT[] DEFAULT '{}',
         token_count     INT,
         created_at      TIMESTAMPTZ DEFAULT now(),
-        UNIQUE(conversation_id, round_number)
+        UNIQUE(conv_id, round_number)
     );
     CREATE INDEX IF NOT EXISTS idx_cs_conv
-        ON conversation_summaries(conversation_id, round_number DESC);
+        ON conversation_summaries(conv_id, round_number DESC);
     """
     db = get_db()
     db.execute(ddl)

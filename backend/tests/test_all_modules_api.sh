@@ -29,13 +29,13 @@ STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/health" 2>/dev/null || ec
 if [ "$STATUS" = "200" ]; then pass "API 可达 ($STATUS)"; else fail "API 不可达" "status=$STATUS"; fi
 
 # ═══════════════════════════════════════════
-# 2. 对话系统 — 分区列表
+# 2. 对话系统 — 目录节点列表
 # ═══════════════════════════════════════════
-echo; echo "═══ 2. GET /api/conversations/tree/partition ═══"
-RESP=$(curl -s "$BASE/api/conversations/tree/partition" 2>/dev/null)
-if echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'partitions' in d" 2>/dev/null; then
-    COUNT=$(echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('partitions',[])))")
-    pass "分区列表返回 (count=$COUNT)"
+echo; echo "═══ 2. GET /api/conversations/tree/directory ═══"
+RESP=$(curl -s "$BASE/api/conversations/tree/directory" 2>/dev/null)
+if echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'directory_nodes' in d" 2>/dev/null; then
+    COUNT=$(echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('directory_nodes',[])))")
+    pass "目录节点列表返回 (count=$COUNT)"
 else
     fail "分区列表异常" "${RESP:0:100}"
 fi

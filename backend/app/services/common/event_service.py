@@ -1,11 +1,11 @@
 """
-Event Service — Phase 4 事件驱动联动
+Event Service — 事件驱动联动
 
 桥接 in-memory EventBus + cognitive_events 持久化 + 后台消费。
 
 职责：
 1. 订阅所有 DomainEvent → 持久化到 cognitive_events 表
-2. 提供 v6 业务事件 emit 辅助方法
+2. 提供业务事件 emit 辅助方法
 3. 后台消费轮询未处理事件，分发到 handler
 """
 from __future__ import annotations
@@ -28,7 +28,7 @@ from shared.log_utils import log_event_processed, log_ripple_edge
 
 logger = logging.getLogger(__name__)
 
-# ── V6 事件类型常量 ──
+# ── 事件类型常量 ──
 
 EVT_MESSAGE_CLASSIFIED = "MessageClassified"
 EVT_PRACTICE_SUBMITTED = "PracticeSubmitted"
@@ -87,10 +87,10 @@ class EventService:
 
         return handler
 
-    # ─── V6 业务 emit ────────────────────────────
+    # ─── 业务 emit ────────────────────────────
 
     @staticmethod
-    def emit_v6_event(
+    def emit_event(
         event_type: str,
         user_id: str = "",
         node_id: str = "",
@@ -115,18 +115,18 @@ class EventService:
     def emit_message_classified(
         user_id: str,
         message_id: str,
-        conversation_id: str,
+        conv_id: str,
         topic_node_ids: list[str] | None = None,
         atom_node_ids: list[str] | None = None,
         mode: str = "confirm",
     ) -> str:
         """写入 message.classified 事件"""
-        return EventService.emit_v6_event(
+        return EventService.emit_event(
             EVT_MESSAGE_CLASSIFIED,
             user_id=user_id,
             payload={
                 "message_id": message_id,
-                "conversation_id": conversation_id,
+                "conv_id": conv_id,
                 "topic_node_ids": topic_node_ids or [],
                 "atom_node_ids": atom_node_ids or [],
                 "mode": mode,
@@ -140,7 +140,7 @@ class EventService:
         correctness: float = 0.0,
         latency_ms: float = 0.0,
     ) -> str:
-        return EventService.emit_v6_event(
+        return EventService.emit_event(
             EVT_PRACTICE_SUBMITTED,
             user_id=user_id,
             payload={
@@ -158,7 +158,7 @@ class EventService:
         level: str = "atom",
         created_by: str = "user",
     ) -> str:
-        return EventService.emit_v6_event(
+        return EventService.emit_event(
             EVT_NODE_CREATED,
             user_id=user_id,
             node_id=node_id,
@@ -184,7 +184,7 @@ class EventService:
         }
         if payload:
             full_payload.update(payload)
-        return EventService.emit_v6_event(
+        return EventService.emit_event(
             EVT_PROPOSAL_ACCEPTED,
             user_id=user_id,
             node_id=target_node_id,
@@ -194,7 +194,7 @@ class EventService:
     # ─── 后台消费者 ──────────────────────────────
 
     def start_consumer(self) -> None:
-        """启动后台事件消费者"""
+        """启动后台事件消费者（保留兼容，推荐由中央调度器管理）"""
         if self._running:
             return
         self._running = True
@@ -213,8 +213,26 @@ class EventService:
             self._consumer_task = None
             logger.info("🔄 EventService 消费者已停止")
 
+    async def _consume_once(self) -> None:
+        """单次消费未处理事件（供调度器周期调用）
+
+        同步 DB 调用通过 run_in_executor 放入线程池。
+        """
+        loop = asyncio.get_event_loop()
+        repo = self._repo or self._lazy_repo()
+
+        try:
+            events = await loop.run_in_executor(
+                None, repo.get_unprocessed_events, _MAX_BATCH
+            )
+            for evt in events:
+                await self._dispatch(evt)
+                await loop.run_in_executor(None, repo.mark_event_processed, evt.id)
+        except Exception:
+            logger.exception("事件消费异常")
+
     async def _consume_loop(self) -> None:
-        """轮询未处理 cognitive_events，按类型分发"""
+        """轮询未处理 cognitive_events，按类型分发（保留兼容）"""
         repo = self._repo or self._lazy_repo()
 
         while self._running:
@@ -307,7 +325,7 @@ class EventService:
             logger.debug("结构扩展检查失败", exc_info=True)
 
     async def _handle_PracticeSubmitted(self, evt) -> None:
-        """practice.submitted → 更新涉及 atom node 的掌握度（v7: 真实数据）
+        """practice.submitted → 更新涉及 atom node 的掌握度（真实数据）
 
         PracticeSubmitted 是多 node batch 事件，payload 中
         atom_node_ids: list[str]、correctness: float ∈ [0,1]、latency_ms: float。
@@ -505,7 +523,7 @@ class EventService:
             except Exception as e:
                 logger.warning("mark_expanded 执行失败: %s", e)
         elif action_type in ("review", "practice"):
-            # v7: 记录"用户已接受复习/练习"事件，便于 dashboard 展示承诺
+            # 记录用户已接受复习/练习事件，便于 dashboard 展示承诺
             # 该事件无需后续处理（processed=true），但留作历史/统计来源
             kp_id = payload.get("kp_id") or payload.get("target_node_id", "")
             try:
@@ -535,7 +553,7 @@ class EventService:
 
     async def _handle_PendingCrossTopic(self, evt) -> None:
         """
-        v6 Phase 6.3: 深度沉浸延后处理
+        深度沉浸延后处理
 
         会话结束/空闲时，读取被抑制的跨主题候选，
         生成"本次对话涉及多个话题，是否关联？"的确认提案。
@@ -643,7 +661,7 @@ def _domain_event_to_payload(event: DomainEvent, event_type: str) -> dict[str, A
     return raw
 
 
-# ─── Phase 6 辅助 ──────────────────────────
+# ─── 辅助 ──────────────────────────
 
 
 def _generate_proposal(

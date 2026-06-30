@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import re
 
-from app.schemas.conversation import Branch, TreeNode
+from app.schemas.conversation import TreeNode
 from app.schemas.practice import BloomLevel
 from app.domain.cognitive import get_repo
 
@@ -191,7 +191,7 @@ class ContextAwarePracticeTrigger:
     def trigger(
         self,
         user_id: str,
-        branch: Branch,
+        branch: Any,
         recent_messages: list[TreeNode],
         subject_hint: str = "",
         count: int = 3,
@@ -204,11 +204,13 @@ class ContextAwarePracticeTrigger:
             可直接传给练习API创建session
         """
         # 1. 提取最近文本
+        def _block_text(b):
+            if isinstance(b, dict):
+                return b.get("text", "") if b.get("type") == "text" else ""
+            return b.text if hasattr(b, "text") else ""
+
         recent_texts = [
-            msg.text_summary or " ".join(
-                b.text if hasattr(b, "text") else ""
-                for b in msg.content_blocks if hasattr(b, "text")
-            )
+            msg.text_summary or " ".join(_block_text(b) for b in (msg.content_blocks or []))
             for msg in recent_messages[-5:]
             if msg.role in ("user", "assistant")
         ]

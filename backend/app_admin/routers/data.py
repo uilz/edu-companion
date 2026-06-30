@@ -35,7 +35,6 @@ class Overview(BaseModel):
     conversations: int = 0
     questions: int = 0
     question_banks: int = 0
-    explain_cards: int = 0
     materials: int = 0
     cognitive_nodes: int = 0
     cognitive_events: int = 0
@@ -82,7 +81,6 @@ async def data_overview(_: dict = Depends(require_role("data_admin"))):
             (SELECT COUNT(*) FROM conversation_user_meta) AS conversations,
             (SELECT COUNT(*) FROM questions) AS questions,
             (SELECT COUNT(*) FROM question_banks) AS question_banks,
-            (SELECT COUNT(*) FROM explain_cards) AS explain_cards,
             (SELECT COUNT(*) FROM materials) AS materials,
             (SELECT COUNT(*) FROM cognitive_nodes) AS cognitive_nodes,
             (SELECT COUNT(*) FROM cognitive_events) AS cognitive_events
@@ -162,20 +160,20 @@ async def list_conversations(
     return {"items": rows, "total": total, "page": page, "page_size": page_size}
 
 
-@router.delete("/conversations/{user_id}/{conversation_id}")
+@router.delete("/conversations/{user_id}/{conv_id}")
 async def delete_conversation(
     user_id: str,
-    conversation_id: str,
+    conv_id: str,
     actor: dict = Depends(require_role("data_admin")),
 ):
     repo = _repo()
     affected = repo.execute(
         "UPDATE conversation_user_meta SET conversations = conversations - %s, updated_at = NOW() "
         "WHERE user_id = %s",
-        (conversation_id, user_id),
+        (conv_id, user_id),
     )
     logger.info("admin 删除会话: user=%s conv=%s actor=%s affected=%s",
-                user_id, conversation_id, actor.get("user_id"), affected)
+                user_id, conv_id, actor.get("user_id"), affected)
     return {"ok": True, "affected": affected}
 
 

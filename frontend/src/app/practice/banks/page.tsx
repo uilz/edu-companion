@@ -13,7 +13,7 @@ export default function PracticeBanksPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api<any[]>("/api/v7/practice/banks")
+    api<any[]>("/api/practice/banks")
       .then(data => setBanks(Array.isArray(data) ? data : []))
       .catch(() => {})
       .finally(() => setLoading(false));

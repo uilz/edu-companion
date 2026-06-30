@@ -29,7 +29,7 @@ def _save_user_data(data, user_id: str):
 def record_event(
     event_type,
     user_id: str,
-    partition_id: str | None = None,
+    dir_id: str | None = None,
     branch_id: str | None = None,
     skill_ids: list[str] | None = None,
     data: dict | None = None,
@@ -44,7 +44,7 @@ def record_event(
             user_id=user_id,
             type=event_type,
             timestamp=now,
-            partition_id=partition_id,
+            dir_id=dir_id,
             branch_id=branch_id,
             skill_ids=skill_ids or [],
             data=data or {},

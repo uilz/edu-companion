@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from app.domain.auth.dependencies import current_user_id
 from app.services.practice.practice_question_bank import _ensure_tables
-from app.services.practice.practice_adaptive import adaptive_select_v2
+from app.services.practice.practice_adaptive import adaptive_select
 from app.services.practice.practice_stats import get_recommendations
 from app.services.practice.engine import (
     get_hint_for_question,
@@ -34,7 +34,7 @@ async def api_adaptive_select(body: dict, user_id: str = Depends(current_user_id
     if not bank_id:
         raise HTTPException(400, "bank_id 不能为空")
     count = max(1, min(50, int(body.get("count", 10))))
-    questions = adaptive_select_v2(
+    questions = adaptive_select(
         bank_id=bank_id,
         user_id=user_id,
         count=count,

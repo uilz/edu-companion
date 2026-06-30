@@ -34,7 +34,7 @@ interface PartitionItem {
 }
 
 interface GraphItem {
-  partition_id: string;
+  dir_id: string;
   partition_name: string;
   name: string;
   version: number;
@@ -75,7 +75,7 @@ export default function DataManagementPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await authedFetch(`/api/v7/data/overview`);
+      const res = await authedFetch(`/api/data/overview`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setOverview(data.overview);
@@ -90,7 +90,7 @@ export default function DataManagementPage() {
   const fetchPartitions = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await authedFetch(`/api/v7/data/partitions`);
+      const res = await authedFetch(`/api/data/partitions`);
       const data = await res.json();
       setPartitions(data.partitions || []);
     } catch {} finally { setLoading(false); }
@@ -100,7 +100,7 @@ export default function DataManagementPage() {
   const fetchGraphs = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await authedFetch(`/api/v7/data/knowledge-graphs`);
+      const res = await authedFetch(`/api/data/knowledge-graphs`);
       const data = await res.json();
       setGraphs(data.knowledge_graphs || []);
     } catch {} finally { setLoading(false); }
@@ -110,7 +110,7 @@ export default function DataManagementPage() {
   const fetchSessions = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await authedFetch(`/api/v7/data/practice-sessions`);
+      const res = await authedFetch(`/api/data/practice-sessions`);
       const data = await res.json();
       setSessions(data.sessions || []);
     } catch {} finally { setLoading(false); }
@@ -120,7 +120,7 @@ export default function DataManagementPage() {
   const fetchCards = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await authedFetch(`/api/v7/data/explain-cards`);
+      const res = await authedFetch(`/api/data/explain-cards`);
       const data = await res.json();
       setCards(data.cards || []);
     } catch {} finally { setLoading(false); }
@@ -130,7 +130,7 @@ export default function DataManagementPage() {
   const fetchMaterials = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await authedFetch(`/api/v7/data/materials`);
+      const res = await authedFetch(`/api/data/materials`);
       const data = await res.json();
       setMaterials(data.materials || []);
     } catch {} finally { setLoading(false); }
@@ -153,7 +153,7 @@ export default function DataManagementPage() {
     if (!confirm("确定删除该分区及其所有子数据（领域、专题、对话、知识图谱）？此操作不可撤销！")) return;
     setDeleting(id);
     try {
-      await authedFetch(`/api/v7/data/partition/${id}`, { method: "DELETE" });
+      await authedFetch(`/api/data/partition/${id}`, { method: "DELETE" });
       fetchPartitions();
       fetchOverview();
     } catch {} finally { setDeleting(null); }
@@ -163,7 +163,7 @@ export default function DataManagementPage() {
     if (!confirm("确定删除该知识图谱？")) return;
     setDeleting(id);
     try {
-      await authedFetch(`/api/v7/data/knowledge-graph/${id}`, { method: "DELETE" });
+      await authedFetch(`/api/data/knowledge-graph/${id}`, { method: "DELETE" });
       fetchGraphs();
       fetchOverview();
     } catch {} finally { setDeleting(null); }
@@ -173,7 +173,7 @@ export default function DataManagementPage() {
     if (!confirm("确定删除该练习会话？")) return;
     setDeleting(id);
     try {
-      await authedFetch(`/api/v7/data/practice-session/${id}`, { method: "DELETE" });
+      await authedFetch(`/api/data/practice-session/${id}`, { method: "DELETE" });
       fetchSessions();
       fetchOverview();
     } catch {} finally { setDeleting(null); }
@@ -183,7 +183,7 @@ export default function DataManagementPage() {
     if (!confirm("确定删除该解释卡片？")) return;
     setDeleting(id);
     try {
-      await authedFetch(`/api/v7/data/explain-card/${id}`, { method: "DELETE" });
+      await authedFetch(`/api/data/explain-card/${id}`, { method: "DELETE" });
       fetchCards();
       fetchOverview();
     } catch {} finally { setDeleting(null); }
@@ -193,7 +193,7 @@ export default function DataManagementPage() {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const res = await authedFetch(`/api/v7/data/export`, { method: "POST" });
+      const res = await authedFetch(`/api/data/export`, { method: "POST" });
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -322,18 +322,18 @@ export default function DataManagementPage() {
                 empty="暂无知识图谱"
               >
                 {graphs.map((g) => (
-                  <tr key={g.partition_id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-surface)]/50 transition-colors">
+                  <tr key={g.dir_id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-surface)]/50 transition-colors">
                     <td className="px-4 py-3 text-sm font-medium">{g.partition_name}</td>
                     <td className="px-4 py-3 text-sm">{g.name}</td>
                     <td className="px-4 py-3 text-sm text-center">v{g.version}</td>
                     <td className="px-4 py-3 text-sm text-center">{g.node_count}</td>
                     <td className="px-4 py-3 text-sm text-center">{g.edge_count}</td>
                     <td className="px-4 py-3 text-center">
-                      <button onClick={() => handleDeleteGraph(g.partition_id)}
-                        disabled={deleting === g.partition_id}
+                      <button onClick={() => handleDeleteGraph(g.dir_id)}
+                        disabled={deleting === g.dir_id}
                         className="p-1.5 rounded text-[var(--color-text-muted)] hover:text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors disabled:opacity-50"
                         title="删除图谱">
-                        {deleting === g.partition_id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                        {deleting === g.dir_id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                       </button>
                     </td>
                   </tr>

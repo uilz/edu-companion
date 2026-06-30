@@ -56,12 +56,12 @@ export default function PracticeHomePage() {
 
   useEffect(() => {
     Promise.all([
-      api<any>("/api/v7/practice/stats/overview").catch(() => null),
-      api<any>("/api/v7/practice/stats/sessions?limit=5").catch(() => ({ items: [] })),
-      api<any>("/api/v7/practice/review/stats").catch(() => null),
-      api<any>("/api/v7/practice/sessions/unfinished").catch(() => ({ items: [] })),
-      api<any>("/api/v7/practice/review/due?limit=5").catch(() => []),
-      api<any>("/api/v7/practice/banks").catch(() => []),
+      api<any>("/api/practice/stats/overview").catch(() => null),
+      api<any>("/api/practice/stats/sessions?limit=5").catch(() => ({ items: [] })),
+      api<any>("/api/practice/review/stats").catch(() => null),
+      api<any>("/api/practice/sessions/unfinished").catch(() => ({ items: [] })),
+      api<any>("/api/practice/review/due?limit=5").catch(() => []),
+      api<any>("/api/practice/banks").catch(() => []),
     ]).then(([ov, sess, rev, unf, dueR, bk]) => {
       setData({ ...(ov || {}), ...(rev || {}) });
       setRecentSessions(Array.isArray(sess) ? sess : sess?.items || []);
@@ -77,7 +77,7 @@ export default function PracticeHomePage() {
   }, []);
 
   const handleDelete = async (id: string) => {
-    await api(`/api/v7/practice/sessions/${id}`, { method: "DELETE" });
+    await api(`/api/practice/sessions/${id}`, { method: "DELETE" });
     setRecentSessions(p => p.filter(s => s.session_id !== id));
     setUnfinished(p => p.filter(s => s.session_id !== id));
     setDueReviews(p => p.filter((r: any) => {

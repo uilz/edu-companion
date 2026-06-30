@@ -1,5 +1,5 @@
 """
-成就服务 — v7 数据桥接
+成就服务
 
 流程:
 1. 每次 session 完成后触发 check_achievements()
@@ -45,7 +45,7 @@ def _ensure_table():
 
 
 def _build_stats(user_id: str) -> dict:
-    """从 v7 数据构建 stats dict 供 achievement engine 使用"""
+    """从真实数据构建 stats dict 供 achievement engine 使用"""
     from app.infrastructure.db.database import get_db
     db = get_db()
 
@@ -91,7 +91,7 @@ def _build_stats(user_id: str) -> dict:
 
     # 对话数 (取 messages 表)
     convs = db.fetchone(
-        "SELECT COUNT(DISTINCT conversation_id) as cnt FROM messages WHERE role = 'user' AND user_id = %s",
+        "SELECT COUNT(DISTINCT conv_id) as cnt FROM messages WHERE role = 'user' AND user_id = %s",
         (user_id,),
     )
     conversation_count = convs["cnt"] if convs else 0

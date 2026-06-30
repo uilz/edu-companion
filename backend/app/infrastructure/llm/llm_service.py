@@ -176,6 +176,7 @@ class LLMService:
                 tool_calls_json = [
                     {
                         "id": tc.id,
+                        "type": "function",
                         "function": {"name": tc.function.name, "arguments": tc.function.arguments},
                     }
                     for tc in msg.tool_calls
@@ -366,6 +367,7 @@ class LLMService:
                 rc = getattr(delta, 'reasoning_content', None)
                 if rc:
                     last_reasoning = rc
+                    yield {"type": "reasoning", "content": rc}
 
                 # text token
                 if delta.content:
@@ -393,7 +395,7 @@ class LLMService:
                 # finish_reason 判断
                 if finish_reason == "tool_calls":
                     result = [
-                        {"id": v["id"], "function": v["function"]}
+                        {"id": v["id"], "type": "function", "function": v["function"]}
                         for _, v in sorted(tool_calls_accum.items())
                     ]
                     yield {"type": "tool_calls", "tool_calls": result}

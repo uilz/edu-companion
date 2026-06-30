@@ -30,7 +30,7 @@ def migrate():
         "SELECT id, name, created_at FROM conversation_partitions"
     )
     branches = db.fetchall(
-        "SELECT id, name, partition_id, created_at FROM conversation_branches"
+        "SELECT id, name, dir_id, created_at FROM conversation_branches"
     )
 
     user_id = "o9cq800rjtrGooSMfmHEQ6uTW6wE@im.wechat"
@@ -64,7 +64,7 @@ def migrate():
         created_nodes += 1
 
         # 为此分区下每个 branch 创建 topic 级节点
-        partition_branches = [b for b in branches if b["partition_id"] == pid]
+        partition_branches = [b for b in branches if b["dir_id"] == pid]
         if partition_branches:
             # 创建默认 domain
             domain_key = f"{pkey}.default"

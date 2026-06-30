@@ -1,10 +1,8 @@
 """
-Practice Conversation 管理 — Conversation(type="practice") 全生命周期
+Practice Conversation 管理 — DirectoryNode(type="conv", kind="practice") 全生命周期
 
-练习会话统一使用 Conversation(type="practice") 存储在 UserData 中，
-与知识树探索对话 (tree_exploration)、秘书对话 (secretary) 采用相同机制。
-
-分区: 所有练习会话挂在专用 "📝 练习" 分区下。
+练习会话使用 DirectoryNode(node_type="conv", kind="practice") 来存储，
+与对话系统采用统一的数据模型。
 """
 
 from __future__ import annotations
@@ -14,8 +12,9 @@ import time
 from uuid import uuid4
 
 from app.schemas.conversation import (
-    Conversation, Partition, TextBlock, TreeNode, UserData,
+    TextBlock, TreeNode, UserData,
 )
+from app.schemas.directory_node import DirectoryNode
 from app.services.common import get_data_repo
 
 logger = logging.getLogger(__name__)
@@ -24,35 +23,40 @@ PRACTICE_PARTITION_NAME = "📝 练习"
 
 
 def ensure_practice_partition(user_id: str, data: UserData | None = None) -> tuple[str, UserData]:
-    """确保存在练习专用分区，返回 (partition_id, data)。"""
+    """确保存在练习专用目录，返回 (dir_id, data)。"""
     if data is None:
         data = get_data_repo().load(user_id)
 
-    for pid, p in data.partitions.items():
-        if p.name == PRACTICE_PARTITION_NAME:
-            return pid, data
+    # 在 directory_nodes 中查找练习目录
+    for nid, n in data.directory_nodes.items():
+        if n.node_type == "dir" and n.name == PRACTICE_PARTITION_NAME:
+            return nid, data
 
-    # 创建练习分区
-    partition = Partition(
-        name=PRACTICE_PARTITION_NAME,
-        subject="练习",
-        direction="subject",
-        emoji="📝",
-        color="#FF6B35",
-        root_id=str(uuid4()),
-    )
-    data.partitions[partition.id] = partition
+    # 创建练习目录
+    from app.services.knowledge.tree_service import tree_ops
+    try:
+        partition = tree_ops.create_dir(
+            user_id=user_id,
+            parent_id=next(iter(data.directory_nodes)).id if data.directory_nodes else "",
+            name=PRACTICE_PARTITION_NAME,
+            emoji="📝",
+            kind="practice",
+        )
+        # reload to get updated data
+        data = get_data_repo().load(user_id)
+    except Exception:
+        # fallback: 直接创建 DirectoryNode
+        dir_id = f"dir_{uuid4().hex[:12]}"
+        partition = DirectoryNode(
+            id=dir_id,
+            node_type="dir",
+            kind="practice",
+            name=PRACTICE_PARTITION_NAME,
+        )
+        data.directory_nodes[dir_id] = partition
+        get_data_repo().save(user_id, data)
 
-    # 根节点
-    root_node = TreeNode(
-        id=partition.root_id, parent_id=partition.root_id,
-        partition_id=partition.id, conversation_id="",
-        role="assistant", content_blocks=[], text_summary="[practice_root]",
-    )
-    data.nodes[partition.root_id] = root_node
-
-    get_data_repo().save(user_id, data)
-    logger.info("练习分区已创建: %s", partition.id)
+    logger.info("练习目录已创建/找到: %s", partition.id)
     return partition.id, data
 
 
@@ -64,17 +68,17 @@ def create_practice_conversation(
     question_count: int = 0,
     mode: str = "adaptive",
 ) -> str:
-    """创建一条练习会话的 Conversation 记录。
+    """创建一条练习会话。
 
-    返回 conversation_id。
+    返回 directory_node id (即 conv_id)。
     """
     data = get_data_repo().load(user_id)
-    partition_id, data = ensure_practice_partition(user_id, data)
+    dir_id, data = ensure_practice_partition(user_id, data)
 
-    conv = Conversation(
-        parent_id=partition_id,
-        parent_type="partition",
-        type="practice",
+    conv = DirectoryNode(
+        node_type="conv",
+        kind="practice",
+        parent_id=dir_id,
         name=bank_name or f"练习-{session_id[:8]}",
         metadata={
             "session_id": session_id,
@@ -85,24 +89,23 @@ def create_practice_conversation(
             "wrong_count": 0,
             "score": None,
             "status": "created",
+            "dir_id": dir_id,
         },
     )
-    conv.partition_id = partition_id
-
     # 创建根节点
     root_id = str(uuid4())
     root_node = TreeNode(
         id=root_id, parent_id=root_id,
-        partition_id=partition_id, conversation_id=conv.id,
+        directory_id=conv.id,
         role="assistant", content_blocks=[], text_summary="[practice_virtual_root]",
     )
     data.nodes[root_id] = root_node
-    conv.path.append(root_id)
+    conv.conv_message_ids = [root_id]
 
-    data.conversations[conv.id] = conv
+    data.directory_nodes[conv.id] = conv
     get_data_repo().save(user_id, data)
 
-    logger.info("练习会话 Conversation 已创建: conv=%s, session=%s", conv.id, session_id)
+    logger.info("练习会话创建: conv=%s, session=%s", conv.id, session_id)
     return conv.id
 
 
@@ -110,19 +113,21 @@ def get_conversation_by_session(
     user_id: str,
     session_id: str,
     data: UserData | None = None,
-) -> Conversation | None:
-    """根据 session_id 查找对应的 Conversation。"""
+) -> DirectoryNode | None:
+    """根据 session_id 查找对应的练习会话。"""
     if data is None:
         data = get_data_repo().load(user_id)
-    for conv in data.conversations.values():
-        if conv.type == "practice" and conv.metadata.get("session_id") == session_id:
-            return conv
+    for n in data.directory_nodes.values():
+        if n.node_type == "conv" and n.kind == "practice":
+            meta = n.metadata or {}
+            if meta.get("session_id") == session_id:
+                return n
     return None
 
 
 def add_practice_answer_message(
     user_id: str,
-    conversation_id: str,
+    conv_id: str,
     session_id: str,
     question_id: str,
     stem: str,
@@ -133,18 +138,20 @@ def add_practice_answer_message(
     hints_used: int,
     analysis: str = "",
 ) -> None:
-    """在练习 Conversation 中添加一条答题消息。"""
+    """在练习会话中添加一条答题消息。"""
     data = get_data_repo().load(user_id)
-    conv = data.conversations.get(conversation_id)
+    conv = data.directory_nodes.get(conv_id)
     if not conv:
-        logger.warning("Conversation %s not found, skipping practice message", conversation_id)
+        logger.warning("练习会话 %s 不存在", conv_id)
         return
+
+    msg_ids = conv.conv_message_ids or []
+    parent_id = msg_ids[-1] if msg_ids else conv.id
 
     # 创建答题消息节点
     node = TreeNode(
-        parent_id=conv.path[-1] if conv.path else conv.id,
-        partition_id=conv.partition_id,
-        conversation_id=conversation_id,
+        parent_id=parent_id,
+        directory_id=conv_id,
         role="assistant",
         content_blocks=[
             TextBlock(text=f"[练习] {stem[:80]}"),
@@ -163,11 +170,11 @@ def add_practice_answer_message(
         },
     )
     data.nodes[node.id] = node
-    conv.path.append(node.id)
-    conv.last_message_at = time.time()
+    conv.conv_message_ids = msg_ids + [node.id]
+    conv.updated_at = time.time()
 
     # 更新 metadata 统计
-    meta = conv.metadata
+    meta = conv.metadata or {}
     meta["last_question_id"] = question_id
     meta["answered_count"] = meta.get("answered_count", 0) + 1
     if is_correct:
@@ -176,7 +183,7 @@ def add_practice_answer_message(
         meta["wrong_count"] = meta.get("wrong_count", 0) + 1
     conv.metadata = meta
 
-    data.conversations[conversation_id] = conv
+    data.directory_nodes[conv_id] = conv
     get_data_repo().save(user_id, data)
 
 
@@ -188,14 +195,14 @@ def update_conversation_on_complete(
     score: float,
     duration_seconds: int | None,
 ) -> None:
-    """完成练习后更新 Conversation 元数据。"""
+    """完成练习后更新目录节点元数据。"""
     data = get_data_repo().load(user_id)
     conv = get_conversation_by_session(user_id, session_id, data)
     if not conv:
-        logger.warning("练习会话 %s 无对应 Conversation", session_id)
+        logger.warning("练习会话 %s 无对应节点", session_id)
         return
 
-    meta = conv.metadata
+    meta = conv.metadata or {}
     meta["status"] = "completed"
     meta["correct_count"] = correct_count
     meta["wrong_count"] = wrong_count
@@ -203,14 +210,12 @@ def update_conversation_on_complete(
     meta["duration_seconds"] = duration_seconds
     conv.metadata = meta
 
-    # summary
     total = correct_count + wrong_count
-    conv.practice_summary = f"{correct_count}/{total} 正确 ({score}%), {duration_seconds or 0}s"
-    conv.summary_dirty = True
+    meta["summary"] = f"{correct_count}/{total} 正确 ({score}%), {duration_seconds or 0}s"
 
-    data.conversations[conv.id] = conv
+    data.directory_nodes[conv.id] = conv
     get_data_repo().save(user_id, data)
-    logger.info("练习会话 Conversation 已更新: session=%s, score=%.1f%%", session_id, score)
+    logger.info("练习会话已更新: session=%s, score=%.1f%%", session_id, score)
 
 
 def complete_practice_conversation(
@@ -218,10 +223,7 @@ def complete_practice_conversation(
     user_id: str,
     stats: dict,
 ) -> None:
-    """练习完成后的 Conversation 更新入口（适配 practice_session.py 调用）。
-
-    stats 格式: {"score": ..., "total": ..., "correct": ..., "wrong": ...}
-    """
+    """练习完成后的更新入口（适配 practice_session.py 调用）。"""
     update_conversation_on_complete(
         user_id=user_id,
         session_id=session_id,

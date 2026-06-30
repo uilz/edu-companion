@@ -3,7 +3,7 @@ AI 出题核心 — generate_and_save + handle_question_generation
 
 流程：
 1. handle_question_generation() 解析自然语言 → 提取参数（subject/skill/bloom/difficulty/count）
-2. generate_and_save()  → 调用 QuestionGenerator → 转 v7 格式 → save → 返回
+2. generate_and_save()  → 调用 QuestionGenerator → 转标准格式 → save → 返回
 3. generate_for_conversation() → 结合对话上下文 → 生成 + 自动归属题库
 
 格式化/校验逻辑委托给 question_formatter.py 中的纯函数。
@@ -166,7 +166,7 @@ async def handle_question_generation(
     user_id: str,
     bank_id: Optional[str] = None,
     bank_name: Optional[str] = None,
-    conversation_id: Optional[str] = None,
+    conv_id: Optional[str] = None,
     node_id: Optional[str] = None,
     conversation_context: Optional[list[dict]] = None,
     material_ids: Optional[list[str]] = None,
@@ -178,7 +178,7 @@ async def handle_question_generation(
     支持三种归属方式（优先级）：
     1. bank_id 明确指定
     2. bank_name 按名称查找或创建
-    3. conversation_id 自动解析
+    3. conv_id 自动解析
     4. node_id 自动解析
 
     支持指定参考资料出题（material_ids）：
@@ -216,8 +216,8 @@ async def handle_question_generation(
             if new_bank:
                 resolved_bank_id = new_bank["id"]
                 logger.info("按名称创建新题库: %s (%s)", bank_name, resolved_bank_id)
-    if not resolved_bank_id and conversation_id:
-        resolved_bank_id = resolve_bank_for_conversation(conversation_id, user_id)
+    if not resolved_bank_id and conv_id:
+        resolved_bank_id = resolve_bank_for_conversation(conv_id, user_id)
     if not resolved_bank_id and node_id:
         resolved_bank_id = resolve_bank_for_node(node_id, user_id)
     if not resolved_bank_id:
@@ -269,7 +269,7 @@ async def handle_question_generation(
 
 
 async def generate_for_conversation(
-    conversation_id: str,
+    conv_id: str,
     user_message: str,
     user_id: str,
     conversation_context: Optional[list[dict]] = None,
@@ -277,12 +277,12 @@ async def generate_for_conversation(
     reference_mode: Optional[str] = None,
 ) -> dict:
     """对话场景下出题：自动解析对话 → 归属题库 → 生成"""
-    bank_id = resolve_bank_for_conversation(conversation_id, user_id)
+    bank_id = resolve_bank_for_conversation(conv_id, user_id)
     return await handle_question_generation(
         user_message=user_message,
         user_id=user_id,
         bank_id=bank_id,
-        conversation_id=conversation_id,
+        conv_id=conv_id,
         conversation_context=conversation_context,
         material_ids=material_ids,
         reference_mode=reference_mode,
@@ -537,6 +537,164 @@ async def generate_similar(
         saved.append(saved_q)
 
     logger.info("同类变体: original=%s, generated=%d", question_id, len(saved))
+    return saved
+
+
+# ── 错题→相似题变体 (ADR 0011 Q7) ──
+
+
+async def generate_similar_from_error(
+    attempt_id: str,
+    user_id: str,
+    count: int = 3,
+) -> list[dict]:
+    """
+    基于错题 attempt 的错因分析定向生成变体 (ADR 0011 Q7)。
+
+    流程:
+    1. 从 practice_attempts 获取 attempt 记录
+    2. 读取 error_analysis 中的 error_type
+    3. 根据错因类型定制 prompt:
+       - "概念混淆" → 生成概念辨析题
+       - "计算失误" → 生成同类计算但简单数值
+       - "审题不清" → 生成更清晰分步题
+    4. 保存到原题所在题库
+    """
+    from app.infrastructure.db.database import get_db
+    from app.infrastructure.llm.question_generator import QuestionGenerator
+    db = get_db()
+
+    # 1. 获取 attempt 记录
+    attempt = db.fetchone(
+        "SELECT * FROM practice_attempts WHERE id = %s AND user_id = %s",
+        (attempt_id, user_id),
+    )
+    if not attempt:
+        logger.warning("Attempt 不存在: %s", attempt_id)
+        return []
+
+    question_id = attempt["question_id"]
+    user_answer = attempt.get("user_answer") or []
+    if isinstance(user_answer, str):
+        try:
+            user_answer = json.loads(user_answer)
+        except Exception:
+            user_answer = [user_answer]
+
+    # 2. 获取原题
+    question = db.fetchone(
+        "SELECT * FROM questions WHERE id = %s AND deleted_at IS NULL",
+        (question_id,),
+    )
+    if not question:
+        logger.warning("原题不存在: %s", question_id)
+        return []
+
+    stem = question["stem"]
+    bank_id = question["bank_id"]
+    qtype = question["question_type"]
+    difficulty = question.get("difficulty", 3)
+    node_ids = question.get("cognitive_node_ids") or []
+    metadata = question.get("metadata") or {}
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except Exception:
+            metadata = {}
+
+    # 3. 读取错因分析
+    error_analysis = attempt.get("error_analysis") or {}
+    if isinstance(error_analysis, str):
+        try:
+            error_analysis = json.loads(error_analysis)
+        except Exception:
+            error_analysis = {}
+    error_type = error_analysis.get("error_type", error_analysis.get("distractor_type", "unknown"))
+    error_pattern = attempt.get("error_pattern", "")
+
+    # 4. 根据错因类型定制 prompt
+    error_prompts = {
+        "conceptual": "这道题涉及概念混淆。请生成概念辨析题，帮助区分易混淆的概念。",
+        "concept_confusion": "这道题涉及概念混淆。请生成概念辨析题，帮助区分易混淆的概念。",
+        "procedural": "这道题是解题步骤错误。请生成同类但步骤更清晰的题，附带分步提示。",
+        "computation": "这道题是计算失误。请生成同类计算题，但使用更简单的数值，帮助练习计算准确度。",
+        "calculation_error": "这道题是计算失误。请生成同类计算题，但使用更简单的数值，帮助练习计算准确度。",
+        "sign_error": "这道题是符号错误。请生成同类题，重点练习符号处理。",
+        "reading": "这道题是审题不清。请生成结构更清晰、步骤更明确的题。",
+        "careless": "这道题是粗心大意。请生成同类题，题面加入关键提示，帮助养成仔细审题的习惯。",
+    }
+
+    error_hint = error_prompts.get(
+        error_type,
+        error_prompts.get(
+            error_pattern,
+            f"这道题答错了（错因: {error_type or error_pattern or '未知'}）。请生成同类题帮助巩固。",
+        ),
+    )
+
+    # 5. 构建 prompt
+    prompt = (
+        f"参考以下错题，生成 {count} 道针对性变体题。\n\n"
+        f"原题：{stem[:300]}\n"
+        f"知识点：{', '.join(node_ids[:3]) if node_ids else '通用'}\n"
+        f"难度：{difficulty}/5\n"
+        f"题型：{qtype}\n"
+        f"学生错因：{error_hint}\n\n"
+        f"要求：\n"
+        f"1. 覆盖相同的知识点\n"
+        f"2. 难度保持一致或略低\n"
+        f"3. 针对错因类型设计，帮助学生纠正错误\n"
+    )
+
+    gen = get_question_generator(llm_service)
+    if not gen:
+        gen = QuestionGenerator(llm_service)
+
+    try:
+        questions = await gen.generate(
+            subject=metadata.get("subject", "通用"),
+            skill_id=node_ids[0] if node_ids else "通用",
+            bloom_level=metadata.get("bloom_level", "apply"),
+            difficulty=difficulty / 5.0,
+            count=count,
+            content_type=qtype,
+            material_context=prompt,
+        )
+    except Exception as e:
+        logger.warning("错题变体生成失败: %s", e)
+        return []
+
+    if not questions:
+        return []
+
+    # 6. 保存到同一题库
+    saved = []
+    for q in questions:
+        saved_q = add_question(
+            bank_id=bank_id,
+            user_id=user_id,
+            question_type=CONTENT_TYPE_MAP.get(qtype, qtype),
+            stem=q.text,
+            answer=_extract_answer(q),
+            options=_extract_options(q),
+            analysis=q.explanation,
+            difficulty=difficulty,
+            cognitive_node_ids=node_ids if node_ids else None,
+            source="llm",
+            metadata={
+                "bloom_level": metadata.get("bloom_level", "apply"),
+                "hints": q.hints,
+                "tags": q.tags,
+                "subject": metadata.get("subject", "通用"),
+                "skill_id": node_ids[0] if node_ids else "",
+                "is_error_variant_of": question_id,
+                "error_type": error_type,
+                "source_detail": q.source,
+            },
+        )
+        saved.append(saved_q)
+
+    logger.info("错题变体: attempt=%s, error_type=%s, generated=%d", attempt_id, error_type, len(saved))
     return saved
 
 

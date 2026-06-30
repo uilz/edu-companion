@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
-import { X, Pencil, Trash2, Loader2, Sparkles, Brain, MessageSquare, ChevronRight } from "lucide-react";
+import { X, Pencil, Trash2, Loader2, Sparkles, Brain, MessageSquare, ChevronRight, BookOpen } from "lucide-react";
 import type { GraphNode } from "@/lib/types/graph-types";
 import { getMasteryColor, getTrendIcon } from "@/lib/types/graph-types";
 
@@ -12,6 +12,7 @@ interface FloatingNodeCardProps {
   onNodeUpdated: () => void;
   onStartPractice?: (nodeId: string) => void;
   onRequestExplain?: (nodeId: string) => void;
+  onFeynmanTeach?: (nodeId: string) => void;
   parentNode?: GraphNode | null;
   onNavigateToParent?: (node: GraphNode) => void;
 }
@@ -19,6 +20,7 @@ interface FloatingNodeCardProps {
 export default function FloatingNodeCard({
   node, partitionId, onClose, onNodeUpdated,
   onStartPractice, onRequestExplain,
+  onFeynmanTeach,
   parentNode, onNavigateToParent,
 }: FloatingNodeCardProps) {
   const ref = useRef<HTMLDivElement>(null);
@@ -129,6 +131,13 @@ export default function FloatingNodeCard({
                 <MessageSquare size={10} />练习
               </button>
             )}
+            {onFeynmanTeach && (
+              <button onClick={() => onFeynmanTeach(node.id)}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] rounded-lg bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 transition-colors"
+                title="费曼学习法——我来给你讲讲">
+                <BookOpen size={10} />讲给AI听
+              </button>
+            )}
             {onNavigateToParent && parentNode && (
               <button onClick={() => onNavigateToParent(parentNode)}
                 className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-colors">
@@ -138,9 +147,9 @@ export default function FloatingNodeCard({
           </div>
 
           {/* 关联会话 */}
-          {node.conversation_ids && node.conversation_ids.length > 0 && (
+          {node.conv_ids && node.conv_ids.length > 0 && (
             <div className="pt-2 border-t border-[var(--color-border)]">
-              <span className="text-[10px] text-[var(--color-text-muted)]">关联 {node.conversation_ids.length} 个会话</span>
+              <span className="text-[10px] text-[var(--color-text-muted)]">关联 {node.conv_ids.length} 个会话</span>
             </div>
           )}
         </div>

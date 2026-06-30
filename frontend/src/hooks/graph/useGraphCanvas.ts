@@ -45,6 +45,7 @@ export interface UseGraphCanvasReturn {
   loading: boolean;
   error: string | null;
   selectedNode: GraphNode | null;
+  nodePosition: { x: number; y: number } | null;
   loadGraph: () => void;
 
   // Canvas
@@ -76,7 +77,7 @@ export interface UseGraphCanvasReturn {
   setNewNodeParent: (v: string) => void;
 
   // Actions — canvas
-  handleNodeSelect: (node: GraphNode) => void;
+  handleNodeSelect: (node: GraphNode, pos?: { x: number; y: number }) => void;
   handleNodeDoubleClick: (node: GraphNode) => void;
   handleNodeContextMenu: (node: GraphNode, e: { clientX: number; clientY: number; preventDefault?: () => void }) => void;
   handleSetFocus: (nodeId: string) => void;
@@ -85,6 +86,7 @@ export interface UseGraphCanvasReturn {
   handleInlineEditSave: () => Promise<void>;
   handleAddNode: () => Promise<void>;
   handleStartTemporary: () => Promise<void>;
+  generateGraph: () => Promise<boolean>;
 
   // Actions — UI
   setDialogState: (s: DialogState | null) => void;
@@ -124,6 +126,7 @@ export function useGraphCanvas(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+  const [nodePosition, setNodePosition] = useState<{ x: number; y: number } | null>(null);
 
   // ── Canvas / Interaction ──
   const [graphMode, setGraphMode] = useState<GraphMode>(layoutPref.graphMode);
@@ -188,12 +191,11 @@ export function useGraphCanvas(
   // Load partition list
   useEffect(() => {
     fetchPartitions().then(list => {
-      const filtered = list.filter((p: { name: string }) => p.name !== "💬 临时");
+      const filtered = list;
       setPartitionList(filtered);
-      if (!partitionId && filtered.length > 0) {
-        const targetId = urlPartition && filtered.some((p: { id: string }) => p.id === urlPartition)
-          ? urlPartition : filtered[0].id;
-        setPartitionId(targetId);
+      // 只有 URL 显式指定了 partition 时才自动设置，否则保持空（显示全部节点）
+      if (!partitionId && filtered.length > 0 && urlPartition && filtered.some((p: { id: string }) => p.id === urlPartition)) {
+        setPartitionId(urlPartition);
       }
       if (filtered.length === 0) setLoading(false);
     });
@@ -201,9 +203,8 @@ export function useGraphCanvas(
 
   // Load graph data
   const loadGraph = useCallback(() => {
-    if (!partitionId) return;
     setLoading(true);
-    fetchGraphData(partitionId)
+    fetchGraphData(partitionId || undefined)
       .then(data => { setGraphData(data); setError(null); })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
@@ -211,12 +212,21 @@ export function useGraphCanvas(
 
   useEffect(() => { loadGraph(); }, [loadGraph]);
 
+  // URL node_id → focusRootId (当 node_id 是 domain 根节点时)
+  useEffect(() => {
+    if (!urlNode || partitionList.length === 0) return;
+    if (partitionList.some(p => p.id === urlNode)) {
+      setFocusRootId(urlNode);
+    }
+  }, [urlNode, partitionList]);
+
   // URL anchor → selected node
   useEffect(() => {
     if (!urlNode || !graphData?.nodes) return;
     const node = graphData.nodes.find(n => n.id === urlNode);
     if (node) {
       setSelectedNode(node);
+      setNodePosition(null);
       setLayoutPref(p => ({ ...p, showDetailPanel: true }));
     }
   }, [urlNode, graphData, setLayoutPref]);
@@ -249,14 +259,29 @@ export function useGraphCanvas(
   // ════════════════════════════════════════
 
   // Graph node actions (shared hook)
-  const nodeActions = useGraphNodeActions(partitionId, {
+  const nodeActions = useGraphNodeActions({
     onNodeUpdated: loadGraph,
     onError: (msg) => setToast({ message: msg, type: "error" }),
   });
 
   // Focus
-  const handleClearFocus = useCallback(() => setFocusRootId(undefined), []);
-  const handleSetFocus = useCallback((nodeId: string) => setFocusRootId(nodeId), []);
+  const handleClearFocus = useCallback(() => {
+    setFocusRootId(undefined);
+    // 清除 URL 中的 node 参数
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("node_id");
+    params.delete("node");
+    const qs = params.toString();
+    router.push(qs ? `/knowledge-tree?${qs}` : "/knowledge-tree", { scroll: false });
+  }, [router, searchParams]);
+
+  const handleSetFocus = useCallback((nodeId: string) => {
+    setFocusRootId(nodeId);
+    // URL 同步 node_id 参数
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("node_id", nodeId);
+    router.push(`/knowledge-tree?${params.toString()}`, { scroll: false });
+  }, [router, searchParams]);
 
   // Focus breadcrumb
   const focusBreadcrumb = useMemo(() => {
@@ -265,8 +290,9 @@ export function useGraphCanvas(
   }, [focusRootId, graphData]);
 
   // Node selection
-  const handleNodeSelect = useCallback((node: GraphNode) => {
+  const handleNodeSelect = useCallback((node: GraphNode, pos?: { x: number; y: number }) => {
     setSelectedNode(node);
+    setNodePosition(pos || null);
     if (node && partitionId) {
       setDialogState({
         type: "tree_exploration",
@@ -384,6 +410,11 @@ export function useGraphCanvas(
     }
   }, [router]);
 
+  // Generate graph
+  const generateGraph = useCallback(async (): Promise<boolean> => {
+    return nodeActions.generateGraph();
+  }, [nodeActions]);
+
   // ════════════════════════════════════════
   //  Keyboard shortcuts
   // ════════════════════════════════════════
@@ -458,7 +489,9 @@ export function useGraphCanvas(
 
   const stats = useMemo(() => {
     if (!graphData?.nodes?.length) return { total: 0, mastered: 0, learning: 0, untouched: 0, avgMastery: 0 };
-    const nodes = graphData.nodes;
+    // 排除虚拟分区根节点（level === "partition" 且 created_by === "system"）
+    const nodes = graphData.nodes.filter(n => !(n.level === "partition" && n.created_by === "system"));
+    if (nodes.length === 0) return { total: 0, mastered: 0, learning: 0, untouched: 0, avgMastery: 0 };
     return {
       total: nodes.length,
       mastered: nodes.filter(n => n.mastery >= 0.8).length,
@@ -473,7 +506,7 @@ export function useGraphCanvas(
   // ════════════════════════════════════════
 
   return {
-    partitionId, setPartitionId, partitionList, graphData, loading, error, selectedNode, loadGraph,
+    partitionId, setPartitionId, partitionList, graphData, loading, error, selectedNode, nodePosition, loadGraph,
     graphMode, zoomLevel, setZoomLevel, graphFullscreen, graphSearch, matchedNodeIds, maxDisplayLevel,
     focusRootId, focusBreadcrumb, masteryFilter, setMasteryFilter,
     contextMenu, toast, dialogState, inlineEditNode, addNodeOpen,
@@ -481,6 +514,7 @@ export function useGraphCanvas(
     handleNodeSelect, handleNodeDoubleClick, handleNodeContextMenu,
     handleSetFocus, handleClearFocus, handleContextMenuAction,
     handleInlineEditSave, handleAddNode, handleStartTemporary,
+    generateGraph,
     setDialogState, setGraphSearch, setSelectedNode, setGraphFullscreen,
     setAddNodeOpen, setContextMenu,
     canvasRef, graphContainerRef, graphSize,

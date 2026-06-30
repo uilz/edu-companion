@@ -19,7 +19,7 @@ PASS = 0
 FAIL = 0
 
 
-def test(name: str, condition: bool, detail: str = ""):
+def _check(name: str, condition: bool, detail: str = ""):
     global PASS, FAIL
     if condition:
         PASS += 1
@@ -45,15 +45,15 @@ def test_proposal_model():
         payload={"kp_id": "123"},
         insight_source="test",
     )
-    test("Proposal 创建", p.title == "测试提案")
-    test("action_type 默认", p.action_type == "review")
-    test("priority 范围", p.priority == 3)
-    test("payload 存储", p.payload.get("kp_id") == "123")
-    test("emoji", p.emoji == "📖")
+    _check("Proposal 创建", p.title == "测试提案")
+    _check("action_type 默认", p.action_type == "review")
+    _check("priority 范围", p.priority == 3)
+    _check("payload 存储", p.payload.get("kp_id") == "123")
+    _check("emoji", p.emoji == "📖")
 
     # 序列化 round-trip
     d = p.to_dict() if hasattr(p, "to_dict") else p.__dict__
-    test("Proposal 可序列化", isinstance(d, dict))
+    _check("Proposal 可序列化", isinstance(d, dict))
 
 
 # ═══════════════════════════════════════════
@@ -77,33 +77,33 @@ def test_module_registry():
     registry.register(DummyModule())
 
     modules = registry.list_modules()
-    test("注册后模块数量 > 0", len(modules) > 0)
+    _check("注册后模块数量 > 0", len(modules) > 0)
     
     dummy_found = any(m["name"] == "dummy" for m in modules)
-    test("Dummy 模块已注册", dummy_found)
+    _check("Dummy 模块已注册", dummy_found)
 
     registry.enable("dummy")
-    test("启用 dummy", registry._enabled.get("dummy", False))
+    _check("启用 dummy", registry._enabled.get("dummy", False))
 
     registry.disable("dummy")
-    test("禁用 dummy", not registry._enabled.get("dummy", True))
+    _check("禁用 dummy", not registry._enabled.get("dummy", True))
 
     # 发现内置模块
     before = len(registry.list_modules())
     count = registry.discover_builtin()
     after = len(registry.list_modules())
-    test(f"内置模块发现完毕 ({after} 个)", after >= 10)
+    _check(f"内置模块发现完毕 ({after} 个)", after >= 10)
     names = [m["name"] for m in registry.list_modules()]
-    test("review_reminder 注册", "review_reminder" in names)
-    test("fatigue_manager 注册", "fatigue_manager" in names)
-    test("daily_brief 注册", "daily_brief" in names)
-    test("behavior_trigger 注册", "behavior_trigger" in names)
+    _check("review_reminder 注册", "review_reminder" in names)
+    _check("fatigue_manager 注册", "fatigue_manager" in names)
+    _check("daily_brief 注册", "daily_brief" in names)
+    _check("behavior_trigger 注册", "behavior_trigger" in names)
 
     # 重复发现不会增加模块数量
     before2 = len(registry.list_modules())
     count2 = registry.discover_builtin()
     after2 = len(registry.list_modules())
-    test("重复发现不增加模块数", after2 == before2)
+    _check("重复发现不增加模块数", after2 == before2)
 
 
 # ═══════════════════════════════════════════
@@ -131,28 +131,28 @@ def test_proposal_store():
 
     try:
         store.save_proposal(p1, user_id=user_id)
-        test("保存提案1", bool(p1.id))
+        _check("保存提案1", bool(p1.id))
         store.save_proposal(p2, user_id=user_id)
-        test("保存提案2", bool(p2.id))
-        test("ID 不同", p1.id != p2.id)
+        _check("保存提案2", bool(p2.id))
+        _check("ID 不同", p1.id != p2.id)
 
         pending = store.get_pending_proposals(user_id=user_id)
-        test("待处理列表非空", len(pending) > 0)
+        _check("待处理列表非空", len(pending) > 0)
 
         # pending 返回的是 Proposal 对象（Pydantic），用 .title 访问
-        test("标题匹配", any(p.title == "测试1" for p in pending))
+        _check("标题匹配", any(p.title == "测试1" for p in pending))
 
         # 验证 update_status
         try:
             store.update_status(p1.id, user_id, "accepted")
             # 用 get_pending 验证不再是 pending
             pending_after = store.get_pending_proposals(user_id=user_id)
-            test("接受后不再出现在待处理", all(p.id != p1.id for p in pending_after))
+            _check("接受后不再出现在待处理", all(p.id != p1.id for p in pending_after))
         except Exception as e:
-            test(f"更新状态异常: {e}", False)
+            _check(f"更新状态异常: {e}", False)
 
     except Exception as e:
-        test(f"ProposalStore 测试异常 (DB 不可用?): {e}", False)
+        _check(f"ProposalStore 测试异常 (DB 不可用?): {e}", False)
         print("  ⚠ 跳过数据库依赖的后续测试")
 
 
@@ -165,24 +165,24 @@ def test_event_handler():
     from app.infrastructure.event_bus import EventBus
 
     handler = SecretaryEventHandler()
-    test("Handler 创建", handler is not None)
-    test("初始未订阅", not handler._subscribed)
+    _check("Handler 创建", handler is not None)
+    _check("初始未订阅", not handler._subscribed)
 
     # 使用真正的 EventBus 实例
     bus = EventBus()
     handler.subscribe(bus)
-    test("订阅后已注册", handler._subscribed)
+    _check("订阅后已注册", handler._subscribed)
     
     # EventBus 的 _handlers 是 dict[type_str, list[callable]]
-    test("SessionCompleted 已订阅", "SessionCompleted" in bus._handlers)
-    test("CognitiveNodeUpdated 已订阅", "CognitiveNodeUpdated" in bus._handlers)
-    test("PracticeSubmitted 已订阅", "PracticeSubmitted" in bus._handlers)
+    _check("SessionCompleted 已订阅", "SessionCompleted" in bus._handlers)
+    _check("CognitiveNodeUpdated 已订阅", "CognitiveNodeUpdated" in bus._handlers)
+    _check("PracticeSubmitted 已订阅", "PracticeSubmitted" in bus._handlers)
 
     handler.unsubscribe()
-    test("取消订阅", not handler._subscribed)
+    _check("取消订阅", not handler._subscribed)
     # EventBus.unsubscribe 只移除 handler 不删除键，检查列表为空
-    test("SessionCompleted handler 已移除", len(bus._handlers.get("SessionCompleted", [])) == 0)
-    test("PracticeSubmitted handler 已移除", len(bus._handlers.get("PracticeSubmitted", [])) == 0)
+    _check("SessionCompleted handler 已移除", len(bus._handlers.get("SessionCompleted", [])) == 0)
+    _check("PracticeSubmitted handler 已移除", len(bus._handlers.get("PracticeSubmitted", [])) == 0)
 
 
 # ═══════════════════════════════════════════
@@ -201,9 +201,9 @@ def test_behavior_trigger():
 
     # 5a — 模块注册元数据
     mod = BehaviorTriggerModule()
-    test("模块名称", mod.meta.name == "behavior_trigger")
-    test("默认启用", mod.meta.default_enabled)
-    test("间隔 == 300", mod.meta.run_interval_seconds == 300)
+    _check("模块名称", mod.meta.name == "behavior_trigger")
+    _check("默认启用", mod.meta.default_enabled)
+    _check("间隔 == 300", mod.meta.run_interval_seconds == 300)
 
     # 5b — on_practice_submitted (低正确率)
     import asyncio
@@ -212,12 +212,12 @@ def test_behavior_trigger():
         atom_node_ids=["node_1"],
         correctness=0.3,
     ))
-    test("低正确率生成提案", low_correctness_result is not None)
+    _check("低正确率生成提案", low_correctness_result is not None)
     if low_correctness_result:
-        test("action_type == review", low_correctness_result.action_type == "review")
-        test("insight_source 含 practice_feedback",
+        _check("action_type == review", low_correctness_result.action_type == "review")
+        _check("insight_source 含 practice_feedback",
              "practice_feedback" in low_correctness_result.insight_source)
-        test("priority >= 3", low_correctness_result.priority >= 3)
+        _check("priority >= 3", low_correctness_result.priority >= 3)
 
     # 5c — on_practice_submitted (高正确率 => 不生成)
     high_correctness_result = asyncio.run(on_practice_submitted(
@@ -225,20 +225,20 @@ def test_behavior_trigger():
         atom_node_ids=["node_2"],
         correctness=0.8,
     ))
-    test("高正确率不生成提案", high_correctness_result is None)
+    _check("高正确率不生成提案", high_correctness_result is None)
 
     # 5d — on_session_completed (高正确率 + 长时长)
     session_result = asyncio.run(on_session_completed(
         user_id="test_user", accuracy=0.9, duration_minutes=30,
     ))
-    test("会话完成生成反思提案", session_result is not None)
+    _check("会话完成生成反思提案", session_result is not None)
     if session_result:
-        test("action_type == review", session_result.action_type == "review")
+        _check("action_type == review", session_result.action_type == "review")
 
     # 5e — 辅助函数 (空列表)
-    test("find_struggling_topics(空)", len(_find_struggling_topics([])) == 0)
-    test("find_stale_topics(空)", len(_find_stale_topics([])) == 0)
-    test("find_ready_for_expansion(空)", len(_find_ready_for_expansion([])) == 0)
+    _check("find_struggling_topics(空)", len(_find_struggling_topics([])) == 0)
+    _check("find_stale_topics(空)", len(_find_stale_topics([])) == 0)
+    _check("find_ready_for_expansion(空)", len(_find_ready_for_expansion([])) == 0)
 
 
 # ═══════════════════════════════════════════
@@ -249,14 +249,14 @@ def test_active_checker():
     from app.domain.secretary.engines.active_checker import ActiveChecker
     from app.domain.secretary.engines.module_registry import module_registry
 
-    checker = ActiveChecker()
-    test("Checker 创建成功", checker is not None)
-    test("默认间隔", hasattr(checker, "_check_interval"))
+    checker = ActiveChecker(user_id="test_user_diag")
+    _check("Checker 创建成功", checker is not None)
+    _check("默认间隔", hasattr(checker, "_check_interval"))
 
     # 确保模块已注册
     module_registry.discover_builtin()
     modules = module_registry.list_modules()
-    test(f"已注册模块数 >= 5 ({len(modules)})", len(modules) >= 5)
+    _check(f"已注册模块数 >= 5 ({len(modules)})", len(modules) >= 5)
 
 
 # ═══════════════════════════════════════════
@@ -269,13 +269,13 @@ def test_notification_store():
         p = Proposal(emoji="📖", title="test", description="test",
                      action_type="review", priority=3, payload={},
                      insight_source="test", generated_by="behavior_trigger")
-        test("Proposal 支持 generated_by", p.generated_by == "behavior_trigger")
+        _check("Proposal 支持 generated_by", p.generated_by == "behavior_trigger")
         
         # 支持 payload (等效于 metadata)
         p.payload["execution_result"] = {"success": True, "message": "done"}
-        test("Proposal payload 支持任意数据", p.payload.get("execution_result", {}).get("success") is True)
+        _check("Proposal payload 支持任意数据", p.payload.get("execution_result", {}).get("success") is True)
     except Exception as e:
-        test(f"Proposal 模型检查异常: {e}", False)
+        _check(f"Proposal 模型检查异常: {e}", False)
         traceback.print_exc()
 
 

@@ -158,8 +158,7 @@ class ClassifierService:
             return candidates
 
         for dn in data.directory_nodes.values():
-            # 只匹配非 temp 的 dir 节点
-            if dn.node_type != "dir" or dn.kind == "temp":
+            if dn.node_type != "dir":
                 continue
             search_text = f"{dn.name} {dn.summary_short} {dn.display_name}"
             matched = sum(1 for w in words if w in search_text)
@@ -216,7 +215,7 @@ class ClassifierService:
                 data = get_data_repo().load(user_id)
                 words = [w for w in text.replace("?", "").replace("，", " ").replace(" ", " ").split() if len(w) >= 2]
                 for dn in data.directory_nodes.values():
-                    if dn.node_type == "dir" and dn.kind != "temp":
+                    if dn.node_type == "dir":
                         if any(w in dn.name for w in words):
                             candidates.append({
                                 "id": dn.id,

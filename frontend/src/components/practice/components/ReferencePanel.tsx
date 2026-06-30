@@ -30,7 +30,7 @@ export default function ReferencePanel({ questionId, query, visible, onClose }: 
     setLoading(true);
 
     // 优先通过题目 ID 搜索
-    authedFetch(`/api/v7/practice/references/for-question?question_id=${encodeURIComponent(questionId)}`)
+    authedFetch(`/api/practice/references/for-question?question_id=${encodeURIComponent(questionId)}`)
       .then(r => r.json())
       .then(data => {
         const items = data?.results || data?.items || [];
@@ -40,7 +40,7 @@ export default function ReferencePanel({ questionId, query, visible, onClose }: 
       .catch(() => {
         // fallback: 使用题干前30字直接搜索
         if (query) {
-          return authedFetch(`/api/v7/practice/references/search?q=${encodeURIComponent(query.slice(0, 30))}`)
+          return authedFetch(`/api/practice/references/search?q=${encodeURIComponent(query.slice(0, 30))}`)
             .then(r => r.json())
             .then(data => {
               const items = data?.results || data?.items || [];

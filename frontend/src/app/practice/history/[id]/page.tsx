@@ -23,7 +23,7 @@ export default function SessionReviewPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api<any>(`/api/v7/practice/sessions/${id}/result`)
+    api<any>(`/api/practice/sessions/${id}/result`)
       .then(data => {
         if (Array.isArray(data.detail)) setResult(data);
         else setError(data.message || "无法加载结果");
@@ -34,7 +34,7 @@ export default function SessionReviewPage() {
 
   const handleDelete = async () => {
     if (!confirm("确认删除此练习记录？")) return;
-    await api(`/api/v7/practice/sessions/${id}`, { method: "DELETE" });
+    await api(`/api/practice/sessions/${id}`, { method: "DELETE" });
     router.push("/practice/history");
   };
 

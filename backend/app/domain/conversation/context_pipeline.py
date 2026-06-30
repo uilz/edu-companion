@@ -14,7 +14,6 @@ from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator, Protocol
 
 from app.schemas.conversation import (
-    Partition,
     Conversation,
     TreeNode,
     TextBlock,
@@ -32,9 +31,9 @@ logger = logging.getLogger(__name__)
 class ContextInput:
     """进入管线的原始输入"""
     user_id: str
-    partition_id: str
+    dir_id: str
     user_text: str
-    conversation_id: str = ""
+    conv_id: str = ""
     previous_payloads: dict[str, Any] = field(default_factory=dict)
     agent_label: str = ""  # kept for backward compat
 
@@ -117,19 +116,78 @@ class ContextPipeline:
 
 
 # ═══════════════════════════════════════════════
-# Provider 1: TutorPersona — AI 人格
+# Provider 1: ConversationMode — AI 对话模式人格
 # ═══════════════════════════════════════════════
 
+FEYNMAN_PROMPT = """你是一个刚开始学习这个知识点的学生。
+你的角色要求：
+1. 认真听对方讲解，像真实学生一样提出追问
+2. 追问要层层递进——基本理解 → 联系已有 → 边界情况 → 应用
+3. 当对方回答正确时，用追问确认他真的懂了
+4. 当对方回答模糊时，指出矛盾点
+5. 不要假装听不懂——诚实地根据讲解质量做回应
+6. 对话结束时输出结构化评估（JSON格式）
 
-class TutorPersona:
-    """注入基础系统提示词（苹小果人格设定）"""
+## 评估输出格式
+在对话结束时（用户多次无新问题或表示结束），你需要在回复末尾附加以下JSON:
+```json
+{
+  "feynman_evaluation": {
+    "highlights": ["亮点1", "亮点2"],
+    "weaknesses": ["不足之处1"],
+    "mastery_level": "high" | "medium" | "low",
+    "summary": "总体评价一句话"
+  }
+}
+```
+
+## 行为准则
+- 不要使用 <!--FOLLOW_UP--> 标注块
+- 不要推荐工具（出题、视频、文档等）
+- 不要主动引导去练习或看视频
+- 保持学生角色，专注于理解和追问
+- 追问语气自然，像课堂上的学生"""
+
+PEER_PROMPT = ""  # P2 实现
+
+
+class ConversationModeProvider:
+    """根据对话 mode 注入对应人格 system prompt。
+
+    mode 存储在 conversation (DirectoryNode) 的 metadata.mode 中。
+    - "tutor" → 现有 TutorPersona 逻辑
+    - "feynman" → 费曼学生角色
+    - "peer" → 暂留空（P2）
+    """
 
     def __init__(self) -> None:
         from app.infrastructure.llm.prompts import SYSTEM_PROMPT
-        self._system_prompt = SYSTEM_PROMPT
+        self._tutor_prompt = SYSTEM_PROMPT
+        self._feynman_prompt = FEYNMAN_PROMPT
+
+    def _resolve_mode(self, input: ContextInput) -> str:
+        """从对话 metadata 解析 mode，默认 "tutor" """
+        if not input.conv_id:
+            return "tutor"
+        try:
+            from app.services.common import get_data_repo
+            data = get_data_repo().load(input.user_id)
+            conv = data.directory_nodes.get(input.conv_id)
+            if conv and conv.node_type == "conv":
+                return conv.metadata.get("mode", "tutor")
+        except Exception:
+            pass
+        return "tutor"
 
     async def build(self, input: ContextInput) -> ContextOutput | None:
-        return SystemChunk(text=self._system_prompt)
+        mode = self._resolve_mode(input)
+        if mode == "feynman":
+            return SystemChunk(text=self._feynman_prompt)
+        elif mode == "peer":
+            # P2: return SystemChunk(text=PEER_PROMPT) when implemented
+            return SystemChunk(text=self._tutor_prompt)
+        else:
+            return SystemChunk(text=self._tutor_prompt)
 
 
 # ═══════════════════════════════════════════════
@@ -138,46 +196,69 @@ class TutorPersona:
 
 
 class ConversationLocation:
-    """注入对话的 PDTC 层级位置 + 分区摘要"""
+    """注入对话的层级位置 + 分区摘要 (DirectoryNode 版本)"""
 
     async def build(self, input: ContextInput) -> ContextOutput | None:
         from app.services.common import get_data_repo
 
         data = get_data_repo().load(input.user_id)
-        partition = data.partitions.get(input.partition_id)
-        if not partition:
-            return None
 
         parts: list[str] = []
         location_data: dict[str, Any] = {
-            "partition_id": input.partition_id,
-            "partition_name": partition.name,
+            "dir_id": input.dir_id,
         }
 
-        # 构建 PDTC 路径
-        conversation = None
-        if input.conversation_id:
-            conversation = data.conversations.get(input.conversation_id)
+        # 获取 conv 节点
+        conv_node = None
+        if input.conv_id:
+            conv_node = data.directory_nodes.get(input.conv_id)
+            if conv_node and conv_node.node_type != "conv":
+                conv_node = None
 
-        if conversation:
-            topic = data.topics.get(conversation.topic_id) if conversation.topic_id else None
-            if topic:
-                location_data["topic_id"] = topic.id
-                location_data["topic_name"] = topic.name
-                domain = data.domains.get(topic.domain_id) if topic.domain_id else None
-                if domain:
-                    location_data["domain_id"] = domain.id
-                    location_data["domain_name"] = domain.name
-                    parts.append(f"领域：{domain.name}")
-                parts.append(f"专题：{topic.name}")
+        # 从 DirectoryNode path 构建层级位置
+        # path = ["root_id", "l1_id", ..., "this_conv_id"]
+        if conv_node and conv_node.path:
+            ancestor_ids = conv_node.path[:-1]  # 除自身外的所有祖先 dir ID
 
-        location_data["level"] = "PDTC" if conversation else ("PC" if input.partition_id else "root")
+            # 遍历祖先目录节点收集名称
+            hierarchy_dirs: list[tuple[str, str]] = []  # (id, display_name)
+            for dir_id in ancestor_ids:
+                dn = data.directory_nodes.get(dir_id)
+                if dn and dn.node_type == "dir":
+                    hierarchy_dirs.append((dn.id, dn.display_name))
 
-        # 分区摘要
-        if partition.context_summary:
-            parts.append(f"分区摘要：{partition.context_summary}")
+            # hierarchy_dirs 从最外层（partition）到最内层（topic）
+            if hierarchy_dirs:
+                location_data["partition_name"] = hierarchy_dirs[0][1]
+                # 如果有超过两层的路由，最内层祖先视为 topic，其上一级视为 domain
+                if len(hierarchy_dirs) > 2:
+                    location_data["domain_name"] = hierarchy_dirs[-2][1]
+                    parts.append(f"领域：{hierarchy_dirs[-2][1]}")
+                if len(hierarchy_dirs) > 1:
+                    location_data["topic_name"] = hierarchy_dirs[-1][1]
+                    parts.append(f"专题：{hierarchy_dirs[-1][1]}")
 
-        render = f"当前分区：{partition.name}"
+            location_data["conversation_name"] = conv_node.display_name
+            location_data["conv_id"] = conv_node.id
+            location_data["level"] = "PDTC"
+        elif input.dir_id:
+            pn = data.directory_nodes.get(input.dir_id)
+            if pn and pn.node_type == "dir":
+                location_data["partition_name"] = pn.display_name
+                location_data["level"] = "PC"
+            else:
+                location_data["level"] = "root"
+        else:
+            location_data["level"] = "root"
+
+        # 分区摘要（使用 dir 节点的 summary_short）
+        partition_node = data.directory_nodes.get(input.dir_id)
+        if partition_node and partition_node.node_type == "dir" and partition_node.summary_short:
+            parts.append(f"分区摘要：{partition_node.summary_short}")
+
+        # 首行渲染
+        partition_name = partition_node.display_name if (partition_node and partition_node.node_type == "dir") else "默认分区"
+        render = f"当前分区：{partition_name}"
         if parts:
             render += "\n" + "\n".join(parts)
 
@@ -284,16 +365,12 @@ class LearnerCognition:
             from app.domain.cognitive import get_repo
 
             data = get_data_repo().load(input.user_id)
-            partition = data.partitions.get(input.partition_id)
+            partition = data.directory_nodes.get(input.dir_id)
 
             cog_node = None
-            if partition:
+            if partition and partition.node_type == "dir":
                 if partition.id:
                     cog_node = get_repo().get_node(partition.id, input.user_id)
-                if not cog_node and partition.subject:
-                    cog_node = get_repo().get_node(partition.subject, input.user_id)
-                if not cog_node and partition.subject:
-                    cog_node = get_repo().find_node_by_label(partition.subject, input.user_id)
                 if not cog_node and partition.name:
                     cog_node = get_repo().find_node_by_label(partition.name, input.user_id)
 
@@ -403,7 +480,7 @@ class LearnerCognition:
         # 知识图谱掌握概览
         try:
             data = get_data_repo().load(input.user_id)
-            graph = data.knowledge_graphs.get(input.partition_id)
+            graph = data.knowledge_graphs.get(input.dir_id)
             if graph and graph.nodes:
                 nodes_list = list(graph.nodes.values())
                 mastered = [n.label for n in nodes_list if n.mastery >= 80]
@@ -466,7 +543,7 @@ class LearningActivity:
         # 练习上下文
         try:
             from app.services.practice.practice_integrator import inject_practice_context
-            practice_ctx = inject_practice_context(input.user_id, input.partition_id)
+            practice_ctx = inject_practice_context(input.user_id, input.dir_id)
             if practice_ctx:
                 parts.append(practice_ctx)
                 activity_data["practice_context"] = practice_ctx
@@ -481,8 +558,8 @@ class LearningActivity:
                 recall_sessions = list(active_practice_sessions.values())
                 if recall_sessions:
                     data = get_data_repo().load(input.user_id)
-                    partition = data.partitions.get(input.partition_id)
-                    subject = partition.subject if partition else ""
+                    partition = data.directory_nodes.get(input.dir_id)
+                    subject = partition.name if partition and partition.node_type == "dir" else ""
                     recall_text = practice_recall.generate_recall(
                         sessions=recall_sessions,
                         days=7,
@@ -501,8 +578,8 @@ class LearningActivity:
         try:
             from app.services.conversation.context_trigger import context_trigger
             data = get_data_repo().load(input.user_id)
-            conversation = data.conversations.get(input.conversation_id) if input.conversation_id else None
-            if conversation:
+            conversation = data.directory_nodes.get(input.conv_id) if input.conv_id else None
+            if conversation and conversation.node_type == "conv":
                 recent_msgs = []
                 for nid in conversation.path[-5:]:
                     node = data.nodes.get(nid)
@@ -567,7 +644,8 @@ class TutorCapability:
                     "当需要练习时，建议 generate_practice；"
                     "当需要可视化时，建议 generate_image；"
                     "当需要整理知识时，建议 generate_mindmap；"
-                    "当需要笔记时，建议 generate_document。"
+                    "当需要笔记时，建议 generate_document；"
+                    "当需要向学生提问时，使用 ask_question（选择题或开放题）。"
                 )
                 parts.append(tool_text)
                 capability_data["tools"] = [t["function"]["name"] for t in TOOL_DEFINITIONS]
@@ -638,7 +716,7 @@ def get_context_pipeline() -> ContextPipeline:
     global _context_pipeline
     if _context_pipeline is None:
         _context_pipeline = ContextPipeline([
-            TutorPersona(),
+            ConversationModeProvider(),
             ConversationLocation(),
             LearnerEmotion(),
             LearnerCognition(),
@@ -649,25 +727,28 @@ def get_context_pipeline() -> ContextPipeline:
 
 
 async def build_llm_messages(
-    partition: Partition,
-    conversation: Conversation,
-    recent_messages: list[TreeNode],
+    partition: Any,
+    conversation: Any,
+    recent_messages: list[Any],
     user_text: str,
     user_id: str = "",
     agent_label: str = "",
+    tool_result: Any = None,
 ) -> list[dict[str, str]]:
     """
     兼容旧 _build_context_messages 签名的新管道调用。
     内部调用 ContextPipeline.assemble() 构建 system message，
     然后追加历史消息和用户消息。
+
+    tool_result: 保留参数以兼容旧调用方，方案A中不再使用此路径注入 tool result。
     """
     pipeline = get_context_pipeline()
 
     input = ContextInput(
         user_id=user_id,
-        partition_id=partition.id if partition else "",
+        dir_id=partition.id if partition else "",
         user_text=user_text,
-        conversation_id=conversation.id if conversation else "",
+        conv_id=conversation.id if conversation else "",
         agent_label=agent_label,
     )
     messages = await pipeline.assemble(input)
@@ -678,7 +759,10 @@ async def build_llm_messages(
             continue
         text_parts = []
         for block in msg.content_blocks:
-            if isinstance(block, TextBlock):
+            if isinstance(block, dict):
+                if block.get("type") == "text":
+                    text_parts.append(block.get("text", ""))
+            elif isinstance(block, TextBlock):
                 text_parts.append(block.text)
             elif hasattr(block, "text"):
                 text_parts.append(block.text)

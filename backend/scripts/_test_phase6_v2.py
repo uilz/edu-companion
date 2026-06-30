@@ -35,7 +35,7 @@ async def main():
 
     # ── 2. 写 PendingCrossTopic 事件 ──
     print("\n=== 写 PendingCrossTopic 事件 ===")
-    evt_id = EventService.emit_v6_event(
+    evt_id = EventService.emit_event(
         event_type="PendingCrossTopic",
         user_id=uid,
         payload={

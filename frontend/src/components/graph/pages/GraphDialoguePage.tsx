@@ -144,7 +144,11 @@ export default function GraphDialoguePage() {
   }
 
   // ── 空状态 ──
-  if (!ctx.graphData || ctx.graphData.nodes.length === 0) {
+  const hasRealNodes = useMemo(() => {
+    if (!ctx.graphData?.nodes?.length) return false;
+    return ctx.graphData.nodes.some((n: any) => !(n.level === "partition" && n.created_by === "system"));
+  }, [ctx.graphData]);
+  if (!ctx.graphData || !hasRealNodes) {
     if (!ctx.partitionId) {
       return <NoPartitionState />;
     }
@@ -169,7 +173,9 @@ function GraphDialogueLayout({ ctx }: { ctx: UseGraphDialogueReturn }) {
 
   const stats = useMemo(() => {
     if (!ctx.graphData || !ctx.graphData.nodes.length) return { total: 0, mastered: 0, learning: 0, avgMastery: 0 };
-    const nodes = ctx.graphData.nodes;
+    // 排除虚拟分区根节点（level === "partition" 且 created_by === "system"）
+    const nodes = ctx.graphData.nodes.filter((n: any) => !(n.level === "partition" && n.created_by === "system"));
+    if (nodes.length === 0) return { total: 0, mastered: 0, learning: 0, avgMastery: 0 };
     return {
       total: nodes.length,
       mastered: nodes.filter(n => n.mastery >= 0.8).length,

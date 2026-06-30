@@ -2,8 +2,8 @@
 
 import React, { useMemo } from "react";
 import {
-  Plus, Pencil, Trash2, MessageSquare,
-  ChevronRight, ChevronDown, FolderOpen, Sparkles,
+  Plus, Pencil, Trash2, MessageSquare, MoreVertical,
+  ChevronRight, ChevronDown, FolderOpen,
 } from "lucide-react";
 import { InlineEdit } from "@/components/ui/InlineEdit";
 
@@ -44,8 +44,7 @@ export const CHILD_LEVEL: Record<string, { level: GraphLevel; name: string; emoj
 // ══════════════════════════════════════════════════════════════
 //  节点图标 — 基于 node_type + kind
 // ══════════════════════════════════════════════════════════════
-export function nodeIcon(nodeType: string, kind?: string) {
-  if (kind === "temp") return <Sparkles size={12} className="text-amber-500" />;
+export function nodeIcon(nodeType: string, _kind?: string) {
   switch (nodeType) {
     case "dir": return <FolderOpen size={13} />;
     default: return null;
@@ -98,9 +97,8 @@ function isOnSelectedPath(node: GraphNode, ancestorIds: Set<string>): boolean {
   return ancestorIds.has(node.id);
 }
 
-/** 只有 dir 节点可以创建子节点；临时目录不允许创建 */
-function canCreateChild(nodeType: string, kind?: string) {
-  if (kind === "temp") return false;
+/** 只有 dir 节点可以创建子节点 */
+function canCreateChild(nodeType: string, _kind?: string) {
   return nodeType === "dir";
 }
 
@@ -116,7 +114,7 @@ const variantClass = (variant: NodeVariant): string => {
     case "selected":
       return "bg-[var(--color-surface)] font-semibold text-[var(--color-text)]";
     case "ancestor":
-      return "bg-[var(--color-accent-soft)] font-normal text-[var(--color-text-secondary)]";
+      return "bg-[rgb(245_245_247)] dark:bg-[rgb(30_30_32)] font-normal text-[var(--color-text-secondary)]";
     default:
       return "bg-transparent font-normal text-[var(--color-text-secondary)]";
   }
@@ -142,6 +140,27 @@ export function SidebarTreeNode({
   const visibleChildren = useMemo(() => children.filter((child) => child.is_visible), [children]);
   const allowChildCreation = canCreateChild(node.node_type, node.kind);
 
+  // ── 三点菜单状态 ──
+  const [openMenuId, setOpenMenuId] = React.useState<string | null>(null);
+  const menuLeaveTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  function toggleMenu(id: string) {
+    setOpenMenuId(prev => prev === id ? null : id);
+  }
+  function clearMenuTimer() {
+    if (menuLeaveTimer.current) { clearTimeout(menuLeaveTimer.current); menuLeaveTimer.current = null; }
+  }
+  function startMenuTimer() {
+    clearMenuTimer();
+    menuLeaveTimer.current = setTimeout(() => setOpenMenuId(null), 350);
+  }
+
+  React.useEffect(() => {
+    if (!openMenuId) return;
+    const handler = () => setOpenMenuId(null);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [openMenuId]);
+
   // ── 统一节点状态：驱动样式 + 点击行为 ──
   const nodeState: NodeVariant = isSelectedNode(node, selectedNode)
     ? "selected"
@@ -155,7 +174,7 @@ export function SidebarTreeNode({
   const [borderWidth, borderColor] = nodeState === "selected"
     ? [3, "var(--color-accent)"]
     : nodeState === "ancestor"
-      ? [Math.max(3.25, 4 / (depth + 2) + 3.25), "var(--color-text-muted)"]
+      ? [Math.max(3.25, 4 / (depth + 2) + 3.25), "color-mix(in srgb, var(--color-text-muted) 35%, transparent)"]
       : [3, "transparent"];
 
   // 统一点击：选中节点切换展开，其余走 selectGraphNode
@@ -194,7 +213,7 @@ export function SidebarTreeNode({
         style={{
           paddingLeft: indent,
           paddingRight: 8,
-          paddingBlock: 6,
+          paddingBlock: "max(6px, calc((44px - 1em) / 2))",
           borderLeft: `${borderWidth}px solid ${borderColor}`,
         }}
         onClick={handleNodeClick}
@@ -205,7 +224,8 @@ export function SidebarTreeNode({
         {node.node_type === "dir" && (
           <button
             onClick={handleChevronClick}
-            className="mr-1 flex w-4 flex-shrink-0 items-center justify-center p-0"
+            className="mr-1 flex-shrink-0 flex items-center justify-center p-0"
+            style={{ minWidth: 44, minHeight: 44 }}
             title={isExpanded ? "收起" : "展开"}
             aria-label={isExpanded ? "收起" : "展开"}
           >
@@ -234,20 +254,46 @@ export function SidebarTreeNode({
           <span className="ml-1 rounded bg-[var(--color-surface)] px-1.5 text-[10px] text-[var(--color-text-muted)]">+{node.suggested_count}</span>
         )}
 
-        {/* 操作按钮组 — 仅 dir 节点显示创建按钮 */}
-        <div className="ml-1 flex flex-shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 max-lg:opacity-100">
-          {allowChildCreation && (
-            <button onClick={(e) => { e.stopPropagation(); handleCreateChild(node); }}
-              className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-success)]" title="新建目录"><Plus size={11} /></button>
-          )}
-          {allowChildCreation && (
-            <button onClick={(e) => { e.stopPropagation(); handleNewConvClick(node, partitionId || node.id); }}
-              className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-success)]" title="新建会话"><MessageSquare size={11} /></button>
-          )}
-          <button onClick={(e) => { e.stopPropagation(); setEditingId(node.id); setEditValue(node.label); }}
-            className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)]" title="重命名"><Pencil size={11} /></button>
-          <button onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: node.id, label: node.label, isConv: node.node_type === "conv", parentId: node.node_type === "conv" ? (node.parent || undefined) : undefined, parent: node.parent }); }}
-            className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-error)]" title="删除"><Trash2 size={11} /></button>
+        {/* 操作菜单 — 统一竖三点下拉 */}
+        <div className="ml-1 flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100 max-lg:opacity-100" onClick={(e) => e.stopPropagation()} onMouseEnter={clearMenuTimer} onMouseLeave={startMenuTimer}>
+          <div className="relative">
+            <button
+              onClick={(e) => { e.stopPropagation(); toggleMenu(node.id); }}
+              className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] rounded"
+              style={{ minWidth: 44, minHeight: 44 }}
+              title="更多操作"
+            >
+              <MoreVertical size={11} />
+            </button>
+            {openMenuId === node.id && (
+              <div className="absolute right-0 top-full mt-1 z-50 min-w-[120px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] py-1 shadow-lg" onClick={(e) => e.stopPropagation()}>
+                {allowChildCreation && (
+                  <button onClick={() => { handleCreateChild(node); setOpenMenuId(null); }}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)]"
+                    style={{ minHeight: 44 }}>
+                    <Plus size={12} /> 新建目录
+                  </button>
+                )}
+                {allowChildCreation && (
+                  <button onClick={() => { handleNewConvClick(node, partitionId || node.id); setOpenMenuId(null); }}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)]"
+                    style={{ minHeight: 44 }}>
+                    <MessageSquare size={12} /> 新建会话
+                  </button>
+                )}
+                <button onClick={() => { setEditingId(node.id); setEditValue(node.label); setOpenMenuId(null); }}
+                  className="flex w-full items-center gap-2 px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)]"
+                  style={{ minHeight: 44 }}>
+                  <Pencil size={12} /> 重命名
+                </button>
+                <button onClick={() => { setDeleteTarget({ id: node.id, label: node.label, isConv: node.node_type === "conv", parentId: node.node_type === "conv" ? (node.parent || undefined) : undefined, parent: node.parent }); setOpenMenuId(null); }}
+                  className="flex w-full items-center gap-2 px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)]"
+                  style={{ minHeight: 44 }}>
+                  <Trash2 size={12} /> 删除
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

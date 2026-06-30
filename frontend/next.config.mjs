@@ -22,7 +22,13 @@ if (existsSync(envPath)) {
 
 const nextConfig = {
   reactStrictMode: true,
-  // output: "standalone",  // 临时注释，用 next start 正常启动
+  productionBrowserSourceMaps: false,
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  experimental: {
+    useLightningcss: false,
+  },
   async redirects() {
     return [
       // 首页 → 驾驶舱

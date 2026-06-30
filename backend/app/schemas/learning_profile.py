@@ -1,5 +1,5 @@
 """
-v3.0 学习画像数据模型
+学习画像数据模型
 
 核心实体：SkillAtom — 唯一的「知识点」实体
 分区画像：PartitionProgress — 一个分区的完整学习进度
@@ -27,7 +27,7 @@ class SkillAtom(BaseModel):
     id: str = ""
     label: str = ""
     description: str = ""
-    partition_id: str = ""
+    dir_id: str = ""
     created_by: str = "ai"                       # "ai" | "user"
 
     # ── 图谱属性 ──
@@ -147,7 +147,7 @@ class TemporalMetrics(BaseModel):
 
 class PartitionProgress(BaseModel):
     """一个分区的完整学习进度画像"""
-    partition_id: str
+    dir_id: str
     partition_name: str = ""
     partition_emoji: str = "📁"
     generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -166,7 +166,7 @@ class PartitionProgress(BaseModel):
 
 class LearningContext(BaseModel):
     """当前学习情境"""
-    partition_id: Optional[str] = None
+    dir_id: Optional[str] = None
     session_duration_minutes: int = 0
     time_of_day: str = "morning"
     recent_correct_rate: float = 1.0

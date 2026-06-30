@@ -16,6 +16,7 @@ from app.domain.cognitive.models import (
     CognitiveLoad,
     CognitiveNode,
     DialogueContext,
+    Metacognition,
     PracticeEvent,
     PracticeSummary,
     Trend,
@@ -240,6 +241,33 @@ def handle_practice_response(event: CognitiveEventRecord) -> dict[str, Any]:
     state.fatigue_level = min(1.0, state.fatigue_level + 0.05)
     state.last_activity_time = now
 
+    # ─── 11. 元认知校准 ───
+    confidence_before = payload.get("confidence_before")
+    if confidence_before is not None and isinstance(confidence_before, int):
+        metacog = node.metacognition or Metacognition()
+        # 计算偏差：confidence_before (1-4) vs correctness_score (4 if correct, 0 if not)
+        correctness_score = 4 if success else 0
+        gap = confidence_before - correctness_score
+        # 更新方向
+        if abs(gap) <= 1:
+            direction = "accurate"
+        elif gap > 0:
+            direction = "overconfident"
+        else:
+            direction = "underconfident"
+        # 更新历史（保留最近20条）
+        history = list(metacog.recent_history or []) + [gap]
+        if len(history) > 20:
+            history = history[-20:]
+        # 计算校准误差（历史均值绝对值）
+        calibration_error = sum(abs(h) for h in history) / len(history) if history else 0.0
+        node.metacognition = Metacognition(
+            self_assessment=confidence_before / 4.0,
+            calibration_error=round(calibration_error, 3),
+            direction=direction,
+            recent_history=history,
+        )
+
     # ─── 13. 激励 (简易, 非 Registry) ───
     new_engagement = node.engagement
     if new_engagement:
@@ -298,6 +326,7 @@ def handle_practice_response(event: CognitiveEventRecord) -> dict[str, Any]:
         "streak": new_engagement.streak_current if new_engagement else 0,
         "decline_signal": decline_signal,
         "deep_trigger": deep_trigger,
+        "metacognition": node.metacognition.model_dump() if node.metacognition else None,
     }
 
 
@@ -497,6 +526,7 @@ def submit_practice(
     latency_ms: float = 5000.0,
     consecutive: bool = False,
     confidence: float = 0.5,
+    confidence_before: int | None = None,
 ) -> dict[str, Any]:
     """便捷方法：创建一个 practice_response 事件并处理。"""
     evt = CognitiveEventRecord(
@@ -510,6 +540,7 @@ def submit_practice(
             "latency_ms": latency_ms,
             "consecutive": consecutive,
             "confidence": confidence,
+            "confidence_before": confidence_before,
         },
     )
     _get_repo().insert(evt)

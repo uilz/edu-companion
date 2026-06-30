@@ -19,7 +19,7 @@ export default function ExamPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    authedFetch("/api/v7/practice/banks")
+    authedFetch("/api/practice/banks")
       .then((r) => r.json())
       .then((data) => {
         setBanks(Array.isArray(data) ? data : data?.items || []);

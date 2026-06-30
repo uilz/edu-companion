@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class ActiveChecker:
     """主动检查器 — 基于模块注册表的周期性检查"""
 
-    def __init__(self, user_id: str, proposal_store=None) -> None:
+    def __init__(self, user_id: str = "", proposal_store=None) -> None:
         self._user_id = user_id
         self._running = False
         self._task: asyncio.Task | None = None
@@ -27,9 +27,13 @@ class ActiveChecker:
         self._last_proposal_count = 0
         self._store = proposal_store
 
-    async def run_check(self) -> dict[str, Any]:
+    async def run_check(self, user_id: str = "") -> dict[str, Any]:
         """执行一次模块化主动检查"""
         from .module_registry import module_registry
+
+        uid = user_id or self._user_id
+        if not uid:
+            return {"error": "user_id required", "modules_run": 0, "proposals_generated": 0, "reasons": []}
 
         findings: dict[str, Any] = {
             "modules_run": 0,
@@ -38,17 +42,17 @@ class ActiveChecker:
         }
 
         # 1. 评估用户情境
-        ctx = await self._context_engine.assess(self._user_id)
+        ctx = await self._context_engine.assess(uid)
 
         # 2. 运行所有已启用模块
-        proposals = await module_registry.run_enabled_checks(self._user_id, ctx)
+        proposals = await module_registry.run_enabled_checks(uid, ctx)
 
         # 2.5 策略引擎过滤
         from .policy_engine import policy_engine
-        daily_used = await policy_engine.get_daily_usage(self._user_id)
+        daily_used = await policy_engine.get_daily_usage(uid)
         proposals = await policy_engine.filter(
             proposals,
-            user_id=self._user_id,
+            user_id=uid,
             quiet_hours=ctx.quiet_hours if ctx else False,
             daily_used=daily_used,
             max_daily=5,
@@ -79,7 +83,7 @@ class ActiveChecker:
         if self._store:
             for p in proposals:
                 try:
-                    self._store.save_proposal(p, user_id=self._user_id, session_id="_active_check")
+                    self._store.save_proposal(p, user_id=uid, session_id="_active_check")
                 except Exception as e:
                     logger.warning("Proposal save failed for active check: %s", e)
 
@@ -96,29 +100,23 @@ class ActiveChecker:
 
     async def _loop(self) -> None:
         """后台循环"""
-        logger.info("🔍 秘书主动检查器启动 (间隔 %ds, 模块数 %d)", self._check_interval, self._count_modules())
+        logger.info("🔍 秘书主动检查器启动 (间隔 %ds)", self._check_interval)
         while self._running:
             try:
                 findings = await self.run_check()
                 if findings["proposals_generated"] > 0:
                     logger.info("📋 生成 %d 条提案: %s", findings["proposals_generated"], "; ".join(findings["reasons"][:3]))
-                else:
-                    logger.debug("主动检查: 无新事项")
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.warning("主动检查异常: %s", e)
             await asyncio.sleep(self._check_interval)
 
-    def _count_modules(self) -> int:
-        try:
-            from .module_registry import module_registry
-            return len(module_registry._modules)
-        except Exception:
-            return 0
-
     def start(self) -> None:
-        """启动后台检查循环"""
+        """启动后台检查循环（保留兼容，推荐由中央调度器管理）
+
+        主动检查最终应由客户端驱动（requestIdleCallback 定时调用 API）。
+        """
         if self._running:
             return
         self._running = True

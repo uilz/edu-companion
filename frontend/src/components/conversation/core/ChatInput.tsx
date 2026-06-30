@@ -8,7 +8,10 @@ import { Send, Paperclip, Image, Loader2, X, Library } from "lucide-react";
 import VoiceRecorder from "./../input/VoiceRecorder";
 import QuotePreview from "./../input/QuotePreview";
 import ResourcePicker from "./../input/ResourcePicker";
-import { useConversationStore } from "@/store/conversation/conversation-store";
+import { useConversationStore, getActiveConvId } from "@/store/conversation/conversation-store";
+import { useMessageStore } from "@/store/conversation/message-store";
+import { setSending } from "@/store/conversation/actions/send-message";
+import { useDraftPersistence } from "@/hooks/conversation/useDraftPersistence";
 
 // --- 组件属性接口 ---
 interface ConversationChatInputProps {
@@ -33,14 +36,12 @@ export interface UploadedFile {
 export default function ConversationChatInput({
   onSend,
   disabled = false,
-  branchId,
   conversationId,
   placeholder,
 }: ConversationChatInputProps) {
-  const _convId = conversationId ?? branchId;
 
   // --- 状态定义 ---
-  const [text, setText] = useState("");               // 输入框文本内容
+  const [text, setText, clearDraft] = useDraftPersistence(); // 输入框文本（自动 localStorage 持久化）
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]); // 已上传的文件列表
   const [uploading, setUploading] = useState(false);    // 是否正在上传
   const [uploadError, setUploadError] = useState("");   // 上传错误信息
@@ -111,15 +112,43 @@ export default function ConversationChatInput({
   }, []);
 
   // ── Send ──
-  // --- 发送消息：调用 onSend 回调并清空输入框及文件列表 ---
-  const handleSend = () => {
+  // 两阶段分离：ChatInput 负责创建会话，store.sendMessage 只负责发送
+
+  /** 确保有活跃会话，没有则创建并等待 loadMessages 完成 */
+  const ensureConv = useCallback(async (): Promise<boolean> => {
+    const store = useConversationStore.getState();
+    if (getActiveConvId(store)) return true;
+
+    await store.handleNewConversation("default", "", "");
+
+    // 等待 loadMessages 完成：handleNewConversation → selectConversation → loadMessages
+    // 和手动从侧边栏创建会话后发消息的行为完全一致
+    for (let i = 0; i < 50; i++) {
+      if (!useMessageStore.getState().loadingMessages) return true;
+      await new Promise(r => setTimeout(r, 50));
+    }
+    return !!getActiveConvId(useConversationStore.getState());
+  }, []);
+
+  const handleSend = async () => {
     const trimmed = text.trim();
     if (!trimmed || disabled) return;
-    onSend(trimmed, uploadedFiles.length > 0 ? uploadedFiles : undefined);
-    setText("");
-    setUploadedFiles([]);
-    // Clear pending quote after normal send
-    useConversationStore.getState().clearPendingQuote();
+
+    setSending(true);
+    try {
+      const ok = await ensureConv();
+      if (!ok) return;
+
+      // 等 React 完成渲染（会话 UI 就绪）
+      await new Promise(r => setTimeout(r, 100));
+
+      onSend(trimmed, uploadedFiles.length > 0 ? uploadedFiles : undefined);
+      setText("");
+      setUploadedFiles([]);
+      useConversationStore.getState().clearPendingQuote();
+    } finally {
+      setSending(false);
+    }
   };
 
   // --- 发送子支消息：创建子支并发送 ---
@@ -137,10 +166,10 @@ export default function ConversationChatInput({
         pq.quotedText,
         trimmed,
       );
-      setText("");
+      clearDraft();
       setUploadedFiles([]);
     } catch (e) {
-
+      // 子支创建失败，保留输入文字
     }
   };
 
@@ -204,13 +233,20 @@ export default function ConversationChatInput({
             <Paperclip size={16} />
           </button>
           <VoiceRecorder
-            onTranscription={(t) => {
+            onTranscription={async (t) => {
               const newText = t.trim();
               if (voiceAutoSend && newText) {
-                // Voice auto-send: send immediately
-                onSend(newText, uploadedFiles.length > 0 ? uploadedFiles : undefined);
-                setText("");
-                setUploadedFiles([]);
+                setSending(true);
+                try {
+                  const ok = await ensureConv();
+                  if (!ok) return;
+                  await new Promise(r => setTimeout(r, 100));
+                  onSend(newText, uploadedFiles.length > 0 ? uploadedFiles : undefined);
+                  setText("");
+                  setUploadedFiles([]);
+                } finally {
+                  setSending(false);
+                }
               } else {
                 setText((prev) => prev + t);
               }

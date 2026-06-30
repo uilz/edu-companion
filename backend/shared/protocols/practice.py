@@ -236,7 +236,7 @@ class PracticeService(Protocol):
 
     # ── 题库管理 ──
 
-    def resolve_bank_for_conversation(self, partition_id: str, topic: str = "") -> str:
+    def resolve_bank_for_conversation(self, dir_id: str, topic: str = "") -> str:
         """对话→题库自动映射"""
         ...
 
@@ -283,7 +283,7 @@ class PracticeService(Protocol):
         self,
         user_id: str,
         session: PracticeSession,
-        partition_id: str,
+        dir_id: str,
         branch_id: str,
     ) -> dict | None:
         """将练习结果写入对话branch"""

@@ -36,7 +36,7 @@ class AdaptiveSelector:
         self,
         user_id: str,
         count: int = DEFAULT_QUEUE_SIZE,
-        partition_id: str | None = None,
+        dir_id: str | None = None,
         mode: str = "adaptive",  # adaptive | review | explore | challenge
     ) -> list[ReviewResult]:
         """
@@ -45,7 +45,7 @@ class AdaptiveSelector:
         参数：
             user_id: 用户
             count: 返回数量
-            partition_id: 可选，限定在某个分区
+            dir_id: 可选，限定在某个分区
             mode: 队列模式
                 adaptive (默认) — 平衡复习 + ZPD + 探索
                 review — 仅复习 (urgency > 0.5)
@@ -56,7 +56,7 @@ class AdaptiveSelector:
             按优先级降序排列的 ReviewResult 列表
         """
         # 1. 获取候选节点
-        nodes = self._get_candidates(user_id, partition_id)
+        nodes = self._get_candidates(user_id, dir_id)
         if not nodes:
             logger.info("No candidate nodes found for user=%s", user_id)
             return []
@@ -83,7 +83,7 @@ class AdaptiveSelector:
         return results
 
     def _get_candidates(
-        self, user_id: str, partition_id: str | None = None,
+        self, user_id: str, dir_id: str | None = None,
     ) -> list[CognitiveNode]:
         """获取候选节点：atom + concept 级别，非删除"""
         nodes = get_repo().list_all_nodes(user_id)
@@ -94,7 +94,7 @@ class AdaptiveSelector:
                 continue
             # 检查未删除 — deleted_at 不存储在 CognitiveNode 模型中
             # 由 SQL 过滤，此处信任 get_repo().list_all_nodes
-            if partition_id and n.path_id and not n.path_id.startswith(partition_id):
+            if dir_id and n.path_id and not n.path_id.startswith(dir_id):
                 continue
             candidates.append(n)
         return candidates

@@ -38,13 +38,13 @@ class PostgresQuestionRepo(QuestionRepository):
 
     async def find_by_id(self, question_id: str) -> dict | None:
         row = _get_db().fetchone(
-            "SELECT * FROM questions WHERE question_id=%s", (question_id,)
+            "SELECT * FROM questions WHERE id=%s", (question_id,)
         )
         return dict(row) if row else None
 
     async def find_by_skill(self, skill_id: str, limit: int = 20) -> list:
         rows = _get_db().fetchall(
-            "SELECT * FROM questions WHERE skill_id=%s LIMIT %s",
+            "SELECT * FROM questions WHERE cognitive_node_ids && ARRAY[%s] LIMIT %s",
             (skill_id, limit)
         )
         return [dict(r) for r in rows]

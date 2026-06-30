@@ -1,5 +1,5 @@
 """
-Knowledge Tree AI v5 — AI 生成 / 扩充 / 编辑 / 对话
+Knowledge Tree AI — AI 生成 / 扩充 / 编辑 / 对话
 
 统一前缀: /api/knowledge-tree/ai
 """
@@ -16,11 +16,10 @@ from pydantic import BaseModel, Field
 
 from app.domain.auth.dependencies import current_user_id
 from app.services.knowledge_tree.knowledge_node_service import kn_svc
-from app.services.knowledge_tree.conversation_service import conv_svc
 from app.services.knowledge_tree.message_service import msg_svc
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/knowledge-tree/ai", tags=["知识树 AI v5"])
+router = APIRouter(prefix="/api/knowledge-tree/ai", tags=["知识树 AI"])
 
 
 # ═══════════════════════════════════════════
@@ -45,7 +44,7 @@ class AiEditRequest(BaseModel):
 
 class AiChatRequest(BaseModel):
     message: str
-    conversation_id: str | None = None
+    conv_id: str | None = None
 
 
 # ═══════════════════════════════════════════
@@ -399,66 +398,20 @@ async def ai_chat_edit_tree(
     body: AiChatRequest,
     user_id: str = Depends(current_user_id),
 ):
-    """创建/获取知识树探索会话，返回 conversation_id。
+    """验证知识树节点是否存在，返回节点信息。
 
-    此为对话系统的统一入口封装：
-      1. 创建/查找 tree_exploration 类型对话
-      2. 返回 conversation_id，前端通过 SSE + POST message 进行流式对话
-      3. 实际消息处理走 ReplyPipeline（含 knowledge_* 工具）
+    知识树与对话系统相互独立。
+    前端通过标准对话 API 发送消息时附加 knowledge_node_id 参数字段即可。
     """
-    from app.services.common import get_data_repo as _gdr
-    from app.schemas.directory_node import DirectoryNode
-
-    # 验证节点存在
     bound_node = kn_svc.get_node(user_id, node_id)
     if not bound_node:
         raise HTTPException(404, "知识点不存在")
 
-    data = _gdr().load(user_id)
-
-    # 查找已存在的探索会话
-    conversation_id = body.conversation_id
-    if not conversation_id:
-        for dn in data.directory_nodes.values():
-            if dn.node_type == "conv" and dn.metadata.get("type") == "tree_exploration" and dn.metadata.get("knowledge_node_id") == node_id:
-                conversation_id = dn.id
-                break
-
-    if not conversation_id:
-        # 确保「知识树探索」分区存在
-        explore_partition_id = None
-        for dn in data.directory_nodes.values():
-            if dn.node_type == "dir" and dn.name == "知识树探索":
-                explore_partition_id = dn.id
-                break
-        if not explore_partition_id:
-            explore_dir = DirectoryNode(
-                user_id=user_id, parent_id=None,
-                node_type="dir", kind="partition",
-                name="知识树探索", path=[],
-            )
-            data.directory_nodes[explore_dir.id] = explore_dir
-            explore_partition_id = explore_dir.id
-
-        # 创建探索对话
-        conv = DirectoryNode(
-            user_id=user_id, parent_id=explore_partition_id,
-            node_type="conv", kind="general",
-            name=f"探索: {bound_node.label}",
-            path=data.directory_nodes[explore_partition_id].path + [explore_partition_id],
-            metadata={"type": "tree_exploration", "knowledge_node_id": node_id},
-        )
-        data.directory_nodes[conv.id] = conv
-        parent = data.directory_nodes[explore_partition_id]
-        parent.add_child(conv.id)
-        _gdr().save(user_id, data)
-        conversation_id = conv.id
-
     return {
         "ok": True,
-        "conversation_id": conversation_id,
         "node_id": node_id,
         "node_label": bound_node.label,
+        "node_level": bound_node.level,
     }
 
 
@@ -488,13 +441,22 @@ async def get_recommendations(
         recommendations = []
 
         if source == "tree":
-            # 找叶子节点（没有子节点的节点）
-            parent_ids = {n.parent_id for n in all_nodes if n.parent_id}
-            leaf_nodes = [n for n in all_nodes if n.id not in parent_ids]
-            unexplored = [
-                {"id": n.id, "label": n.label}
-                for n in leaf_nodes if n.mastery < 0.3
-            ]
+            # 排除虚拟分区根节点（系统自动创建的 partition 级别节点）
+            real_nodes = [n for n in all_nodes if not (n.level == "partition" and n.created_by == "system")]
+            if not real_nodes:
+                recommendations.append({
+                    "type": "empty",
+                    "message": "还没有知识节点，请先生成知识树",
+                    "action": "generate",
+                })
+            else:
+                # 找叶子节点（没有子节点的节点）
+                parent_ids = {n.parent_id for n in real_nodes if n.parent_id}
+                leaf_nodes = [n for n in real_nodes if n.id not in parent_ids]
+                unexplored = [
+                    {"id": n.id, "label": n.label}
+                    for n in leaf_nodes if n.mastery < 0.3
+                ]
             if unexplored:
                 recommendations.append({
                     "type": "unexplored_nodes",
@@ -510,24 +472,9 @@ async def get_recommendations(
                 })
 
         elif source == "conversation":
-            # 找有关联 conversation 的节点
-            nodes_with_conv = set()
-            convs = conv_svc.list_conversations(user_id)
-            for conv in convs:
-                for nid in conv.knowledge_node_ids:
-                    nodes_with_conv.add(nid)
-
-            nodes_without_conv = [
-                {"id": n.id, "label": n.label}
-                for n in all_nodes if n.id not in nodes_with_conv
-            ]
-            if nodes_without_conv:
-                recommendations.append({
-                    "type": "pending_nodes",
-                    "message": f"有 {len(nodes_without_conv)} 个节点待整理",
-                    "action": "go_tree",
-                    "nodes": nodes_without_conv[:5],
-                })
+            # 对话系统与知识树已解耦，不再依赖节点关联对话来推荐
+            # 保留分支结构供将来扩展
+            pass
 
         return {"ok": True, "recommendations": recommendations[:3]}
 

@@ -22,10 +22,10 @@ class ConversationService(Protocol):
     async def send_and_reply(
         self,
         user_id: str,
-        partition_id: str,
+        dir_id: str,
         user_text: str,
         content_blocks: list | None = None,
-        conversation_id: str = "",
+        conv_id: str = "",
         pending_quote: dict | None = None,
     ) -> dict:
         """完整流程：存用户消息 → 生成回复（含工具） → 存助手消息"""
@@ -34,10 +34,10 @@ class ConversationService(Protocol):
     async def send_and_reply_stream(
         self,
         user_id: str,
-        partition_id: str,
+        dir_id: str,
         user_text: str,
         content_blocks: list | None = None,
-        conversation_id: str = "",
+        conv_id: str = "",
         pending_quote: dict | None = None,
     ) -> AsyncGenerator[dict, None]:
         """完整流程（流式）：自动路由 → 存用户消息 → 预执行工具 → 流式生成回复 → 存助手消息"""
@@ -47,7 +47,7 @@ class ConversationService(Protocol):
         self,
         user_id: str,
         content: str,
-        partition_id: str | None = None,
+        dir_id: str | None = None,
         branch_id: str | None = None,
     ) -> dict:
         """发送消息 → LLM 回复（简化版）"""
@@ -66,7 +66,7 @@ class ConversationService(Protocol):
 
     async def create_domain(
         self,
-        partition_id: str,
+        dir_id: str,
         name: str,
         emoji: str = "📚",
     ) -> TreeNode:
@@ -101,7 +101,7 @@ class ConversationService(Protocol):
 
     async def get_tree(
         self,
-        partition_id: str,
+        dir_id: str,
         user_id: str = DEFAULT_USER_ID,
     ) -> Partition:
         """获取分区完整树结构"""
@@ -111,7 +111,7 @@ class ConversationService(Protocol):
 
     async def persist_message(
         self,
-        conversation_id: str,
+        conv_id: str,
         role: str,
         content: str,
         source: str = "user",
@@ -124,7 +124,7 @@ class ConversationService(Protocol):
 
     async def rename_partition(
         self,
-        partition_id: str,
+        dir_id: str,
         name: str,
         user_id: str = DEFAULT_USER_ID,
     ) -> dict:
@@ -133,7 +133,7 @@ class ConversationService(Protocol):
 
     async def delete_partition(
         self,
-        partition_id: str,
+        dir_id: str,
         user_id: str = DEFAULT_USER_ID,
     ) -> dict:
         """删除分区"""

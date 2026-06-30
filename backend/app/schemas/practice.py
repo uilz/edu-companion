@@ -1,7 +1,6 @@
 """
-练习系统数据模型 v2.1 — 直接映射 DB 列名
-v2.1 变更:
-  - Question.question_id → id, 砍 skill_id/correct_answer/cognitive_skills/discrimination/guessing
+练习系统数据模型 — 直接映射 DB 列名
+- Question.question_id → id, 砍 skill_id/correct_answer/cognitive_skills/discrimination/guessing
   - PracticeSession.session_id → id, 砍 planned_skills/question_ids/attempts/frustration
   - AttemptRecord.attempt_id → id
   - 砍 KnowledgeState BKT 参数 (统一 CognitiveNode.Belief 为唯一权威源)
@@ -98,16 +97,25 @@ class Question(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     bank_id: str = ""
     user_id: str = ""
+    subject: str = ""                       # 学科
+    skill_id: str = ""                      # 关联知识点ID
     question_type: str = "single"           # single/multiple/judge/fill/free_form/calculation
     stem: str = ""
+    text: str = ""                          # 题目文本 (alias for stem)
     options: list[QuestionOption] = Field(default_factory=list)  # JSONB
     answer: list[str] = Field(default_factory=list)              # JSONB — 从 options[].is_correct 推导
+    correct_answer: str = ""                # 正确答案 (用于兼容旧接口)
     explanation: str = ""                   # 解析
     hints: list[str] = Field(default_factory=list)               # JSONB
-    difficulty: int = 3                     # 1~5 (DB: difficulty)
+    difficulty: float = 0.5                 # 0~1 (DB: difficulty)
+    bloom_level: Optional[BloomLevel] = None  # Bloom认知层次
+    quality_score: float = 0.5              # 题目质量分
+    usage_count: int = 0                    # 使用次数
     source: str = "manual"                  # llm/manual/imported/material
     status: str = "active"
     metadata: dict[str, Any] = Field(default_factory=dict)       # JSONB
+    cognitive_node_ids: list[str] = Field(default_factory=list)  # 关联认知节点
+    tags: list[str] = Field(default_factory=list)                # 标签
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     deleted_at: Optional[str] = None
@@ -170,7 +178,7 @@ class PracticeSession(BaseModel):
     wrong_count: int = 0
     score: Optional[float] = None
     cognitive_node_ids: list[str] = Field(default_factory=list)  # 待迁移至 cognitive_links
-    conversation_id: Optional[str] = None
+    conv_id: Optional[str] = None
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
     duration_seconds: Optional[int] = None
@@ -208,6 +216,13 @@ class SessionQuestion(BaseModel):
 # ──────────────────────────────────────────────
 # 知识状态 (CognitiveNode.Belief DTO, 无 BKT)
 # ──────────────────────────────────────────────
+
+class PracticeSessionPlan(BaseModel):
+    """ZPD 练习会话规划 (供 zpd_scheduler 使用)"""
+    skills: list[str] = Field(default_factory=list)
+    questions: list[Question] = Field(default_factory=list)
+    estimated_minutes: int = 0
+
 
 class KnowledgeState(BaseModel):
     """知识点掌握度 (从 CognitiveNode.Belief 读取, 仅 DTO)"""

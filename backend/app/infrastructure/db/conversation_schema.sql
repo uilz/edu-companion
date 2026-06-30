@@ -19,11 +19,6 @@ ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS nodes JSONB DEFAULT 
 ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS link_nodes JSONB DEFAULT '{}';
 ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS response_blocks JSONB DEFAULT '{}';
 
--- 向下兼容旧字段
-ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS event_log JSONB DEFAULT '[]';
-ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS domains JSONB DEFAULT '{}';
-ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS topics JSONB DEFAULT '{}';
-ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS files JSONB DEFAULT '{}';
-ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS background_jobs JSONB DEFAULT '{}';
+-- 旧向后兼容字段 (event_log, domains, topics, files, background_jobs) 已移除
 ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS secretary_prefs JSONB DEFAULT '{}';
 ALTER TABLE conversation_user_meta ADD COLUMN IF NOT EXISTS policy_memory JSONB DEFAULT '{}';

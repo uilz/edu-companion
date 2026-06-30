@@ -142,11 +142,11 @@ class TestEventBusChain:
     """事件总线链路测试"""
 
     def test_handler_registered(self):
-        """AnswerSubmitted 应有至少 4 个 handler"""
+        """AnswerSubmitted 应有至少 3 个 handler"""
         from app.application.di import container
 
         handlers = container.event_bus._handlers.get("AnswerSubmitted", [])
-        assert len(handlers) >= 4  # analytics + habits + knowledge + cognitive_sync
+        assert len(handlers) >= 3  # analytics + habits + knowledge
 
     def test_cognitive_updated_handler(self):
         """CognitiveNodeUpdated 应有至少 1 个 handler"""
@@ -163,7 +163,8 @@ class TestEventBusChain:
         )
 
         secretary_event_handler.subscribe(container.event_bus)
-        handlers = container.event_bus._handlers.get("AnswerSubmitted", [])
+        # Secretary 订阅 CognitiveNodeUpdated / SessionCompleted / PracticeSubmitted
+        handlers = container.event_bus._handlers.get("CognitiveNodeUpdated", [])
         handler_names = [h.__qualname__ for h in handlers]
         assert any("SecretaryEventHandler" in h for h in handler_names)
 

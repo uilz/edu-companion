@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS material_toc (
     chunk_start     INTEGER DEFAULT 0,
     chunk_end       INTEGER DEFAULT 0,
     page_start      INTEGER,
+    heading_line_index INTEGER DEFAULT 0,
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 

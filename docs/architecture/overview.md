@@ -230,3 +230,9 @@ Nginx (:80/443)
 ---
 
 > 详细架构演进历史见 [archive/](../archive/)。当前架构由 v8.1 (知识树 AI 对话) 演进而来。
+>
+> ### 附：核心子系统架构
+>
+> | 子系统 | 文档 |
+> |--------|------|
+> | AI Tool 系统（LLM Function Calling） | [tool-architecture.md](tool-architecture.md) |

@@ -56,11 +56,11 @@ class AdaptivePlanGenerator:
     async def generate(
         self, user_id: str, reason: str = "manual",
         subject: str | None = None,
-        partition_id: str | None = None,
+        dir_id: str | None = None,
     ) -> dict:
         # ── 动态加载前置关系：知识树优先，回退硬编码 ──
-        if partition_id:
-            self._checker.load_from_knowledge_tree(user_id, partition_id)
+        if dir_id:
+            self._checker.load_from_knowledge_tree(user_id, dir_id)
         else:
             self._checker.reset()
 

@@ -373,7 +373,10 @@ def _build_context_messages(
             continue
         text_parts = []
         for block in msg.content_blocks:
-            if isinstance(block, TextBlock):
+            if isinstance(block, dict):
+                if block.get("type") == "text":
+                    text_parts.append(block.get("text", ""))
+            elif isinstance(block, TextBlock):
                 text_parts.append(block.text)
             elif hasattr(block, "text"):
                 text_parts.append(block.text)

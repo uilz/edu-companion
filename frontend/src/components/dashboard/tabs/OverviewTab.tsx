@@ -12,6 +12,7 @@ import {
 // 自定义 UI 组件导入
 import Card from '@/components/ui/Card';
 import UnifiedSearch from '@/components/search/UnifiedSearch';
+import ConfidenceCalibrationCard from '@/components/dashboard/analytics/ConfidenceCalibrationCard';
 import { authedFetch, API_BASE } from "@/lib/api/api";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
 
@@ -76,7 +77,7 @@ interface DashboardOverview {
 
 // 快捷操作
 const QUICK_ACTIONS = [
-  { emoji: '💬', title: '智能对话', desc: '随时提问', href: '/learn' },
+  { emoji: '💬', title: '智能对话', desc: '随时提问', href: '/conversation' },
   { emoji: '✏️', title: '开始练习', desc: '刷题检测', href: '/practice' },
   { emoji: '📈', title: '学情分析', desc: '深度追踪', href: '/analytics' },
   { emoji: '🧠', title: '知识图谱', desc: '补充薄弱', href: '/knowledge-tree' },
@@ -131,13 +132,13 @@ export function OverviewTab() {
       if (!userId) { setLoading(false); return; }
       try {
         const [statsRes, dashRes, achieveRes, weakRes, convRes, propRes, eventRes] = await Promise.all([
-          authedFetch(`/api/v7/practice/stats/overview`),
+          authedFetch(`/api/practice/stats/overview`),
           authedFetch(`/api/dashboard/overview?user_id=${userId}`),
-          authedFetch(`/api/v7/practice/achievements`),
-          authedFetch(`/api/v7/practice/stats/weak-skills`),
+          authedFetch(`/api/practice/achievements`),
+          authedFetch(`/api/practice/stats/weak-skills`),
           authedFetch(`/api/conversations?limit=3`),
           authedFetch(`/api/secretary/proposals/pending?limit=3`),
-          authedFetch(`/api/events/recent?limit=5`),
+          authedFetch(`/api/secretary/events/recent?limit=5`),
         ]);
         if (statsRes.ok) setStats(await statsRes.json());
         if (dashRes.ok) setDashboard(await dashRes.json());
@@ -426,6 +427,9 @@ export function OverviewTab() {
           </Card>
         </div>
 
+        {/* 自信度校准 */}
+        <ConfidenceCalibrationCard />
+
         {/* ═══ 跨系统数据聚合 ═══ */}
 
         {/* 最近对话 */}
@@ -438,7 +442,7 @@ export function OverviewTab() {
                 {conversations.map((conv) => (
                   <Link
                     key={conv.id}
-                    href={`/learn?conversation=${conv.id}`}
+                    href={`/conversation?conversation=${conv.id}`}
                     className="flex items-center gap-2 px-3 py-2.5 bg-[var(--color-surface)] text-xs hover:bg-[var(--color-accent)]/10 active:scale-[0.97] transition-colors group"
                   >
                     <MessageCircle size={13} className="text-[var(--color-info)] flex-shrink-0" />
@@ -453,7 +457,7 @@ export function OverviewTab() {
                   </Link>
                 ))}
                 <Link
-                  href="/learn"
+                  href="/conversation"
                   className="block text-center text-xs text-[var(--color-accent)] hover:underline mt-2"
                 >
                   开始新对话 →

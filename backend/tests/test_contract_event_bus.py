@@ -17,7 +17,6 @@ from shared.events import (
     DomainEvent,
     AnswerSubmitted,
     SessionCompleted,
-    KnowledgeStateUpdated,
 )
 from app.infrastructure.event_bus import EventBus
 

@@ -26,6 +26,10 @@ from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from app.schemas.conversation import ResponseBlock
+from .tool_registry import (
+    ALL_TOOL_INFO, get_all_tool_definitions, get_tool_display_map,
+    get_tool_block_types, get_fast_tools, get_slow_tools, get_suspending_tools,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -429,105 +433,21 @@ class ToolRepository:
 
 
 # ═══════════════════════════════════════════════
-# LLM Function Calling 格式工具定义
-# （从 tool_executor.py 迁入，保持向后兼容）
+# 从统一 ToolRegistry 派生的注册表（单一事实来源：tool_registry.py）
 # ═══════════════════════════════════════════════
 
-TOOL_DEFINITIONS: list[dict] = [
-    {
-        "type": "function",
-        "function": {
-            "name": "search_media",
-            "description": "搜索B站/YouTube/知乎等平台的学习视频和教程",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "搜索内容/知识点"},
-                    "platforms": {"type": "array", "items": {"type": "string"}, "description": "平台列表: bilibili/youtube/zhihu/baidu_wenku"},
-                },
-                "required": ["query"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "generate_practice",
-            "description": "生成练习题。当用户要求出题时使用，支持指定题库名称（如现有题库会追加，否则自动创建）",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "subject": {"type": "string", "description": "学科"},
-                    "knowledge_point": {"type": "string", "description": "知识点"},
-                    "difficulty": {"type": "string", "enum": ["基础", "进阶", "挑战"], "default": "进阶"},
-                    "count": {"type": "integer", "description": "题目数量", "default": 2},
-                    "bank_name": {"type": "string", "description": "目标题库名称。如果留空，系统会自动分配到一个通用题库"},
-                },
-                "required": ["subject"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "query_question_banks",
-            "description": "查询已有的题库和题目。支持列出所有题库、按关键词搜索题库、查看某个题库下的题目列表",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "action": {
-                        "type": "string",
-                        "enum": ["list_banks", "get_bank", "search_questions"],
-                        "description": "操作类型: list_banks=列出所有题库, get_bank=查看题库详情, search_questions=在题库中搜索题目",
-                    },
-                    "bank_id": {"type": "string", "description": "题库ID（get_bank/search_questions时需要）"},
-                    "keyword": {"type": "string", "description": "搜索关键词（search_questions时可选）"},
-                    "limit": {"type": "integer", "description": "返回数量上限", "default": 20},
-                },
-                "required": ["action"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "create_question_bank",
-            "description": "创建一个新的题库。在准备批量出题前先创建题库，然后多次调用 generate_practice 向其中添加题目",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string", "description": "题库名称，如「编程-算法基础」"},
-                    "description": {"type": "string", "description": "题库描述，说明覆盖的知识点和难度范围"},
-                    "subject": {"type": "string", "description": "所属学科"},
-                },
-                "required": ["name"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "secretary_diagnose",
-            "description": "诊断当前学习状态（薄弱点、认知负荷、学习进度），生成学习建议。当用户询问「我学得怎么样」「我的薄弱点」「给建议」等时调用",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "scope": {
-                        "type": "string",
-                        "enum": ["full", "quick"],
-                        "description": "诊断范围: full=全量诊断(慢), quick=快速评估(快)",
-                        "default": "quick",
-                    },
-                },
-                "required": [],
-            },
-        },
-    },
-]
+TOOL_DEFINITIONS: list[dict] = get_all_tool_definitions()
+FAST_TOOLS: set[str] = get_fast_tools()
+SLOW_TOOLS: set[str] = get_slow_tools()
+SUSPENDING_TOOLS: set[str] = get_suspending_tools()
+TOOL_DISPLAY_NAMES: dict[str, dict] = get_tool_display_map()
+_TOOL_TO_BLOCK_TYPE: dict[str, str] = get_tool_block_types()
 
-# 工具快慢分类（供 tool_executor 引用）
-FAST_TOOLS: set[str] = {"search_media", "generate_practice", "query_question_banks", "create_question_bank", "secretary_diagnose"}
-SLOW_TOOLS: set[str] = {"generate_image", "generate_mindmap", "generate_document"}
+# 知识树工具的 handler 仍从 knowledge_ops_tools 加载
+from app.infrastructure.llm.knowledge_ops_tools import (  # noqa: E402
+    TOOL_DEFINITIONS as KTOOL_DEFINITIONS,
+    TOOL_HANDLERS as KTOOL_HANDLERS,
+)
 
 
 # 全局单例

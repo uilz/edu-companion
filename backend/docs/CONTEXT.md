@@ -178,7 +178,7 @@ _Avoid_: 徽章系统（achievement 是正式术语）
 ### 事件驱动系统
 
 **Domain Event (领域事件)**:
-通过 EventBus 发布-订阅的事件类型。重要事件：AnswerSubmitted / ErrorRecorded / SessionCompleted / KnowledgeStateUpdated / MessageClassified / NodeCreated / ProposalAccepted / AssistantReplied。
+通过 EventBus 发布-订阅的事件类型。重要事件：AnswerSubmitted / ErrorRecorded / SessionCompleted / MessageClassified / NodeCreated / ProposalAccepted / AssistantReplied / CognitiveNodeUpdated / PracticeSubmitted / PendingCrossTopic。
 _Avoid_: 消息事件（与 Message 区分）
 
 **Event Bus:**
@@ -291,7 +291,9 @@ Agent 流式输出事件：token / tool_block / agent_delegate / agent_message /
 **TreeNode.agent_label**:
 消息节点的 Agent 归属标签。前端 MessageList 据此渲染不同头像/颜色。
 
-### 工具系统 (vNext 架构)
+### 工具系统
+
+详见 [docs/architecture/tool-architecture.md](../../docs/architecture/tool-architecture.md)。
 
 **ToolRepository (工具聚合中心)**:
 所有 Agent 共享的工具注册 + 分类 + 意图检测统一中心。替代 `tool_executor.py` + `tool_registry.py`。`discover()` 后自动合并同模块操作为单 tool + action 参数。5 个合并工具：tool_practice / tool_media / tool_search / tool_learning / tool_secretary。文件：`backend/app/infrastructure/llm/tool_repository.py`。

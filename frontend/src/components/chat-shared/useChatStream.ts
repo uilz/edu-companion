@@ -22,7 +22,7 @@ export interface ChatStreamConfig {
   onToken?: (delta: string) => void;
   /** 收到工具调用时的回调 */
   onToolCall?: (tc: ToolCallEvent) => void;
-  /** 收到 conversation_id 时的回调 */
+  /** 收到 conv_id 时的回调 */
   onConversationId?: (id: string) => void;
   /** 完成时的回调 */
   onDone?: () => void;
@@ -94,8 +94,8 @@ export function useChatStream() {
               }
               break;
             case SSE_EVENTS.CONVERSATION:
-              if (data.conversation_id) {
-                config.onConversationId?.(data.conversation_id as string);
+              if (data.conv_id) {
+                config.onConversationId?.(data.conv_id as string);
               }
               break;
           }

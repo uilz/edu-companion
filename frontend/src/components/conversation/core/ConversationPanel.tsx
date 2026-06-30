@@ -2,13 +2,14 @@
 
 import React from "react";
 import {
-  Menu, Bot, ChevronLeft, ChevronRight, BarChart3,
+  Menu, Bot, ChevronLeft, ChevronRight, List, GitBranch,
 } from "lucide-react";
 import StudySidebar from "@/components/conversation/panels/StudySidebar";
 import ConversationMessageArea from "@/components/conversation/core/ConversationMessageArea";
 import MobileBottomSheet from "@/components/conversation/panels/MobileBottomSheet";
 import type { UseConversationReturn } from "@/hooks/conversation/useConversation";
 import { useConversationStore } from "@/store/conversation/conversation-store";
+import { useMessageStore } from "@/store/conversation/message-store";
 import { useTreeStore } from "@/store/conversation/tree-store";
 import { NewNodeDialog } from "@/components/ui/NewNodeDialog";
 import KnowledgeTreeRecommendBanner from "@/components/conversation/banners/KnowledgeTreeRecommendBanner";
@@ -22,11 +23,16 @@ import { useBreakpoint } from "@/hooks/useBreakpoint";
  * 桌面端支持侧栏折叠，移动端为全屏布局。
  */
 export default function ConversationPanel(
-  props: UseConversationReturn & { onEnterFocusMode?: () => void }
+  props: UseConversationReturn
 ) {
   const isInSubBranch = useConversationStore((s) => s.isInSubBranch);
   const exitSubBranch = useConversationStore((s) => s.exitSubBranch);
-  const subBranchMessages = useConversationStore((s) => s.messages);
+  const subBranchMessages = useMessageStore((s) => s.messages);
+  const sidebarMode = useConversationStore((s) => s.sidebarMode);
+  const setSidebarMode = useConversationStore((s) => s.setSidebarMode);
+  const conversationMode = useConversationStore((s) => s.conversationMode);
+  const createSubBranch = useConversationStore((s) => s.createSubBranch);
+  const isFeynmanMode = conversationMode === "feynman";
 
   const subBranchQuotedText = React.useMemo(() => {
     if (!isInSubBranch) return "";
@@ -34,6 +40,23 @@ export default function ConversationPanel(
     return q?.quoted_text || "";
   }, [isInSubBranch, subBranchMessages]);
 
+  // ── 费曼讲学回调 ──
+  const handleFeynmanTeach = React.useCallback(
+    async (messageId: string, messageText: string, sourceConvId: string) => {
+      if (!sourceConvId) return;
+      // Create a feynman sub-branch from the AI's message
+      await createSubBranch(
+        sourceConvId,
+        messageId,
+        0,
+        messageText.length,
+        messageText.slice(0, 100),
+        "我来给你讲讲这个知识点",
+        "feynman",
+      );
+    },
+    [createSubBranch],
+  );
 
 
   const {
@@ -41,7 +64,6 @@ export default function ConversationPanel(
     selectedNodeId,
     selectedNodeType,
     messages,
-    responseBlocks,
     isLoading,
     statusMessage,
     replyingToId,
@@ -80,33 +102,19 @@ export default function ConversationPanel(
 
   // ── Mobile layout ──
   if (!isDesktop) {
+    const headerTitle = activeDir
+      ? `${activeDir.emoji} ${activeDir.name}`
+      : "对话";
+
     return (
       <div
         className="fixed inset-0 bg-[var(--color-bg)] z-30 flex flex-col"
         style={{ bottom: "var(--bottom-nav-height)" }}
       >
-        <div className="flex-shrink-0 border-b border-[var(--color-border)] px-4 py-3 flex items-center gap-3">
-          <button
-            onClick={() => setShowDirSidebar(true)}
-            className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-            style={{ minWidth: 44, minHeight: 44 }}
-          >
-            <Menu size={20} />
-          </button>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold text-[var(--color-text)] truncate">
-              {activeDir
-                ? `${activeDir.emoji} ${activeDir.name}`
-                : "对话"}
-            </div>
-          </div>
-        </div>
-
         <div className="flex-1 overflow-hidden flex flex-col">
           <KnowledgeTreeRecommendBanner />
           <ConversationMessageArea
             messages={messages}
-            responseBlocks={responseBlocks}
             isLoading={isLoading}
             statusMessage={statusMessage}
             activeConversationId={activeConversationId}
@@ -121,7 +129,25 @@ export default function ConversationPanel(
             isInSubBranch={isInSubBranch}
             subBranchQuotedText={subBranchQuotedText}
             exitSubBranch={exitSubBranch}
+            isFeynmanMode={isFeynmanMode}
+            onFeynmanTeach={handleFeynmanTeach}
             convError={convError}
+            breadcrumb={
+              <div className="flex items-center gap-3 py-3">
+                <button
+                  onClick={() => setShowDirSidebar(true)}
+                  className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                  style={{ minWidth: 44, minHeight: 44 }}
+                >
+                  <Menu size={20} />
+                </button>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-[var(--color-text)] truncate">
+                    {headerTitle}
+                  </div>
+                </div>
+              </div>
+            }
           />
         </div>
 
@@ -188,21 +214,31 @@ export default function ConversationPanel(
               </a>
               <div className="flex items-center gap-0.5">
                 <button
+                  onClick={() => setSidebarMode(sidebarMode === "tree" ? "flat" : "tree")}
+                  className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+                  title={sidebarMode === "tree" ? "切换为扁平列表" : "切换为树状视图"}
+                >
+                  {sidebarMode === "tree" ? <List size={15} /> : <GitBranch size={15} />}
+                </button>
+                <button
                   onClick={() => {
-                    handleNewConversation("default", "");
+                    (handleSelectConversation as (dirId: string | null, cid: string | null) => void)(null, null);
+                    window.history.replaceState(null, "", "/conversation");
                   }}
                   className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
                   title="临时新建会话"
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                 </button>
-                <button
-                  onClick={() => setShowNewDir(true)}
-                  className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
-                  title="新建目录"
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-                </button>
+                {sidebarMode !== "flat" && (
+                  <button
+                    onClick={() => setShowNewDir(true)}
+                    className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+                    title="新建目录"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                  </button>
+                )}
                 <button
                   onClick={() => setSidebarCollapsed(true)}
                   className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
@@ -210,13 +246,7 @@ export default function ConversationPanel(
                 >
                   <ChevronLeft size={14} />
                 </button>
-                <button
-                  onClick={props.onEnterFocusMode}
-                  className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent-soft)]"
-                  title="专注模式"
-                >
-                  <BarChart3 size={14} />
-                </button>
+
               </div>
             </div>
 
@@ -254,18 +284,9 @@ export default function ConversationPanel(
 
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {selectedNodeId && (
-          <div className="flex-shrink-0 border-b border-[var(--color-border)] bg-[var(--color-bg)]">
-            <div className="max-w-3xl mx-auto px-6 py-3">
-              <NodePathBreadcrumb />
-            </div>
-          </div>
-        )}
-
         <KnowledgeTreeRecommendBanner />
         <ConversationMessageArea
           messages={messages}
-          responseBlocks={responseBlocks}
           isLoading={isLoading}
           statusMessage={statusMessage}
           activeConversationId={activeConversationId}
@@ -273,7 +294,6 @@ export default function ConversationPanel(
           onSend={handleSend}
           onDeleteMessage={handleDeleteMessage}
           onEditMessage={handleEditMessage}
-          onVersionSwitch={handleVersionSwitch}
           switchBanner={switchBanner}
           switchBannerPartitionName={switchBannerPartitionName}
           handleSwitchConfirm={handleSwitchConfirm}
@@ -281,7 +301,16 @@ export default function ConversationPanel(
           isInSubBranch={isInSubBranch}
           subBranchQuotedText={subBranchQuotedText}
           exitSubBranch={exitSubBranch}
+          isFeynmanMode={isFeynmanMode}
+          onFeynmanTeach={handleFeynmanTeach}
           convError={convError}
+          breadcrumb={
+            selectedNodeId ? (
+              <div className="max-w-3xl mx-auto px-6 py-3">
+                <NodePathBreadcrumb />
+              </div>
+            ) : undefined
+          }
         />
       </div>
 

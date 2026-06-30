@@ -140,7 +140,7 @@ def compute_force_layout(nodes: list[dict], edges: list[dict]) -> dict[str, tupl
 async def get_knowledge_graph(
     user_id: str = Depends(current_user_id),
     subject: Optional[str] = None,
-    partition_id: Optional[str] = None,
+    dir_id: Optional[str] = None,
 ):
     """
     获取用户的知识图谱
@@ -154,8 +154,8 @@ async def get_knowledge_graph(
     checker = _get_checker()
 
     # ── 动态加载: 知识树优先 ──
-    if partition_id:
-        checker.load_from_knowledge_tree(user_id, partition_id)
+    if dir_id:
+        checker.load_from_knowledge_tree(user_id, dir_id)
     prerequisites = checker._prerequisites
 
     # 确定要显示的技能

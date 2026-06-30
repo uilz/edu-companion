@@ -3,12 +3,12 @@
 import React, { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import type { GraphData, GraphNode } from "@/lib/types/graph-types";
 import { getMasteryColor } from "@/lib/types/graph-types";
-import { ChevronRight, ZoomIn, ZoomOut, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
 
 interface FocusGraphProps {
   data: GraphData;
   selectedNodeId?: string;
-  onNodeSelect?: (node: GraphNode) => void;
+  onNodeSelect?: (node: GraphNode, pos?: { x: number; y: number }) => void;
   onFocusNode?: (nodeId: string) => void;
   onNodeContextMenu?: (node: GraphNode, e: React.MouseEvent) => void;
   activePath: string[];
@@ -16,6 +16,8 @@ interface FocusGraphProps {
   height: number;
   searchQuery?: string;
   matchedNodeIds?: string[];
+  /** 在正确位置渲染节点弹出层，位置会随视图变化自动更新 */
+  renderNodePopup?: (pos: { x: number; y: number }) => React.ReactNode;
 }
 
 // ── Tree builder ──
@@ -46,7 +48,7 @@ const V_GAP = 20;
 interface ViewTransform { x: number; y: number; scale: number; }
 
 export default function FocusGraph({
-  data, selectedNodeId, onNodeSelect, onFocusNode, onNodeContextMenu, activePath, width, height, searchQuery, matchedNodeIds,
+  data, selectedNodeId, onNodeSelect, onFocusNode, onNodeContextMenu, activePath, width, height, searchQuery, matchedNodeIds, renderNodePopup,
 }: FocusGraphProps) {
   const { children, roots, treeSet } = useMemo(() => buildTree(data.nodes), [data.nodes]);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -54,16 +56,11 @@ export default function FocusGraph({
 
   // ── Pan / Zoom ──
   const [view, setView] = useState<ViewTransform>({ x: 0, y: 0, scale: 1 });
+  const viewRef = useRef(view);
+  viewRef.current = view;
   const isDragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0 });
   const viewStart = useRef({ x: 0, y: 0 });
-
-  const zoomPercent = useMemo(() => Math.round(view.scale * 100), [view.scale]);
-  const handleSliderZoom = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setView((v) => ({ ...v, scale: parseInt(e.target.value, 10) / 100 }));
-  }, []);
-  const handleZoomIn = useCallback(() => setView((v) => ({ ...v, scale: Math.min(v.scale * 1.15, 3) })), []);
-  const handleZoomOut = useCallback(() => setView((v) => ({ ...v, scale: Math.max(v.scale / 1.15, 0.3) })), []);
 
   // ── Collapse ──
   const [collapsed, setCollapsed] = useState<Set<string>>(() => {
@@ -115,24 +112,25 @@ export default function FocusGraph({
     if (isDoubleClick) {
       if (n.childrenCount > 0) toggle(n.id);
     } else {
-      clickTimer.current = setTimeout(() => onNodeSelect?.(n), 250);
+      // 传入 view 调整后的坐标（适配 scaled-div 坐标系）
+      const v = viewRef.current;
+      clickTimer.current = setTimeout(() => onNodeSelect?.(n, {
+        x: n.x * v.scale + v.x,
+        y: n.y * v.scale + v.y,
+      }), 250);
     }
   }, [onNodeSelect, toggle]);
 
-  // ── Click breadcrumb to navigate ──
-  const handleBreadcrumbClick = useCallback((node: GraphNode) => {
-    onNodeSelect?.(node);
-  }, [onNodeSelect]);
-
-  // ── Mouse pan (global listeners for out-of-bounds tracking) ──
+  // ── Mouse pan ──
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as SVGElement;
     if (target.closest("[data-node-id],.graph-btn,.graph-slider")) return;
     isDragging.current = true;
     dragStart.current = { x: e.clientX, y: e.clientY };
-    viewStart.current = { x: view.x, y: view.y };
+    const v = viewRef.current;
+    viewStart.current = { x: v.x, y: v.y };
     e.preventDefault();
-  }, [view]);
+  }, []);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -162,34 +160,51 @@ export default function FocusGraph({
 
   // ── Touch ──
   const lastTouch = useRef<{ x: number; y: number; dist?: number } | null>(null);
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length === 1) {
-      lastTouch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      viewStart.current = { x: view.x, y: view.y };
-    } else if (e.touches.length === 2) {
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      lastTouch.current = { x: (e.touches[0].clientX + e.touches[1].clientX) / 2, y: (e.touches[0].clientY + e.touches[1].clientY) / 2, dist: Math.sqrt(dx * dx + dy * dy) };
-      viewStart.current = { x: view.x, y: view.y };
-    }
-  }, [view]);
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    if (e.touches.length === 1 && lastTouch.current) {
-      setView((v) => ({ ...v, x: viewStart.current.x + e.touches[0].clientX - lastTouch.current!.x, y: viewStart.current.y + e.touches[0].clientY - lastTouch.current!.y }));
-    } else if (e.touches.length === 2 && lastTouch.current?.dist) {
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      const newDist = Math.sqrt(dx * dx + dy * dy);
-      setView((v) => {
-        const newScale = Math.min(Math.max(v.scale * (newDist / lastTouch.current!.dist!), 0.3), 3);
-        return { x: e.touches[0].clientX - (e.touches[0].clientX - viewStart.current.x) / v.scale * newScale, y: e.touches[0].clientY - (e.touches[0].clientY - viewStart.current.y) / v.scale * newScale, scale: newScale };
-      });
-    }
+  // 用原生 addEventListener 注册 touch 事件（passive: false），避免 React passive 限制
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      const v = viewRef.current;
+      if (e.touches.length === 1) {
+        lastTouch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        viewStart.current = { x: v.x, y: v.y };
+      } else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        lastTouch.current = { x: (e.touches[0].clientX + e.touches[1].clientX) / 2, y: (e.touches[0].clientY + e.touches[1].clientY) / 2, dist: Math.sqrt(dx * dx + dy * dy) };
+        viewStart.current = { x: v.x, y: v.y };
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      if (e.touches.length === 1 && lastTouch.current) {
+        setView((v) => ({ ...v, x: viewStart.current.x + e.touches[0].clientX - lastTouch.current!.x, y: viewStart.current.y + e.touches[0].clientY - lastTouch.current!.y }));
+      } else if (e.touches.length === 2 && lastTouch.current?.dist) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const newDist = Math.sqrt(dx * dx + dy * dy);
+        setView((v) => {
+          const newScale = Math.min(Math.max(v.scale * (newDist / lastTouch.current!.dist!), 0.3), 3);
+          return { x: e.touches[0].clientX - (e.touches[0].clientX - viewStart.current.x) / v.scale * newScale, y: e.touches[0].clientY - (e.touches[0].clientY - viewStart.current.y) / v.scale * newScale, scale: newScale };
+        });
+      }
+    };
+
+    const onTouchEnd = () => { lastTouch.current = null; };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd);
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+    };
   }, []);
-
-  const handleTouchEnd = useCallback(() => { lastTouch.current = null; }, []);
 
   // ── Search auto-expand ──
   useEffect(() => {
@@ -231,7 +246,6 @@ export default function FocusGraph({
       const isColl = collapsed.has(id);
       const showKids = !isColl && kids.length > 0;
 
-      // 定位本节点（yCenter 是卡片垂直中点）
       flat.push({
         ...node,
         x: depth * (CARD_W + H_GAP) + 24,
@@ -262,11 +276,6 @@ export default function FocusGraph({
     return flat;
   }, [data.nodes, children, roots, collapsed]);
 
-  // ── Breadcrumbs ──
-  const breadcrumbs = useMemo(() => {
-    return activePath.map((id) => data.nodes.find((n) => n.id === id)).filter(Boolean) as GraphNode[];
-  }, [activePath, data.nodes]);
-
   // ── Edge style ──
   const getEdgeStyle = (sourceId: string, targetId: string) => {
     const onPath = activePath.includes(sourceId) && activePath.includes(targetId);
@@ -287,6 +296,14 @@ export default function FocusGraph({
 
   const statusWidth = (t: string) => t.length * 7 + 10;
 
+  // ── 选中的节点在 SVG viewport 中的位置（实时计算，跟随视图变化） ──
+  const selectedScreenPos = useMemo(() => {
+    if (!selectedNodeId) return null;
+    const n = layout.find(l => l.id === selectedNodeId);
+    if (!n) return null;
+    return { x: n.x * view.scale + view.x, y: n.y * view.scale + view.y };
+  }, [selectedNodeId, layout, view]);
+
   return (
     <div className="relative w-full h-full select-none" onContextMenu={(e) => e.preventDefault()}>
 
@@ -296,9 +313,6 @@ export default function FocusGraph({
         className="w-full h-full cursor-grab active:cursor-grabbing"
         onMouseDown={handleMouseDown}
         onWheel={handleWheel}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
       >
         <defs>
           <filter id="card-shadow">
@@ -370,12 +384,12 @@ export default function FocusGraph({
                   fill={isSel ? "rgba(255,255,255,0.8)" : "var(--color-text-muted)"}
                 >{n.emoji || "📘"}</text>
 
-                {/* Title — 去掉 emoji 前缀防止重复 */}
+                {/* Title */}
                 <text x={n.x + 8} y={n.y + 38} fontSize={11}
                   fill={isSel ? "#fff" : "var(--color-text)"} fontWeight={700}
                 >{n.label.replace(n.emoji || "", "").trim()}</text>
 
-                {/* 简介（节点的内容说明） */}
+                {/* 简介 */}
                 <foreignObject x={n.x + 8} y={n.y + 48} width={CARD_W - 16} height={32}>
                   <div className="text-[7.5px] leading-[10px] overflow-hidden"
                     style={{ color: isSel ? "rgba(255,255,255,0.7)" : "var(--color-text-muted)" }}>
@@ -389,7 +403,12 @@ export default function FocusGraph({
 
                 {/* Action: 深入（聚焦到该节点） */}
                 <g className="graph-btn" style={{ cursor: "pointer" }}
-                  onClick={(e) => { e.stopPropagation(); onNodeSelect?.(n); onFocusNode?.(n.id); }}>
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const v = viewRef.current;
+                    onNodeSelect?.(n, { x: n.x * v.scale + v.x, y: n.y * v.scale + v.y });
+                    onFocusNode?.(n.id);
+                  }}>
                   <rect x={n.x + 8} y={n.y + CARD_H - 24} width={52} height={18} rx={3}
                     fill={isSel ? "rgba(255,255,255,0.12)" : "var(--color-surface-hover)"} />
                   <text x={n.x + 18} y={n.y + CARD_H - 12} fontSize={8}
@@ -417,32 +436,8 @@ export default function FocusGraph({
         </g>
       </svg>
 
-      {/* ═══ BOTTOM BAR ═══ */}
-      <div className="flex-shrink-0 flex items-center justify-between px-3 py-1.5 border-t border-[var(--color-border)] bg-[var(--color-surface)] min-h-[34px]">
-        <div className="flex items-center gap-1.5">
-          <button onClick={handleZoomOut}
-            className="graph-btn graph-slider w-6 h-6 flex items-center justify-center rounded text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)]">
-            <ZoomOut size={12} />
-          </button>
-          <input
-            type="range" min={30} max={300} value={zoomPercent}
-            onChange={handleSliderZoom}
-            className="graph-slider w-20 h-1 appearance-none cursor-pointer rounded-full"
-            style={{
-              background: `linear-gradient(to right, var(--color-accent) 0%, var(--color-accent) ${zoomPercent}%, var(--color-border) ${zoomPercent}%, var(--color-border) 100%)`,
-            }}
-          />
-          <button onClick={handleZoomIn}
-            className="graph-btn graph-slider w-6 h-6 flex items-center justify-center rounded text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)]">
-            <ZoomIn size={12} />
-          </button>
-          <span className="text-[9px] text-[var(--color-text-muted)] min-w-[2.5em] text-center font-mono">{zoomPercent}%</span>
-        </div>
-        <button onClick={() => setView({ x: 0, y: 0, scale: 1 })}
-          className="graph-btn flex items-center gap-0.5 px-1.5 py-1 rounded text-[9px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)]">
-          <RefreshCw size={10} />重置
-        </button>
-      </div>
+      {/* ═══ 节点弹出层（在 SVG 之上，位置实时跟随视图） ═══ */}
+      {renderNodePopup && selectedScreenPos && renderNodePopup(selectedScreenPos)}
     </div>
   );
 }

@@ -26,20 +26,27 @@ logger = logging.getLogger(__name__)
 @router.get("/stream/{cid}")
 async def stream_conversation(cid: str, request: Request, user_id: str = Depends(current_user_id)):
     """SSE 端点：订阅指定会话的流式事件。
-
-    1. 如果流正在后台生成，先回放已缓存的事件，再实时推送
-    2. 如果流已完成，回放全部事件后结束
-    3. 如果流不存在或已清理，立即结束
+    
+    支持 SSE 原生断线重连（Last-Event-ID）：
+    - 每条事件带 id: <seq> 字段
+    - 重连时浏览器自动发送 Last-Event-ID 头
+    - 服务端跳过已接收事件
     """
-    # 快速检查：会话是否存在且活跃
-    is_active = await token_buffer.is_active(cid)
+    last_event_id = 0
+    try:
+        last_event_id = int(request.headers.get("last-event-id", "0"))
+    except (ValueError, TypeError):
+        last_event_id = 0
 
     async def event_generator():
         try:
+            event_counter = 0
             async for event in token_buffer.subscribe(cid, from_beginning=True):
-                # SSE 格式: data: <json>\n\n
+                event_counter += 1
+                if event_counter <= last_event_id:
+                    continue  # 跳过客户端已接收的事件
                 data = json.dumps(event, ensure_ascii=False, default=str)
-                yield f"data: {data}\n\n"
+                yield f"id: {event_counter}\ndata: {data}\n\n"
 
             # 流结束信号
             yield "data: {\"type\":\"stream_end\"}\n\n"
@@ -53,7 +60,7 @@ async def stream_conversation(cid: str, request: Request, user_id: str = Depends
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",  # 禁用 nginx 缓冲
+            "X-Accel-Buffering": "no",
         },
     )
 

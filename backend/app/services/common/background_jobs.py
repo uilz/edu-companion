@@ -23,13 +23,13 @@ class BackgroundJobManager:
     def register_handler(self, tool_name: str, handler):
         self._handlers[tool_name] = handler
 
-    async def submit(self, user_id: str, tool_name: str, params: dict, block_id: str, partition_id: str, conversation_id: str) -> BackgroundJob:
+    async def submit(self, user_id: str, tool_name: str, params: dict, block_id: str, dir_id: str, conv_id: str) -> BackgroundJob:
         job = BackgroundJob(
             tool_name=tool_name,
             params=params,
             block_id=block_id,
-            partition_id=partition_id,
-            conversation_id=conversation_id,
+            dir_id=dir_id,
+            conv_id=conv_id,
         )
         self._jobs[job.id] = job
 
@@ -106,7 +106,7 @@ class BackgroundJobManager:
                     json.dumps({
                         "tool_name": job.tool_name,
                         "block_id": job.block_id,
-                        "conversation_id": job.conversation_id,
+                        "conv_id": job.conv_id,
                         "duration_seconds": (job.completed_at - job.created_at) if job.completed_at else 0,
                     }, ensure_ascii=False),
                 ),

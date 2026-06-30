@@ -46,8 +46,8 @@ export default function AchievementsTab() {
     setLoading(true);
     try {
       const [ach, st] = await Promise.all([
-        authedFetch("/api/v7/practice/achievements").then(r => r.json()),
-        authedFetch("/api/v7/practice/achievements/stats").then(r => r.json()),
+        authedFetch("/api/practice/achievements").then(r => r.json()),
+        authedFetch("/api/practice/achievements/stats").then(r => r.json()),
       ]);
       setAchievements(ach);
       setStats(st);

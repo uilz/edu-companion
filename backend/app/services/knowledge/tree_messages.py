@@ -22,34 +22,27 @@ class TreeMessagesMixin:
 
     def add_message(
         self, user_id, dir_id, role, content_blocks,
-        text_summary="", conversation_id="", agent_label="",
+        text_summary="", conv_id="", agent_label="",
     ) -> TreeNode | MessageNode:
         """添加消息到对话。
 
-        dir_id 和 conversation_id 二选一：
-        - 有 conversation_id → 使用 directory_nodes 中 conv 节点的 conv_message_ids
-        - 有 dir_id → 在目录下查找/创建临时对话
+        conv_id 优先；备选 dir_id。需至少有一个有效。
         """
         data = self._get_data_repo().load(user_id)
 
         conv_node: DirectoryNode | None = None
-        if conversation_id:
-            conv_node = data.directory_nodes.get(conversation_id)
+        if conv_id:
+            conv_node = data.directory_nodes.get(conv_id)
 
-        if not conv_node:
-            # 自动创建临时对话
-            if not dir_id:
-                temp_dir = self._ensure_temp_dir(user_id, data)
-                dir_id = temp_dir.id
-            # 尝试找目录下已有临时 conv
+        if not conv_node and dir_id:
+            # 找目录下的第一个 conv 节点
             for dn in data.directory_nodes.values():
-                if dn.parent_id == dir_id and dn.node_type == "conv" and dn.kind == "temp":
+                if dn.parent_id == dir_id and dn.node_type == "conv":
                     conv_node = dn
                     break
-            if not conv_node:
-                conv_node = self._create_conv_node(data, dir_id, "临时会话", "temp")
-                data = self._get_data_repo().load(user_id)
-                conv_node = data.directory_nodes.get(conv_node.id)
+
+        if not conv_node:
+            raise ValueError(f"未找到对话节点 (conv_id={conv_id}, dir_id={dir_id})")
 
         # 创建消息节点
         text_content = ""
@@ -66,6 +59,10 @@ class TreeMessagesMixin:
             directory_id=conv_node.id,
             parent_id=conv_node.conv_message_ids[-1] if conv_node.conv_message_ids else None,
             role=role, content=text_content, text_summary=text_summary or text_content,
+            content_blocks=[
+                b.model_dump(mode="json") if hasattr(b, "model_dump") else b
+                for b in (content_blocks or [])
+            ],
         )
         # 同时也存入 data.nodes 以兼容旧代码
         data.nodes[node.id] = node
@@ -101,13 +98,12 @@ class TreeMessagesMixin:
         if not old_node:
             raise ValueError(f"消息 {message_id} 不存在")
 
-        old_dir_id = getattr(old_node, "directory_id", getattr(old_node, "conversation_id", ""))
+        old_dir_id = getattr(old_node, "directory_id", getattr(old_node, "conv_id", ""))
         old_parent_id = getattr(old_node, "parent_id", "")
 
         new_node = OldTreeNode(
             parent_id=old_parent_id,
-            partition_id=getattr(old_node, "partition_id", ""),
-            conversation_id=old_dir_id,
+            directory_id=old_dir_id,
             role=old_node.role,
             content_blocks=new_content_blocks,
             text_summary=new_text_summary,
@@ -155,7 +151,7 @@ class TreeMessagesMixin:
                 parent.children_ids.remove(nid)
 
         # 从 conv 的 conv_message_ids 移除
-        dir_id = getattr(node, "directory_id", getattr(node, "conversation_id", ""))
+        dir_id = getattr(node, "directory_id", getattr(node, "conv_id", ""))
         conv = data.directory_nodes.get(dir_id)
         if conv and conv.node_type == "conv":
             conv.conv_message_ids = [
@@ -166,12 +162,14 @@ class TreeMessagesMixin:
         self._get_data_repo().save(user_id, data)
 
     def update_message_content(self, user_id: str, message_id: str, text: str) -> None:
-        """更新消息文本内容。"""
+        """更新消息文本内容，保留非 text 块（如 tool / reasoning）。"""
         data = self._get_data_repo().load(user_id)
         node = data.nodes.get(message_id)
         if not node:
             return
         node.content = text
         node.text_summary = text
-        node.content_blocks = [{"type": "text", "text": text}]
+        # 保留非 text 块（tool / reasoning 等），只替换 text 块的位置
+        existing_non_text = [b for b in (node.content_blocks or []) if isinstance(b, dict) and b.get("type") != "text"]
+        node.content_blocks = [*existing_non_text, {"type": "text", "text": text}]
         self._get_data_repo().save(user_id, data)

@@ -99,12 +99,13 @@ class SecretaryModuleRegistry:
 
     def discover_builtin(self) -> int:
         """发现并注册所有内置模块"""
-        from .builtin_review import ReviewReminderModule, FatigueManagerModule, LateralExpansionModule
+        from .builtin_review import ReviewReminderModule, FatigueManagerModule, LateralExpansionModule, ErrorPatternModule
         from .builtin_housekeeping import TempConversationCleanupModule, SilentTaskModule
         from .builtin_daily_brief import DailyBriefModule
 
         self.register(ReviewReminderModule())
         self.register(FatigueManagerModule())
+        self.register(ErrorPatternModule())
 
         if "exam_mode" not in self._modules:
             from .builtin_review import ExamModeModule

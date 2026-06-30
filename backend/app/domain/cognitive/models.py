@@ -1,6 +1,6 @@
 """CognitiveNode — 统一认知量子实体
 
-基于 AI 伴学系统中枢数据设计文档 v2.10
+基于 AI 伴学系统中枢数据设计文档
 """
 
 from __future__ import annotations
@@ -224,6 +224,7 @@ class Metacognition(BaseModel):
     self_assessment: float = 0.5
     calibration_error: float = 0.0
     direction: str = "accurate"  # overconfident | underconfident | accurate
+    recent_history: list[float] = Field(default_factory=list)  # 最近N次偏差值
 
 
 # ═══════════════════════════════════════════

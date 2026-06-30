@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, Target } from "lucide-react";
 import Card from "@/components/ui/Card";
-import { authedFetch, API_BASE } from "@/lib/api/api";
+import { knowledgeNodesApi, type KnowledgeNode } from "@/lib/api/knowledge-tree-api";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
 
 // ── Types ──
@@ -228,14 +228,26 @@ export default function RadarChart() {
     if (!userId) return;
     setLoading(true);
     try {
-      const params = new URLSearchParams({ user_id: userId });
-      if (subj) params.set("subject", subj);
-      const res = await authedFetch(`/api/knowledge/graph?${params}`);
-      if (!res.ok) throw new Error("Failed");
-      const json: GraphData = await res.json();
-      setGraphData(json);
-    } catch (e) {
+      const json = await knowledgeNodesApi.list();
+      const knodes: KnowledgeNode[] = json.nodes || [];
+      // 按 domain 过滤
+      const filtered = subj ? knodes.filter(n => n.level === "domain" && n.label === subj) : knodes;
+      const domainNodes = knodes.filter(n => n.level === "domain");
+      const subjects = Array.from(new Set(domainNodes.map(n => n.label)));
 
+      const graphNodes: GraphNode[] = filtered.map(n => ({
+        id: n.id,
+        label: n.label,
+        subject: n.level === "domain" ? n.label : (domainNodes.find(d => d.id === n.parent_id)?.label || ""),
+        mastery: Math.round((n.mastery || 0) * 100),
+        mastery_level: n.mastery_level || "未接触",
+        can_practice: true,
+        blocked_by: [],
+        attempt_count: 0,
+      }));
+
+      setGraphData({ nodes: graphNodes, subjects });
+    } catch (e) {
       setGraphData(null);
     } finally {
       setLoading(false);

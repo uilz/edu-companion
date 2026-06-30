@@ -26,7 +26,7 @@ export interface KGTreeResponse {
   nodes: KGNodeItem[];
   edges: KGEdgeItem[];
   partition_name: string;
-  partition_id: string;
+  dir_id: string;
   version: number;
   linked_conversations: Record<string, string[]>;
 }
@@ -50,7 +50,7 @@ export interface GraphNode {
   emoji?: string;
   color?: string;
   brief?: string;           // 短描述（用于卡片展示）
-  conversation_ids?: string[];  // 关联的对话会话 ID
+  conv_ids?: string[];  // 关联的对话会话 ID
 }
 
 export interface GraphEdge {
@@ -178,14 +178,14 @@ export function kgTreeToGraphData(tree: KGTreeResponse): GraphData {
     parent: parentMap.get(n.id) || undefined,
     is_visible: true,
     node_type: n.created_by === "user" ? "explicit" : "auto_generated",
-    path_id: `${tree.partition_id}.${n.id.slice(0, 8)}`,
+    path_id: `${tree.dir_id}.${n.id.slice(0, 8)}`,
     emoji: "",
     brief: n.description || `${n.label}`,
-    conversation_ids: tree.linked_conversations?.[n.id] || [],
+    conv_ids: tree.linked_conversations?.[n.id] || [],
   }));
 
   // ── 虚拟分区根节点 ──
-  const partitionId = `partition:${tree.partition_id}`;
+  const partitionId = `partition:${tree.dir_id}`;
   const partitionNode: GraphNode = {
     id: partitionId,
     label: tree.partition_name || "知识图谱",
@@ -200,7 +200,7 @@ export function kgTreeToGraphData(tree: KGTreeResponse): GraphData {
     parent: undefined,
     is_visible: true,
     node_type: "explicit",
-    path_id: tree.partition_id,
+    path_id: tree.dir_id,
     emoji: "",
     brief: `分区: ${tree.partition_name || "知识图谱"}`,
   };

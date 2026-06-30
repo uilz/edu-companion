@@ -31,7 +31,7 @@ def migrate():
         for dom_id, dom_data in domains.items():
             emoji = dom_data.get("emoji", "")
             name = dom_data.get("name", "")
-            partition_id = dom_data.get("partition_id", "")
+            dir_id = dom_data.get("dir_id", "")
 
             cur.execute("""
                 UPDATE cognitive_nodes
@@ -44,7 +44,7 @@ def migrate():
                     INSERT INTO cognitive_nodes (id, user_id, label, level, parent, emoji, node_type, is_visible, is_active)
                     VALUES (%s, %s, %s, 'domain', %s, %s, 'explicit', true, true)
                     ON CONFLICT (id) DO UPDATE SET emoji = %s
-                """, (dom_id, user_id, name, partition_id, emoji, emoji))
+                """, (dom_id, user_id, name, dir_id, emoji, emoji))
             total_dom += 1
             print(f"  Domain: {dom_id} emoji={emoji} name={name}")
 

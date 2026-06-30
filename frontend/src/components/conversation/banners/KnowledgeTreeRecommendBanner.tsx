@@ -14,7 +14,6 @@ interface Recommendation {
   type: string;
   message: string;
   action: string;
-  partition_id: string;
   nodes?: { id: string; label: string }[];
 }
 
@@ -41,11 +40,7 @@ function persistDismissedId(dismissedId: string) {
  * 轮询知识树推荐信息，通过 NotificationStore 管理通知状态，
  * 关闭后持久化（不随页面刷新丢失），并接入秘书系统管理。
  */
-export default function KnowledgeTreeRecommendBanner({
-  partitionId,
-}: {
-  partitionId: string | null;
-}) {
+export default function KnowledgeTreeRecommendBanner() {
   // 从 NotificationStore 中读取活跃（pending）的树推荐通知
   const allNotifications = useNotificationStore((s) => s.notifications);
   const pendingRecs = useMemo(
@@ -67,12 +62,9 @@ export default function KnowledgeTreeRecommendBanner({
 
   // 轮询推荐 → 写入 NotificationStore
   useEffect(() => {
-    if (!partitionId) return;
-
     const fetchRecs = async () => {
       try {
-        const res = await authedFetch("/api/knowledge/graph/recommendation?source=conversation",
-        );
+        const res = await authedFetch("/api/knowledge-tree/ai/recommendation?source=conversation");
         if (!res.ok) return;
         const d = await res.json();
         const recs: Recommendation[] = d.recommendations || [];
@@ -82,10 +74,8 @@ export default function KnowledgeTreeRecommendBanner({
         const dismissedSet = loadDismissedSet();
 
         for (const rec of recs) {
-          // 使用 partition_id + type 作为唯一 ID 避免重复添加
-          const notifId = `tree_rec_${rec.partition_id}_${rec.type}`;
+          const notifId = `tree_rec_${rec.type}`;
           if (existingIds.has(notifId)) continue;
-          // 已经关闭过的（localStorage 持久化）不再添加
           if (dismissedSet.has(notifId)) continue;
 
           const notif: SecretaryNotification = {
@@ -115,7 +105,7 @@ export default function KnowledgeTreeRecommendBanner({
     // 每 30 秒轮询
     const interval = setInterval(fetchRecs, 30000);
     return () => clearInterval(interval);
-  }, [partitionId]);
+  }, []);
 
   if (pendingRecs.length === 0) return null;
 

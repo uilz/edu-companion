@@ -32,161 +32,6 @@ from app.services.practice.adaptive_scorer import (
 logger = logging.getLogger(__name__)
 
 
-def adaptive_select(
-    bank_id: str,
-    user_id: str,
-    count: int = 10,
-    mode: str = "adaptive",
-    exclude_ids: Optional[list[str]] = None,
-    target_difficulty: Optional[int] = None,
-    cognitive_node_ids: Optional[list[str]] = None,
-    bloom_distribution: Optional[dict[str, int]] = None,
-) -> list[dict]:
-    """
-    自适应选题。
-
-    参数:
-        bank_id: 题库ID
-        count: 选题数量
-        mode: adaptive / review / challenge / new
-        exclude_ids: 排除的题目ID（如已在当前会话中的）
-        target_difficulty: 目标难度 1-5
-        cognitive_node_ids: 限定的知识点范围
-        bloom_distribution: Bloom层次分布 {"remember": 2, "understand": 3, ...}
-
-    返回:
-        选出的题目列表（不含答案）
-    """
-    from app.infrastructure.db.database import get_db
-    db = get_db()
-
-    exclude = set(exclude_ids or [])
-
-    # 1. 获取题库所有活跃题目
-    questions = db.fetchall(
-        """SELECT q.* FROM questions q
-           WHERE q.bank_id = %s AND q.deleted_at IS NULL AND q.status = 'active'
-           AND q.is_slashed = false
-           ORDER BY q.created_at DESC""",
-        (bank_id,),
-    )
-
-    if not questions:
-        logger.info("题库 %s 无可用题目", bank_id)
-        return []
-
-    # 2. 过滤排除 + 知识点范围
-    pool = [q for q in questions if q["id"] not in exclude]
-    if cognitive_node_ids:
-        pool = [
-            q for q in pool
-            if q.get("cognitive_node_ids") and any(
-                cid in (q["cognitive_node_ids"] or []) for cid in cognitive_node_ids
-            )
-        ]
-
-    if not pool:
-        logger.info("过滤后无可用题目 bank=%s", bank_id)
-        return []
-
-    # 3. 获取历史作答统计
-    qids = [q["id"] for q in pool]
-    if not qids:
-        return []
-
-    # 查询每个题目的历史正确率
-    stats_raw = db.fetchall(
-        """SELECT question_id,
-                  COUNT(*) as total,
-                  SUM(CASE WHEN is_wrong THEN 1 ELSE 0 END) as wrongs,
-                  MAX(created_at) as last_done
-           FROM practice_attempts
-           WHERE question_id = ANY(%s) AND user_id = %s
-           GROUP BY question_id""",
-        (qids, user_id),
-    )
-    stats_map = {r["question_id"]: r for r in stats_raw}
-
-    # 4. 计算权重并排序
-    scored = []
-    for q in pool:
-        qid = q["id"]
-        stat = stats_map.get(qid, {})
-        total = stat.get("total", 0) or 0
-        wrongs = stat.get("wrongs", 0) or 0
-
-        if mode == "new":
-            # 纯新题模式：没做过的排最前
-            score = 0 if total == 0 else 100 + total
-        elif mode == "review":
-            # 复习模式：错得越多越优先
-            score = -wrongs  # 负数做大值
-            if total == 0:
-                score = -100  # 新题不优先
-        elif mode == "challenge":
-            # 挑战模式：高难度优先
-            score = -float(q.get("difficulty", 3))
-        else:
-            # adaptive 默认模式
-            if total == 0:
-                score = -50  # 新题，中等优先
-            elif wrongs / max(total, 1) > 0.5:
-                score = -wrongs * 2  # 错误率 > 50%，极高优先
-            else:
-                score = 50 - wrongs  # 已掌握的靠后
-
-        # 目标难度加权
-        if target_difficulty:
-            diff = q.get("difficulty", 3)
-            score -= abs(diff - target_difficulty) * 5
-
-        scored.append((score, q))
-
-    # 5. 按分数排序（分数越小越靠前）
-    scored.sort(key=lambda x: x[0])
-
-    # 6. 选前 N 道 + 随机微调（避免每次完全一样）
-    top_n = scored[:max(count * 2, 20)]  # 候选池放大
-    # 前 70% 从高分区选，后 30% 加入随机扰动
-    high_priority = top_n[:max(len(top_n) // 2, count)]
-    low_priority = top_n[len(high_priority):]
-
-    selected = []
-    # 先取高优先级
-    random.shuffle(high_priority)
-    for _, q in high_priority:
-        if len(selected) >= count:
-            break
-        selected.append(q)
-
-    # 不够再补低优先级
-    if len(selected) < count:
-        random.shuffle(low_priority)
-        for _, q in low_priority:
-            if len(selected) >= count:
-                break
-            if q not in selected:
-                selected.append(q)
-
-    # 7. Bloom 覆盖保证（主动重平衡）
-    selected = _ensure_bloom_coverage(selected, bloom_distribution, full_pool=pool)
-
-    # 8. 脱敏（不返回答案）
-    result = []
-    for q in selected:
-        item = _row_to_safe(q)
-        stat = stats_map.get(q["id"], {})
-        item["_attempts"] = stat.get("total", 0) or 0
-        item["_wrongs"] = stat.get("wrongs", 0) or 0
-        result.append(item)
-
-    logger.info(
-        "自适应选题: bank=%s, mode=%s, pool=%d, selected=%d",
-        bank_id, mode, len(pool), len(result),
-    )
-    return result
-
-
 def _ensure_bloom_coverage(
     questions: list[dict],
     distribution: Optional[dict[str, int]] = None,
@@ -197,11 +42,11 @@ def _ensure_bloom_coverage(
 
 
 # ══════════════════════════════════════════════════════════════
-# v2 自适应算法 — 6:3:1 分层 + AI fallback
+# 自适应算法 — 6:3:1 分层 + AI fallback
 # ══════════════════════════════════════════════════════════════
 
 
-def adaptive_select_v2(
+def adaptive_select(
     bank_id: str,
     user_id: str,
     count: int = 10,
@@ -212,17 +57,17 @@ def adaptive_select_v2(
     subject_hint: Optional[str] = None,
 ) -> list[dict]:
     """
-    增强版自适应选题。
-
-    相比 v1 的改进：
-    1. 6:3:1 分层 — 通过 practice_attempts 统计各知识点掌握度
-       → 薄弱 (mastery<0.4) 60% / 巩固 (0.4-0.7) 30% / 保持 (>=0.7) 10%
-    2. ε-greedy 探索 — 10% 概率随机选题，避免纯贪心
-    3. AI fallback — 题目不足时自动 AI 生成补足
-    4. 冷启动 — 无历史数据时退化为 v1 算法
+    自适应选题（6:3:1 分层 + AI fallback）。
 
     参数:
-        subject_hint: AI fallback 时使用的学科提示，从对话上下文推断
+        bank_id: 题库ID
+        user_id: 用户ID
+        count: 选题数量
+        mode: adaptive / review / challenge / new
+        exclude_ids: 排除的题目ID
+        cognitive_node_ids: 限定的知识点范围
+        enable_ai_fallback: 题目不足时是否 AI 生成补足
+        subject_hint: AI fallback 时使用的学科提示
     """
     from app.infrastructure.db.database import get_db
     db = get_db()
@@ -303,7 +148,7 @@ def adaptive_select_v2(
             result.extend(ai_questions)
 
     logger.info(
-        "adaptive_v2: bank=%s, mode=%s, pool=%d, selected=%d%s",
+        "adaptive: bank=%s, mode=%s, pool=%d, selected=%d%s",
         bank_id, mode, len(pool), len(result),
         " (with AI fallback)" if len(result) > len(selected) else "",
     )

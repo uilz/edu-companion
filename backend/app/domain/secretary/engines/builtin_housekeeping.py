@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import logging
-import time
 
 from ..models import Proposal
 from .context_engine import SessionContext
@@ -20,7 +19,7 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════
 
 class TempConversationCleanupModule(SecretaryModule):
-    """临时会话清理模块"""
+    """临时会话清理模块（已废弃 — 临时会话机制已移除）"""
 
     @property
     def meta(self) -> ModuleMeta:
@@ -28,63 +27,14 @@ class TempConversationCleanupModule(SecretaryModule):
             name="temp_conv_cleanup",
             display_name="临时会话清理",
             emoji="🧹",
-            description="定期清理 48h 过期的临时会话",
-            default_enabled=True,
-            run_interval_seconds=3600,
+            description="已废弃",
+            default_enabled=False,
+            run_interval_seconds=86400,
         )
 
     async def run_check(
         self, user_id: str, ctx: SessionContext | None = None,
     ) -> list[Proposal]:
-        # TODO: 这些 infrastructure 导入应通过 DI 注入，而非在方法内懒加载
-        from app.services.common import get_data_repo
-        from app.infrastructure.db.cognitive_link_storage import get_links_for_conversation, remove_link
-
-        cutoff = time.time() - 48 * 3600
-        cleaned = 0
-
-        try:
-            from app.infrastructure.db.database import get_db
-            db = get_db()
-            rows = db.fetchall(
-                "SELECT id FROM conversations WHERE is_temporary = true AND created_at < to_timestamp(%s)",
-                (cutoff,),
-            )
-            for row in rows:
-                cid = row["id"]
-                try:
-                    links = get_links_for_conversation(cid)
-                    for link in links:
-                        remove_link(link.id)
-                except Exception:
-                    pass
-                db.execute("DELETE FROM conversations WHERE id = %s", (cid,))
-                cleaned += 1
-        except Exception as e:
-            logger.debug("PG 临时会话清理: %s", e)
-
-        # JSON 后端
-        try:
-            repo = get_data_repo()
-            for uid in [user_id]:
-                data = repo.load(uid)
-                if not data:
-                    continue
-                conv_ids = [
-                    cid for cid, conv in data.conversations.items()
-                    if getattr(conv, "is_temporary", False) and
-                    (getattr(conv, "created_at", 0) or 0) < cutoff
-                ]
-                for cid in conv_ids:
-                    del data.conversations[cid]
-                    cleaned += 1
-                if conv_ids:
-                    repo.save(uid, data)
-        except Exception as e:
-            logger.debug("JSON 临时会话清理: %s", e)
-
-        if cleaned:
-            logger.info("清理了 %d 个过期临时会话", cleaned)
         return []
 
 

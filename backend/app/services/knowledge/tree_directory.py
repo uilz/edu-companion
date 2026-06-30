@@ -11,7 +11,6 @@ import logging
 import time
 from typing import Any
 
-from app.domain.cognitive.writer import CognitiveNodeWriter
 from app.schemas.directory_node import DirectoryNode, MessageNode
 from app.schemas.conversation import UserData
 from app.services.common import get_data_repo
@@ -24,102 +23,59 @@ class TreeDirectoryMixin:
 
     ROOT_NAME = "我的知识库"
 
-    # ── 根节点 ──
-
-    def _ensure_root(self, user_id: str, data: UserData) -> DirectoryNode:
-        """确保存在根目录节点。"""
-        for dn in data.directory_nodes.values():
-            if dn.node_type == "dir" and dn.parent_id is None:
-                return dn
-        root = DirectoryNode(
-            user_id=user_id,
-            parent_id=None,
-            node_type="dir",
-            kind="general",
-            name=self.ROOT_NAME,
-            path=[],
-        )
-        data.directory_nodes[root.id] = root
-        return root
-
-    def _ensure_temp_dir(self, user_id: str, data: UserData) -> DirectoryNode:
-        """确保存在临时目录。"""
-        for dn in data.directory_nodes.values():
-            if dn.node_type == "dir" and dn.kind == "temp":
-                return dn
-        root = self._ensure_root(user_id, data)
-        temp = DirectoryNode(
-            user_id=user_id,
-            parent_id=root.id,
-            node_type="dir",
-            kind="temp",
-            name="💬 临时",
-            path=root.path + [root.id],
-        )
-        root.add_child(temp.id)
-        data.directory_nodes[temp.id] = temp
-        return temp
-
-    def _sync_cognitive_node(
-        self, user_id: str, label: str, node_id: str, level: str,
-    ) -> None:
-        """创建 DirectoryNode 时联动创建 CognitiveNode。"""
-        try:
-            writer = CognitiveNodeWriter(user_id)
-            writer.create_node(
-                label=label,
-                level=level,
-                parent_id=None,
-                node_type="explicit",
-                created_by="user",
-                is_visible=True,
-            )
-        except Exception:
-            logger.debug("sync cognitive node skipped for %s (%s)", label, level)
-
-    def _find_root(self, data: UserData) -> DirectoryNode | None:
-        for dn in data.directory_nodes.values():
-            if dn.node_type == "dir" and dn.parent_id is None:
-                return dn
-        return None
-
     # ── 创建节点 ──
 
     def create_dir(
-        self, user_id: str, parent_id: str, name: str,
+        self, user_id: str, parent_id: str | None = None, name: str = "",
         kind: str = "general",
     ) -> DirectoryNode:
-        """创建目录节点。"""
+        """创建目录节点。parent_id=None 表示根级目录（未分类）。"""
         data = get_data_repo().load(user_id)
-        parent = data.directory_nodes.get(parent_id)
-        if not parent:
-            raise ValueError(f"父目录 {parent_id} 不存在")
+        path: list[str] = []
+        if parent_id:
+            parent = data.directory_nodes.get(parent_id)
+            if not parent:
+                raise ValueError(f"父目录 {parent_id} 不存在")
+            if parent.node_type != "dir":
+                raise ValueError(f"父节点 {parent_id} 不是目录类型，不能创建子目录")
+            path = parent.path + [parent.id]
         node = DirectoryNode(
             user_id=user_id, parent_id=parent_id,
-            node_type="dir", kind=kind, name=name,
-            path=parent.path + [parent.id],
+            node_type="dir", kind=kind, name=name or "新文件夹",
+            path=path,
         )
-        parent.add_child(node.id)
+        if parent_id:
+            parent = data.directory_nodes.get(parent_id)
+            if parent:
+                parent.add_child(node.id)
         data.directory_nodes[node.id] = node
         get_data_repo().save(user_id, data)
-        self._sync_cognitive_node(user_id, name, parent_id, level="domain")
+        # 目录与知识树已解耦，不再联动创建 CognitiveNode
         return node
 
     def create_conv(
-        self, user_id: str, parent_id: str, name: str = "",
+        self, user_id: str, parent_id: str | None = None, name: str = "",
         kind: str = "general",
     ) -> DirectoryNode:
-        """创建对话节点 + 初始根消息。"""
+        """创建对话节点 + 初始根消息。parent_id=None 表示未分类。"""
         data = get_data_repo().load(user_id)
-        parent = data.directory_nodes.get(parent_id)
-        if not parent:
-            raise ValueError(f"父目录 {parent_id} 不存在")
+        path: list[str] = []
+        if parent_id:
+            parent = data.directory_nodes.get(parent_id)
+            if not parent:
+                raise ValueError(f"父目录 {parent_id} 不存在")
+            if parent.node_type != "dir":
+                raise ValueError(f"父节点 {parent_id} 不是目录类型，不能创建会话")
+            path = parent.path + [parent.id]
         node = DirectoryNode(
             user_id=user_id, parent_id=parent_id,
             node_type="conv", kind=kind, name=name or "新对话",
-            path=parent.path + [parent.id],
+            path=path,
         )
-        parent.add_child(node.id)
+        if parent_id:
+            parent = data.directory_nodes.get(parent_id)
+            if parent:
+                parent.add_child(node.id)
         data.directory_nodes[node.id] = node
 
         # 根消息节点
@@ -131,15 +87,7 @@ class TreeDirectoryMixin:
         data.nodes[root_msg.id] = root_msg
 
         get_data_repo().save(user_id, data)
-        self._sync_cognitive_node(user_id, name or node.name, node.id, level="topic")
-        return node
-
-    def create_temp_conv(self, user_id: str) -> DirectoryNode:
-        """创建临时对话。"""
-        data = get_data_repo().load(user_id)
-        temp_dir = self._ensure_temp_dir(user_id, data)
-        node = self._create_conv_node(data, temp_dir.id, "临时会话", "temp")
-        get_data_repo().save(user_id, data)
+        # 目录与知识树已解耦，不再联动创建 CognitiveNode
         return node
 
     def _create_conv_node(
@@ -196,8 +144,6 @@ class TreeDirectoryMixin:
         node = data.directory_nodes.get(node_id)
         if not node:
             raise ValueError(f"节点 {node_id} 不存在")
-        if node.kind == "temp":
-            raise ValueError("临时节点不可重命名")
         node.user_name = name
         node.updated_at = time.time()
         get_data_repo().save(user_id, data)
@@ -232,7 +178,15 @@ class TreeDirectoryMixin:
     ) -> list[dict[str, Any]]:
         """返回可嵌套的目录树。"""
         data = get_data_repo().load(user_id)
-        root = self._find_root(data) if root_id is None else data.directory_nodes.get(root_id)
+        if root_id is None:
+            # 找根节点（parent_id 为 None 的 dir 节点）
+            root = next(
+                (dn for dn in data.directory_nodes.values()
+                 if dn.node_type == "dir" and dn.parent_id is None),
+                None,
+            )
+        else:
+            root = data.directory_nodes.get(root_id)
         if not root:
             return []
         return [self._to_dict(dn, data) for dn in self._iter_children(root, data)]

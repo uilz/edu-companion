@@ -35,8 +35,8 @@ export default function SubBranchInline({ messageId, subBranches, onEnter }: Pro
         <div className="mt-1.5 space-y-1">
           {subBranches.map((sb) => (
             <button
-              key={sb.conversation_id}
-              onClick={() => onEnter(sb.conversation_id)}
+              key={sb.conv_id}
+              onClick={() => onEnter(sb.conv_id)}
               className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs
                          text-left text-[var(--color-text-secondary)]
                          hover:bg-[var(--color-surface-hover)]

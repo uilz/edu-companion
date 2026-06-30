@@ -88,41 +88,21 @@ class SessionCompleted(DomainEvent):
 
 
 # ──────────────────────────────────────────────
-# 知识域事件
-# ──────────────────────────────────────────────
-
-
-@dataclass(frozen=True)
-class KnowledgeStateUpdated(DomainEvent):
-    """知识状态变化事件 — BKT mastery 级别变化
-    DEPRECATED: superseded by CognitiveNodeUpdated"""
-    user_id: str = ""
-    skill_id: str = ""
-    old_mastery: str = "未接触"
-    new_mastery: str = "未接触"
-    p_known_before: float = 0.0
-    p_known_after: float = 0.0
-    attempt_count: int = 0
-
-    @property
-    def event_type(self) -> str:
-        return "KnowledgeStateUpdated"
-
-
-# ──────────────────────────────────────────────
 # 对话域事件 (Phase 5)
 # ──────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
 class AssistantReplied(DomainEvent):
-    """AI 助手回复完成事件 — 触发多媒体生成"""
+    """AI 助手回复完成事件 — 触发多媒体生成 + 认知同步 + 知识证据 + 元历史"""
     user_id: str = ""
-    partition_id: str = ""
+    dir_id: str = ""
     branch_id: str = ""
-    conversation_id: str = ""
+    conv_id: str = ""
     message_id: str = ""
+    assistant_message_id: str = ""
     content: str = ""
+    user_text: str = ""
     skill_ids: list[str] = field(default_factory=list)
     contains_math: bool = False
 
@@ -141,7 +121,7 @@ class MessageClassified(DomainEvent):
     """消息分类确认事件 — 用户确认认知归属后发布"""
     user_id: str = ""
     message_id: str = ""
-    conversation_id: str = ""
+    conv_id: str = ""
     topic_node_ids: list[str] = field(default_factory=list)
     atom_node_ids: list[str] = field(default_factory=list)
     mode: str = "confirm"
@@ -239,7 +219,6 @@ EVENT_TYPES: dict[str, type[DomainEvent]] = {
         AnswerSubmitted,
         ErrorRecorded,
         SessionCompleted,
-        KnowledgeStateUpdated,  # DEPRECATED
         AssistantReplied,
         CognitiveNodeUpdated,
         MessageClassified,

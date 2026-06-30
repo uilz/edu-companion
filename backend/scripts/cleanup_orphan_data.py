@@ -3,7 +3,7 @@
 
 清理对象：
 1. messages 表中 user_id='u1'（测试用 user，不在 users 表）
-2. messages 表中 conversation_id 不在 conversations 表 的旧数据
+2. messages 表中 conv_id 不在 conversations 表 的旧数据
 3. 5 个测试/历史用户：testfrom18001/browsertest/newuser2/Apple/testuser（保留 default_user 与真实登录用户）
 4. secretary_proposals 中 test_user_diag 的测试数据
 5. practice_question_bank 中 import_source='auto' 的「通用题库」
@@ -56,16 +56,16 @@ def main() -> None:
             cur.execute("DELETE FROM messages WHERE user_id = 'u1'")
 
         # ── 2. messages 关联 conversations 的孤儿数据 ──
-        banner("2. messages.conversation_id 不在 conversations 的孤儿数据")
+        banner("2. messages.conv_id 不在 conversations 的孤儿数据")
         n = count(cur, """
             SELECT COUNT(*) FROM messages m
-            WHERE NOT EXISTS (SELECT 1 FROM conversations c WHERE c.id = m.conversation_id)
+            WHERE NOT EXISTS (SELECT 1 FROM conversations c WHERE c.id = m.conv_id)
         """)
         print(f"  计划删除: {n} 条")
         if not DRY_RUN and n:
             cur.execute("""
                 DELETE FROM messages m
-                WHERE NOT EXISTS (SELECT 1 FROM conversations c WHERE c.id = m.conversation_id)
+                WHERE NOT EXISTS (SELECT 1 FROM conversations c WHERE c.id = m.conv_id)
             """)
 
         # ── 3. 测试/历史用户 ──

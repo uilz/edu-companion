@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/achievements", tags=["成就系统"])
 
 
 def _collect_stats(user_id: str) -> dict[str, Any]:
-    """从现有数据源收集所有统计指标（v7: 全部从 PG 真实读取）"""
+    """从现有数据源收集所有统计指标（全部从 PG 真实读取）"""
     try:
         # 从 learner profile 拿持久化字段（streak/total_study_minutes 也走真实计算）
         profile = learner_engine.get_or_create_profile(user_id)

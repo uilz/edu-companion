@@ -32,7 +32,7 @@ class NoteCreate(BaseModel):
     source_text: str = ""
     node_ids: list[str] = Field(default_factory=list)
     message_id: str = ""
-    conversation_id: str = ""
+    conv_id: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -73,7 +73,7 @@ def _note_row(n: dict) -> dict:
         "source_text": n["source_text"],
         "node_ids": json.loads(n["node_ids"]) if isinstance(n["node_ids"], str) else (n["node_ids"] or []),
         "message_id": n["message_id"],
-        "conversation_id": n["conversation_id"],
+        "conv_id": n["conv_id"],
         "metadata": json.loads(n["metadata"]) if isinstance(n["metadata"], str) else (n["metadata"] or {}),
         "created_at": n["created_at"].isoformat() if hasattr(n["created_at"], "isoformat") else str(n["created_at"]),
     }
@@ -88,12 +88,12 @@ async def create_note(body: NoteCreate, user_id: str = Query(default=None)):
     note_id = f"note_{datetime.now().strftime('%Y%m%d%H%M%S%f')}_{uid}"
 
     db.execute(
-        """INSERT INTO user_notes (id, user_id, content, type, source_text, node_ids, message_id, conversation_id, metadata)
+        """INSERT INTO user_notes (id, user_id, content, type, source_text, node_ids, message_id, conv_id, metadata)
            VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s::jsonb)""",
         (
             note_id, uid, body.content, body.type, body.source_text,
             json.dumps(body.node_ids, ensure_ascii=False),
-            body.message_id or None, body.conversation_id or None,
+            body.message_id or None, body.conv_id or None,
             json.dumps(body.metadata, ensure_ascii=False),
         ),
     )

@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class Event(BaseModel):
     """统一事件记录 — 取代旧 CognitiveEvent
 
-    v2 新增: stream_type, stream_id, parent_event_id, correlation_id,
+    新增: stream_type, stream_id, parent_event_id, correlation_id,
              summary, importance, embedding
     """
     id: str = Field(default_factory=lambda: f"evt_{uuid4().hex[:12]}")
@@ -53,7 +53,7 @@ class Event(BaseModel):
     # 数据
     payload: dict[str, Any] = Field(default_factory=dict)
 
-    # v2 AI 记忆
+    # AI 记忆
     summary: str = ""
     importance: float = 0.0
     embedding: list[float] | None = None

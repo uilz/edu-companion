@@ -6,71 +6,48 @@ import {
   ChevronLeft, ChevronRight, ChevronDown,
 } from "lucide-react";
 import { useConversationStore } from "@/store/conversation/conversation-store";
-import { bindPipelineToStore, getPipeline } from "@/store/pipeline";
+import { useMessageStore } from "@/store/conversation/message-store";
+import { useChatStream } from "@/hooks/conversation/useChatStream";
+import { setChatStreamAPI } from "@/store/conversation/actions/send-message";
 
 import { apiFetch } from "@/store/conversation/tree-helpers";
 import MessageList from "@/components/conversation/core/MessageList";
 import ConversationChatInput from "@/components/conversation/core/ChatInput";
 import { useGraphData } from "@/hooks/graph/useGraphData";
 import type { GraphData, GraphNode } from "@/lib/types/graph-types";
+import type { SelectedNode } from "@/components/conversation/tree/SidebarTreeNode";
 import FocusGraph from "@/components/graph/graphs/FocusGraph";
 import ForceGraph from "@/components/graph/graphs/ForceGraph";
 import PracticePanel from "@/components/practice/panels/PracticePanel";
 
 export default function FocusPage() {
   // ── Store data ──
-  const messages = useConversationStore((s) => s.messages);
-  const responseBlocks = useConversationStore((s) => s.responseBlocks);
+  const messages = useMessageStore((s) => s.messages);
   const isLoading = useConversationStore((s) => s.isLoading);
   const sendMessage = useConversationStore((s) => s.sendMessage);
   const deleteMessage = useConversationStore((s) => s.deleteMessage);
   const editMessage = useConversationStore((s) => s.editMessage);
   const versionSwitch = useConversationStore((s) => s.versionSwitch);
   const dirList = useConversationStore((s) => s.dirList);
-  const selectedNodeId = useConversationStore((s) => s.selectedNodeId);
-  const selectedNodeType = useConversationStore((s) => s.selectedNodeType);
   const loadDirList = useConversationStore((s) => s.loadDirList);
   const loadMessages = useConversationStore((s) => s.loadMessages);
   const wsConnected = useConversationStore((s) => s.wsConnected);
 
-  // ── Derive IDs from selectedNode.path ──
+  // ── 所有导航状态统一由 selectedNode 推导 ──
   const storeSelectedNode = useConversationStore((s) => s.selectedNode);
-  const activeConversationId = selectedNodeType === "conv" ? selectedNodeId : null;
-  const selectedDirId = useMemo(() => {
-    if (!selectedNodeId) return null;
-    if (selectedNodeType !== "conv") return selectedNodeId;
-    // conv 节点：父目录是 path 最后一个元素
-    const path = storeSelectedNode?.path;
-    return path && path.length > 0 ? path[path.length - 1] : null;
-  }, [selectedNodeId, selectedNodeType, storeSelectedNode]);
+  const activeConversationId = storeSelectedNode?.level === "conv" ? storeSelectedNode.id : null;
+  const selectedDirId = storeSelectedNode?.level === "conv" ? (storeSelectedNode.parent ?? null) : (storeSelectedNode?.id ?? null);
 
-  // ── Init: StreamPipeline + navigation + load dirs ──
+  // ── useChatStream（替代 StreamPipeline） ──
+  const chatStream = useChatStream();
   useEffect(() => {
-    const cleanups: (() => void)[] = [];
-    cleanups.push(bindPipelineToStore(useConversationStore));
-    // URL 同步订阅
-    let prevUrlNodeId: string | null = null;
-    const unsub = useConversationStore.subscribe((state: { urlInitialized: boolean; selectedNodeId: string | null; activeConversationId: string | null }) => {
-      if (!state.urlInitialized) return;
-      const nodeId = state.activeConversationId || state.selectedNodeId;
-      if (nodeId === prevUrlNodeId) return;
-      prevUrlNodeId = nodeId;
-      try {
-        const params = new URLSearchParams();
-        if (nodeId) params.set("node_id", nodeId);
-        const qs = params.toString();
-        window.history.replaceState(null, "", qs ? `${window.location.pathname}?${qs}` : window.location.pathname);
-        localStorage.setItem("learn-page-state", JSON.stringify({ nodeId }));
-      } catch { /* ignore */ }
-    });
-    cleanups.push(unsub);
-    const handler = () => getPipeline().saveCacheBeforeUnload();
-    window.addEventListener("beforeunload", handler);
+    setChatStreamAPI(chatStream);
+    return () => setChatStreamAPI({ send: async () => {}, stop: async () => {}, submitToolResult: async () => {} });
+  }, [chatStream]);
+
+  // ── Init: navigation + load dirs ──
+  useEffect(() => {
     loadDirList();
-    return () => {
-      cleanups.forEach((fn) => fn?.());
-      window.removeEventListener("beforeunload", handler);
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -261,34 +238,19 @@ export default function FocusPage() {
     setDomains([]);
     setTopics([]);
     setOpenDropdown(null);
-    useConversationStore.setState({
-      selectedNodeId: pid,
-      selectedNodeType: "dir",
-      messages: [],
-      responseBlocks: [],
-    });
+    useConversationStore.getState().selectConversation(pid, "");
     loadDirList();
   }, [loadDirList]);
 
   const handleSelectDomain = useCallback((did: string) => {
     setTopics([]);
     setOpenDropdown(null);
-    useConversationStore.setState({
-      selectedNodeId: did,
-      selectedNodeType: "dir",
-      messages: [],
-      responseBlocks: [],
-    });
+    useConversationStore.getState().selectConversation(did, "");
   }, []);
 
   const handleSelectTopic = useCallback((tid: string) => {
     setOpenDropdown(null);
-    useConversationStore.setState({
-      selectedNodeId: tid,
-      selectedNodeType: "dir",
-      messages: [],
-      responseBlocks: [],
-    });
+    useConversationStore.getState().selectConversation(tid, "");
     // Load first empty conversation or create one
     apiFetch<{ conversations: { id: string; message_count?: number }[] }>(`/tree/conversation?parent_id=${tid}`)
       .then((data) => {
@@ -296,15 +258,11 @@ export default function FocusPage() {
         const empty = convs.find((c: { id: string; message_count?: number }) => !c.message_count || c.message_count === 0);
         const foundConvId = empty?.id || convs[0]?.id;
         if (foundConvId) {
-          useConversationStore.setState({
-            selectedNodeId: foundConvId,
-            selectedNodeType: "conv",
-          });
-          loadMessages(foundConvId);
+          useConversationStore.getState().selectConversation(tid, foundConvId);
         }
       })
       .catch(() => {});
-  }, [loadMessages]);
+  }, []);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -603,7 +561,6 @@ export default function FocusPage() {
               <div className="flex-1 overflow-y-auto px-4 pt-6 pb-2 space-y-4">
                 <MessageList
                   messages={messages}
-                  responseBlocks={responseBlocks}
                   isLoading={isLoading}
                   onDeleteMessage={deleteMessage}
                   onEditMessage={(mid, text) => editMessage(mid, text)}

@@ -65,21 +65,21 @@ class KnowledgeQueryServiceImpl:
 
     # ── 认知同步 ──
 
-    def post_message_hooks(self, user_id: str, partition_id: str, node) -> None:
+    def post_message_hooks(self, user_id: str, dir_id: str, node) -> None:
         from app.services.knowledge.cognitive_sync import _p0_post_message_hooks
-        return _p0_post_message_hooks(user_id, partition_id, node)
+        return _p0_post_message_hooks(user_id, dir_id, node)
 
     async def analyze_conversation_evidence(
         self,
         user_id: str,
-        partition_id: str,
+        dir_id: str,
         user_text: str,
         assistant_reply: str,
-        conversation_id: str = "",
+        conv_id: str = "",
     ) -> None:
         from app.services.knowledge.cognitive_sync import _analyze_conversation_evidence
         return await _analyze_conversation_evidence(
-            user_id, partition_id, user_text, assistant_reply, conversation_id,
+            user_id, dir_id, user_text, assistant_reply, conv_id,
         )
 
     async def cognify_dialogue_context(

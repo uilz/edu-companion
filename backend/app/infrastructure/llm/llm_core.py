@@ -21,7 +21,7 @@ from app.schemas.conversation import (
 )
 from app.infrastructure.llm.llm_service import llm_service
 from app.services.common import get_data_repo
-from app.services.conversation.context_pipeline import build_llm_messages
+from app.domain.conversation.context_pipeline import build_llm_messages
 from app.services.analytics.emotion_analyzer import emotion_analyzer
 
 logger = logging.getLogger(__name__)
@@ -31,13 +31,13 @@ logger = logging.getLogger(__name__)
 # 基础工具函数
 # ═══════════════════════════════════════════════
 
-def _find_active_conversation(data, partition_id: str):
+def _find_active_conversation(data, dir_id: str):
     """找到根目录下的活跃对话。沿 parent 链遍历 conv 节点。"""
     # 通过 directory_nodes 遍历：找属于该 partition 的最新 conv
     convs = sorted(
         (
             dn for dn in data.directory_nodes.values()
-            if dn.node_type == "conv" and _is_descendant_of(data, dn.id, partition_id)
+            if dn.node_type == "conv" and _is_descendant_of(data, dn.id, dir_id)
         ),
         key=lambda x: x.updated_at,
         reverse=True,
@@ -84,11 +84,11 @@ def parse_sources(text: str) -> tuple[str, list[str]]:
     return cleaned, sources
 
 
-def _resolve_skill_ids(labels: list[str], partition_id: str, user_id: str) -> list[str]:
+def _resolve_skill_ids(labels: list[str], dir_id: str, user_id: str) -> list[str]:
     """将 [来源: xxx] 中的知识点标签映射为 skill_id"""
     from app.services.common import get_data_repo
     data = get_data_repo().load(user_id)
-    graph = data.knowledge_graphs.get(partition_id)
+    graph = data.knowledge_graphs.get(dir_id)
     if not graph or not graph.nodes:
         return []
     # 构建 label → id 映射（精确匹配 + 模糊匹配）
@@ -119,7 +119,7 @@ def _resolve_skill_ids(labels: list[str], partition_id: str, user_id: str) -> li
 
 async def generate_reply(
     user_id: str,
-    partition_id: str,
+    dir_id: str,
     user_text: str,
 ) -> str:
     """生成助手回复（非流式）。
@@ -132,11 +132,11 @@ async def generate_reply(
         5. 返回纯文本回复
     """
     data = get_data_repo().load(user_id)
-    partition = data.partitions.get(partition_id)
-    if not partition:
-        raise ValueError(f"Partition {partition_id} not found")
+    partition = data.directory_nodes.get(dir_id)
+    if not partition or partition.node_type != "dir":
+        raise ValueError(f"Directory {dir_id} not found")
 
-    conversation = _find_active_conversation(data, partition_id)
+    conversation = _find_active_conversation(data, dir_id)
     if not conversation:
         raise ValueError(f"Active conversation not found")
 
@@ -164,7 +164,7 @@ async def generate_reply(
 
 async def generate_reply_stream(
     user_id: str,
-    partition_id: str,
+    dir_id: str,
     user_text: str,
     extra_tool_context: str = "",
 ) -> AsyncGenerator[str, None]:
@@ -176,11 +176,11 @@ async def generate_reply_stream(
         文本 chunk（str），调用方逐片段拼接。
     """
     data = get_data_repo().load(user_id)
-    partition = data.partitions.get(partition_id)
-    if not partition:
-        raise ValueError(f"Partition {partition_id} not found")
+    partition = data.directory_nodes.get(dir_id)
+    if not partition or partition.node_type != "dir":
+        raise ValueError(f"Directory {dir_id} not found")
 
-    conversation = _find_active_conversation(data, partition_id)
+    conversation = _find_active_conversation(data, dir_id)
     if not conversation:
         raise ValueError(f"Active conversation not found")
 

@@ -1,15 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Loader2, Send, Bot, User, AlertCircle, Sparkles, ArrowRight } from "lucide-react";
+import React, { useEffect, useRef, useCallback } from "react";
+import { Loader2, Send, Bot, User, AlertCircle, Sparkles } from "lucide-react";
 import type { GraphNode } from "@/lib/types/graph-types";
-import { authedFetch } from "@/lib/api/api";
-
-interface ChatMessage {
-  role: "user" | "assistant";
-  text: string;
-  id: string;
-}
+import { useTreeChatStream } from "@/hooks/graph/useTreeChatStream";
 
 interface TreeChatPanelProps {
   node: GraphNode;
@@ -20,88 +14,56 @@ interface TreeChatPanelProps {
 export default function TreeChatPanel({
   node, partitionId, onNodeUpdated,
 }: TreeChatPanelProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [convId, setConvId] = useState("");
-  const [error, setError] = useState("");
+  const chat = useTreeChatStream();
+  const [input, setInput] = React.useState("");
   const listRef = useRef<HTMLDivElement>(null);
+  const initRef = useRef(false);
+
+  // 节点变化时重新初始化会话
+  useEffect(() => {
+    initRef.current = false;
+    chat.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.id]);
+
+  useEffect(() => {
+    if (!chat.conversationId && !initRef.current) {
+      initRef.current = true;
+      chat.initChat(node.id).catch((e) => {
+        console.error("initChat failed:", e);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.id, chat.conversationId]);
 
   // 滚动到底部
   useEffect(() => {
     if (listRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [chat.messages, chat.streamText]);
 
   // 发送消息
   const handleSend = useCallback(async () => {
-    if (!input.trim() || loading) return;
-    const userText = input.trim();
-    const userMsg: ChatMessage = { role: "user", text: userText, id: "u-" + Date.now() };
-    setMessages(prev => [...prev, userMsg]);
+    if (!input.trim() || chat.streaming) return;
+    const text = input.trim();
     setInput("");
-    setLoading(true);
-    setError("");
+    await chat.sendMessage(text, partitionId);
+    onNodeUpdated();
+  }, [input, chat, partitionId, onNodeUpdated]);
 
-    try {
-      const res = await authedFetch(`/api/knowledge/graph/${partitionId}/ai-chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          node_id: node.id,
-          message: userText,
-          conversation_id: convId || undefined,
-        }),
-      });
-      const data = await res.json();
-
-      if (data.error === "scope_mismatch") {
-        const asstMsg: ChatMessage = {
-          role: "assistant",
-          text: `⚠️ ${data.message}\n\n👉 请点击「${data.bound_node_label}」节点，在它的详情面板中启动探索会话。`,
-          id: "a-" + Date.now(),
-        };
-        setMessages(prev => [...prev, asstMsg]);
-        return;
-      }
-
-      if (data.conversation_id) setConvId(data.conversation_id);
-
-      // 如果有对话推荐，附加在回复下方
-      let replyText = data.response || "";
-      if (data.conversation_recommendation) {
-        const rec = data.conversation_recommendation;
-        if (rec.type === "exploration_complete") {
-          replyText += `\n\n---\n💡 **探索完成！** 建议到[对话系统](/)深入学习具体知识点。`;
-        } else if (rec.type === "deep_dive") {
-          replyText += `\n\n---\n💡 对「${rec.node_label}」很感兴趣？去[对话系统](/)深入探讨。`;
-        } else if (rec.type === "parent_reference") {
-          replyText += `\n\n---\n💡 这个知识属于「${rec.node_label}」，建议切换到该节点的探索会话。`;
-        }
-      }
-
-      const asstMsg: ChatMessage = {
-        role: "assistant",
-        text: replyText || "（收到空回复）",
-        id: "a-" + Date.now(),
-      };
-      setMessages(prev => [...prev, asstMsg]);
-      onNodeUpdated();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [input, loading, node.id, partitionId, convId, onNodeUpdated]);
-
-  // 快捷键：Enter 发送
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
   };
+
+  // 合并历史消息 + 正在流式的内容
+  const allMessages = [
+    ...chat.messages,
+    ...(chat.streamText ? [{ role: "assistant" as const, text: chat.streamText, id: "streaming" }] : []),
+  ];
 
   return (
     <div className="flex flex-col h-full">
@@ -125,7 +87,7 @@ export default function TreeChatPanel({
 
       {/* 消息列表 */}
       <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-        {messages.length === 0 && !loading && (
+        {allMessages.length === 0 && !chat.streaming && (
           <div className="flex flex-col items-center justify-center h-full text-center gap-2">
             <Bot size={28} className="text-[var(--color-accent)] opacity-40" />
             <p className="text-xs text-[var(--color-text-muted)] max-w-[240px] leading-relaxed">
@@ -140,9 +102,7 @@ export default function TreeChatPanel({
               ].map((hint, i) => (
                 <button
                   key={i}
-                  onClick={() => {
-                    setInput(hint);
-                  }}
+                  onClick={() => setInput(hint)}
                   className="px-2 py-1 text-[10px] rounded-lg border border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-colors"
                 >
                   {hint}
@@ -152,7 +112,7 @@ export default function TreeChatPanel({
           </div>
         )}
 
-        {messages.map(msg => (
+        {allMessages.map((msg) => (
           <div key={msg.id} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             {msg.role === "assistant" && (
               <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center mt-0.5">
@@ -174,7 +134,7 @@ export default function TreeChatPanel({
           </div>
         ))}
 
-        {loading && (
+        {chat.streaming && !chat.streamText && (
           <div className="flex gap-2 justify-start">
             <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center">
               <Bot size={12} className="text-[var(--color-accent)]" />
@@ -185,9 +145,9 @@ export default function TreeChatPanel({
           </div>
         )}
 
-        {error && (
+        {chat.error && (
           <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-500/10 text-red-500 text-[11px]">
-            <AlertCircle size={12} /> {error}
+            <AlertCircle size={12} /> {chat.error}
           </div>
         )}
       </div>
@@ -201,14 +161,15 @@ export default function TreeChatPanel({
             onKeyDown={handleKeyDown}
             placeholder="告诉 AI 你想怎么编辑..."
             rows={1}
-            className="flex-1 px-3 py-2 text-xs rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] resize-none transition-colors"
+            disabled={chat.streaming}
+            className="flex-1 px-3 py-2 text-xs rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] resize-none transition-colors disabled:opacity-50"
           />
           <button
             onClick={handleSend}
-            disabled={loading || !input.trim()}
+            disabled={chat.streaming || !input.trim()}
             className="flex-shrink-0 p-2 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-40 transition-all active:scale-[0.97]"
           >
-            {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+            {chat.streaming ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
           </button>
         </div>
       </div>

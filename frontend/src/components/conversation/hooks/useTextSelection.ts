@@ -53,25 +53,30 @@ export function useTextSelection(
     /** 点击是否落在已有选区的范围内 */
     insidePrevSelection: boolean;
   } | null>(null);
+  /** 追踪上一次选中的 DOM 元素（用于判断点击是否落在已有选区内） */
+  const lastSelectedElRef = useRef<HTMLElement | null>(null);
 
-  useEffect(() => { selectionRef.current = selection; }, [selection]);
+  useEffect(() => {
+    selectionRef.current = selection;
+    if (!selection) lastSelectedElRef.current = null;
+  }, [selection]);
 
   const handleTextMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.detail >= 2) e.preventDefault();
     const prev = selectionRef.current;
-    const target = e.target as HTMLElement;
     let insidePrevSelection = false;
-    if (prev) {
-      const sel = window.getSelection();
-      if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
-        insidePrevSelection = sel.getRangeAt(0).intersectsNode(target);
-      }
+    if (prev && lastSelectedElRef.current) {
+      // 用 bounding rect 判断点击是否落在上次选中的元素内
+      // 避免 DOM 引用因重渲染失效
+      const rect = lastSelectedElRef.current.getBoundingClientRect();
+      insidePrevSelection =
+        e.clientX >= rect.left && e.clientX <= rect.right &&
+        e.clientY >= rect.top && e.clientY <= rect.bottom;
     }
     mousedownRef.current = {
       x: e.clientX, y: e.clientY,
       insidePrevSelection,
     };
-    console.log("[useTextSelection] mousedown SET md=", !!mousedownRef.current, "x=", e.clientX, "insidePrev=", insidePrevSelection);
   }, []);
 
   const handleTextMouseUp = useCallback((_e: React.MouseEvent) => {}, []);
@@ -99,11 +104,7 @@ export function useTextSelection(
       const target = e.target as HTMLElement;
 
       const md = mousedownRef.current;
-      console.log("[useTextSelection] click: md=", !!md, "clientX=", clientX, "clientY=", clientY);
-      if (!md) {
-        console.log("[useTextSelection] No mousedown data — returning early");
-        return;
-      }
+      if (!md) return;
 
       const dx = clientX - md.x;
       const dy = clientY - md.y;
@@ -150,6 +151,7 @@ export function useTextSelection(
           const sentenceEl = target.closest("[data-sentence]") as HTMLElement | null;
           if (sentenceEl) {
             const paraEl = findParagraphEl(sentenceEl);
+            lastSelectedElRef.current = paraEl;
             const paraRange = document.createRange();
             paraRange.selectNodeContents(paraEl);
             window.getSelection()?.removeAllRanges();
@@ -166,7 +168,8 @@ export function useTextSelection(
           }
         }
         // paragraph → 全文
-        const msgEl = container.closest("[data-message-id]") || container;
+        const msgEl = (container.closest("[data-message-id]") as HTMLElement | null) || container;
+        lastSelectedElRef.current = msgEl;
         const selRange = document.createRange();
         selRange.selectNodeContents(msgEl);
         window.getSelection()?.removeAllRanges();
@@ -184,7 +187,6 @@ export function useTextSelection(
 
       // ── Break: 点击已有选区外的新区域 → 先清除，不选中 ──
       if (selectionRef.current) {
-        console.log("[useTextSelection] Break existing selection — clearing");
         window.getSelection()?.removeAllRanges();
         setSelection(null);
         return;
@@ -194,53 +196,57 @@ export function useTextSelection(
       let sentenceEl = target.closest("[data-sentence]") as HTMLElement | null;
 
       // 如果点击落在 block 元素的 padding 区域，target 可能是 <p>/<li> 等 block 元素本身
-      // 此时 closest 往上找找不到 [data-sentence]，需要往子元素里找
+      // 此时 closest 往上找找不到 [data-sentence]，需要检查点击是否在文本区域内
       if (!sentenceEl) {
         const blockTags = new Set(["P", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "BLOCKQUOTE", "TD", "TH"]);
         if (blockTags.has(target.tagName)) {
-          // 在 block 元素的子元素中找最近的 [data-sentence]
           const allSentences = Array.from(target.querySelectorAll("[data-sentence]")) as HTMLElement[];
-          if (allSentences.length > 0) {
-            // 找离点击位置最近的 sentence
-            let closest: HTMLElement | null = null;
-            let minDist = Infinity;
-            for (const s of allSentences) {
-              const r = s.getBoundingClientRect();
-              const cx = r.left + r.width / 2;
-              const cy = r.top + r.height / 2;
-              const dist = (cx - clientX) ** 2 + (cy - clientY) ** 2;
-              if (dist < minDist) { minDist = dist; closest = s; }
-            }
-            sentenceEl = closest;
+          // 只在点击位置落在某个 sentence 的 bounding box 内时才选中
+          const inSentenceBounds = allSentences.some(s => {
+            const r = s.getBoundingClientRect();
+            return clientX >= r.left && clientX <= r.right &&
+                   clientY >= r.top && clientY <= r.bottom;
+          });
+          if (!inSentenceBounds) {
+            window.getSelection()?.removeAllRanges();
+            setSelection(null);
+            return;
           }
+          // 找离点击位置最近的 sentence
+          let closest: HTMLElement | null = null;
+          let minDist = Infinity;
+          for (const s of allSentences) {
+            const r = s.getBoundingClientRect();
+            const cx = r.left + r.width / 2;
+            const cy = r.top + r.height / 2;
+            const dist = (cx - clientX) ** 2 + (cy - clientY) ** 2;
+            if (dist < minDist) { minDist = dist; closest = s; }
+          }
+          sentenceEl = closest;
         }
       }
 
-      console.log("[useTextSelection] sentenceEl found:", !!sentenceEl, "target.tagName=", target.tagName, "target.className=", (target as HTMLElement).className?.substring(0, 60));
       if (!sentenceEl) {
-        console.log("[useTextSelection] No sentence element found — clearing selection");
         window.getSelection()?.removeAllRanges();
         setSelection(null);
         return;
       }
 
+      lastSelectedElRef.current = sentenceEl;
+
       const sentenceRange = document.createRange();
       sentenceRange.selectNodeContents(sentenceEl);
-      console.log("[useTextSelection] Range created, text=", sentenceEl.textContent?.substring(0, 60));
       const sel = window.getSelection();
       sel?.removeAllRanges();
       sel?.addRange(sentenceRange);
 
       const selText = sel?.toString().trim() || "";
-      console.log("[useTextSelection] selText length:", selText.length, "text:", selText.substring(0, 60));
       if (!selText || selText.length < 2) {
-        console.log("[useTextSelection] selText too short — cancelling");
         setSelection(null);
         return;
       }
 
       const fb = mapToFullText(selText, fullText);
-      console.log("[useTextSelection] Setting selection state, charStart=", fb.start, "charEnd=", fb.end);
       setSelection({
         text: selText, messageId, sourceConversationId: conversationId,
         position: { x: clientX, y: clientY },

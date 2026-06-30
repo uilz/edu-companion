@@ -54,13 +54,13 @@ class AppContainer:
             self.event_bus = EventBus(handler_timeout=settings.event_bus_timeout)
         self.llm_circuit = CircuitBreaker("llm", failure_threshold=3)
 
-        # ── v2 EventSystem: 统一事件存储 + 记忆 + 聚合 ──
+        # ── EventSystem: 统一事件存储 + 记忆 + 聚合 ──
         from app.infrastructure.event_store import EventStore
         from app.infrastructure.event_memory import EventMemory
-        from app.infrastructure.event_aggregator import EventAggregator
+        from app.infrastructure.event_aggregator import EventHierarchyAggregator
         self.event_store = EventStore()
         self.event_memory = EventMemory()
-        self.event_aggregator = EventAggregator()
+        self.event_aggregator = EventHierarchyAggregator()
 
         # ── DataRepository 仓储 ──
         self._init_data_repo()
@@ -80,13 +80,13 @@ class AppContainer:
         self.media_service: MediaService = self._create_media()
         self.multimedia_service: MultimediaService = self._create_multimedia()
 
-        # ── Knowledge v5 服务 (四实体解耦架构) ──
-        self.knowledge_v5 = self._create_knowledge_v5()
+        # ── Knowledge 服务 (四实体解耦架构) ──
+        self.knowledge_services = self._create_knowledge_services()
 
         # ── 注册事件处理器 ──
         self._wire_events()
 
-        # v6 Phase 4: 事件持久化桥接 (仅内存 EventBus 需要)
+        # 事件持久化桥接 (仅内存 EventBus 需要)
         if not use_persistent:
             try:
                 from app.services.common.event_service import event_service
@@ -180,8 +180,8 @@ class AppContainer:
             event_bus=self.event_bus,
         )
 
-    def _create_knowledge_v5(self) -> dict:
-        """创建 Knowledge v5 服务层 (四实体解耦架构)"""
+    def _create_knowledge_services(self) -> dict:
+        """创建 Knowledge 服务层 (四实体解耦架构)"""
         from app.services.knowledge_tree import (
             KnowledgeNodeService, ConversationService,
             NavigationService, MessageService,
@@ -239,7 +239,11 @@ class AppContainer:
         # AI 回复 → 多媒体生成
         bus.subscribe("AssistantReplied", self.multimedia_service.on_assistant_replied)
 
-        # ═══ v2 EventSystem: 旧事件迁移 → EventBus 统一订阅 ═══
+        # AI 回复 → 对话副作用 (认知同步 / 知识证据 / 元历史)
+        from app.domain.conversation.reply_hooks import reply_hooks
+        reply_hooks.subscribe(bus)
+
+        # ═══ EventSystem: 旧事件迁移 → EventBus 统一订阅 ═══
 
         # MessageClassified → 可见性级联 + 结构扩展检查
         async def _on_message_classified(event: DomainEvent) -> None:
@@ -457,7 +461,7 @@ class AppContainer:
                 logger.debug("ZPD scheduler not available")
         bus.subscribe("SessionCompleted", _on_practice_to_knowledge_tree)
 
-        # ── v2 EventSystem: 工作记忆生命周期 + 聚合 ──
+        # ── EventSystem: 工作记忆生命周期 ──
         async def _on_session_completed(event: DomainEvent) -> None:
             from shared.events import SessionCompleted
             if not isinstance(event, SessionCompleted):
@@ -465,20 +469,9 @@ class AppContainer:
             user_id = event.user_id
             session_id = event.session_id
             try:
-                # 结束工作记忆
                 self.event_memory.working_end(user_id, session_id)
-                # 触发聚合
-                agg_record = await self.event_aggregator.aggregate_practice_session(
-                    user_id, session_id
-                )
-                if agg_record:
-                    await self.event_store.append(
-                        agg_record,
-                        stream_type="practice",
-                        stream_id=session_id,
-                    )
             except Exception:
-                logger.debug("EventMemory/Aggregator hook failed", exc_info=True)
+                logger.debug("EventMemory hook failed", exc_info=True)
         bus.subscribe("SessionCompleted", _on_session_completed)
 
         async def _on_assistant_replied(event: DomainEvent) -> None:
@@ -486,26 +479,20 @@ class AppContainer:
             if not isinstance(event, AssistantReplied):
                 return
             user_id = event.user_id
-            conversation_id = event.conversation_id
+            conv_id = event.conv_id
             try:
-                # 检查对话聚合阈值
-                agg_record = await self.event_aggregator.on_event(
+                self.event_memory.working_event(
+                    user_id, conv_id,
                     EventRecord(
                         user_id=user_id,
                         event_type="AssistantReplied",
                         stream_type="conversation",
-                        stream_id=conversation_id,
+                        stream_id=conv_id,
                         payload=asdict(event),
                     )
                 )
-                if agg_record:
-                    await self.event_store.append(
-                        agg_record,
-                        stream_type="conversation",
-                        stream_id=conversation_id,
-                    )
             except Exception:
-                logger.debug("EventAggregator hook failed", exc_info=True)
+                logger.debug("EventMemory hook failed", exc_info=True)
         bus.subscribe("AssistantReplied", _on_assistant_replied)
 
         logger.info("🔗 注册 %d 个事件订阅", sum(len(v) for v in bus._handlers.values()))

@@ -20,7 +20,7 @@ class KnowledgeEvent:
     event_type: str  # node_created | node_updated | node_deleted | mastery_changed | conversation_linked
     user_id: str
     node_id: str | None = None
-    conversation_id: str | None = None
+    conv_id: str | None = None
     data: dict = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
 
@@ -28,7 +28,7 @@ class KnowledgeEvent:
         payload = {
             "event": self.event_type,
             "node_id": self.node_id,
-            "conversation_id": self.conversation_id,
+            "conv_id": self.conv_id,
             "data": self.data,
             "timestamp": self.timestamp,
         }
@@ -65,7 +65,7 @@ class KnowledgeEventBus:
 
         logger.info(
             "KnowledgeEvent: %s user=%s node=%s conv=%s",
-            event.event_type, event.user_id, event.node_id, event.conversation_id,
+            event.event_type, event.user_id, event.node_id, event.conv_id,
         )
 
         # 推送到所有该用户的订阅者
@@ -88,7 +88,7 @@ class KnowledgeEventBus:
                 user_id=event.user_id,
                 payload={
                     "node_id": event.node_id,
-                    "conversation_id": event.conversation_id,
+                    "conv_id": event.conv_id,
                     "data": event.data,
                 },
             )

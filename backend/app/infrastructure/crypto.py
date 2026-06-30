@@ -18,7 +18,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 logger = logging.getLogger(__name__)
 
-_SALT = b"edu-companion-llm-key-v1"
+_SALT = b"edu-companion-llm-key"
 
 
 def _derive_key(secret: str) -> bytes:

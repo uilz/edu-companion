@@ -1,8 +1,8 @@
 """
-分区学习进度画像 API (v4 — CognitiveNode only)
+分区学习进度画像 API
 
 端点:
-  GET /{partition_id}           — 完整分区进度画像
+  GET /{dir_id}           — 完整分区进度画像
   GET /student-profile          — 跨分区全局画像
 """
 
@@ -35,7 +35,7 @@ router = APIRouter(prefix="/api/partition-progress", tags=["学习画像"])
 # ═══════════════════════════════════════════════════
 
 
-def _compute_partition_progress_cognitive(partition_id: str, user_id: str) -> PartitionProgress | None:
+def _compute_partition_progress_cognitive(dir_id: str, user_id: str) -> PartitionProgress | None:
     """
     从 cognitive_nodes 表计算分区进度画像。
 
@@ -45,14 +45,14 @@ def _compute_partition_progress_cognitive(partition_id: str, user_id: str) -> Pa
         from app.domain.cognitive import get_repo
         from app.domain.cognitive.models import CognitiveNode
 
-        partition_node = get_repo().get_node(partition_id, user_id)
+        partition_node = get_repo().get_node(dir_id, user_id)
         if not partition_node:
-            logger.info(f"[cognitive] 分区节点不存在: {partition_id}")
+            logger.info(f"[cognitive] 分区节点不存在: {dir_id}")
             return None
 
         # 获取分区下所有子节点 (递归)
-        all_nodes: dict[str, CognitiveNode] = {partition_id: partition_node}
-        _collect_subtree(partition_id, user_id, all_nodes)
+        all_nodes: dict[str, CognitiveNode] = {dir_id: partition_node}
+        _collect_subtree(dir_id, user_id, all_nodes)
 
         # 筛选 atom/concept 级别节点作为技能节点
         skill_nodes = {
@@ -174,7 +174,7 @@ def _compute_partition_progress_cognitive(partition_id: str, user_id: str) -> Pa
         temporal.review_backlog = len(review_queue)
 
         pp = PartitionProgress(
-            partition_id=partition_id,
+            dir_id=dir_id,
             partition_name=partition_node.label,
             partition_emoji="📁",
             skills=skills,
@@ -296,22 +296,22 @@ def _estimate_completion(total: int, mastered: int, velocity: float) -> int:
 # ═══════════════════════════════════════════════════
 
 
-@router.get("/{partition_id}", response_model=PartitionProgress)
-async def get_partition_progress(partition_id: str, user_id: str = Depends(current_user_id)):
+@router.get("/{dir_id}", response_model=PartitionProgress)
+async def get_partition_progress(dir_id: str, user_id: str = Depends(current_user_id)):
     """获取分区的完整学习进度画像 — CognitiveNode only"""
 
-    result = _compute_partition_progress_cognitive(partition_id, user_id)
+    result = _compute_partition_progress_cognitive(dir_id, user_id)
     if result is not None:
         return result
 
     # 无认知数据时返回空画像
     from app.services.common import get_data_repo
     data = get_data_repo().load(user_id)
-    partition = data.partitions.get(partition_id)
+    partition = data.directory_nodes.get(dir_id)
     if not partition:
         raise HTTPException(status_code=404, detail="分区不存在")
     return PartitionProgress(
-        partition_id=partition_id,
+        dir_id=dir_id,
         partition_name=partition.name,
         partition_emoji=getattr(partition, "emoji", "📁"),
     )

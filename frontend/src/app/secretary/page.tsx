@@ -3,7 +3,7 @@
 import {
   Bell, Check, X, Clock, AlertTriangle, TrendingUp, Settings,
   MessageSquare, Search, ChevronDown, ChevronRight,
-  RotateCcw, EyeOff, Timer,
+  RotateCcw, EyeOff, Timer, Activity,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
@@ -17,6 +17,7 @@ import { navigateToProposal } from "@/store/notification/proposal-navigator";
 import type {
   SecretaryNotification, PageType, ActionType, NotificationSource,
 } from "@/store/notification/types";
+import EventStream from "@/components/secretary/EventStream";
 
 // ══════════════════════════════════════════════════════════════
 //  Constants
@@ -62,7 +63,7 @@ const PRIORITY_LABELS: Record<number, string> = {
   5: "紧急",
 };
 
-type TabKey = "pending" | "snoozed" | "history";
+type TabKey = "pending" | "snoozed" | "history" | "events";
 type ViewMode = "flat" | "grouped";
 
 // ══════════════════════════════════════════════════════════════
@@ -218,6 +219,11 @@ export default function SecretaryPage() {
       case "history": {
         list = store.getHistoryNotifications(activeFilter);
         label = `历史 (${list.length})`;
+        break;
+      }
+      case "events": {
+        list = [];
+        label = "事件流";
         break;
       }
       default:
@@ -486,6 +492,7 @@ export default function SecretaryPage() {
           { key: "pending" as TabKey, label: "待处理", icon: Bell },
           { key: "snoozed" as TabKey, label: "已延后", icon: Timer },
           { key: "history" as TabKey, label: "历史", icon: Clock },
+          { key: "events" as TabKey, label: "事件流", icon: Activity },
         ]).map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -502,8 +509,9 @@ export default function SecretaryPage() {
         ))}
       </div>
 
-      {/* ── 筛选栏 ── */}
-      <div className="flex items-center gap-2 flex-wrap">
+      {/* ── 筛选栏 (仅通知 tabs) ── */}
+      {activeTab !== "events" && (
+        <div className="flex items-center gap-2 flex-wrap">
         {/* 来源 */}
         <select
           value={filterSource}
@@ -591,6 +599,7 @@ export default function SecretaryPage() {
           </button>
         )}
       </div>
+      )}
 
       {/* ── 批量操作栏 ── */}
       {batchMode && selectedIds.size > 0 && (
@@ -618,18 +627,22 @@ export default function SecretaryPage() {
       )}
 
       {/* ── 列表标题 ── */}
-      {!loading && (
+      {!loading && activeTab !== "events" && (
         <div className="text-xs text-[var(--color-text-muted)]">{countLabel}</div>
       )}
 
       {/* ── 列表 / 分组视图 ── */}
-      {!loading && items.length === 0 ? (
+      {/* 事件流 tab — 独立渲染 */}
+      {activeTab === "events" && <EventStream />}
+
+      {/* 通知 tabs */}
+      {activeTab !== "events" && !loading && items.length === 0 ? (
         <div className="p-6 rounded-lg border border-dashed border-[var(--color-border)] text-center text-sm text-[var(--color-text-muted)]">
           {activeTab === "pending" && "🎉 没有待处理的通知"}
           {activeTab === "snoozed" && "没有已延后的通知"}
           {activeTab === "history" && "暂无历史记录"}
         </div>
-      ) : (
+      ) : activeTab !== "events" ? (
         <>
           {/* Flat 模式 */}
           {viewMode === "flat" && items.map((item) => (
@@ -681,7 +694,7 @@ export default function SecretaryPage() {
             );
           })}
         </>
-      )}
+      ) : null}
     </div>
   );
 }

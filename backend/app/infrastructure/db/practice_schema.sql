@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS questions (
 
 -- 迁移: 为已存在的表补充新列（开发阶段幂等执行）
 ALTER TABLE practice_attempts ADD COLUMN IF NOT EXISTS error_analysis JSONB DEFAULT '{}';
+ALTER TABLE practice_attempts ADD COLUMN IF NOT EXISTS confidence_before INTEGER DEFAULT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_q_bank ON questions(bank_id) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_q_type ON questions(question_type);
@@ -167,26 +168,30 @@ CREATE TABLE IF NOT EXISTS user_settings (
     updated_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 7.0.10 消息表 (取代 conversation_user_meta.nodes/messages/response_blocks JSONB)
+-- 7.0.10 消息表 (v5 schema — 四实体解耦架构)
 CREATE TABLE IF NOT EXISTS messages (
-    id              TEXT PRIMARY KEY,
-    user_id         TEXT NOT NULL,
-    directory_id    TEXT NOT NULL,
-    role            TEXT NOT NULL,               -- user | assistant | system
-    content         TEXT DEFAULT '',
-    content_blocks  JSONB DEFAULT '[]',          -- [TextBlock, PracticeBlock, MindMapBlock, ...]
-    text_summary    TEXT DEFAULT '',
-    parent_id       TEXT,
-    children_ids    TEXT[] DEFAULT '{}',
-    timestamp       DOUBLE PRECISION DEFAULT 0,
-    token_count     INTEGER DEFAULT 0,
-    version         INTEGER DEFAULT 1,
-    is_deleted      BOOLEAN DEFAULT FALSE,
-    agent_label     TEXT DEFAULT '',
-    metadata        JSONB DEFAULT '{}',
-    created_at      TIMESTAMPTZ DEFAULT NOW()
+    id                  TEXT PRIMARY KEY,
+    user_id             TEXT NOT NULL,
+    conversation_id     TEXT NOT NULL,
+    role                TEXT NOT NULL,               -- user | assistant | system
+    content             TEXT DEFAULT '',
+    content_blocks      JSONB DEFAULT '[]',          -- [TextBlock, PracticeBlock, MindMapBlock, ...]
+    text_summary        TEXT DEFAULT '',
+    knowledge_node_ids  JSONB DEFAULT '[]',
+    parent_id           TEXT,
+    children_ids        JSONB DEFAULT '[]',
+    has_sub_branches    BOOLEAN DEFAULT FALSE,
+    sub_branch_ids      JSONB DEFAULT '[]',
+    sub_branch_summaries JSONB DEFAULT '[]',
+    timestamp           TIMESTAMPTZ DEFAULT NOW(),
+    token_count         INTEGER DEFAULT 0,
+    version             INTEGER DEFAULT 1,
+    is_deleted          BOOLEAN DEFAULT FALSE,
+    agent_label         TEXT DEFAULT '',
+    metadata            JSONB DEFAULT '{}'
 );
 
-CREATE INDEX IF NOT EXISTS idx_msg_dir ON messages(directory_id);
+CREATE INDEX IF NOT EXISTS idx_msg_conversation ON messages(conv_id);
 CREATE INDEX IF NOT EXISTS idx_msg_user ON messages(user_id);
 CREATE INDEX IF NOT EXISTS idx_msg_parent ON messages(parent_id);
+CREATE INDEX IF NOT EXISTS idx_msg_timestamp ON messages(timestamp);

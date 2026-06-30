@@ -5,13 +5,7 @@ import { AlertCircle, Loader2, Send, Bot, MessageCircle } from "lucide-react";
 import type { GraphNode } from "@/lib/types/graph-types";
 import TreeChatPanel from "@/components/graph/panels/TreeChatPanel";
 import type { DialogState } from "./KnowledgeTreePage";
-import { authedFetch, API_BASE } from "@/lib/api/api";
-
-interface ChatMessage {
-  role: "user" | "assistant";
-  text: string;
-  id: string;
-}
+import { useTreeChatStream } from "@/hooks/graph/useTreeChatStream";
 
 interface DialogContainerProps {
   dialogState: DialogState | null;
@@ -32,61 +26,60 @@ export default function DialogContainer({
   const isNodeMode = dialogState?.type === "tree_exploration" && !!dialogState.boundNode;
   const isTemporary = dialogState?.type === "temporary";
 
-  // ── 全局/临时对话状态 ──
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // ── 临时对话状态（独立流，用 hook 直接管理） ──
+  const tempChat = useTreeChatStream();
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
+
+  // 绑定已有 conversationId
+  useEffect(() => {
+    if (dialogState?.conversationId && !tempChat.conversationId) {
+      tempChat.bindConversation(dialogState.conversationId);
+    }
+  }, [dialogState?.conversationId, tempChat.conversationId, tempChat]);
 
   // 自动滚动到底部
   useEffect(() => {
     if (listRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [tempChat.messages, tempChat.streamText]);
 
-  // ── 全局/临时对话发送消息 ──
+  // ── 临时对话发送 ──
   const handleSend = useCallback(async () => {
-    if (!input.trim() || loading || !dialogState) return;
-    const userText = input.trim();
-    const userMsg: ChatMessage = { role: "user", text: userText, id: "u-" + Date.now() };
-    setMessages(prev => [...prev, userMsg]);
+    if (!input.trim() || tempChat.streaming || !dialogState) return;
     setInput("");
-    setLoading(true);
-    setError("");
-
-    try {
-      const res = await authedFetch(`/api/conversations/tree/conversation/${dialogState.conversationId}/message`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: userText, partition_id: partitionId }),
-      });
-      const data = await res.json();
-      const reply = data.response || data.text || "（收到）";
-      setMessages(prev => [...prev, { role: "assistant", text: reply, id: "a-" + Date.now() }]);
-    } catch (e: any) {
-      setError(e.message);
-      setMessages(prev => [...prev, { role: "assistant", text: `发送失败: ${e.message}`, id: "a-" + Date.now() }]);
-    } finally {
-      setLoading(false);
+    if (dialogState.conversationId) {
+      if (!tempChat.conversationId) {
+        tempChat.bindConversation(dialogState.conversationId);
+      }
+      await tempChat.sendMessage(input.trim(), partitionId);
     }
-  }, [input, loading, dialogState, partitionId]);
+  }, [input, tempChat, dialogState, partitionId]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (isNodeMode && dialogState?.boundNode) return; // TreeChatPanel handles its own send
+      if (isNodeMode && dialogState?.boundNode) return;
       handleSend();
     }
   };
+
+  // 合并消息流
+  const displayMessages = dialogState?.conversationId
+    ? [
+        ...tempChat.messages,
+        ...(tempChat.streamText ? [{ role: "assistant" as const, text: tempChat.streamText, id: "streaming" }] : []),
+      ]
+    : [];
+
+  const isLoading = tempChat.streaming;
 
   const title = isTemporary ? "临时对话" : isNodeMode ? "节点探索" : "知识树助手";
   const boundLabel = isNodeMode ? dialogState?.boundNode?.label : "";
 
   return (
-    <div className="flex flex-col h-full bg-[var(--color-surface)] border-r border-[var(--color-border)] overflow-hidden"
-      style={{ width: `${width}px` }}>
+    <div className="flex flex-col h-full overflow-hidden bg-[var(--color-surface)] border-r border-[var(--color-border)]">
       {/* ══ 头部 ══ */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--color-border)] flex-shrink-0">
         <MessageCircle size={15} className="text-[var(--color-accent)] shrink-0" />
@@ -115,7 +108,7 @@ export default function DialogContainer({
           <>
             {/* 消息列表 */}
             <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-              {messages.length === 0 && !loading && (
+              {displayMessages.length === 0 && !isLoading && (
                 <div className="flex flex-col items-center justify-center h-full text-center gap-3 px-4">
                   <div className="w-10 h-10 rounded-xl bg-[var(--color-accent)]/10 flex items-center justify-center">
                     <Bot size={22} className="text-[var(--color-accent)]" />
@@ -145,7 +138,7 @@ export default function DialogContainer({
                 </div>
               )}
 
-              {messages.map((msg) => (
+              {displayMessages.map((msg) => (
                 <div key={msg.id} className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : ""}`} style={{ maxWidth: "92%" }}>
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs shrink-0
                     ${msg.role === "user" ? "bg-[var(--color-accent)]/10" : "bg-[var(--color-page-secondary)]"}`}>
@@ -161,7 +154,7 @@ export default function DialogContainer({
                 </div>
               ))}
 
-              {loading && (
+              {isLoading && (
                 <div className="flex gap-2" style={{ maxWidth: "92%" }}>
                   <div className="w-6 h-6 rounded-full bg-[var(--color-page-secondary)] flex items-center justify-center text-xs shrink-0">🤖</div>
                   <div className="px-3 py-2 rounded-xl rounded-tl-md border border-[var(--color-border)] bg-[var(--color-page-secondary)]">
@@ -170,15 +163,15 @@ export default function DialogContainer({
                 </div>
               )}
 
-              {error && (
+              {tempChat.error && (
                 <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-500/10 text-red-500 text-[11px]">
-                  <AlertCircle size={12} />{error}
+                  <AlertCircle size={12} />{tempChat.error}
                 </div>
               )}
             </div>
 
             {/* 输入区 */}
-            <div className="flex-shrink-0 px-4 py-3 border-t border-[var(--color-border)] bg-[var(--color-surface)]">
+            <div className="flex-shrink-0 px-4 py-3 border-t border-[var(--color-border)] bg-[var(--color-page-secondary)]">
               <div className="flex items-center gap-2">
                 <input
                   value={input}
@@ -187,9 +180,9 @@ export default function DialogContainer({
                   placeholder={isTemporary ? "输入消息…" : "向知识树提问…"}
                   className="flex-1 px-3 py-2 text-[12px] border border-[var(--color-border)] rounded-lg bg-[var(--color-page-secondary)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
                 />
-                <button onClick={handleSend} disabled={loading || !input.trim()}
+                <button onClick={handleSend} disabled={isLoading || !input.trim()}
                   className="p-2 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity">
-                  {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                  {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                 </button>
               </div>
             </div>

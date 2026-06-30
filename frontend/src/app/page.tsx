@@ -63,7 +63,7 @@ interface Achievement {
 
 /** 首页四宫格快捷入口配置 */
 const QUICK_ACTIONS = [
-  { emoji: "💬", title: "智能对话", desc: "随时提问，启发式学习", href: "/learn", color: "from-blue-500/20 to-cyan-500/10" },
+  { emoji: "💬", title: "智能对话", desc: "随时提问，启发式学习", href: "/conversation", color: "from-blue-500/20 to-cyan-500/10" },
   { emoji: "✏️", title: "开始练习", desc: "定制化刷题检测", href: "/practice", color: "from-emerald-500/20 to-teal-500/10" },
   { emoji: "📊", title: "学情分析", desc: "全方位进度追踪", href: "/analytics", color: "from-violet-500/20 to-purple-500/10" },
   { emoji: "🧠", title: "知识图谱", desc: "查漏补缺", href: "/knowledge-tree", color: "from-amber-500/20 to-orange-500/10" },
@@ -90,9 +90,9 @@ export default function HomePage() {
     async function loadData() {
       try {
         const [statsRes, achieveRes, weakRes] = await Promise.all([
-          authedFetch(`/api/v7/practice/stats/overview`),
-          authedFetch(`/api/v7/practice/achievements`),
-          authedFetch(`/api/v7/practice/stats/weak-skills`),
+          authedFetch(`/api/practice/stats/overview`),
+          authedFetch(`/api/practice/achievements`),
+          authedFetch(`/api/practice/stats/weak-skills`),
         ]);
         if (statsRes.ok) setStats(await statsRes.json());
         if (achieveRes.ok) {
@@ -340,7 +340,7 @@ export default function HomePage() {
         <div className="mt-12 text-center">
           <div className="swiss-divider" />
           <Link
-            href="/learn"
+            href="/conversation"
             className="inline-flex items-center gap-2 px-8 py-3.5 bg-[var(--color-accent)] text-white font-semibold rounded-lg hover:bg-[var(--color-accent-hover)] hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-200"
           >
             <Sparkles size={18} />

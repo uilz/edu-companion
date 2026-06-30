@@ -24,10 +24,11 @@ def reg():
 
 @pytest.fixture
 def ops_dir() -> str:
-    """返回 app/cognitive/operations/ 的绝对路径"""
+    """返回 app/domain/cognitive/operations/ 的绝对路径"""
     return str(
         Path(__file__).resolve().parent.parent
         / "app"
+        / "domain"
         / "cognitive"
         / "operations"
     )

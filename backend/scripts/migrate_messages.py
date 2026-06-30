@@ -61,7 +61,7 @@ def migrate():
                     break
 
             db.execute(
-                """INSERT INTO messages (id, conversation_id, user_id, role, content, content_blocks, summary, token_count, created_at)
+                """INSERT INTO messages (id, conv_id, user_id, role, content, content_blocks, summary, token_count, created_at)
                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, to_timestamp(%s))
                    ON CONFLICT (id) DO NOTHING""",
                 (

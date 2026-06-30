@@ -14,7 +14,7 @@ interface AppShellProps {
   children: React.ReactNode;
 }
 
-const FULLSCREEN_ROUTES = ['/learn', '/focus'];
+const FULLSCREEN_ROUTES = ['/conversation', '/focus'];
 
 /**
  * AppShell — 应用外壳布局 (v2 Responsive)
@@ -54,7 +54,7 @@ export default function AppShell({ children }: AppShellProps) {
       <div className="min-h-screen bg-page">
         <Sidebar />
         <main
-          className="min-h-screen transition-all duration-300"
+          className="relative min-h-screen transition-all duration-300"
           style={{
             paddingLeft: 'var(--sidebar-actual-width, 280px)',
           }}
@@ -91,7 +91,7 @@ export default function AppShell({ children }: AppShellProps) {
 
         {/* 主内容 */}
         <main
-          className="min-h-screen transition-all duration-300"
+          className="relative min-h-screen transition-all duration-300"
           style={{ paddingTop: '3.5rem' }}
         >
           <div className="swiss-container">{children}</div>
@@ -109,7 +109,7 @@ export default function AppShell({ children }: AppShellProps) {
       <BottomNav />
 
       <main
-        className="min-h-screen"
+        className="relative min-h-screen"
         style={{ paddingBottom: 'var(--bottom-nav-height)' }}
       >
         {/* 移动端不做 swiss-container padding，让子页面全宽利用空间 */}

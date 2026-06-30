@@ -39,8 +39,10 @@ class SecretaryEventHandler:
             return
         self._bus = bus
 
-        # 运行时类型检查（避免 import infrastructure）
-        if type(bus).__name__ != "EventBus":
+        # 运行时类型检查 — 接受 EventBus 及 PersistentEventBus
+        from app.infrastructure.event_bus import EventBus
+        from app.infrastructure.persistent_event_bus import PersistentEventBus
+        if not isinstance(bus, (EventBus, PersistentEventBus)):
             logger.warning("传入的对象不是 EventBus 实例（%s），跳过订阅",
                            type(bus).__module__)
             return

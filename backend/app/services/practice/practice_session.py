@@ -1,5 +1,5 @@
 """
-练习会话管理 — 全生命周期 (门面模式 v2)
+练习会话管理 — 全生命周期 (门面模式)
 
 变更:
 - D3: 上下文使用 PracticeSession Pydantic 对象
@@ -26,6 +26,22 @@ from app.services.practice import session_repository as repo
 logger = logging.getLogger(__name__)
 
 
+def _get_metacognition_feedback(confidence_before, is_correct: bool) -> str:
+    """根据自信度和正确性返回元认知反馈文案"""
+    if confidence_before is None:
+        return ""
+    if confidence_before >= 3:
+        if is_correct:
+            return "你确实掌握了，自信是对的"
+        else:
+            return "⚠️ 元认知偏差：你以为掌握了但其实没有。建议重新学习推导过程。"
+    else:
+        if is_correct:
+            return "💡 谦逊的正确：你比你以为的更懂。试着给别人讲一遍确认。"
+        else:
+            return "还有提升空间，继续努力"
+
+
 def _session_to_dict(session) -> dict:
     """将 PracticeSession 转为前端 dict (兼容 API 响应)"""
     if session is None:
@@ -45,7 +61,7 @@ def _session_to_dict(session) -> dict:
         "node_ids": session.cognitive_node_ids,
         "cognitive_node_ids": session.cognitive_node_ids,
         "config": session.config,
-        "conversation_id": session.conversation_id,
+        "conv_id": session.conv_id,
         "created_at": safe_iso(session.created_at),
         "started_at": safe_iso(session.started_at),
         "finished_at": safe_iso(session.finished_at),
@@ -77,7 +93,7 @@ async def create_session(
         }
     """
     from app.infrastructure.db.database import get_db
-    from app.services.practice.practice_adaptive import adaptive_select_v2
+    from app.services.practice.practice_adaptive import adaptive_select
     from app.services.practice.practice_conversation import create_practice_conversation
     db = get_db()
 
@@ -183,7 +199,7 @@ async def _collect_questions_from_sources(
     - variants: 从已有题目生成变式
     - new: AI 生成新题
     """
-    from app.services.practice.practice_adaptive import adaptive_select_v2
+    from app.services.practice.practice_adaptive import adaptive_select
 
     all_questions = []
     exclude = set(exclude_ids or [])
@@ -191,7 +207,7 @@ async def _collect_questions_from_sources(
     # 1. 题库选题
     bank_count = sources.get("bank", 0)
     if bank_count > 0:
-        bank_questions = adaptive_select_v2(
+        bank_questions = adaptive_select(
             bank_id=bank_id,
             user_id=user_id,
             count=bank_count,
@@ -256,7 +272,7 @@ async def _collect_questions_from_sources(
     if total < count:
         shortage = count - total
         logger.info("来源不足 %d 题，题库补足", shortage)
-        extra = adaptive_select_v2(
+        extra = adaptive_select(
             bank_id=bank_id,
             user_id=user_id,
             count=shortage,
@@ -506,6 +522,7 @@ def submit_answer(
     user_answer: Optional[list] = None,
     time_spent: int = 0,
     hints_used: int = 0,
+    confidence_before: int = None,
 ) -> dict:
     """
     提交答题 (D9: session_questions 不再存状态, 仅 practice_attempts).
@@ -580,7 +597,7 @@ def submit_answer(
 
     # 4. 写入答题记录 (D9: 唯一记录源)
     repo.insert_attempt(db, session_id, question_id, user_id, is_correct, user_answer or [],
-                         time_spent, hints_used, error_pattern, error_analysis, now)
+                         time_spent, hints_used, error_pattern, error_analysis, confidence_before, now)
 
     # 5. 更新会话统计
     repo.update_session_stats(db, session_id)
@@ -610,6 +627,7 @@ def submit_answer(
         "wrong_count_increased": not is_correct,
         "error_type": error_pattern,
         "error_detail": error_analysis.get("llm_detail", ""),
+        "metacognition_feedback": _get_metacognition_feedback(confidence_before, is_correct),
     }
 
 

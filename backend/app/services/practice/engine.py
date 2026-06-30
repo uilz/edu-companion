@@ -64,7 +64,6 @@ from app.services.practice.practice_question_gen import (
 # ── 自适应选题 (practice_adaptive) ──
 from app.services.practice.practice_adaptive import (
     adaptive_select,
-    adaptive_select_v2,
 )
 
 # ── 错题本 (practice_error_book) ──

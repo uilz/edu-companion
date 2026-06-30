@@ -1,5 +1,5 @@
 """
-学习计划 REST API v2.0 — 自适应计划
+学习计划 REST API — 自适应计划
 
 改进: 使用 AdaptivePlanGenerator 替代旧 learner_model.generate_study_plan
 - 支持前置卡控
@@ -29,7 +29,7 @@ async def generate_study_plan(
     user_id: str = Depends(current_user_id),
     subject: Optional[str] = None,
     reason: str = "manual",
-    partition_id: Optional[str] = None,
+    dir_id: Optional[str] = None,
 ):
     """
     生成自适应学习计划
@@ -43,7 +43,7 @@ async def generate_study_plan(
             user_id=user_id,
             reason=reason,
             subject=subject,
-            partition_id=partition_id,
+            dir_id=dir_id,
         )
         return result
     except Exception as e:
@@ -107,7 +107,7 @@ async def get_plan_progress(user_id: str) -> dict[str, Any]:
 async def get_learning_suggestions(
     user_id: str = Depends(current_user_id),
     subject: Optional[str] = None,
-    partition_id: Optional[str] = None,
+    dir_id: Optional[str] = None,
 ):
     """
     获取智能学习建议
@@ -132,8 +132,8 @@ async def get_learning_suggestions(
             return await _canonical_get_ks(uid, sid)
 
     checker = PrerequisiteChecker(_Adapter())
-    if partition_id:
-        checker.load_from_knowledge_tree(user_id, partition_id)
+    if dir_id:
+        checker.load_from_knowledge_tree(user_id, dir_id)
 
     for rec in recs:
         sid = rec["skill_id"]

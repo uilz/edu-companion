@@ -84,6 +84,15 @@ def _repo():
     return get_admin_repo()
 
 
+def _safe_iso(val):
+    """将 datetime 或时间值转为 ISO 字符串"""
+    if val is None:
+        return None
+    if hasattr(val, "isoformat"):
+        return val.isoformat()
+    return str(val)
+
+
 def _row_to_model(r: dict) -> UserRow:
     return UserRow(
         id=r.get("id", ""),
@@ -92,8 +101,8 @@ def _row_to_model(r: dict) -> UserRow:
         display_name=r.get("display_name", ""),
         role=r.get("role", "user"),
         is_active=bool(r.get("is_active", True)),
-        last_login=str(r.get("last_login") or "") or None,
-        created_at=str(r.get("created_at") or ""),
+        last_login=_safe_iso(r.get("last_login")),
+        created_at=_safe_iso(r.get("created_at")) or "",
         avatar_url=r.get("avatar_url", ""),
     )
 
@@ -307,7 +316,7 @@ async def login_log(
     return {
         "user_id": user_id,
         "username": user_rows[0].get("username", ""),
-        "last_login": str(user_rows[0].get("last_login") or "") or None,
+        "last_login": _safe_iso(user_rows[0].get("last_login")),
         "online": online,
         "active_sessions": active_sessions,
         "recent_logins": events,

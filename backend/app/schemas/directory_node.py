@@ -77,21 +77,21 @@ class DirectoryNode(BaseModel):
 class MessageNode(BaseModel):
     """消息节点 — 取代原 TreeNode
 
-    TreeNode 改名 MessageNode, 不再耦合 partition_id/conversation_id,
+    TreeNode 改名 MessageNode, 不再耦合 dir_id/conv_id,
     统一用 directory_id 指向所属 conv 节点。
     discussed_skill_ids 已删除 (改为事件化)。
 
     可容纳旧 TreeNode 序列化数据（向前兼容），
-    分区字段映射: partition_id+conversation_id → directory_id。
+    分区字段映射: dir_id+conv_id → directory_id。
     """
+    model_config = ConfigDict(extra='ignore')
+
     id: str = Field(default_factory=lambda: f"msg_{uuid4().hex[:12]}")
     directory_id: str = ""                    # 所属 conv 节点 ID
 
-    # ── 向后兼容 (旧 TreeNode 字段, 已废弃) ──
-    partition_id: str = ""
-    conversation_id: str = ""
-    parent_id: str | None = None
-    children_ids: list[str] = Field(default_factory=list)
+    # ── 树结构 ──
+    parent_id: str | None = None              # 父消息 ID
+    children_ids: list[str] = Field(default_factory=list)  # 子消息 ID 列表
 
     # ── 内容 ──
     role: str = "user"                        # "user" | "assistant"

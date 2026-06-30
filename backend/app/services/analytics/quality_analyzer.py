@@ -153,7 +153,7 @@ class QualityAnalyzer:
 
         # 获取题目信息
         q = db.fetchone(
-            "SELECT * FROM questions WHERE question_id = %s",
+            "SELECT * FROM questions WHERE id = %s",
             (question_id,)
         )
         if not q:
@@ -304,8 +304,8 @@ class QualityAnalyzer:
     def analyze_all(self, min_attempts: int = 5) -> QualitySummary:
         """全量分析所有题目"""
         db = get_db()
-        rows = db.fetchall("SELECT question_id FROM questions WHERE status != 'retired'")
-        all_qids = [r["question_id"] for r in rows]
+        rows = db.fetchall("SELECT id FROM questions WHERE status != 'retired'")
+        all_qids = [r["id"] for r in rows]
 
         results = []
         grades = {"excellent": 0, "good": 0, "marginal": 0, "poor": 0,
@@ -360,8 +360,8 @@ class QualityAnalyzer:
         actions_taken = {"flagged": 0, "retired": 0, "kept": 0}
         details = []
 
-        for qid in [r["question_id"] for r in db.fetchall(
-            "SELECT question_id FROM questions WHERE status != 'retired'"
+        for qid in [r["id"] for r in db.fetchall(
+            "SELECT id FROM questions WHERE status != 'retired'"
         )]:
             result = self.analyze_question(qid)
             if result is None:

@@ -76,7 +76,7 @@ class NavigationService:
         return self.get_node(user_id, nav_id)
 
     def create_conv_ref(
-        self, user_id: str, parent_id: str, conversation_id: str,
+        self, user_id: str, parent_id: str, conv_id: str,
         name: str = "", kind: str = "general",
     ) -> NavigationNodeSchema:
         """创建会话引用节点 (指向 Conversation)"""
@@ -87,9 +87,9 @@ class NavigationService:
         path = parent.path + [parent.id]
         db = get_db()
         db.execute(
-            """INSERT INTO navigation_nodes (id, user_id, parent_id, node_type, kind, name, path, conversation_id)
+            """INSERT INTO navigation_nodes (id, user_id, parent_id, node_type, kind, name, path, conv_id)
                VALUES (%s, %s, %s, 'conv', %s, %s, %s, %s)""",
-            (nav_id, user_id, parent_id, kind, name or "新对话", json.dumps(path), conversation_id),
+            (nav_id, user_id, parent_id, kind, name or "新对话", json.dumps(path), conv_id),
         )
         self._add_child_to_parent(user_id, parent_id, nav_id)
         return self.get_node(user_id, nav_id)
@@ -173,7 +173,7 @@ class NavigationService:
                 "node_type": child.node_type,
                 "kind": child.kind,
                 "parent_id": child.parent_id,
-                "conversation_id": child.conversation_id,
+                "conv_id": child.conv_id,
                 "knowledge_area_id": child.knowledge_area_id,
             }
             if child.node_type == "dir":
@@ -256,7 +256,7 @@ class NavigationService:
             user_name=row.get("user_name"),
             ai_name=row.get("ai_name") or "",
             children_order=_json_list(row.get("children_order")),
-            conversation_id=row.get("conversation_id"),
+            conv_id=row.get("conv_id"),
             knowledge_area_id=row.get("knowledge_area_id"),
             path=_json_list(row.get("path")),
             created_at=row["created_at"].timestamp() if hasattr(row.get("created_at", 0), "timestamp") else time.time(),

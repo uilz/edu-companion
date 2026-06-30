@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState, useRef } from "react";
 import { Tag, Plus, Loader2, Check } from "lucide-react";
-import { v2 } from "@/lib/api/api";
+import { cognitiveApi } from "@/lib/api/api";
 
 interface CandidateNode {
   id: string;
@@ -43,9 +43,9 @@ export default function CognitiveTag({ messageId, messageText, initialNodeIds }:
   const handleClassify = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await v2<{ candidates: CandidateNode[] }>("/classify", {
+      const result = await cognitiveApi<{ candidates: CandidateNode[] }>("/v2/classify", {
         method: "POST",
-        body: JSON.stringify({ conversation_id: "", message: messageText }),
+        body: JSON.stringify({ conv_id: "", message: messageText }),
       });
       setCandidates(result.candidates || []);
       setShowPanel(true);
@@ -62,7 +62,7 @@ export default function CognitiveTag({ messageId, messageText, initialNodeIds }:
       : [...confirmedIds, nodeId];
 
     try {
-      await v2(`/messages/${messageId}/cognitive-confirm`, {
+      await cognitiveApi(`/v2/messages/${messageId}/cognitive-confirm`, {
         method: "POST",
         body: JSON.stringify({ cognitive_node_ids: newIds }),
       });

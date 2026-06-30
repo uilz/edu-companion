@@ -3,7 +3,7 @@
 import React, { useState, useCallback } from "react";
 import {
   X, Pencil, Trash2, Loader2, Sparkles, Check, Send,
-  AlertCircle, MessageSquare, Brain, ChevronRight, Save,
+  AlertCircle, MessageSquare, Brain, ChevronRight, Save, BookOpen,
 } from "lucide-react";
 import type { GraphNode } from "@/lib/types/graph-types";
 import { getMasteryColor, getTrendIcon } from "@/lib/types/graph-types";
@@ -16,6 +16,7 @@ interface NodeDetailPanelProps {
   onNodeUpdated: () => void;
   onStartPractice?: (nodeId: string) => void;
   onRequestExplain?: (nodeId: string) => void;
+  onFeynmanTeach?: (nodeId: string) => void;
   parentNode?: GraphNode | null;
   onNavigateToParent?: (node: GraphNode) => void;
 }
@@ -23,6 +24,7 @@ interface NodeDetailPanelProps {
 export default function NodeDetailPanel({
   node, partitionId, onClose, onNodeUpdated,
   onStartPractice, onRequestExplain,
+  onFeynmanTeach,
   parentNode, onNavigateToParent,
 }: NodeDetailPanelProps) {
   const [editing, setEditing] = useState(false);
@@ -46,7 +48,7 @@ export default function NodeDetailPanel({
   const [error, setError] = useState("");
 
   // ── 图谱节点操作（共享 hook） ──
-  const nodeActions = useGraphNodeActions(partitionId, {
+  const nodeActions = useGraphNodeActions({
     onNodeUpdated,
     onError: setError,
   });
@@ -200,11 +202,11 @@ export default function NodeDetailPanel({
               )}
 
               {/* 关联会话 */}
-              {node.conversation_ids && node.conversation_ids.length > 0 && (
+              {node.conv_ids && node.conv_ids.length > 0 && (
                 <div>
-                  <span className="text-[10px] text-[var(--color-text-muted)]">关联 {node.conversation_ids.length} 个会话</span>
+                  <span className="text-[10px] text-[var(--color-text-muted)]">关联 {node.conv_ids.length} 个会话</span>
                   <div className="flex items-center gap-1 mt-1 flex-wrap">
-                    {node.conversation_ids.slice(0, 5).map(cid => (
+                    {node.conv_ids.slice(0, 5).map(cid => (
                       <span key={cid} className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] truncate max-w-[100px]">{cid.slice(0, 12)}…</span>
                     ))}
                   </div>
@@ -233,6 +235,13 @@ export default function NodeDetailPanel({
                     <button onClick={() => onStartPractice(node.id)}
                       className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] rounded-lg bg-[var(--color-accent)]/10 text-[var(--color-accent)] hover:bg-[var(--color-accent)]/20 transition-colors">
                       <MessageSquare size={10} />开始练习
+                    </button>
+                  )}
+                  {onFeynmanTeach && (
+                    <button onClick={() => onFeynmanTeach(node.id)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] rounded-lg bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 transition-colors"
+                      title="费曼学习法——我来给你讲讲">
+                      <BookOpen size={10} />我来给你讲讲
                     </button>
                   )}
                 </div>

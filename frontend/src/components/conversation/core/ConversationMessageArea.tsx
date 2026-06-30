@@ -8,12 +8,11 @@ import SwitchBanner from "@/components/conversation/banners/SwitchBanner";
 import ErrorBanner from "@/components/conversation/banners/ErrorBanner";
 import SecretaryInlineBanner from "@/components/notification/SecretaryInlineBanner";
 import StreamingControls from "@/components/conversation/core/StreamingControls";
-import type { MessageNode, ResponseBlock } from "@/types";
+import type { MessageNode } from "@/types";
 
 // ── Props ──
 export interface ConversationMessageAreaProps {
   messages: MessageNode[];
-  responseBlocks: ResponseBlock[];
   isLoading: boolean;
   statusMessage?: string;
   activeConversationId: string | null;
@@ -22,7 +21,6 @@ export interface ConversationMessageAreaProps {
   onSend: (text: string) => void;
   onDeleteMessage: (id: string) => void;
   onEditMessage: (messageId: string, newText: string) => Promise<number>;
-  onVersionSwitch?: (messageId: string, direction: "prev" | "next", currentIndex?: number) => Promise<{ index: number; total: number } | null>;
 
   switchBanner?: {
     domainName: string;
@@ -38,6 +36,9 @@ export interface ConversationMessageAreaProps {
   subBranchQuotedText?: string;
   exitSubBranch?: () => void;
 
+  isFeynmanMode?: boolean;
+  onFeynmanTeach?: (messageId: string, messageText: string, conversationId: string) => void;
+
   convError?: string | null;
 
   socraticEnabled?: boolean;
@@ -45,8 +46,9 @@ export interface ConversationMessageAreaProps {
   setFollowUpMode?: (mode: "ask" | "answer") => void;
 
   renderBottomControls?: () => React.ReactNode;
-  messageListClassName?: string;
   placeholder?: string;
+
+  breadcrumb?: React.ReactNode;
 }
 
 /**
@@ -58,7 +60,6 @@ export interface ConversationMessageAreaProps {
 export default function ConversationMessageArea(props: ConversationMessageAreaProps) {
   const {
     messages,
-    responseBlocks,
     isLoading,
     statusMessage,
     activeConversationId,
@@ -73,13 +74,15 @@ export default function ConversationMessageArea(props: ConversationMessageAreaPr
     isInSubBranch,
     subBranchQuotedText,
     exitSubBranch,
+    isFeynmanMode,
+    onFeynmanTeach,
     convError,
     socraticEnabled,
     followUpMode,
     setFollowUpMode,
     renderBottomControls,
-    messageListClassName,
     placeholder,
+    breadcrumb,
   } = props;
 
   return (
@@ -101,21 +104,21 @@ export default function ConversationMessageArea(props: ConversationMessageAreaPr
       {convError && <ErrorBanner message={convError} />}
 
       <div className="flex-1 overflow-hidden flex flex-col">
-        <div className={messageListClassName || "flex-1 overflow-y-auto space-y-4"}>
-          <SecretaryInlineBanner conversationId={activeConversationId} />
-          <MessageList
+        <SecretaryInlineBanner conversationId={activeConversationId} />
+        <MessageList
             messages={messages}
-            responseBlocks={responseBlocks}
             isLoading={isLoading}
             statusMessage={statusMessage}
             replyingToId={replyingToId}
             conversationId={activeConversationId}
+            isFeynmanMode={isFeynmanMode}
             onDeleteMessage={onDeleteMessage}
             onEditMessage={onEditMessage}
             onSend={onSend}
+            onFeynmanTeach={onFeynmanTeach}
+            breadcrumb={breadcrumb}
           />
         </div>
-      </div>
 
       {/* 流式控制按钮（运行时 / 暂停时显示） */}
       {isLoading && (

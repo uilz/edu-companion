@@ -103,7 +103,7 @@ export default function QualityPage() {
   /** 从后端加载质量分析摘要数据 */
   const loadSummary = useCallback(async () => {
     try {
-      const res = await authedFetch(`/api/v7/practice/quality`);
+      const res = await authedFetch(`/api/practice/quality`);
       if (res.ok) setSummary(await res.json());
     } catch (e) {
       setError("加载失败");
@@ -119,7 +119,7 @@ export default function QualityPage() {
   const loadDetail = async (qid: string) => {
     setDetailLoading(true);
     try {
-      const res = await authedFetch(`/api/v7/practice/quality/detail/${qid}`);
+      const res = await authedFetch(`/api/practice/quality/detail/${qid}`);
       if (res.ok) setDetail(await res.json());
     } finally {
       setDetailLoading(false);
@@ -130,7 +130,7 @@ export default function QualityPage() {
   const handleApply = async () => {
     setApplying(true);
     try {
-      const res = await authedFetch(`/api/v7/practice/quality/apply?dry_run=false`, {
+      const res = await authedFetch(`/api/practice/quality/apply?dry_run=false`, {
         method: "POST",
       });
       const data = await res.json();

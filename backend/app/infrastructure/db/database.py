@@ -1,5 +1,5 @@
 """
-PostgreSQL 数据库层 v2.0
+PostgreSQL 数据库层
 
 连接池 + 建表 + 仓库方法。
 pgvector 依赖可选（未安装时向量字段降级为 bytea）。
@@ -315,7 +315,7 @@ class Database:
             cur.execute(SCHEMA_SQL)
 
             from pathlib import Path
-            for sql_file in ["events_schema.sql", "conversation_schema.sql", "cognitive_schema.sql", "learning_schema.sql", "practice_schema.sql"]:
+            for sql_file in ["events_schema.sql", "event_relations_migration.sql", "conversation_schema.sql", "cognitive_schema.sql", "learning_schema.sql", "practice_schema.sql"]:
                 sql_path = Path(__file__).parent / sql_file
                 if sql_path.exists():
                     with open(sql_path) as f:

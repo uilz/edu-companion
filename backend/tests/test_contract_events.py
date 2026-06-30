@@ -21,7 +21,6 @@ from shared.events import (
     AssistantReplied,
     CognitiveNodeUpdated,
     ErrorRecorded,
-    KnowledgeStateUpdated,
     MessageClassified,
     NodeCreated,
     PendingCrossTopic,
@@ -37,7 +36,6 @@ ALL_EVENTS = [
     AnswerSubmitted,
     ErrorRecorded,
     SessionCompleted,
-    KnowledgeStateUpdated,
     AssistantReplied,
     CognitiveNodeUpdated,
     MessageClassified,
@@ -122,30 +120,6 @@ class TestSessionCompleted:
         assert e.total_questions == 0
         assert e.accuracy == 0.0
 
-
-# ═══════════════════════════════════════════
-# 知识域事件
-# ═══════════════════════════════════════════
-
-class TestKnowledgeStateUpdated:
-    def test_event_type(self):
-        assert KnowledgeStateUpdated().event_type == "KnowledgeStateUpdated"
-
-    def test_defaults(self):
-        e = KnowledgeStateUpdated()
-        assert e.old_mastery == "未接触"
-        assert e.new_mastery == "未接触"
-        assert e.attempt_count == 0
-
-    def test_mastery_transition(self):
-        e = KnowledgeStateUpdated(
-            user_id="u1", skill_id="calculus",
-            old_mastery="发展中", new_mastery="已掌握",
-            p_known_before=0.55, p_known_after=0.92,
-            attempt_count=12,
-        )
-        assert e.old_mastery == "发展中"
-        assert e.new_mastery == "已掌握"
 
 # ═══════════════════════════════════════════
 # 序列化往返

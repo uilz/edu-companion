@@ -6,20 +6,11 @@
 from __future__ import annotations
 import logging
 from app.schemas.conversation import ResponseBlock
-from app.infrastructure.llm.tool_repository import TOOL_DEFINITIONS, FAST_TOOLS, SLOW_TOOLS
+from app.infrastructure.llm.tool_repository import TOOL_DEFINITIONS, FAST_TOOLS, SLOW_TOOLS, _TOOL_TO_BLOCK_TYPE
 from app.services.secretary.tool_handler import handle_secretary_diagnose
+from app.infrastructure.llm.knowledge_ops_tools import TOOL_HANDLERS as KTOOL_HANDLERS, TOOL_DEFINITIONS as KTOOL_DEFINITIONS
 
 logger = logging.getLogger(__name__)
-
-# 工具名 → 前端 block type 映射
-_TOOL_TO_BLOCK_TYPE = {
-    "generate_practice": "practice",
-    "search_media": "video",
-    "generate_image": "image",
-    "generate_mindmap": "mindmap",
-    "generate_document": "document",
-    "secretary_diagnose": "tool_block",
-}
 
 # ── 工具处理器 ──
 async def _handle_search_media(params: dict) -> dict:
@@ -33,12 +24,12 @@ async def _handle_search_media(params: dict) -> dict:
 
 
 async def _handle_generate_practice(params: dict) -> dict:
-    """生成练习题 — 对接 v7 练习系统（自动保存到题库）"""
+    """生成练习题 — 对接练习系统（自动保存到题库）"""
     subject = params.get("subject", "")
     kp = params.get("knowledge_point", subject)
     difficulty_str = params.get("difficulty", "进阶")
     count = params.get("count", 2)
-    conversation_id = params.get("conversation_id", "")
+    conv_id = params.get("conv_id", "")
     user_text = params.get("knowledge_point", subject)
     bank_name = params.get("bank_name", "").strip() or None
     uid = params.get("user_id", "")
@@ -49,7 +40,7 @@ async def _handle_generate_practice(params: dict) -> dict:
         result = await handle_question_generation(
             user_message=user_text[:200],
             user_id=uid,
-            conversation_id=conversation_id or None,
+            conv_id=conv_id or None,
             bank_name=bank_name,
         )
 
@@ -75,7 +66,7 @@ async def _handle_generate_practice(params: dict) -> dict:
             "message": f"当前题库中关于{kp}的题目不足，建议切换到搜索模式获取更多学习资源。",
         }
     except Exception as e:
-        logger.warning("generate_practice v7 fallback: %s", e)
+        logger.warning("generate_practice fallback: %s", e)
         return {
             "subject": subject,
             "knowledge_point": kp,
@@ -129,18 +120,18 @@ async def _handle_generate_mindmap(params: dict) -> dict:
     topic = params.get("topic", "")
     depth = params.get("depth", 3)
     user_id = params.get("user_id", "")
-    partition_id = params.get("partition_id", "")
+    dir_id = params.get("dir_id", "")
 
     nodes = [{"id": "root", "label": topic, "level": 0}]
     edges = []
 
     # 尝试从知识图谱获取相关知识点
     subtopics = []
-    if user_id and partition_id:
+    if user_id and dir_id:
         try:
             from app.services.common import get_data_repo as _mm_storage
             _data = _mm_storage().load(user_id)
-            graph = _data.knowledge_graphs.get(partition_id)
+            graph = _data.knowledge_graphs.get(dir_id)
             if graph and graph.nodes:
                 # 找与 topic 相关的知识点
                 topic_lower = topic.lower()
@@ -394,6 +385,23 @@ async def _handle_create_question_bank(params: dict) -> dict:
     return {"error": "创建题库失败", "created": False}
 
 
+async def _handle_ask_question(params: dict) -> dict:
+    """提问工具 — 直接返回问题数据，由前端交互处理"""
+    questions = params.get("questions", [])
+    # 兼容旧版单问题格式
+    if not questions and params.get("question"):
+        questions = [
+            {
+                "question": params["question"],
+                "options": params.get("options", []),
+            }
+        ]
+    return {
+        "type": params.get("type", "choice"),
+        "questions": questions,
+    }
+
+
 TOOL_HANDLERS = {
     "search_media": _handle_search_media,
     "generate_practice": _handle_generate_practice,
@@ -403,8 +411,11 @@ TOOL_HANDLERS = {
     "generate_mindmap": _handle_generate_mindmap,
     "generate_document": _handle_generate_document,
     "secretary_diagnose": handle_secretary_diagnose,
+    "ask_question": _handle_ask_question,
+    "rename_conversation": None,  # inline 处理, 见 reply_pipeline.py
 }
-
+# 合并知识树操作工具
+TOOL_HANDLERS.update(KTOOL_HANDLERS)
 
 class ToolExecutor:
     """统一的工具执行器"""
@@ -451,11 +462,11 @@ class ToolExecutor:
             return TOOL_DEFINITIONS
         return [t for t in TOOL_DEFINITIONS if t["function"]["name"] in tool_names]
 
-    def create_response_block(self, message_id: str, partition_id: str, branch_id: str, block_type: str, content: dict, status: str = "ready", order: int = 0) -> ResponseBlock:
+    def create_response_block(self, message_id: str, dir_id: str, branch_id: str, block_type: str, content: dict, status: str = "ready", order: int = 0) -> ResponseBlock:
         """创建 ResponseBlock"""
         return ResponseBlock(
             message_id=message_id,
-            partition_id=partition_id,
+            dir_id=dir_id,
             branch_id=branch_id,
             type=block_type,
             status=status,

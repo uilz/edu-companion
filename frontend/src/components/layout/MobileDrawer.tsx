@@ -17,7 +17,7 @@ interface MobileDrawerProps {
 }
 
 const navItems = [
-  { href: '/learn',         label: '学习空间', icon: Brain },
+  { href: '/conversation',         label: '学习空间', icon: Brain },
   { href: '/practice',      label: '练习',     icon: Dumbbell },
   { href: '/knowledge-tree', label: '知识树',   icon: GitGraph },
   { href: '/secretary',     label: '秘书',     icon: Bell },

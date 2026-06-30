@@ -79,15 +79,15 @@ class TestAgentChatEndpoint:
             ) as response:
                 assert response.status_code == 200
 
-    def test_chat_with_conversation_id_reuses(self, client):
-        """传入已有 conversation_id 应复用会话"""
+    def test_chat_with_conv_id_reuses(self, client):
+        """传入已有 conv_id 应复用会话"""
         with client.stream(
             "POST",
             "/api/secretary/agent/chat",
             json={
                 "message": "继续",
                 "current_page": "/learn",
-                "conversation_id": "conv_secretary_001",
+                "conv_id": "conv_secretary_001",
             },
         ) as response:
             assert response.status_code == 200

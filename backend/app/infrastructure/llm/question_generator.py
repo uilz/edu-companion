@@ -57,70 +57,13 @@ QUESTION_SYSTEM_PROMPT = """你是一个专业的练习题生成AI。根据学�
 
 class QuestionGenerator:
     """
-    LLM练习题生成器
-    
+    LLM 练习题生成器
+
     策略：
-    1. 先查模板题库（命中率高 + 免费）
-    2. 模板未命中 → LLM生成（灵活 + 有成本）
-    3. LLM生成后缓存到模板库
+    1. LLM 基于 subject + skill_id 的知识自主出题
+    2. 可用 material_context 补充参考资料
+    3. LLM 生成后缓存到内存
     """
-
-    # 预置模板（高频知识点）
-    TEMPLATES = {
-        "calculus_limit": """极限知识要点：
-- 极限的定义（ε-δ语言）
-- 重要极限：lim(x→0) sin(x)/x = 1, lim(x→∞) (1+1/x)^x = e
-- 极限的运算法则（四则运算、复合函数）
-- 无穷小与无穷大
-- 单侧极限
-- 夹逼定理""",
-
-        "calculus_derivative": """导数知识要点：
-- 导数的定义与几何意义
-- 基本求导公式（幂函数、三角函数、指数函数、对数函数）
-- 求导法则（四则运算、链式法则）
-- 高阶导数
-- 隐函数求导
-- 参数方程求导""",
-
-        "calculus_integral": """积分知识要点：
-- 不定积分的定义与性质
-- 基本积分公式
-- 换元积分法
-- 分部积分法
-- 定积分的定义与性质
-- 定积分的应用（面积、体积）""",
-
-        "linear_matrix": """矩阵知识要点：
-- 矩阵的定义与基本运算
-- 矩阵的转置
-- 特殊矩阵（单位阵、对角阵、对称阵）
-- 矩阵的秩
-- 逆矩阵
-- 分块矩阵""",
-
-        "linear_determinant": """行列式知识要点：
-- 行列式的定义与性质
-- 行列式的计算（展开法、初等变换）
-- 克拉默法则
-- Vandermonde行列式""",
-
-        "probability": """概率论知识要点：
-- 随机事件与概率
-- 条件概率与贝叶斯公式
-- 随机变量与分布函数
-- 常见分布（二项、泊松、正态、指数）
-- 数学期望与方差
-- 大数定律与中心极限定理""",
-
-        "physics_mechanics": """力学知识要点：
-- 运动学（位移、速度、加速度）
-- 牛顿运动定律
-- 动量与冲量
-- 功与能
-- 刚体转动
-- 简谐振动""",
-    }
 
     def __init__(self, llm_service: LLMService):
         self.llm = llm_service
@@ -135,10 +78,11 @@ class QuestionGenerator:
         count: int = 3,
         content_type: str = "choice",
         material_context: Optional[str] = None,
+        reference_mode: Optional[str] = None,
     ) -> list[Question]:
         """
         生成练习题
-        
+
         参数:
             subject: 学科
             skill_id: 知识点ID
@@ -146,11 +90,20 @@ class QuestionGenerator:
             difficulty: 目标难度 0-1
             count: 生成数量
             content_type: 题型 (choice/fill/free_form)
-            material_context: 用户资料上下文（可选）
+            material_context: 参考资料上下文（可选）
+            reference_mode: 参考模式 (inspiration/reference/strict)
         """
-        knowledge_ctx = self.TEMPLATES.get(skill_id, f"{subject} - {skill_id}")
+        knowledge_ctx = f"学科: {subject}\n知识点: {skill_id}"
+
+        # 参考资料注入（支持三种参考模式）
         if material_context:
-            knowledge_ctx += f"\n\n用户学习资料内容：\n{material_context[:2000]}"
+            mode_instructions = {
+                "inspiration": "以下资料仅供灵感参考，出题不必严格遵循资料内容，可以适当拓展延伸。",
+                "reference": "请参考以下资料内容出题，题目应与资料相关但不必完全限制于资料范围。",
+                "strict": "请严格参照以下资料内容出题，题目必须完全基于资料内容，不要超出资料覆盖的知识范围。",
+            }
+            mode_hint = mode_instructions.get(reference_mode, mode_instructions["reference"]) if reference_mode else ""
+            knowledge_ctx += f"\n\n参考资料说明：{mode_hint}\n用户学习资料内容：\n{material_context[:2000]}"
 
         bloom_labels = {"remember": "记忆", "understand": "理解", "apply": "应用", "analyze": "分析", "evaluate": "评价", "create": "创造"}
         bloom_zh = bloom_labels.get(bloom_level.value, bloom_level.value)
@@ -234,33 +187,9 @@ class QuestionGenerator:
             return self._generate_fallback(skill_id, subject, count)
 
     def _parse_llm_response(self, response: str) -> list[dict]:
-        """解析LLM返回的JSON"""
-        # 尝试提取JSON部分
-        try:
-            # 直接解析
-            return json.loads(response)
-        except json.JSONDecodeError:
-            logger.debug("Direct JSON parse failed, trying code block extraction")
-
-        # 尝试从markdown代码块中提取
-        import re
-        json_match = re.search(r'```(?:json)?\s*([\s\S]*?)```', response)
-        if json_match:
-            try:
-                return json.loads(json_match.group(1))
-            except json.JSONDecodeError:
-                logger.debug("Code block JSON parse failed, trying array extraction")
-
-        # 尝试找数组
-        array_match = re.search(r'\[\s*\{[\s\S]*?\}\s*\]', response)
-        if array_match:
-            try:
-                return json.loads(array_match.group(0))
-            except json.JSONDecodeError:
-                logger.debug("Array regex JSON parse failed, giving up")
-
-        logger.warning(f"无法解析LLM响应为JSON: {response[:200]}")
-        return []
+        """解析LLM返回的JSON — 使用 Pydantic 校验链 (ADR 0011 Q6)"""
+        from app.services.practice.question_validator import parse_and_validate_llm_response
+        return parse_and_validate_llm_response(response)
 
     def _build_options(self, options_data: list[dict]) -> list[QuestionOption]:
         """构建选项列表"""

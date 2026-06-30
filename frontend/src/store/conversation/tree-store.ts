@@ -8,10 +8,10 @@
 import { create } from "zustand";
 import type { GraphNode } from "@/components/conversation/tree/SidebarTreeNode";
 import { apiFetch } from "./tree-helpers";
-import { v2 } from "@/lib/api/api";
+import { cognitiveApi } from "@/lib/api/api";
 
 const ROOT_KEY = "__graph_root__";
-const EXPANDED_KEY = "learn-tree-expanded";
+const EXPANDED_KEY = "conversation-tree-expanded";
 
 function persistExpandedSet(expanded: Set<string>) {
   try {
@@ -55,14 +55,15 @@ export const useTreeStore = create<TreeState>()((set, get) => ({
 
   loadRootNodes: async () => {
     try {
-      // 优先尝试 /tree/directory
-      try {
-        const dirData = await apiFetch<{ directory_nodes?: any[] }>("/tree/directory");
-        const allNodes = dirData?.directory_nodes;
-        if (allNodes && allNodes.length > 0) {
-          const sysRoot = allNodes.find((n: any) => n.node_type === "dir" && !n.parent_id);
-          const sysRootId = sysRoot?.id || "";
-          const topLevelNodes = allNodes
+      const dirData = await apiFetch<{ directory_nodes?: any[] }>("/tree/directory");
+      const allNodes = dirData?.directory_nodes;
+      if (allNodes && allNodes.length > 0) {
+        const sysRoot = allNodes.find((n: any) => n.node_type === "dir" && !n.parent_id);
+        let topLevelNodes: GraphNode[];
+        if (sysRoot) {
+          // 旧模型：有系统根目录，取根下的子 dir
+          const sysRootId = sysRoot.id;
+          topLevelNodes = allNodes
             .filter((n: any) => n.node_type === "dir" && n.parent_id === sysRootId)
             .map((n: any, i: number) => ({
               id: n.id, label: n.name, level: "dir" as const,
@@ -71,48 +72,36 @@ export const useTreeStore = create<TreeState>()((set, get) => ({
               kind: n.kind, suggested_count: 0, created_at: 0,
               brief: "", path: n.path || [],
             }));
-          const rootNodes = topLevelNodes.length > 0 ? topLevelNodes
-            : sysRoot ? [{
-                id: sysRoot.id, label: sysRoot.name, level: "dir" as const,
-                parent: null, emoji: sysRoot.emoji || "", nodeIndex: 0,
-                path_id: sysRoot.name, is_visible: true, node_type: "dir",
-                kind: sysRoot.kind, suggested_count: 0, created_at: 0,
-                brief: "", path: [],
-              }] : [];
-          set(s => {
-            const next = new Map(s.childMap);
-            next.set(ROOT_KEY, rootNodes);
-            const validExpanded = new Set<string>();
-            s.expandedSet.forEach((eid) => {
-              if (eid === ROOT_KEY || next.has(eid)) validExpanded.add(eid);
-            });
-            return { childMap: next, rootLoaded: true, rootId: sysRootId, expandedSet: validExpanded };
-          });
-          return;
+        } else {
+          // 新扁平模型：根级节点（dir 和 conv）都作为顶层
+          topLevelNodes = allNodes
+            .filter((n: any) => !n.parent_id)
+            .map((n: any, i: number) => ({
+              id: n.id, label: n.name,
+              level: (n.node_type === "dir" ? "dir" : "conv") as "dir" | "conv",
+              parent: null, emoji: n.emoji || "", nodeIndex: i,
+              path_id: n.name, is_visible: true, node_type: n.node_type,
+              kind: n.kind, suggested_count: 0, created_at: 0,
+              brief: "", path: n.path || [],
+            }));
         }
-      } catch { /* fall through */ }
-
-      // 回退：旧 /tree/partition API
-      const data = await apiFetch<{ partitions: { id: string; name: string; emoji?: string; root_id?: string }[] }>("/tree/partition");
-      const nodes: GraphNode[] = (data.partitions || []).map((p, i) => ({
-        id: p.id, label: p.name, level: "dir" as const, parent: null,
-        emoji: p.emoji || "", nodeIndex: i, path_id: p.name,
-        is_visible: true, node_type: "dir", suggested_count: 0,
-        created_at: 0, brief: "", path: [],
-      }));
+        set(s => {
+          const next = new Map(s.childMap);
+          next.set(ROOT_KEY, topLevelNodes);
+          const validExpanded = new Set<string>();
+          s.expandedSet.forEach((eid) => {
+            if (eid === ROOT_KEY || next.has(eid)) validExpanded.add(eid);
+          });
+          return { childMap: next, rootLoaded: true, rootId: sysRoot?.id || "", expandedSet: validExpanded };
+        });
+        return;
+      }
+      // 空树
       set(s => {
         const next = new Map(s.childMap);
-        next.set(ROOT_KEY, nodes);
+        next.set(ROOT_KEY, []);
         return { childMap: next, rootLoaded: true };
       });
-
-      // 预热
-      const state = get();
-      for (const node of nodes) {
-        if (state.expandedSet.has(node.id) && !state.childMap.has(node.id)) {
-          get().loadChildren(node.id, "dir");
-        }
-      }
     } catch { /* ignore */ }
   },
 
@@ -134,7 +123,7 @@ export const useTreeStore = create<TreeState>()((set, get) => ({
           brief: "", path: d.path || [],
         }));
       } catch {
-        children = (await v2<GraphNode[]>(`/graph/nodes?parent_id=${nodeId}`));
+        children = (await cognitiveApi<GraphNode[]>(`/graph/nodes?parent_id=${nodeId}`));
       }
       set(s => {
         const next = new Map(s.childMap);

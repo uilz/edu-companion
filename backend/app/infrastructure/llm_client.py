@@ -7,12 +7,12 @@ import os
 
 logger = logging.getLogger("infra.llm")
 
-# 模型名从环境变量读取（OpenAI 兼容格式）
-_TEXT_MODEL = os.getenv("TEXT_MODEL", "openai/gpt-4o-mini")
+# 模型名从环境变量读取（DeepSeek 兼容格式）
+_TEXT_MODEL = os.getenv("TEXT_MODEL", "deepseek-v4-flash")
 
 
 class LLMClient:
-    """LLM 客户端 — 只使用 OpenAI 兼容 API 格式"""
+    """LLM 客户端 — 只使用 DeepSeek 兼容 API 格式"""
 
     def __init__(self, model: str | None = None):
         self._model = model or _TEXT_MODEL

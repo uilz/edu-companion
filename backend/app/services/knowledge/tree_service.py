@@ -1,7 +1,7 @@
 """
 TreeService — 树形对话操作深模块（DirectoryNode 版）
 
-取代 v4.0 的 Partition/Domain/Topic/Conversation 四层模型。
+取代旧版 Partition/Domain/Topic/Conversation 四层模型。
 所有节点统一用 DirectoryNode, 通过 node_type (dir/conv) 和 kind 区分。
 
 对外暴露 TreeOpsService 类和 tree_ops 单例。
@@ -57,20 +57,20 @@ class TreeSyncMixin:
         self,
         user_id: str,
         skill_id: str,
-        partition_id: str = "",
-        conversation_id: str = "",
+        dir_id: str = "",
+        conv_id: str = "",
     ) -> None:
         """After a reply mentions a knowledge concept, upsert a CognitiveNode."""
         try:
             await _async_retry(
-                lambda: self._do_sync_skill(user_id, skill_id, conversation_id),
+                lambda: self._do_sync_skill(user_id, skill_id, conv_id),
                 retries=1,
             )
         except Exception:
             logger.exception("_sync_skill failed for %s", skill_id)
 
     async def _do_sync_skill(
-        self, user_id: str, skill_id: str, conversation_id: str,
+        self, user_id: str, skill_id: str, conv_id: str,
     ) -> None:
         """Inner sync logic (wrapped by _async_retry)."""
         cog = get_repo().get_node(skill_id, user_id)
@@ -85,7 +85,7 @@ class TreeSyncMixin:
             id=skill_id,
             label=skill_id,
             level="topic",
-            parent=conversation_id or None,
+            parent=conv_id or None,
             path_id=path_id,
             node_type="auto_generated",
             is_visible=True,
@@ -186,7 +186,7 @@ class TreeOpsService(
     """所有树形结构操作（DirectoryNode 版本）—— composed from focused sub-modules.
 
     公有方法一览:
-    目录操作: create_dir, create_conv, create_temp_conv, delete_node, rename_node,
+    目录操作: create_dir, create_conv, delete_node, rename_node,
               get_node, list_children, build_tree, find_conv, find_active_conv, migrate_conv
               create_partition, delete_partition, create_domain, delete_domain,
               create_topic, delete_topic, create_conversation, delete_conversation

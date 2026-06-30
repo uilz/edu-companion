@@ -1,5 +1,5 @@
 """
-SessionRepository — 练习会话持久化层 v2
+SessionRepository — 练习会话持久化层
 
 职责:
 1. 会话记录的 CRUD (practice_sessions 表) → 返回 PracticeSession Pydantic
@@ -45,7 +45,7 @@ def _row_to_session(row: dict) -> PracticeSession:
         wrong_count=row.get("wrong_count") or 0,
         score=row.get("score"),
         cognitive_node_ids=row.get("cognitive_node_ids") or [],
-        conversation_id=row.get("conversation_id"),
+        conv_id=row.get("conv_id"),
         started_at=_safe_iso(row.get("started_at")),
         finished_at=_safe_iso(row.get("finished_at")),
         duration_seconds=row.get("duration_seconds"),
@@ -238,6 +238,7 @@ def insert_attempt(
     hints_used: int,
     error_pattern: str = "",
     error_analysis: dict = None,
+    confidence_before: int = None,
     now: str = "",
 ) -> str:
     """插入答题记录 (D9: 唯一记录源, session_questions 不再存状态)"""
@@ -249,12 +250,12 @@ def insert_attempt(
         """INSERT INTO practice_attempts
            (id, session_id, question_id, user_id, is_correct, user_answer,
             time_spent_seconds, is_wrong, wrong_count, consecutive_correct,
-            error_pattern, error_analysis, created_at)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            error_pattern, error_analysis, confidence_before, created_at)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
         (attempt_id, session_id, question_id, user_id, is_correct,
          json.dumps(user_answer), time_spent,
          not is_correct, 1 if not is_correct else 0, 0 if not is_correct else 1,
-         error_pattern, json.dumps(error_analysis or {}), now),
+         error_pattern, json.dumps(error_analysis or {}), confidence_before, now),
     )
     return attempt_id
 

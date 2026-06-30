@@ -1,134 +1,62 @@
 """
-ReplyPipeline — 统一回复管线
+ReplyPipeline — 统一回复管线 (orchestrator)
 
-invoke() 为单一入口，产出 ReplyEvent 流。非流式消费只需监听 done 事件。
+invoke() 为单一入口，产出 ReplyEvent 流。
 
-内部 5 阶段：
-  Stage 1: auto_resolve → context_switch 事件
-  Stage 2: 存用户消息 → user_message 事件
-  Stage 3: LLM tool loop（工具调用 → 真实流式文本回复）
-  Stage 4: PostProcessor 链（追问/来源/存储/sync）
-  Stage 5: done 事件
+5 阶段委托给 pipeline_stages.py:
+  Stage 1 (ClassifyStage): 分类器 → context_switch
+  Stage 2 (SaveMessageStage): 存用户消息 → user_message
+  Stage 3 (ToolLoopStage): LLM tool loop
+  Stage 4 (PostProcessStage): blocking 后处理器链
+  Stage 5 (DoneStage): done 事件
 
-注意：本模块位于 domain/conversation/ 但包含对 app.infrastructure.llm 和
-app.services 的导入。这些是领域编排层（domain orchestration）对基础设施的合法调用，
-因为 LLM 调用、工具执行和持久化存储是领域逻辑运行所必需的运行时依赖。
-这些导入采用方法内懒加载（lazy import）模式以最小化模块加载时的耦合。
+PostProcessor 接口及内置实现 (SourceParser/SocraticCounter/ResponseBlockSaver/
+CognitivePathAutoCreator) 保留在本模块，供 PostProcessStage 使用。
+
+副作用处理器 (CognitiveSyncHook/KnowledgeEvidenceHook/MetaHistoryHook)
+已迁移到 reply_hooks.py，通过 AssistantReplied 事件驱动。
 """
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
-import re
-from dataclasses import dataclass, field
-from typing import Any, AsyncGenerator, Protocol
+from typing import Any, Protocol
 
-from app.schemas.conversation import (
-    ContentBlock,
-    TextBlock,
-    TreeNode,
-    ResponseBlock,
-    QuoteBlock,
+from app.schemas.conversation import ContentBlock, ResponseBlock
+from app.domain.conversation.pipeline_stages import (
+    PipelineCtx,
+    ToolResult,
+    ReplyEvent,
+    PostProcessInput,
+    FEYNMAN_ALLOWED_TOOLS,
+    ClassifyStage,
+    SaveMessageStage,
+    ToolLoopStage,
+    PostProcessStage,
+    DoneStage,
 )
-from app.services.common import get_data_repo
-from app.services.knowledge.tree_service import tree_ops
-from app.services.common.classifier_service import classifier_service
-from app.infrastructure.llm.tool_executor import tool_executor, SLOW_TOOLS
-from app.services.analytics.emotion_analyzer import emotion_analyzer
-from app.domain.knowledge import get_knowledge_query
 
 logger = logging.getLogger(__name__)
 
-MAX_TOOL_ROUNDS = 5
 AGENT_LABEL = "tutor"
 
 
 # ═══════════════════════════════════════════════
-# 事件类型
+# PostProcessor 接口 & 内置实现
 # ═══════════════════════════════════════════════
-
-
-@dataclass
-class ReplyEvent:
-    """管线产出的事件"""
-    type: str  # context_switch | user_message | tool_block | token | done | error
-    data: dict = field(default_factory=dict)
-
-    # 便捷字段（type 特定）
-    content: str = ""                   # token
-    block: dict | None = None           # tool_block
-    message: dict | None = None         # user_message
-    switch_detail: dict | None = None   # context_switch
-
-
-# ═══════════════════════════════════════════════
-# PostProcessor 接口
-# ═══════════════════════════════════════════════
-
-
-@dataclass
-class PostProcessInput:
-    """进入后处理器的数据"""
-    user_id: str
-    partition_id: str
-    user_text: str
-    reply_text: str
-    conversation_id: str
-    assistant_node: TreeNode
-    response_blocks: list[ResponseBlock]
-    conversation: Any = None
 
 
 class PostProcessor(Protocol):
     """后处理器接口"""
-
     is_blocking: bool  # True → await, False → create_task
 
     async def process(self, input: PostProcessInput) -> None: ...
 
 
-# ═══════════════════════════════════════════════
-# 内置 PostProcessor
-# ═══════════════════════════════════════════════
-
-FOLLOW_UP_RE = re.compile(
-    r'<!--FOLLOW_UP-->\s*\n?(.*?)\n?<!--/FOLLOW_UP-->',
-    re.DOTALL,
-)
-
-
-class FollowUpParser(PostProcessor):
-    """追问问题解析 → 写入 assistant node metadata"""
-    is_blocking = True
-
-    async def process(self, input: PostProcessInput) -> None:
-        match = FOLLOW_UP_RE.search(input.reply_text)
-        if not match:
-            return
-        raw = match.group(1).strip()
-        questions = [
-            q.strip().lstrip('0123456789.、）) ')
-            for q in raw.split('\n')
-            if q.strip()
-        ][:3]
-        if not questions:
-            return
-        data = get_data_repo().load(input.user_id)
-        if input.assistant_node.id in data.nodes:
-            data.nodes[input.assistant_node.id].metadata = (
-                data.nodes[input.assistant_node.id].metadata or {}
-            )
-            data.nodes[input.assistant_node.id].metadata["follow_up_questions"] = questions
-            get_data_repo().save(input.user_id, data)
-            logger.info("Follow-up questions extracted: %d questions", len(questions))
-
-
 class SourceParser(PostProcessor):
-    """来源解析 → 提取 [来源: xxx] 标注 → 事件化 (不再写入 MessageNode)
+    """来源解析 → 提取 [来源: xxx] 标注 → 事件化
     
-    skill_ids 通过类级别缓存 _skill_ids_by_node 传递给 CognitiveSyncHook。
+    skill_ids 通过类级别缓存 _skill_ids_by_node 传递给外部 hooks (reply_hooks.py)。
     """
     is_blocking = True
     _skill_ids_by_node: dict[str, list[str]] = {}
@@ -140,11 +68,10 @@ class SourceParser(PostProcessor):
         if not source_labels:
             return
 
-        skill_ids = _resolve_skill_ids(source_labels, input.partition_id, input.user_id)
+        skill_ids = _resolve_skill_ids(source_labels, input.dir_id, input.user_id)
         if not skill_ids:
             return
 
-        # 缓存 skill_ids 供 CognitiveSyncHook 消费 (不再持久化到 MessageNode)
         SourceParser._skill_ids_by_node[input.assistant_node.id] = skill_ids
         logger.info("消息 %s 标注知识点: %s", input.assistant_node.id[:8], skill_ids)
 
@@ -155,8 +82,8 @@ class SourceParser(PostProcessor):
             record_event(
                 EventType.SKILL_DISCUSSED,
                 user_id=input.user_id,
-                partition_id=input.partition_id,
-                conversation_id=conv_id,
+                dir_id=input.dir_id,
+                conv_id=conv_id,
                 skill_ids=[sid],
             )
 
@@ -166,8 +93,9 @@ class SocraticCounter(PostProcessor):
     is_blocking = True
 
     async def process(self, input: PostProcessInput) -> None:
+        from app.services.common import get_data_repo
         data = get_data_repo().load(input.user_id)
-        conv = data.directory_nodes.get(input.conversation_id)
+        conv = data.directory_nodes.get(input.conv_id)
         if conv and conv.node_type != "conv":
             conv = None
         if not conv:
@@ -185,7 +113,7 @@ class SocraticCounter(PostProcessor):
         conv.metadata['socratic_question_count'] = count
         get_data_repo().save(input.user_id, data)
         if count >= 3:
-            logger.info("Socratic limit: %d consecutive questions in conv %s", count, input.conversation_id[:8])
+            logger.info("Socratic limit: %d consecutive questions in conv %s", count, input.conv_id[:8])
 
 
 class ResponseBlockSaver(PostProcessor):
@@ -195,6 +123,7 @@ class ResponseBlockSaver(PostProcessor):
     async def process(self, input: PostProcessInput) -> None:
         if not input.response_blocks:
             return
+        from app.services.common import get_data_repo
         data = get_data_repo().load(input.user_id)
         for block in input.response_blocks:
             block.message_id = input.assistant_node.id
@@ -202,52 +131,131 @@ class ResponseBlockSaver(PostProcessor):
         get_data_repo().save(input.user_id, data)
 
 
-class CognitiveSyncHook(PostProcessor):
-    """对话 → CognitiveNode 联动 (通过 SourceParser 缓存读取 skill_ids)"""
+class CognitivePathAutoCreator(PostProcessor):
+    """AI回复后，若对话在临时目录且匹配到知识树节点，自动创建目录路径并迁移。"""
     is_blocking = False
 
     async def process(self, input: PostProcessInput) -> None:
-        from app.services.knowledge.cognitive_sync import _cognify_dialogue_context
+        from app.services.common import get_data_repo
+        from app.schemas.conversation import DirectoryNode
+        import time
 
-        # 从 SourceParser 的类级别缓存读取 skill_ids
-        skill_ids = SourceParser._skill_ids_by_node.pop(input.assistant_node.id, [])
-        if skill_ids and input.conversation:
-            await _cognify_dialogue_context(
-                input.user_id, input.conversation, list(skill_ids),
-                context_type="lower",
-            )
+        try:
+            if not input.conversation:
+                return
 
+            data = get_data_repo().load(input.user_id)
+            conv = data.directory_nodes.get(input.conv_id)
+            if not conv or conv.node_type != "conv":
+                return
 
-class KnowledgeEvidenceHook(PostProcessor):
-    """对话知识证据分析"""
-    is_blocking = False
+            parent = data.directory_nodes.get(conv.parent_id) if conv.parent_id else None
+            if parent:
+                return  # Already categorized
 
-    async def process(self, input: PostProcessInput) -> None:
-        from app.services.knowledge.cognitive_sync import _analyze_conversation_evidence
-        await _analyze_conversation_evidence(
-            input.user_id, input.partition_id,
-            input.user_text, input.reply_text,
-            conversation_id=input.conversation_id,
-        )
+            skill_ids = SourceParser._skill_ids_by_node.pop(input.assistant_node.id + "_auto_create", [])
+            if not skill_ids:
+                skill_ids = SourceParser._skill_ids_by_node.get(input.assistant_node.id, [])
 
+            if not skill_ids:
+                return
 
-class MetaHistoryHook(PostProcessor):
-    """消息后处理钩子：元历史 / 分支重命名 / 图谱更新"""
-    is_blocking = False
+            from app.domain.cognitive import get_repo as get_cog_repo
+            cog_repo = get_cog_repo()
 
-    async def process(self, input: PostProcessInput) -> None:
-        get_knowledge_query().post_message_hooks(
-            input.user_id, input.partition_id, input.assistant_node,
-        )
+            matched_path_id = None
+            matched_label = None
+
+            for skill_id in skill_ids:
+                cog_node = cog_repo.get_node(skill_id, input.user_id)
+                if cog_node and cog_node.path_id:
+                    matched_path_id = cog_node.path_id
+                    matched_label = cog_node.label or skill_id
+                    break
+
+            if not matched_path_id:
+                return
+
+            segments = matched_path_id.split(".")
+            current_parent_id = None
+
+            root = None
+            for dn in data.directory_nodes.values():
+                if dn.node_type == "dir" and dn.parent_id is None:
+                    root = dn
+                    break
+            if not root:
+                return
+
+            current_parent_id = root.id
+            last_dir_id = None
+
+            for segment in segments:
+                existing = None
+                for dn in data.directory_nodes.values():
+                    if (dn.parent_id == current_parent_id and
+                        dn.node_type == "dir" and
+                        dn.name == segment):
+                        existing = dn
+                        break
+
+                if existing:
+                    current_parent_id = existing.id
+                    last_dir_id = existing.id
+                else:
+                    parent_dir = data.directory_nodes.get(current_parent_id)
+                    new_dir = DirectoryNode(
+                        user_id=input.user_id,
+                        parent_id=current_parent_id,
+                        node_type="dir",
+                        kind="general",
+                        name=segment,
+                        path=(parent_dir.path + [parent_dir.id]) if parent_dir else [],
+                    )
+                    if parent_dir:
+                        parent_dir.add_child(new_dir.id)
+                    data.directory_nodes[new_dir.id] = new_dir
+                    current_parent_id = new_dir.id
+                    last_dir_id = new_dir.id
+
+            if not last_dir_id:
+                return
+
+            if last_dir_id != conv.parent_id:
+                if conv.parent_id:
+                    old_parent = data.directory_nodes.get(conv.parent_id)
+                    if old_parent:
+                        old_parent.remove_child(conv.id)
+
+                conv.parent_id = last_dir_id
+                target_parent = data.directory_nodes.get(last_dir_id)
+                if target_parent:
+                    conv.path = target_parent.path + [target_parent.id]
+                    target_parent.add_child(conv.id)
+                conv.kind = "general"
+                conv.metadata["last_active"] = time.time()
+                conv.updated_at = time.time()
+
+                get_data_repo().save(input.user_id, data)
+                logger.info(
+                    "CognitivePathAutoCreator: migrated conv %s to %s (path: %s)",
+                    input.conv_id, matched_path_id, segments,
+                )
+        except Exception:
+            logger.debug("CognitivePathAutoCreator failed (non-critical)", exc_info=True)
 
 
 # ═══════════════════════════════════════════════
-# ReplyPipeline
+# ReplyPipeline — 编排器
 # ═══════════════════════════════════════════════
 
 
 class ReplyPipeline:
-    """回复管线 — 单一入口 invoke()，产出 ReplyEvent 流"""
+    """回复管线 — 单一入口 invoke()，产出 ReplyEvent 流。
+
+    内部委托给 5 个 PipelineStage:
+      ClassifyStage → SaveMessageStage → ToolLoopStage → PostProcessStage → DoneStage
+    """
 
     def __init__(
         self,
@@ -256,390 +264,84 @@ class ReplyPipeline:
     ) -> None:
         self._post_processors = post_processors or _default_post_processors()
         self.agent_label = agent_label
-
-    # ── 公开 API ──
+        self._stages = [
+            ClassifyStage(),
+            SaveMessageStage(),
+            ToolLoopStage(),
+            PostProcessStage(processors=self._post_processors),
+            DoneStage(),
+        ]
 
     async def invoke(
         self,
         user_id: str,
-        partition_id: str,
+        dir_id: str,
         user_text: str,
         content_blocks: list[ContentBlock] | None = None,
-        conversation_id: str = "",
+        conv_id: str = "",
         pending_quote: dict | None = None,
+        knowledge_node_id: str | None = None,
+        tool_result: ToolResult | None = None,
+        resume_state: dict | None = None,
     ) -> AsyncGenerator[ReplyEvent, None]:
-        """流式执行完整回复流程，产出事件序列"""
+        """流式执行完整回复流程，产出事件序列
+
+        resume_state: 挂起恢复时传入 {llm_messages, tools, _round}，跳过阶段 1-2
+        """
+        ctx = PipelineCtx(
+            user_id=user_id,
+            dir_id=dir_id,
+            user_text=user_text,
+            content_blocks=content_blocks,
+            conv_id=conv_id,
+            pending_quote=pending_quote,
+            knowledge_node_id=knowledge_node_id,
+            agent_label=self.agent_label,
+            tool_result=tool_result,
+        )
+        if resume_state is not None:
+            ctx._resume_state = resume_state
+
         try:
-            async for event in self._run(
-                user_id, partition_id, user_text,
-                content_blocks=content_blocks,
-                conversation_id=conversation_id,
-                pending_quote=pending_quote,
-            ):
-                yield event
+            for stage in self._stages:
+                # 恢复模式：跳过已完成的分类和保存阶段
+                if resume_state is not None and stage.name in ("classify", "save_message"):
+                    continue
+
+                try:
+                    async for event in stage.invoke(ctx):
+                        yield event
+                except Exception as stage_err:
+                    logger.error(
+                        "Stage [%s] failed for conv %s: %s",
+                        stage.name, ctx.conv_id[:8] if ctx.conv_id else "?", stage_err,
+                        exc_info=True,
+                    )
+                    yield ReplyEvent(type="error", data={"error": str(stage_err)})
+                    # tool_loop 失败不继续执行后续阶段
+                    if stage.name in ("tool_loop",):
+                        break
+
+                # 挂起检测：tool_loop 阶段挂起后不再执行后续阶段
+                if stage.name == "tool_loop" and ctx._suspended:
+                    logger.info("Pipeline suspended at tool_loop, conv=%s", ctx.conv_id[:8])
+                    break
         except Exception as e:
             logger.error("ReplyPipeline failed: %s", e, exc_info=True)
             yield ReplyEvent(type="error", data={"error": str(e)})
 
-    # ── 内部阶段 ──
-
-    async def _run(
-        self,
-        user_id: str,
-        partition_id: str,
-        user_text: str,
-        content_blocks: list[ContentBlock] | None = None,
-        conversation_id: str = "",
-        pending_quote: dict | None = None,
-    ) -> AsyncGenerator[ReplyEvent, None]:
-        # ═══════════════════════════════════════════
-        # Stage 1: 分类器 → context_switch
-        # 仅临时会话 (kind="temp") 首条消息运行双路匹配。
-        # 非临时会话跳过分类 — 前端 fireClassify() 已独立处理。
-        # ═══════════════════════════════════════════
-        _stage1_route: dict | None = None
-        if conversation_id:
-            try:
-                _s1_data = get_data_repo().load(user_id)
-                _s1_conv = _s1_data.directory_nodes.get(conversation_id)
-                if _s1_conv and _s1_conv.kind == "temp":
-                    # 临时会话 → 双路匹配 (CognitiveNode + DirectoryNode)
-                    _s1_result = classifier_service.classify_by_text(
-                        user_id, user_text,
-                    )
-                    if _s1_result.get("should_switch") and _s1_result.get("candidates"):
-                        _s1_top = _s1_result["candidates"][0]
-                        _s1_route = {
-                            "should_recommend_switch": True,
-                            "switch_detail": {
-                                "source": "dual_path",
-                                "candidates": _s1_result["candidates"][:3],
-                                "reason": _s1_top.get("source", "cognitive"),
-                            },
-                            "target_partition_id": _s1_top.get("id", ""),
-                            "target_domain_name": _s1_top.get("label", ""),
-                            "target_topic_name": _s1_top.get("label", ""),
-                            "full_path": _s1_top.get("path_id", ""),
-                        }
-            except Exception:
-                logger.debug("Stage1 分类失败", exc_info=True)
-
-        if _stage1_route and _stage1_route["should_recommend_switch"]:
-            yield ReplyEvent(
-                type="context_switch",
-                switch_detail=_stage1_route["switch_detail"],
-                data={
-                    "switch_detail": _stage1_route["switch_detail"],
-                    "target_partition_id": _stage1_route.get("target_partition_id", ""),
-                    "target_domain_name": _stage1_route.get("target_domain_name", ""),
-                    "target_topic_name": _stage1_route.get("target_topic_name", ""),
-                    "partition_id": partition_id,
-                    "conversation_id": conversation_id,
-                    "full_path": _stage1_route.get("full_path", ""),
-                },
-            )
-
-        # ═══════════════════════════════════════════
-        # Stage 2: 存用户消息
-        # ═══════════════════════════════════════════
-        blocks = content_blocks or [TextBlock(text=user_text)]
-        if pending_quote:
-            blocks = [
-                QuoteBlock(
-                    quoted_text=pending_quote.get("quoted_text", ""),
-                    source_message_id=pending_quote.get("source_message_id", ""),
-                    source_conversation_id=pending_quote.get("source_conversation_id", ""),
-                    char_start=pending_quote.get("char_start", 0),
-                    char_end=pending_quote.get("char_end", 0),
-                ),
-                *blocks,
-            ]
-        user_node = tree_ops.add_message(
-            user_id, partition_id, "user", blocks, user_text,
-            conversation_id=conversation_id,
-        )
-        get_knowledge_query().post_message_hooks(user_id, partition_id, user_node)
-
-        # 异步情绪追踪
-        try:
-            loop = asyncio.get_running_loop()
-            if loop.is_running():
-                loop.create_task(emotion_analyzer.classify(user_text, user_id))
-        except Exception:
-            logger.debug("异步情绪分类创建失败", exc_info=True)
-
-        yield ReplyEvent(
-            type="user_message",
-            message=user_node.model_dump(mode="json"),
-        )
-
-        if not conversation_id and user_node.conversation_id:
-            conversation_id = user_node.conversation_id
-            yield ReplyEvent(
-                type="conversation_created",
-                data={"conversation_id": conversation_id},
-            )
-
-        # ═══════════════════════════════════════════
-        # Stage 3: LLM tool loop（真实流式）
-        # ═══════════════════════════════════════════
-        from app.infrastructure.llm.llm_service import llm_service
-        from app.domain.conversation.context_pipeline import build_llm_messages
-        from app.infrastructure.llm.tool_repository import get_tool_repository
-
-        enriched_text = user_text
-        if pending_quote:
-            qt = pending_quote.get("quoted_text", "")
-            if qt:
-                enriched_text = f"（引用上文：「{qt}」）\n{user_text}"
-
-        data = get_data_repo().load(user_id)
-        partition = data.directory_nodes.get(partition_id)
-        conversation = _find_conversation(data, partition_id, conversation_id)
-        recent = _get_recent_messages(conversation, data, 8)
-
-        llm_messages = await build_llm_messages(
-            partition, conversation, recent, enriched_text, user_id,
-            agent_label=self.agent_label,
-        )
-
-        # ── 知识树探索会话：注入节点上下文 ──
-        if conversation and conversation.metadata.get("type") == "tree_exploration":
-            knowledge_node_id = conversation.metadata.get("knowledge_node_id", "")
-            if knowledge_node_id:
-                try:
-                    from app.services.knowledge_tree.knowledge_node_service import kn_svc
-                    bound_node = kn_svc.get_node(user_id, knowledge_node_id)
-                    if bound_node:
-                        scope_ids = _get_descendant_ids(user_id, knowledge_node_id)
-                        scope_labels = {}
-                        for sid in scope_ids:
-                            sn = kn_svc.get_node(user_id, sid)
-                            if sn:
-                                scope_labels[sid] = sn.label
-                        ctx_prompt = (
-                            f"## 当前知识树探索上下文\n"
-                            f"- 绑定节点: {bound_node.label}（ID: {knowledge_node_id}）\n"
-                            f"- 层级: {bound_node.level}\n"
-                            f"- 描述: {bound_node.brief or '无'}\n"
-                            f"- 作用域内节点（你可通过 knowledge_* 工具操作）:\n"
-                            + "\n".join(f"  [{sid}] {label}" for sid, label in scope_labels.items()) +
-                            "\n\n## 严格规则\n"
-                            f"1. 你只能编辑、扩充、删除上列作用域内的节点。\n"
-                            f"2. 如果用户提及作用域外的节点，告知其不在当前探索范围内。\n"
-                            f"3. 使用 knowledge_* 工具来执行操作，不要用 [ACTION:] 标记。\n"
-                            f"4. 如果用户完成探索，可以建议他们回到知识树视图查看变更。\n"
-                        )
-                        llm_messages.insert(0, {"role": "system", "content": ctx_prompt})
-                except Exception as e:
-                    logger.debug("知识树上下文注入失败: %s", e)
-
-        tools = get_tool_repository().to_llm_schema()
-
-        response_blocks: list[ResponseBlock] = []
-        order = 0
-        full_reply = ""
-
-        for _round in range(MAX_TOOL_ROUNDS):
-            tool_calls = None
-            full_reply = ""
-            try:
-                async for ev in llm_service.generate_stream_with_tools(
-                    messages=llm_messages, task_type="chat",
-                    temperature=0.7, max_tokens=2048, tools=tools,
-                    user_id=user_id,
-                ):
-                    if ev["type"] == "token":
-                        full_reply += ev["content"]
-                        yield ReplyEvent(type="token", content=ev["content"])
-                    elif ev["type"] == "tool_calls":
-                        tool_calls = ev["tool_calls"]
-                    # "done" type → no tool_calls, text complete
-            except Exception as e:
-                logger.error("LLM tool loop failed at round %d: %s", _round, e)
-                full_reply = f"抱歉，生成回复时遇到了问题：{str(e)[:200]}"
-                yield ReplyEvent(type="token", content=full_reply)
-                break
-
-            if not tool_calls:
-                # ── 文本回复（token 已在流中 yield），退出 loop ──
-                break
-
-            # ── 有 tool_calls：执行工具 ──
-            logger.info(
-                "LLM tool calls (round %d): %s",
-                _round, [tc["function"]["name"] for tc in tool_calls],
-            )
-
-            # 追加 assistant tool_call 消息
-            llm_messages.append({
-                "role": "assistant",
-                "content": None,
-                "tool_calls": tool_calls,
-            })
-
-            for tc in tool_calls:
-                tool_name = tc["function"]["name"]
-                try:
-                    args = json.loads(tc["function"]["arguments"])
-                except (json.JSONDecodeError, KeyError):
-                    args = {}
-
-                try:
-                    tool_block = await tool_executor.execute(
-                        tool_name, args, user_id=user_id,
-                    )
-                    tool_block.order = order
-                    response_blocks.append(tool_block)
-                    order += 1
-
-                    if tool_name in SLOW_TOOLS:
-                        from app.services.common.background_jobs import job_manager
-                        await job_manager.submit(
-                            user_id=user_id, tool_name=tool_name,
-                            params=args, block_id=tool_block.id,
-                            partition_id=partition_id,
-                            conversation_id=conversation_id,
-                        )
-                        data.response_blocks[tool_block.id] = tool_block
-
-                    yield ReplyEvent(
-                        type="tool_block",
-                        block=tool_block.model_dump(mode="json"),
-                    )
-
-                    # 追加 tool result 消息
-                    from app.infrastructure.llm.tool_dispatch import _summarize_tool_result
-                    llm_messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc.get("id", ""),
-                        "content": json.dumps({
-                            "tool": tool_name,
-                            "result": _summarize_tool_result(tool_name, tool_block),
-                        }, ensure_ascii=False),
-                    })
-                except Exception as e:
-                    logger.error("Tool %s failed at round %d: %s", tool_name, _round, e)
-                    llm_messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc.get("id", ""),
-                        "content": json.dumps({"error": str(e)}),
-                    })
-
-        else:
-            # 超过 MAX_TOOL_ROUNDS 仍产出工具 → 强行收尾
-            logger.warning("Max tool rounds (%d) reached, forcing text reply", MAX_TOOL_ROUNDS)
-            full_reply = "已完成上述工具调用，还有什么需要帮助的吗？"
-            yield ReplyEvent(type="token", content=full_reply)
-
-        # ═══════════════════════════════════════════
-        # Stage 4: PostProcessor 链
-        # ═══════════════════════════════════════════
-        assistant_node = tree_ops.add_message(
-            user_id, partition_id, "assistant",
-            [TextBlock(text=full_reply)], full_reply,
-            conversation_id=conversation_id,
-            agent_label=self.agent_label,
-        )
-
-        cleaned_reply = _clean_follow_up(full_reply)
-        if cleaned_reply != full_reply:
-            tree_ops.update_message_content(user_id, assistant_node.id, cleaned_reply)
-            full_reply = cleaned_reply
-            data = get_data_repo().load(user_id)
-            assistant_node = data.nodes.get(assistant_node.id) or assistant_node
-
-        pp_input = PostProcessInput(
-            user_id=user_id,
-            partition_id=partition_id,
-            user_text=user_text,
-            reply_text=full_reply,
-            conversation_id=conversation_id,
-            assistant_node=assistant_node,
-            response_blocks=response_blocks,
-            conversation=conversation,
-        )
-        for processor in self._post_processors:
-            try:
-                if processor.is_blocking:
-                    await processor.process(pp_input)
-                else:
-                    asyncio.create_task(processor.process(pp_input))
-            except Exception:
-                logger.debug(
-                    "PostProcessor %s failed", type(processor).__name__,
-                    exc_info=True,
-                )
-
-        # ═══════════════════════════════════════════
-        # Stage 5: done
-        # ═══════════════════════════════════════════
-        yield ReplyEvent(
-            type="done",
-            data={
-                "assistant_message": assistant_node.model_dump(mode="json"),
-                "response_blocks": [b.model_dump(mode="json") for b in response_blocks],
-                "reply_text": full_reply,
-            },
-        )
-
 
 # ═══════════════════════════════════════════════
-# 辅助函数
+# 处理器列表
 # ═══════════════════════════════════════════════
-
-
-def _find_conversation(data, partition_id: str, conversation_id: str = ""):
-    """查找活跃对话"""
-    if conversation_id:
-        return data.directory_nodes.get(conversation_id)
-    # Find the most recent conv node under the given directory
-    convs = sorted(
-        (dn for dn in data.directory_nodes.values()
-         if dn.node_type == "conv" and dn.parent_id == partition_id),
-        key=lambda x: x.updated_at,
-        reverse=True,
-    )
-    return convs[0] if convs else None
-
-
-def _get_descendant_ids(user_id: str, node_id: str) -> list[str]:
-    """获取节点的所有子孙节点 ID"""
-    try:
-        from app.services.knowledge_tree.knowledge_node_service import kn_svc
-        result = [node_id]
-        children = kn_svc.get_children(user_id, node_id)
-        for child in children:
-            result.extend(_get_descendant_ids(user_id, child.id))
-        return result
-    except Exception:
-        return [node_id]
-
-
-def _get_recent_messages(conversation, data, count: int = 8) -> list[TreeNode]:
-    """获取最近 N 条消息"""
-    if not conversation:
-        return []
-    messages = []
-    for nid in conversation.conv_message_ids[-count:]:
-        node = data.nodes.get(nid)
-        if node and not node.is_deleted:
-            messages.append(node)
-    return messages
-
-
-def _clean_follow_up(text: str) -> str:
-    """移除 FOLLOW_UP 标记块"""
-    return FOLLOW_UP_RE.sub('', text).strip()
 
 
 def _default_post_processors() -> list[PostProcessor]:
+    """只保留 blocking 处理器。副作用处理器 (CognitiveSyncHook/KnowledgeEvidenceHook/MetaHistoryHook)
+    已迁移到 domain/conversation/reply_hooks.py，通过 AssistantReplied 事件驱动。"""
     return [
         SocraticCounter(),
-        FollowUpParser(),
         SourceParser(),
-        MetaHistoryHook(),
+        CognitivePathAutoCreator(),
         ResponseBlockSaver(),
-        CognitiveSyncHook(),
-        KnowledgeEvidenceHook(),
     ]

@@ -1,5 +1,5 @@
 """
-学习者数字孪生引擎（v7: PG 真存储 + 内存 cache）
+学习者数字孪生引擎
 管理学习者画像、连续天数、进度统计。
 所有统计字段（practice_count/streak_days/total_sessions）从 PG 真实计算，不再使用内存 dict。
 """
@@ -35,7 +35,7 @@ class LearnerModelEngine:
     """
 
     def __init__(self) -> None:
-        # v7: 仅保留临时会话存储（用于 in-memory clean_expired_sessions）
+        # 仅保留临时会话存储（用于 in-memory clean_expired_sessions）
         # 画像/统计字段全部从 PG 真实计算，不再维护内存 dict
         self._profiles: dict[str, LearnerProfile] = {}
         # 会话存储: session_id -> ConversationContext（临时缓存）
@@ -151,7 +151,7 @@ class LearnerModelEngine:
     # ──────────────────────────────────────────────
 
     def get_progress_summary(self, user_id: str) -> ProgressSummary:
-        """获取学习进度摘要（v7: 全部从 PG 真实读取）"""
+        """获取学习进度摘要（全部从 PG 真实读取）"""
         # ── 1. 答题统计：直接从 practice_attempts 聚合 ──
         total_questions = 0
         correct_answers = 0
@@ -242,7 +242,7 @@ class LearnerModelEngine:
         )
 
     def get_streak_days(self, user_id: str) -> int:
-        """从 PG 真实计算连续学习天数（v7: 基于 practice_attempts.created_at）"""
+        """从 PG 真实计算连续学习天数（基于 practice_attempts.created_at）"""
         try:
             from app.infrastructure.db.database import get_db
             db = get_db()
@@ -275,7 +275,7 @@ class LearnerModelEngine:
             return 0
 
     def get_total_sessions(self, user_id: str) -> int:
-        """从 PG 真实统计 session 数（v7: 包含已完成的 practice_sessions）"""
+        """从 PG 真实统计 session 数（包含已完成的 practice_sessions）"""
         try:
             from app.infrastructure.db.database import get_db
             db = get_db()

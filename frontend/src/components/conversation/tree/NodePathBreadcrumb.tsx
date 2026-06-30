@@ -13,8 +13,8 @@ import { useMemo } from "react";
  * 新架构：所有 node 统一从 childMap 中查找标签。
  */
 export default function NodePathBreadcrumb() {
-  const selectedNodeId = useConversationStore((s) => s.selectedNodeId);
-  const selectedNodeType = useConversationStore((s) => s.selectedNodeType);
+  const selectedNodeId = useConversationStore((s) => s.selectedNode?.id);
+  const selectedNodeType = useConversationStore((s) => s.selectedNode?.level);
   const selectedNode = useConversationStore((s) => s.selectedNode);
   const childMap = useTreeStore((s) => s.childMap);
 

@@ -10,7 +10,7 @@ import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 interface DAGGraphProps {
   data: GraphData;
   selectedNodeId?: string;
-  onNodeSelect?: (node: GraphNode) => void;
+  onNodeSelect?: (node: GraphNode, pos?: { x: number; y: number }) => void;
   onNodeContextMenu?: (node: GraphNode, e: React.MouseEvent) => void;
   width: number;
   height: number;
@@ -211,7 +211,7 @@ export default function DAGGraph({
 
             return (
               <g key={n.id} data-node-id={n.id}
-                onClick={() => onNodeSelect?.(n)}
+                onClick={() => onNodeSelect?.(n, { x: n.x, y: n.y })}
                 onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onNodeContextMenu?.(n, e); }}
                 onMouseEnter={() => setHoveredId(n.id)}
                 onMouseLeave={() => setHoveredId(null)}

@@ -84,18 +84,19 @@ async def _search_conversations(q: str, limit: int, user_id: str) -> list[Search
             if q_lower not in text:
                 continue
 
-            # 取 partition name
-            partition_name = ""
-            if node.partition_id in data.partitions:
-                partition_name = data.partitions[node.partition_id].name
+            # 取所属对话名称
+            conv_name = ""
+            conv_id = getattr(node, "directory_id", getattr(node, "conv_id", ""))
+            if conv_id and conv_id in data.directory_nodes:
+                conv_name = data.directory_nodes[conv_id].name
 
             results.append(SearchResultItem(
                 type="conversation",
                 title=node.text_summary[:80] or "(无摘要)",
-                subtitle=f"{partition_name} · 分支: {node.branch_id[:8]}",
-                link=f"/chat?partition={node.partition_id}&branch={node.branch_id}",
+                subtitle=f"{conv_name}" if conv_name else "",
+                link=f"/chat?partition={conv_id}",
                 score=0.85,
-                meta={"node_id": node_id, "partition_id": node.partition_id},
+                meta={"node_id": node_id, "directory_id": conv_id},
             ))
 
         # 按时间排序

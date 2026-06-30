@@ -17,25 +17,22 @@ docker compose -f docker/docker-compose.yml up -d
 
 | 目录 | 内容 | 适合谁 |
 |------|------|--------|
-| [architecture/](architecture/overview.md) | 系统架构、分层设计、全局规则 | 所有人 |
+| [architecture/](architecture/overview.md) | 系统架构、分层设计、全局规则（含 AI Tool 架构） | 所有人 |
 | [specs/](specs/) | 数据结构和核心规则定义 | 开发前必看 |
-| [modules/](modules/) | 各模块实现方案 | 对应模块开发者 |
-| [roadmaps/](roadmaps/) | 实施计划和任务范围 | PM 和开发者 |
+| [modules/](modules/) | 各模块实现方案（对话/认知/练习/秘书/图谱） | 对应模块开发者 |
 | [design-language.md](design-language.md) | UI 设计规范（颜色、字体、组件） | 前端开发者 |
-| [adr/](adr/) | 架构决策记录 | 需追溯决策时 |
-| [archive/](archive/) | 历史归档（旧设计、旧计划） | 仅供参考 |
+| [agents/](agents/domain.md) | AI 智能体与 Issue 管理 | 团队协作 |
 
 ### 新人 5 分钟路线
 
 1. 先读 [architecture/overview.md](architecture/overview.md) — 了解系统全貌
 2. 找到自己负责的模块，读对应 [specs/](specs/) 的数据定义
 3. 再读 [modules/](modules/) 的实现方案
-4. 最后看 [roadmaps/](roadmaps/) 确认当前迭代范围
 
 ### 开发一个新功能
 
 ```
-specs/ 看数据结构 → modules/ 看实现方案 → roadmaps/ 确认任务范围
+specs/ 看数据结构 → modules/ 看实现方案
 ```
 
 ### 修改数据结构

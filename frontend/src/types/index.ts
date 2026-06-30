@@ -1,4 +1,4 @@
-// ── v4.0: 新 DirectoryNode 架构（node_type: "dir" | "conv" + kind）─
+// ── 新 DirectoryNode 架构（node_type: "dir" | "conv" + kind）─
 
 /** 消息节点（MessageNode）：知识树中的单个消息节点 */
 export interface MessageNode {
@@ -32,7 +32,7 @@ export interface MessageNode {
   has_sub_branches?: boolean;                // 是否有子支
   sub_branch_ids?: string[];                 // 子支会话 ID 列表
   sub_branch_summaries?: {                   // 子支摘要列表
-    conversation_id: string;
+    conv_id: string;
     quoted_text: string;
     summary: string;
   }[];
@@ -44,13 +44,35 @@ export interface MessageNode {
   follow_up_questions?: string[];            // 追问问题（最末 assistant 消息）
 
   // ── 向后兼容字段 ──
-  partition_id?: string;
-  conversation_id?: string;
+  dir_id?: string;
+  conv_id?: string;
+}
+
+/** 工具调用块（ToolBlock）：AI 工具调用的全生命周期状态 */
+export interface ToolBlock {
+  type: "tool";
+  tool_call_id: string;
+  tool_name: string;
+  display_name?: string;  // 中文显示名（如 "搜索学习资源"）
+  icon?: string;           // 工具图标
+  arguments: Record<string, unknown>;
+  status: "pending" | "running" | "done" | "error";
+  result_block_type?: string;
+  result_content?: Record<string, unknown>;
+  error?: string;
+  tool_round: number;
+}
+
+/** 推理思考块（ReasoningBlock）：LLM 的推理过程流式展示 */
+export interface ReasoningBlock {
+  type: "reasoning";
+  text: string;
+  status: "streaming" | "done";
 }
 
 /** 内容块（ContentBlock）：消息中的单一内容单元，支持多种媒体类型 */
 export interface ContentBlock {
-  type: "text" | "image" | "audio" | "video" | "document" | "quote" | "file";  // 内容块类型
+  type: "text" | "image" | "audio" | "video" | "document" | "quote" | "file" | "tool" | "reasoning";  // 内容块类型
   text?: string;                                              // 文本内容（仅 text 类型）
   file_id?: string;                                           // 文件 ID
   duration_ms?: number;                                       // 媒体时长（毫秒）
@@ -61,7 +83,7 @@ export interface ContentBlock {
   text_content?: string;                                      // 提取的文本内容
   preview_text?: string;                                      // 预览文本
   source_message_id?: string;                                 // 被引用消息 ID（quote 类型）
-  source_conversation_id?: string;                            // 被引用消息所在会话 ID
+  source_conv_id?: string;                            // 被引用消息所在会话 ID
   char_start?: number;                                        // 选中文本起始偏移
   char_end?: number;                                          // 选中文本结束偏移
   quoted_text?: string;                                       // 引用的原文
@@ -76,13 +98,13 @@ export interface SubBranchRef {
   char_start: number;
   char_end: number;
   quoted_text: string;
-  child_conversation_id: string;
+  child_conv_id: string;
   created_at: number;
 }
 
 /** 子支信息 */
 export interface SubBranchInfo {
-  conversation_id: string;
+  conv_id: string;
   quoted_text: string;
   message_count: number;
   summary: string;
@@ -93,15 +115,34 @@ export interface SubBranchInfo {
 export interface ResponseBlock {
   id: string;                                // 响应块唯一标识
   message_id: string;                        // 所属消息 ID
-  partition_id: string;                      // 所属分区 ID
-  conversation_id: string;                   // 所属对话 ID
-  type: "text" | "video" | "practice" | "image" | "audio" | "mindmap" | "document" | "secretary_suggestions" | "expand";
+  dir_id: string;                      // 所属分区 ID
+  conv_id: string;                   // 所属对话 ID
+  type: "text" | "video" | "practice" | "image" | "audio" | "mindmap" | "document" | "secretary_suggestions" | "expand" | "question";
   status: "streaming" | "ready" | "generating" | "failed";
   content: Record<string, unknown>;
   order: number;
   sources?: string[];
   created_at: number;
   updated_at: number;
+}
+
+/** 自我解释评估结果（SelfExplainResult）：P0-R03 */
+export interface SelfExplainResult {
+  accuracy: "A" | "B" | "C";
+  completeness: "完整" | "部分" | "缺失核心";
+  clarity: "清晰" | "模糊" | "混乱";
+  feedback: string;
+  concept_name: string;
+}
+
+/** 自我解释提示类型 */
+export type SelfExplainPromptType = "retell" | "example" | "contrast";
+
+/** 自我解释评估请求 */
+export interface SelfExplainRequest {
+  explanation_text: string;
+  knowledge_node_id: string;
+  prompt_type: SelfExplainPromptType;
 }
 
 /** 后台任务（BackgroundJob）：由工具触发的异步任务状态跟踪 */
@@ -123,7 +164,7 @@ export interface MaterialMeta {
   file_name: string;
   file_type: string;
   file_size: number;
-  partition_id: string;
+  dir_id: string;
   purpose: string;
   status: string;
   chunk_count: number;
@@ -141,7 +182,7 @@ export interface MaterialRef {
   file_size: number;
   status: string;
   skills_covered: string[];
-  partition_id: string;
+  dir_id: string;
 }
 
 // ── WebSocket Message Types ──
@@ -152,18 +193,18 @@ export type WSIncomingMessage =
   | { type: "user_message"; message: MessageNode }
   | { type: "token"; content: string; block_id?: string }
   | { type: "tool_block"; block: ResponseBlock }
-  | { type: "done"; partition_id: string; assistant_message: MessageNode; response_blocks?: ResponseBlock[] }
+  | { type: "done"; dir_id: string; assistant_message: MessageNode; response_blocks?: ResponseBlock[] }
   | { type: "error"; message: string }
   | { type: "block_update"; block: ResponseBlock }
   | { type: "job_update"; job: BackgroundJob }
-  | { type: "context_switch"; partition_id: string; conversation_id: string; domain_name: string; topic_name: string; switch_detail: Record<string, string> }
-  | { type: "resume"; content: string; conversation_id?: string }
+  | { type: "context_switch"; dir_id: string; conv_id: string; domain_name: string; topic_name: string; switch_detail: Record<string, string> }
+  | { type: "resume"; content: string; conv_id?: string }
   | { type: "resume_done"; message?: string }
   | { type: "pong" }
   | { type: "secretary_update"; content: { reason: string[]; proposal_count: number } }
   | { type: "secretary_inline"; proposal: import("../store/notification/types").SecretaryNotification }
   | { type: "secretary_proposal_update"; content: { id: string; status: string; until?: number | null } }
   // ── 双向推荐 ──
-  | { type: "tree_recommendation"; partition_id: string; message: string; node_count?: number; edge_count?: number; partition_name?: string; needs_generate?: boolean }
-  | { type: "temp_recommendation"; rec_type: string; message: string; partition_id?: string; partition_name?: string; needs_generate?: boolean; create_conversation?: boolean }
-  | { type: "conversation_created"; data: { conversation_id: string } };
+  | { type: "tree_recommendation"; dir_id: string; message: string; node_count?: number; edge_count?: number; partition_name?: string; needs_generate?: boolean }
+  | { type: "temp_recommendation"; rec_type: string; message: string; dir_id?: string; partition_name?: string; needs_generate?: boolean; create_conversation?: boolean }
+  | { type: "conversation_created"; data: { conv_id: string } };

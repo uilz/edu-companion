@@ -463,7 +463,7 @@ async def run_checker(
     """手动触发一次主动检查"""
     from app.domain.secretary.engines.active_checker import active_checker
     try:
-        findings = await active_checker.run_check()
+        findings = await active_checker.run_check(user_id=user_id)
         return {
             "status": "ok",
             "modules_run": findings.get("modules_run", 0),
@@ -538,7 +538,9 @@ async def get_onboarding_status(
     try:
         from app.domain.cognitive import get_repo
         nodes = get_repo().list_all_nodes(user_id)
-        total_nodes = len(nodes) if nodes else 0
+        # 排除虚拟分区根节点（系统自动创建的 partition 级别节点）
+        real_nodes = [n for n in nodes if not (n.level == "partition" and n.created_by == "system")]
+        total_nodes = len(real_nodes) if real_nodes else 0
     except Exception:
         total_nodes = 0
 
@@ -703,7 +705,7 @@ async def get_event_stream(
     since: float = 0.0,
     until: float = 0.0,
 ) -> list[dict]:
-    """获取用户事件流 (EventSystem v2)
+    """获取用户事件流
 
     支持按 stream_type, stream_id, event_type 过滤，
     按时间倒序排列，支持时间范围查询。
@@ -790,7 +792,8 @@ async def get_event_summary(
 
     # 统计各类型事件数量
     types = ["AssistantReplied", "AnswerSubmitted", "SessionCompleted",
-             "CognitiveNodeUpdated", "NodeCreated", "ConversationDigest",
+             "CognitiveNodeUpdated", "NodeCreated",
+             "EpisodeDigest", "TopicDigest", "TypeDigest",
              "PracticeSessionSummary", "DailyDigest"]
     counts = {}
     for t in types:
@@ -816,10 +819,70 @@ async def get_event_summary(
     }
 
 
+# ══════════════════════════════════════════════════════════════
+#  事件层次查询 — EventSystem v2
+# ══════════════════════════════════════════════════════════════
+
+
+@router.get("/events/top-level")
+async def get_top_level_events(
+    user_id: str = Depends(current_user_id),
+    dimension: str = "",
+    stream_type: str = "",
+    limit: int = 50,
+) -> list[dict]:
+    """获取顶层事件 (没有父节点的事件)
+
+    聚合流视图: 仅显示未被折叠的事件。
+
+    Query params:
+        dimension: mixed | topic | type (空=全部)
+        stream_type: 按流类型过滤 (aggregate=仅聚合事件)
+        limit: 返回条数 (默认50, 最大200)
+    """
+    from app.infrastructure.event_aggregator import (
+        get_top_level_events as _top_level,
+        get_top_level_by_dimension as _top_by_dim,
+    )
+
+    if dimension and dimension in ("mixed", "topic", "type"):
+        rows = _top_by_dim(user_id, dimension, min(limit, 200), stream_type=stream_type)
+    else:
+        rows = _top_level(user_id, min(limit, 200), stream_type=stream_type)
+
+    return rows
+
+
+@router.get("/events/{event_id}/children")
+async def get_event_children(
+    event_id: str,
+    user_id: str = Depends(current_user_id),
+) -> list[dict]:
+    """获取聚合事件的子节点 (下钻)
+
+    展开一个聚合事件，显示其包含的子事件。
+    """
+    from app.infrastructure.event_aggregator import get_children as _children
+    return _children(event_id)
+
+
+@router.get("/events/{event_id}/ancestors")
+async def get_event_ancestors(
+    event_id: str,
+    user_id: str = Depends(current_user_id),
+) -> list[dict]:
+    """获取事件的所有祖先 (CTE 递归)
+
+    从原始事件向上追溯，显示所有聚合层级。
+    """
+    from app.infrastructure.event_aggregator import get_ancestors as _ancestors
+    return _ancestors(event_id)
+
+
 class AgentChatRequest(BaseModel):
     message: str = Field(..., min_length=1)
     current_page: str = "/"
-    conversation_id: str | None = None
+    conv_id: str | None = None
 
 
 @router.post("/agent/chat")
@@ -830,34 +893,20 @@ async def agent_chat(body: AgentChatRequest, user_id: str = Depends(current_user
     """
     from app.domain.secretary.tools.tool_registry import ToolRegistry
     from app.services.common import get_data_repo
-    from app.services.knowledge.tree_service import tree_ops
-    from app.schemas.conversation import Conversation
-    import uuid
+    from app.schemas.directory_node import DirectoryNode
 
     # ── 创建/复用 secretary 类型会话 ──
-    conv_id = body.conversation_id
+    conv_id = body.conv_id
     if not conv_id:
         data = get_data_repo().load(user_id)
-        # 创建临时分区下的 secretary 会话
-        temp_partition = None
-        for pid, p in data.partitions.items():
-            if getattr(p, "is_temp", False):
-                temp_partition = p
-                break
-
-        if not temp_partition:
-            temp_partition, _ = tree_ops._ensure_temp_partition(user_id, data)
-
-        conv = Conversation(
-            id=str(uuid.uuid4()),
-            parent_id=temp_partition.id,
-            parent_type="partition",
-            type="secretary",
+        conv = DirectoryNode(
+            node_type="conv",
+            kind="secretary",
+            parent_id=None,
             name="AI 秘书对话",
+            metadata={},
         )
-        conv.partition_id = temp_partition.id
-        conv.is_temporary = True
-        data.conversations[conv.id] = conv
+        data.directory_nodes[conv.id] = conv
         get_data_repo().save(user_id, data)
         conv_id = conv.id
 
@@ -868,8 +917,8 @@ async def agent_chat(body: AgentChatRequest, user_id: str = Depends(current_user
     tool_schemas = registry.get_schema()
 
     async def event_stream():
-        # 返回 conversation_id 事件
-        yield f"event: conversation\ndata: {json.dumps({'conversation_id': conv_id})}\n\n"
+        # 返回 conv_id 事件
+        yield f"event: conversation\ndata: {json.dumps({'conv_id': conv_id})}\n\n"
 
         # ── 调用 Agent LLM 进行意图分析 ──
         try:

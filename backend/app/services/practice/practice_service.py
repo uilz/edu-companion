@@ -70,6 +70,7 @@ def update_cognitive_after_practice(
     skill_id: str,
     is_correct: bool,
     latency_ms: int = 0,
+    confidence_before: int | None = None,
 ) -> dict:
     """练习后更新 CognitiveNode 并发布事件
 
@@ -88,6 +89,7 @@ def update_cognitive_after_practice(
             success=is_correct,
             latency_ms=latency_ms,
             consecutive=True,
+            confidence_before=confidence_before,
         )
     except Exception as e:
         logger.warning("CognitiveNode submit_practice failed: %s", e)
@@ -364,6 +366,7 @@ def record_attempt(
     is_correct: bool,
     time_spent_seconds: float,
     hints_used: int,
+    confidence_before: int | None = None,
 ) -> None:
     """记录一次答题到 practice_attempts 表（唯一表）"""
     db = get_db()
@@ -377,12 +380,12 @@ def record_attempt(
             """INSERT INTO practice_attempts
                (id, session_id, question_id, user_id, user_answer, is_correct,
                 time_spent_seconds, is_wrong, wrong_count, consecutive_correct,
-                cognitive_node_ids, created_at)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                cognitive_node_ids, confidence_before, created_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (attempt_id, session_id, question_id, user_id,
              answer, is_correct, time_spent_seconds,
              is_wrong, 1 if is_wrong else 0, 0 if is_wrong else 1,
-             [], now),
+             [], confidence_before, now),
         )
     except Exception as e:
         logger.debug("记录答题失败: %s", e)

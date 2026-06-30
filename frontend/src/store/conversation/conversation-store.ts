@@ -14,13 +14,13 @@ import { create } from "zustand";
 export { useTreeStore } from "./tree-store";
 export { useMessageStore } from "./message-store";
 
-import type { MessageNode, ResponseBlock, SubBranchInfo } from "@/types";
+import type { MessageNode, SubBranchInfo } from "@/types";
 import type { GraphNode, SelectedNode } from "@/components/conversation/tree/SidebarTreeNode";
 import { useTreeStore } from "./tree-store";
 import { useMessageStore } from "./message-store";
 
 // ── Action implementation imports ──
-import { sendMessageImpl } from "./actions/send-message";
+import { sendMessageImpl, setSending } from "./actions/send-message";
 import { loadDirListImpl, createDirectoryImpl, renameDirectoryImpl } from "./actions/dir-ops";
 import { selectConversationImpl, switchConfirmImpl, switchDismissImpl } from "./actions/nav-ops";
 import { handleNewConversationImpl } from "./actions/tree-ops";
@@ -60,7 +60,6 @@ export interface UseConversationReturn {
   selectedNodeId: string | null;
   selectedNodeType: "dir" | "conv" | null;
   messages: MessageNode[];
-  responseBlocks: ResponseBlock[];
   isLoading: boolean;
   statusMessage: string;
   replyingToId: string | null;
@@ -100,14 +99,13 @@ export interface DirInfo {
 
 export interface ConversationState {
   // ── UI state (此 store 管理) ──
+  // 所有导航状态统一由 selectedNode 推导，不设冗余字段
   selectedNode: SelectedNode | null;
-  selectedNodeId: string | null;
-  selectedNodeType: "dir" | "conv" | null;
-  selectedDirId: string | null;
-  activeConversationId: string | null;
   urlInitialized: boolean;
-  postSendRedirect: string | null;
-  setPostSendRedirect: (id: string | null) => void;
+
+  // ── 侧边栏模式 ──
+  sidebarMode: "tree" | "flat";
+  setSidebarMode: (mode: "tree" | "flat") => void;
 
   dirList: DirInfo[];
   loadingDirList: boolean;
@@ -133,15 +131,11 @@ export interface ConversationState {
   subBranchParentConvId: string | null;
   subBranchSourceMsgId: string | null;
 
-  // ── 消息代理字段 ──
-  messages: MessageNode[];
-  responseBlocks: ResponseBlock[];
-  loadingMessages: boolean;
-  convError: string | null;
+  // ── 对话模式 ──
+  conversationMode: "tutor" | "feynman" | "peer";
+  setConversationMode: (mode: "tutor" | "feynman" | "peer") => void;
 
   // ── 导航 ──
-  setSelectedNodeId: (id: string | null) => void;
-  setSelectedNodeType: (t: "dir" | "conv" | null) => void;
   selectGraphNode: (node: GraphNode, dirId: string) => Promise<void>;
   toggleExpand: (node: GraphNode) => void;
   setUrlInitialized: (v: boolean) => void;
@@ -172,11 +166,12 @@ export interface ConversationState {
   clearPendingQuote: () => void;
   enterSubBranch: (subBranchConvId: string) => void;
   exitSubBranch: () => Promise<void>;
-  createSubBranch: (sourceConvId: string, sourceMsgId: string, charStart: number, charEnd: number, quotedText: string, initialMessage: string) => Promise<string | null>;
+  createSubBranch: (sourceConvId: string, sourceMsgId: string, charStart: number, charEnd: number, quotedText: string, initialMessage: string, mode?: string) => Promise<string | null>;
   loadSubBranches: (messageId: string) => Promise<SubBranchInfo[]>;
 }
 
-const SIDEBAR_KEY = "learn-sidebar-collapsed";
+const SIDEBAR_KEY = "conversation-sidebar-collapsed";
+const SIDEBAR_MODE_KEY = "sidebar-mode";
 
 function restoreSidebarCollapsed(): boolean {
   try {
@@ -184,16 +179,25 @@ function restoreSidebarCollapsed(): boolean {
   } catch { return false; }
 }
 
+function restoreSidebarMode(): "tree" | "flat" {
+  try {
+    const v = localStorage.getItem(SIDEBAR_MODE_KEY);
+    if (v === "tree" || v === "flat") return v;
+  } catch { /* ignore */ }
+  return "tree";
+}
+
 export const useConversationStore = create<ConversationState>()((set, get) => ({
   // ── Initial state ──
   selectedNode: null,
-  selectedNodeId: null,
-  selectedNodeType: null,
-  selectedDirId: null,
-  activeConversationId: null,
   urlInitialized: false,
-  postSendRedirect: null,
-  setPostSendRedirect: (id) => set({ postSendRedirect: id }),
+
+  // ── 侧边栏模式 ──
+  sidebarMode: restoreSidebarMode(),
+  setSidebarMode: (mode) => {
+    try { localStorage.setItem(SIDEBAR_MODE_KEY, mode); } catch {}
+    set({ sidebarMode: mode });
+  },
 
   dirList: [],
   loadingDirList: true,
@@ -213,15 +217,9 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
   subBranchParentConvId: null,
   subBranchSourceMsgId: null,
 
-  // ── 消息代理字段 ──
-  messages: [],
-  responseBlocks: [],
-  loadingMessages: false,
-  convError: null,
-
-  // ── Setters (inline, trivial) ──
-  setSelectedNodeId: (id) => set({ selectedNodeId: id }),
-  setSelectedNodeType: (t) => set({ selectedNodeType: t }),
+  // ── 对话模式 ──
+  conversationMode: "tutor" as "tutor" | "feynman" | "peer",
+  setConversationMode: (mode) => set({ conversationMode: mode }),
 
   // ── selectGraphNode ──
   selectGraphNode: async (node: GraphNode, _dirId: string) => {
@@ -229,17 +227,13 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
     const nodeType: "dir" | "conv" | null = level === "conv" ? "conv" : "dir";
     const containerId = nodeType === "conv" ? (parent || id) : id;
 
-    // Phase 1：立即更新选中状态
+    // Phase 1：立即更新选中状态（所有导航信息统一由 selectedNode 推导）
     set({
       selectedNode: { id, level, parent: parent ?? null, path: path || [] },
-      selectedNodeId: id,
-      selectedNodeType: nodeType,
-      activeConversationId: null,
       switchBanner: null,
       showDirSidebar: false,
-      messages: [],
-      responseBlocks: [],
     });
+    useMessageStore.setState({ messages: [], loadingMessages: false, convError: null });
 
     // Phase 2：批量加载数据（通过 tree-store）
     const tree = useTreeStore.getState();
@@ -273,13 +267,12 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
     expanded.add(id);
     // 使用 tree-store 的 persist 逻辑
     try {
-      localStorage.setItem("learn-tree-expanded", JSON.stringify(Array.from(expanded)));
+      localStorage.setItem("conversation-tree-expanded", JSON.stringify(Array.from(expanded)));
     } catch { /* ignore */ }
     useTreeStore.setState({ expandedSet: expanded });
 
-    // Phase 4：如果是 conv，异步激活会话
+    // Phase 4：如果是 conv，异步加载消息（无需再设 activeConversationId，Phase 1 已设 selectedNode）
     if (nodeType === "conv") {
-      set({ activeConversationId: id });
       useMessageStore.getState().loadMessages(id);
     }
   },
@@ -311,21 +304,24 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
   // ── Messages (delegate to message-store) ──
   loadMessages: async (convId) => {
     await useMessageStore.getState().loadMessages(convId);
-    // Sync delegated fields back to this store for backward compat
-    const msgState = useMessageStore.getState();
-    set({
-      messages: msgState.messages,
-      responseBlocks: msgState.responseBlocks,
-      loadingMessages: msgState.loadingMessages,
-      convError: msgState.convError,
-    });
   },
-  sendMessage: (text, files) => sendMessageImpl(set, get, text, files),
+  sendMessage: async (text, files) => {
+    // Phase 2 only: 假设当前已有活跃会话（由 ChatInput 负责创建）
+    const convId = getActiveConvId(get());
+    if (!convId) return;
+    setSending(true);
+    try {
+      await sendMessageImpl(set, get, text, files, getSelectedDirId(get()) || "", convId);
+    } finally {
+      setSending(false);
+    }
+  },
   deleteMessage: async (msgId) => {
     await useMessageStore.getState().deleteMessage(msgId);
     // Refresh messages in the active conversation
-    const cId = get().activeConversationId;
-    if (cId) await get().loadMessages(cId);
+    const node = get().selectedNode;
+    const convId = node?.level === "conv" ? node.id : null;
+    if (convId) await useMessageStore.getState().loadMessages(convId);
   },
   editMessage: (msgId, newText) => useMessageStore.getState().editMessage(msgId, newText),
   versionSwitch: (msgId, dir, idx) => useMessageStore.getState().versionSwitch(msgId, dir, idx),
@@ -337,9 +333,41 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
   setPendingQuote: (quote) => setPendingQuoteImpl(set, quote),
   enterSubBranch: (convId) => enterSubBranchImpl(set, get, convId),
   exitSubBranch: () => exitSubBranchImpl(set, get),
-  createSubBranch: (sc, sm, cs, ce, qt, im) => createSubBranchImpl(set, get, sc, sm, cs, ce, qt, im),
+  createSubBranch: (sc, sm, cs, ce, qt, im, mode) => createSubBranchImpl(set, get, sc, sm, cs, ce, qt, im, mode),
   loadSubBranches: (msgId) => loadSubBranchesImpl(set, get, msgId),
 }));
+
+// ══════════════════════════════════════════════════════════════
+//  辅助函数：从 selectedNode 推导导航字段
+//
+//  旧代码有四套冗余字段（selectedNodeId, selectedNodeType,
+//  selectedDirId, activeConversationId），现在统一收敛到
+//  selectedNode。这些函数帮助硬编码值的迁移。
+// ══════════════════════════════════════════════════════════════
+
+/** 从 selectedNode 推导当前选中的节点 ID */
+export function getSelectedNodeId(s: { selectedNode: SelectedNode | null }): string | null {
+  return s?.selectedNode?.id ?? null;
+}
+
+/** 从 selectedNode 推导当前选中的节点类型 */
+export function getSelectedNodeType(s: { selectedNode: SelectedNode | null }): "dir" | "conv" | null {
+  return (s?.selectedNode?.level ?? null) as "dir" | "conv" | null;
+}
+
+/** 从 selectedNode 推导当前选中的目录 ID（conv 时返回父目录 ID，dir 时返回自身 ID） */
+export function getSelectedDirId(s: { selectedNode: SelectedNode | null }): string | null {
+  const node = s?.selectedNode;
+  if (!node) return null;
+  return node.level === "conv" ? node.parent : node.id;
+}
+
+/** 从 selectedNode 推导当前活跃的会话 ID（conv 时返回自身 ID，dir 时返回 null） */
+export function getActiveConvId(s: { selectedNode: SelectedNode | null }): string | null {
+  const node = s?.selectedNode;
+  if (!node) return null;
+  return node.level === "conv" ? node.id : null;
+}
 
 // useConversationStore 已直接 re-export useTreeStore 和 useMessageStore
 // 消费者应直接使用 useTreeStore / useMessageStore 获取树/消息数据

@@ -39,6 +39,9 @@ interface Props {
   isLast: boolean;
   isExam?: boolean;
   submitError?: string;
+  /** 自信度 */
+  confidenceBefore?: number | null;
+  onConfidenceChange?: (level: number) => void;
 }
 
 /** 练习卡片 — 题干 + 选项 + 反馈 + 工具栏 一体化 */
@@ -46,6 +49,7 @@ export default function QuestionCard({
   question, index, total,
   showFeedback, lastResult, submitting, selected,
   onSelect, onSubmit, onSkip, onNext, isLast, isExam, submitError,
+  confidenceBefore, onConfidenceChange,
 }: Props) {
   const [showHint, setShowHint] = useState(false);
   const [hintText, setHintText] = useState("");
@@ -59,7 +63,7 @@ export default function QuestionCard({
 
   const qtype = question.question_type;
   const isOptionType = qtype === "single" || qtype === "multiple" || qtype === "judge" || qtype === "choice";
-  const canSubmit = isOptionType ? selected.length > 0 : fillAnswer.trim().length > 0;
+  const canSubmit = (isOptionType ? selected.length > 0 : fillAnswer.trim().length > 0) && confidenceBefore !== null;
 
   const handleShowHint = useCallback(async () => {
     if (showHint) return;
@@ -181,6 +185,38 @@ export default function QuestionCard({
         </div>
       )}
 
+      {/* ── 自信度选择器（仅答题前） ── */}
+      {!showFeedback && onConfidenceChange && (
+        <div className="px-5 pb-3">
+          <p className="text-[10px] text-[var(--color-text-muted)] mb-2">答题前，请先评估你对本题的把握程度：</p>
+          <div className="flex gap-2">
+            {[
+              { level: 1, label: "完全不确定", emoji: "🤔" },
+              { level: 2, label: "有点不确定", emoji: "🤨" },
+              { level: 3, label: "比较确定", emoji: "👍" },
+              { level: 4, label: "非常确定", emoji: "💪" },
+            ].map((item) => {
+              const active = confidenceBefore === item.level;
+              return (
+                <button
+                  key={item.level}
+                  type="button"
+                  onClick={() => onConfidenceChange(item.level)}
+                  className={`flex-1 py-2 px-1 rounded-xl border text-xs font-medium transition-all ${
+                    active
+                      ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
+                      : "border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-muted)] hover:border-[var(--color-accent)]/50"
+                  }`}
+                >
+                  <div className="text-sm mb-0.5">{item.emoji}</div>
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ── 选项 ── */}
       {isOptionType && (
         <div className="px-5 pb-4 space-y-2">
@@ -240,6 +276,8 @@ export default function QuestionCard({
             correctAnswer={lastResult.correct_answer || []}
             analysis={(lastResult as any).explanation || (lastResult as any).analysis || ""}
             skipped={skipped}
+            metacognitionFeedback={lastResult.metacognition_feedback}
+            confidenceBefore={confidenceBefore}
           />
         </div>
       )}

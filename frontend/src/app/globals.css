@@ -1084,3 +1084,24 @@
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
+
+/* 全屏路由页面（知识树等）需要覆盖 swiss-container 的 padding/max-width，
+   避免 h-screen 溢出产生页面滚动条（放在末尾确保覆盖所有媒体查询变体） */
+.swiss-container:has(.route-fullscreen) {
+  padding: 0 !important;
+  max-width: none !important;
+}
+
+/* 全屏路由页面：各断点下的定位偏移 */
+/* 桌面端：left 跟随侧边栏宽度 */
+@media (min-width: 1024px) {
+  .route-fullscreen {
+    left: var(--sidebar-actual-width, 280px);
+  }
+}
+/* 移动端：bottom 留出底部导航空间 */
+@media (max-width: 639px) {
+  .route-fullscreen {
+    bottom: var(--bottom-nav-height);
+  }
+}

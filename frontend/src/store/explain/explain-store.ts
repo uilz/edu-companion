@@ -20,7 +20,7 @@ export interface CardMessage {
 export interface ExplainCardData {
   id: string;
   user_id?: string;
-  conversation_id: string;
+  conv_id: string;
   /** 绑定到哪个消息 */
   message_id: string;
   /** 卡片深度：1 = 从消息中触发，2+ = 从卡片中触发 */
@@ -68,7 +68,7 @@ interface ExplainStore {
   loadFromConversation: (conversationId: string) => Promise<void>;
   /** 在后端创建卡片，返回完整数据 */
   createCard: (data: {
-    conversation_id: string;
+    conv_id: string;
     message_id: string;
     depth: number;
     parent_card_id?: string;
@@ -133,7 +133,7 @@ export const useExplainStore = create<ExplainStore>((set, get) => ({
   loadFromConversation: async (conversationId) => {
     try {
       const data = await api<ExplainCardData[]>(
-        `/api/knowledge-tree/explain-cards?conversation_id=${encodeURIComponent(conversationId)}`,
+        `/api/knowledge-tree/explain-cards?conv_id=${encodeURIComponent(conversationId)}`,
       );
       set({ cards: data });
     } catch {
@@ -156,7 +156,7 @@ export const useExplainStore = create<ExplainStore>((set, get) => ({
       // 后端不可用时，生成本地 ID 插入（降级模式）
       const localCard: ExplainCardData = {
         id: `explain_local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        conversation_id: data.conversation_id,
+        conv_id: data.conv_id,
         message_id: data.message_id,
         depth: data.depth,
         parent_card_id: data.parent_card_id,

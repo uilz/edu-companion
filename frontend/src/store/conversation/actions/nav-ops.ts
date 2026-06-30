@@ -8,10 +8,12 @@
 import { useNotificationStore } from "@/store/notification/notification-store";
 import { useTreeStore } from "@/store/conversation/tree-store";
 import { authedFetch } from "@/lib/api/api";
+import { getSelectedDirId } from "../conversation-store";
+import { useMessageStore } from "../message-store";
 
 /** 选中会话。主动解析会话的完整父链，同步更新 selectedNode。 */
 export async function selectConversationImpl(set: any, get: any, dirId: string | null, conversationId: string | null) {
-  const oldDirId = get().selectedDirId;
+  const oldDirId = getSelectedDirId(get());
   const resetPath = dirId && dirId !== oldDirId;
 
   // 从 childMap 中查找 dir 节点获取 path
@@ -24,24 +26,22 @@ export async function selectConversationImpl(set: any, get: any, dirId: string |
     });
   }
 
-  // dirId 即父目录 ID
-  const syncSelNode = dirId ? { id: dirId, level: "dir", parent: null, path: dirPath } : null;
-
   // 立即设置基础状态 + 同步解析的 selectedNode
+  const selNode = conversationId
+    ? { id: conversationId, level: "conv" as const, parent: dirId || null, path: dirPath }
+    : dirId
+      ? { id: dirId, level: "dir" as const, parent: null, path: dirPath }
+      : null;
   set({
-    selectedDirId: dirId || null,
-    selectedNodeId: conversationId || null,
-    selectedNodeType: conversationId ? ("conv" as const) : get().selectedNodeType,
-    activeConversationId: conversationId || null,
-    selectedNode: syncSelNode || get().selectedNode,
+    selectedNode: selNode,
     convError: null,
     showDirSidebar: false,
     switchBanner: null,
   });
   if (conversationId) {
-    setTimeout(() => get().loadMessages(conversationId), 50);
+    await useMessageStore.getState().loadMessages(conversationId);
   } else {
-    set({ messages: [], responseBlocks: [] });
+    useMessageStore.setState({ messages: [] });
   }
 }
 
@@ -53,9 +53,9 @@ export async function switchConfirmImpl(set: any, get: any) {
     const resp = await authedFetch("/api/conversations/tree/switch", {
       method: "POST",
       body: JSON.stringify({
-        source_conversation_id: banner.conversationId,
+        source_conv_id: banner.conversationId,
         source_node_id: "",
-        target_partition_id: banner.targetDirId || banner.dirId,
+        target_dir_id: banner.targetDirId || banner.dirId,
         target_domain_name: banner.targetDomainName || "",
         target_topic_name: banner.targetTopicName || "",
       }),
@@ -66,8 +66,8 @@ export async function switchConfirmImpl(set: any, get: any) {
     }
     const result = await resp.json();
 
-    const targetConvId = result.target_conversation_id;
-    const targetDirId = result.target_partition_id || banner.targetDirId || banner.dirId;
+    const targetConvId = result.target_conv_id;
+    const targetDirId = result.target_dir_id || banner.targetDirId || banner.dirId;
     await selectConversationImpl(set, get, targetDirId, targetConvId);
   } catch (e) {
     console.error("Switch migration error:", e);

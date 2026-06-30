@@ -1,5 +1,5 @@
 """
-学习事件记录模型 (v3.0 Event Layer)
+学习事件记录模型
 
 记录所有可观测的学习行为，供画像层聚合计算趋势和指标。
 """
@@ -36,7 +36,7 @@ class LearningEvent(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # 上下文
-    partition_id: Optional[str] = None
+    dir_id: Optional[str] = None
     branch_id: Optional[str] = None
     skill_ids: list[str] = Field(default_factory=list)
 
@@ -59,7 +59,7 @@ class EventLog(BaseModel):
 
 class EventStats(BaseModel):
     """某分区 x 时间段的事件统计"""
-    partition_id: str
+    dir_id: str
     days: int = 7
     total_events: int = 0
     practice_count: int = 0

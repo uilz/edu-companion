@@ -6,7 +6,7 @@
 -- 全部子系统存在 JSONB 字段中
 -- ════════════════════════════════════════════
 
-CREATE TABLE IF NOT EXISTS cognitive_nodes (
+CREATE TABLE IF NOT EXISTS knowledge_nodes (
     id              TEXT NOT NULL,              -- "math.analysis.derivative.chain_rule"
     user_id         TEXT NOT NULL,              -- 多用户支持
     label           TEXT NOT NULL DEFAULT '',
@@ -51,14 +51,14 @@ CREATE TABLE IF NOT EXISTS cognitive_nodes (
 );
 
 -- 用户索引（user_id 不是 PK 一部分，但需要快速过滤）
-CREATE INDEX IF NOT EXISTS idx_cog_nodes_user ON cognitive_nodes(user_id);
-CREATE INDEX IF NOT EXISTS idx_cog_nodes_parent ON cognitive_nodes(parent);
-CREATE INDEX IF NOT EXISTS idx_cog_nodes_level ON cognitive_nodes(level);
+CREATE INDEX IF NOT EXISTS idx_cog_nodes_user ON knowledge_nodes(user_id);
+CREATE INDEX IF NOT EXISTS idx_cog_nodes_parent ON knowledge_nodes(parent);
+CREATE INDEX IF NOT EXISTS idx_cog_nodes_level ON knowledge_nodes(level);
 -- next_review: 浮点时间戳（Unix 秒，含小数），用 double precision
 CREATE INDEX IF NOT EXISTS idx_cog_nodes_next_review
-    ON cognitive_nodes (((scheduling ->> 'next_review'::text)::double precision))
+    ON knowledge_nodes (((scheduling ->> 'next_review'::text)::double precision))
     WHERE (scheduling ->> 'next_review'::text) IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_cog_nodes_urgency
-    ON cognitive_nodes(((scheduling->>'urgency')::float) DESC)
+    ON knowledge_nodes(((scheduling->>'urgency')::float) DESC)
     WHERE scheduling->>'urgency' IS NOT NULL;
 

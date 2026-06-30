@@ -94,3 +94,7 @@ backend/models/*
 .ipynb_checkpoints/
 tsconfig.tsbuildinfo
 design.md
+
+# rebuild
+.rebuild.lock
+.rebuild.last_run

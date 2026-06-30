@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Pencil, Trash2, Copy, ChevronLeft, ChevronRight } from "lucide-react";
+import { Pencil, Trash2, Copy, ChevronLeft, ChevronRight, MessageSquare } from "lucide-react";
 import SpeakButton from "./../media/SpeakButton";
 
 export interface VersionInfo {
@@ -18,13 +18,14 @@ interface MessageActionsProps {
   onDelete?: () => void;
   onCopy?: () => void;
   onVersionNav?: (direction: "prev" | "next") => void;
+  onFeynmanTeach?: () => void;
 }
 
 /**
  * MessageActions — 消息气泡下方的操作按钮组
  *
  * 用户消息: 版本切换 | 编辑 | 删除 | 复制
- * 助手消息: 删除 | 复制 | 语音
+ * 助手消息: 删除 | 复制 | 语音 | 我来给你讲讲
  */
 export default function MessageActions({
   role,
@@ -35,6 +36,7 @@ export default function MessageActions({
   onDelete,
   onCopy,
   onVersionNav,
+  onFeynmanTeach,
 }: MessageActionsProps) {
   if (role === "user") {
     return (
@@ -79,6 +81,14 @@ export default function MessageActions({
       {onCopy && (
         <button onClick={onCopy} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]" title="复制">
           <Copy size={12} />
+        </button>
+      )}
+      {onFeynmanTeach && (
+        <button onClick={onFeynmanTeach}
+          className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+          title="费曼学习法——讲给AI听">
+          <MessageSquare size={11} />
+          <span>我来给你讲讲</span>
         </button>
       )}
           <SpeakButton text={text} />

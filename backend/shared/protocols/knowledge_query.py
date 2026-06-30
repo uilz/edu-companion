@@ -65,17 +65,17 @@ class KnowledgeQueryService(Protocol):
 
     # ── 认知同步 ──
 
-    def post_message_hooks(self, user_id: str, partition_id: str, node) -> None:
+    def post_message_hooks(self, user_id: str, dir_id: str, node) -> None:
         """消息存储后的钩子：异步写元历史 + 触发分支命名/图谱更新"""
         ...
 
     async def analyze_conversation_evidence(
         self,
         user_id: str,
-        partition_id: str,
+        dir_id: str,
         user_text: str,
         assistant_reply: str,
-        conversation_id: str = "",
+        conv_id: str = "",
     ) -> None:
         """分析一轮对话，提取知识证据（通过 CognitiveNode 事件系统）"""
         ...

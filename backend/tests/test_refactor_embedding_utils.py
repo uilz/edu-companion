@@ -38,7 +38,7 @@ class TestEmbeddingUtilsImports:
         import app.infrastructure.media.material_common
         # 验证模块没有直接引用 classifier 的 compute_embedding
         import inspect
-        source = inspect.getsource(app.services.materials.material_common)
+        source = inspect.getsource(app.infrastructure.media.material_common)
         assert "from app.infrastructure.embedding_utils import" in source
 
 

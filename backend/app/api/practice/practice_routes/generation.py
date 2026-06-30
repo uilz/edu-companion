@@ -26,7 +26,7 @@ async def api_generate(body: dict, user_id: str = Depends(current_user_id)):
         raise HTTPException(400, "请描述你想练习什么内容")
     bank_id = body.get("bank_id")
     bank_name = body.get("bank_name", "").strip() or None
-    conversation_id = body.get("conversation_id")
+    conv_id = body.get("conv_id")
     node_id = body.get("node_id")
     material_ids = body.get("material_ids")
     reference_mode = body.get("reference_mode")
@@ -35,7 +35,7 @@ async def api_generate(body: dict, user_id: str = Depends(current_user_id)):
         user_id=user_id,
         bank_id=bank_id,
         bank_name=bank_name,
-        conversation_id=conversation_id,
+        conv_id=conv_id,
         node_id=node_id,
         material_ids=material_ids,
         reference_mode=reference_mode,
@@ -135,16 +135,16 @@ async def api_explain_question(question_id: str, user_id: str = Depends(current_
 async def api_generate_from_conversation(body: dict, user_id: str = Depends(current_user_id)):
     """对话场景出题：自动识别对话内容并生成题目"""
     _ensure_tables()
-    conversation_id = body.get("conversation_id", "")
-    if not conversation_id:
-        raise HTTPException(400, "conversation_id 不能为空")
+    conv_id = body.get("conv_id", "")
+    if not conv_id:
+        raise HTTPException(400, "conv_id 不能为空")
     user_message = body.get("message", "").strip()
     if not user_message:
         raise HTTPException(400, "请描述你想练习什么内容")
     context = body.get("context")
 
     result = await generate_for_conversation(
-        conversation_id=conversation_id,
+        conv_id=conv_id,
         user_message=user_message,
         user_id=user_id,
         conversation_context=context,

@@ -29,15 +29,15 @@ export default function StatusBar({
   };
 
   return (
-    <div className="flex items-center gap-1 h-[32px] px-4 bg-[var(--color-page-secondary)] border-t border-[var(--color-border)] flex-shrink-0 text-[10px] text-[var(--color-text-muted)]">
-      <span className="mr-2 text-[10px]">📊 <strong className="text-[var(--color-text)]">{stats.total}</strong> 节点</span>
-      <div className="w-px h-4 bg-[var(--color-border)]" />
+    <div className="flex items-center gap-1 h-[32px] px-4 bg-[var(--color-page-secondary)] border-t border-[var(--color-border)] flex-shrink-0 text-[10px] text-[var(--color-text-muted)] overflow-hidden">
+      <span className="mr-2 text-[10px] shrink-0">📊 <strong className="text-[var(--color-text)]">{stats.total}</strong> 节点</span>
+      <div className="w-px h-4 bg-[var(--color-border)] shrink-0" />
       {filterBtn("mastered", "已掌握", "var(--color-success)", stats.mastered, "✅")}
       {filterBtn("learning", "学习中", "var(--color-warning)", stats.learning, "📖")}
       {filterBtn("untouched", "未接触", "var(--color-text-muted)", stats.untouched, "📐")}
-      <div className="w-px h-4 bg-[var(--color-border)]" />
-      <span className="text-[10px]">平均掌握度 <strong style={{ color: getMasteryColor(stats.avgMastery) }}>{Math.round(stats.avgMastery * 100)}%</strong></span>
-      <span className="ml-auto text-[10px]">
+      <div className="w-px h-4 bg-[var(--color-border)] shrink-0" />
+      <span className="text-[10px] shrink-0 hidden sm:inline">平均掌握度 <strong style={{ color: getMasteryColor(stats.avgMastery) }}>{Math.round(stats.avgMastery * 100)}%</strong></span>
+      <span className="ml-auto text-[10px] shrink-0 hidden lg:inline">
         快捷键: <kbd className="inline-block px-1 py-0.5 bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded text-[9px] font-mono">↑↓←→</kbd> 切换
         · <kbd className="inline-block px-1 py-0.5 bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded text-[9px] font-mono">F2</kbd> 编辑
         · <kbd className="inline-block px-1 py-0.5 bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded text-[9px] font-mono">Del</kbd> 删除

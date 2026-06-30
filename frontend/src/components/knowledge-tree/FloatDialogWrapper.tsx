@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { MessageCircle, X, Send, Bot, Loader2 } from "lucide-react";
 import type { GraphNode } from "@/lib/types/graph-types";
-import { authedFetch } from "@/lib/api/api";
 import type { DialogState } from "./KnowledgeTreePage";
+import { useTreeChatStream } from "@/hooks/graph/useTreeChatStream";
 
 const SNAP_THRESHOLD = 30;
 const POS_KEY = "kt-float-pos";
@@ -19,14 +19,20 @@ export default function FloatDialogWrapper({
   onNodeUpdated: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [msgs, setMsgs] = useState<{ role: "ai" | "user"; text: string }[]>([]);
+  const chat = useTreeChatStream();
   const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
-  }, [msgs]);
+  }, [chat.messages, chat.streamText]);
+
+  // 绑定 conversationId
+  useEffect(() => {
+    if (dialogState?.conversationId && !chat.conversationId) {
+      chat.bindConversation(dialogState.conversationId);
+    }
+  }, [dialogState?.conversationId, chat.conversationId, chat]);
 
   const btnRef = useRef<HTMLButtonElement>(null);
   const dragRef = useRef({ dragging: false, moved: false, startX: 0, startY: 0, startLeft: 0, startTop: 0 });
@@ -40,17 +46,31 @@ export default function FloatDialogWrapper({
     return "right";
   });
 
-  const handleDragStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
-    const cx = "touches" in e ? e.touches[0].clientX : e.clientX;
-    const cy = "touches" in e ? e.touches[0].clientY : e.clientY;
+  const _startDrag = useCallback((clientX: number, clientY: number) => {
     let adjustedX = pos.x;
     if (snapped === "left") adjustedX = 8;
     else if (snapped === "right") adjustedX = window.innerWidth - 60;
     if (adjustedX !== pos.x) setPos({ x: adjustedX, y: pos.y });
     setSnapped("none");
-    dragRef.current = { dragging: true, moved: false, startX: cx, startY: cy, startLeft: adjustedX, startTop: pos.y };
+    dragRef.current = { dragging: true, moved: false, startX: clientX, startY: clientY, startLeft: adjustedX, startTop: pos.y };
   }, [pos, snapped]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    _startDrag(e.clientX, e.clientY);
+  }, [_startDrag]);
+
+  // 用原生 addEventListener 注册 touchstart（passive: false），因为 React touch 事件默认 passive
+  useEffect(() => {
+    const el = btnRef.current;
+    if (!el) return;
+    const onTouchStart = (e: TouchEvent) => {
+      e.preventDefault();
+      _startDrag(e.touches[0].clientX, e.touches[0].clientY);
+    };
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    return () => el.removeEventListener("touchstart", onTouchStart);
+  }, [_startDrag]);
 
   useEffect(() => {
     const onMove = (e: MouseEvent | TouchEvent) => {
@@ -97,40 +117,32 @@ export default function FloatDialogWrapper({
 
   const isNodeMode = dialogState?.type === "tree_exploration" && !!dialogState.boundNode;
 
+  // 合并消息流
+  const displayMessages = [
+    ...chat.messages,
+    ...(chat.streamText ? [{ role: "assistant" as const, text: chat.streamText, id: "streaming" }] : []),
+  ];
+
   const send = async () => {
-    if (!input.trim() || sending) return;
+    if (!input.trim() || chat.streaming || !dialogState?.conversationId) return;
     const text = input.trim();
-    setMsgs(p => [...p, { role: "user", text }]);
     setInput("");
-    setSending(true);
-    try {
-      if (dialogState && dialogState.conversationId) {
-        const res = await authedFetch(`/api/conversations/tree/conversation/${dialogState.conversationId}/message`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, partition_id: partitionId }),
-        });
-        const data = await res.json();
-        setMsgs(p => [...p, { role: "ai", text: data.response || data.text || "（收到）" }]);
-      } else {
-        setMsgs(p => [...p, { role: "ai", text: `你好！已收到关于「${text}」的消息。可以点击右侧节点选择具体知识点进行深入学习。` }]);
-      }
-    } catch {
-      setMsgs(p => [...p, { role: "ai", text: "发送失败，请重试。" }]);
-    } finally {
-      setSending(false);
+    if (!chat.conversationId) {
+      chat.bindConversation(dialogState.conversationId);
     }
+    await chat.sendMessage(text, partitionId);
   };
 
   const [hovering, setHovering] = useState(false);
   const isSnapped = snapped !== "none";
   const showFull = !isSnapped || hovering || open;
 
+  void onDialogStateChange; void selectedNode; void onNodeUpdated;
+
   return (
     <>
       <button ref={btnRef}
-        onMouseDown={handleDragStart}
-        onTouchStart={handleDragStart}
+        onMouseDown={handleMouseDown}
         onClick={handleClick}
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
@@ -161,7 +173,7 @@ export default function FloatDialogWrapper({
           </div>
 
           <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
-            {msgs.length === 0 && (
+            {displayMessages.length === 0 && !chat.streaming && (
               <div className="flex flex-col items-center justify-center h-full text-center gap-2 py-6">
                 <Bot size={24} className="text-[var(--color-accent)] opacity-40" />
                 <p className="text-xs text-[var(--color-text-muted)]">
@@ -169,8 +181,8 @@ export default function FloatDialogWrapper({
                 </p>
               </div>
             )}
-            {msgs.map((msg, i) => (
-              <div key={i} className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : ""}`} style={{ maxWidth: "92%" }}>
+            {displayMessages.map((msg, i) => (
+              <div key={msg.id || i} className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : ""}`} style={{ maxWidth: "92%" }}>
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs shrink-0 ${
                   msg.role === "user" ? "bg-[var(--color-accent)]/10" : "bg-[var(--color-page-secondary)]"
                 }`}>
@@ -185,7 +197,7 @@ export default function FloatDialogWrapper({
                 </div>
               </div>
             ))}
-            {sending && (
+            {chat.streaming && !chat.streamText && (
               <div className="flex gap-2" style={{ maxWidth: "92%" }}>
                 <div className="w-6 h-6 rounded-full bg-[var(--color-page-secondary)] flex items-center justify-center text-xs shrink-0">🤖</div>
                 <div className="px-3 py-2 rounded-xl rounded-tl-md border border-[var(--color-border)] bg-[var(--color-page-secondary)]">
@@ -193,17 +205,23 @@ export default function FloatDialogWrapper({
                 </div>
               </div>
             )}
+            {chat.error && (
+              <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-500/10 text-red-500 text-[11px]">
+                <span>{chat.error}</span>
+              </div>
+            )}
           </div>
 
           <div className="flex-shrink-0 px-4 py-3 border-t border-[var(--color-border)] bg-[var(--color-surface)]">
             <div className="flex items-center gap-2">
               <input value={input} onChange={e => setInput(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && send()}
+                onKeyDown={e => e.key === "Enter" && !chat.streaming && send()}
                 placeholder="输入消息…"
-                className="flex-1 px-3 py-2 text-[12px] border border-[var(--color-border)] rounded-lg bg-[var(--color-page-secondary)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors" />
-              <button onClick={send} disabled={sending || !input.trim()}
+                disabled={chat.streaming}
+                className="flex-1 px-3 py-2 text-[12px] border border-[var(--color-border)] rounded-lg bg-[var(--color-page-secondary)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors disabled:opacity-50" />
+              <button onClick={send} disabled={chat.streaming || !input.trim()}
                 className="p-2 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity">
-                {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                {chat.streaming ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
               </button>
             </div>
           </div>

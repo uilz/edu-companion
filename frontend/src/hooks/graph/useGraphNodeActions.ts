@@ -3,14 +3,16 @@
 //
 //  封装 KnowledgeTreePage / NodeDetailPanel / TreeChatPanel
 //  之间重复的节点 CRUD 和 AI 操作逻辑。
+//  使用 knowledge-tree-api.ts (四实体解耦架构)
 //
 //  用法：
-//     const actions = useGraphNodeActions(partitionId, { onNodeUpdated: loadGraph });
+//     const actions = useGraphNodeActions({ onNodeUpdated: loadGraph });
 //     await actions.deleteNode(nodeId);
 //     await actions.aiExpand(nodeId);
 // ══════════════════════════════════════════════════════════════
 
 import { useCallback } from "react";
+import { knowledgeNodesApi } from "@/lib/api/knowledge-tree-api";
 import { authedFetch } from "@/lib/api/api";
 
 export interface GraphNodeActionsCallbacks {
@@ -20,7 +22,6 @@ export interface GraphNodeActionsCallbacks {
 }
 
 export function useGraphNodeActions(
-  partitionId: string,
   callbacks?: GraphNodeActionsCallbacks,
 ) {
   const { onNodeUpdated, onError, onDeleted } = callbacks || {};
@@ -28,10 +29,8 @@ export function useGraphNodeActions(
   // ── 删除节点 ──
   const deleteNode = useCallback(async (nodeId: string, nodeLabel: string): Promise<boolean> => {
     try {
-      const res = await authedFetch(`/api/knowledge/graph/${partitionId}/node/${nodeId}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error("删除失败");
+      const json = await knowledgeNodesApi.delete(nodeId);
+      if (!json.ok) throw new Error("删除失败");
       onDeleted?.();
       onNodeUpdated?.();
       return true;
@@ -39,7 +38,7 @@ export function useGraphNodeActions(
       onError?.(e.message || "删除失败");
       return false;
     }
-  }, [partitionId, onNodeUpdated, onError, onDeleted]);
+  }, [onNodeUpdated, onError, onDeleted]);
 
   // ── 编辑节点 ──
   const editNode = useCallback(async (
@@ -47,36 +46,38 @@ export function useGraphNodeActions(
     data: { label?: string; description?: string; tags?: string[] },
   ): Promise<boolean> => {
     try {
-      const res = await authedFetch(`/api/knowledge/graph/${partitionId}/node/${nodeId}`, {
-        method: "PATCH",
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) throw new Error("保存失败");
+      const payload: Record<string, unknown> = {};
+      if (data.label !== undefined) payload.label = data.label;
+      if (data.description !== undefined) payload.brief = data.description;
+      if (data.tags !== undefined) payload.tags = data.tags;
+      const json = await knowledgeNodesApi.update(nodeId, payload);
+      if (!json.node) throw new Error("保存失败");
       onNodeUpdated?.();
       return true;
     } catch (e: any) {
       onError?.(e.message || "保存失败");
       return false;
     }
-  }, [partitionId, onNodeUpdated, onError]);
+  }, [onNodeUpdated, onError]);
 
   // ── 创建节点 ──
   const createNode = useCallback(async (data: {
     label: string; parent_id?: string; description?: string;
   }): Promise<boolean> => {
     try {
-      const res = await authedFetch(`/api/knowledge/graph/${partitionId}/node`, {
-        method: "POST",
-        body: JSON.stringify(data),
+      const json = await knowledgeNodesApi.create({
+        label: data.label,
+        parent_id: data.parent_id,
+        brief: data.description,
       });
-      if (!res.ok) throw new Error("创建失败");
+      if (!json.node) throw new Error("创建失败");
       onNodeUpdated?.();
       return true;
     } catch (e: any) {
       onError?.(e.message || "创建失败");
       return false;
     }
-  }, [partitionId, onNodeUpdated, onError]);
+  }, [onNodeUpdated, onError]);
 
   // ── AI 扩展 ──
   const aiExpand = useCallback(async (
@@ -84,9 +85,9 @@ export function useGraphNodeActions(
     options?: { depth?: number; direction?: "children" | "siblings" },
   ): Promise<boolean> => {
     try {
-      const res = await authedFetch(`/api/knowledge/graph/${partitionId}/ai-expand`, {
+      const res = await authedFetch(`/api/knowledge-tree/ai/expand/${nodeId}`, {
         method: "POST",
-        body: JSON.stringify({ node_id: nodeId, depth: options?.depth ?? 2, direction: options?.direction ?? "children" }),
+        body: JSON.stringify({ depth: options?.depth ?? 2, direction: options?.direction ?? "children" }),
       });
       if (!res.ok) throw new Error("AI 扩充失败");
       onNodeUpdated?.();
@@ -95,14 +96,14 @@ export function useGraphNodeActions(
       onError?.(e.message || "AI 扩充失败");
       return false;
     }
-  }, [partitionId, onNodeUpdated, onError]);
+  }, [onNodeUpdated, onError]);
 
   // ── AI 编辑/优化 ──
   const aiEdit = useCallback(async (nodeId: string): Promise<boolean> => {
     try {
-      const res = await authedFetch(`/api/knowledge/graph/${partitionId}/ai-edit`, {
+      const res = await authedFetch(`/api/knowledge-tree/ai/edit/${nodeId}`, {
         method: "POST",
-        body: JSON.stringify({ node_id: nodeId }),
+        body: JSON.stringify({ instruction: "优化该节点的名称、描述和标签" }),
       });
       if (!res.ok) throw new Error("AI 编辑失败");
       onNodeUpdated?.();
@@ -111,7 +112,7 @@ export function useGraphNodeActions(
       onError?.(e.message || "AI 编辑失败");
       return false;
     }
-  }, [partitionId, onNodeUpdated, onError]);
+  }, [onNodeUpdated, onError]);
 
   // ── AI 对话 ──
   const aiChat = useCallback(async (
@@ -120,12 +121,11 @@ export function useGraphNodeActions(
     convId?: string,
   ): Promise<{ response: string; conversationId?: string } | null> => {
     try {
-      const res = await authedFetch(`/api/knowledge/graph/${partitionId}/ai-chat`, {
+      const res = await authedFetch(`/api/knowledge-tree/ai/chat/${nodeId}`, {
         method: "POST",
         body: JSON.stringify({
-          node_id: nodeId,
           message,
-          conversation_id: convId || undefined,
+          conv_id: convId || undefined,
         }),
       });
       const data = await res.json();
@@ -134,17 +134,17 @@ export function useGraphNodeActions(
         onError?.(errMsg);
         return { response: errMsg };
       }
-      return { response: data.response || "", conversationId: data.conversation_id };
+      return { response: data.response || "", conversationId: data.conv_id };
     } catch (e: any) {
       onError?.(e.message || "对话失败");
       return null;
     }
-  }, [partitionId, onError]);
+  }, [onError]);
 
   // ── 生成知识树 ──
   const generateGraph = useCallback(async (): Promise<boolean> => {
     try {
-      const res = await authedFetch(`/api/knowledge/graph/${partitionId}/generate`, { method: "POST" });
+      const res = await authedFetch(`/api/knowledge-tree/ai/generate`, { method: "POST" });
       if (!res.ok) throw new Error(`服务返回 ${res.status}`);
       onNodeUpdated?.();
       return true;
@@ -152,7 +152,7 @@ export function useGraphNodeActions(
       onError?.(e.message || "生成失败");
       return false;
     }
-  }, [partitionId, onNodeUpdated, onError]);
+  }, [onNodeUpdated, onError]);
 
   return { deleteNode, editNode, createNode, aiExpand, aiEdit, aiChat, generateGraph };
 }

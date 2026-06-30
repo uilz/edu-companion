@@ -3,7 +3,7 @@
 P5: 资料→分区归属→分支引用
 
 数据存储: COMPANION_HOME/uploads/materials_meta.json
-结构: {material_id: {partition_id, file_name, file_type, level, parent_id, ...}}
+结构: {material_id: {dir_id, file_name, file_type, level, parent_id, ...}}
 """
 
 from __future__ import annotations
@@ -74,23 +74,23 @@ class MaterialsMetaStore:
         data.pop(material_id, None)
         self._save()
 
-    def list_by_partition(self, partition_id: str) -> list[dict]:
+    def list_by_partition(self, dir_id: str) -> list[dict]:
         """获取某分区下的所有资料"""
         result = []
         for mid, meta in self._load().items():
-            pid = meta.get("partition_id", UNCATEGORIZED_PARTITION_ID)
-            if pid == partition_id:
+            pid = meta.get("dir_id", UNCATEGORIZED_PARTITION_ID)
+            if pid == dir_id:
                 result.append({"material_id": mid, **meta})
         return sorted(result, key=lambda x: x.get("created_at", ""), reverse=True)
 
-    def search(self, query: str, partition_id: str | None = None) -> list[dict]:
+    def search(self, query: str, dir_id: str | None = None) -> list[dict]:
         """按文件名搜索资料"""
         q = query.lower()
         result = []
         for mid, meta in self._load().items():
             if q in meta.get("file_name", "").lower():
-                pid = meta.get("partition_id", UNCATEGORIZED_PARTITION_ID)
-                if partition_id is None or pid == partition_id:
+                pid = meta.get("dir_id", UNCATEGORIZED_PARTITION_ID)
+                if dir_id is None or pid == dir_id:
                     result.append({"material_id": mid, **meta})
         return sorted(result, key=lambda x: x.get("created_at", ""), reverse=True)
 
@@ -129,7 +129,7 @@ class MaterialsMetaStore:
                 "file_name": fname[37:] if len(fname) > 37 else fname,
                 "file_type": file_type_map.get(ext, "unknown"),
                 "file_size": fpath.stat().st_size,
-                "partition_id": UNCATEGORIZED_PARTITION_ID,
+                "dir_id": UNCATEGORIZED_PARTITION_ID,
                 "level": "partition",
                 "parent_id": "",
                 "purpose": "session",
@@ -149,18 +149,18 @@ class MaterialsMetaStore:
 
         return count
 
-    def migrate_to_partition(self, material_id: str, partition_id: str):
+    def migrate_to_partition(self, material_id: str, dir_id: str):
         """将资料移动到指定分区"""
         data = self._load()
         if material_id in data:
-            data[material_id]["partition_id"] = partition_id
+            data[material_id]["dir_id"] = dir_id
             self._save()
 
     def get_stats_by_partition(self) -> dict[str, int]:
         """统计各分区的资料数量"""
         stats: dict[str, int] = {}
         for mid, meta in self._load().items():
-            pid = meta.get("partition_id", UNCATEGORIZED_PARTITION_ID)
+            pid = meta.get("dir_id", UNCATEGORIZED_PARTITION_ID)
             stats[pid] = stats.get(pid, 0) + 1
         return stats
 

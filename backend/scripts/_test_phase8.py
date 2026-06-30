@@ -8,7 +8,7 @@ def main():
     db = get_db()
 
     # 清理上次残留
-    db.execute("DELETE FROM conversation_summaries WHERE conversation_id = '00000000-0000-0000-0000-000000000001'")
+    db.execute("DELETE FROM conversation_summaries WHERE conv_id = '00000000-0000-0000-0000-000000000001'")
 
     # 1. 检查 conversation_summaries 表
     r = db.fetchall(
@@ -40,7 +40,7 @@ def main():
     from app.services.common.summary_service import save_summary, get_recent_summaries, build_condensed_context
 
     sid = save_summary(
-        conversation_id="00000000-0000-0000-0000-000000000001",
+        conv_id="00000000-0000-0000-0000-000000000001",
         summary="测试摘要内容",
         user_id=DEFAULT_USER_ID,
         round_number=10,

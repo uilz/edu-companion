@@ -148,7 +148,7 @@ class ConversationService:
             knowledge_node_ids=_json_list(row.get("knowledge_node_ids")),
             summary_short=row.get("summary_short") or "",
             summary_dirty=row.get("summary_dirty", False),
-            parent_conversation_id=row.get("parent_conversation_id") or "",
+            parent_conv_id=row.get("parent_conv_id") or "",
             sub_branch_ids=_json_list(row.get("sub_branch_ids")),
             depth=row.get("depth", 0),
             created_at=row["created_at"].timestamp() if hasattr(row["created_at"], "timestamp") else time.time(),

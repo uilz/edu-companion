@@ -364,7 +364,9 @@ export default function KnowledgeTreePage() {
   if (canvas.loading) return <LoadingSkeleton />;
   if (canvas.error) return <ErrorState message={canvas.error} onRetry={canvas.loadGraph} />;
 
-  if (!canvas.graphData || canvas.graphData.nodes.length === 0) {
+  // 排除虚拟分区根节点后判断是否有真实节点
+  const realNodes = canvas.graphData?.nodes?.filter(n => !(n.level === "partition" && n.created_by === "system")) ?? [];
+  if (!canvas.graphData || realNodes.length === 0) {
     if (!canvas.partitionId) {
       return <NoPartitionState onPartitionCreated={canvas.setPartitionId} onStartTemporary={canvas.handleStartTemporary} />;
     }

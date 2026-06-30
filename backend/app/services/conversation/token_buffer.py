@@ -1,13 +1,19 @@
 """
 TokenBuffer — 流式事件内存缓存 + 状态管理 + 订阅发布
 
-每个 conversation_id 对应一个 BufferEntry，包含：
+每个 conv_id 对应一个 BufferEntry，包含：
   - events: list[dict]      全部缓存事件
+  - consumed_offset: int    已从 events 头部丢弃的事件数（全局序号基准）
   - state: State            当前状态（RUNNING / PAUSED / DONE / CANCELLED）
   - subscribers: list[Event] 等待新事件的 asyncio.Event
   - resume_event: Event     暂停时等待恢复的信号
 
 线程安全：所有写操作通过 asyncio.Lock 保护。
+
+设计要点：
+  - 订阅者使用「全局事件序号」追踪读取进度，不依赖本地数组下标
+  - 截断时 consumed_offset 增加，订阅者自动推进 last_read_idx，
+    保证不会因截断而静默丢失未读事件
 """
 
 from __future__ import annotations
@@ -30,14 +36,15 @@ class State(enum.Enum):
 class BufferEntry:
     def __init__(self) -> None:
         self.events: list[dict] = []
+        self.consumed_offset: int = 0  # events[0] 对应的全局序号
         self.state: State = State.RUNNING
         self.subscribers: list[asyncio.Event] = []
         self.resume_event = asyncio.Event()
         self.resume_event.set()  # 初始为「可运行」状态
 
 
-# 单个会话最大缓冲事件数（超过时丢弃旧 token，保留非 token 事件）
-_MAX_BUFFERED_EVENTS = 500
+# 单个会话最大缓冲事件数（超过时从头部丢弃旧 token 事件）
+_MAX_BUFFERED_EVENTS = 2000
 
 
 class TokenBuffer:
@@ -57,11 +64,32 @@ class TokenBuffer:
                 entry = BufferEntry()
                 self._buffers[conv_id] = entry
             entry.events.append(event)
-            # 限界：超过上限时优先丢弃旧 token 事件，保留 done 等关键事件
+
+            # 限界：超过上限时丢弃头部旧 token 事件
             if len(entry.events) > _MAX_BUFFERED_EVENTS:
-                # 保留最后 80%，丢弃前面的纯 token 事件
-                keep_count = int(_MAX_BUFFERED_EVENTS * 0.8)
-                entry.events = entry.events[-keep_count:]
+                # 计算需要丢弃的数量
+                drop_target = int(_MAX_BUFFERED_EVENTS * 0.8)
+                drop_count = len(entry.events) - drop_target
+
+                # 优先丢弃 type=token 的事件（从头部开始）
+                dropped = 0
+                surviving: list[dict] = []
+                for ev in entry.events:
+                    if dropped < drop_count and ev.get("type") == "token":
+                        dropped += 1
+                        continue
+                    surviving.append(ev)
+
+                # 如果只丢 token 还不够，退化为从头部直接截断
+                if len(surviving) > _MAX_BUFFERED_EVENTS:
+                    keep_count = int(_MAX_BUFFERED_EVENTS * 0.8)
+                    actual_dropped = len(entry.events) - keep_count
+                    entry.events = entry.events[-keep_count:]
+                    entry.consumed_offset += actual_dropped
+                else:
+                    entry.events = surviving
+                    entry.consumed_offset += dropped
+
             # 通知所有订阅者
             for evt in entry.subscribers:
                 evt.set()
@@ -102,8 +130,13 @@ class TokenBuffer:
         参数：
           wait_for_entry: 如果 True，当缓冲区不存在时最多等待 max_wait 秒
           max_wait: 等待缓冲区创建的超时秒数
+
+        使用「全局事件序号」追踪读取进度，即使缓冲区头部被截断
+        （consumed_offset 增大），订阅者也能正确跳过已丢失的事件，
+        不会读取错位或静默丢弃事件。
         """
         entry: BufferEntry | None = None
+        # last_read_idx：全局事件序号，订阅者已读取到的位置
         last_read_idx = 0
 
         # 如果缓冲区不存在，等待它被创建（处理 SSE 在 pipeline 启动前连接）
@@ -123,10 +156,15 @@ class TokenBuffer:
 
             subscriber_event = asyncio.Event()
             entry.subscribers.append(subscriber_event)
-            last_read_idx = 0 if from_beginning else len(entry.events)
+            # 全局序号初始化
+            if from_beginning:
+                last_read_idx = entry.consumed_offset
+            else:
+                last_read_idx = entry.consumed_offset + len(entry.events)
 
             # 如果已结束且没有事件，直接返回
-            if entry.state in (State.DONE, State.CANCELLED) and last_read_idx >= len(entry.events):
+            if entry.state in (State.DONE, State.CANCELLED) and \
+               last_read_idx >= entry.consumed_offset + len(entry.events):
                 return
 
         # ── 事件循环 ──
@@ -139,9 +177,14 @@ class TokenBuffer:
                     else:
                         resume_evt = None
 
-                    # 读取新事件
-                    new_events = entry.events[last_read_idx:]
-                    last_read_idx = len(entry.events)
+                    # 如果缓冲区头部被截断，推进 last_read_idx
+                    if last_read_idx < entry.consumed_offset:
+                        last_read_idx = entry.consumed_offset
+
+                    # 将全局序号转为本地数组下标，读取新事件
+                    local_start = last_read_idx - entry.consumed_offset
+                    new_events = entry.events[local_start:]
+                    last_read_idx = entry.consumed_offset + len(entry.events)
 
                 # 如果暂停，等待恢复信号
                 if resume_evt is not None:
@@ -155,9 +198,11 @@ class TokenBuffer:
                 final_events: list = []
                 async with self._lock:
                     if entry.state in (State.DONE, State.CANCELLED):
-                        # yield 最后一批事件
-                        final_events = entry.events[last_read_idx:]
-                        last_read_idx = len(entry.events)
+                        if last_read_idx < entry.consumed_offset:
+                            last_read_idx = entry.consumed_offset
+                        local_start = last_read_idx - entry.consumed_offset
+                        final_events = entry.events[local_start:]
+                        last_read_idx = entry.consumed_offset + len(entry.events)
                         if not final_events:
                             break
 

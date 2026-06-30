@@ -56,31 +56,25 @@ def _weighted_recent_messages(messages: list, last_n: int = 8) -> list:
 
 async def summarize_branch_name(user_id: str, branch_id: str) -> str:
     """
-    根据对话内容自动重命名分支
-
-    规则：
-    - ≤5条消息：取第一条消息的前20字
-    - 5-20条：尝试 LLM 重命名（加权最近消息）
-    - >20条：再次 LLM 重命名（更多上下文）
+    根据对话内容自动重命名对话（DirectoryNode 版本）
     """
     data = get_data_repo().load(user_id)
-    branch = data.conversations.get(branch_id)
-    if not branch:
+    branch = data.directory_nodes.get(branch_id)
+    if not branch or branch.node_type != "conv":
         return ""
 
-    messages = [data.nodes.get(nid) for nid in branch.path if data.nodes.get(nid)]
+    msg_ids = branch.conv_message_ids or []
+    messages = [data.nodes.get(nid) for nid in msg_ids if data.nodes.get(nid)]
     msg_count = len(messages)
 
     if msg_count == 0:
         return branch.name or "新对话"
 
     if msg_count <= 5:
-        # 初始命名：取第一条消息前20字
         first_msg = messages[0]
         text = first_msg.text_summary or ""
         return text[:20] + ("..." if len(text) > 20 else "")
 
-    # 使用加权消息进行命名
     recent_texts = _weighted_recent_messages(messages, last_n=8)
     return await _llm_rename_branch(recent_texts, branch.name)
 
@@ -122,75 +116,76 @@ async def _llm_rename_branch(recent_texts: list[str], current_name: str) -> str:
         return best[:20] + ("..." if len(best) > 20 else "")
 
 
-def update_partition_context(user_id: str, partition_id: str) -> str:
+def update_partition_context(user_id: str, dir_id: str) -> str:
     """
-    更新分区上下文摘要
-
-    合并所有分支摘要，生成分区级别的上下文
-    LLM对话时注入这个摘要以省token
+    更新分区上下文摘要（DirectoryNode 版本）
+    合并所有子对话摘要，生成目录级别的上下文
     """
     data = get_data_repo().load(user_id)
-    partition = data.partitions.get(partition_id)
+    partition = data.directory_nodes.get(dir_id)
     if not partition:
         return ""
 
-    # Conversation → Topic → Domain → Partition
-    partition_domain_ids = {d.id for d in data.domains.values() if d.partition_id == partition_id}
-    partition_topic_ids = {t.id for t in data.topics.values() if t.domain_id in partition_domain_ids}
-    branches = [b for b in data.conversations.values() if b.topic_id in partition_topic_ids]
-    active_branch = data.conversations.get(partition.active_conversation_id)
+    # 收集该目录下的所有对话节点
+    branches = [
+        n for n in data.directory_nodes.values()
+        if n.node_type == "conv" and n.parent_id == dir_id
+    ]
+    # 最活跃对话（updated_at 最新）
+    branches_sorted = sorted(branches, key=lambda n: n.updated_at, reverse=True)
+    active_branch = branches_sorted[0] if branches_sorted else None
 
-    # 构建分区摘要
-    parts = [f"分区: {partition.name} ({partition.subject or '通用'})"]
-    parts.append(f"共 {len(branches)} 条分支")
+    # 构建摘要
+    parts = [f"目录: {partition.name}"]
+    parts.append(f"共 {len(branches)} 个对话")
 
     if active_branch:
-        msg_count = len(active_branch.path)
-        parts.append(f"活跃分支: {active_branch.name or '未命名'} ({msg_count}条消息)")
-        if active_branch.summary:
-            parts.append(f"摘要: {active_branch.summary}")
-        if active_branch.practice_summary:
-            parts.append(f"练习: {active_branch.practice_summary}")
+        msg_count = len(active_branch.conv_message_ids or [])
+        parts.append(f"活跃对话: {active_branch.name or '未命名'} ({msg_count}条消息)")
+        summary = (active_branch.metadata or {}).get("summary", "")
+        if summary:
+            parts.append(f"摘要: {summary}")
 
     context = " | ".join(parts)
     partition.context_summary = context
     get_data_repo().save(user_id, data)
 
-    logger.info(f"分区 {partition_id} 上下文已更新")
+    logger.info(f"目录 {dir_id} 上下文已更新")
     return context
 
 
 def generate_branch_summary(user_id: str, branch_id: str) -> str:
     """
-    为分支生成摘要
-
-    触发条件：消息数 > 10 且距上次摘要 > 1小时，或手动触发
+    为对话生成摘要（DirectoryNode 版本）
     """
     data = get_data_repo().load(user_id)
-    branch = data.conversations.get(branch_id)
-    if not branch:
+    branch = data.directory_nodes.get(branch_id)
+    if not branch or branch.node_type != "conv":
         return ""
 
-    messages = [data.nodes.get(nid) for nid in branch.path if data.nodes.get(nid)]
+    msg_ids = branch.conv_message_ids or []
+    messages = [data.nodes.get(nid) for nid in msg_ids if data.nodes.get(nid)]
     if len(messages) < 10:
-        return branch.summary or ""
+        meta = branch.metadata or {}
+        return meta.get("summary", "")
 
-    # 降级：提取最近消息的文本摘要
     recent_texts = []
     for msg in messages[-10:]:
         text = msg.text_summary or ""
         if text:
             recent_texts.append(text[:50])
 
-    summary = " > ".join(recent_texts[-5:])  # 最近5条的摘要链
+    summary = " > ".join(recent_texts[-5:])
     if len(summary) > 200:
         summary = summary[:197] + "..."
 
-    branch.summary = summary
-    branch.summary_dirty = False
+    if not branch.metadata:
+        branch.metadata = {}
+    branch.metadata["summary"] = summary
+    branch.metadata["summary_dirty"] = False
     get_data_repo().save(user_id, data)
 
-    logger.info(f"分支 {branch_id} 摘要已生成: {summary[:50]}...")
+    logger.info(f"对话 {branch_id} 摘要已生成: {summary[:50]}...")
     return summary
 
 

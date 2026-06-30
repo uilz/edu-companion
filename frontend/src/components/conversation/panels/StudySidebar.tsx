@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { Plus, Hash, FolderOpen } from "lucide-react";
+import { Hash, FolderOpen } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { NewNodeDialog } from "@/components/ui/NewNodeDialog";
 import { SidebarTreeNode } from "@/components/conversation/tree/SidebarTreeNode";
+import { FlatConversationList } from "@/components/conversation/panels/FlatConversationList";
 import { useTreeNavigation } from "@/hooks/graph/useTreeNavigation";
 import { useConversationStore } from "@/store/conversation/conversation-store";
 import { useTreeStore } from "@/store/conversation/tree-store";
@@ -43,7 +44,7 @@ export default function StudySidebar({
         await treeState.loadRootNodes();
       }
       const s = useConversationStore.getState();
-      const pid = s.selectedNodeId;
+      const pid = s.selectedNode?.id;
       if (!pid) return;
 
       try {
@@ -63,7 +64,7 @@ export default function StudySidebar({
         // 节点不存在（如 URL 中的 node_id 已被删除），清除 URL 回到默认
         try {
           window.history.replaceState(null, "", window.location.pathname);
-          localStorage.removeItem("learn-page-state");
+          localStorage.removeItem("conversation-page-state");
         } catch { /* ignore */ }
       }
     };
@@ -73,6 +74,7 @@ export default function StudySidebar({
   const nav = useTreeNavigation(onConversationReady, onTreeChanged);
   const selectGraphNode = useConversationStore(s => s.selectGraphNode);
   const selectedNode = useConversationStore(s => s.selectedNode);
+  const sidebarMode = useConversationStore(s => s.sidebarMode);
 
   // ── 祖先链：selectedNode.path 中的祖先 ID 集合 ──
   const ancestorIds = useMemo(() => {
@@ -93,14 +95,17 @@ export default function StudySidebar({
             <FolderOpen size={15} className="text-[var(--color-accent)]" />
             <span className="text-xs font-semibold text-[var(--color-text)]">学习空间</span>
           </div>
-          <button onClick={onCreateDir}
-            className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface)] active:scale-[0.97] transition-all rounded" title="新建目录">
-            <Plus size={15} />
-          </button>
+          <div className="flex items-center gap-1">
+          </div>
         </div>
       )}
       <div className="flex-1 overflow-y-auto py-1">
-        {loading ? (
+        {sidebarMode === "flat" ? (
+          <FlatConversationList
+            onRenameConv={nav.handleRenameConv}
+            onDeleteConv={nav.setDeleteTarget}
+          />
+        ) : loading ? (
           <div className="px-4 py-8 text-center text-xs text-[var(--color-text-muted)]">加载中...</div>
         ) : nav.rootNodes.length === 0 ? (
           <div className="px-4 py-8 text-center">

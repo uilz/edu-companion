@@ -104,7 +104,7 @@ class ZPDScheduler:
     def estimate_student_ability(
         self,
         skill_id: str,
-        user_id: str,
+        user_id: str = "",
     ) -> float:
         """
         估计学生在某知识点的能力θ

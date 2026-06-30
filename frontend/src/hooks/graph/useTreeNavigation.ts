@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { v2, tree } from "@/lib/api/api";
+import { tree } from "@/lib/api/api";
 import type { GraphNode, GraphLevel } from "@/components/conversation/tree/SidebarTreeNode";
 import { ROOT_KEY } from "@/components/conversation/tree/SidebarTreeNode";
 import { useConversationStore } from "@/store/conversation/conversation-store";
@@ -108,7 +108,7 @@ export function useTreeNavigation(
         method: "POST",
         body: JSON.stringify({ node_type: "dir", kind: "general", parent_id: parent.id, name, emoji }),
       });
-      const convId = resp.conversation_id;
+      const convId = resp.conv_id;
       const newNodeId = resp.directory_node?.id;
 
       // 1) 刷新父节点的子列表
@@ -119,6 +119,7 @@ export function useTreeNavigation(
         treeState.toggleExpand(parent);
       }
 
+      useTreeStore.setState(s => ({ treeRefreshKey: s.treeRefreshKey + 1 }));
       onTreeChanged?.();
 
       // 3) 选中新节点（统一走 selectGraphNode）
@@ -183,6 +184,7 @@ export function useTreeNavigation(
         });
       }
       useTreeStore.getState().setChildMap(newMap);
+      useTreeStore.setState(s => ({ treeRefreshKey: s.treeRefreshKey + 1 }));
       onTreeChanged?.();
     } catch { /* ignore */ }
     setEditingId(null);
@@ -191,12 +193,13 @@ export function useTreeNavigation(
   // ── 重命名会话（统一用 childMap 更新）──
   const handleRenameConv = useCallback(async (convId: string, name: string, parentId: string) => {
     try {
-      await tree(`/tree/conversation/${convId}`, { method: "PATCH", body: JSON.stringify({ name }) });
+      await tree(`/tree/directory/${convId}`, { method: "PATCH", body: JSON.stringify({ name }) });
       const treeState = useTreeStore.getState();
       const newMap = new Map(treeState.childMap);
       const children = newMap.get(parentId) || [];
       newMap.set(parentId, children.map(c => c.id === convId ? { ...c, label: name } : c));
       useTreeStore.getState().setChildMap(newMap);
+      useTreeStore.setState(s => ({ treeRefreshKey: s.treeRefreshKey + 1 }));
     } catch { /* ignore */ }
     setEditingId(null);
   }, []);
@@ -207,22 +210,21 @@ export function useTreeNavigation(
       const convStore = useConversationStore.getState();
       const treeState = useTreeStore.getState();
       try {
-        // 从父节点获取 kind（temp 目录下创建的 conv 也应为 temp）
-        const childKind = node.kind === "temp" ? "temp" : "general";
-        const result = await ensureConversationAtLevel(node.level, node.id, partitionId, childKind);
+        const result = await ensureConversationAtLevel("dir", node.id, partitionId, "general");
         if (result) {
           if (!treeState.expandedSet.has(node.id)) {
             treeState.toggleExpand(node);
           }
           // 刷新 childMap 获取新会话节点
           await treeState.loadChildren(node.id, "dir");
+          useTreeStore.setState(s => ({ treeRefreshKey: s.treeRefreshKey + 1 }));
           // 从 childMap 找到新会话，走 selectGraphNode 统一选中
           const kids = useTreeStore.getState().childMap.get(node.id) || [];
-          const newConv = kids.find(n => n.id === result.conversationId);
+          const newConv = kids.find(n => n.id === result.convId);
           if (newConv) {
             await convStore.selectGraphNode(newConv, partitionId);
           } else {
-            onConversationReady?.(result.partitionId, result.conversationId);
+            onConversationReady?.(result.dirId, result.convId);
           }
         }
       } catch (e) {
@@ -239,13 +241,9 @@ export function useTreeNavigation(
 
     try {
       if (deleteTarget.isConv) {
-        await tree(`/tree/conversation/${deleteTarget.id}`, { method: "DELETE" });
+        await tree(`/tree/directory/${deleteTarget.id}`, { method: "DELETE" });
       } else {
-        try {
-          await tree(`/tree/directory/${deleteTarget.id}`, { method: "DELETE" });
-        } catch {
-          await v2(`/graph/nodes/${deleteTarget.id}?recursive=true`, { method: "DELETE" });
-        }
+        await tree(`/tree/directory/${deleteTarget.id}`, { method: "DELETE" });
       }
 
       // 统一刷新父节点的子列表
@@ -255,20 +253,15 @@ export function useTreeNavigation(
         await treeState.loadChildren(parentId, "dir");
       }
 
+      useTreeStore.setState(s => ({ treeRefreshKey: s.treeRefreshKey + 1 }));
       onTreeChanged?.();
 
       // 删除后导航：清除选中状态 + URL
-      if (deleteTarget.id === useConversationStore.getState().selectedNodeId) {
+      const cs = useConversationStore.getState();
+      if (deleteTarget.id === cs.selectedNode?.id) {
         if (parentId === ROOT_KEY) {
           // 删除一级目录 → 清除选中状态 + URL
-          useConversationStore.setState({
-            selectedNodeId: null,
-            selectedNodeType: null,
-            activeConversationId: null,
-            selectedNode: null,
-            messages: [],
-            responseBlocks: [],
-          });
+          useConversationStore.getState().selectConversation("", "");
           try { window.history.replaceState(null, "", window.location.pathname); } catch { /* ignore */ }
         } else {
           navigateToNode(parentId);

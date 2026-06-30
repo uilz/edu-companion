@@ -1,5 +1,5 @@
 """
-PostgreSQL 对话存储引擎 (v6.0 — DirectoryNode)
+PostgreSQL 对话存储引擎 (DirectoryNode)
 
 统一 UserData JSONB 存储, 使用 directory_nodes 取代旧 partitions/domains/topics/conversations。
 所有字典存入 conversation_user_meta 表的 JSONB 列。
@@ -13,12 +13,10 @@ import time
 from pathlib import Path
 from typing import Any
 
-from pydantic import TypeAdapter
-
 from app.infrastructure.db.database import Database
 from app.schemas.conversation import (
-    UserData, ResponseBlock, LinkNode, ContentBlock,
-    FileRecord, BackgroundJob, KnowledgeGraph,
+    UserData, ResponseBlock, LinkNode,
+    FileRecord, KnowledgeGraph,
 )
 from app.schemas.directory_node import DirectoryNode, MessageNode
 from shared.protocols.data_repository import DataRepository, AdminRepository
@@ -107,38 +105,47 @@ class PgStorageEngine(DataRepository, AdminRepository):
                     except Exception as e:
                         logger.debug("Parse DirectoryNode %s: %s", nid, e)
 
-        # nodes (MessageNode)
-        nodes: dict[str, MessageNode] = {}
-        raw_nodes = self._parse_json(meta.get("nodes", {}), {})
-        if isinstance(raw_nodes, dict):
-            for nid, ndata in raw_nodes.items():
-                if isinstance(ndata, dict):
-                    ndata = self._fix_node_content_blocks(ndata)
-                    try:
-                        nodes[nid] = MessageNode(**ndata)
-                    except Exception as e:
-                        logger.debug("Deser MessageNode %s: %s", nid, e)
+        # D18: nodes 从 messages 表读取
+        from app.services.conversation.message_repository import get_message_repo
+        msg_repo = get_message_repo()
+        nodes = msg_repo.load_all(user_id)
 
-        # response_blocks
+        # D15: response_blocks 从 nodes.content_blocks 重建
         response_blocks: dict[str, ResponseBlock] = {}
-        raw_rb = self._parse_json(meta.get("response_blocks", {}), {})
-        if isinstance(raw_rb, dict):
-            for rid, rdata in raw_rb.items():
-                if isinstance(rdata, dict):
+        for nid, node in nodes.items():
+            for cb in node.content_blocks:
+                if isinstance(cb, dict) and cb.get("_response_block"):
                     try:
-                        response_blocks[rid] = ResponseBlock(**rdata)
+                        response_blocks[cb.get("_response_block_id", cb.get("id", ""))] = ResponseBlock(**{
+                            "id": cb.get("_response_block_id", cb.get("id", "")),
+                            "message_id": nid,
+                            "dir_id": cb.get("dir_id", ""),
+                            "conv_id": cb.get("conv_id", ""),
+                            "type": cb.get("block_type", "text"),
+                            "status": cb.get("status", "ready"),
+                            "content": cb.get("content", {}),
+                            "order": cb.get("order", 0),
+                            "sources": cb.get("sources", []),
+                            "created_at": cb.get("created_at", 0),
+                            "updated_at": cb.get("updated_at", 0),
+                        })
                     except Exception:
                         pass
 
         # link_nodes
         link_nodes = self._parse_json_dict(LinkNode, meta.get("link_nodes", {}))
         files = self._parse_json_dict(FileRecord, meta.get("files", {}))
-        background_jobs = self._parse_json_dict(BackgroundJob, meta.get("background_jobs", {}))
+
+        # D17: background_jobs 纯内存，不再从 DB 读取
 
         # 其他字段
         event_log = self._parse_json(meta.get("event_log", []), [])
-        secretary_prefs = self._parse_json(meta.get("secretary_prefs", {}), {})
-        policy_memory = self._parse_json(meta.get("policy_memory", {}), {})
+
+        # D16: secretary_prefs / policy_memory 从 user_settings 统一表读取
+        from app.infrastructure.db.user_settings_repo import get_user_settings_repo
+        settings_repo = get_user_settings_repo()
+        secretary_prefs = settings_repo.get_key(user_id, "secretary_prefs", {})
+        policy_memory = settings_repo.get_key(user_id, "policy_memory", {})
 
         knowledge_graphs = {}
         raw_kg = self._parse_json(meta.get("knowledge_graphs", {}))
@@ -159,7 +166,6 @@ class PgStorageEngine(DataRepository, AdminRepository):
             link_nodes=link_nodes,
             response_blocks=response_blocks,
             files=files,
-            background_jobs=background_jobs,
             knowledge_graphs=knowledge_graphs,
             event_log=event_log,
             secretary_prefs=secretary_prefs,
@@ -171,45 +177,59 @@ class PgStorageEngine(DataRepository, AdminRepository):
     def save(self, user_id: str, data: UserData) -> None:
         self._ensure_schema()
         db = Database.get()
-        type_adapter = TypeAdapter(list[ContentBlock])
 
         # directory_nodes
         dn_json = self._j({k: v.model_dump() for k, v in data.directory_nodes.items()})
 
-        # nodes
-        nodes_dict = {}
-        for nid, node in data.nodes.items():
-            nd = node.model_dump()
-            nd["content_blocks"] = type_adapter.dump_python(node.content_blocks)
-            nodes_dict[nid] = nd
-        nodes_json = self._j(nodes_dict)
+        # D18: nodes 写入 messages 独立表
+        # D15: response_blocks 合并到 nodes.content_blocks 一起持久化
+        from app.services.conversation.message_repository import get_message_repo
+        msg_repo = get_message_repo()
+
+        # 将 response_blocks 合并到对应消息的 content_blocks
+        for block_id, block in data.response_blocks.items():
+            msg_id = block.message_id
+            if msg_id and msg_id in data.nodes:
+                node = data.nodes[msg_id]
+                # 移除旧的 response_block 条目
+                node.content_blocks = [cb for cb in node.content_blocks
+                                       if not (isinstance(cb, dict) and cb.get("_response_block"))]
+                # 添加新的 response_block 条目
+                node.content_blocks.append({
+                    "_response_block": True,
+                    "_response_block_id": block.id,
+                    "status": block.status,
+                    "block_type": block.type,
+                    "content": block.content,
+                    "order": block.order,
+                    "sources": block.sources,
+                    "dir_id": getattr(block, "dir_id", block.conv_id),
+                    "conv_id": block.conv_id,
+                    "created_at": block.created_at,
+                    "updated_at": block.updated_at,
+                })
+
+        msg_repo.save_all(user_id, data.nodes)
 
         link_nodes_json = self._j({k: v.model_dump() for k, v in data.link_nodes.items()})
-        response_blocks_json = self._j({k: v.model_dump() for k, v in data.response_blocks.items()})
 
         db.execute(
             """
             INSERT INTO conversation_user_meta
                 (user_id, role, org_id,
-                 directory_nodes, nodes, link_nodes, response_blocks,
-                 files, background_jobs,
+                 directory_nodes, link_nodes,
+                 files,
                  knowledge_graphs, event_log,
-                 secretary_prefs, policy_memory,
                  created_at, updated_at)
-            VALUES (%s,%s,%s, %s,%s,%s,%s, %s,%s, %s,%s, %s,%s, %s,%s)
+            VALUES (%s,%s,%s, %s,%s, %s, %s,%s, %s,%s)
             ON CONFLICT (user_id) DO UPDATE SET
                 role = EXCLUDED.role,
                 org_id = EXCLUDED.org_id,
                 directory_nodes = EXCLUDED.directory_nodes,
-                nodes = EXCLUDED.nodes,
                 link_nodes = EXCLUDED.link_nodes,
-                response_blocks = EXCLUDED.response_blocks,
                 files = EXCLUDED.files,
-                background_jobs = EXCLUDED.background_jobs,
                 knowledge_graphs = EXCLUDED.knowledge_graphs,
                 event_log = EXCLUDED.event_log,
-                secretary_prefs = EXCLUDED.secretary_prefs,
-                policy_memory = EXCLUDED.policy_memory,
                 updated_at = EXCLUDED.updated_at
             """,
             (
@@ -217,19 +237,22 @@ class PgStorageEngine(DataRepository, AdminRepository):
                 data.role,
                 data.org_id,
                 dn_json,
-                nodes_json,
                 link_nodes_json,
-                response_blocks_json,
                 self._j({k: v.model_dump() for k, v in data.files.items()}),
-                self._j({k: v.model_dump() for k, v in data.background_jobs.items()}),
                 self._j({k: v.model_dump() for k, v in data.knowledge_graphs.items()}),
                 self._j(data.event_log),
-                self._j(data.secretary_prefs),
-                self._j(data.policy_memory),
                 time.time(),
                 time.time(),
             ),
         )
+
+        # D16: secretary_prefs / policy_memory 写入 user_settings 统一表
+        from app.infrastructure.db.user_settings_repo import get_user_settings_repo
+        settings_repo = get_user_settings_repo()
+        settings_repo.set_multiple(user_id, {
+            "secretary_prefs": data.secretary_prefs,
+            "policy_memory": data.policy_memory,
+        })
 
     # ── 辅助 ──
 
@@ -245,16 +268,6 @@ class PgStorageEngine(DataRepository, AdminRepository):
                     except Exception as e:
                         logger.debug("Parse %s %s: %s", model_cls.__name__, key, e)
         return result
-
-    @staticmethod
-    def _fix_node_content_blocks(ndata: dict) -> dict:
-        ndata.setdefault("children_ids", [])
-        ndata.setdefault("links_to", [])
-        ndata.setdefault("linked_from", [])
-        ndata.setdefault("parent_id", None)
-        if "content_blocks" not in ndata:
-            ndata["content_blocks"] = []
-        return ndata
 
     # ── AdminRepository ──
 

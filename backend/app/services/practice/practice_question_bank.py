@@ -121,20 +121,20 @@ def delete_bank(bank_id, user_id):
     return db.fetchone("SELECT id FROM question_banks WHERE id = %s AND deleted_at IS NULL", (bank_id,)) is None
 
 
-def resolve_bank_for_conversation(conversation_id, user_id, user_specified_bank_id=None):
+def resolve_bank_for_conversation(conv_id, user_id, user_specified_bank_id=None):
     _ensure_tables()
     if user_specified_bank_id:
         return user_specified_bank_id
     from app.infrastructure.db.database import get_db
     db = get_db()
-    conv = db.fetchone("SELECT source_partition_id, source_branch_id FROM conversations WHERE id = %s", (conversation_id,))
+    conv = db.fetchone("SELECT source_dir_id, source_branch_id FROM conversations WHERE id = %s", (conv_id,))
     if conv and conv.get("source_branch_id"):
         bank_id = f"bnk_{conv['source_branch_id']}"
         _ensure_bank(db, bank_id, user_id, conv["source_branch_id"])
         return bank_id
-    if conv and conv.get("source_partition_id"):
-        bank_id = f"bnk_{conv['source_partition_id']}"
-        _ensure_bank(db, bank_id, user_id, conv["source_partition_id"])
+    if conv and conv.get("source_dir_id"):
+        bank_id = f"bnk_{conv['source_dir_id']}"
+        _ensure_bank(db, bank_id, user_id, conv["source_dir_id"])
         return bank_id
     default_id = f"bnk_{user_id}_default"
     _ensure_default_bank(db, default_id, user_id)

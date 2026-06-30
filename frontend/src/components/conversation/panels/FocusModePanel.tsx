@@ -10,10 +10,11 @@ import ConversationMessageArea from "@/components/conversation/core/Conversation
 import PracticePanel from "@/components/practice/panels/PracticePanel";
 import TreeBreadcrumb from "@/components/conversation/tree/TreeBreadcrumb";
 import { useConversationStore } from "@/store/conversation/conversation-store";
+import { useMessageStore } from "@/store/conversation/message-store";
 import { useSocraticMode } from "@/components/conversation/hooks/useSocraticMode";
 import { apiFetch } from "@/store/conversation/tree-helpers";
 
-type LocalConv = { id: string; name: string; partition_id: string; is_active: boolean };
+type LocalConv = { id: string; name: string; dir_id: string; is_active: boolean };
 
 /** FocusModePanel — 专注模式面板
  *
@@ -26,10 +27,8 @@ export default function FocusModePanel({
 }: {
   onExitFocusMode?: () => void;
 }) {
-  const messages = useConversationStore((s) => s.messages);
-  const responseBlocks = useConversationStore((s) => s.responseBlocks);
-  const selectedNodeId = useConversationStore((s) => s.selectedNodeId);
-  const selectedNodeType = useConversationStore((s) => s.selectedNodeType);
+  const messages = useMessageStore((s) => s.messages);
+  const storeSelectedNode = useConversationStore((s) => s.selectedNode);
   const isLoading = useConversationStore((s) => s.isLoading);
   const statusMessage = useConversationStore((s) => s.statusMessage);
   const sendMessage = useConversationStore((s) => s.sendMessage);
@@ -38,10 +37,9 @@ export default function FocusModePanel({
   const versionSwitch = useConversationStore((s) => s.versionSwitch);
   const dirList = useConversationStore((s) => s.dirList);
   const loadDirList = useConversationStore((s) => s.loadDirList);
-  const loadMessages = useConversationStore((s) => s.loadMessages);
 
-  // ── 从 selectedNodeId/selectedNodeType 派生 ──
-  const activeConversationId = selectedNodeType === 'conv' ? selectedNodeId : null;
+  // ── 从 selectedNode 派生 ──
+  const activeConversationId = storeSelectedNode?.level === 'conv' ? storeSelectedNode.id : null;
 
   // ── 从设置页读取配置 ──
   const socraticEnabled = useRef(false);
@@ -73,11 +71,11 @@ export default function FocusModePanel({
   // ── 路径名称 ──
   const [conversationName, setConversationName] = useState("");
   const [conversationOptions, setConversationOptions] = useState<LocalConv[]>([]);
-  const partitionName = dirList.find(p => p.id === selectedNodeId)?.name || "";
+  const partitionName = dirList.find(p => p.id === storeSelectedNode?.id)?.name || "";
 
   // ── 加载会话信息（仅当 activeConversationId 变更时）──
   useEffect(() => {
-    if (!selectedNodeId) {
+    if (!storeSelectedNode?.id) {
       setConversationName("");
       setConversationOptions([]);
       return;
@@ -89,12 +87,12 @@ export default function FocusModePanel({
       try {
         // 直接通过目录树 API 查询会话信息
         const convRes = await apiFetch<{ directory_nodes?: any[] }>(
-          `/tree/directory?parent_id=${selectedNodeId}`,
+          `/tree/directory?parent_id=${storeSelectedNode?.id}`,
         );
         if (cancelled) return;
         const convs: LocalConv[] = (convRes.directory_nodes || [])
           .filter((n: any) => n.node_type === "conv")
-          .map((c: any) => ({ id: c.id, name: c.name, partition_id: selectedNodeId, is_active: false }));
+          .map((c: any) => ({ id: c.id, name: c.name, dir_id: storeSelectedNode?.id || "", is_active: false }));
         setConversationOptions(convs);
         const match = convs.find((c: any) => c.id === activeConversationId);
         setConversationName(match?.name || "");
@@ -106,7 +104,7 @@ export default function FocusModePanel({
     };
     load();
     return () => { cancelled = true; };
-  }, [selectedNodeId, activeConversationId]);
+  }, [storeSelectedNode?.id, activeConversationId]);
 
   // ── 分栏 ──
   const [splitPercent, setSplitPercent] = useState(50);
@@ -227,23 +225,15 @@ export default function FocusModePanel({
               conversationName={conversationName || undefined}
               dirList={dirList.map((p) => ({ id: p.id, label: p.name, emoji: p.emoji }))}
               conversations={conversationOptions.map((c) => ({ id: c.id, label: c.name || "未命名会话" }))}
-              selectedDirId={selectedNodeType === 'dir' ? selectedNodeId : null}
-              selectedConversationId={selectedNodeType === 'conv' ? selectedNodeId : null}
+              selectedDirId={storeSelectedNode?.level === 'dir' ? storeSelectedNode.id : null}
+              selectedConversationId={storeSelectedNode?.level === 'conv' ? storeSelectedNode.id : null}
               onSelectPartition={(pid) => {
-                useConversationStore.setState({
-                  selectedNodeId: pid,
-                  selectedNodeType: 'dir',
-                  messages: [],
-                  responseBlocks: [],
-                });
+                useConversationStore.getState().selectConversation(pid, "");
                 loadDirList();
               }}
               onSelectConversation={(cid) => {
-                useConversationStore.setState({
-                  selectedNodeId: cid,
-                  selectedNodeType: 'conv',
-                });
-                loadMessages(cid);
+                const curParent = useConversationStore.getState().selectedNode?.id;
+                useConversationStore.getState().selectConversation(curParent ?? "", cid);
               }}
             />
           </div>
@@ -256,7 +246,6 @@ export default function FocusModePanel({
         ) : (
           <ConversationMessageArea
             messages={messages}
-            responseBlocks={responseBlocks}
             isLoading={isLoading}
             statusMessage={statusMessage}
             activeConversationId={activeConversationId}
@@ -267,7 +256,6 @@ export default function FocusModePanel({
             socraticEnabled={socraticMode}
             followUpMode={followUpMode}
             setFollowUpMode={setFollowUpMode}
-            messageListClassName="flex-1 overflow-y-auto px-4 pt-6 pb-2 space-y-4"
           />
         )}
       </div>
@@ -310,7 +298,7 @@ export default function FocusModePanel({
         className="flex flex-col overflow-hidden"
         style={{ width: `calc((100% - ${SPLITTER_WIDTH_PX}px) * ${(100 - splitPercent) / 100})` }}
       >
-        <KnowledgeTreeEntry partitionId={selectedNodeId} />
+        <KnowledgeTreeEntry partitionId={storeSelectedNode?.id} />
       </div>
 
       {isDragging && (

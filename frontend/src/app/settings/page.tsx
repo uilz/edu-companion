@@ -50,7 +50,7 @@ export default function SettingsPage() {
     <div className="max-w-3xl mx-auto px-4 py-6">
       <div className="flex items-center gap-3 mb-6">
         <Link
-          href="/learn"
+          href="/conversation"
           className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -286,7 +286,7 @@ function SecurityTab({ user }: { user: AuthUser | null }) {
   const logout = useCallback(async () => {
     try {
       localStorage.removeItem("token");
-      localStorage.removeItem("learn-page-state");
+      localStorage.removeItem("conversation-page-state");
       sessionStorage.clear();
       router.push("/login");
     } catch { router.push("/login"); }
@@ -732,6 +732,7 @@ function PreferencesTab() {
   const [socratic, setSocratic] = useState(false);
   const [socraticFollowUp, setSocraticFollowUp] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState("");
+  const [autoScrollOnLoad, setAutoScrollOnLoad] = useState(true);
 
   useEffect(() => {
     const saved = localStorage.getItem("edu-companion-settings-prefs");
@@ -741,6 +742,7 @@ function PreferencesTab() {
         setSocratic(parsed.socraticMode || false);
         setSocraticFollowUp(parsed.socraticFollowUpMode || false);
         setSystemPrompt(parsed.systemPrompt || "");
+        setAutoScrollOnLoad(parsed.autoScrollOnLoad ?? true);
       } catch { /* */ }
     }
   }, []);
@@ -750,8 +752,9 @@ function PreferencesTab() {
       socraticMode: socratic,
       socraticFollowUpMode: socraticFollowUp,
       systemPrompt,
+      autoScrollOnLoad,
     }));
-  }, [socratic, socraticFollowUp, systemPrompt]);
+  }, [socratic, socraticFollowUp, systemPrompt, autoScrollOnLoad]);
 
   return (
     <div className="space-y-5">
@@ -808,6 +811,24 @@ function PreferencesTab() {
           className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 rounded focus:outline-none focus:border-[var(--color-border-hover)] resize-none"
           placeholder="自定义 AI 的角色和行为指令..."
         />
+      </div>
+
+      {/* 页面加载时滚动到底部 */}
+      <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-semibold text-[var(--color-text)]">页面加载时自动滚动到底部</div>
+            <p className="text-xs text-[var(--color-text-muted)] mt-1">
+              刷新页面进入对话时，是否自动滚动到最新消息（仅首次加载生效）
+            </p>
+          </div>
+          <button
+            onClick={() => setAutoScrollOnLoad(!autoScrollOnLoad)}
+            className={`relative w-11 h-6 rounded-full transition-colors ${autoScrollOnLoad ? "bg-[var(--color-accent)]" : "bg-[var(--color-surface)] border border-[var(--color-border)]"}`}
+          >
+            <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${autoScrollOnLoad ? "translate-x-[22px]" : "translate-x-[2px]"}`} />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -992,7 +1013,7 @@ function DataTab() {
   const fetchOverview = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await authedFetch<any>("/api/v7/data/overview");
+      const res = await authedFetch<any>("/api/data/overview");
       setOverview(res?.overview || null);
     } catch {} finally { setLoading(false); }
   }, []);
@@ -1003,7 +1024,7 @@ function DataTab() {
     setExporting(true);
     try {
       const token = localStorage.getItem("access_token");
-      const res = await fetch("/api/v7/data/export", {
+      const res = await fetch("/api/data/export", {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -1022,7 +1043,7 @@ function DataTab() {
     if (!confirm("再次确认：所有数据将被永久删除。")) return;
     try {
       const token = localStorage.getItem("access_token");
-      await authedFetch("/api/v7/data/reset", {
+      await authedFetch("/api/data/reset", {
         method: "DELETE",
         headers: token ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } : {},
       });

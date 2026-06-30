@@ -61,10 +61,12 @@ async def write_to_meta_history(user_id: str, node: TreeNode) -> None:
 
 def _node_to_record(node: TreeNode) -> dict:
     """将TreeNode/MessageNode转为元历史记录"""
+    # MessageNode 已改为 directory_id（兼容旧 dir_id / conv_id）
+    dir_id = getattr(node, "directory_id", None) or getattr(node, "dir_id", "")
     return {
         "id": node.id,
-        "partition_id": node.partition_id,
-        "conversation_id": node.conversation_id,
+        "dir_id": dir_id,
+        "conv_id": getattr(node, "conv_id", dir_id),
         "role": node.role,
         "content_blocks": [
             b.model_dump() if hasattr(b, 'model_dump') else b
@@ -77,7 +79,7 @@ def _node_to_record(node: TreeNode) -> dict:
             "parent_id": node.parent_id,
             "children_ids": node.children_ids,
             "is_deleted": node.is_deleted,
-            "has_modified_version": node.has_modified_version,
+            "has_modified_version": getattr(node, "has_modified_version", node.version > 1),
         },
         "written_at": datetime.now().isoformat(),
     }

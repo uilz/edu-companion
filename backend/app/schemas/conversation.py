@@ -1,5 +1,5 @@
 """
-对话系统数据模型 v4.0
+对话系统数据模型
 层级：DirectoryNode 统一模型 → 对话 → 消息节点
 树形消息结构，支持内联分支导航，不再有独立分支实体
 """
@@ -55,12 +55,30 @@ class QuoteBlock(BaseModel):
     """引用内容块 — 类似文件附件，展示引用的原文"""
     type: Literal["quote"] = "quote"
     source_message_id: str           # 被引用消息 ID
-    source_conversation_id: str      # 被引用消息所在会话 ID
+    source_conv_id: str      # 被引用消息所在会话 ID
     char_start: int = 0              # 选中文本起始偏移
     char_end: int = 0                # 选中文本结束偏移
     quoted_text: str                 # 引用的原文
 
-ContentBlock = TextBlock | ImageBlock | AudioBlock | VideoBlock | DocumentBlock | QuoteBlock
+class ToolBlock(BaseModel):
+    """工具调用块 — 记录工具调用的全生命周期"""
+    type: Literal["tool"] = "tool"
+    tool_call_id: str = ""
+    tool_name: str
+    arguments: dict = Field(default_factory=dict)
+    status: str = "pending"  # pending | running | done | error
+    result_block_type: str | None = None  # 结果的 block 类型（text/image/video...）
+    result_content: dict | None = None    # 结果数据
+    error: str | None = None
+    tool_round: int = 0
+
+class ReasoningBlock(BaseModel):
+    """推理思考块 — LLM 的 reasoning_content"""
+    type: Literal["reasoning"] = "reasoning"
+    text: str = ""
+    status: str = "streaming"  # streaming | done
+
+ContentBlock = TextBlock | ImageBlock | AudioBlock | VideoBlock | DocumentBlock | QuoteBlock | ToolBlock | ReasoningBlock
 
 
 # ── File Record（不变） ──
@@ -95,7 +113,7 @@ class SubBranchRef(BaseModel):
     char_start: int = 0              # 选中文本在消息纯文本中的起始偏移
     char_end: int = 0                # 选中文本的结束偏移
     quoted_text: str = ""            # 引用的原文（冗余存储，方便展示）
-    child_conversation_id: str = ""  # 子支会话 ID
+    child_conv_id: str = ""  # 子支会话 ID
     created_at: float = Field(default_factory=time.time)
 
 
@@ -112,13 +130,13 @@ class LinkNode(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     type: Literal["link"] = "link"
     target_message_id: str
-    target_conversation_id: str
-    source_conversation_id: str
+    target_conv_id: str
+    source_conv_id: str
     preview_summary: str | None = None
     timestamp: float = Field(default_factory=time.time)
 
 
-# ── Conversation（v4: 替换旧 Branch） ──
+# ── Conversation──
 
 class Conversation(BaseModel):
     """对话线程，可挂载到任意 DirectoryNode 层级下。
@@ -143,7 +161,7 @@ class Conversation(BaseModel):
     primary_node_id: str | None = None  # 关联 cognitive_nodes.id (topic 级)
     is_temporary: bool = False          # 临时会话标记（旧字段，逐步迁移到 type）
     # ── 子支相关 ──
-    parent_conversation_id: str = ""           # 父会话 ID（空=顶层会话）
+    parent_conv_id: str = ""           # 父会话 ID（空=顶层会话）
     parent_sub_branch_ref: SubBranchRef | None = None  # 作为子支时的引用锚点
     sub_branch_ids: list[str] = Field(default_factory=list)  # 直接子支会话 ID 列表
     depth: int = 0                             # 子支深度（0=顶层，1=一级子支...）
@@ -163,7 +181,7 @@ class KGNode(BaseModel):
     tags: list[str] = Field(default_factory=list)
     created_by: str = "ai"
     created_at: float = Field(default_factory=time.time)
-    conversation_ids: list[str] = Field(default_factory=list)
+    conv_ids: list[str] = Field(default_factory=list)
 
 class KGEdge(BaseModel):
     """知识图谱边，描述知识点间的关系（如 prerequisite）"""
@@ -175,7 +193,7 @@ class KGEdge(BaseModel):
     weight: float = 1.0
 
 class KnowledgeGraph(BaseModel):
-    """知识图谱，由directory_node (dir/conv) 关联组织，不再依赖 partition_id"""
+    """知识图谱，由directory_node (dir/conv) 关联组织，不再依赖 dir_id"""
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str = ""
     nodes: dict[str, KGNode] = Field(default_factory=dict)
@@ -192,12 +210,13 @@ class ResponseBlock(BaseModel):
     """助教回复块，包含各类多模态回复内容（文本/练习/视频/思维导图等）"""
     id: str = Field(default_factory=lambda: str(uuid4()))
     message_id: str = ""
-    conversation_id: str = ""
+    conv_id: str = ""
     type: str  # text | practice | video | image | audio | mindmap | document
     status: str = "ready"
     content: dict = Field(default_factory=dict)
     order: int = 0
     sources: list[str] = Field(default_factory=list)
+    tool_name: str = ""  # 调用此块的工具名（如 search_media）
     created_at: float = Field(default_factory=time.time)
     updated_at: float = Field(default_factory=time.time)
 
@@ -211,7 +230,7 @@ class BackgroundJob(BaseModel):
     result: dict | None = None
     progress: float = 0.0
     block_id: str = ""
-    conversation_id: str = ""
+    conv_id: str = ""
     created_at: float = Field(default_factory=time.time)
     completed_at: float | None = None
     error: str | None = None
@@ -220,7 +239,7 @@ class BackgroundJob(BaseModel):
 # ── User Data Root（DirectoryNode 版本） ──
 
 class UserData(BaseModel):
-    """用户数据根模型 — DirectoryNode 版本 (取代 v4 partition/domain/topic)"""
+    """用户数据根模型 — DirectoryNode 版本"""
     user_id: str
     role: str = "student"
     org_id: str | None = None
@@ -253,29 +272,4 @@ class UserData(BaseModel):
         "accept_counts": {},
     })
 
-    # ═════════════════════════════════════════════════════════
-    # 向后兼容属性 — 从 directory_nodes 合成旧模型视图
-    # ═════════════════════════════════════════════════════════
-
-    @property
-    def partitions(self) -> dict[str, DirectoryNode]:
-        """返回顶级目录节点 (parent_id=None 的 dir 节点)。"""
-        return {nid: n for nid, n in self.directory_nodes.items()
-                if n.node_type == "dir" and n.parent_id is None}
-
-    @property
-    def domains(self) -> dict[str, DirectoryNode]:
-        """返回所有非根目录节点 (有 parent_id 的 dir 节点)。"""
-        return {nid: n for nid, n in self.directory_nodes.items()
-                if n.node_type == "dir" and n.parent_id is not None}
-
-    @property
-    def topics(self) -> dict[str, DirectoryNode]:
-        """同 domains — 在扁平模型中无法区分 domain/topic。"""
-        return self.domains
-
-    @property
-    def conversations(self) -> dict[str, DirectoryNode]:
-        """返回所有 conv 节点。"""
-        return {nid: n for nid, n in self.directory_nodes.items()
-                if n.node_type == "conv"}
+    # — 旧模型合成属性已删除 (DirectoryNode 为唯一模型) —
