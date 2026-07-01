@@ -309,10 +309,10 @@ if [ "$EXPORT_DB" = true ]; then
 fi
 
 if [ "$IMPORT_DB" = true ]; then
-  log "🗄️  导入数据库表结构..."
+  log "🗄️  导入+清理数据库表结构..."
   cd "$PROJECT_DIR"
   source backend/venv/bin/activate
-  DB_PASSWORD="$DB_PASSWORD" python3 scripts/ensure_all_tables.py --import 2>&1 || log "⚠️  导入有非致命警告（可忽略）"
+  DB_PASSWORD="$DB_PASSWORD" python3 scripts/ensure_all_tables.py --import --prune 2>&1 || log "⚠️  导入有非致命警告（可忽略）"
 fi
 
 start_service "frontend" "$PROJECT_DIR/frontend" \
