@@ -301,7 +301,7 @@ log "🗄️  确保数据库表完整..."
 cd "$PROJECT_DIR"
 source backend/venv/bin/activate
 DB_PASSWORD="$DB_PASSWORD" DB_HOST="$DB_HOST" DB_PORT="$DB_PORT" DB_USER="$DB_USER" DB_NAME="$DB_NAME" \
-  python3 scripts/ensure_all_tables.py 2>&1 || log "⚠️  建表脚本有非致命警告（可忽略）"
+  python3 scripts/ensure_all_tables.py -y 2>&1 || log "⚠️  建表脚本有非致命警告（可忽略）"
 
 start_service "frontend" "$PROJECT_DIR/frontend" \
   "npx next start -p 3000" \

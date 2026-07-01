@@ -3,16 +3,15 @@
 确保数据库表完整 — 从源库导出 DDL 并回放到目标库。
 
 用法:
-  # 本库自检 (rebuild.sh 集成)
-  DB_PASSWORD=xxx python3 scripts/ensure_all_tables.py
+  # 自检模式 (rebuild.sh 集成)
+  DB_PASSWORD=xxx python3 scripts/ensure_all_tables.py -y
 
-  # 从本地 (46 表) 推送到远端 (28 表)
+  # 推送模式 — 交互式询问目标地址
+  DB_PASSWORD=local_pw python3 scripts/ensure_all_tables.py
+
+  # 推送模式 — 全参数指定 (非交互)
   DB_PASSWORD=local_pw python3 scripts/ensure_all_tables.py \
-    --to-host=<远端IP> --to-password=<远端密码>
-
-  # 也可通过环境变量指定目标
-  TO_HOST=192.168.x.x TO_PASSWORD=yyy \
-    DB_PASSWORD=local_pw python3 scripts/ensure_all_tables.py
+    --to-host=192.168.x.x --to-password=yyy -y
 """
 import os
 import subprocess
@@ -27,21 +26,16 @@ SRC_USER = os.environ.get("DB_USER", "companion")
 SRC_DB = os.environ.get("DB_NAME", "edu_companion")
 SRC_PASSWORD = os.environ.get("DB_PASSWORD")
 
-# ── 目标库 (ddl 回放到哪里) ──
-DST_HOST = os.environ.get("TO_HOST")    # None = 回放到源库自身
-DST_PORT = os.environ.get("TO_PORT", "5432")
-DST_USER = os.environ.get("TO_USER", "companion")
-DST_DB = os.environ.get("TO_DB", "edu_companion")
-DST_PASSWORD = os.environ.get("TO_PASSWORD")
-
 
 def parse_args():
     parser = argparse.ArgumentParser(description="确保数据库表完整")
-    parser.add_argument("--to-host", help="目标库地址（不指定则回放到源库自身）")
+    parser.add_argument("--to-host", help="目标库地址（不指定则交互式询问）")
     parser.add_argument("--to-port", default="5432")
     parser.add_argument("--to-user", default="companion")
     parser.add_argument("--to-password", default="")
     parser.add_argument("--to-db", default="edu_companion")
+    parser.add_argument("-y", "--yes", action="store_true",
+                        help="跳过确认提示（非交互模式）")
     return parser.parse_args()
 
 
@@ -127,17 +121,36 @@ def apply_ddl(ddl: str, host, port, user, db, password):
 def main():
     args = parse_args()
 
-    # 目标: CLI 参数优先，其次环境变量，最后=源库自身
-    dst_host = args.to_host or DST_HOST or SRC_HOST
-    dst_port = args.to_port or DST_PORT or SRC_PORT
-    dst_user = args.to_user or DST_USER or SRC_USER
-    dst_db = args.to_db or DST_DB or SRC_DB
-    dst_password = args.to_password or DST_PASSWORD or SRC_PASSWORD or ""
+    # ── 确定目标库参数 ──
+    dst_host = args.to_host
+    dst_port = args.to_port
+    dst_user = args.to_user
+    dst_db = args.to_db
+    dst_password = args.to_password
 
-    push_mode = dst_host != SRC_HOST
+    # 没有 --to-host → 自检模式
+    self_check = not dst_host
 
-    print(f"源库: {SRC_HOST}:{SRC_PORT}/{SRC_DB}")
-    print(f"目标: {dst_host}:{dst_port}/{dst_db}" + ("  ← 推送模式" if push_mode else "  ← 自检模式"))
+    if self_check:
+        dst_host = SRC_HOST
+        dst_port = SRC_PORT
+        dst_user = SRC_USER
+        dst_db = SRC_DB
+        dst_password = SRC_PASSWORD or ""
+    else:
+        # 推送模式：没有 -y 时交互式确认或补充信息
+        if not args.yes:
+            print(f"\n目标库: {dst_host}:{dst_port}/{dst_db} (user={dst_user})")
+            if not dst_password:
+                dst_password = input("目标数据库密码: ").strip()
+            reply = input("确认应用 DDL 到上述目标库? (y/n): ").strip().lower()
+            if reply != 'y':
+                print("已取消.")
+                sys.exit(0)
+
+    print(f"源库: {SRC_HOST}:{SRC_PORT}/{SRC_DB}  (user={SRC_USER})")
+    print(f"目标: {dst_host}:{dst_port}/{dst_db}" +
+          ("  ← 自检模式" if self_check else "  ← 推送模式"))
 
     print("导出 DDL...")
     raw = get_ddl(SRC_HOST, SRC_PORT, SRC_USER, SRC_DB, SRC_PASSWORD)
