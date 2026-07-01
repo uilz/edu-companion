@@ -82,8 +82,11 @@ async def recent_events(
     where_sql = (" WHERE " + " AND ".join(where)) if where else ""
     params.append(limit)
     rows = repo.query(
-        f"SELECT event_id, event_type, user_id, node_id, processed, timestamp, payload "
-        f"FROM cognitive_events{where_sql} ORDER BY timestamp DESC LIMIT %s",
+        f"SELECT id AS event_id, event_type, user_id, "
+        f"source_id AS node_id, "
+        f"CASE WHEN status='pending' THEN FALSE ELSE TRUE END AS processed, "
+        f"created_at AS timestamp, payload "
+        f"FROM events{where_sql} ORDER BY created_at DESC LIMIT %s",
         tuple(params),
     ) or []
     return {"items": rows, "count": len(rows)}
@@ -97,9 +100,9 @@ async def event_stats(
     repo = _repo()
     rows = repo.query(
         "SELECT event_type, COUNT(*) AS cnt, "
-        "  COUNT(*) FILTER (WHERE processed = FALSE) AS pending "
-        "FROM cognitive_events "
-        "WHERE timestamp > NOW() - (%s || ' hours')::interval "
+        "  COUNT(*) FILTER (WHERE status = 'pending') AS pending "
+        "FROM events "
+        "WHERE created_at > NOW() - (%s || ' hours')::interval "
         "GROUP BY event_type ORDER BY cnt DESC",
         (str(hours),),
     ) or []
@@ -114,12 +117,12 @@ async def event_trend(
     """事件趋势（按天聚合），用于前端折线图"""
     repo = _repo()
     rows = repo.query(
-        "SELECT DATE(timestamp) AS day, "
+        "SELECT DATE(created_at) AS day, "
         "       COUNT(*) AS total, "
-        "       COUNT(*) FILTER (WHERE processed = FALSE) AS pending "
-        "FROM cognitive_events "
-        "WHERE timestamp > NOW() - (%s || ' days')::interval "
-        "GROUP BY DATE(timestamp) ORDER BY day",
+        "       COUNT(*) FILTER (WHERE status = 'pending') AS pending "
+        "FROM events "
+        "WHERE created_at > NOW() - (%s || ' days')::interval "
+        "GROUP BY DATE(created_at) ORDER BY day",
         (str(days),),
     ) or []
     return {"days": days, "series": rows}
@@ -136,7 +139,7 @@ async def system_health(_: dict = Depends(require_role("analyst"))):
     rows = repo.query("""
         SELECT
             (SELECT COUNT(*) FROM users WHERE is_active = TRUE) AS active_users,
-            (SELECT COUNT(*) FROM cognitive_events WHERE processed = FALSE) AS pending_events,
+            (SELECT COUNT(*) FROM events WHERE status = 'pending') AS pending_events,
             (SELECT COUNT(*) FROM knowledge_nodes) AS nodes_total,
             (SELECT COUNT(*) FROM conversation_user_meta) AS user_metas,
             (SELECT pg_database_size(current_database())) AS db_bytes,
@@ -165,9 +168,10 @@ async def recent_errors(
 ):
     repo = _repo()
     rows = repo.query(
-        "SELECT event_id, event_type, user_id, node_id, timestamp, payload "
-        "FROM cognitive_events WHERE processed = FALSE "
-        "ORDER BY timestamp ASC LIMIT %s",
+        "SELECT id AS event_id, event_type, user_id, source_id AS node_id, "
+        "created_at AS timestamp, payload "
+        "FROM events WHERE status = 'pending' "
+        "ORDER BY created_at ASC LIMIT %s",
         (limit,),
     ) or []
     return {"pending_count": len(rows), "items": rows}
