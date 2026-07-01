@@ -126,7 +126,7 @@ def get_event_queue_length(user_id: str) -> int:
         from app.infrastructure.db.database import get_db
         db = get_db()
         row = db.fetchone(
-            "SELECT COUNT(*) as cnt FROM cognitive_events WHERE user_id = %s AND processed = false",
+            "SELECT COUNT(*) as cnt FROM events WHERE user_id = %s AND status = 'pending'",
             (user_id,),
         )
         return row["cnt"] if row else 0

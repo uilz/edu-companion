@@ -84,14 +84,16 @@ def toggle_favorite(question_id, user_id):
 def toggle_slash(question_id, user_id):
     from app.infrastructure.db.database import get_db
     db = get_db()
-    existing = db.fetchone("SELECT id FROM slashed_questions WHERE question_id = %s AND user_id = %s",
-                           (question_id, user_id))
+    existing = db.fetchone(
+        "SELECT id FROM question_user_flags WHERE question_id = %s AND user_id = %s AND flag_type = 'slashed'",
+        (question_id, user_id))
     if existing:
-        db.execute("DELETE FROM slashed_questions WHERE id = %s", (existing["id"],))
+        db.execute("DELETE FROM question_user_flags WHERE id = %s", (existing["id"],))
         db.execute("UPDATE questions SET is_slashed = false WHERE id = %s", (question_id,))
         return False
-    db.execute("INSERT INTO slashed_questions (id, user_id, question_id) VALUES (%s, %s, %s)",
-               (f"sl_{question_id}_{user_id[-6:]}", user_id, question_id))
+    db.execute(
+        "INSERT INTO question_user_flags (id, user_id, question_id, flag_type) VALUES (%s, %s, %s, 'slashed')",
+        (f"sl_{question_id}_{user_id[-6:]}", user_id, question_id))
     db.execute("UPDATE questions SET is_slashed = true WHERE id = %s", (question_id,))
     return True
 

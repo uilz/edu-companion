@@ -418,7 +418,7 @@ async def health_check() -> dict:
     # 事件队列监控
     try:
         event_count = db.fetchone(
-            "SELECT COUNT(*) as cnt FROM cognitive_events WHERE processed = false"
+            "SELECT COUNT(*) as cnt FROM events WHERE status = 'pending'"
         )
         pending = event_count["cnt"] if event_count else 0
         checks["event_queue_pending"] = pending
