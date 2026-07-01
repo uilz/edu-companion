@@ -12,6 +12,7 @@ import { cognitiveApi } from "@/lib/api/api";
 
 const ROOT_KEY = "__graph_root__";
 const EXPANDED_KEY = "conversation-tree-expanded";
+const ORPHAN_TEMP_ID = "__orphan_temp__";
 
 function persistExpandedSet(expanded: Set<string>) {
   try {
@@ -88,6 +89,52 @@ export const useTreeStore = create<TreeState>()((set, get) => ({
         set(s => {
           const next = new Map(s.childMap);
           next.set(ROOT_KEY, topLevelNodes);
+
+          // ── 收集无父会话，归入"💬 临时"目录 ──
+          const existingIds = new Set(topLevelNodes.map(n => n.id));
+          const orphanConvs = allNodes.filter(
+            (n: any) => n.node_type === "conv" && !n.parent_id && !existingIds.has(n.id)
+          );
+          if (orphanConvs.length > 0) {
+            const tempNode: GraphNode = {
+              id: ORPHAN_TEMP_ID,
+              label: "默认",
+              level: "dir",
+              parent: null,
+              emoji: "📁",
+              nodeIndex: topLevelNodes.length,
+              path_id: "默认",
+              is_visible: true,
+              node_type: "dir",
+              kind: "temp",
+              suggested_count: 0,
+              created_at: 0,
+              brief: "",
+              path: [],
+            };
+            topLevelNodes.push(tempNode);
+            // 替换 ROOT_KEY 的列表（因为 topLevelNodes 已修改）
+            next.set(ROOT_KEY, topLevelNodes);
+            // 将无父会话设为临时目录的子节点
+            const orphanChildren: GraphNode[] = orphanConvs.map((n: any, i: number) => ({
+              id: n.id,
+              label: n.name,
+              level: "conv" as const,
+              parent: ORPHAN_TEMP_ID,
+              emoji: n.emoji || "",
+              nodeIndex: i,
+              path_id: n.name || "",
+              is_visible: true,
+              node_type: "conv",
+              kind: n.kind || "temp",
+              suggested_count: 0,
+              created_at: n.created_at || 0,
+              brief: "",
+              path: n.path || [],
+            }));
+            next.set(ORPHAN_TEMP_ID, orphanChildren);
+          }
+
           const validExpanded = new Set<string>();
           s.expandedSet.forEach((eid) => {
             if (eid === ROOT_KEY || next.has(eid)) validExpanded.add(eid);

@@ -177,11 +177,11 @@ export function SidebarTreeNode({
       ? [Math.max(3.25, 4 / (depth + 2) + 3.25), "color-mix(in srgb, var(--color-text-muted) 35%, transparent)"]
       : [3, "transparent"];
 
-  // 统一点击：选中节点切换展开，其余走 selectGraphNode
+  // 统一点击：目录只展开/收起，会话走 selectGraphNode
   const handleNodeClick = () => {
-    if (nodeState === "selected") {
+    if (node.node_type === "dir") {
       toggleExpand(node);
-    } else {
+    } else if (nodeState !== "selected") {
       onSelectGraphNode(node, partitionId || node.id);
     }
   };

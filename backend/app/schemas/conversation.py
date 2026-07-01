@@ -210,6 +210,7 @@ class ResponseBlock(BaseModel):
     """助教回复块，包含各类多模态回复内容（文本/练习/视频/思维导图等）"""
     id: str = Field(default_factory=lambda: str(uuid4()))
     message_id: str = ""
+    dir_id: str = ""
     conv_id: str = ""
     type: str  # text | practice | video | image | audio | mindmap | document
     status: str = "ready"

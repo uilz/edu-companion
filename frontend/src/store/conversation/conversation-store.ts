@@ -231,7 +231,6 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
     set({
       selectedNode: { id, level, parent: parent ?? null, path: path || [] },
       switchBanner: null,
-      showDirSidebar: false,
     });
     useMessageStore.setState({ messages: [], loadingMessages: false, convError: null });
 

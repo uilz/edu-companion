@@ -433,6 +433,8 @@ function _handleBlockUpdate(block: any) {
                 status: blockStatus,
                 result_block_type: block.result_block_type || innerBlock.type || null,
                 result_content: block.result_content || innerBlock.content || null,
+                conv_id: innerBlock.conv_id || b.conv_id || "",
+                dir_id: innerBlock.dir_id || b.dir_id || "",
                 error: isFailed ? (innerBlock.content?.error || "工具执行失败") : undefined,
               };
             }
@@ -501,6 +503,8 @@ function _handleDone(
     status: (rb.status === "error" ? "error" : "done") as "done" | "error",
     result_block_type: rb.type || rb.block_type || null,
     result_content: rb.content || null,
+    conv_id: rb.conv_id || "",
+    dir_id: rb.dir_id || "",
     error: rb.error || null,
     tool_round: 0,
   }));

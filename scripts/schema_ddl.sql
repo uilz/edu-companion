@@ -1,5 +1,5 @@
--- 导出时间: 2026-07-01 11:33:45
--- 包含 32 张表, 91 个索引
+-- 导出时间: 2026-07-01 16:36:55
+-- 包含 33 张表, 91 个索引
 
 CREATE INDEX IF NOT EXISTS idx_ach_user ON public.achievements USING btree (user_id);
 
@@ -671,6 +671,12 @@ CREATE TABLE IF NOT EXISTS public.session_questions (
     time_spent_seconds integer DEFAULT 0,
     hints_used integer DEFAULT 0,
     created_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.system_config (
+    key character varying(64) NOT NULL,
+    value text DEFAULT ''::text NOT NULL,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS public.user_notes (

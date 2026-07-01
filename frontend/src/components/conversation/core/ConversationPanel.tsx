@@ -92,6 +92,15 @@ export default function ConversationPanel(
 
   const { isDesktop } = useBreakpoint();
 
+  // ── Mobile: 选中节点变化时自动关闭侧边栏 ──
+  const prevSelectedNodeId = React.useRef(selectedNodeId);
+  React.useEffect(() => {
+    if (!isDesktop && prevSelectedNodeId.current !== selectedNodeId) {
+      if (showDirSidebar) setShowDirSidebar(false);
+    }
+    prevSelectedNodeId.current = selectedNodeId;
+  }, [selectedNodeId, isDesktop, showDirSidebar, setShowDirSidebar]);
+
   const activeConversationId = selectedNodeType === "conv" ? selectedNodeId : null;
 
   const switchBannerPartitionName = React.useMemo(() => {
@@ -133,7 +142,7 @@ export default function ConversationPanel(
             onFeynmanTeach={handleFeynmanTeach}
             convError={convError}
             breadcrumb={
-              <div className="flex items-center gap-3 py-3">
+              <div className="flex items-center gap-3 py-3 px-1">
                 <button
                   onClick={() => setShowDirSidebar(true)}
                   className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
@@ -146,6 +155,25 @@ export default function ConversationPanel(
                     {headerTitle}
                   </div>
                 </div>
+                <button
+                  onClick={() => setSidebarMode(sidebarMode === "tree" ? "flat" : "tree")}
+                  className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+                  style={{ minWidth: 44, minHeight: 44 }}
+                  title={sidebarMode === "tree" ? "切换为扁平列表" : "切换为树状视图"}
+                >
+                  {sidebarMode === "tree" ? <List size={18} /> : <GitBranch size={18} />}
+                </button>
+                <button
+                  onClick={() => {
+                    (handleSelectConversation as (dirId: string | null, cid: string | null) => void)(null, null);
+                    window.history.replaceState(null, "", "/conversation");
+                  }}
+                  className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+                  style={{ minWidth: 44, minHeight: 44 }}
+                  title="临时新建会话"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </button>
               </div>
             }
           />
@@ -153,6 +181,41 @@ export default function ConversationPanel(
 
         {showDirSidebar && (
           <MobileBottomSheet onClose={() => setShowDirSidebar(false)}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
+              <span className="text-xs font-semibold text-[var(--color-text-muted)]">学习空间</span>
+              <div className="flex items-center gap-0.5">
+                <button
+                  onClick={() => setSidebarMode(sidebarMode === "tree" ? "flat" : "tree")}
+                  className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+                  title={sidebarMode === "tree" ? "切换为扁平列表" : "切换为树状视图"}
+                >
+                  {sidebarMode === "tree" ? <List size={15} /> : <GitBranch size={15} />}
+                </button>
+                <button
+                  onClick={() => {
+                    (handleSelectConversation as (dirId: string | null, cid: string | null) => void)(null, null);
+                    setShowDirSidebar(false);
+                    window.history.replaceState(null, "", "/conversation");
+                  }}
+                  className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+                  title="临时新建会话"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </button>
+                {sidebarMode !== "flat" && (
+                  <button
+                    onClick={() => {
+                      setShowDirSidebar(false);
+                      setShowNewDir(true);
+                    }}
+                    className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+                    title="新建目录"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                  </button>
+                )}
+              </div>
+            </div>
             <StudySidebar
               selectedDirId={selectedNodeId}
               activeConversationId={activeConversationId}
@@ -161,7 +224,9 @@ export default function ConversationPanel(
                 setShowDirSidebar(false);
                 setShowNewDir(true);
               }}
+              onRenameDir={handleRenameDirectory}
               loading={loadingDirList}
+              compact
               onNewConversation={(level, parentId, partitionId) => {
                 setShowDirSidebar(false);
                 handleNewConversation(level, parentId, partitionId);

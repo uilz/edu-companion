@@ -9,7 +9,6 @@ import TextSelectionToolbar from "./../input/TextSelectionToolbar";
 import SubBranchInline from "./../blocks/SubBranchInline";
 import SpeakButton from "./../media/SpeakButton";
 import MarkdownRenderer from "./../blocks/MarkdownRenderer";
-import CognitiveTag from "./../cards/CognitiveTag";
 import SelfExplainCard from "./../cards/SelfExplainCard";
 import MessageActions from "./MessageActions";
 import MessageEditArea from "./MessageEditArea";
@@ -225,6 +224,8 @@ export default function MessageList({
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const breadcrumbRef = useRef<HTMLDivElement>(null);
+  const [breadcrumbHeight, setBreadcrumbHeight] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -456,6 +457,19 @@ export default function MessageList({
     );
   }
 
+  // ── 动态测量面包屑实际高度（移动端按钮高度 > 固定 h-12） ──
+  useEffect(() => {
+    if (!breadcrumbRef.current) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const h = entry.contentRect.height;
+        if (h > 0) setBreadcrumbHeight(h);
+      }
+    });
+    ro.observe(breadcrumbRef.current);
+    return () => ro.disconnect();
+  }, [breadcrumb]);
+
   // Auto-scroll（首次加载遵循用户设置，后续消息始终自动滚动到底部）
   const [autoScrollOnLoad, setAutoScrollOnLoad] = useState(true);
   useEffect(() => {
@@ -616,7 +630,7 @@ export default function MessageList({
       <ErrorBoundary>
       <div ref={containerRef} className="flex-1 overflow-y-auto px-4 pb-2 space-y-6" onScroll={handleScroll}>
         {/* Spacer to prevent content hidden under overlay breadcrumb */}
-        {breadcrumb && <div className="h-12" />}
+        {breadcrumb && <div style={{ height: breadcrumbHeight || 48 }} />}
         {visibleMessages.map((message) => {
           const isUser = message.role === "user";
           const isEditing = editingId === message.id;
@@ -711,29 +725,34 @@ export default function MessageList({
                         </>
                       ) : (
                         <>
-                          {/* Content blocks rendered via registry — always render regardless of loading state */}
-                          {(message.content_blocks || [])
-                            .filter(b => b.type !== "text")
-                            .map((b, bi) => {
-                              const Renderer = BLOCK_RENDERERS[b.type];
-                              return Renderer ? <Renderer key={`block-${bi}`} block={b} /> : null;
-                            })}
-                          {!displayText.trim() && isLoading ? (
+                          {/* ── 按 content_blocks 原始顺序交织渲染（text ↔ tool ↔ reasoning 等）── */}
+                          {(message.content_blocks || []).map((b, bi) => {
+                            if (b.type === "text") {
+                              const blockText = b.text || "";
+                              if (!blockText) return null;
+                              return (
+                                <div key={`text-${bi}`}
+                                  data-message-id={message.id} data-conv-id={message.conv_id} data-full-text={blockText}
+                                  className="text-base leading-[1.65] whitespace-pre-wrap break-words select-text"
+                                  onMouseDown={handleTextMouseDown} onMouseUp={handleTextMouseUp} onContextMenu={handleTextContextMenu}
+                                  onClick={(e) => { e.stopPropagation(); handleTextClick(e, message.id, message.conv_id || "", blockText); }}
+                                >
+                                  <ExplainMarkers text={blockText} cards={cardsForMsg} messageId={message.id} onBadgeClick={(id) => {
+                                    const c = useExplainStore.getState().cards.find(c => c.id === id);
+                                    if (c) useExplainStore.getState().toggleCollapse(id, !c.collapsed);
+                                  }} />
+                                </div>
+                              );
+                            }
+                            const Renderer = BLOCK_RENDERERS[b.type];
+                            return Renderer ? <Renderer key={`block-${bi}`} block={b} /> : null;
+                          })}
+                          {/* 无 text 块且流式未完成 → 加载动画 */}
+                          {!(message.content_blocks || []).some(b => b.type === "text") && isLoading && (
                             <div className="flex gap-1.5 items-center py-1 px-1">
                               <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
                               <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "200ms" }} />
                               <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "400ms" }} />
-                            </div>
-                          ) : (
-                            <div data-message-id={message.id} data-conv-id={message.conv_id} data-full-text={displayText}
-                              className="text-base leading-[1.65] whitespace-pre-wrap break-words select-text"
-                              onMouseDown={handleTextMouseDown} onMouseUp={handleTextMouseUp} onContextMenu={handleTextContextMenu}
-                              onClick={(e) => { e.stopPropagation(); handleTextClick(e, message.id, message.conv_id || "", displayText); }}
-                            >
-                              <ExplainMarkers text={displayText} cards={cardsForMsg} messageId={message.id} onBadgeClick={(id) => {
-                                const c = useExplainStore.getState().cards.find(c => c.id === id);
-                                if (c) useExplainStore.getState().toggleCollapse(id, !c.collapsed);
-                              }} />
                             </div>
                           )}
                         </>
@@ -749,11 +768,6 @@ export default function MessageList({
                       ))}
 
                       {/* Explain cards inline */}
-                      {/* Cognitive tag */}
-                      <div className="flex justify-end mt-1">
-                        <CognitiveTag messageId={message.id} messageText={displayText} initialNodeIds={message.cognitive_node_ids} />
-                      </div>
-
                       {/* Self-explain card (P0-R03) — assistant messages with cognitive nodes */}
                       {!isUser && message.cognitive_node_ids && message.cognitive_node_ids.length > 0 && (
                         <SelfExplainCard
@@ -853,21 +867,33 @@ export default function MessageList({
       </div>
       {breadcrumb && (
         <div
-          className="absolute top-0 inset-x-0 z-10"
-          style={{
-            background: 'linear-gradient(to top, transparent 0%, var(--color-bg) 60%)',
-          }}
+          ref={breadcrumbRef}
+          className="absolute top-0 inset-x-0"
+          style={{ zIndex: 10 }}
         >
+          {/* Layer 3: 渐变背景 */}
           <div
             className="absolute inset-0 pointer-events-none"
             style={{
-              WebkitBackdropFilter: 'blur(6px) saturate(140%)',
-              backdropFilter: 'blur(6px) saturate(140%)',
-              WebkitMaskImage: 'linear-gradient(to top, transparent 0%, black 100%)',
-              maskImage: 'linear-gradient(to top, transparent 0%, black 100%)',
+              zIndex: 1,
+              background: 'linear-gradient(to top, transparent 0%, var(--color-bg) 60%)',
             }}
           />
-          {breadcrumb}
+          {/* Layer 2: 渐变毛玻璃（blur 与背景渐变同步增强） */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              zIndex: 2,
+              backdropFilter: 'blur(6px) saturate(140%)',
+              WebkitBackdropFilter: 'blur(6px) saturate(140%)',
+              maskImage: 'linear-gradient(to top, transparent 0%, black 60%)',
+              WebkitMaskImage: 'linear-gradient(to top, transparent 0%, black 60%)',
+            }}
+          />
+          {/* Layer 1: 按钮文字，透明背景 */}
+          <div className="relative" style={{ zIndex: 3, background: 'transparent' }}>
+            {breadcrumb}
+          </div>
         </div>
       )}
       </ErrorBoundary>

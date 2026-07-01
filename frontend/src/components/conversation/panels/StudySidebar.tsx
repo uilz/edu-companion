@@ -36,7 +36,7 @@ export default function StudySidebar({
   onConversationReady,
   onTreeChanged,
 }: Props) {
-  // ── 挂载时统一导航：从后端获取节点 path，交由 selectGraphNode 自动展开祖先链 ──
+  // ── 挂载时展开祖先链 ──
   useEffect(() => {
     const init = async () => {
       const treeState = useTreeStore.getState();
@@ -51,15 +51,11 @@ export default function StudySidebar({
         // 从后端获取节点详情（含 path 祖先链）
         const resp = await apiFetch<{ directory_node: any }>(`/tree/directory/${pid}`);
         const d = resp.directory_node;
-        const node: GraphNode = {
-          id: d.id, label: d.name, level: d.node_type === "conv" ? "conv" : "dir",
-          parent: d.parent_id || null, emoji: d.emoji || "", nodeIndex: 0,
-          path_id: d.name || "", is_visible: true, node_type: d.node_type,
-          kind: d.kind, suggested_count: 0, created_at: d.created_at || 0,
-          brief: "", path: d.path || [],
-        };
-        // selectGraphNode 内部会沿 path 展开所有祖先 + 加载子节点 + auto-expand
-        await s.selectGraphNode(node, pid);
+        const path = d.path || [];
+        // 展开所有祖先节点，让树视图定位到当前选中节点
+        if (path.length > 0) {
+          useTreeStore.getState().expandAncestors(path);
+        }
       } catch {
         // 节点不存在（如 URL 中的 node_id 已被删除），清除 URL 回到默认
         try {

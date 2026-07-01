@@ -35,7 +35,6 @@ export async function selectConversationImpl(set: any, get: any, dirId: string |
   set({
     selectedNode: selNode,
     convError: null,
-    showDirSidebar: false,
     switchBanner: null,
   });
   if (conversationId) {

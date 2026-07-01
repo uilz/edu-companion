@@ -14,7 +14,7 @@ import logging
 from typing import AsyncGenerator
 
 from app.domain.conversation.reply_pipeline import ReplyPipeline, ReplyEvent
-from app.domain.conversation.pipeline_stages import ToolResult, _pop_suspended, _has_suspended
+from app.domain.conversation.pipeline_stages import ToolResult, PipelineCtx, _pop_suspended, _has_suspended
 from app.services.conversation.stream_buffer import stream_buffer
 from app.services.analytics.emotion_analyzer import emotion_analyzer
 from app.services.conversation.active_stream import active_streams

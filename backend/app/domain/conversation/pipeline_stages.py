@@ -330,7 +330,6 @@ class ToolLoopStage:
 
         while True:
             tool_calls = None
-            ctx.full_reply = ""
             try:
                 async for ev in llm_service.generate_stream_with_tools(
                     messages=llm_messages, task_type="chat",
@@ -460,7 +459,7 @@ class ToolLoopStage:
 
                 # 只追加 assistant(tool_calls)，不追加 tool result → 挂起等待用户
                 llm_messages.append({
-                    "role": "assistant", "content": None,
+                    "role": "assistant", "content": ctx.full_reply or None,
                     "tool_calls": [tc],
                 })
 
@@ -605,22 +604,27 @@ async def _execute_single_tool(
                     id=f"rename_{uuid4().hex[:8]}",
                     type="rename_conversation", status="success",
                     content={"name": new_name},
+                    conv_id=ctx.conv_id, dir_id=ctx.dir_id,
                 )
             except Exception as e:
                 return ResponseBlock(
                     id=f"rename_{uuid4().hex[:8]}",
                     type="rename_conversation", status="failed",
                     content={"error": str(e)},
+                    conv_id=ctx.conv_id, dir_id=ctx.dir_id,
                 )
         return ResponseBlock(
             id=f"rename_{uuid4().hex[:8]}",
             type="rename_conversation", status="failed",
             content={"error": "缺少 name 参数"},
+            conv_id=ctx.conv_id, dir_id=ctx.dir_id,
         )
 
     tool_block = await tool_executor.execute(tool_name, args, user_id=ctx.user_id)
     tool_block.order = order
     tool_block.tool_name = tool_name
+    tool_block.conv_id = ctx.conv_id
+    tool_block.dir_id = ctx.dir_id
 
     # 为 ask_question 块持久化 tool_call_id，便于后续答案提交作为 tool result
     if tool_name == "ask_question" and tc.get("id"):
