@@ -281,6 +281,52 @@ class LoginEventRepo:
             "total": total["cnt"] if total else 0,
         }
 
+    def get_user_login_history(self, user_id: str, limit: int = 20) -> list[dict]:
+        """获取用户登录历史（别名）"""
+        return self.get_history(user_id, limit)
+
+    def get_user_online_status(self, user_id: str) -> dict:
+        """获取用户在线状态"""
+        row = self._db.fetchone(
+            "SELECT created_at FROM login_events WHERE user_id = %s "
+            "ORDER BY created_at DESC LIMIT 1",
+            (user_id,),
+        )
+        last_seen = row["created_at"] if row else None
+        # 15 分钟内算在线
+        now = self._db.fetchone("SELECT NOW()::timestamp AS now")
+        online = False
+        if last_seen and now:
+            from datetime import timedelta
+            online = (now["now"] - last_seen) < timedelta(minutes=15)
+        return {"online": online, "last_seen": last_seen.isoformat() if last_seen else None}
+
+    def get_user_active_sessions(self, user_id: str) -> list[dict]:
+        """获取用户活跃会话"""
+        limit = 10
+        rows = self._db.fetchall(
+            "SELECT event_id, user_id, ip_address, device_type, browser, os, "
+            "       country, region, city, created_at, is_current "
+            "FROM login_events WHERE user_id = %s AND is_current = TRUE "
+            "ORDER BY created_at DESC LIMIT %s",
+            (user_id, limit),
+        )
+        return rows or []
+
+    def get_ip_analysis(self, user_id: str) -> list[dict]:
+        """获取用户 IP 分析（按 IP 聚合统计）"""
+        rows = self._db.fetchall(
+            """SELECT ip_address, country, region, city,
+                      COUNT(*) AS count,
+                      MAX(created_at) AS last_seen
+               FROM login_events
+               WHERE user_id = %s
+               GROUP BY ip_address, country, region, city
+               ORDER BY count DESC""",
+            (user_id,),
+        )
+        return rows or []
+
     def mark_current_session(self, user_id: str, ip_address: str, user_agent: str) -> None:
         """将匹配 IP + UA 的最新登录事件标记为当前会话"""
         self._db.execute(

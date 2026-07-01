@@ -11,6 +11,8 @@ GET    /{user_id}/login-log   登录历史
 POST   /bulk/role             批量改角色
 POST   /bulk/ban              批量封禁
 POST   /bulk/unban            批量解封
+POST   /bulk/delete           批量删除
+DELETE /{user_id}             删除单个用户
 """
 from __future__ import annotations
 
@@ -108,8 +110,9 @@ def _row_to_model(r: dict) -> UserRow:
 
 
 def _hash_password(password: str) -> str:
-    """简易 SHA-256 哈希（与 auth-gateway auth_service 一致）"""
-    return hashlib.sha256(password.encode()).hexdigest()
+    """使用 bcrypt 哈希（与 auth-gateway auth_service 一致）"""
+    import bcrypt
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 # ── Endpoints ──
@@ -375,6 +378,35 @@ async def bulk_unban(
     return {"ok": True, "affected": affected}
 
 
+@router.post("/bulk/delete")
+async def bulk_delete(
+    body: BulkActionBody,
+    _user: dict = Depends(require_role("super_admin")),
+):
+    """批量删除用户及其关联数据（不可恢复）"""
+    if not body.user_ids:
+        raise HTTPException(400, "user_ids 不能为空")
+
+    repo = _repo()
+    deleted = 0
+    for uid in body.user_ids:
+        existing = repo.query("SELECT id FROM users WHERE id = %s", (uid,))
+        if not existing:
+            continue
+        # 顺序删：先子表再主表
+        repo.execute("DELETE FROM login_events WHERE user_id = %s", (uid,))
+        repo.execute("DELETE FROM practice_attempts WHERE user_id = %s", (uid,))
+        repo.execute("DELETE FROM practice_sessions WHERE user_id = %s", (uid,))
+        repo.execute("DELETE FROM conversation_user_meta WHERE user_id = %s", (uid,))
+        repo.execute("DELETE FROM knowledge_nodes WHERE user_id = %s", (uid,))
+        repo.execute("DELETE FROM events WHERE user_id = %s", (uid,))
+        repo.execute("DELETE FROM users WHERE id = %s", (uid,))
+        deleted += 1
+
+    logger.info("admin 批量删除用户: count=%d", deleted)
+    return {"ok": True, "affected": deleted, "message": f"已删除 {deleted} 个用户"}
+
+
 @router.post("/{user_id}/force-logout")
 async def force_logout_user(
     user_id: str,
@@ -397,12 +429,28 @@ async def force_logout_user(
     logger.info("admin 强制踢出用户所有设备: user_id=%s", user_id)
     return {"ok": True, "message": "已强制该用户所有设备下线"}
 
-    # 软删除：用户名加后缀防止重复，标记为不活跃
+
+@router.delete("/{user_id}")
+async def delete_user(
+    user_id: str,
+    _user: dict = Depends(require_role("super_admin")),
+):
+    """彻底删除用户及其关联数据（不可恢复）"""
+    repo = _repo()
+    existing = repo.query("SELECT id, username FROM users WHERE id = %s", (user_id,))
+    if not existing:
+        raise HTTPException(404, "用户不存在")
+
     old_username = existing[0].get("username", "")
-    new_username = f"{old_username}_deleted_{user_id[:8]}"
-    repo.execute(
-        "UPDATE users SET is_active = FALSE, username = %s, status = 'deactivated', updated_at = NOW() WHERE id = %s",
-        (new_username, user_id),
-    )
-    logger.info("admin 注销用户: id=%s username=%s", user_id, old_username)
-    return {"ok": True, "user_id": user_id, "message": "用户已注销"}
+
+    # 顺序删：先子表再主表
+    repo.execute("DELETE FROM login_events WHERE user_id = %s", (user_id,))
+    repo.execute("DELETE FROM practice_attempts WHERE user_id = %s", (user_id,))
+    repo.execute("DELETE FROM practice_sessions WHERE user_id = %s", (user_id,))
+    repo.execute("DELETE FROM conversation_user_meta WHERE user_id = %s", (user_id,))
+    repo.execute("DELETE FROM knowledge_nodes WHERE user_id = %s", (user_id,))
+    repo.execute("DELETE FROM events WHERE user_id = %s", (user_id,))
+    repo.execute("DELETE FROM users WHERE id = %s", (user_id,))
+
+    logger.info("admin 删除用户: id=%s username=%s", user_id, old_username)
+    return {"ok": True, "user_id": user_id, "username": old_username, "message": "用户已删除"}

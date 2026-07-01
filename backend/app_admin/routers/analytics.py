@@ -41,7 +41,7 @@ async def kpi(_: dict = Depends(require_role("analyst"))):
             (SELECT COUNT(*) FROM practice_attempts) AS attempts_total,
             (SELECT COUNT(*) FROM practice_attempts WHERE is_correct = TRUE) AS attempts_correct,
             (SELECT COUNT(*) FROM practice_sessions) AS sessions_total,
-            (SELECT COUNT(*) FROM cognitive_nodes WHERE level = 'atom') AS atom_nodes,
+            (SELECT COUNT(*) FROM knowledge_nodes WHERE level = 'atom') AS atom_nodes,
             (SELECT COUNT(*) FROM questions) AS questions_total,
             (SELECT COUNT(*) FROM questions WHERE deleted_at IS NULL) AS questions_active
     """)
@@ -75,7 +75,7 @@ async def mastery_distribution(_: dict = Depends(require_role("analyst"))):
                 ELSE '0.8-1.0'
             END AS bucket,
             COUNT(*) AS cnt
-        FROM cognitive_nodes
+        FROM knowledge_nodes
         WHERE level = 'atom' AND (belief->>'proficiency_mean') IS NOT NULL
         GROUP BY bucket
         ORDER BY bucket
@@ -165,7 +165,7 @@ async def subject_distribution(_: dict = Depends(require_role("analyst"))):
             COUNT(DISTINCT q.id) AS questions,
             COUNT(DISTINCT cn.id) AS nodes
         FROM questions q
-        FULL JOIN cognitive_nodes cn ON cn.id = q.id
+        FULL JOIN knowledge_nodes cn ON cn.id = q.id
         GROUP BY subject
         ORDER BY questions DESC
     """) or []
@@ -224,7 +224,7 @@ async def accuracy_trend(
         "SELECT DATE(created_at) AS day, "
         "       COUNT(*) AS total, "
         "       COUNT(*) FILTER (WHERE is_correct = TRUE) AS correct, "
-        "       AVG(time_spent) AS avg_time_spent "
+        "       AVG(time_spent_seconds) AS avg_time_spent "
         "FROM practice_attempts "
         "WHERE created_at > NOW() - (%s || ' days')::interval "
         "GROUP BY DATE(created_at) ORDER BY day",

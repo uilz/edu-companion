@@ -44,3 +44,36 @@ async def event_consumer() -> None:
         await event_service._consume_once()
     except Exception:
         logger.exception("EventService 消费异常")
+
+
+# ── Event 清理（每小时）──
+
+_EVENT_RETENTION_DAYS = 7
+
+
+async def event_cleanup() -> None:
+    """删除超过保留期的 events 和 event_relations 记录
+
+    每小时执行一次，防止事件表无限增长（此前曾累积 1.3GB/500万行）。
+    """
+    from app.infrastructure.db.database import get_db
+    try:
+        db = get_db()
+
+        # 先删 relations（避免 FK 约束）
+        rel_deleted = db.execute(
+            "DELETE FROM event_relations WHERE created_at < NOW() - (%s || ' days')::INTERVAL",
+            (str(_EVENT_RETENTION_DAYS),),
+        )
+
+        # 再删 events
+        evt_deleted = db.execute(
+            "DELETE FROM events WHERE created_at < NOW() - (%s || ' days')::INTERVAL",
+            (str(_EVENT_RETENTION_DAYS),),
+        )
+
+        if rel_deleted or evt_deleted:
+            logger.info("事件清理: 删除 %d 条 event_relations, %d 条 events",
+                       rel_deleted, evt_deleted)
+    except Exception:
+        logger.exception("事件清理异常")

@@ -1,6 +1,5 @@
 -- 练习系统统一建表 (v2 重构版)
--- 取代: question_bank.sql + database.py 内联建表 + 各文件内联 _ensure_tables()
--- 注意: 本文件由 _ensure_tables() 幂等执行，所有表用 IF NOT EXISTS
+-- 本文件由 _ensure_tables() 幂等执行，所有表用 IF NOT EXISTS
 
 -- 7.0.1 题库表
 CREATE TABLE IF NOT EXISTS question_banks (
@@ -43,10 +42,6 @@ CREATE TABLE IF NOT EXISTS questions (
     updated_at      TIMESTAMPTZ DEFAULT NOW(),
     deleted_at      TIMESTAMPTZ
 );
-
--- 迁移: 为已存在的表补充新列（开发阶段幂等执行）
-ALTER TABLE practice_attempts ADD COLUMN IF NOT EXISTS error_analysis JSONB DEFAULT '{}';
-ALTER TABLE practice_attempts ADD COLUMN IF NOT EXISTS confidence_before INTEGER DEFAULT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_q_bank ON questions(bank_id) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_q_type ON questions(question_type);
@@ -191,7 +186,7 @@ CREATE TABLE IF NOT EXISTS messages (
     metadata            JSONB DEFAULT '{}'
 );
 
-CREATE INDEX IF NOT EXISTS idx_msg_conversation ON messages(conv_id);
+CREATE INDEX IF NOT EXISTS idx_msg_conversation ON messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_msg_user ON messages(user_id);
 CREATE INDEX IF NOT EXISTS idx_msg_parent ON messages(parent_id);
 CREATE INDEX IF NOT EXISTS idx_msg_timestamp ON messages(timestamp);

@@ -27,6 +27,9 @@ router = APIRouter()
 
 AUTH_GATEWAY_URL = os.getenv("AUTH_GATEWAY_URL", "http://127.0.0.1:18001")
 
+# 不能通过 /env 暴露的敏感环境变量
+_ENV_SECRET_PATTERNS = ("KEY", "SECRET", "PASSWORD", "TOKEN", "JWT", "CREDENTIAL", "PRIVATE")
+
 
 def _repo():
     from app.services.common import get_admin_repo
@@ -68,6 +71,18 @@ async def get_config(_: dict = Depends(require_role("super_admin"))):
         "pid": os.getpid(),
         "cwd": os.getcwd(),
     }
+
+
+@router.get("/env")
+async def get_env_info(_: dict = Depends(require_role("super_admin"))):
+    """获取环境变量快照（过滤敏感信息）"""
+    safe: dict[str, str] = {}
+    for key, value in os.environ.items():
+        upper_key = key.upper()
+        if any(secret in upper_key for secret in _ENV_SECRET_PATTERNS):
+            continue
+        safe[key] = value
+    return {"env": safe}
 
 
 @router.get("/db-status")

@@ -89,13 +89,13 @@ def _decode_jwt(token: str) -> Optional[dict]:
 
 
 class AdminAuthMiddleware:
-    """admin 进程的鉴权中间件 — 纯 ASGI 实现"""
+    """admin 进程的鉴权中间件 — 纯 ASGI 实现
+
+    仅做 JWT 解码 + RBAC 角色校验。admin 本地运行不对外开放，
+    无需 IP 白名单、冷却、限流等复杂安全机制。"""
 
     def __init__(self, app):
         self.app = app
-        # IP 白名单（逗号分隔，留空 = 不限制）
-        whitelist_raw = os.getenv("ADMIN_IP_WHITELIST", "")
-        self.ip_whitelist = {ip.strip() for ip in whitelist_raw.split(",") if ip.strip()} if whitelist_raw else set()
 
     @staticmethod
     def _extract_token(scope: dict) -> Optional[str]:
@@ -111,25 +111,7 @@ class AdminAuthMiddleware:
                     name, _, val = part.strip().partition("=")
                     if name == "access_token":
                         return val
-        # 3. Query param
-        qs = scope.get("query_string", b"").decode("utf-8", "ignore")
-        for kv in qs.split("&"):
-            if kv.startswith("token="):
-                return kv.split("=", 1)[1]
         return None
-
-    @staticmethod
-    def _get_client_ip(scope: dict) -> str:
-        """从 ASGI scope 提取客户端 IP"""
-        # 优先 x-forwarded-for
-        for k, v in scope.get("headers", []):
-            if k == b"x-forwarded-for":
-                return v.decode("utf-8", "ignore").split(",")[0].strip()
-        # 回退到 client address
-        client = scope.get("client")
-        if client:
-            return client[0]
-        return "unknown"
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -140,17 +122,6 @@ class AdminAuthMiddleware:
         # 公开路径，不限制
         if path in PUBLIC_PATHS or path.startswith("/admin/docs"):
             return await self.app(scope, receive, send)
-
-        # ── IP 白名单检查（如果配置了白名单） ──
-        if self.ip_whitelist:
-            client_ip = self._get_client_ip(scope)
-            if client_ip not in self.ip_whitelist:
-                logger.warning("Admin IP 白名单拒绝: ip=%s path=%s (whitelist=%s)", client_ip, path, self.ip_whitelist)
-                await self._send_json_response(
-                    send, 403,
-                    {"error": "forbidden", "detail": "您的 IP 不在管理后台白名单中"},
-                )
-                return
 
         # 提取 token 并验证
         token = self._extract_token(scope)

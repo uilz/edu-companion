@@ -137,7 +137,7 @@ async def system_health(_: dict = Depends(require_role("analyst"))):
         SELECT
             (SELECT COUNT(*) FROM users WHERE is_active = TRUE) AS active_users,
             (SELECT COUNT(*) FROM cognitive_events WHERE processed = FALSE) AS pending_events,
-            (SELECT COUNT(*) FROM cognitive_nodes) AS nodes_total,
+            (SELECT COUNT(*) FROM knowledge_nodes) AS nodes_total,
             (SELECT COUNT(*) FROM conversation_user_meta) AS user_metas,
             (SELECT pg_database_size(current_database())) AS db_bytes,
             (SELECT NOW()) AS now_ts

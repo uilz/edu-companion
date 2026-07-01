@@ -2,33 +2,40 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, ApiError, getCurrentUser, hasRole } from "@/lib/api";
+import { useAuthStore } from "@/lib/auth-store";
 
-/**
- * 首页：检查登录态 → 跳到有权限的默认页
- */
 export default function Home() {
   const router = useRouter();
-  const [hint, setHint] = useState("加载中…");
+  const { user, sync, can } = useAuthStore();
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const u = getCurrentUser();
-    if (!u) {
+    sync();
+    setMounted(true);
+  }, [sync]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (!user) {
       router.replace("/login");
       return;
     }
-    // 按权限挑一个默认页
-    if (hasRole(u.role, "super_admin")) router.replace("/users");
-    else if (hasRole(u.role, "data_admin")) router.replace("/data");
-    else if (hasRole(u.role, "analyst")) router.replace("/analytics");
-    else {
-      setHint(`当前角色 ${u.role} 无任何管理权限`);
-    }
-  }, [router]);
+    if (can("super_admin")) router.replace("/users");
+    else if (can("data_admin")) router.replace("/data");
+    else if (can("analyst")) router.replace("/analytics");
+  }, [mounted, user, router, can]);
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center py-20 text-ink-muted text-caption">
+        加载中…
+      </div>
+    );
+  }
 
   return (
-    <div className="page">
-      <p className="muted">{hint}</p>
+    <div className="py-20 text-center text-ink-muted text-body">
+      当前角色 {user.role} 无任何管理权限
     </div>
   );
 }

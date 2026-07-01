@@ -52,11 +52,11 @@ from app.api.knowledge_tree import router as knowledge_tree_router
 from app.api.knowledge_tree_sse import router as knowledge_tree_sse_router
 from app.api.knowledge_tree_ai import router as knowledge_tree_ai_router
 
-# 管理员系统
-from app.api.admin.admin_routes import router as admin_router
-
 # 用户自定义 LLM 配置
 from app.domain.auth.settings_api import router as settings_router
+
+# 认证 API（登录历史、活跃会话、踢出设备等）
+from app.domain.auth.api import router as auth_router
 
 from app.config import settings
 from shared.learner_model import learner_engine
@@ -206,11 +206,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # 中央调度器 — 统一管理所有服务端后台任务
     # ═══════════════════════════════════════════
     from app.infrastructure.scheduler import BackgroundScheduler
-    from app.infrastructure.scheduler.tasks import event_bus_poll, event_consumer
+    from app.infrastructure.scheduler.tasks import event_bus_poll, event_consumer, event_cleanup
 
     app.state.scheduler = BackgroundScheduler()
     app.state.scheduler.add_task("event_bus", 0.5, event_bus_poll)
     app.state.scheduler.add_task("event_consumer", 5.0, event_consumer)
+    app.state.scheduler.add_task("event_cleanup", 3600, event_cleanup)  # 每小时清理过期事件
 
     await app.state.scheduler.start_all()
     logger.info("✅ 中央调度器已启动: %d 个后台任务", len(app.state.scheduler._tasks))
@@ -370,11 +371,12 @@ app.include_router(learning_enhance_router)
 # 文件管理
 app.include_router(files_router)
 
-# 管理员系统
-app.include_router(admin_router)
 
 # 用户自定义 LLM 配置（非认证 — 保留在主后端）
 app.include_router(settings_router)
+
+# 认证 API（登录历史、活跃会话、踢出设备等）
+app.include_router(auth_router)
 
 # 智能题库
 app.include_router(practice_routes_router)

@@ -2,13 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { setSession, type AdminRole, type AdminUser } from "@/lib/api";
+import { login, setSession } from "@/lib/api";
+import type { AdminRole, AdminUser } from "@/lib/types";
 
-/**
- * 登录页
- * - 通过认证网关 18001 取 JWT
- * - 仅 super_admin / data_admin / analyst 可使用管理后台
- */
+const ALLOWED_ROLES: AdminRole[] = ["super_admin", "data_admin", "analyst"];
+
 export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
@@ -21,66 +19,82 @@ export default function LoginPage() {
     setErr("");
     setLoading(true);
     try {
-      const res = await fetch("http://127.0.0.1:18001/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-      if (!res.ok) {
-        const t = await res.text();
-        throw new Error(`登录失败: ${res.status} ${t.slice(0, 100)}`);
-      }
-      const data = await res.json();
-      const token: string = data.access_token;
-      const u = data.user || {};
-      const role: AdminRole = (u.role || "user") as AdminRole;
+      const data = await login(username, password);
+      const role: AdminRole = (data.user.role || "user") as AdminRole;
 
-      if (!["super_admin", "data_admin", "analyst"].includes(role)) {
+      if (!ALLOWED_ROLES.includes(role)) {
         throw new Error(`角色 ${role} 无管理后台权限`);
       }
 
       const user: AdminUser = {
-        user_id: u.id || u.username || username,
-        username: u.username || username,
+        user_id: data.user.user_id || data.user.username || username,
+        username: data.user.username || username,
         role,
       };
-      setSession(token, user);
+      setSession(data.access_token, data.refresh_token, user);
 
       router.push(role === "super_admin" ? "/users" : "/analytics");
-    } catch (e: any) {
-      setErr(e.message || "登录失败");
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "登录失败");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="login-wrap">
-      <form className="login-card" onSubmit={submit}>
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <div style={{ fontSize: 36, marginBottom: 8 }}>&#x1F6E1;&#xFE0F;</div>
-          <h1 style={{ margin: 0, fontSize: 22 }}>Edu Admin</h1>
-          <p className="muted" style={{ marginTop: 6, fontSize: 13 }}>管理后台登录</p>
+    <div className="flex items-center justify-center min-h-screen bg-page">
+      <form
+        onSubmit={submit}
+        className="w-[380px] bg-surface-elevated p-10 rounded-xl border border-divider shadow-md animate-slide-up"
+      >
+        <div className="text-center mb-6">
+          <div className="text-4xl mb-2">&#x1F6E1;&#xFE0F;</div>
+          <h1 className="text-heading text-ink-primary">Edu Admin</h1>
+          <p className="text-caption text-ink-muted mt-1">管理后台登录</p>
         </div>
-        <label>
+
+        <label className="block text-caption text-ink-secondary font-medium mt-4 mb-1">
           用户名
-          <input value={username} onChange={(e) => setUsername(e.target.value)} required placeholder="请输入用户名" />
         </label>
-        <label>
+        <input
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          required
+          placeholder="请输入用户名"
+          className="w-full px-3 py-2.5 bg-input text-ink-primary border border-divider rounded-md text-body
+                     focus:outline-none focus:border-accent transition-colors duration-fast"
+        />
+
+        <label className="block text-caption text-ink-secondary font-medium mt-4 mb-1">
           密码
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            placeholder="请输入密码"
-          />
         </label>
-        {err && <div className="err">{err}</div>}
-        <button className="btn" disabled={loading}>
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          placeholder="请输入密码"
+          className="w-full px-3 py-2.5 bg-input text-ink-primary border border-divider rounded-md text-body
+                     focus:outline-none focus:border-accent transition-colors duration-fast"
+        />
+
+        {err && (
+          <div className="mt-3 p-2.5 bg-danger/10 border border-danger/20 rounded-md text-caption text-danger">
+            {err}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full mt-5 py-2.5 rounded-md font-medium text-body bg-accent text-white
+                     hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed
+                     transition-colors duration-fast"
+        >
           {loading ? "登录中…" : "登录"}
         </button>
-        <p className="hint muted" style={{ textAlign: "center", marginTop: 16 }}>
+
+        <p className="text-center mt-4 text-fine text-ink-muted">
           仅 super_admin / data_admin / analyst 可登录
         </p>
       </form>

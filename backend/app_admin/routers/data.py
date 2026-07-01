@@ -82,7 +82,7 @@ async def data_overview(_: dict = Depends(require_role("data_admin"))):
             (SELECT COUNT(*) FROM questions) AS questions,
             (SELECT COUNT(*) FROM question_banks) AS question_banks,
             (SELECT COUNT(*) FROM materials) AS materials,
-            (SELECT COUNT(*) FROM cognitive_nodes) AS cognitive_nodes,
+            (SELECT COUNT(*) FROM knowledge_nodes) AS cognitive_nodes,
             (SELECT COUNT(*) FROM cognitive_events) AS cognitive_events
     """)
     if not rows:
