@@ -209,7 +209,7 @@ export default function AgentFloat() {
   // 初始化位置，延迟 0.5s 浮现（防止刷新瞬移）
   useEffect(() => {
     const saved = loadPos();
-    const initial = saved || { x: window.innerWidth - 64, y: window.innerHeight - 200 };
+    const initial = saved || { x: window.innerWidth, y: window.innerHeight };
     // 夹紧到当前视口并吸附（桌面保存的位置在手机上可能溢出）
     clampAndSnap(initial);
 
