@@ -297,6 +297,11 @@ start_service "backend" "$PROJECT_DIR/backend" \
   "venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000" \
   8000 "/health" 180
 
+log "🗄️  确保数据库表完整..."
+cd "$PROJECT_DIR/backend"
+source venv/bin/activate
+python3 scripts/ensure_all_tables.py 2>&1 || log "⚠️  建表脚本有非致命警告（通常是权限提示，可忽略）"
+
 start_service "frontend" "$PROJECT_DIR/frontend" \
   "npx next start -p 3000" \
   3000 "/"
