@@ -21,7 +21,8 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     if (!ready || !user || !hasRole(user.role, "analyst")) return;
-    Promise.all([
+    // Promise.allSettled：任一查询失败不影响其他区段渲染，并把错误显式标到该区段
+    const settled = Promise.allSettled([
       api.get<AnalyticsKpi>("/analytics/kpi"),
       api.get<AnalyticsTrend>("/analytics/practice-trend?days=14"),
       api.get<{ items: TopWrongQuestion[] }>("/analytics/top-wrong-questions?limit=10"),
@@ -30,10 +31,19 @@ export default function AnalyticsPage() {
       api.get<{ items: SubjectDistItem[] }>("/analytics/subject-distribution"),
       api.get<{ buckets: DifficultyBucket[] }>("/analytics/difficulty-distribution"),
       api.get<{ items: EngagementItem[] }>("/analytics/user-engagement?limit=10"),
-    ]).then(([k, t, w, m, a, sd, d, e]) => {
-      setKpi(k); setTrend(t); setWrong(w); setMastery(m);
-      setActivity(a); setSubjectDist(sd); setDifficulty(d); setEngagement(e);
-    }).catch((e) => setErr(e.message));
+    ]);
+    settled.then(([k, t, w, m, a, sd, d, e]) => {
+      const failed: string[] = [];
+      if (k.status === "fulfilled") setKpi(k.value); else failed.push(`KPI: ${k.reason?.message}`);
+      if (t.status === "fulfilled") setTrend(t.value); else failed.push(`趋势: ${t.reason?.message}`);
+      if (w.status === "fulfilled") setWrong(w.value); else failed.push(`错题: ${w.reason?.message}`);
+      if (m.status === "fulfilled") setMastery(m.value); else failed.push(`掌握度: ${m.reason?.message}`);
+      if (a.status === "fulfilled") setActivity(a.value); else failed.push(`活跃度: ${a.reason?.message}`);
+      if (sd.status === "fulfilled") setSubjectDist(sd.value); else failed.push(`学科: ${sd.reason?.message}`);
+      if (d.status === "fulfilled") setDifficulty(d.value); else failed.push(`难度: ${d.reason?.message}`);
+      if (e.status === "fulfilled") setEngagement(e.value); else failed.push(`参与度: ${e.reason?.message}`);
+      if (failed.length > 0) setErr(failed.join(" | "));
+    });
   }, [ready, user]);
 
   if (!ready) return <div className="py-20 text-center text-ink-muted">加载中…</div>;

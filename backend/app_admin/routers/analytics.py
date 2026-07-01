@@ -166,7 +166,7 @@ async def subject_distribution(_: dict = Depends(require_role("analyst"))):
             COUNT(DISTINCT cn.id) AS nodes
         FROM questions q
         FULL JOIN knowledge_nodes cn ON cn.id = q.id
-        GROUP BY subject
+        GROUP BY q.bank_id
         ORDER BY questions DESC
     """) or []
     return {"items": rows}
