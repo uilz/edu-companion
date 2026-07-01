@@ -69,14 +69,16 @@ def delete_question(question_id, user_id):
 def toggle_favorite(question_id, user_id):
     from app.infrastructure.db.database import get_db
     db = get_db()
-    existing = db.fetchone("SELECT id FROM question_favorites WHERE question_id = %s AND user_id = %s",
-                           (question_id, user_id))
+    existing = db.fetchone(
+        "SELECT id FROM question_user_flags WHERE question_id = %s AND user_id = %s AND flag_type = 'favorite'",
+        (question_id, user_id))
     if existing:
-        db.execute("DELETE FROM question_favorites WHERE id = %s", (existing["id"],))
+        db.execute("DELETE FROM question_user_flags WHERE id = %s", (existing["id"],))
         db.execute("UPDATE questions SET is_favorite = false WHERE id = %s", (question_id,))
         return False
-    db.execute("INSERT INTO question_favorites (id, user_id, question_id) VALUES (%s, %s, %s)",
-               (f"fav_{question_id}_{user_id[-6:]}", user_id, question_id))
+    db.execute(
+        "INSERT INTO question_user_flags (id, user_id, question_id, flag_type) VALUES (%s, %s, %s, 'favorite')",
+        (f"fav_{question_id}_{user_id[-6:]}", user_id, question_id))
     db.execute("UPDATE questions SET is_favorite = true WHERE id = %s", (question_id,))
     return True
 
