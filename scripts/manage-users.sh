@@ -41,13 +41,13 @@ get_db_password() {
 run_sql() {
   local pw
   pw=$(get_db_password)
-  PGPASSWORD="$pw" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -Atc "$1"
+  PGPASSWORD="$pw" PAGER=cat psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -Atc "$1"
 }
 
 run_sql_stdout() {
   local pw
   pw=$(get_db_password)
-  PGPASSWORD="$pw" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "$1"
+  PGPASSWORD="$pw" PAGER=cat psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "$1"
 }
 
 # ── 生成 bcrypt 哈希 ──
@@ -128,65 +128,86 @@ reset_password() {
     err "两次密码不一致"; return 1
   fi
 
+  # 检查用户是否存在
+  local exists
+  exists=$(PGPASSWORD="$(get_db_password)" PAGER=cat psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -Atc "SELECT COUNT(*) FROM users WHERE id='$uid_or_name' OR username='$uid_or_name';" 2>/dev/null)
+  if [[ -z "$exists" || "$exists" -eq 0 ]]; then
+    err "用户 $uid_or_name 不存在"; return 1
+  fi
+
   local hash
   hash=$(gen_hash "$new_pwd")
 
-  # 判断输入是 ID 还是 username
   if [[ "$uid_or_name" =~ ^u_ ]]; then
     run_sql "UPDATE users SET password_hash='$hash', updated_at=NOW() WHERE id='$uid_or_name';"
   else
     run_sql "UPDATE users SET password_hash='$hash', updated_at=NOW() WHERE username='$uid_or_name';"
   fi
+  log "密码已重置"
+}
 
-  if [[ $? -eq 0 ]]; then
-    log "密码已重置"
+# ── 修改角色 ──
+change_role() {
+  read -r -p "用户 ID 或 用户名: " uid_or_name
+  echo "角色: 1) user  2) analyst  3) data_admin  4) super_admin"
+  read -r -p "新角色编号: " r
+  local new_role
+  case "$r" in
+    1) new_role="user" ;; 2) new_role="analyst" ;; 3) new_role="data_admin" ;; 4) new_role="super_admin" ;;
+    *) err "无效角色"; return 1 ;;
+  esac
+  if [[ "$uid_or_name" =~ ^u_ ]]; then
+    run_sql "UPDATE users SET role='$new_role', updated_at=NOW() WHERE id='$uid_or_name';"
+  else
+    run_sql "UPDATE users SET role='$new_role', updated_at=NOW() WHERE username='$uid_or_name';"
+  fi
+  local rc=$?
+  # 检查是否真的更新了行（UPDATE 返回 "UPDATE N"）
+  local affected
+  affected=$(PGPASSWORD="$(get_db_password)" PAGER=cat psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -Atc "SELECT COUNT(*) FROM users WHERE id='$uid_or_name' OR username='$uid_or_name';" 2>/dev/null)
+  if [[ "$affected" -gt 0 ]]; then
+    log "用户 $uid_or_name 角色已改为 $new_role"
   else
     err "用户 $uid_or_name 不存在"
   fi
 }
 
-# ── 修改角色 ──
-change_role() {
-  read -r -p "用户 ID: " uid
-  echo "角色: 1) user  2) analyst  3) data_admin  4) super_admin"
-  read -r -p "新角色编号: " r
-  case "$r" in
-    1) role="user" ;; 2) role="analyst" ;; 3) role="data_admin" ;; 4) role="super_admin" ;;
-    *) err "无效角色"; return 1 ;;
-  esac
-  run_sql "UPDATE users SET role='$role', updated_at=NOW() WHERE id='$uid';"
-  log "用户 $uid 角色已改为 $role"
-}
-
 # ── 封禁/解封 ──
 toggle_ban() {
-  read -r -p "用户 ID: " uid
+  read -r -p "用户 ID 或 用户名: " uid_or_name
+  local field
+  if [[ "$uid_or_name" =~ ^u_ ]]; then field="id"; else field="username"; fi
   local is_active
-  is_active=$(run_sql "SELECT is_active FROM users WHERE id='$uid';")
+  is_active=$(run_sql "SELECT is_active FROM users WHERE $field='$uid_or_name';")
   if [[ "$is_active" == "t" ]]; then
-    run_sql "UPDATE users SET is_active=false, updated_at=NOW() WHERE id='$uid';"
-    log "用户 $uid 已封禁"
+    run_sql "UPDATE users SET is_active=false, updated_at=NOW() WHERE $field='$uid_or_name';"
+    log "用户 $uid_or_name 已封禁"
+  elif [[ "$is_active" == "f" ]]; then
+    run_sql "UPDATE users SET is_active=true, updated_at=NOW() WHERE $field='$uid_or_name';"
+    log "用户 $uid_or_name 已解封"
   else
-    run_sql "UPDATE users SET is_active=true, updated_at=NOW() WHERE id='$uid';"
-    log "用户 $uid 已解封"
+    err "用户 $uid_or_name 不存在"
   fi
 }
 
 # ── 删除用户（带关联数据清理） ──
 delete_user() {
-  read -r -p "用户 ID: " uid
+  read -r -p "用户 ID 或 用户名: " uid_or_name
+  local field
+  if [[ "$uid_or_name" =~ ^u_ ]]; then field="id"; else field="username"; fi
+
+  # 先检查用户是否存在
+  local exists
+  exists=$(run_sql "SELECT id FROM users WHERE $field='$uid_or_name';")
+  if [[ -z "$exists" ]]; then
+    err "用户 $uid_or_name 不存在"; return 1
+  fi
+  local uid="$exists"
+
   echo ""
   warn "警告: 删除用户不可恢复！将删除该用户的所有关联数据。"
-  read -r -p "确认删除 $uid ? (输入 yes 确认): " confirm
+  read -r -p "确认删除 $uid ($uid_or_name) ? (输入 yes 确认): " confirm
   if [[ "$confirm" != "yes" ]]; then
-    warn "已取消"; return 1
-  fi
-
-  # 先显示用户信息
-  run_sql_stdout "SELECT id, username, email, role, created_at FROM users WHERE id='$uid';" 2>/dev/null || true
-
-  read -r -p "再次确认删除 $uid ? (输入 yes ): " confirm2
-  if [[ "$confirm2" != "yes" ]]; then
     warn "已取消"; return 1
   fi
 
@@ -198,14 +219,16 @@ delete_user() {
   run_sql "DELETE FROM knowledge_nodes       WHERE user_id='$uid';" 2>/dev/null || true
   run_sql "DELETE FROM events                WHERE user_id='$uid';" 2>/dev/null || true
   run_sql "DELETE FROM users                 WHERE id='$uid';" 2>/dev/null || true
-  log "用户 $uid 已永久删除"
+  log "用户 $uid ($uid_or_name) 已永久删除"
 }
 
 # ── 强制踢下线 ──
 force_logout() {
-  read -r -p "用户 ID: " uid
-  run_sql "UPDATE users SET token_version=token_version+1, updated_at=NOW() WHERE id='$uid';"
-  log "用户 $uid 的 token_version 已递增，所有设备需重新登录"
+  read -r -p "用户 ID 或 用户名: " uid_or_name
+  local field
+  if [[ "$uid_or_name" =~ ^u_ ]]; then field="id"; else field="username"; fi
+  run_sql "UPDATE users SET token_version=token_version+1, updated_at=NOW() WHERE $field='$uid_or_name';"
+  log "用户 $uid_or_name 的 token_version 已递增，所有设备需重新登录"
 }
 
 # ── 创建或重置第一个超级管理员 ──
