@@ -195,12 +195,12 @@ export default function Sidebar() {
         {/* 深色/浅色主题切换 */}
         <button
           onClick={toggleTheme}
-          title={collapsed ? (theme === 'dark' ? '浅色模式' : '深色模式') : undefined}
+          title={collapsed ? (theme === 'dark' ? '深色模式' : '浅色模式') : undefined}
           className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-ink-secondary hover:text-ink-primary hover:bg-surface active:scale-[0.97] transition-all
             ${collapsed ? 'justify-center px-0' : 'px-5'}`}
         >
           {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
-          {!collapsed && <span>{theme === 'dark' ? '浅色模式' : '深色模式'}</span>}
+          {!collapsed && <span>{theme === 'dark' ? '深色模式' : '浅色模式'}</span>}
         </button>
 
         {/* 版本信息 */}

@@ -18,6 +18,7 @@ export default function UsersPage() {
   const [q, setQ] = useState("");
   const [role, setRole] = useState("");
   const [activeFilter, setActiveFilter] = useState("");
+  const [onlineFilter, setOnlineFilter] = useState("");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -35,6 +36,9 @@ export default function UsersPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailTab, setDetailTab] = useState<"info" | "devices" | "history" | "ip">("info");
 
+  // 30 秒轮询：拉取最新在线状态
+  const POLL_INTERVAL_MS = 30_000;
+
   const load = useCallback(async () => {
     setLoading(true); setErr("");
     try {
@@ -42,6 +46,7 @@ export default function UsersPage() {
       if (q) params.set("q", q);
       if (role) params.set("role", role);
       if (activeFilter) params.set("is_active", activeFilter === "active" ? "true" : "false");
+      if (onlineFilter) params.set("is_online", onlineFilter === "online" ? "true" : "false");
       params.set("page", String(page));
       params.set("page_size", "20");
       const d = await api.get<PaginatedResponse<UserRow>>(`/users?${params}`);
@@ -49,9 +54,14 @@ export default function UsersPage() {
     } catch (e: any) {
       setErr(e.message);
     } finally { setLoading(false); }
-  }, [q, role, activeFilter, page]);
+  }, [q, role, activeFilter, onlineFilter, page]);
 
-  useEffect(() => { if (ready && user && hasRole(user.role, "super_admin")) load(); }, [ready, user, load]);
+  useEffect(() => {
+    if (!ready || !user || !hasRole(user.role, "super_admin")) return;
+    load();
+    const t = setInterval(load, POLL_INTERVAL_MS);
+    return () => clearInterval(t);
+  }, [ready, user, load]);
 
   if (!ready) return <div className="py-20 text-center text-ink-muted">加载中…</div>;
   if (!user || !hasRole(user.role, "super_admin")) return null;
@@ -168,6 +178,11 @@ export default function UsersPage() {
           <option value="active">活跃</option>
           <option value="banned">封禁</option>
         </select>
+        <select className={inputClass} value={onlineFilter} onChange={(e) => { setOnlineFilter(e.target.value); setPage(1); }}>
+          <option value="">全部在线</option>
+          <option value="online">在线</option>
+          <option value="offline">离线</option>
+        </select>
         <button className="px-3 py-1 bg-surface border border-divider rounded-md text-fine text-ink-secondary hover:bg-surface-hover transition-colors" onClick={() => load()}>刷新</button>
         <span className="flex-1" />
         <button className="px-3 py-1 bg-success text-black rounded-md text-fine font-medium hover:brightness-90 transition-colors" onClick={() => setModal("create")}>+ 创建用户</button>
@@ -194,12 +209,12 @@ export default function UsersPage() {
             <thead>
               <tr>
                 <th className={thClass} style={{ width: 36 }}><input type="checkbox" checked={data ? selected.size === data.items.length && data.items.length > 0 : false} onChange={selectAll} /></th>
-                <th className={thClass}>用户</th><th className={thClass}>角色</th><th className={thClass}>状态</th><th className={thClass}>最近登录</th><th className={`${thClass} text-right`}>操作</th>
+                <th className={thClass}>用户</th><th className={thClass}>角色</th><th className={thClass}>状态</th><th className={thClass}>在线</th><th className={thClass}>最近登录</th><th className={`${thClass} text-right`}>操作</th>
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={6} className="text-ink-muted text-center py-8 text-caption">加载中…</td></tr>}
-              {!loading && data?.items.length === 0 && <tr><td colSpan={6} className="text-ink-muted text-center py-10 text-caption">无匹配用户</td></tr>}
+              {loading && <tr><td colSpan={7} className="text-ink-muted text-center py-8 text-caption">加载中…</td></tr>}
+              {!loading && data?.items.length === 0 && <tr><td colSpan={7} className="text-ink-muted text-center py-10 text-caption">无匹配用户</td></tr>}
               {data?.items.map((u) => (
                 <tr key={u.id} className="group">
                   <td className={tdClass}><input type="checkbox" checked={selected.has(u.id)} onChange={() => toggleSelect(u.id)} /></td>
@@ -227,6 +242,19 @@ export default function UsersPage() {
                     </select>
                   </td>
                   <td className={tdClass}>{u.is_active ? <span className="bg-success/15 text-success border border-success/20 rounded-full px-2 py-0.5 text-fine font-medium">活跃</span> : <span className="bg-danger/15 text-danger border border-danger/20 rounded-full px-2 py-0.5 text-fine font-medium">封禁</span>}</td>
+                  <td className={tdClass}>
+                    {u.is_online ? (
+                      <span className="inline-flex items-center gap-1.5 bg-success/15 text-success border border-success/20 rounded-full px-2 py-0.5 text-fine font-medium">
+                        <span className="w-1.5 h-1.5 rounded-full bg-success" />
+                        在线
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 bg-ink-muted/15 text-ink-muted border border-divider rounded-full px-2 py-0.5 text-fine font-medium">
+                        <span className="w-1.5 h-1.5 rounded-full bg-ink-muted" />
+                        离线
+                      </span>
+                    )}
+                  </td>
                   <td className={`${tdClass} font-mono text-fine text-ink-muted`}>{u.last_login?.slice(0, 16) || "—"}</td>
                   <td className={`${tdClass} text-right`}>
                     <div className="flex items-center gap-1.5 justify-end">

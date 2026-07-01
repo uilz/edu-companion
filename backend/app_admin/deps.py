@@ -8,6 +8,7 @@ Admin 鉴权依赖 — FastAPI Dependency
 - 中间件直接本地解码 JWT（HS256，与主应用共享 JWT_SECRET）
 - 不调外部认证网关（admin 进程独立部署，避免循环依赖）
 - 强制要求 is_admin 角色（最低 super_admin），否则 401/403
+- 认证通过后 fire-and-forget 刷新 last_active_at（与主应用共用节流策略）
 
 使用：
     from app_admin.deps import require_admin, require_role
@@ -22,8 +23,9 @@ Admin 鉴权依赖 — FastAPI Dependency
 """
 from __future__ import annotations
 
-import os
+import asyncio
 import logging
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -140,6 +142,14 @@ class AdminAuthMiddleware:
         scope["state"] = dict(scope.get("state") or {})
         scope["state"]["user"] = user
         scope["state"]["user_id"] = user["user_id"] if user else None
+        # fire-and-forget 触发 last_active_at 刷新（5 分钟节流）
+        if user:
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.create_task(_admin_touch_active(user["user_id"]))
+            except RuntimeError:
+                pass
         return await self.app(scope, receive, send)
 
     @staticmethod
@@ -193,6 +203,20 @@ async def require_admin(request: Request) -> dict:
             detail=f"需要 super_admin 角色（当前：{role}）",
         )
     return user
+
+
+# ── 活跃时间节流刷新 ──
+
+ADMIN_LAST_ACTIVE_THROTTLE_SEC = 300
+
+
+async def _admin_touch_active(user_id: str) -> None:
+    """异步刷新 last_active_at（DB 内 5 分钟节流，失败仅记日志）"""
+    try:
+        from app.infrastructure.db.auth_repository import UserRepo
+        UserRepo().touch_last_active(user_id, throttle_sec=ADMIN_LAST_ACTIVE_THROTTLE_SEC)
+    except Exception as e:
+        logger.debug("admin touch_last_active failed for %s: %s", user_id, e)
 
 
 def require_role(min_role: str):

@@ -6,11 +6,13 @@
 2. 本地解码 JWT（HS256，与 auth-gateway 共享 JWT_SECRET）
 3. 将验证结果注入 request.state.user 和 request.state.user_id
 4. 未携带 token / token 无效：除公开路径外，**返回 401**
+5. 认证通过后 fire-and-forget 触发 last_active_at 节流更新（5 分钟一次）
 
 性能：本地 HMAC-SHA256 解码 ~0.01ms，对比 HTTP 调网关 3-10ms
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from typing import Optional, Any
@@ -24,6 +26,9 @@ JWT_SECRET = os.getenv("JWT_SECRET")
 if not JWT_SECRET:
     raise RuntimeError("JWT_SECRET environment variable is not set")
 JWT_ALGORITHM = "HS256"
+
+# last_active_at 写入节流（秒）
+LAST_ACTIVE_THROTTLE_SEC = 300
 
 # 不需要认证的路径前缀
 PUBLIC_PATHS = frozenset({
@@ -77,6 +82,8 @@ class AuthMiddleware:
         scope["state"] = dict(scope.get("state") or {})
         scope["state"]["user"] = user
         scope["state"]["user_id"] = user["user_id"]
+        # fire-and-forget 触发 last_active_at 刷新（5 分钟节流）
+        schedule_touch_active(user["user_id"])
         return await self.app(scope, receive, send)
 
     @staticmethod
@@ -126,3 +133,31 @@ def get_request_user_id(request: Any) -> str:
 def get_request_user(request: Any) -> Optional[dict]:
     """从请求状态获取当前用户信息"""
     return getattr(request.state, "user", None)
+
+
+# ── 活跃时间节流刷新 ──
+
+async def _touch_active_at(user_id: str) -> None:
+    """异步刷新 last_active_at（DB 内 5 分钟节流，失败仅记日志）"""
+    try:
+        from app.infrastructure.db.auth_repository import UserRepo
+        UserRepo().touch_last_active(user_id, throttle_sec=LAST_ACTIVE_THROTTLE_SEC)
+    except Exception as e:
+        logger.debug("touch_last_active failed for %s: %s", user_id, e)
+
+
+def schedule_touch_active(user_id: Optional[str]) -> None:
+    """fire-and-forget 调度一次 last_active_at 刷新（5 分钟节流）"""
+    if not user_id:
+        return
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.create_task(_touch_active_at(user_id))
+    except RuntimeError:
+        # 没有 event loop（极少见）— 同步执行兜底
+        try:
+            from app.infrastructure.db.auth_repository import UserRepo
+            UserRepo().touch_last_active(user_id, throttle_sec=LAST_ACTIVE_THROTTLE_SEC)
+        except Exception as e:
+            logger.debug("touch_last_active sync fallback failed: %s", e)

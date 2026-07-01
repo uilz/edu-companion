@@ -3,36 +3,37 @@ module.exports = {
   content: [
     "./src/**/*.{js,ts,jsx,tsx,mdx}",
   ],
+  darkMode: ["class", '[data-theme="dark"]'],
   theme: {
     extend: {
       colors: {
         // Page backgrounds
-        page: '#0f1419',
-        'page-secondary': '#161b22',
+        page: 'var(--color-page)',
+        'page-secondary': 'var(--color-page-secondary)',
         // Surface (cards, panels)
-        surface: '#1a2332',
-        'surface-hover': '#212d3d',
-        'surface-elevated': '#1e293b',
+        surface: 'var(--color-surface)',
+        'surface-hover': 'var(--color-surface-hover)',
+        'surface-elevated': 'var(--color-surface-elevated)',
         // Ink (text)
-        'ink-primary': '#e2e8f0',
-        'ink-secondary': '#94a3b8',
-        'ink-muted': '#64748b',
-        'ink-link': '#60a5fa',
+        'ink-primary': 'var(--color-ink-primary)',
+        'ink-secondary': 'var(--color-ink-secondary)',
+        'ink-muted': 'var(--color-ink-muted)',
+        'ink-link': 'var(--color-ink-link)',
         // Accent
-        accent: '#3b82f6',
-        'accent-hover': '#2563eb',
-        'accent-soft': 'rgba(59,130,246,0.12)',
+        accent: 'var(--color-accent)',
+        'accent-hover': 'var(--color-accent-hover)',
+        'accent-soft': 'var(--color-accent-soft)',
         // Status
-        success: '#4ade80',
-        warning: '#fbbf24',
-        danger: '#f87171',
-        info: '#22d3ee',
+        success: 'var(--color-success)',
+        warning: 'var(--color-warning)',
+        danger: 'var(--color-danger)',
+        info: 'var(--color-info)',
         // Divider
-        divider: '#1e293b',
-        'divider-hover': '#334155',
+        divider: 'var(--color-divider)',
+        'divider-hover': 'var(--color-divider-hover)',
         // Input
-        input: '#0f172a',
-        'input-focus': '#1a2332',
+        input: 'var(--color-input)',
+        'input-focus': 'var(--color-input-focus)',
       },
       fontFamily: {
         sans: ['Inter', 'Noto Sans SC', 'system-ui', '-apple-system', 'sans-serif'],
@@ -53,8 +54,8 @@ module.exports = {
         xl: '20px',
       },
       boxShadow: {
-        sm: '0 1px 3px rgba(0,0,0,0.2)',
-        md: '0 4px 16px rgba(0,0,0,0.3)',
+        sm: '0 1px 3px rgba(0,0,0,0.08)',
+        md: '0 4px 16px rgba(0,0,0,0.10)',
         glow: '0 2px 12px rgba(59,130,246,0.15)',
       },
       spacing: {

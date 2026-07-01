@@ -333,7 +333,12 @@ _Avoid_: auth service（与业务后端的 auth middleware 混淆时）
 每次用户登录时记录的事件，存储在 `login_events` 表。含 user_id / ip_address / device_type / browser / os / region / login_time。通过 UA 解析工具 `app/domain/auth/ua_parser.py` 从 User-Agent 提取设备/浏览器/OS 信息。IP 区域使用简化版本地/内网/公网推断。
 
 **Online Status (在线状态)**:
-基于 `users.last_active_at` 字段判定。每次认证请求更新（5 分钟节流），30 分钟内活跃视为在线。API：`GET /api/auth/me/active-sessions`（查看自己）、`GET /api/auth/users/online/list`（管理员查看在线用户）。
+基于 `users.last_active_at` 字段判定。每次认证请求都会触发 fire-and-forget 调度，调用 `UserRepo.touch_last_active(user_id, throttle_sec=300)` 刷新；该方法在 DB 内做 NOW() 比较，仅当 `last_active_at` 距今 > 5 分钟时才真正写库。30 分钟内活跃视为在线。API：
+- `GET /api/auth/users/online/list`（管理员查看在线用户，走 `UserRepo.get_online_users/get_online_count`）
+- `GET /api/admin/users` 列表返回 `is_online` 字段（SQL 内 `last_active_at > NOW() - INTERVAL '30 minutes'` 判定）
+- 详情页 `GET /api/admin/users/{id}/login-log` 通过 `LoginEventRepo.get_user_online_status` 读取同一字段。
+
+> **时区约束**：DB 列 `timestamp without time zone` 存 CST 墙钟（与服务器本地时一致）。Python 判定在线时必须用 `datetime.now()`，**禁止** `datetime.utcnow()`，否则 0~8 小时内的活跃时间会因负 delta 误判为在线。
 
 ### 用户设置系统
 

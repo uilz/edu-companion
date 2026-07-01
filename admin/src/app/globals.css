@@ -2,18 +2,104 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ═══════════════════════════════════════════════════════════════
+   主题 CSS 变量
+   - 默认 light（在 :root 上定义）
+   - [data-theme="dark"] 覆盖为深色
+   - 所有颜色集中在此，便于主题扩展
+   ═══════════════════════════════════════════════════════════════ */
+
+:root,
+[data-theme="light"] {
+  /* Page backgrounds */
+  --color-page: #f8fafc;
+  --color-page-secondary: #f1f5f9;
+
+  /* Surface */
+  --color-surface: #ffffff;
+  --color-surface-hover: #f1f5f9;
+  --color-surface-elevated: #ffffff;
+
+  /* Ink (text) */
+  --color-ink-primary: #0f172a;
+  --color-ink-secondary: #475569;
+  --color-ink-muted: #94a3b8;
+  --color-ink-link: #2563eb;
+
+  /* Accent */
+  --color-accent: #3b82f6;
+  --color-accent-hover: #2563eb;
+  --color-accent-soft: rgba(59, 130, 246, 0.10);
+
+  /* Status */
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+  --color-info: #0891b2;
+
+  /* Divider */
+  --color-divider: #e2e8f0;
+  --color-divider-hover: #cbd5e1;
+
+  /* Input */
+  --color-input: #ffffff;
+  --color-input-focus: #eff6ff;
+
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  /* Page backgrounds */
+  --color-page: #0f1419;
+  --color-page-secondary: #161b22;
+
+  /* Surface */
+  --color-surface: #1a2332;
+  --color-surface-hover: #212d3d;
+  --color-surface-elevated: #1e293b;
+
+  /* Ink (text) */
+  --color-ink-primary: #e2e8f0;
+  --color-ink-secondary: #94a3b8;
+  --color-ink-muted: #64748b;
+  --color-ink-link: #60a5fa;
+
+  /* Accent */
+  --color-accent: #3b82f6;
+  --color-accent-hover: #2563eb;
+  --color-accent-soft: rgba(59, 130, 246, 0.12);
+
+  /* Status */
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-danger: #f87171;
+  --color-info: #22d3ee;
+
+  /* Divider */
+  --color-divider: #1e293b;
+  --color-divider-hover: #334155;
+
+  /* Input */
+  --color-input: #0f172a;
+  --color-input-focus: #1a2332;
+
+  color-scheme: dark;
+}
+
 /* ── 基础重置 ── */
 html, body {
   padding: 0;
   margin: 0;
   min-height: 100vh;
+  background: var(--color-page);
+  color: var(--color-ink-primary);
 }
 
 /* ── 滚动条 ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #475569; }
+::-webkit-scrollbar-thumb { background: var(--color-divider-hover); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-ink-muted); }
 
 /* ── 动画 ── */
 @layer utilities {

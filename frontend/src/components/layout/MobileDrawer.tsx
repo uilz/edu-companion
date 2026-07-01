@@ -176,7 +176,7 @@ export default function MobileDrawer({ open, onClose }: MobileDrawerProps) {
             style={{ minHeight: 44 }}
           >
             {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-            <span>{theme === 'dark' ? '浅色模式' : '深色模式'}</span>
+            <span>{theme === 'dark' ? '深色模式' : '浅色模式'}</span>
           </button>
 
           <div className="px-4 py-3 text-[10px] text-ink-muted tracking-wide">

@@ -40,7 +40,7 @@ interface ThemeContextType {
 
 const STORAGE_THEME_KEY = 'edu-companion-theme';
 const STORAGE_STYLE_KEY = 'edu-companion-style';
-const DEFAULT_THEME: Theme = 'dark';
+const DEFAULT_THEME: Theme = 'light';
 const DEFAULT_STYLE: DesignStyle = 'professional';
 
 // ── Context ──

@@ -167,12 +167,14 @@ frontend/src/
 
 ### 登录事件追踪
 
-| 事件 | 存储表 | 数据 |
-|------|--------|------|
-| 用户登录 | `login_events` | user_id, ip_address, device_type, browser, os, region, login_time |
-| 用户活跃 | `users.last_active_at` | 每次请求更新（5 分钟节流） |
+| 事件 | 存储表 | 数据 | 触发时机 |
+|------|--------|------|----------|
+| 用户登录 | `login_events` | user_id, ip_address, device_type, browser, os, region, login_time | 每次登录成功 |
+| 用户活跃 | `users.last_active_at` | timestamp | 每次认证请求更新（5 分钟 DB 内节流） |
 
-在线状态判定：`last_active_at` 在最近 30 分钟内 → 在线。
+在线状态判定：`last_active_at` 在最近 30 分钟内 → 在线。**单一数据源**，主应用与 admin 共用 `users.last_active_at`；admin `/api/admin/users` 列表直接返回 `is_online`，前端 30 秒轮询刷新。
+
+> **时区约定**：DB 列 `timestamp without time zone` 存 CST 墙钟（与服务器本地时一致）。Python 判定在线时必须用 `datetime.now()`，**禁止** `datetime.utcnow()`，否则 0~8 小时内的活跃时间会因负 delta 误判为在线。未来若服务跨时区部署，需将列迁至 `TIMESTAMPTZ`。
 
 ---
 

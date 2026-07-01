@@ -100,6 +100,42 @@ class UserRepo:
             (user_id,),
         )
 
+    def touch_last_active(self, user_id: str, throttle_sec: int = 300) -> None:
+        """节流式刷新 last_active_at（默认 5 分钟节流）
+
+        判定逻辑放在 DB 内（NOW() 比较），避免每请求都产生一次 UPDATE。
+        用于在认证中间件里 fire-and-forget 触发，不会阻塞请求。
+        """
+        self._db.execute(
+            "UPDATE users SET last_active_at = NOW() "
+            "WHERE id = %s AND (last_active_at IS NULL "
+            "  OR last_active_at < NOW() - make_interval(secs => %s))",
+            (user_id, throttle_sec),
+        )
+
+    def get_online_users(self, limit: int = 50, online_window_min: int = 30) -> list[dict]:
+        """获取当前在线用户列表（last_active_at 在 N 分钟内）"""
+        return self._db.fetchall(
+            """SELECT id, username, display_name, role, email,
+                      last_active_at, last_login
+               FROM users
+               WHERE last_active_at IS NOT NULL
+                 AND last_active_at > NOW() - make_interval(mins => %s)
+               ORDER BY last_active_at DESC
+               LIMIT %s""",
+            (online_window_min, limit),
+        ) or []
+
+    def get_online_count(self, online_window_min: int = 30) -> int:
+        """获取在线用户数"""
+        row = self._db.fetchone(
+            """SELECT COUNT(*) AS c FROM users
+               WHERE last_active_at IS NOT NULL
+                 AND last_active_at > NOW() - make_interval(mins => %s)""",
+            (online_window_min,),
+        )
+        return int(row["c"]) if row else 0
+
     def update_display_name(self, user_id: str, display_name: str) -> None:
         """更新显示名称"""
         self._db.execute(
@@ -286,20 +322,24 @@ class LoginEventRepo:
         return self.get_history(user_id, limit)
 
     def get_user_online_status(self, user_id: str) -> dict:
-        """获取用户在线状态"""
+        """获取用户在线状态（基于 users.last_active_at，30 分钟内视为在线）
+
+        DB 列是 `timestamp without time zone`，NOW() 返回 CST 墙钟。
+        Python 进程也在 CST，故用 `datetime.now()` 而非 `datetime.utcnow()`。
+        """
         row = self._db.fetchone(
-            "SELECT created_at FROM login_events WHERE user_id = %s "
-            "ORDER BY created_at DESC LIMIT 1",
+            "SELECT last_active_at FROM users WHERE id = %s",
             (user_id,),
         )
-        last_seen = row["created_at"] if row else None
-        # 15 分钟内算在线
-        now = self._db.fetchone("SELECT NOW()::timestamp AS now")
+        last_seen = row["last_active_at"] if row else None
         online = False
-        if last_seen and now:
-            from datetime import timedelta
-            online = (now["now"] - last_seen) < timedelta(minutes=15)
-        return {"online": online, "last_seen": last_seen.isoformat() if last_seen else None}
+        if last_seen:
+            from datetime import datetime, timedelta
+            online = (datetime.now() - last_seen) < timedelta(minutes=30)
+        return {
+            "online": online,
+            "last_seen": last_seen.isoformat() if last_seen else None,
+        }
 
     def get_user_active_sessions(self, user_id: str) -> list[dict]:
         """获取用户活跃会话"""

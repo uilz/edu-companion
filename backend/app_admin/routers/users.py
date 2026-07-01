@@ -40,9 +40,35 @@ class UserRow(BaseModel):
     display_name: str = ""
     role: str = "user"
     is_active: bool = True
+    is_online: bool = False
+    last_active_at: Optional[str] = None
     last_login: Optional[str] = None
     created_at: str = ""
     avatar_url: str = ""
+
+
+# ── 在线判定阈值（与架构文档一致） ──
+ONLINE_WINDOW_MIN = 30
+
+
+def _is_online(last_active_at) -> bool:
+    """判断 last_active_at 是否在 ONLINE_WINDOW_MIN 分钟内
+
+    关键：DB 列是 `timestamp without time zone`，NOW() 返回的是服务器本地
+    时间（CST）。Python 进程也在 CST，所以必须用 `datetime.now()` 而非
+    `datetime.utcnow()`，否则 0~8 小时内的活跃时间会因 UTC 减 CST
+    出现负 delta，Python 判定 "-7h54m < 30m" 为 True，导致全部误判为在线。
+    """
+    if not last_active_at:
+        return False
+    from datetime import datetime, timedelta
+    now = datetime.now()
+    if isinstance(last_active_at, str):
+        try:
+            last_active_at = datetime.fromisoformat(last_active_at)
+        except ValueError:
+            return False
+    return (now - last_active_at) < timedelta(minutes=ONLINE_WINDOW_MIN)
 
 
 class UserListResponse(BaseModel):
@@ -96,6 +122,7 @@ def _safe_iso(val):
 
 
 def _row_to_model(r: dict) -> UserRow:
+    last_active_at = r.get("last_active_at")
     return UserRow(
         id=r.get("id", ""),
         username=r.get("username", ""),
@@ -103,6 +130,8 @@ def _row_to_model(r: dict) -> UserRow:
         display_name=r.get("display_name", ""),
         role=r.get("role", "user"),
         is_active=bool(r.get("is_active", True)),
+        is_online=_is_online(last_active_at),
+        last_active_at=_safe_iso(last_active_at),
         last_login=_safe_iso(r.get("last_login")),
         created_at=_safe_iso(r.get("created_at")) or "",
         avatar_url=r.get("avatar_url", ""),
@@ -124,9 +153,10 @@ async def list_users(
     q: Optional[str] = None,
     role: Optional[str] = None,
     is_active: Optional[bool] = None,
+    is_online: Optional[bool] = None,
     _user: dict = Depends(require_role("super_admin")),
 ):
-    """用户列表（分页 + 模糊搜索 + 角色 + 状态过滤）"""
+    """用户列表（分页 + 模糊搜索 + 角色 + 状态 + 在线过滤）"""
     repo = _repo()
     if not repo:
         raise HTTPException(503, "AdminRepository 不可用")
@@ -142,6 +172,16 @@ async def list_users(
     if is_active is not None:
         params.append(is_active)
         where.append(f"is_active = %s")
+    if is_online is not None:
+        # 在线过滤在 SQL 内完成（更准更快），与文档 30 分钟阈值一致
+        if is_online:
+            where.append(
+                f"last_active_at IS NOT NULL AND last_active_at > NOW() - INTERVAL '{ONLINE_WINDOW_MIN} minutes'"
+            )
+        else:
+            where.append(
+                f"(last_active_at IS NULL OR last_active_at <= NOW() - INTERVAL '{ONLINE_WINDOW_MIN} minutes')"
+            )
 
     where_sql = (" WHERE " + " AND ".join(where)) if where else ""
 
@@ -151,7 +191,8 @@ async def list_users(
     offset = (page - 1) * page_size
     params.extend([page_size, offset])
     rows = repo.query(
-        f"SELECT id, username, email, display_name, role, is_active, last_login, created_at, avatar_url "
+        f"SELECT id, username, email, display_name, role, is_active, "
+        f"last_login, last_active_at, created_at, avatar_url "
         f"FROM users{where_sql} ORDER BY created_at DESC LIMIT %s OFFSET %s",
         tuple(params),
     )
@@ -168,16 +209,18 @@ async def online_users(
     limit: int = Query(50, ge=1, le=200),
     _user: dict = Depends(require_role("super_admin")),
 ):
-    """获取当前在线用户列表"""
+    """获取当前在线用户列表（基于 users.last_active_at）"""
     try:
-        from app.domain.auth.login_event_repo import get_login_event_repo
-        le_repo = get_login_event_repo()
+        from app.infrastructure.db.auth_repository import UserRepo
+        user_repo = UserRepo()
         return {
-            "online_count": le_repo.get_all_online_count(),
-            "users": le_repo.get_online_users(limit=limit),
+            "online_count": user_repo.get_online_count(online_window_min=ONLINE_WINDOW_MIN),
+            "users": user_repo.get_online_users(limit=limit, online_window_min=ONLINE_WINDOW_MIN),
+            "window_minutes": ONLINE_WINDOW_MIN,
         }
     except Exception as e:
-        return {"online_count": 0, "users": [], "error": str(e)}
+        logger.exception("online_users 失败")
+        return {"online_count": 0, "users": [], "window_minutes": ONLINE_WINDOW_MIN, "error": str(e)}
 
 
 @router.get("/{user_id}", response_model=UserRow)

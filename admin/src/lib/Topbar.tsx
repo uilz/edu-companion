@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useAuthStore } from "./auth-store";
+import { useTheme } from "./theme";
 import type { AdminRole } from "./types";
 
 const TABS: { href: string; label: string; icon: string; min: AdminRole }[] = [
@@ -25,6 +26,7 @@ export function Topbar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, sync, logout, can } = useAuthStore();
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     sync();
@@ -65,6 +67,16 @@ export function Topbar() {
       </nav>
 
       <div className="flex items-center gap-2 flex-shrink-0">
+        <button
+          onClick={toggleTheme}
+          aria-label={theme === "dark" ? "切换到浅色" : "切换到深色"}
+          title={theme === "dark" ? "切换到浅色" : "切换到深色"}
+          className="w-8 h-8 inline-flex items-center justify-center rounded-md text-fine
+                     text-ink-secondary border border-divider
+                     hover:bg-surface-hover hover:text-ink-primary transition-colors duration-fast"
+        >
+          {theme === "dark" ? "☀" : "☾"}
+        </button>
         {user ? (
           <>
             <span className="text-caption text-ink-secondary">

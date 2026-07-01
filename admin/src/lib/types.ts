@@ -50,6 +50,8 @@ export interface UserRow {
   display_name: string;
   role: string;
   is_active: boolean;
+  is_online?: boolean;
+  last_active_at?: string | null;
   last_login: string | null;
   created_at: string;
   avatar_url: string;
