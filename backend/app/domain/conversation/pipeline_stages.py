@@ -123,6 +123,7 @@ class PipelineCtx:
     full_reply: str = ""
     conversation: Any = None  # DirectoryNode
     _suspended: bool = False  # 管线是否挂起等待用户回答
+    _cancelled: bool = False  # 管线是否被用户中断（stop）
 
 
 class PipelineStage(Protocol):
@@ -372,6 +373,7 @@ class ToolLoopStage:
                         _build_tool_call_display(tc, _round, TOOL_DISPLAY_NAMES)
                         for tc in tool_calls
                     ],
+                    "conv_id": ctx.conv_id or "",
                 },
             )
 
@@ -556,14 +558,14 @@ class DoneStage:
     name = "done"
 
     async def invoke(self, ctx: PipelineCtx) -> AsyncGenerator[ReplyEvent, None]:
-        yield ReplyEvent(
-            type="done",
-            data={
-                "assistant_message": ctx.assistant_node.model_dump(mode="json") if ctx.assistant_node else {},
-                "response_blocks": [b.model_dump(mode="json") for b in ctx.response_blocks],
-                "reply_text": ctx.full_reply,
-            },
-        )
+        data: dict = {
+            "assistant_message": ctx.assistant_node.model_dump(mode="json") if ctx.assistant_node else {},
+            "response_blocks": [b.model_dump(mode="json") for b in ctx.response_blocks],
+            "reply_text": ctx.full_reply,
+        }
+        if ctx._cancelled:
+            data["cancelled"] = True
+        yield ReplyEvent(type="done", data=data)
 
 
 # ═══════════════════════════════════════════════
@@ -649,6 +651,8 @@ def _append_tool_to_stream(stream_blocks: list, tool_block: ResponseBlock,
         "status": "done" if tool_block.status in ("success", "ready") else "error",
         "result_block_type": getattr(tool_block, "type", "") or getattr(tool_block, "block_type", None),
         "result_content": getattr(tool_block, "content", None),
+        "conv_id": getattr(tool_block, "conv_id", "") or "",
+        "dir_id": getattr(tool_block, "dir_id", "") or "",
         "error": getattr(tool_block, "status", None) == "failed" and getattr(tool_block, "content", {}).get("error", "") or None,
         "tool_round": getattr(tool_block, "order", 0),
     })

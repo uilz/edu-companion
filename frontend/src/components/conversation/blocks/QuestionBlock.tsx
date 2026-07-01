@@ -1,8 +1,13 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import { Send, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { getChatStreamAPI } from "@/store/conversation/actions/send-message";
+import MarkdownRenderer from "./MarkdownRenderer";
 
 interface QuestionItem {
   question: string;
@@ -12,7 +17,6 @@ interface QuestionItem {
 interface QuestionBlockProps {
   content: Record<string, unknown>;
   convId?: string;
-  dirId?: string;
 }
 
 // ──────────────── 提交工具结果（恢复挂起的管线） ────────────────
@@ -21,14 +25,13 @@ async function submitToolResult(
   toolCallId: string,
   answers: string,
   convId: string,
-  dirId: string,
 ) {
   const chatStream = getChatStreamAPI();
   if (!chatStream?.submitToolResult) return;
 
   // 方案A：不创建新的 assistant 占位消息。
   // 原 send() 的 streamingId 仍活跃，恢复后事件继续流入同一流式消息。
-  await chatStream.submitToolResult(toolCallId, answers, convId, dirId);
+  await chatStream.submitToolResult(toolCallId, answers, convId);
 }
 
 // ──────────────── 选择题（多选交互） ────────────────
@@ -48,7 +51,9 @@ function ChoiceQuestion({
   if (showCustom) {
     return (
       <div>
-        <p className="text-sm font-medium text-[var(--color-text)] mb-3">{question}</p>
+        <div className="text-sm font-medium text-[var(--color-text)] mb-3">
+          <MarkdownRenderer content={question} />
+        </div>
         <div className="flex items-center gap-2">
           <input
             value={customValue}
@@ -80,7 +85,9 @@ function ChoiceQuestion({
 
   return (
     <div>
-      <p className="text-sm font-medium text-[var(--color-text)] mb-3">{question}</p>
+      <div className="text-sm font-medium text-[var(--color-text)] mb-3">
+        <MarkdownRenderer content={question} />
+      </div>
       <div className="flex flex-col gap-1.5">
         {options.map((opt, i) => {
           const isSel = selected.includes(opt);
@@ -98,7 +105,11 @@ function ChoiceQuestion({
                 ${isSel ? "bg-[var(--color-accent)] text-white" : "border border-[var(--color-border)] text-transparent"}`}>
                 {isSel ? <Check size={12} /> : null}
               </span>
-              <span>{opt}</span>
+              <span className="[&_.katex]:text-inherit">
+                <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                  {opt}
+                </ReactMarkdown>
+              </span>
             </button>
           );
         })}
@@ -125,11 +136,14 @@ function OpenQuestion({
 }) {
   return (
     <div>
-      <p className="text-sm font-medium text-[var(--color-text)] mb-3">{question}</p>
+      <div className="text-sm font-medium text-[var(--color-text)] mb-3">
+        <MarkdownRenderer content={question} />
+      </div>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="输入你的回答..."
+        autoComplete="off"
         className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]
           focus:outline-none focus:border-[var(--color-accent)] focus:ring-1 focus:ring-[var(--color-accent)]/30
           text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]"
@@ -149,7 +163,11 @@ function ReadOnlySummary({ questions, answers }: { questions: QuestionItem[]; an
       </div>
       {questions.map((q, i) => (
         <div key={i} className="px-4 py-2 flex items-baseline gap-2 text-sm">
-          <span className="text-[var(--color-text-muted)] flex-shrink-0">{q.question}</span>
+          <span className="text-[var(--color-text-muted)] flex-shrink-0 [&_.katex]:text-inherit">
+            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+              {q.question}
+            </ReactMarkdown>
+          </span>
           <span className="text-[var(--color-text)]">—</span>
           <span className="text-[var(--color-text)]">
             {answers[i]?.length > 0 ? answers[i].join("、") : "未回答"}
@@ -186,7 +204,11 @@ function SingleQuestionCard({
       <div className="mt-3 mb-2 rounded-xl border border-[var(--color-accent)]/20 bg-[var(--color-accent)]/5 overflow-hidden">
         <div className="flex items-center gap-2 px-4 pt-3 pb-2">
           <span className="w-6 h-6 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center text-xs flex-shrink-0">❓</span>
-          <span className="text-sm font-medium text-[var(--color-text)]">{question}</span>
+          <span className="text-sm font-medium text-[var(--color-text)]">
+            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+              {question}
+            </ReactMarkdown>
+          </span>
         </div>
         <div className="px-4 pb-3">
           <ChoiceQuestion
@@ -217,7 +239,11 @@ function SingleQuestionCard({
     <div className="mt-3 mb-2 rounded-xl border border-[var(--color-accent)]/20 bg-[var(--color-accent)]/5 overflow-hidden">
       <div className="flex items-center gap-2 px-4 pt-3 pb-2">
         <span className="w-6 h-6 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center text-xs flex-shrink-0">❓</span>
-        <span className="text-sm font-medium text-[var(--color-text)]">{question}</span>
+        <span className="text-sm font-medium text-[var(--color-text)]">
+          <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+            {question}
+          </ReactMarkdown>
+        </span>
       </div>
       <div className="px-4 pb-4 flex items-center gap-2">
         <input
@@ -253,6 +279,8 @@ function MultiQuestionGroup({
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<string[][]>(() => questions.map(() => []));
   const [submitted, setSubmitted] = useState(false);
+  // ref 同步跟踪最新 answers，handleSubmit 中读取避免闭包捕获旧值
+  const answersRef = React.useRef<string[][]>(questions.map(() => []));
 
   const toggleAnswer = useCallback((val: string) => {
     setAnswers(prev => {
@@ -261,6 +289,7 @@ function MultiQuestionGroup({
       const idx = cur.indexOf(val);
       if (idx >= 0) cur.splice(idx, 1);
       else cur.push(val);
+      answersRef.current = next;
       return next;
     });
   }, [step]);
@@ -269,13 +298,16 @@ function MultiQuestionGroup({
     setAnswers(prev => {
       const next = prev.map(a => [...a]);
       next[step] = val ? [val] : [];
+      answersRef.current = next;
       return next;
     });
   }, [step]);
 
   const handleSubmit = () => {
+    const latest = answersRef.current;
+    console.debug("[MultiQuestionGroup] answers snapshot:", JSON.stringify(latest));
     const lines = questions.map((q, i) => {
-      const ans = answers[i];
+      const ans = latest[i];
       if (!ans || ans.length === 0) return `问题${i + 1}：未回答`;
       return `问题${i + 1}：${ans.join("、")}`;
     });
@@ -318,8 +350,8 @@ function MultiQuestionGroup({
         </div>
       </div>
 
-      {/* 题目 */}
-      <div className="px-4 pb-4">
+      {/* 题目 — key={step} 强制切换步骤时重新挂载，避免浏览器 autofill 串值 */}
+      <div className="px-4 pb-4" key={step}>
         {qType === "choice" || q.options?.length ? (
           <ChoiceQuestion
             question={q.question}
@@ -377,7 +409,7 @@ function MultiQuestionGroup({
 
 // ──────────────── 入口组件 ────────────────
 
-export default function QuestionBlock({ content, convId, dirId }: QuestionBlockProps) {
+export default function QuestionBlock({ content, convId }: QuestionBlockProps) {
   const qType = (content.type as string) || "choice";
   const questions = (content.questions as QuestionItem[]) || [];
   const singleQuestion = (content.question as string) || "";
@@ -385,12 +417,16 @@ export default function QuestionBlock({ content, convId, dirId }: QuestionBlockP
   const toolCallId = (content.tool_call_id as string) || "";
 
   const handleAnswer = useCallback((answerText: string) => {
-    if (!toolCallId || !convId || !dirId) {
-      console.warn("[QuestionBlock] 缺少 tool_call_id / convId / dirId，无法提交工具结果");
+    if (!toolCallId || !convId) {
+      console.warn("[QuestionBlock] 缺少必要字段", {
+        toolCallId: toolCallId || "(空)",
+        convId: convId || "(空)",
+        contentKeys: Object.keys(content || {}),
+      });
       return;
     }
-    submitToolResult(toolCallId, answerText, convId, dirId);
-  }, [toolCallId, convId, dirId]);
+    submitToolResult(toolCallId, answerText, convId);
+  }, [toolCallId, convId]);
 
   if (questions.length > 0) {
     return <MultiQuestionGroup questions={questions} qType={qType} onAnswer={handleAnswer} />;

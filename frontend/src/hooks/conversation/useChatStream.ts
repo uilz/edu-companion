@@ -7,8 +7,12 @@
  * 职责：
  *  - send(): POST { action:"send" } → 读 SSE 响应 → 分发事件
  *  - replay(): POST { action:"replay" } → 读 SSE 响应 → 分发事件
- *  - stop(): abort fetch
+ *  - stop(): POST { action:"stop" } → 等待当前流 done 事件 → 截断内容自然到达
+ *  - waitForDone(): 等待当前流完成（供中断后发新消息使用）
  *  - 事件分发：token / tool_calls / done / error / ... → 写入 Zustand stores
+ *
+ * 不再 abort fetch：stop 仅通知后端停止生成，前端持续接收事件直到 done 到达。
+ * generation 机制防止新旧流事件交叉写入。
  */
 
 import { useCallback, useRef, useMemo } from "react";
@@ -27,7 +31,6 @@ import type { SecretaryNotification } from "@/store/notification/types";
 async function readSSEStream(
   body: ReadableStream<Uint8Array>,
   onEvent: (event: Record<string, unknown>) => void,
-  signal?: AbortSignal,
 ): Promise<void> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -69,7 +72,6 @@ async function readSSEStream(
     }
   } finally {
     reader.releaseLock();
-    if (signal?.aborted) return;
   }
 }
 
@@ -78,9 +80,14 @@ async function readSSEStream(
 // ══════════════════════════════════════════════════════════════
 
 export function useChatStream() {
-  const abortRef = useRef<AbortController | null>(null);
-  // 当前流式写入的临时 assistant ID（用于 done 时定位）
-  const streamingMsgIdRef = useRef<string | null>(null);
+  /** 当前 send() 的 Promise，stop() 等待它完成后才返回 */
+  const sendPromiseRef = useRef<Promise<void> | null>(null);
+  /** 每轮 send 递增，事件处理时校验是否仍是最新 generation */
+  const generationRef = useRef(0);
+  /** stop() 设置此标志，事件循环中跳过后续 token/reasoning */
+  const stoppedRef = useRef(false);
+  /** replay 专用 promise，与 send 隔离 */
+  const replayPromiseRef = useRef<Promise<void> | null>(null);
   const convIdRef = useRef<string | null>(null);
   const dirIdRef = useRef<string | null>(null);
 
@@ -158,7 +165,9 @@ export function useChatStream() {
     convIdRef.current = convId;
     dirIdRef.current = dirId;
 
-    abortRef.current = new AbortController();
+    // 递增 generation，旧 generation 的事件将被忽略
+    const gen = ++generationRef.current;
+    stoppedRef.current = false;
 
     const token = typeof window !== "undefined"
       ? localStorage.getItem("access_token") || ""
@@ -166,7 +175,6 @@ export function useChatStream() {
 
     const storeApi = {
       setState: (p: any) => {
-        // 用 import 的 getter 避免循环依赖
         const { useConversationStore } = require("@/store/conversation/conversation-store");
         useConversationStore.setState(p);
       },
@@ -176,7 +184,7 @@ export function useChatStream() {
       },
     };
 
-    try {
+    const doSend = async () => {
       const res = await fetch(
         `/api/conversations/tree/conversation/${convId}/message`,
         {
@@ -190,7 +198,6 @@ export function useChatStream() {
             text,
             dir_id: dirId,
           }),
-          signal: abortRef.current.signal,
         },
       );
 
@@ -200,18 +207,21 @@ export function useChatStream() {
       }
       if (!res.body) throw new Error("No response body");
 
-      await readSSEStream(
-        res.body,
-        (event) => dispatchEvent(event, storeApi),
-        abortRef.current.signal,
-      );
+      await readSSEStream(res.body, (event) => {
+        // 忽略旧 generation 的事件（新 send 已启动）
+        if (generationRef.current !== gen) return;
+        // 用户点击停止后：跳过后续 token/reasoning，但仍处理 done/error
+        if (stoppedRef.current && (event.type === "token" || event.type === "reasoning")) return;
+        dispatchEvent(event, storeApi);
+      });
+    };
+
+    sendPromiseRef.current = doSend();
+    try {
+      await sendPromiseRef.current;
     } catch (err: unknown) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        // 用户点击停止 → 清理流式状态，保留已有内容
-        storeApi.setState({ isLoading: false, statusMessage: "" });
-        useMessageStore.setState({ streamingId: null });
-        return;
-      }
+      // 旧 generation 的错误不处理
+      if (generationRef.current !== gen) return;
       const msg = err instanceof Error ? err.message : "未知错误";
       _handleError(`连接失败: ${msg}`, storeApi);
     }
@@ -219,11 +229,10 @@ export function useChatStream() {
 
   /**
    * 重连已有流（刷新页面后）。
+   * 与 send 隔离，有自己的 promise 追踪。
    */
   const replay = useCallback(async (convId: string) => {
     convIdRef.current = convId;
-
-    abortRef.current = new AbortController();
 
     const token = typeof window !== "undefined"
       ? localStorage.getItem("access_token") || ""
@@ -240,7 +249,7 @@ export function useChatStream() {
       },
     };
 
-    try {
+    const doReplay = async () => {
       const res = await fetch(
         `/api/conversations/tree/conversation/${convId}/message`,
         {
@@ -250,20 +259,19 @@ export function useChatStream() {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ action: "replay" }),
-          signal: abortRef.current.signal,
         },
       );
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       if (!res.body) return;
 
-      await readSSEStream(res.body, (event) => dispatchEvent(event, storeApi), abortRef.current.signal);
+      await readSSEStream(res.body, (event) => dispatchEvent(event, storeApi));
+    };
+
+    replayPromiseRef.current = doReplay();
+    try {
+      await replayPromiseRef.current;
     } catch (err: unknown) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        storeApi.setState({ isLoading: false, statusMessage: "" });
-        useMessageStore.setState({ streamingId: null });
-        return;
-      }
       console.error("[useChatStream] replay failed:", err);
     }
   }, []);
@@ -278,7 +286,6 @@ export function useChatStream() {
     toolCallId: string,
     answers: string,
     convId: string,
-    _dirId: string,
   ) => {
     const token = typeof window !== "undefined"
       ? localStorage.getItem("access_token") || ""
@@ -307,9 +314,17 @@ export function useChatStream() {
     return res.json();
   }, []);
 
-  /** 停止流 */
+  /**
+   * 停止当前流式生成。
+   *
+   * 流程：POST {action:"stop"} → 通知后端停止 → 等待当前 send() 的
+   * done 事件到达（后端现在在 CancelledError 后会跑 PostProcess + Done 阶段，
+   * 持久化截断消息后再发 done）。
+   *
+   * 调用方需在 resolve 后自行清理 isLoading / streamingId 状态。
+   */
   const stop = useCallback(async () => {
-    abortRef.current?.abort();
+    stoppedRef.current = true;
 
     const convId = convIdRef.current;
     if (convId) {
@@ -329,9 +344,17 @@ export function useChatStream() {
         /* best effort */
       }
     }
+
+    // 等待当前 send() 完成 — 后端的 done(cancelled) 事件会到达
+    if (sendPromiseRef.current) {
+      try { await sendPromiseRef.current; } catch { /* _handleError 已处理 */ }
+    }
   }, []);
 
-  return useMemo(() => ({ send, replay, stop, submitToolResult }), [send, replay, stop, submitToolResult]);
+  return useMemo(
+    () => ({ send, replay, stop, submitToolResult }),
+    [send, replay, stop, submitToolResult],
+  );
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -364,7 +387,8 @@ function _handleToken(content: string) {
   });
 }
 
-function _handleToolCalls(data: { tool_calls: any[] }) {
+function _handleToolCalls(data: { tool_calls: any[]; conv_id?: string }) {
+  const convId = data.conv_id || "";
   useMessageStore.setState((state: { messages: MessageNode[]; streamingId: string | null }) => {
     const sid = state.streamingId;
     if (!sid) return {};
@@ -378,6 +402,7 @@ function _handleToolCalls(data: { tool_calls: any[] }) {
       arguments: tc.arguments,
       status: "pending" as const,
       tool_round: tc.tool_round || 0,
+      conv_id: convId,
     }));
 
     return {
@@ -412,7 +437,10 @@ function _handleToolCallUpdate(data: { tool_call_id: string; status: string }) {
 
 function _handleBlockUpdate(block: any) {
   const tcId = block.tool_call_id || (block.data?.tool_call_id) || "";
-  if (!tcId) return;
+  if (!tcId) {
+    console.debug("[_handleBlockUpdate] 跳过：tcId 为空", { blockType: block.type });
+    return;
+  }
 
   const innerBlock = block.block || block;
   const isFailed = innerBlock.status === "failed" || innerBlock.status === "error";
@@ -420,7 +448,8 @@ function _handleBlockUpdate(block: any) {
 
   useMessageStore.setState((state: { messages: MessageNode[]; streamingId: string | null }) => {
     const sid = state.streamingId;
-    return {
+    let matched = false;
+    const result = {
       messages: state.messages.map((msg) => {
         // 仅更新当前流式消息，不广播到历史消息
         if (sid && msg.id !== sid) return msg;
@@ -428,6 +457,7 @@ function _handleBlockUpdate(block: any) {
           ...msg,
           content_blocks: msg.content_blocks?.map((b: any) => {
             if (b.type === "tool" && b.tool_call_id === tcId) {
+              matched = true;
               return {
                 ...b,
                 status: blockStatus,
@@ -443,6 +473,10 @@ function _handleBlockUpdate(block: any) {
         };
       }),
     };
+    if (!matched) {
+      console.debug("[_handleBlockUpdate] 未匹配到 ToolBlock", { tcId, sid, innerBlockType: innerBlock.type, innerBlockConvId: innerBlock.conv_id });
+    }
+    return result;
   });
 }
 

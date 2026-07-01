@@ -91,6 +91,7 @@ async def start_background_pipeline(
     """
     # 预创建缓冲区，确保 streaming 时 entry 已存在
     await stream_buffer.publish(conv_id, {"type": "stream_start"})
+    await active_streams.mark_start(conv_id)
 
     task = asyncio.create_task(_run_pipeline_task(
         user_id, text, dir_id, conv_id, pending_quote, knowledge_node_id, tool_result,
@@ -145,8 +146,6 @@ async def resume_background_pipeline(
     pipeline = ReplyPipeline(agent_label=AGENT_LABEL)
     assistant_text = ""
 
-    me = asyncio.current_task()
-
     try:
         async for event in pipeline.invoke(
             ctx.user_id, ctx.dir_id, ctx.user_text,
@@ -154,16 +153,7 @@ async def resume_background_pipeline(
             resume_state=resume_state,
         ):
             assistant_text += event.content or ""
-            if me and me.cancelled():
-                logger.info("Resume pipeline task cancelled [%s]", conv_id[:8])
-                break
             await _publish_event_to_buffer(conv_id, event)
-    except asyncio.CancelledError:
-        logger.info("Resume pipeline CancelledError [%s]", conv_id[:8])
-        await _publish_event_to_buffer(conv_id, ReplyEvent(
-            type="done", content=assistant_text,
-            data={"done": True, "cancelled": True},
-        ))
     except Exception as e:
         logger.error("Resume pipeline 异常 [%s]: %s", conv_id[:8], e, exc_info=True)
         await _publish_event_to_buffer(conv_id, ReplyEvent(
@@ -171,6 +161,7 @@ async def resume_background_pipeline(
         ))
     finally:
         await stream_buffer.mark_done(conv_id)
+        await active_streams.mark_done(conv_id)
         if assistant_text.strip():
             asyncio.ensure_future(_publish_reply_event(
                 ctx.user_id, ctx.dir_id, ctx.conv_id, assistant_text,
@@ -218,20 +209,8 @@ async def _run_pipeline_task(
             elif event.type == "pipeline_suspended":
                 suspended = True
 
-            # 检查自身 task 是否被取消（stream_buffer.cancel 会 cancel 此 task）
-            if me and me.cancelled():
-                logger.info("Pipeline task cancelled [%s]", conv_id[:8])
-                break
-
             await _publish_event_to_buffer(conv_id, event)
 
-    except asyncio.CancelledError:
-        logger.info("Pipeline task CancelledError [%s]", conv_id[:8])
-        await _publish_event_to_buffer(conv_id, ReplyEvent(
-            type="done",
-            content=assistant_text,
-            data={"done": True, "cancelled": True},
-        ))
     except Exception as e:
         logger.error("后台 pipeline 异常 [%s]: %s", conv_id[:8], e, exc_info=True)
         err_event = ReplyEvent(type="error", data={"error": str(e)})
@@ -239,6 +218,7 @@ async def _run_pipeline_task(
     finally:
         if not suspended:
             await stream_buffer.mark_done(conv_id)
+        await active_streams.mark_done(conv_id)
         if assistant_text.strip():
             asyncio.ensure_future(_publish_reply_event(
                 user_id, dir_id, conv_id, assistant_text,

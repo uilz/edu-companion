@@ -19,6 +19,7 @@ CognitivePathAutoCreator) 保留在本模块，供 PostProcessStage 使用。
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Protocol
 
@@ -326,6 +327,21 @@ class ReplyPipeline:
                 if stage.name == "tool_loop" and ctx._suspended:
                     logger.info("Pipeline suspended at tool_loop, conv=%s", ctx.conv_id[:8])
                     break
+        except asyncio.CancelledError:
+            # 优雅关闭：完成 PostProcess + Done 阶段，持久化截断消息
+            logger.info("Pipeline cancelled, graceful shutdown for conv=%s", ctx.conv_id[:8])
+            ctx._cancelled = True
+            for stage in self._stages:
+                if stage.name in ("classify", "save_message", "tool_loop"):
+                    continue
+                try:
+                    async for event in stage.invoke(ctx):
+                        yield event
+                except Exception as stage_err:
+                    logger.error(
+                        "Stage [%s] failed during cancel for conv %s: %s",
+                        stage.name, ctx.conv_id[:8] if ctx.conv_id else "?", stage_err,
+                    )
         except Exception as e:
             logger.error("ReplyPipeline failed: %s", e, exc_info=True)
             yield ReplyEvent(type="error", data={"error": str(e)})

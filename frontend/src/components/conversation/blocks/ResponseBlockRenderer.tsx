@@ -63,7 +63,7 @@ export default function ResponseBlockRenderer({ block }: ResponseBlockRendererPr
         />
       );
     case "question":
-      return <QuestionBlock content={content} convId={block.conv_id} dirId={block.dir_id} />;
+      return <QuestionBlock content={content} convId={block.conv_id} />;
     default:
       // Fallback for unhandled tool block types — show raw content
       return (

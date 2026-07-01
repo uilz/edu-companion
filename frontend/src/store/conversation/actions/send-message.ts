@@ -17,7 +17,7 @@ import { useMessageStore } from "../message-store";
 export type ChatStreamAPI = {
   send: (text: string, convId: string, dirId: string) => Promise<void>;
   stop: () => Promise<void>;
-  submitToolResult: (toolCallId: string, answers: string, convId: string, dirId: string) => Promise<void>;
+  submitToolResult: (toolCallId: string, answers: string, convId: string) => Promise<void>;
 };
 
 /** 模块级 chatStream 引用，由 useConversation 注入 */
@@ -46,12 +46,10 @@ export async function sendMessageImpl(
   const chatStream = getChatStreamAPI();
   if (!text.trim() || !chatStream) return;
 
-  // ── 打断逻辑：如果正在加载，先停止再发新的 ──
+  // ── 打断逻辑：等待旧流 done 事件到达后再发新消息 ──
   if (get().isLoading) {
-    chatStream.stop();
-    set({ isLoading: false, statusMessage: "" });
-    useMessageStore.setState({ streamingId: null });
-    await new Promise(r => setTimeout(r, 100));
+    await chatStream.stop();
+    // stop() 返回时 done 事件已处理完毕（_handleDone 已清理 isLoading/streamingId）
   }
 
   const tempUserId = "t_" + Date.now().toString(36) + "_" + Math.random().toString(36).substr(2, 9);
