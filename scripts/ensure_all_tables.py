@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """
-确保数据库表完整 — 从源库导出 DDL 并回放到目标库。
+数据库表结构同步 — export / import 模式。
 
 用法:
-  # 自检模式 (rebuild.sh 集成)
-  DB_PASSWORD=xxx python3 scripts/ensure_all_tables.py -y
+  # 在完整库的机器上导出 DDL
+  DB_PASSWORD=xxx python3 scripts/ensure_all_tables.py --export
 
-  # 推送模式 — 交互式询问目标地址
-  DB_PASSWORD=local_pw python3 scripts/ensure_all_tables.py
+  # 在远端机器上导入 DDL (补全缺失表)
+  DB_PASSWORD=yyy python3 scripts/ensure_all_tables.py --import
 
-  # 推送模式 — 全参数指定 (非交互)
-  DB_PASSWORD=local_pw python3 scripts/ensure_all_tables.py \
-    --to-host=192.168.x.x --to-password=yyy -y
+  # rebuild.sh 集成 (默认跳过, 加 --sync-db 触发)
+  bash rebuild.sh --sync-db
 """
 import os
 import subprocess
@@ -19,44 +18,63 @@ import sys
 import re
 import argparse
 
-# ── 源库 (ddl 从哪里导出) ──
-SRC_HOST = os.environ.get("DB_HOST", "127.0.0.1")
-SRC_PORT = os.environ.get("DB_PORT", "5432")
-SRC_USER = os.environ.get("DB_USER", "companion")
-SRC_DB = os.environ.get("DB_NAME", "edu_companion")
-SRC_PASSWORD = os.environ.get("DB_PASSWORD")
+SCHEMA_FILE = os.path.join(os.path.dirname(__file__), "schema_ddl.sql")
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="确保数据库表完整")
-    parser.add_argument("--to-host", help="目标库地址（不指定则交互式询问）")
-    parser.add_argument("--to-port", default="5432")
-    parser.add_argument("--to-user", default="companion")
-    parser.add_argument("--to-password", default="")
-    parser.add_argument("--to-db", default="edu_companion")
-    parser.add_argument("-y", "--yes", action="store_true",
-                        help="跳过确认提示（非交互模式）")
+    parser = argparse.ArgumentParser(description="数据库表结构同步")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--export", action="store_true",
+                       help="从本地库导出 DDL 到 scripts/schema_ddl.sql")
+    group.add_argument("--import", dest="do_import", action="store_true",
+                       help="从 scripts/schema_ddl.sql 导入 DDL 到本地库")
     return parser.parse_args()
 
 
-def get_ddl(host, port, user, db, password) -> str:
-    """从指定库导出完整 schema DDL"""
+def _db_env():
+    return {
+        "host": os.environ.get("DB_HOST", "127.0.0.1"),
+        "port": os.environ.get("DB_PORT", "5432"),
+        "user": os.environ.get("DB_USER", "companion"),
+        "db": os.environ.get("DB_NAME", "edu_companion"),
+        "password": os.environ.get("DB_PASSWORD", ""),
+    }
+
+
+def run_psql(sql: str):
+    """执行 SQL 并返回输出"""
     env = os.environ.copy()
-    if password:
-        env["PGPASSWORD"] = password
+    cfg = _db_env()
+    if cfg["password"]:
+        env["PGPASSWORD"] = cfg["password"]
+    r = subprocess.run(
+        ["psql", f"--host={cfg['host']}", f"--port={cfg['port']}",
+         f"--username={cfg['user']}", f"--dbname={cfg['db']}",
+         "-At", "-c", sql],
+        capture_output=True, text=True, env=env,
+    )
+    if r.returncode != 0:
+        print(f"psql 错误: {r.stderr.strip()}")
+        return ""
+    return r.stdout.strip()
+
+
+def run_pg_dump():
+    """导出完整 DDL"""
+    cfg = _db_env()
+    env = os.environ.copy()
+    if cfg["password"]:
+        env["PGPASSWORD"] = cfg["password"]
     try:
         r = subprocess.run(
-            ["pg_dump", f"--host={host}", f"--port={port}",
-             f"--username={user}", f"--dbname={db}",
+            ["pg_dump", f"--host={cfg['host']}", f"--port={cfg['port']}",
+             f"--username={cfg['user']}", f"--dbname={cfg['db']}",
              "--schema-only", "--no-owner", "--no-acl"],
             capture_output=True, text=True, env=env, check=True,
         )
         return r.stdout
-    except FileNotFoundError:
-        print("错误: 请先安装 postgresql-client")
-        sys.exit(1)
     except subprocess.CalledProcessError as e:
-        print(f"错误: pg_dump 失败: {e.stderr}")
+        print(f"pg_dump 失败: {e.stderr}")
         sys.exit(1)
 
 
@@ -70,7 +88,6 @@ def extract_ddl(text: str) -> str:
     for m in re.finditer(r'(CREATE\s+TABLE\s+.*?\);)\s*', text, re.DOTALL | re.IGNORECASE):
         stmts.append(m.group(1))
 
-    # 去重
     seen = set()
     unique = []
     for s in stmts:
@@ -89,80 +106,81 @@ def extract_ddl(text: str) -> str:
     return '\n\n'.join(output)
 
 
-def apply_ddl(ddl: str, host, port, user, db, password):
-    """回放 DDL 到指定库"""
+def do_export():
+    cfg = _db_env()
+    print(f"导出 DDL 从 {cfg['host']}:{cfg['port']}/{cfg['db']}...")
+    raw = run_pg_dump()
+    ddl = extract_ddl(raw)
+
+    tables = ddl.count("CREATE TABLE IF NOT EXISTS")
+    indexes = ddl.count("INDEX IF NOT EXISTS")
+
+    with open(SCHEMA_FILE, "w") as f:
+        f.write(f"-- 导出时间: {subprocess.run(['date', '+%Y-%m-%d %H:%M:%S'], capture_output=True, text=True).stdout.strip()}\n")
+        f.write(f"-- 包含 {tables} 张表, {indexes} 个索引\n\n")
+        f.write(ddl)
+        f.write("\n")
+
+    print(f"已写入 {SCHEMA_FILE}")
+    print(f"  {tables} 张表, {indexes} 个索引")
+    print(f"  (文件大小: {os.path.getsize(SCHEMA_FILE):,} 字节)")
+
+
+def do_import():
+    if not os.path.exists(SCHEMA_FILE):
+        print(f"错误: 找不到 {SCHEMA_FILE}")
+        print("请先在完整库的机器上执行 --export, 然后将此文件复制到远端机器")
+        sys.exit(1)
+
+    cfg = _db_env()
+    with open(SCHEMA_FILE) as f:
+        ddl = f.read()
+
+    tables = ddl.count("CREATE TABLE IF NOT EXISTS")
+    indexes = ddl.count("INDEX IF NOT EXISTS")
+
+    print(f"从 {SCHEMA_FILE} 导入 DDL...")
+    print(f"  {tables} 张表, {indexes} 个索引")
+    print(f"导入到 {cfg['host']}:{cfg['port']}/{cfg['db']}...")
+
     env = os.environ.copy()
-    if password:
-        env["PGPASSWORD"] = password
+    if cfg["password"]:
+        env["PGPASSWORD"] = cfg["password"]
 
     proc = subprocess.run(
-        ["psql", f"--host={host}", f"--port={port}",
-         f"--username={user}", f"--dbname={db}",
+        ["psql", f"--host={cfg['host']}", f"--port={cfg['port']}",
+         f"--username={cfg['user']}", f"--dbname={cfg['db']}",
          "-v", "ON_ERROR_STOP=1"],
         input=ddl, capture_output=True, text=True, env=env,
     )
 
     if proc.returncode != 0:
         errors = [l for l in proc.stderr.split('\n')
-                  if l.strip() and 'already exists' not in l and 'NOTICE:' not in l and 'must be owner' not in l]
+                  if l.strip() and 'already exists' not in l
+                  and 'NOTICE:' not in l and 'must be owner' not in l]
         if errors:
             for e in errors[:10]:
                 print(f"  ! {e}")
 
-    cnt = subprocess.run(
-        ["psql", f"--host={host}", f"--port={port}",
-         f"--username={user}", f"--dbname={db}",
-         "-Atc", "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public'"],
-        capture_output=True, text=True, env=env,
+    cnt = run_psql(
+        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public'"
     )
-    print(f"     目标表数量: {cnt.stdout.strip()}")
+    print(f"导入完成.  当前表数量: {cnt}")
 
 
 def main():
     args = parse_args()
 
-    # ── 确定目标库参数 ──
-    dst_host = args.to_host
-    dst_port = args.to_port
-    dst_user = args.to_user
-    dst_db = args.to_db
-    dst_password = args.to_password
+    if not args.export and not args.do_import:
+        print("请指定 --export 或 --import")
+        print("  --export   从本地库导出 DDL 到 scripts/schema_ddl.sql")
+        print("  --import   从 scripts/schema_ddl.sql 导入 DDL 到本地库")
+        sys.exit(1)
 
-    # 没有 --to-host → 自检模式
-    self_check = not dst_host
-
-    if self_check:
-        dst_host = SRC_HOST
-        dst_port = SRC_PORT
-        dst_user = SRC_USER
-        dst_db = SRC_DB
-        dst_password = SRC_PASSWORD or ""
+    if args.export:
+        do_export()
     else:
-        # 推送模式：没有 -y 时交互式确认或补充信息
-        if not args.yes:
-            print(f"\n目标库: {dst_host}:{dst_port}/{dst_db} (user={dst_user})")
-            if not dst_password:
-                dst_password = input("目标数据库密码: ").strip()
-            reply = input("确认应用 DDL 到上述目标库? (y/n): ").strip().lower()
-            if reply != 'y':
-                print("已取消.")
-                sys.exit(0)
-
-    print(f"源库: {SRC_HOST}:{SRC_PORT}/{SRC_DB}  (user={SRC_USER})")
-    print(f"目标: {dst_host}:{dst_port}/{dst_db}" +
-          ("  ← 自检模式" if self_check else "  ← 推送模式"))
-
-    print("导出 DDL...")
-    raw = get_ddl(SRC_HOST, SRC_PORT, SRC_USER, SRC_DB, SRC_PASSWORD)
-    ddl = extract_ddl(raw)
-
-    tables = ddl.count("CREATE TABLE IF NOT EXISTS")
-    indexes = ddl.count("INDEX IF NOT EXISTS")
-    print(f"解析到 {tables} 张表, {indexes} 个索引")
-
-    print("回放 (幂等)...")
-    apply_ddl(ddl, dst_host, dst_port, dst_user, dst_db, dst_password)
-    print("完成.")
+        do_import()
 
 
 if __name__ == "__main__":

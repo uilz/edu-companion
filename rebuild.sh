@@ -1,6 +1,6 @@
 #!/bin/bash
 # rebuild.sh — 关闭 → 构建前端 → 启动所有服务 → 启动 Nginx
-# 用法: bash rebuild.sh [--skip-build] [--skip-admin]
+# 用法: bash rebuild.sh [--skip-build] [--skip-admin] [--sync-db]
 # 要求：所有服务（包括 Nginx）必须在当前用户下运行，不能有 root 进程占用端口。
 set -e
 
@@ -10,11 +10,13 @@ NGINX_BIN="${NGINX_BIN:-/usr/sbin/nginx}"
 LOG_DIR="$PROJECT_DIR/logs"
 SKIP_BUILD=false
 SKIP_ADMIN=false
+SYNC_DB=false
 
 for arg; do
   case $arg in
     --skip-build) SKIP_BUILD=true ;;
     --skip-admin) SKIP_ADMIN=true ;;
+    --sync-db)    SYNC_DB=true ;;
   esac
 done
 mkdir -p "$LOG_DIR"
@@ -297,11 +299,13 @@ start_service "backend" "$PROJECT_DIR/backend" \
   "venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000" \
   8000 "/health" 180
 
-log "🗄️  确保数据库表完整..."
-cd "$PROJECT_DIR"
-source backend/venv/bin/activate
-DB_PASSWORD="$DB_PASSWORD" DB_HOST="$DB_HOST" DB_PORT="$DB_PORT" DB_USER="$DB_USER" DB_NAME="$DB_NAME" \
-  python3 scripts/ensure_all_tables.py -y 2>&1 || log "⚠️  建表脚本有非致命警告（可忽略）"
+if [ "$SYNC_DB" = true ]; then
+  log "🗄️  同步数据库表结构..."
+  cd "$PROJECT_DIR"
+  source backend/venv/bin/activate
+  DB_PASSWORD="$DB_PASSWORD" DB_HOST="$DB_HOST" DB_PORT="$DB_PORT" DB_USER="$DB_USER" DB_NAME="$DB_NAME" \
+    python3 scripts/ensure_all_tables.py --import 2>&1 || log "⚠️  同步有非致命警告（可忽略）"
+fi
 
 start_service "frontend" "$PROJECT_DIR/frontend" \
   "npx next start -p 3000" \
