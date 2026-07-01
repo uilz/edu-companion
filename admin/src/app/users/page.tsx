@@ -12,6 +12,20 @@ const ROLE_COLORS: Record<string, string> = {
   user: "bg-[#475569]",
 };
 
+/** 把 ISO 时间格式化为"X 分钟前"的相对时间（基于浏览器本地时间） */
+function formatLastActive(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return "—";
+  const diffSec = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (diffSec < 60) return "刚刚";
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)} 分钟前`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} 小时前`;
+  // 超过 1 天直接显示日期
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export default function UsersPage() {
   const { ready, user } = useAuthGuard();
   const [data, setData] = useState<PaginatedResponse<UserRow> | null>(null);
@@ -209,12 +223,12 @@ export default function UsersPage() {
             <thead>
               <tr>
                 <th className={thClass} style={{ width: 36 }}><input type="checkbox" checked={data ? selected.size === data.items.length && data.items.length > 0 : false} onChange={selectAll} /></th>
-                <th className={thClass}>用户</th><th className={thClass}>角色</th><th className={thClass}>状态</th><th className={thClass}>在线</th><th className={thClass}>最近登录</th><th className={`${thClass} text-right`}>操作</th>
+                <th className={thClass}>用户</th><th className={thClass}>角色</th><th className={thClass}>状态</th><th className={thClass}>在线</th><th className={thClass}>上次活跃</th><th className={thClass}>最近登录</th><th className={`${thClass} text-right`}>操作</th>
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={7} className="text-ink-muted text-center py-8 text-caption">加载中…</td></tr>}
-              {!loading && data?.items.length === 0 && <tr><td colSpan={7} className="text-ink-muted text-center py-10 text-caption">无匹配用户</td></tr>}
+              {loading && <tr><td colSpan={8} className="text-ink-muted text-center py-8 text-caption">加载中…</td></tr>}
+              {!loading && data?.items.length === 0 && <tr><td colSpan={8} className="text-ink-muted text-center py-10 text-caption">无匹配用户</td></tr>}
               {data?.items.map((u) => (
                 <tr key={u.id} className="group">
                   <td className={tdClass}><input type="checkbox" checked={selected.has(u.id)} onChange={() => toggleSelect(u.id)} /></td>
@@ -244,18 +258,21 @@ export default function UsersPage() {
                   <td className={tdClass}>{u.is_active ? <span className="bg-success/15 text-success border border-success/20 rounded-full px-2 py-0.5 text-fine font-medium">活跃</span> : <span className="bg-danger/15 text-danger border border-danger/20 rounded-full px-2 py-0.5 text-fine font-medium">封禁</span>}</td>
                   <td className={tdClass}>
                     {u.is_online ? (
-                      <span className="inline-flex items-center gap-1.5 bg-success/15 text-success border border-success/20 rounded-full px-2 py-0.5 text-fine font-medium">
+                      <span className="inline-flex items-center gap-1.5 bg-success/15 text-success border border-success/20 rounded-full px-2 py-0.5 text-fine font-medium whitespace-nowrap">
                         <span className="w-1.5 h-1.5 rounded-full bg-success" />
                         在线
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 bg-ink-muted/15 text-ink-muted border border-divider rounded-full px-2 py-0.5 text-fine font-medium">
+                      <span className="inline-flex items-center gap-1.5 bg-ink-muted/15 text-ink-muted border border-divider rounded-full px-2 py-0.5 text-fine font-medium whitespace-nowrap">
                         <span className="w-1.5 h-1.5 rounded-full bg-ink-muted" />
                         离线
                       </span>
                     )}
                   </td>
-                  <td className={`${tdClass} font-mono text-fine text-ink-muted`}>{u.last_login?.slice(0, 16) || "—"}</td>
+                  <td className={`${tdClass} font-mono text-fine text-ink-muted whitespace-nowrap`} title={u.last_active_at || ""}>
+                    {formatLastActive(u.last_active_at)}
+                  </td>
+                  <td className={`${tdClass} font-mono text-fine text-ink-muted whitespace-nowrap`}>{u.last_login?.slice(0, 16) || "—"}</td>
                   <td className={`${tdClass} text-right`}>
                     <div className="flex items-center gap-1.5 justify-end">
                       <button className="px-2.5 py-1 rounded-md text-fine font-medium bg-accent/15 text-accent border border-accent/20 hover:brightness-90 transition-colors" onClick={() => openDetail(u)}>详情</button>

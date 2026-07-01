@@ -284,10 +284,19 @@ if [ "$SKIP_BUILD" = false ]; then
   log "🔨 构建前端..."
   cd "$PROJECT_DIR/frontend"
   [ ! -d "node_modules" ] && log "📦 安装前端依赖..." && npm install --no-audit --no-fund --prefer-offline 2>&1
+  frontend_build_log="$LOG_DIR/frontend-build_${TIMESTAMP}.log"
+  log "   详细日志: $frontend_build_log"
   NODE_OPTIONS="--max-old-space-size=2048" \
   NEXT_TELEMETRY_DISABLED=1 \
   NODE_ENV=production \
-    npx next build --no-lint 2>&1 | tail -20
+    npx next build --no-lint > "$frontend_build_log" 2>&1
+  build_status=$?
+  # 始终打印最后 20 行，便于快速诊断
+  tail -20 "$frontend_build_log"
+  if [ "$build_status" -ne 0 ]; then
+    log "❌ 前端构建失败 (exit=$build_status)，请查看完整日志: $frontend_build_log"
+    exit 1
+  fi
   log "✅ 前端构建完成"
 else
   log "⏭️ 跳过前端构建"
@@ -336,8 +345,22 @@ if [ "$SKIP_ADMIN" = false ]; then
   if [ -d "$PROJECT_DIR/admin" ]; then
     cd "$PROJECT_DIR/admin"
     [ ! -d "node_modules" ] && log "📦 安装 admin 前端依赖..." && npm install --no-audit --no-fund --prefer-offline 2>&1
+    log "🔨 构建 admin 前端..."
+    admin_build_log="$LOG_DIR/admin-build_${TIMESTAMP}.log"
+    log "   详细日志: $admin_build_log"
+    NODE_OPTIONS="--max-old-space-size=2048" \
+    NEXT_TELEMETRY_DISABLED=1 \
+    NODE_ENV=production \
+      npx next build --no-lint > "$admin_build_log" 2>&1
+    build_status=$?
+    tail -20 "$admin_build_log"
+    if [ "$build_status" -ne 0 ]; then
+      log "❌ admin 前端构建失败 (exit=$build_status)，请查看完整日志: $admin_build_log"
+      exit 1
+    fi
+    log "✅ admin 前端构建完成"
     start_service "admin-frontend" "$PROJECT_DIR/admin" \
-      "npx next dev -p 3001" \
+      "npx next start -p 3001" \
       3001 "/"
   fi
 fi
