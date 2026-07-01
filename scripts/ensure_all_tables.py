@@ -6,7 +6,7 @@
   # 在完整库的机器上导出 DDL
   DB_PASSWORD=xxx python3 scripts/ensure_all_tables.py --export
 
-  # 在远端机器上导入 DDL (补全缺失表)
+  # 在远端机器上导入 DDL (补全缺失表 + 缺列 + 缺索引)
   DB_PASSWORD=yyy python3 scripts/ensure_all_tables.py --import
 
   # 导入 + 删除远端多余的表 (使两端完全对齐)
@@ -20,6 +20,7 @@ import subprocess
 import sys
 import re
 import argparse
+import json
 
 SCHEMA_FILE = os.path.join(os.path.dirname(__file__), "schema_ddl.sql")
 
@@ -47,11 +48,16 @@ def _db_env():
     }
 
 
-def run_psql(sql: str):
+def _psql_env():
     env = os.environ.copy()
     cfg = _db_env()
     if cfg["password"]:
         env["PGPASSWORD"] = cfg["password"]
+    return env, cfg
+
+
+def run_psql(sql: str):
+    env, cfg = _psql_env()
     r = subprocess.run(
         ["psql", f"--host={cfg['host']}", f"--port={cfg['port']}",
          f"--username={cfg['user']}", f"--dbname={cfg['db']}",
@@ -64,17 +70,15 @@ def run_psql(sql: str):
     return r.stdout.strip()
 
 
-def run_psql_file(sql: str):
+def run_psql_file(sql: str, on_error_stop: bool = True):
     """执行多行 SQL 文件"""
-    env = os.environ.copy()
-    cfg = _db_env()
-    if cfg["password"]:
-        env["PGPASSWORD"] = cfg["password"]
+    env, cfg = _psql_env()
+    args = ["psql", f"--host={cfg['host']}", f"--port={cfg['port']}",
+            f"--username={cfg['user']}", f"--dbname={cfg['db']}"]
+    if on_error_stop:
+        args.extend(["-v", "ON_ERROR_STOP=1"])
     proc = subprocess.run(
-        ["psql", f"--host={cfg['host']}", f"--port={cfg['port']}",
-         f"--username={cfg['user']}", f"--dbname={cfg['db']}",
-         "-v", "ON_ERROR_STOP=1"],
-        input=sql, capture_output=True, text=True, env=env,
+        args, input=sql, capture_output=True, text=True, env=env,
     )
     if proc.returncode != 0:
         errors = [l for l in proc.stderr.split('\n')
@@ -87,10 +91,7 @@ def run_psql_file(sql: str):
 
 def run_pg_dump():
     """导出完整 DDL"""
-    cfg = _db_env()
-    env = os.environ.copy()
-    if cfg["password"]:
-        env["PGPASSWORD"] = cfg["password"]
+    env, cfg = _psql_env()
     try:
         r = subprocess.run(
             ["pg_dump", f"--host={cfg['host']}", f"--port={cfg['port']}",
@@ -113,6 +114,36 @@ def parse_table_names_from_ddl(text: str) -> set[str]:
     ):
         names.add(m.group(1))
     return names
+
+
+def _table_ddl_dict(text: str) -> dict[str, str]:
+    """{table_name: CREATE TABLE DDL}"""
+    result = {}
+    for m in re.finditer(
+        r'(CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?(\w+)\s*\(.*?\);)\s*',
+        text, re.DOTALL | re.IGNORECASE
+    ):
+        stmt = m.group(1)
+        tbl = m.group(2)
+        result[tbl] = stmt
+    return result
+
+
+def _columns_from_ddl(stmt: str) -> list[str]:
+    """从 CREATE TABLE DDL 提取所有列名 (排除约束)"""
+    cols = []
+    body = re.search(r'\((.*)\);', stmt, re.DOTALL)
+    if not body:
+        return cols
+    for line in body.group(1).split('\n'):
+        line = line.strip().rstrip(',')
+        if not line or re.match(r'^\s*(PRIMARY|UNIQUE|FOREIGN|CONSTRAINT|CHECK|INDEX|KEY|UNIQUE)\s',
+                                line, re.IGNORECASE):
+            continue
+        m = re.match(r'^\s*"?(\w+)"?\s+', line)
+        if m:
+            cols.append(m.group(1))
+    return cols
 
 
 def extract_ddl(text: str) -> str:
@@ -163,6 +194,17 @@ def do_export():
     print(f"  (文件大小: {os.path.getsize(SCHEMA_FILE):,} 字节)")
 
 
+def _existing_columns(table: str) -> set[str]:
+    """查询目标库某表已有的列名"""
+    rows = run_psql(
+        "SELECT column_name FROM information_schema.columns "
+        f"WHERE table_schema='public' AND table_name='{table}'"
+    )
+    if not rows:
+        return set()
+    return set(rows.strip().split('\n'))
+
+
 def do_import(prune: bool, yes: bool):
     if not os.path.exists(SCHEMA_FILE):
         print(f"错误: 找不到 {SCHEMA_FILE}")
@@ -179,13 +221,82 @@ def do_import(prune: bool, yes: bool):
     print(f"  {tables} 张表, {indexes} 个索引")
     print(f"导入到 {_db_env()['host']}:{_db_env()['port']}/{_db_env()['db']}...")
 
-    # ── 导入 ──
-    run_psql_file(ddl)
+    # ── Phase 1: CREATE TABLE IF NOT EXISTS ──
+    print("\n[Phase 1/3]  建表...")
+    # 只提取 CREATE TABLE 语句 (不含 INDEX)
+    table_stmts = '\n\n'.join(
+        _table_ddl_dict(ddl).values()
+    )
+    run_psql_file(table_stmts)
+    print("  ✓ 建表完成")
+
+    # ── Phase 2: ALTER TABLE ADD COLUMN (缺列补充) ──
+    print("\n[Phase 2/3]  补充缺失列...")
+    added = 0
+    table_cols = {}  # {table: [col_names]}
+    for tbl, stmt in _table_ddl_dict(ddl).items():
+        expected = _columns_from_ddl(stmt)
+        actual = _existing_columns(tbl)
+        if not actual:  # 表不存在 → Phase 1 已创建, 无需补列
+            continue
+        missing = [c for c in expected if c not in actual]
+        if not missing:
+            continue
+        # 从 DDL 提取每一列完整定义
+        body = re.search(r'\((.*)\);', stmt, re.DOTALL)
+        if not body:
+            continue
+        col_defs = {}
+        for line in body.group(1).split('\n'):
+            line = line.strip().rstrip(',')
+            if not line or re.match(r'^\s*(PRIMARY|UNIQUE|FOREIGN|CONSTRAINT|CHECK|INDEX|KEY|UNIQUE)\s',
+                                    line, re.IGNORECASE):
+                continue
+            cm = re.match(r'^\s*"?(\w+)"?\s+(.+)$', line)
+            if cm:
+                col_defs[cm.group(1)] = line
+
+        for col in missing:
+            if col not in col_defs:
+                continue
+            sql = f'ALTER TABLE "{tbl}" ADD COLUMN {col_defs[col]};'
+            # 脱敏 DEFAULT 中有函数调用的列 (如 gen_random_uuid)
+            sql_safe = re.sub(r"DEFAULT\s+\w+\(.*?\)", "DEFAULT NULL", sql)
+            run_psql(sql_safe)
+            print(f"    ✓ {tbl}.{col}")
+            added += 1
+
+    if added == 0:
+        print("  所有列已是最新, 无需补充.")
+
+    # ── Phase 3: CREATE INDEX IF NOT EXISTS (容错) ──
+    print("\n[Phase 3/3]  建索引 (容错模式)...")
+    index_stmts = []
+    for m in re.finditer(r'(CREATE\s+(UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\s+.*?;)',
+                         ddl, re.DOTALL | re.IGNORECASE):
+        index_stmts.append(m.group(1))
+    if index_stmts:
+        # 逐个执行, 失败只警告
+        for stmt in index_stmts:
+            env, cfg = _psql_env()
+            r = subprocess.run(
+                ["psql", f"--host={cfg['host']}", f"--port={cfg['port']}",
+                 f"--username={cfg['user']}", f"--dbname={cfg['db']}",
+                 "-c", stmt],
+                capture_output=True, text=True, env=env,
+            )
+            if r.returncode != 0:
+                err = r.stderr.strip()
+                if "already exists" not in err:
+                    print(f"  ! 索引跳过: {err[:120]}")
+        print(f"  ✓ 索引处理完成 ({len(index_stmts)} 个)")
+    else:
+        print("  无索引需要处理.")
 
     cnt = run_psql(
         "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public'"
     )
-    print(f"导入完成.  当前表数量: {cnt}")
+    print(f"\n导入完成.  当前表数量: {cnt}")
 
     # ── 清理多余表 ──
     if prune:
@@ -196,7 +307,6 @@ def _prune_tables(source_ddl: str, yes: bool):
     """删除目标库中 schema 不存在的表"""
     expected = parse_table_names_from_ddl(source_ddl)
 
-    # 查询目标库所有表
     raw = run_psql(
         "SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name"
     )
@@ -205,15 +315,10 @@ def _prune_tables(source_ddl: str, yes: bool):
     actual = set(raw.strip().split('\n'))
 
     extra = actual - expected
-    if not extra:
-        print("  没有多余表需要清理.")
-        return
-
-    # 过滤掉系统表
     extra = {t for t in extra if not t.startswith('alembic_')}
 
     if not extra:
-        print("  没有多余表需要清理 (忽略 alembic_*).")
+        print("  没有多余表需要清理.")
         return
 
     print(f"\n发现 {len(extra)} 张多余表:")
@@ -226,7 +331,6 @@ def _prune_tables(source_ddl: str, yes: bool):
             print("已取消.")
             return
 
-    # 逐个 DROP TABLE CASCADE (解除外键依赖)
     for t in sorted(extra):
         run_psql(f'DROP TABLE IF EXISTS "{t}" CASCADE')
         print(f"    ✓ 已删除 {t}")
