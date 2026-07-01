@@ -1,6 +1,12 @@
 #!/bin/bash
 # rebuild.sh — 关闭 → 构建前端 → 启动所有服务 → 启动 Nginx
-# 用法: bash rebuild.sh [--skip-build] [--skip-admin] [--export-db] [--import-db]
+#
+# 参数:
+#   --skip-build    跳过前端构建
+#   --skip-admin    跳过 admin 服务
+#   --export-db     导出数据库表结构到 scripts/schema_ddl.sql
+#   --import-db     导入+清理 scripts/schema_ddl.sql 到数据库
+#
 # 要求：所有服务（包括 Nginx）必须在当前用户下运行，不能有 root 进程占用端口。
 set -e
 
