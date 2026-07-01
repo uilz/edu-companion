@@ -530,8 +530,7 @@ class PostProcessStage:
                 logger.debug("PostProcessor %s failed", type(processor).__name__, exc_info=True)
                 self._report_error(type(processor).__name__, ctx.user_id, e, ctx.conv_id, ctx.dir_id)
 
-        # 无事件产出 — 由 DoneStage 产出
-
+        yield ReplyEvent(type="stage", stage="post_process")
 
     def _report_error(self, processor_name: str, user_id: str, exc: Exception,
                       conv_id: str, dir_id: str) -> None:

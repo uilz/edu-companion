@@ -136,7 +136,7 @@ export function OverviewTab() {
           authedFetch(`/api/dashboard/overview?user_id=${userId}`),
           authedFetch(`/api/practice/achievements`),
           authedFetch(`/api/practice/stats/weak-skills`),
-          authedFetch(`/api/conversations?limit=3`),
+          authedFetch(`/api/conversations/tree/conversations/recent?limit=3`),
           authedFetch(`/api/secretary/proposals/pending?limit=3`),
           authedFetch(`/api/secretary/events/recent?limit=5`),
         ]);

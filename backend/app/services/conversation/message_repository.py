@@ -38,6 +38,9 @@ class MessageRepository:
                 END IF;
             END $$;
         """)
+        # 清理旧 schema 遗留的 conversation_id 列（远端 VM 有此列导致 NotNullViolation）
+        self._db.execute("ALTER TABLE messages DROP COLUMN IF EXISTS conversation_id")
+
         self._db.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 id                  TEXT PRIMARY KEY,

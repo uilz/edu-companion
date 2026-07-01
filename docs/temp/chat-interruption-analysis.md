@@ -280,3 +280,39 @@ CancelledError handler 中:
 - SSE 等待 done 事件的超时保护（若后端崩溃，不能永久阻塞）
 - `mark_start` 放在 `start_background_pipeline` 还是 `_run_pipeline_task` 开头需要确认
 - 取消时的 PostProcessStage 精简版：SocraticCounter 等非必要处理器可跳过，只需 `tree_ops.add_message()` + `ResponseBlockSaver`
+
+---
+
+## 实现记录 (2026-07-01)
+
+### 已修改文件
+
+| 文件 | 变更 |
+|------|------|
+| `backend/app/domain/conversation/reply_pipeline.py` | `invoke()` 新增 `except asyncio.CancelledError` 分支，设置 `ctx._cancelled = True`，跳过 tool_loop 之前的 stage，继续执行 post_process + done |
+| `backend/app/domain/conversation/conversation_processor.py` | `start_background_pipeline()` 补充 `active_streams.mark_start()`；`_run_pipeline_task()` 和 `resume_background_pipeline()` 移除 `CancelledError` handler 和 `me.cancelled()` 检查；finally 中补充 `active_streams.mark_done()` |
+| `backend/app/domain/conversation/pipeline_stages.py` | `PipelineCtx` 新增 `_cancelled: bool` 字段；`DoneStage` 在 cancelled 时附加 `cancelled: True` 到 done 事件；`PostProcessStage.invoke` 补充 `yield` 使其成为真正的 async generator |
+| `frontend/src/hooks/conversation/useChatStream.ts` | 完全移除 `AbortController`；新增 `generationRef` 防止新旧流事件交叉；`stop()` 改为设置 `stoppedRef` 标志 + POST stop + 等待 `sendPromiseRef` 完成；`send()` 内事件循环根据 `stoppedRef` 跳过 token/reasoning |
+| `frontend/src/store/conversation/actions/send-message.ts` | 打断逻辑改为 `await chatStream.stop()` 等待 done 事件到达，移除手动清理 isLoading/streamingId + 100ms 等待 |
+
+### 验证结果
+
+```
+后端日志验证 (send → stop → done):
+  Stream active [conv_id]          ✅ active_streams.mark_start 生效
+  StreamBuffer cancelled [conv_id]  ✅ cancel 触发
+  Pipeline cancelled, graceful shutdown  ✅ CancelledError 被 ReplyPipeline 内部捕获
+  Stream done [conv_id]            ✅ mark_done 调用
+
+API 验证:
+  POST /message {action:"stop"} → {"ok":true} ✅
+  GET /stream/active → {"active":true}  ✅ (之前永远返回 false)
+  GET /messages → 2条消息 (user + assistant) ✅ (assistant 消息已持久化)
+  done 事件包含 cancelled: true + assistant_message ✅
+```
+
+### 遗留问题
+
+- **缺陷 B (replay 竞态)**: 两个 useEffect 的竞态未修复。`loadMessages` 和 `replay` 都依赖 `activeConversationId`，并发执行可能导致 `r_xxx` 与 `loadMessages` 重建的 `_rebuild` 冲突。这是爆发频率较低的问题，可在后续独立处理。
+- **缺陷 D (replay 重复消息)**: replay 创建新 `r_xxx` 而非恢复已有消息 ID。由于 stop 后 assistant 消息已持久化，refresh 时 `loadMessages` 已能获取完整消息，replay 仅用于"正在流式中的 refresh"场景，此时消息尚未持久化，replay 行为正确。
+- **PostProcessStage.invoke 无 yield 的 bug**: 原代码声明为 `async def invoke(...) -> AsyncGenerator` 但函数体内无 `yield`，Python 将其视为普通 coroutine，`async for` 会报 `TypeError`。这个 bug 在正常流程（非 cancel）中同样存在，但被 `except Exception` 静默捕获。已修复。

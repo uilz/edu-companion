@@ -64,8 +64,10 @@ async def write_aggregate(
     """客户端聚合完成后写入聚合事件"""
     from uuid import uuid4
     from app.infrastructure.db.events_repository import Event, get_events_repo
+    from app.infrastructure.db.database import get_db
 
     repo = get_events_repo()
+    db = get_db()
     aggregates = body.get("aggregates", [])
     written = 0
 
@@ -97,7 +99,7 @@ async def write_aggregate(
         child_ids = agg.get("child_ids", [])
         for cid in child_ids:
             rid = f"rel_{uuid4().hex[:12]}"
-            repo.execute(
+            db.execute(
                 "INSERT INTO event_relations (id, parent_id, child_id) "
                 "VALUES (%s, %s, %s) ON CONFLICT (parent_id, child_id) DO NOTHING",
                 (rid, event_id, cid),
