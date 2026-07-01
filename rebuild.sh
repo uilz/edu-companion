@@ -298,8 +298,8 @@ start_service "backend" "$PROJECT_DIR/backend" \
   8000 "/health" 180
 
 log "🗄️  确保数据库表完整..."
-cd "$PROJECT_DIR/backend"
-source venv/bin/activate
+cd "$PROJECT_DIR"
+source backend/venv/bin/activate
 python3 scripts/ensure_all_tables.py 2>&1 || log "⚠️  建表脚本有非致命警告（通常是权限提示，可忽略）"
 
 start_service "frontend" "$PROJECT_DIR/frontend" \
