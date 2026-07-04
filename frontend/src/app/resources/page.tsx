@@ -703,13 +703,13 @@ export default function ResourcesPage() {
                             <div onClick={() => navigateToFolder(f.material_id, f.file_name)}
                               className="flex items-center gap-2.5 min-w-0 text-[var(--color-text)] hover:text-[var(--color-accent)] cursor-pointer transition-colors">
                               <FolderOpen size={15} className="text-amber-500 shrink-0" />
-                              <span className="text-[13px] truncate font-medium">{f.file_name}</span>
+                              <span className="text-[13px] truncate font-medium">{f.file_name || "未命名文件夹"}</span>
                             </div>
                           ) : (
                             <Link href={`/files/${f.material_id}`}
                               className="flex items-center gap-2.5 min-w-0 text-[var(--color-text)] hover:text-[var(--color-accent)] transition-colors group/link">
                               {getFileIcon(ext)}
-                              <span className="text-[13px] truncate">{f.file_name}</span>
+                              <span className="text-[13px] truncate">{f.file_name || `未命名·${ext || "文件"}`}</span>
                               <ExternalLink size={10} className="text-[var(--color-text-muted)] opacity-0 group-hover/link:opacity-100 shrink-0 transition-opacity" />
                             </Link>
                           )}

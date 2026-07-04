@@ -80,7 +80,7 @@ const _baseItems: Omit<NavItem, "icon" | "visibleIn">[] = [
   { path: "/secretary",     label: "秘书",       priority: 21, requiresAuth: true },
   { path: "/liveroom",      label: "语音房",     priority: 22, requiresAuth: true },
   { path: "/analytics",     label: "分析",       priority: 30, requiresAuth: true },
-  { path: "/files",         label: "文件",       priority: 40, requiresAuth: true },
+  { path: "/resources",     label: "文件",       priority: 40, requiresAuth: true },
   { path: "/settings",      label: "设置",       priority: 50, requiresAuth: true },
   { path: "/emotion",       label: "心情",       priority: 51, requiresAuth: true },
 ];

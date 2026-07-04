@@ -6,7 +6,7 @@ import {
   User, Shield, LogOut, Eye, EyeOff, Check, Loader2,
   Monitor, Smartphone, MapPin, X, Database, Download,
   AlertTriangle, RefreshCw, Layout, PanelTop, PanelBottom,
-  PanelLeft, PanelRight, RotateCcw,
+  PanelLeft, PanelRight, RotateCcw, Info,
 } from "lucide-react";
 import Link from "next/link";
 import { useTheme, STYLE_LIST } from "@/contexts/ThemeContext";
@@ -22,7 +22,7 @@ const SETTINGS_TABS = [
   { key: "preferences", label: "学习偏好", icon: Brain },
   { key: "appearance", label: "外观", icon: Sun },
   { key: "data", label: "数据管理", icon: Database },
-  { key: "about", label: "关于", icon: "info" },
+  { key: "about", label: "关于", icon: Info },
 ] as const;
 
 type TabKey = (typeof SETTINGS_TABS)[number]["key"];
@@ -93,7 +93,7 @@ function SettingsContent() {
     <div className="max-w-3xl mx-auto px-4 py-6">
       <div className="flex items-center gap-3 mb-6">
         <Link
-          href="/conversation"
+          href="/dashboard"
           className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

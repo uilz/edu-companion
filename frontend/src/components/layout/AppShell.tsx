@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { useBreakpoint } from '@/hooks/useBreakpoint';
 import BottomNav from './BottomNav';
 import MobileDrawer from './MobileDrawer';
@@ -10,7 +11,7 @@ import ActionFeedbackToast from '../notification/ActionFeedbackToast';
 import AgentFloat from '../agent/AgentFloat';
 import DevRoleSwitcher from './DevRoleSwitcher';
 import Cockpit from '@/components/dashboard/Cockpit';
-import { Menu } from 'lucide-react';
+import { Menu, ArrowLeft } from 'lucide-react';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -75,6 +76,16 @@ export default function AppShell({ children }: AppShellProps) {
         <AgentFloat />
         <DevRoleSwitcher />
         <ActionFeedbackToast />
+        {isDesktop && (
+          <Link
+            href="/dashboard"
+            aria-label="返回驾驶舱"
+            className="fixed top-3 left-3 z-40 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--color-surface)]/80 backdrop-blur border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] text-xs transition-colors shadow-sm"
+          >
+            <ArrowLeft size={12} />
+            <span>返回</span>
+          </Link>
+        )}
       </>
     );
   }
