@@ -3,6 +3,8 @@
 > 智能题库系统 — 练习、考试、错题本、AI 出题、Bloom 分类、多维知识状态、自适应出题、用户资料索引。
 >
 > 源码：[backend/app/schemas/practice.py](../../../backend/app/schemas/practice.py)
+>
+> **文档**：[前端设计](./frontend-design.md) | [后端 API](./backend-api.md)
 
 ---
 

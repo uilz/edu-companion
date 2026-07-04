@@ -1,15 +1,15 @@
 "use client";
 
-import React, { useState, useCallback, useEffect, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef, memo } from "react";
 import {
   Clock, AlertTriangle, Check, X, ChevronRight, ChevronLeft,
   FileText, Send, Loader2, Trophy, Brain, BookOpen,
-  BarChart3, Grid3X3,
+  BarChart3, Grid3X3, X as XIcon,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import "katex/dist/katex.min.css";
+// katex/dist/katex.min.css 已在 app/globals.css 统一 import
 import {
   createExam, listBanks,
   getExamTime,
@@ -21,6 +21,8 @@ import {
   type ExamTimeInfo,
 } from "@/lib/api/practice-api";
 import QuestionStem from "@/components/practice/components/QuestionStem";
+import PracticeEmptyState from "@/components/practice/components/PracticeEmptyState";
+import SessionTimer from "@/components/practice/components/SessionTimer";
 
 type Phase = "setup" | "answering" | "submitting" | "result";
 
@@ -34,6 +36,153 @@ interface Props {
   onClose?: () => void;
 }
 
+/**
+ * 顶部考试计时条 — 独立 memo 组件，自身 1Hz 计时，不触发父级重渲
+ * 接收 timeLeft 作为 props；通过 react.memo + 自定义比较避免父级 re-render
+ */
+const ExamTimerBar = memo(function ExamTimerBar({ timeLeft, totalQuestions, answeredCount, onToggleAnswerSheet, onSubmit, showAnswerSheet }: {
+  timeLeft: number;
+  totalQuestions: number;
+  answeredCount: number;
+  onToggleAnswerSheet: () => void;
+  onSubmit: () => void;
+  showAnswerSheet: boolean;
+}) {
+  const urgent = timeLeft < 120;
+  const warn = timeLeft < 300;
+  return (
+    <div className="sticky top-0 z-10 bg-[var(--color-bg)]/95 backdrop-blur-sm border-b border-[var(--color-border)]/50 px-3 sm:px-4 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <span className="text-[11px] text-[var(--color-text-muted)] tabular">
+            {answeredCount} / {totalQuestions}
+          </span>
+          <div
+            data-testid="exam-timer-display"
+            data-urgent={urgent ? "true" : "false"}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium tabular ${
+              urgent ? "bg-red-500/10 text-red-500 animate-pulse" :
+              warn ? "bg-amber-500/10 text-amber-500" :
+              "bg-[var(--color-surface)] text-[var(--color-text)]"
+            }`}
+          >
+            <Clock size={12} />
+            {formatTimeLocal(timeLeft)}
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+          <button
+            onClick={onToggleAnswerSheet}
+            data-testid="toggle-answer-sheet-btn"
+            aria-label="答题卡"
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] border transition-all ${
+              showAnswerSheet
+                ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
+                : "border-[var(--color-border)]/50 text-[var(--color-text-muted)] hover:border-[var(--color-accent)]/30"
+            }`}
+          >
+            <Grid3X3 size={12} />
+            <span className="hidden sm:inline">答题卡</span>
+            <span className="text-[9px]">{answeredCount}/{totalQuestions}</span>
+          </button>
+          <button
+            onClick={onSubmit}
+            data-testid="submit-exam-btn"
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-medium bg-red-500 text-white hover:opacity-90 transition-opacity"
+          >
+            <Send size={10} />
+            <span>交卷</span>
+          </button>
+        </div>
+      </div>
+      {/* 进度条 */}
+      <div className="w-full h-1 bg-[var(--color-border)]/30 rounded-full overflow-hidden mt-2">
+        <div
+          className="h-full bg-[var(--color-accent)] rounded-full transition-all duration-300"
+          style={{ width: `${(answeredCount / Math.max(totalQuestions, 1)) * 100}%` }}
+        />
+      </div>
+    </div>
+  );
+});
+
+function formatTimeLocal(seconds: number) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+}
+
+/**
+ * 答题卡侧栏 — 移动端作为 bottom sheet，桌面端作为左侧栏
+ */
+const AnswerSheet = memo(function AnswerSheet({
+  questions, savedAnswers, currentIdx, onSelect, onClose, isMobile,
+}: {
+  questions: ExamQuestion[];
+  savedAnswers: Record<string, string[]>;
+  currentIdx: number;
+  onSelect: (idx: number) => void;
+  onClose: () => void;
+  isMobile: boolean;
+}) {
+  const answeredCount = Object.keys(savedAnswers).length;
+  return (
+    <div
+      data-testid="answer-sheet"
+      className={
+        isMobile
+          ? "fixed inset-x-0 bottom-0 z-40 max-h-[70vh] overflow-y-auto p-3 bg-[var(--color-bg)] border-t border-[var(--color-border)] rounded-t-2xl shadow-2xl"
+          : "w-48 flex-shrink-0 border-r border-[var(--color-border)]/30 bg-[var(--color-surface)]/50 overflow-y-auto p-2"
+      }
+    >
+      {isMobile && (
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-medium text-[var(--color-text)]">答题卡</p>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-[var(--color-surface)]" aria-label="关闭">
+            <XIcon size={14} />
+          </button>
+        </div>
+      )}
+      {!isMobile && (
+        <p className="text-[9px] text-[var(--color-text-muted)] mb-2 px-1 font-medium uppercase tracking-wider">答题卡</p>
+      )}
+      <div className={`grid ${isMobile ? "grid-cols-6" : "grid-cols-4"} gap-1.5`}>
+        {questions.map((q, i) => {
+          const ans = savedAnswers[q.id];
+          const isAnswered = ans && ans.length > 0;
+          const isActive = i === currentIdx;
+          return (
+            <button
+              key={q.id}
+              data-testid={`answer-sheet-${i + 1}`}
+              onClick={() => onSelect(i)}
+              className={`w-full aspect-square flex items-center justify-center rounded-md text-[10px] font-medium transition-all ${
+                isActive
+                  ? "ring-2 ring-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
+                  : isAnswered
+                    ? "bg-green-500/10 text-green-600 border border-green-500/30"
+                    : "bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)]/50 hover:border-[var(--color-accent)]/30"
+              }`}
+            >
+              {i + 1}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-3 px-1 space-y-1 text-[9px] text-[var(--color-text-muted)]">
+        <div className="flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-sm bg-green-500/30 border border-green-500/50" />
+          <span>已答 ({answeredCount})</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-sm bg-[var(--color-bg)] border border-[var(--color-border)]/50" />
+          <span>未答 ({questions.length - answeredCount})</span>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose }: Props) {
   const [phase, setPhase] = useState<Phase>("setup");
   const [duration, setDuration] = useState(30);
@@ -46,15 +195,27 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
   const [fillAnswer, setFillAnswer] = useState("");
   const [showAnswerSheet, setShowAnswerSheet] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [serverRemaining, setServerRemaining] = useState<number | null>(null);
+  const [autoSubmitted, setAutoSubmitted] = useState(false);
   const [examResult, setExamResult] = useState<ExamResult | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [banks, setBanks] = useState<{ id: string; name: string }[]>([]);
   const [selectedBankId, setSelectedBankId] = useState(bankId || "");
+  const [isMobile, setIsMobile] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const startedRef = useRef(false);
 
   const currentQuestion = questions[currentIdx] ?? null;
+
+  // 监听 viewport 变化，决定答题卡是侧栏还是 bottom-sheet
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const update = () => setIsMobile(window.innerWidth < 768);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
 
   // 加载题库列表
   useEffect(() => {
@@ -83,7 +244,13 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
       setPhase("answering");
       setCurrentIdx(0);
       setSelectedAnswers([]);
-      setTimeLeft(duration * 60);
+      // 服务器返回的 deadline 计算倒计时
+      if (exam.deadline) {
+        const dl = new Date(exam.deadline).getTime();
+        setTimeLeft(Math.max(0, Math.floor((dl - Date.now()) / 1000)));
+      } else {
+        setTimeLeft(duration * 60);
+      }
       startedRef.current = true;
     } catch (e: any) {
       setError(e?.message || "创建考试失败");
@@ -93,7 +260,7 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
     }
   }, [selectedBankId, bankId, count, duration, nodeId]);
 
-  // ── 计时器 ──
+  // ── 计时器（仅控制本地 timeLeft，UI 通过 SessionTimer/ExamTimerBar 渲染） ──
   useEffect(() => {
     if (phase !== "answering" || !session) return;
     if (timerRef.current) clearInterval(timerRef.current);
@@ -101,10 +268,13 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
     // 同步服务器时间
     const syncTime = async () => {
       try {
-        const info = await getExamTime(session.session_id);
-        if (info.remaining_seconds != null) setTimeLeft(info.remaining_seconds);
+        const info: ExamTimeInfo = await getExamTime(session.session_id);
+        if (info.remaining_seconds != null) {
+          setTimeLeft(info.remaining_seconds);
+          setServerRemaining(info.remaining_seconds);
+        }
         if (!info.valid && info.auto_submitted) {
-          // 超时自动交卷
+          setAutoSubmitted(true);
           const result = await submitAllExam(session.session_id);
           setExamResult(result);
           setPhase("result");
@@ -117,7 +287,6 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timerRef.current!);
-          // 时间到
           handleTimeUp();
           return 0;
         }
@@ -130,23 +299,18 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
     };
   }, [phase, session]);
 
-  const handleTimeUp = useCallback(async () => {
-    if (!session) return;
-    try {
-      const result = await submitAllExam(session.session_id);
-      setExamResult(result);
-      setPhase("result");
-    } catch {}
-  }, [session]);
-
-  // ── 每30秒同步服务器时间 ──
+  // 30s 同步服务器时间
   useEffect(() => {
     if (phase !== "answering") return;
     const interval = setInterval(async () => {
       try {
-        const info = await getExamTime(session?.session_id);
-        if (info.remaining_seconds != null) setTimeLeft(info.remaining_seconds);
+        const info: ExamTimeInfo = await getExamTime(session?.session_id);
+        if (info.remaining_seconds != null) {
+          setTimeLeft(info.remaining_seconds);
+          setServerRemaining(info.remaining_seconds);
+        }
         if (!info.valid && info.auto_submitted) {
+          setAutoSubmitted(true);
           const result = await submitAllExam(session?.session_id);
           setExamResult(result);
           setPhase("result");
@@ -155,6 +319,16 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
     }, 30000);
     return () => clearInterval(interval);
   }, [phase, session]);
+
+  const handleTimeUp = useCallback(async () => {
+    if (!session) return;
+    setAutoSubmitted(true);
+    try {
+      const result = await submitAllExam(session.session_id);
+      setExamResult(result);
+      setPhase("result");
+    } catch {}
+  }, [session]);
 
   // ── 选择答案 ──
   const toggleAnswer = useCallback((letter: string) => {
@@ -193,7 +367,6 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
 
   // ── 导航 ──
   const goToQuestion = useCallback((idx: number) => {
-    // 保存当前题答案
     if (currentQuestion) {
       const isFillType = !OPTION_TYPES.includes(currentQuestion.question_type);
       if (isFillType && fillAnswer.trim()) {
@@ -206,9 +379,9 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
     const nextQ = questions[idx];
     const saved = savedAnswers[nextQ?.id] || [];
     setSelectedAnswers(saved);
-    // 恢复填空答案
     const isFillType = nextQ && !OPTION_TYPES.includes(nextQ.question_type);
     setFillAnswer(isFillType && saved.length > 0 ? saved[0] : "");
+    setShowAnswerSheet(false);
   }, [currentQuestion, selectedAnswers, savedAnswers, questions, fillAnswer]);
 
   const handleNext = useCallback(() => {
@@ -229,14 +402,12 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
 
     setPhase("submitting");
     try {
-      // 先逐题提交答案（调用考试 submit 路由）
       for (const q of questions) {
         const userAns = savedAnswers[q.id];
         if (userAns && userAns.length > 0) {
           await submitExamAnswer(session.session_id, q.id, userAns, 0).catch(() => {});
         }
       }
-      // 批量交卷
       const result = await submitAllExam(session.session_id);
       setExamResult(result);
       setPhase("result");
@@ -245,6 +416,40 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
       setPhase("answering");
     }
   }, [session, questions, savedAnswers]);
+
+  // ── 键盘快捷键 ──
+  useEffect(() => {
+    if (phase !== "answering") return;
+    const handler = (e: KeyboardEvent) => {
+      // 输入框内不响应
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleNext();
+        return;
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        handlePrev();
+        return;
+      }
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        handleNext();
+        return;
+      }
+      // 1-4 选答案
+      const idx = parseInt(e.key) - 1;
+      if (idx >= 0 && currentQuestion && currentQuestion.options && idx < currentQuestion.options.length) {
+        toggleAnswer(currentQuestion.options[idx].letter);
+        return;
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [phase, currentQuestion, handleNext, handlePrev, toggleAnswer]);
 
   // ── 返回重选 ──
   const handleRetry = useCallback(() => {
@@ -256,15 +461,10 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
     setSavedAnswers({});
     setExamResult(null);
     setError("");
+    setAutoSubmitted(false);
+    setServerRemaining(null);
     startedRef.current = false;
   }, []);
-
-  // ── 格式化时间 ──
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-  };
 
   const answeredCount = Object.keys(savedAnswers).length;
   const unansweredCount = questions.length - answeredCount;
@@ -272,7 +472,7 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
   // ── Setup Screen ──
   if (phase === "setup") {
     return (
-      <div className="flex flex-col items-center justify-center h-full px-6 py-8">
+      <div className="flex flex-col items-center justify-center h-full px-4 sm:px-6 py-6 sm:py-8">
         <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
           <FileText size={20} className="text-red-500" />
         </div>
@@ -283,7 +483,6 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
           计时答题 · 答题卡导航 · 自动交卷 · 成绩报告
         </p>
 
-        {/* 题库选择 */}
         {banks.length > 1 && (
           <div className="w-full mb-4">
             <p className="text-[10px] text-[var(--color-text-muted)] mb-2 font-medium">选择题库</p>
@@ -294,13 +493,12 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
           </div>
         )}
 
-        {/* 时长选择 */}
         <div className="w-full mb-4">
           <p className="text-[10px] text-[var(--color-text-muted)] mb-2 font-medium">考试时长</p>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5 sm:gap-2 flex-wrap">
             {[15, 30, 45, 60, 90, 120].map((m) => (
               <button key={m} onClick={() => setDuration(m)}
-                className={`flex-1 py-2 rounded-lg border text-center text-sm font-medium transition-all ${
+                className={`flex-1 min-w-[60px] py-2 rounded-lg border text-center text-sm font-medium transition-all ${
                   duration === m
                     ? "border-red-500 bg-red-500/10 text-red-500"
                     : "border-[var(--color-border)]/50 bg-[var(--color-surface)] text-[var(--color-text)] hover:border-red-500/30"
@@ -309,13 +507,12 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
           </div>
         </div>
 
-        {/* 题数选择 */}
         <div className="w-full mb-4">
           <p className="text-[10px] text-[var(--color-text-muted)] mb-2 font-medium">题目数量</p>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5 sm:gap-2 flex-wrap">
             {[10, 20, 30, 50].map((n) => (
               <button key={n} onClick={() => setCount(n)}
-                className={`flex-1 py-2 rounded-lg border text-center text-sm font-medium transition-all ${
+                className={`flex-1 min-w-[60px] py-2 rounded-lg border text-center text-sm font-medium transition-all ${
                   count === n
                     ? "border-red-500 bg-red-500/10 text-red-500"
                     : "border-[var(--color-border)]/50 bg-[var(--color-surface)] text-[var(--color-text)] hover:border-red-500/30"
@@ -324,7 +521,6 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
           </div>
         </div>
 
-        {/* 提示 */}
         <div className="w-full mb-6 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
           <div className="flex items-start gap-2">
             <AlertTriangle size={12} className="text-amber-500 mt-0.5" />
@@ -335,12 +531,17 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
         </div>
 
         <button onClick={handleStart} disabled={loading}
+          data-testid="start-exam-btn"
           className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-red-500 text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
           {loading ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
           {loading ? "出题中..." : "开始考试"}
         </button>
 
         {error && <p className="mt-3 text-[10px] text-red-500">{error}</p>}
+
+        <p className="mt-3 text-[9px] text-[var(--color-text-muted)] text-center">
+          快捷键：1-4 选答案 · ← → 切题 · Enter 下一题
+        </p>
       </div>
     );
   }
@@ -351,89 +552,34 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
 
     return (
       <div className="flex flex-col h-full">
-        {/* 顶部：计时 + 答题卡按钮 */}
-        <div className="sticky top-0 z-10 bg-[var(--color-bg)] border-b border-[var(--color-border)]/50 px-4 py-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-[11px] text-[var(--color-text-muted)]">
-                {currentIdx + 1} / {questions.length}
-              </span>
-              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium ${
-                timeLeft < 120 ? "bg-red-500/10 text-red-500 animate-pulse" :
-                timeLeft < 300 ? "bg-amber-500/10 text-amber-500" :
-                "bg-[var(--color-surface)] text-[var(--color-text)]"
-              }`}>
-                <Clock size={12} />
-                {formatTime(timeLeft)}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setShowAnswerSheet(!showAnswerSheet)}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] border transition-all ${
-                  showAnswerSheet
-                    ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                    : "border-[var(--color-border)]/50 text-[var(--color-text-muted)] hover:border-[var(--color-accent)]/30"
-                }`}>
-                <Grid3X3 size={12} />
-                答题卡
-                <span className="ml-1 text-[9px]">{answeredCount}/{questions.length}</span>
-              </button>
-              <button onClick={handleSubmitAll}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-medium bg-red-500 text-white hover:opacity-90 transition-opacity">
-                <Send size={10} />交卷
-              </button>
-            </div>
-          </div>
-          {/* 进度条 */}
-          <div className="w-full h-1 bg-[var(--color-border)]/30 rounded-full overflow-hidden mt-2">
-            <div className="h-full bg-[var(--color-accent)] rounded-full transition-all duration-300"
-              style={{ width: `${(answeredCount / Math.max(questions.length, 1)) * 100}%` }} />
-          </div>
-        </div>
+        <ExamTimerBar
+          timeLeft={timeLeft}
+          totalQuestions={questions.length}
+          answeredCount={answeredCount}
+          onToggleAnswerSheet={() => setShowAnswerSheet(!showAnswerSheet)}
+          onSubmit={handleSubmitAll}
+          showAnswerSheet={showAnswerSheet}
+        />
 
-        {/* 主区域：答题卡 + 题目 */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* 答题卡侧栏 */}
-          {showAnswerSheet && (
-            <div className="w-48 flex-shrink-0 border-r border-[var(--color-border)]/30 bg-[var(--color-surface)]/50 overflow-y-auto p-2">
-              <p className="text-[9px] text-[var(--color-text-muted)] mb-2 px-1 font-medium uppercase tracking-wider">答题卡</p>
-              <div className="grid grid-cols-4 gap-1.5">
-                {questions.map((q, i) => {
-                  const ans = savedAnswers[q.id];
-                  const isAnswered = ans && ans.length > 0;
-                  const isActive = i === currentIdx;
-                  return (
-                    <button key={q.id} onClick={() => { goToQuestion(i); setShowAnswerSheet(false); }}
-                      className={`w-full aspect-square flex items-center justify-center rounded-md text-[10px] font-medium transition-all ${
-                        isActive
-                          ? "ring-2 ring-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                          : isAnswered
-                            ? "bg-green-500/10 text-green-600 border border-green-500/30"
-                            : "bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)]/50 hover:border-[var(--color-accent)]/30"
-                      }`}>
-                      {i + 1}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="mt-3 px-1 space-y-1 text-[9px] text-[var(--color-text-muted)]">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-green-500/30 border border-green-500/50" />
-                  <span>已答 ({answeredCount})</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-[var(--color-bg)] border border-[var(--color-border)]/50" />
-                  <span>未答 ({unansweredCount})</span>
-                </div>
-              </div>
-            </div>
+        {/* 主区域 */}
+        <div className="flex-1 flex overflow-hidden relative">
+          {/* 桌面端答题卡侧栏 */}
+          {!isMobile && showAnswerSheet && (
+            <AnswerSheet
+              questions={questions}
+              savedAnswers={savedAnswers}
+              currentIdx={currentIdx}
+              onSelect={goToQuestion}
+              onClose={() => setShowAnswerSheet(false)}
+              isMobile={false}
+            />
           )}
 
           {/* 题目区域 */}
-          <div className="flex-1 overflow-y-auto px-4 py-4">
-            {currentQuestion && (
+          <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-3 sm:py-4">
+            {currentQuestion ? (
               <>
-                <div className="mb-1 flex items-center gap-2">
+                <div className="mb-1 flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)]/50 text-[var(--color-text-muted)]">
                     {currentQuestion.question_type === "single" || currentQuestion.question_type === "choice" ? "单选题" :
                      currentQuestion.question_type === "multiple" ? "多选题" :
@@ -441,26 +587,32 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
                      currentQuestion.question_type === "fill" ? "填空题" :
                      currentQuestion.question_type === "free_form" || currentQuestion.question_type === "essay" ? "简答题" : "选择题"}
                   </span>
-                  <span className="text-[9px] text-[var(--color-text-muted)]">
+                  <span className="text-[9px] text-[var(--color-text-muted)] tabular">
                     难度 {"★".repeat(currentQuestion.difficulty).padEnd(5, "☆")}
+                  </span>
+                  <span className="text-[9px] text-[var(--color-text-muted)] ml-auto tabular">
+                    第 {currentIdx + 1} / {questions.length} 题
                   </span>
                 </div>
 
                 <QuestionStem stem={currentQuestion.stem} className="text-base leading-relaxed mb-4" />
 
-                {/* 选项类型 */}
                 {OPTION_TYPES.includes(currentQuestion.question_type) && (
                 <div className="space-y-2">
                   {currentQuestion.options?.map((opt) => {
                     const isSelected = selectedAnswers.includes(opt.letter);
                     const isMultiple = currentQuestion.question_type === "multiple";
                     return (
-                      <button key={opt.letter} onClick={() => toggleAnswer(opt.letter)}
-                        className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-all ${
+                      <button
+                        key={opt.letter}
+                        data-testid={`exam-option-${opt.letter}`}
+                        onClick={() => toggleAnswer(opt.letter)}
+                        className={`w-full flex items-start gap-3 p-2.5 sm:p-3 rounded-lg border text-left transition-all ${
                           isSelected
                             ? "border-red-500 bg-red-500/10"
                             : "border-[var(--color-border)]/60 bg-[var(--color-surface)] hover:border-red-500/30"
-                        }`}>
+                        }`}
+                      >
                         <span className={`flex-shrink-0 w-6 h-6 flex items-center justify-center text-[11px] font-medium ${
                           isMultiple ? "rounded-md" : "rounded-full"
                         } ${
@@ -469,20 +621,20 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
                             : "bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)]"
                         }`}>{opt.letter}</span>
                         <span className="text-[13px] text-[var(--color-text)] leading-relaxed pt-0.5 [&_p]:m-0 [&_.katex]:text-sm">
-                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} components={{ p: ({ children }) => <>{children}</> }}>
-                      {opt.text}
-                    </ReactMarkdown>
-                  </span>
+                          <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} components={{ p: ({ children }) => <>{children}</> }}>
+                            {opt.text}
+                          </ReactMarkdown>
+                        </span>
                       </button>
                     );
                   })}
                 </div>
                 )}
 
-                {/* 填空/简答类型 */}
                 {!OPTION_TYPES.includes(currentQuestion.question_type) && (
                 <div>
                   <textarea
+                    data-testid="exam-fill-answer"
                     value={fillAnswer}
                     onChange={(e) => saveFillAnswer(e.target.value)}
                     placeholder={currentQuestion.question_type === "fill" ? "输入你的答案..." : "输入你的回答..."}
@@ -492,27 +644,41 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
                 </div>
                 )}
               </>
-            )}
-
-            {/* 空状态 */}
-            {!currentQuestion && (
-              <div className="flex items-center justify-center h-full">
-                <p className="text-xs text-[var(--color-text-muted)]">暂无题目</p>
-              </div>
+            ) : (
+              <PracticeEmptyState
+                variant="generic"
+                title="暂无题目"
+                description="考试未包含任何题目"
+                compact
+              />
             )}
           </div>
+
+          {/* 移动端答题卡 — bottom sheet */}
+          {isMobile && showAnswerSheet && (
+            <AnswerSheet
+              questions={questions}
+              savedAnswers={savedAnswers}
+              currentIdx={currentIdx}
+              onSelect={goToQuestion}
+              onClose={() => setShowAnswerSheet(false)}
+              isMobile={true}
+            />
+          )}
         </div>
 
         {/* 底部导航 */}
-        <div className="border-t border-[var(--color-border)]/30 px-4 py-2.5 flex items-center justify-between">
+        <div className="border-t border-[var(--color-border)]/30 px-3 sm:px-4 py-2.5 flex items-center justify-between safe-area-bottom">
           <button onClick={handlePrev} disabled={currentIdx === 0}
+            data-testid="exam-prev-btn"
             className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] border border-[var(--color-border)]/50 text-[var(--color-text-muted)] hover:border-[var(--color-accent)]/30 disabled:opacity-30 transition-all">
             <ChevronLeft size={12} />上一题
           </button>
-          <span className="text-[10px] text-[var(--color-text-muted)]">
+          <span className="text-[10px] text-[var(--color-text-muted)] tabular">
             {currentIdx + 1} / {questions.length}
           </span>
           <button onClick={isLast ? handleSubmitAll : handleNext}
+            data-testid="exam-next-btn"
             className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${
               isLast
                 ? "bg-red-500 text-white hover:opacity-90"
@@ -540,7 +706,7 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
                      grade_color === "yellow" ? "bg-yellow-500" : "bg-red-500";
 
     return (
-      <div className="overflow-y-auto h-full px-4 py-6">
+      <div className="overflow-y-auto h-full px-3 sm:px-4 py-6">
         {/* 分数大卡片 */}
         <div className={`text-center p-6 rounded-xl border-2 mb-6 ${colorMap[grade_color] || colorMap.blue}`}>
           <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
@@ -548,7 +714,7 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
               grade_color === "blue" ? "text-blue-500" :
               grade_color === "yellow" ? "text-yellow-500" : "text-red-500"} />
           </div>
-          <div className={`text-5xl font-bold mb-1 ${
+          <div className={`text-5xl font-bold mb-1 tabular ${
             grade_color === "green" ? "text-green-500" :
             grade_color === "blue" ? "text-blue-500" :
             grade_color === "yellow" ? "text-yellow-500" : "text-red-500"
@@ -564,7 +730,6 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
           </p>
         </div>
 
-        {/* 题型统计 */}
         {Object.keys(type_stats).length > 0 && (
           <div className="mb-6">
             <p className="text-[10px] text-[var(--color-text-muted)] mb-2 font-medium">题型统计</p>
@@ -589,7 +754,6 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
           </div>
         )}
 
-        {/* 逐题回顾 */}
         <div className="mb-6">
           <p className="text-[10px] text-[var(--color-text-muted)] mb-2 font-medium">逐题回顾</p>
           <div className="space-y-2">
@@ -611,7 +775,7 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
                       <span className="text-[9px] text-[var(--color-text-muted)] mr-1">#{i + 1}</span>
                       <QuestionStem stem={qr.stem} className="text-sm leading-relaxed" />
                     </div>
-                    <div className="flex items-center gap-2 mt-1 text-[9px] text-[var(--color-text-muted)]">
+                    <div className="flex items-center gap-2 mt-1 text-[9px] text-[var(--color-text-muted)] flex-wrap">
                       <span>你的答案: {Array.isArray(qr.user_answer) ? qr.user_answer.join(", ") || "未答" : "未答"}</span>
                       {!qr.is_correct && (
                         <span className="text-green-600">
@@ -631,14 +795,15 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
           </div>
         </div>
 
-        {/* 操作按钮 */}
         <div className="flex gap-3 mb-8">
           <button onClick={handleRetry}
+            data-testid="exam-retry-btn"
             className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-[var(--color-border)]/50 text-sm text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-all">
             <Brain size={14} />再来一次
           </button>
           {onClose && (
             <button onClick={onClose}
+              data-testid="exam-back-btn"
               className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity">
               <BarChart3 size={14} />返回
             </button>

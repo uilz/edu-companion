@@ -135,6 +135,19 @@ class Database:
             cur.close()
             self.put_conn(conn)
 
+    def execute_with_rowcount(self, sql: str, params: tuple = ()) -> int:
+        """执行 SQL 并返回受影响行数 (用于 DELETE/UPDATE 是否真生效的判断)"""
+        conn = self.get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(sql, params)
+            rowcount = cur.rowcount
+            conn.commit()
+            return int(rowcount or 0)
+        finally:
+            cur.close()
+            self.put_conn(conn)
+
     def executemany(self, sql: str, params_list: list[tuple]) -> None:
         """批量执行同一 SQL — 单次往返 (H4 性能优化)"""
         if not params_list:

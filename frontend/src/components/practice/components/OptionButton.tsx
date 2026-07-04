@@ -1,9 +1,10 @@
 "use client";
 
+import React, { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import "katex/dist/katex.min.css";
+// katex/dist/katex.min.css 已在 app/globals.css 统一 import
 
 interface Props {
   label: string;
@@ -16,7 +17,7 @@ interface Props {
 }
 
 /** 选项按钮 — 支持 selected / correct / wrong 三种态 */
-export default function OptionButton({
+function OptionButtonImpl({
   label, text, selected, showResult, isCorrect, disabled, onSelect,
 }: Props) {
   let border = "border-[var(--color-border)] hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-surface)]";
@@ -37,7 +38,7 @@ export default function OptionButton({
         </span>
       );
     } else if (selected) {
-      border = "border-red-400 dark:border-red-600";
+      border = "border-red-400 dark:border-red-400";
       bg = "bg-red-50 dark:bg-red-900/15";
       textColor = "text-red-700 dark:text-red-300";
       indicator = (
@@ -60,7 +61,7 @@ export default function OptionButton({
     <button
       onClick={onSelect}
       disabled={disabled}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-150 ${border} ${bg} ${textColor} ${disabled ? "cursor-default" : "cursor-pointer"}`}
+      className={`w-full flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border transition-all duration-150 ${border} ${bg} ${textColor} ${disabled ? "cursor-default" : "cursor-pointer"}`}
     >
       <span className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border ${
         showResult
@@ -84,3 +85,20 @@ export default function OptionButton({
     </button>
   );
 }
+
+/**
+ * React.memo 包裹的 OptionButton — 选中/反馈状态未变时跳过重渲
+ * 自定义比较函数：text 变化才重渲（KaTeX 渲染昂贵）
+ */
+const OptionButton = memo(OptionButtonImpl, (prev, next) => {
+  return (
+    prev.label === next.label &&
+    prev.text === next.text &&
+    prev.selected === next.selected &&
+    prev.showResult === next.showResult &&
+    prev.isCorrect === next.isCorrect &&
+    prev.disabled === next.disabled
+  );
+});
+
+export default OptionButton;

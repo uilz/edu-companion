@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, memo } from "react";
 import { Volume2, Heart, EyeOff, Eye, Lightbulb, SkipForward, Shuffle, Loader2, BookOpen, MessageSquareText } from "lucide-react";
 import QuestionStem from "@/components/practice/components/QuestionStem";
 import OptionButton from "./OptionButton";
@@ -10,7 +10,6 @@ import ExplanationPanel from "./ExplanationPanel";
 import ReferencePanel from "./ReferencePanel";
 import {
   getQuestionHint,
-  getQuestionExplanation,
   generateSimilarQuestions,
   toggleFavorite,
   toggleSlash,
@@ -45,7 +44,7 @@ interface Props {
 }
 
 /** 练习卡片 — 题干 + 选项 + 反馈 + 工具栏 一体化 */
-export default function QuestionCard({
+function QuestionCardImpl({
   question, index, total,
   showFeedback, lastResult, submitting, selected,
   onSelect, onSubmit, onSkip, onNext, isLast, isExam, submitError,
@@ -79,52 +78,56 @@ export default function QuestionCard({
     setHintLoading(false);
   }, [question.id, showHint]);
 
-  const handleReadAloud = () => {
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      const text = question.stem.replace(/[*_#`~>\[\]()]/g, "");
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = "zh-CN"; u.rate = 0.9;
-      window.speechSynthesis.speak(u);
-    }
-  };
+  const handleReadAloud = useCallback(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const text = question.stem.replace(/[*_#`~>\[\]()]/g, "");
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "zh-CN"; u.rate = 0.9;
+    window.speechSynthesis.speak(u);
+  }, [question.stem]);
 
-  const handleFav = async () => {
+  const handleFav = useCallback(async () => {
     try { setIsFav((await toggleFavorite(question.id)).is_favorite); } catch {}
-  };
-  const handleSlash = async () => {
-    try { /* no need to store state */ await toggleSlash(question.id); } catch {}
-  };
-  const handleSimilar = async () => {
+  }, [question.id]);
+  const handleSlash = useCallback(async () => {
+    try { await toggleSlash(question.id); } catch {}
+  }, [question.id]);
+  const handleSimilar = useCallback(async () => {
     setSimilarLoading(true);
     try { await generateSimilarQuestions(question.id, 3); } catch {}
     setSimilarLoading(false);
-  };
+  }, [question.id]);
 
   // 处理跳过
-  const handleSkip = () => {
+  const handleSkip = useCallback(() => {
     setSkipped(true);
     onSkip();
-  };
+  }, [onSkip]);
 
   // 提交按钮点击：选择题直接提交，填空/简答直接传答案
-  const handleSubmitClick = () => {
+  const handleSubmitClick = useCallback(() => {
     if (isOptionType) {
       onSubmit();
     } else {
       onSubmit([fillAnswer.trim()]);
     }
-  };
+  }, [isOptionType, onSubmit, fillAnswer]);
 
   // 切换题目时重置填空答案
   useEffect(() => {
     setFillAnswer("");
+    setSkipped(false);
+    setShowHint(false);
+    setHintText("");
+    setShowExplanation(false);
+    setShowReference(false);
   }, [question.id]);
 
   return (
-    <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)] overflow-hidden">
+    <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)] overflow-hidden message-enter">
       {/* ── 头部 ── */}
-      <div className="px-5 py-3 border-b border-[var(--color-border)]/50 flex items-center gap-2">
+      <div className="px-3 sm:px-5 py-3 border-b border-[var(--color-border)]/50 flex items-center gap-2 flex-wrap">
         <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)] font-medium">
           第 {index + 1} 题
         </span>
@@ -169,13 +172,13 @@ export default function QuestionCard({
       </div>
 
       {/* ── 题干 ── */}
-      <div className="px-5 py-4">
+      <div className="px-3 sm:px-5 py-4">
         <QuestionStem stem={question.stem} className="text-base leading-relaxed" />
       </div>
 
       {/* ── 提示（仅答题前） ── */}
       {!showFeedback && (
-        <div className="px-5 pb-3">
+        <div className="px-3 sm:px-5 pb-3">
           <HintPanel
             visible={showHint}
             hintText={hintText}
@@ -187,7 +190,7 @@ export default function QuestionCard({
 
       {/* ── 自信度选择器（仅答题前） ── */}
       {!showFeedback && onConfidenceChange && (
-        <div className="px-5 pb-3">
+        <div className="px-3 sm:px-5 pb-3">
           <p className="text-[10px] text-[var(--color-text-muted)] mb-2">答题前，请先评估你对本题的把握程度：</p>
           <div className="flex gap-2">
             {[
@@ -201,6 +204,7 @@ export default function QuestionCard({
                 <button
                   key={item.level}
                   type="button"
+                  data-testid={`confidence-level-${item.level}`}
                   onClick={() => onConfidenceChange(item.level)}
                   className={`flex-1 py-2 px-1 rounded-xl border text-xs font-medium transition-all ${
                     active
@@ -219,7 +223,7 @@ export default function QuestionCard({
 
       {/* ── 选项 ── */}
       {isOptionType && (
-        <div className="px-5 pb-4 space-y-2">
+        <div className="px-3 sm:px-5 pb-4 space-y-2">
           {(question.options || []).map((opt: any) => {
             const label = opt.letter || opt.label || "";
             const text = opt.text || opt.content || "";
@@ -234,7 +238,7 @@ export default function QuestionCard({
                 text={text}
                 selected={isSelected || isCorrectAnswer || false}
                 showResult={showFeedback}
-                isCorrect={isCorrectAnswer && !isWrongPick}
+                isCorrect={!!(isCorrectAnswer && !isWrongPick)}
                 disabled={showFeedback}
                 onSelect={() => onSelect(label)}
               />
@@ -245,7 +249,7 @@ export default function QuestionCard({
 
       {/* ── 填空/简答输入框 ── */}
       {!isOptionType && !showFeedback && (
-        <div className="px-5 pb-4">
+        <div className="px-3 sm:px-5 pb-4">
           <textarea
             value={fillAnswer}
             onChange={(e) => { setFillAnswer(e.target.value); }}
@@ -260,7 +264,7 @@ export default function QuestionCard({
 
       {/* ── 填空/简答的反馈：显示用户的回答 ── */}
       {!isOptionType && showFeedback && selected.length > 0 && (
-        <div className="px-5 pb-4">
+        <div className="px-3 sm:px-5 pb-4">
           <div className="p-3 rounded-xl border border-[var(--color-border)]/60 bg-[var(--color-surface)]">
             <p className="text-[10px] text-[var(--color-text-muted)] mb-1">你的回答</p>
             <p className="text-sm text-[var(--color-text)] whitespace-pre-wrap">{selected[0]}</p>
@@ -270,7 +274,7 @@ export default function QuestionCard({
 
       {/* ── 反馈 ── */}
       {showFeedback && lastResult && (
-        <div className="px-5 pb-4">
+        <div className="px-3 sm:px-5 pb-4">
           <FeedbackPanel
             isCorrect={lastResult.is_correct}
             correctAnswer={lastResult.correct_answer || []}
@@ -283,7 +287,7 @@ export default function QuestionCard({
       )}
 
       {/* ── AI 讲解 ── */}
-      <div className="px-5 pb-4">
+      <div className="px-3 sm:px-5 pb-4">
         <ExplanationPanel
           questionId={question.id}
           stem={question.stem}
@@ -293,7 +297,7 @@ export default function QuestionCard({
       </div>
 
       {/* ── 参考资料 ── */}
-      <div className="px-5 pb-4">
+      <div className="px-3 sm:px-5 pb-4">
         <ReferencePanel
           questionId={question.id}
           query={question.stem}
@@ -303,7 +307,7 @@ export default function QuestionCard({
       </div>
 
       {/* ── 底部按钮 ── */}
-      <div className="px-5 py-3 border-t border-[var(--color-border)]/50 flex flex-col gap-2">
+      <div className="px-3 sm:px-5 py-3 border-t border-[var(--color-border)]/50 flex flex-col gap-2">
         {submitError && (
           <div className="text-[10px] text-red-500 text-center">{submitError}</div>
         )}
@@ -312,6 +316,7 @@ export default function QuestionCard({
             <button
               onClick={handleSubmitClick}
               disabled={!canSubmit || submitting}
+              data-testid="submit-answer-btn"
               className="px-5 py-2 rounded-xl bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 disabled:opacity-30 transition-all flex items-center gap-1.5"
             >
               {submitting ? (
@@ -326,6 +331,7 @@ export default function QuestionCard({
           ) : (
             <button
               onClick={onNext}
+              data-testid="next-question-btn"
               className="px-5 py-2 rounded-xl bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 transition-all"
             >
               {isLast ? "完成练习" : "下一题"}
@@ -351,3 +357,25 @@ function IconButton({ icon, title, onClick }: { icon: React.ReactNode; title: st
     </button>
   );
 }
+
+/**
+ * React.memo 包裹 — 切题/改置信度不再触发整卡重渲
+ * 自定义比较：question.id/showFeedback/submitting/selected 变化才重渲
+ */
+const QuestionCard = memo(QuestionCardImpl, (prev, next) => {
+  return (
+    prev.question.id === next.question.id &&
+    prev.question.stem === next.question.stem &&
+    prev.showFeedback === next.showFeedback &&
+    prev.submitting === next.submitting &&
+    prev.selected === next.selected &&
+    prev.isLast === next.isLast &&
+    prev.isExam === next.isExam &&
+    prev.submitError === next.submitError &&
+    prev.confidenceBefore === next.confidenceBefore &&
+    prev.index === next.index &&
+    prev.total === next.total
+  );
+});
+
+export default QuestionCard;

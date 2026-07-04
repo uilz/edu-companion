@@ -4,7 +4,7 @@ import { X, Check, Eye, Edit3 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import "katex/dist/katex.min.css";
+// katex/dist/katex.min.css 已在 app/globals.css 统一 import
 import type { V7Question } from "@/lib/api/practice-api";
 import QuestionStem from "@/components/practice/components/QuestionStem";
 

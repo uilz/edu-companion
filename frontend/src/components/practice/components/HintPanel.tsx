@@ -4,7 +4,7 @@ import { Lightbulb, Loader2, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import "katex/dist/katex.min.css";
+// katex/dist/katex.min.css 已在 app/globals.css 统一 import
 
 interface Props {
   hintText: string;
