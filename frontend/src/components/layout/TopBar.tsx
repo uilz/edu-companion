@@ -125,30 +125,46 @@ export default function TopBar() {
     return () => document.removeEventListener("mousedown", onClick);
   }, [userMenuOpen]);
 
-  // 用户菜单打开时：计算 dropdown 位置（基于按钮 bounding rect）
+  // 同步计算 dropdown 位置：基于按钮 bounding rect
   // 用 position: fixed + portal 渲染，绕过 grid cell / ResizableContainer 的 overflow 裁剪
-  useEffect(() => {
-    if (!userMenuOpen) {
-      setUserMenuPos(null);
-      return;
-    }
-    const updatePos = () => {
-      const btn = userButtonRef.current;
-      if (!btn) return;
-      const rect = btn.getBoundingClientRect();
-      setUserMenuPos({
-        top: rect.bottom + 4,
-        right: window.innerWidth - rect.right,
-      });
+  const computeMenuPos = useCallback(() => {
+    const btn = userButtonRef.current;
+    if (!btn) return null;
+    const rect = btn.getBoundingClientRect();
+    return {
+      top: rect.bottom + 4,
+      right: window.innerWidth - rect.right,
     };
-    updatePos();
+  }, []);
+
+  // 切换菜单：同步算位置（避免 effect 时序导致首次 render 不显示）
+  const toggleUserMenu = useCallback(() => {
+    setUserMenuOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        const pos = computeMenuPos();
+        if (pos) setUserMenuPos(pos);
+      } else {
+        setUserMenuPos(null);
+      }
+      return next;
+    });
+  }, [computeMenuPos]);
+
+  // 打开后：跟随 scroll / resize 实时更新位置
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const updatePos = () => {
+      const pos = computeMenuPos();
+      if (pos) setUserMenuPos(pos);
+    };
     window.addEventListener("scroll", updatePos, true);
     window.addEventListener("resize", updatePos);
     return () => {
       window.removeEventListener("scroll", updatePos, true);
       window.removeEventListener("resize", updatePos);
     };
-  }, [userMenuOpen]);
+  }, [userMenuOpen, computeMenuPos]);
 
   // SSR 守卫：portal 需要 document.body
   const [mounted, setMounted] = useState(false);
@@ -295,7 +311,9 @@ export default function TopBar() {
             <div ref={userMenuRef} className="relative">
               <button
                 ref={userButtonRef}
-                onClick={() => setUserMenuOpen((v) => !v)}
+                onClick={toggleUserMenu}
+                aria-haspopup="menu"
+                aria-expanded={userMenuOpen}
                 className="flex items-center gap-1.5 px-1.5 h-8 rounded hover:bg-surface-hover transition-colors"
               >
                 <div className="w-6 h-6 rounded-full bg-accent flex items-center justify-center text-white text-[11px] font-semibold">
