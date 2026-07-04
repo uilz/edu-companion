@@ -117,8 +117,13 @@ def delete_bank(bank_id, user_id):
     from app.infrastructure.db.database import get_db
     db = get_db()
     now = datetime.now().isoformat()
-    db.execute("UPDATE question_banks SET deleted_at = %s WHERE id = %s AND user_id = %s", (now, bank_id, user_id))
-    return db.fetchone("SELECT id FROM question_banks WHERE id = %s AND deleted_at IS NULL", (bank_id,)) is None
+    # 用 rowcount 判断是否真的有一条 row 被影响 (而非依赖后续 SELECT 的歧义)
+    rowcount = db.execute_with_rowcount(
+        "UPDATE question_banks SET deleted_at = %s "
+        "WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
+        (now, bank_id, user_id),
+    )
+    return rowcount > 0
 
 
 def resolve_bank_for_conversation(conv_id, user_id, user_specified_bank_id=None):
@@ -127,15 +132,36 @@ def resolve_bank_for_conversation(conv_id, user_id, user_specified_bank_id=None)
         return user_specified_bank_id
     from app.infrastructure.db.database import get_db
     db = get_db()
-    conv = db.fetchone("SELECT source_dir_id, source_branch_id FROM conversations WHERE id = %s", (conv_id,))
-    if conv and conv.get("source_branch_id"):
-        bank_id = f"bnk_{conv['source_branch_id']}"
-        _ensure_bank(db, bank_id, user_id, conv["source_branch_id"])
-        return bank_id
-    if conv and conv.get("source_dir_id"):
-        bank_id = f"bnk_{conv['source_dir_id']}"
-        _ensure_bank(db, bank_id, user_id, conv["source_dir_id"])
-        return bank_id
+    # conversations 表在 v5.0 中已合并到 conversation_user_meta.conversations JSONB;
+    # 旧 SQL 引用了不存在的 source_dir_id/source_branch_id 列, 这里改为
+    # 防御式查 conversation_user_meta.conversations JSONB, 容错回退到默认题库。
+    try:
+        row = db.fetchone(
+            "SELECT conversations FROM conversation_user_meta WHERE user_id = %s",
+            (user_id,),
+        )
+        if row:
+            import json as _json
+            convs = row.get("conversations") or {}
+            if isinstance(convs, str):
+                try:
+                    convs = _json.loads(convs)
+                except Exception:
+                    convs = {}
+            conv = convs.get(conv_id) if isinstance(convs, dict) else None
+            if isinstance(conv, dict):
+                branch = conv.get("source_branch_id") or conv.get("branch_id") or ""
+                directory = conv.get("source_dir_id") or conv.get("directory_id") or ""
+                if branch:
+                    bank_id = f"bnk_{branch}"
+                    _ensure_bank(db, bank_id, user_id, branch)
+                    return bank_id
+                if directory:
+                    bank_id = f"bnk_{directory}"
+                    _ensure_bank(db, bank_id, user_id, directory)
+                    return bank_id
+    except Exception:
+        pass
     default_id = f"bnk_{user_id}_default"
     _ensure_default_bank(db, default_id, user_id)
     return default_id

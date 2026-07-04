@@ -299,19 +299,30 @@ def _get_metacognition_feedback(confidence_before: int | None, is_correct: bool)
 
 @router.post("/submit")
 async def submit_answer(req: _SubmitAnswerRequest, user_id: str = Depends(current_user_id)):
-    """独立练习 — 提交单题答案"""
+    """独立练习 — 提交单题答案
+
+    路径: /api/practice/submit (与 /api/practice/sessions/{id}/submit 共用逻辑)
+    """
     from app.infrastructure.db.database import get_db
     from app.services.practice.practice_service import check_answer
-    from app.services.practice.engine import update_cognitive_after_practice, record_attempt
+    from app.services.practice.engine import update_cognitive_after_practice, record_attempt, publish_practice_events
+    from app.services.practice.practice_session import _get_metacognition_feedback
 
     db = get_db()
     row = db.fetchone("SELECT * FROM questions WHERE id = %s", (req.question_id,))
     if not row:
         raise HTTPException(status_code=404, detail="Question not found")
 
+    # 校验 session 归属 (跨用户提交防护)
+    if req.session_id:
+        from app.services.practice.session_repository import get_session
+        owner = get_session(db, req.session_id, user_id)
+        if not owner:
+            raise HTTPException(status_code=404, detail="Session not found or not owned by user")
+
     correct_answer = (row.get("answer") or "").strip()
     is_correct = check_answer(req.answer, correct_answer)
-    explanation = row.get("analysis", "")
+    explanation = row.get("analysis", "") or row.get("explanation", "")
     skill_id = row.get("skill_id", "")
 
     knowledge_update = None
@@ -339,6 +350,19 @@ async def submit_answer(req: _SubmitAnswerRequest, user_id: str = Depends(curren
         time_spent_seconds=req.time_spent_seconds,
         hints_used=req.hints_used,
         confidence_before=req.confidence_before,
+    )
+
+    # 发布领域事件 (SSOT = engine.publish_practice_events)
+    await publish_practice_events(
+        user_id=user_id,
+        session_id=req.session_id,
+        question_id=req.question_id,
+        question=dict(row) if not isinstance(row, dict) else row,
+        is_correct=is_correct,
+        user_answer=req.answer,
+        correct_answer=correct_answer,
+        time_spent_seconds=int(req.time_spent_seconds),
+        hints_used=req.hints_used,
     )
 
     return {
@@ -533,7 +557,7 @@ async def evaluate_self_explain(req: _SelfExplainRequest, user_id: str = Depends
 
 
 @router.get("/knowledge/state")
-async def get_knowledge_state():
+async def get_knowledge_state(user_id: str = Depends(current_user_id)):
     """获取统一知识状态"""
     from app.domain.knowledge import get_knowledge_query
-    return get_knowledge_query().get_all_skills_summary()
+    return get_knowledge_query().get_all_skills_summary(user_id)

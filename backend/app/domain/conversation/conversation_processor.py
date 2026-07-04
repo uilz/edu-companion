@@ -89,6 +89,8 @@ async def start_background_pipeline(
 
     调用方直接管理 StreamingResponse，同一请求内从 StreamBuffer.stream() 读取事件。
     """
+    # 清理上一次对话的缓冲区，避免旧事件回放导致消息重复
+    await stream_buffer.cleanup(conv_id)
     # 预创建缓冲区，确保 streaming 时 entry 已存在
     await stream_buffer.publish(conv_id, {"type": "stream_start"})
     await active_streams.mark_start(conv_id)
@@ -118,6 +120,15 @@ async def resume_background_pipeline(
         "tool_call_id": tool_result.tool_call_id,
         "content": f"用户回答了之前提出的问题：\n{tool_result.answers}",
     })
+
+    # 持久化用户答案到 question 工具块的 result_content.user_answer。
+    # 这样 PostProcessStage 持久化时，user_answer 会跟随 stream_content_blocks
+    # 一起写入 MessageNode.content_blocks，刷新页面后 QuestionBlock 仍能识别已作答状态。
+    _persist_user_answer_to_question_block(
+        state.ctx.stream_content_blocks,
+        tool_result.tool_call_id,
+        tool_result.answers,
+    )
 
     logger.info("Resuming suspended pipeline, conv=%s, round=%d", conv_id[:8], state._round)
 
@@ -279,3 +290,47 @@ async def _publish_reply_event(
         )
     except Exception:
         logger.debug("事件发布失败（fire-and-forget）", exc_info=True)
+
+
+def _persist_user_answer_to_question_block(
+    stream_blocks: list[dict],
+    tool_call_id: str,
+    answers: str,
+) -> None:
+    """将用户答案写入到对应的 question 工具块 result_content.user_answer 字段。
+
+    stream_blocks 形态：每个块是 dict，type="tool" 的块含 result_block_type/result_content。
+    ask_question 工具的 result_block_type="question"，result_content 含 type/questions/question/options/tool_call_id。
+
+    写入后，PostProcessStage 持久化 MessageNode.content_blocks 时，user_answer 会一并保存，
+    刷新页面后 QuestionBlock 组件读 result_content.user_answer 即可识别已作答状态。
+    """
+    if not stream_blocks or not tool_call_id:
+        return
+    for block in stream_blocks:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") != "tool":
+            continue
+        # 优先匹配 tool_call_id 字段（_append_tool_to_stream 写入的）
+        if block.get("tool_call_id") and block["tool_call_id"] != tool_call_id:
+            continue
+        if block.get("result_block_type") != "question":
+            continue
+        result_content = block.get("result_content")
+        if not isinstance(result_content, dict):
+            continue
+        # 二次校验：result_content.tool_call_id 才是 LLM 给的 tc["id"]
+        if result_content.get("tool_call_id") and result_content["tool_call_id"] != tool_call_id:
+            continue
+        result_content["user_answer"] = answers
+        result_content["answered_at"] = __import__("time").time()
+        logger.info(
+            "user_answer 持久化到 question 块: tool_call_id=%s, len=%d",
+            tool_call_id[:8], len(answers),
+        )
+        return
+    logger.warning(
+        "未找到匹配的 question 工具块: tool_call_id=%s, stream_blocks 数=%d",
+        tool_call_id[:8], len(stream_blocks),
+    )

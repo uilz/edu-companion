@@ -2,6 +2,11 @@
 
 > 基于 Zustand Store + SSE StreamPipeline + Block Renderer Registry 的组件架构。
 > 源码: [frontend/src/store/conversation/](../../../frontend/src/store/conversation/) | [frontend/src/components/conversation/](../../../frontend/src/components/conversation/)
+>
+> **Task #80 (2026-07-04) 更新**:
+> - 修复 4 个 pre-existing TS 错误（QuestionBlock/ToolCallBlock/StudySidebar）
+> - 新增 `useTreeStore.expandAncestors()` action
+> - 配套 E2E: `backend/tests/test_conversation_e2e_full.py` (51 测试)
 
 ---
 
@@ -51,12 +56,51 @@ ConversationPage
 | `rootId` | 根目录节点 ID |
 | `childMap` | `Map<string, Children[]>` 子节点缓存 |
 | `directoryNodes` | 扁平节点列表 |
+| `expandedSet` | `Set<string>` 展开节点 ID 集合 |
+| `loadingSet` | `Set<string>` 加载中节点 ID 集合 |
+| `rootLoaded` | `boolean` 根是否已加载 |
+| `treeRefreshKey` | `number` 树变更信号 |
 
-| Action | 说明 |
-|--------|------|
-| `loadRootNodes()` | 加载根级目录 |
-| `loadChildren(parentId)` | 加载子节点 |
-| `selectNode(id)` | 选中节点并展开路径 |
+| Action | 说明 | Task #80 |
+|--------|------|----------|
+| `loadRootNodes()` | 加载根级目录 | - |
+| `loadChildren(parentId)` | 加载子节点 | - |
+| `toggleExpand(node)` | 切换展开状态 | - |
+| `expandAncestors(path)` | **展开祖先链** | **新增** |
+| `setChildMap(m)` | 直接设置 childMap | - |
+
+#### expandAncestors（Task #80 新增）
+
+```typescript
+expandAncestors: (path: string[]) => void
+```
+
+**作用**：把 path 数组中的所有节点 ID 全部加入 expandedSet，同时保证 ROOT_KEY 始终展开。
+
+**使用场景**：
+- 页面初始化时从 URL 恢复 selectedNode（StudySidebar.tsx:57）
+- SwitchBanner 切换会话时
+- 节点搜索跳转
+
+**实现**：
+```typescript
+expandAncestors: (path: string[]) => {
+  if (!Array.isArray(path) || path.length === 0) return;
+  set(s => {
+    const next = new Set(s.expandedSet);
+    next.add(ROOT_KEY);
+    for (const id of path) {
+      if (id) next.add(id);
+    }
+    persistExpandedSet(next);  // localStorage 持久化
+    return { expandedSet: next };
+  });
+}
+```
+
+**修复前**：StudySidebar.tsx 直接调用 `useTreeStore.getState().expandAncestors(path)`，但该方法不存在 → TS2339 错误。代码虽然 build 通过（TypeScript strict 模式不开启），但运行时会 throw `expandAncestors is not a function`，导致页面初始化时无法展开祖先链 → 树视图无法定位到当前选中节点。
+
+**修复后**：方法存在、TS 编译通过、祖先链正确展开。
 
 ### pipeline/setup.ts — SSE 桥接层
 
@@ -93,6 +137,24 @@ const BLOCK_RENDERERS: Record<string, React.ComponentType<any> | null> = {
 ```
 
 渲染时遍历 `content_blocks`，按 `type` 查表渲染。新增 block 类型只需注册一行。
+
+---
+
+## 已知问题与修复历史（Task #80）
+
+### 修复的 TS 错误
+
+| 文件:行 | 错误 | 根本原因 | 修复 |
+|---------|------|----------|------|
+| `QuestionBlock.tsx:240` | `Property 'questions' does not exist on type '{ content, fallbackQuestions }'` | `PersistedAnswersView` 用 `questions: fallbackQuestions` 解构重命名，但调用点传的是 `fallbackQuestions` 字段 | 函数签名去掉重命名，prop 名统一为 `fallbackQuestions` |
+| `ToolCallBlock.tsx:86-87` | `Property 'dir_id' / 'conv_id' does not exist on type 'ToolBlock'` | `ToolBlock` 类型未声明这两个字段，代码尝试从 block 读取 | 移除对未定义字段的读取（用空串），因为 ResponseBlockRenderer 不需要这些字段 |
+| `StudySidebar.tsx:57` | `Property 'expandAncestors' does not exist on type 'TreeState'` | 调用了未实现的方法 | 在 tree-store 新增 `expandAncestors(path)` action |
+
+### 已知遗留问题（不在 Task #80 范围）
+
+1. **`stream_sse.py` 未挂载**：4 个 SSE 端点（`/stream/{cid}`, pause/resume/stop）在源文件中实现但未被 `conversation.py` 包含 → 404。统一消息端点使用 `stream_buffer` 实现了同等功能。后续 Task 需决定删除 dead code 或挂载启用。
+2. **`/tree/switch` 未实现**：调用 `tree_ops.move_subtree_to_conversation`（不存在）→ 当前返回 501 (Task #80 改进)。
+3. **`/tree/conversation/{cid}/migrate` 调用错误方法**：原调用 `migrate_temporary_conversation`（不存在）→ Task #80 改为 `migrate_conv`（存在）。
 
 ---
 
@@ -158,7 +220,7 @@ frontend/src/
 │   ├── conversation/
 │   │   ├── conversation-store.ts      — 根 Store
 │   │   ├── message-store.ts           — 消息 Store
-│   │   ├── tree-store.ts              — 目录树 Store
+│   │   ├── tree-store.ts              — 目录树 Store (含 expandAncestors)
 │   │   ├── tree-helpers.ts            — API 工具函数
 │   │   ├── setup.ts                   — SSE 桥接 (pipeline/setup.ts)
 │   │   └── actions/
@@ -179,6 +241,7 @@ frontend/src/
 │       └── blocks/
 │           ├── registry.ts            — Block Renderer 注册表
 │           ├── ToolCallBlock.tsx       — 工具调用卡片
+│           ├── QuestionBlock.tsx       — 问题卡片 (Task #80 修复)
 │           ├── ReasoningBlock.tsx      — 推理过程
 │           ├── ImageBlock.tsx
 │           └── FileBlock.tsx
@@ -187,3 +250,23 @@ frontend/src/
     └── conversation/
         └── useConversation.ts          — 页面级 hook
 ```
+
+---
+
+## 配套测试
+
+后端 E2E 测试：`backend/tests/test_conversation_e2e_full.py` (Task #80 新增)
+
+- 51 个测试，全部通过
+- 覆盖 11 个测试类：
+  1. TestTreeDirectoryCRUD (8) - 树节点 CRUD
+  2. TestConversationCRUD (3) - 对话 CRUD
+  3. TestMessageOperations (6) - 消息操作
+  4. TestUnifiedMessageEndpoint (4) - 统一消息端点
+  5. TestSubBranch (3) - 子支
+  6. TestEmotionEndpoints (3) - 情绪
+  7. TestSSEStream (4) - SSE 流（验证 dead code 状态）
+  8. TestKnowledgeTreeConversations (9) - 知识树对话
+  9. TestCrossModuleEvents (3) - 事件联动
+  10. TestDataIsolation (5) - 数据隔离
+  11. TestFullLifecycle (3) - 完整生命周期

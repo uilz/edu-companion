@@ -42,6 +42,33 @@ def _get_metacognition_feedback(confidence_before, is_correct: bool) -> str:
             return "还有提升空间，继续努力"
 
 
+async def _publish_practice_events(
+    *,
+    user_id: str,
+    session_id: str,
+    question_id: str,
+    question: dict,
+    is_correct: bool,
+    user_answer,
+    correct_answer,
+    time_spent_seconds: int,
+    hints_used: int,
+) -> None:
+    """发布练习答题领域事件 — 委托到 engine.publish_practice_events (SSOT 单一来源)"""
+    from app.services.practice.engine import publish_practice_events
+    await publish_practice_events(
+        user_id=user_id,
+        session_id=session_id,
+        question_id=question_id,
+        question=question,
+        is_correct=is_correct,
+        user_answer=user_answer,
+        correct_answer=correct_answer,
+        time_spent_seconds=time_spent_seconds,
+        hints_used=hints_used,
+    )
+
+
 def _session_to_dict(session) -> dict:
     """将 PracticeSession 转为前端 dict (兼容 API 响应)"""
     if session is None:
@@ -539,6 +566,10 @@ def submit_answer(
     db = get_db()
 
     # 1. 验证 (D9: 从 practice_attempts 检查是否已答)
+    #    先校验 session 归属当前 user (防止跨用户提交)
+    session = repo.get_session(db, session_id, user_id)
+    if not session:
+        return {"error": "会话不存在或不属于当前用户", "is_correct": False}
     sq = repo.get_session_question(db, session_id, question_id)
     if not sq:
         return {"error": "题目不属于该会话", "is_correct": False}
@@ -616,6 +647,42 @@ def submit_answer(
             )
     except Exception as e:
         logger.debug("认知节点同步失败: %s", e)
+
+    # 7. 发布领域事件 (SSOT: shared/events.py)
+    #   - AnswerSubmitted  → analytics/habit/knowledge 3 个订阅者
+    #   - ErrorRecorded    → knowledge/media 2 个订阅者
+    #   - PracticeSubmitted → cognitive service
+    # publish_practice_events 是 async; submit_answer 是 sync (FastAPI sync route);
+    # 用 asyncio 异步 fire-and-forget 让事件真正进入总线。
+    try:
+        import asyncio
+        from app.services.practice.engine import publish_practice_events
+        coro = publish_practice_events(
+            user_id=user_id,
+            session_id=session_id,
+            question_id=question_id,
+            question=dict(question) if question else {},
+            is_correct=is_correct,
+            user_answer=user_answer or [],
+            correct_answer=correct_answer,
+            time_spent_seconds=time_spent,
+            hints_used=hints_used,
+        )
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # FastAPI 已经在 event loop 中 → create_task
+                asyncio.ensure_future(coro)
+            else:
+                loop.run_until_complete(coro)
+        except RuntimeError:
+            # 无 event loop (线程上下文)
+            try:
+                asyncio.run(coro)
+            except Exception:
+                pass
+    except Exception as e:
+        logger.debug("Practice 事件发布失败: %s", e)
 
     return {
         "is_correct": is_correct,
@@ -730,6 +797,44 @@ def complete_session(session_id: str, user_id: str) -> Optional[dict]:
         complete_practice_conversation(session_id, user_id, stats)
     except Exception as e:
         logger.debug("练习对话完成失败: %s", e)
+
+    # 发布 SessionCompleted 事件 (SSOT: shared/events.py + engine.publish_session_completed)
+    #   订阅者: session_bridge.on_session_completed / planning_service / secretary / knowledge_tree
+    try:
+        from app.services.practice.engine import publish_session_completed
+        import asyncio
+        total = stats.get("total", 0) or 0
+        correct = stats.get("correct", 0) or 0
+        accuracy = (correct / total) if total > 0 else 0.0
+        # 时长 (秒→分钟)
+        duration_seconds = 0
+        if session.started_at and session.finished_at:
+            try:
+                start = datetime.fromisoformat(session.started_at)
+                end = datetime.fromisoformat(now)
+                duration_seconds = max(0, (end - start).total_seconds())
+            except Exception:
+                pass
+        coro = publish_session_completed(
+            user_id=user_id,
+            session_id=session_id,
+            total_questions=total,
+            correct_count=correct,
+            accuracy=accuracy,
+            duration_minutes=duration_seconds / 60.0,
+        )
+        # event_bus.publish 是 async; 在同步上下文用 asyncio.create_task
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(coro)
+            else:
+                loop.run_until_complete(coro)
+        except RuntimeError:
+            # 无 event loop (如线程上下文), 走 fire-and-forget
+            asyncio.run(coro)
+    except Exception as e:
+        logger.debug("SessionCompleted 事件发布失败: %s", e)
 
     return {
         "session_id": session.id,

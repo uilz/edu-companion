@@ -7,6 +7,7 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { Send, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { getChatStreamAPI } from "@/store/conversation/actions/send-message";
+import { useMessageStore } from "@/store/conversation/message-store";
 import MarkdownRenderer from "./MarkdownRenderer";
 
 interface QuestionItem {
@@ -17,6 +18,20 @@ interface QuestionItem {
 interface QuestionBlockProps {
   content: Record<string, unknown>;
   convId?: string;
+}
+
+/** 从 content 中提取已作答的答案列表。
+ *  content.user_answer 是字符串（前端提交的 answers），按下划线/换行等分隔成多题。
+ *  对多问题场景，前端提交时已用 "问题N：xxx" 格式拼接。
+ */
+function parseUserAnswer(content: Record<string, unknown>): string[] {
+  const raw = (content.user_answer as string) || "";
+  if (!raw) return [];
+  // 多题分隔："问题1：xxx\n问题2：yyy" 或单题 "xxx"
+  return raw
+    .split(/\n+/)
+    .map((line) => line.replace(/^问题\d+[：:]\s*/, "").trim())
+    .filter(Boolean);
 }
 
 // ──────────────── 提交工具结果（恢复挂起的管线） ────────────────
@@ -32,6 +47,35 @@ async function submitToolResult(
   // 方案A：不创建新的 assistant 占位消息。
   // 原 send() 的 streamingId 仍活跃，恢复后事件继续流入同一流式消息。
   await chatStream.submitToolResult(toolCallId, answers, convId);
+}
+
+/** 提交答案时立即把 user_answer 写入本地 store 中对应 tool 块的 result_content，
+ *  让 UI 立刻进入"已作答"模式，无需等 server 端 done 事件回传。
+ *  tool_call_id 同时匹配外层 tool_call_id 和 result_content.tool_call_id。
+ */
+function applyLocalUserAnswer(toolCallId: string, answerText: string) {
+  if (!toolCallId || !answerText) return;
+  const answeredAt = Date.now() / 1000;
+  useMessageStore.setState((state) => ({
+    messages: state.messages.map((msg) => ({
+      ...msg,
+      content_blocks: (msg.content_blocks || []).map((b: any) => {
+        if (b?.type !== "tool") return b;
+        const bTc = b.tool_call_id;
+        const rcTc = b.result_content?.tool_call_id;
+        if (bTc !== toolCallId && rcTc !== toolCallId) return b;
+        if (!b.result_content) return b;
+        return {
+          ...b,
+          result_content: {
+            ...b.result_content,
+            user_answer: answerText,
+            answered_at: answeredAt,
+          },
+        };
+      }),
+    })),
+  }));
 }
 
 // ──────────────── 选择题（多选交互） ────────────────
@@ -153,7 +197,7 @@ function OpenQuestion({
   );
 }
 
-// ──────────────── 只读摘要（提交后的浏览模式） ────────────────
+// ──────────────── 只读摘要（提交后的浏览模式 / 持久化还原） ────────────────
 
 function ReadOnlySummary({ questions, answers }: { questions: QuestionItem[]; answers: string[][]; }) {
   return (
@@ -169,13 +213,45 @@ function ReadOnlySummary({ questions, answers }: { questions: QuestionItem[]; an
             </ReactMarkdown>
           </span>
           <span className="text-[var(--color-text)]">—</span>
-          <span className="text-[var(--color-text)]">
-            {answers[i]?.length > 0 ? answers[i].join("、") : "未回答"}
+          <span className="text-[var(--color-text)] [&_.katex]:text-inherit">
+            {answers[i]?.length > 0
+              ? answers[i].map((a, ai) => (
+                  <ReactMarkdown
+                    key={ai}
+                    remarkPlugins={[remarkMath]}
+                    rehypePlugins={[rehypeKatex]}
+                    components={{ p: ({ children }) => <>{children}</> }}
+                  >
+                    {a}
+                  </ReactMarkdown>
+                ))
+              : "未回答"}
           </span>
         </div>
       ))}
     </div>
   );
+}
+
+/** 持久化的已作答视图：从 content.user_answer 解析答案并直接展示只读摘要。
+ *  适用于刷新页面后、或者从历史消息加载时的场景。
+ */
+function PersistedAnswersView({
+  content, fallbackQuestions,
+}: {
+  content: Record<string, unknown>;
+  fallbackQuestions: QuestionItem[];
+}) {
+  const multiQuestions = (content.questions as QuestionItem[] | undefined) || [];
+  const singleQuestion = (content.question as string) || "";
+  const questions: QuestionItem[] = multiQuestions.length > 0
+    ? multiQuestions
+    : (singleQuestion ? [{ question: singleQuestion, options: content.options as string[] | undefined }] : fallbackQuestions);
+  const flatAnswers = parseUserAnswer(content);
+  // 将扁平答案按题目数对齐
+  const answers: string[][] = questions.map((_, i) => flatAnswers[i] ? [flatAnswers[i]] : []);
+  if (questions.length === 0) return null;
+  return <ReadOnlySummary questions={questions} answers={answers} />;
 }
 
 // ──────────────── 单问题卡片（交互 + 只读两种状态） ────────────────
@@ -415,6 +491,15 @@ export default function QuestionBlock({ content, convId }: QuestionBlockProps) {
   const singleQuestion = (content.question as string) || "";
   const singleOptions = (content.options as string[]) || [];
   const toolCallId = (content.tool_call_id as string) || "";
+  const hasPersistedAnswer = !!(content.user_answer as string | undefined)?.length;
+
+  // 已持久化（后端写入 result_content.user_answer）→ 优先显示只读摘要
+  if (hasPersistedAnswer) {
+    const fallbackQuestions: QuestionItem[] = questions.length > 0
+      ? questions
+      : (singleQuestion ? [{ question: singleQuestion, options: singleOptions }] : []);
+    return <PersistedAnswersView content={content} fallbackQuestions={fallbackQuestions} />;
+  }
 
   const handleAnswer = useCallback((answerText: string) => {
     if (!toolCallId || !convId) {
@@ -425,8 +510,10 @@ export default function QuestionBlock({ content, convId }: QuestionBlockProps) {
       });
       return;
     }
+    // 立即在本地 store 写入 user_answer，UI 立刻进入"已作答"模式
+    applyLocalUserAnswer(toolCallId, answerText);
     submitToolResult(toolCallId, answerText, convId);
-  }, [toolCallId, convId]);
+  }, [toolCallId, convId, content]);
 
   if (questions.length > 0) {
     return <MultiQuestionGroup questions={questions} qType={qType} onAnswer={handleAnswer} />;

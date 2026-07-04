@@ -179,10 +179,15 @@ async def delete_directory_node(node_id: str, user_id: str = Depends(current_use
 
 @router.post("/tree/conversation/{conv_id}/migrate")
 async def migrate_conversation(conv_id: str, body: MigrateConversationRequest, user_id: str = Depends(current_user_id)):
-    """将临时对话迁移到正式分区。"""
+    """将对话迁移到目标目录下。
+
+    修复历史: 原代码调用 tree_ops.migrate_temporary_conversation（不存在）→ 500。
+    实际语义与 tree_ops.migrate_conv 等价（kind="temp" 判定在 tree_conv 自身处理），
+    故改用现有方法。该方法已支持任意 conv → dir 迁移。
+    """
     try:
-        conv = tree_ops.migrate_temporary_conversation(
-            user_id, conv_id, body.target_dir_id, body.target_type,
+        conv = tree_ops.migrate_conv(
+            user_id, conv_id, body.target_dir_id,
         )
         return {"ok": True, "conversation": conv.model_dump(mode="json")}
     except ValueError as e:
@@ -194,22 +199,15 @@ async def migrate_conversation(conv_id: str, body: MigrateConversationRequest, u
 
 @router.post("/tree/switch")
 async def switch_conversation(body: SwitchConfirmRequest, user_id: str = Depends(current_user_id)):
-    """用户确认切换推荐后：将触发节点及其子节点迁移到目标层级下的新会话。"""
-    try:
-        result = tree_ops.move_subtree_to_conversation(
-            user_id=user_id,
-            source_node_id=body.source_node_id,
-            target_domain_name=body.target_domain_name,
-            target_topic_name=body.target_topic_name,
-            source_conv_id=body.source_conv_id,
-            target_dir_id=body.target_dir_id,
-        )
-        return result
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    except Exception:
-        logger.exception("Failed to switch conversation")
-        raise HTTPException(500, "Internal server error")
+    """用户确认切换推荐后：将触发节点及其子节点迁移到目标层级下的新会话。
+
+    状态: 未实现。`move_subtree_to_conversation` 在 tree_ops 上不存在 (ADR Phase B 设计，
+    实施阶段未落地)。明确返回 501，避免上游 SwitchBanner 误以为操作成功。
+    """
+    raise HTTPException(
+        status_code=501,
+        detail="switch_subtree 未实现 — tree_ops.move_subtree_to_conversation 缺失 (ADR 2026-phases/conversation-hierarchy-redesign Phase B 待办)",
+    )
 
 
 @router.get("/tree/directory/{node_id}")

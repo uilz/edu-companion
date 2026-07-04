@@ -357,9 +357,29 @@ export function useChatStream() {
   );
 }
 
-// ══════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════
 //  Event handlers — 直接写 Zustand stores（替代 setup.ts）
-// ══════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════
+
+/**
+ * 启发式：切块时把上一个 streaming 的 reasoning 块翻成 done。
+ *
+ * 后端在 reasoning → text / reasoning → tool 切换时不会发"reasoning 结束"事件，
+ * 只有整条流 done 时才会一次性翻 done（见 _handleDone），导致用户视觉上看到上一个
+ * reasoning 块继续显示 spinner 与"思考中..."标签。
+ *
+ * 这里的启发式与后端的块顺序约定一致：流式阶段 reasoning 块永远只会被新 text/tool 块
+ * 切走，不会出现 reasoning → reasoning 的连续（同类型后端会合并）。当且仅当
+ * `lastBlock` 是 `status==="streaming"` 的 reasoning 时才翻 done。
+ */
+function _closeStreamingReasoning(blocks: Array<{ type: string; status?: string }>): typeof blocks {
+  if (blocks.length === 0) return blocks;
+  const last = blocks[blocks.length - 1];
+  if (last.type === "reasoning" && last.status === "streaming") {
+    return [...blocks.slice(0, -1), { ...last, status: "done" as const }];
+  }
+  return blocks;
+}
 
 function _handleToken(content: string) {
   useMessageStore.setState((state: { messages: MessageNode[]; streamingId: string | null }) => {
@@ -368,12 +388,14 @@ function _handleToken(content: string) {
     return {
       messages: state.messages.map((m) => {
         if (m.id !== sid) return m;
-        const existingBlocks = [...(m.content_blocks || [])];
+        let existingBlocks = [...(m.content_blocks || [])];
         const lastBlock = existingBlocks.length > 0 ? existingBlocks[existingBlocks.length - 1] : null;
 
         if (lastBlock && lastBlock.type === "text") {
           existingBlocks[existingBlocks.length - 1] = { ...lastBlock, text: lastBlock.text + content };
         } else {
+          // 切到新 text 块：若上一个是 streaming 的 reasoning，先翻成 done
+          existingBlocks = _closeStreamingReasoning(existingBlocks);
           existingBlocks.push({ type: "text" as const, text: content });
         }
 
@@ -406,11 +428,12 @@ function _handleToolCalls(data: { tool_calls: any[]; conv_id?: string }) {
     }));
 
     return {
-      messages: state.messages.map((msg) =>
-        msg.id === sid
-          ? { ...msg, content_blocks: [...(msg.content_blocks || []), ...toolBlocks] }
-          : msg,
-      ),
+      messages: state.messages.map((msg) => {
+        if (msg.id !== sid) return msg;
+        // 切到 tool 块：若上一个是 streaming 的 reasoning，先翻成 done
+        const closedBlocks = _closeStreamingReasoning(msg.content_blocks || []);
+        return { ...msg, content_blocks: [...closedBlocks, ...toolBlocks] };
+      }),
     };
   });
 }
@@ -561,7 +584,24 @@ function _handleDone(
               (b.status !== "pending" && b.status !== "running") ? b.status
               : serverBlock?.status === "error" ? "error"
               : "done";
-            if (serverBlock) return { ...serverBlock, status: finalStatus };
+            if (serverBlock) {
+              // 保留本地 user_answer/answered_at（server 端 response_blocks 来自
+              // 初始 tool_block.content，resume 时虽写入 stream_content_blocks，
+              // 但 ctx.response_blocks 未同步更新，server 不会回传 user_answer）
+              const localRc = b.result_content || {};
+              const preservedUserAnswer = localRc.user_answer;
+              const preservedAnsweredAt = localRc.answered_at;
+              return {
+                ...serverBlock,
+                status: finalStatus,
+                result_content: {
+                  ...(serverBlock.result_content || {}),
+                  ...(preservedUserAnswer
+                    ? { user_answer: preservedUserAnswer, answered_at: preservedAnsweredAt }
+                    : {}),
+                },
+              };
+            }
             return { ...b, status: finalStatus };
           }
           if (b.type === "reasoning") {

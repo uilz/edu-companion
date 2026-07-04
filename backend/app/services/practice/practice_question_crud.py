@@ -103,11 +103,13 @@ def toggle_slash(question_id, user_id):
 def batch_import_questions(bank_id, user_id, questions):
     saved = []
     for q in questions:
+        # add_question 接受 analysis (不是 explanation)
         saved.append(add_question(
             bank_id=bank_id, user_id=user_id,
             question_type=q.get("question_type", "single"),
             stem=q.get("stem", ""), answer=q.get("answer", []),
-            options=q.get("options"), explanation=q.get("explanation", "") or q.get("analysis", ""),
+            options=q.get("options"),
+            analysis=q.get("analysis", "") or q.get("explanation", ""),
             difficulty=q.get("difficulty", 3),
             cognitive_node_ids=q.get("cognitive_node_ids"),
             source=q.get("source", "import"),

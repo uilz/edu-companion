@@ -233,12 +233,24 @@ export default function MessageList({
   const [scrollDir, setScrollDir] = useState<"up" | "down">("up");
   const lastScrollTopRef = useRef(0);
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 兼容旧字段：标记用户是否已离开底部足够远
   const userAwayFromBottom = useRef(false);
   const hoverOnButtonRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
   const isAutoScrollingRef = useRef(false);
   const scrollEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastMsgsLengthRef = useRef(0);
+  // ── 自动跟随状态机 ──
+  // autoFollow = 是否"跟随底部"。true 时新消息/流式 token 自动滚动到底部。
+  // 进入条件：scrollTop 距离底部 ≤ AUTO_FOLLOW_THRESHOLD（50px）
+  // 退出条件：用户主动向上滚动（滚轮向上 / scrollTop 减小）且已离开底部
+  // 重新进入：滚回底部 / 点击"滚到底部"按钮 / 发送新消息
+  const AUTO_FOLLOW_THRESHOLD = 50;
+  const autoFollowRef = useRef(true);
+  // 用于在自动滚动动画期间忽略 scroll 事件对 autoFollow 的反向更新
+  const autoScrollOriginRef = useRef<"user" | "program" | null>(null);
+  const lastWheelDeltaYRef = useRef(0);
+  const lastWheelTsRef = useRef(0);
   const streamingId = useMessageStore((s) => s.streamingId);
   const [editedTexts, setEditedTexts] = useState<EditedMap>({});
   const [subBranchData, setSubBranchData] = useState<Record<string, SubBranchInfo[]>>({});
@@ -470,7 +482,7 @@ export default function MessageList({
     return () => ro.disconnect();
   }, [breadcrumb]);
 
-  // Auto-scroll（首次加载遵循用户设置，后续消息始终自动滚动到底部）
+  // Auto-scroll on load（尊重用户设置）+ 后续由 autoFollow 状态机接管
   const [autoScrollOnLoad, setAutoScrollOnLoad] = useState(true);
   useEffect(() => {
     try {
@@ -483,29 +495,38 @@ export default function MessageList({
   }, []);
 
   useEffect(() => {
-    if (!bottomRef.current) return;
+    if (!bottomRef.current || !containerRef.current) return;
 
     // 首次加载：等消息真正加载完成后再决策
     if (!initialLoadDoneRef.current) {
       if (messages.length === 0) return;
       initialLoadDoneRef.current = true;
       if (!autoScrollOnLoad) {
-        containerRef.current?.scrollTo({ top: 0 });
+        containerRef.current.scrollTo({ top: 0 });
+        autoFollowRef.current = false;
         return;
       }
+      // 用户开启了"加载时滚动到底部"→ 执行原逻辑 + 启用 autoFollow
+      autoScrollOriginRef.current = "program";
+      isAutoScrollingRef.current = true;
+      bottomRef.current.scrollIntoView({ behavior: "smooth" });
+      autoFollowRef.current = true;
+      return;
     }
 
-    // 后续：仅在长度变化（新消息）或流式输出时自动滚动
-    // 内容懒加载（text_summary 变但长度不变）不触发自动滚动
+    // 后续：仅在新消息或流式输出时触发自动滚动
+    // 懒加载（text_summary 变但长度不变）不触发
     const isNewMessage = messages.length > lastMsgsLengthRef.current;
     const isStreaming = !!streamingId;
     if (!isNewMessage && !isStreaming) return;
     lastMsgsLengthRef.current = messages.length;
 
-    if (!userAwayFromBottom.current) {
-      isAutoScrollingRef.current = true;
-      bottomRef.current.scrollIntoView({ behavior: "smooth" });
-    }
+    // autoFollow 为 false → 尊重用户已上滑的意图，不自动滚动
+    if (!autoFollowRef.current) return;
+
+    autoScrollOriginRef.current = "program";
+    isAutoScrollingRef.current = true;
+    bottomRef.current.scrollIntoView({ behavior: "smooth" });
   }, [messages.length, streamingId, autoScrollOnLoad]);
 
   // 组件卸载时清理定时器
@@ -535,7 +556,28 @@ export default function MessageList({
     if (!containerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    const isAtBottom = distanceFromBottom <= AUTO_FOLLOW_THRESHOLD;
 
+    // ── autoFollow 状态机更新 ──
+    // 由程序触发的滚动不修改 autoFollow（避免动画过程中的反弹取消）
+    const isProgramScroll = autoScrollOriginRef.current === "program";
+    if (isProgramScroll) {
+      // 程序滚动：保持 autoFollow 状态，只在到达底部时确保为 true
+      if (isAtBottom) autoFollowRef.current = true;
+    } else {
+      // 用户滚动：根据位置切换 autoFollow
+      if (isAtBottom) {
+        // 滚到或接近底部 → 进入跟随模式
+        autoFollowRef.current = true;
+      } else if (scrollTop < lastScrollTopRef.current) {
+        // 真正向上滚（scrollTop 减小）且已离开底部 → 退出跟随
+        autoFollowRef.current = false;
+      }
+      // scrollTop 增大但在中间 → 保持当前状态（可能是用户手动下滚查看历史）
+    }
+    lastScrollTopRef.current = scrollTop;
+
+    // 兼容旧字段
     userAwayFromBottom.current = distanceFromBottom > 300;
 
     // 检测自动滚动是否结束（200ms 无新 scroll 事件视为结束）
@@ -543,21 +585,19 @@ export default function MessageList({
       if (scrollEndTimerRef.current) clearTimeout(scrollEndTimerRef.current);
       scrollEndTimerRef.current = setTimeout(() => {
         isAutoScrollingRef.current = false;
+        autoScrollOriginRef.current = null;
       }, 200);
     }
 
     // 在两端尽头时不显示按钮
     const atTop = scrollTop <= 50;
-    const atBottom = distanceFromBottom <= 50;
-    if (atTop || atBottom) {
+    if (atTop || isAtBottom) {
       setShowScrollButton(false);
       return;
     }
 
     // 判断实际滚动方向
     const scrollingDown = scrollTop > lastScrollTopRef.current;
-    lastScrollTopRef.current = scrollTop;
-
     scrollDirRef.current = scrollingDown ? "down" : "up";
     setScrollDir(scrollingDown ? "down" : "up");
     setShowScrollButton(true);
@@ -565,6 +605,58 @@ export default function MessageList({
     // 滚动时重置自动隐藏计时器
     startHideTimer();
   }, [startHideTimer]);
+
+  // ── 滚轮事件：单独追踪以识别"用户主动向上滑"意图 ──
+  // scroll 事件在程序触发的 smooth scroll 期间也会触发，
+  // 单独监听 wheel 可以更精准地标记用户意图
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      // 滚轮向上（deltaY < 0）→ 标记为用户主动上滑
+      if (e.deltaY < -1) {
+        autoScrollOriginRef.current = "user";
+        const distanceFromBottom =
+          el.scrollHeight - el.scrollTop - el.clientHeight;
+        if (distanceFromBottom > AUTO_FOLLOW_THRESHOLD) {
+          autoFollowRef.current = false;
+        }
+      }
+    };
+    el.addEventListener("wheel", onWheel, { passive: true });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // ── 触摸滑动：移动端上下拖动也应退出 autoFollow ──
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    let lastTouchY = 0;
+    const onTouchStart = (e: TouchEvent) => {
+      lastTouchY = e.touches[0]?.clientY ?? 0;
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      const y = e.touches[0]?.clientY ?? 0;
+      const dy = y - lastTouchY;
+      lastTouchY = y;
+      // 向下拖（手指向上滑 → 视图向下滑）→ dy > 0 实际是向上滚内容
+      // 这里 dy > 0 表示手指从下往上 → 视图内容向上滚 → 用户在看历史
+      if (dy > 1) {
+        autoScrollOriginRef.current = "user";
+        const distanceFromBottom =
+          el.scrollHeight - el.scrollTop - el.clientHeight;
+        if (distanceFromBottom > AUTO_FOLLOW_THRESHOLD) {
+          autoFollowRef.current = false;
+        }
+      }
+    };
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+    };
+  }, []);
 
   // ── 版本感知显示 ──
   // 版本组信息从 outlines 推导（outlines 包含全版本，messages 已被 tip 过滤）
@@ -1017,10 +1109,16 @@ export default function MessageList({
         }}
         onClick={() => {
           if (scrollDirRef.current === "up") {
+            // 向上滚到顶部 → 退出 autoFollow
+            autoScrollOriginRef.current = "program";
             isAutoScrollingRef.current = true;
+            autoFollowRef.current = false;
             containerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
           } else {
+            // 向下滚到底部 → 启用 autoFollow
+            autoScrollOriginRef.current = "program";
             isAutoScrollingRef.current = true;
+            autoFollowRef.current = true;
             bottomRef.current?.scrollIntoView({ behavior: "smooth" });
             userAwayFromBottom.current = false;
           }

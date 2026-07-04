@@ -331,6 +331,7 @@ class ToolLoopStage:
 
         while True:
             tool_calls = None
+            current_reasoning = ""  # 本轮 LLM 返回的 reasoning_content
             try:
                 async for ev in llm_service.generate_stream_with_tools(
                     messages=llm_messages, task_type="chat",
@@ -342,8 +343,13 @@ class ToolLoopStage:
                         yield ReplyEvent(type="token", content=ev["content"])
                         _append_block(ctx.stream_content_blocks, {"type": "text", "text": ev["content"]})
                     elif ev["type"] == "reasoning":
+                        current_reasoning += ev["content"]
                         yield ReplyEvent(type="reasoning", content=ev["content"])
                         _append_block(ctx.stream_content_blocks, {"type": "reasoning", "text": ev["content"], "status": "streaming"})
+                    elif ev["type"] == "done":
+                        # 流结束：以最后累计的 reasoning_content 为准（覆盖增量拼接的片段）
+                        if ev.get("reasoning_content"):
+                            current_reasoning = ev["reasoning_content"]
                     elif ev["type"] == "tool_calls":
                         tool_calls = ev["tool_calls"]
             except Exception as e:
@@ -379,9 +385,11 @@ class ToolLoopStage:
 
             # ── 处理非 ask_question 的工具（正常执行）──
             if other_tcs:
+                # deepseek 思考模式：含 tool_calls 的 assistant 消息必须附带本轮 reasoning_content
                 llm_messages.append({
                     "role": "assistant", "content": None,
                     "tool_calls": other_tcs,
+                    "reasoning_content": current_reasoning or None,
                 })
                 for tc in other_tcs:
                     yield ReplyEvent(
@@ -460,9 +468,11 @@ class ToolLoopStage:
                     _append_tool_to_stream(ctx.stream_content_blocks, tool_block, tool_name, TOOL_DISPLAY_NAMES)
 
                 # 只追加 assistant(tool_calls)，不追加 tool result → 挂起等待用户
+                # deepseek 思考模式：必须附带本轮 reasoning_content，否则 resume 时 API 拒绝
                 llm_messages.append({
                     "role": "assistant", "content": ctx.full_reply or None,
                     "tool_calls": [tc],
+                    "reasoning_content": current_reasoning or None,
                 })
 
                 _suspend_loop(ctx.conv_id, _SuspendedLoopState(
@@ -501,6 +511,10 @@ class PostProcessStage:
         for b in ctx.stream_content_blocks:
             if b.get("type") == "reasoning" and b.get("status") == "streaming":
                 b["status"] = "done"
+
+        # 把 user_answer 从 stream_content_blocks 同步到 response_blocks，
+        # 让 DoneStage 发送给前端的 response_blocks 也携带 user_answer。
+        _sync_user_answer_to_response_blocks(ctx.response_blocks, ctx.stream_content_blocks)
 
         ctx.assistant_node = tree_ops.add_message(
             ctx.user_id, ctx.dir_id, "assistant",
@@ -579,6 +593,38 @@ def _append_block(blocks: list, block: dict) -> None:
             blocks[-1]["text"] += block.get("text", "")
         return
     blocks.append(block)
+
+
+def _sync_user_answer_to_response_blocks(response_blocks: list, stream_blocks: list) -> None:
+    """将 stream_content_blocks 中已写入的 user_answer 同步到 ctx.response_blocks。
+    两者形态不同：response_blocks 是 Pydantic ResponseBlock 列表（含 type="question"），
+    stream_blocks 是 dict 列表（type="tool"，result_content 含 question 数据）。
+    同步后 DoneStage 回传给前端的 response_blocks 才会包含 user_answer。
+    """
+    if not response_blocks or not stream_blocks:
+        return
+    for rb in response_blocks:
+        rc = getattr(rb, "content", None)
+        if not isinstance(rc, dict):
+            continue
+        rb_tool_call_id = rc.get("tool_call_id")
+        if not rb_tool_call_id:
+            continue
+        for sb in stream_blocks:
+            if not isinstance(sb, dict):
+                continue
+            sb_rc = sb.get("result_content")
+            if not isinstance(sb_rc, dict):
+                continue
+            if sb.get("tool_call_id") and sb["tool_call_id"] != rb_tool_call_id:
+                continue
+            if sb_rc.get("tool_call_id") and sb_rc["tool_call_id"] != rb_tool_call_id:
+                continue
+            if sb_rc.get("user_answer"):
+                rc["user_answer"] = sb_rc["user_answer"]
+                if sb_rc.get("answered_at"):
+                    rc["answered_at"] = sb_rc["answered_at"]
+            break
 
 
 def _build_tool_call_display(tc: dict, round_num: int, display_names: dict) -> dict:

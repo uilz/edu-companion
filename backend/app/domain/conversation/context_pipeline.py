@@ -17,6 +17,7 @@ from app.schemas.conversation import (
     Conversation,
     TreeNode,
     TextBlock,
+    ReasoningBlock,
 )
 
 logger = logging.getLogger(__name__)
@@ -758,20 +759,36 @@ async def build_llm_messages(
         if msg.is_deleted:
             continue
         text_parts = []
+        reasoning_parts: list[str] = []
         for block in msg.content_blocks:
             if isinstance(block, dict):
-                if block.get("type") == "text":
+                btype = block.get("type")
+                if btype == "text":
                     text_parts.append(block.get("text", ""))
+                elif btype == "reasoning":
+                    t = block.get("text", "")
+                    if t:
+                        reasoning_parts.append(t)
             elif isinstance(block, TextBlock):
                 text_parts.append(block.text)
-            elif hasattr(block, "text"):
+            elif isinstance(block, ReasoningBlock) and block.text:
+                reasoning_parts.append(block.text)
+            elif hasattr(block, "text") and not isinstance(block, (TextBlock, ReasoningBlock)):
                 text_parts.append(block.text)
         content = "\n".join(text_parts) if text_parts else ""
-        if content.strip():
-            messages.append({
-                "role": msg.role,
-                "content": content,
-            })
+        if not content.strip():
+            # assistant 消息仅含 reasoning（推理模型溢出）时也要回传
+            if msg.role != "assistant" or not reasoning_parts:
+                continue
+        # deepseek 思考模式：assistant 消息若有 reasoning_content 必须传回 API
+        reasoning_content = "\n".join(reasoning_parts) if reasoning_parts else None
+        msg_dict: dict = {
+            "role": msg.role,
+            "content": content or None,
+        }
+        if reasoning_content and msg.role == "assistant":
+            msg_dict["reasoning_content"] = reasoning_content
+        messages.append(msg_dict)
 
     # 追加当前用户消息
     messages.append({"role": "user", "content": user_text})

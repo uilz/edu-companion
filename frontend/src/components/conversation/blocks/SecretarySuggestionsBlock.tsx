@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Bell, Check, Clock, X } from "lucide-react";
-import { useCurrentUserId } from "@/hooks/useCurrentUserId";
+import { useAuth } from "@/contexts/AuthContext";
 import { authedFetch } from "@/lib/api/api";
 
 interface SecretaryProposal {
@@ -63,7 +63,7 @@ export default function SecretarySuggestionsBlock({
 }
 
 function ProposalCard({ proposal }: { proposal: SecretaryProposal }) {
-  const userId = useCurrentUserId();
+  const { user } = useAuth();
   const [dismissed, setDismissed] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -71,10 +71,10 @@ function ProposalCard({ proposal }: { proposal: SecretaryProposal }) {
   if (dismissed || accepted) return null;
 
   const handleAccept = async () => {
-    if (!userId) return;
+    if (!user) return;
     setLoading(true);
     try {
-      const res = await authedFetch(`/api/secretary/proposals/${proposal.id}/accept?user_id=${userId}`,
+      const res = await authedFetch(`/api/secretary/proposals/${proposal.id}/accept?user_id=${user.id}`,
         { method: "POST" }
       );
       if (res.ok) {
@@ -86,10 +86,10 @@ function ProposalCard({ proposal }: { proposal: SecretaryProposal }) {
   };
 
   const handleDismiss = async () => {
-    if (!userId) return;
+    if (!user) return;
     setLoading(true);
     try {
-      const res = await authedFetch(`/api/secretary/proposals/${proposal.id}/dismiss?user_id=${userId}`,
+      const res = await authedFetch(`/api/secretary/proposals/${proposal.id}/dismiss?user_id=${user.id}`,
         { method: "POST" }
       );
       if (res.ok) {

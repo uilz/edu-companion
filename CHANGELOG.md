@@ -4,6 +4,113 @@
 
 ---
 
+## [8.4.4] - 2026-07-04
+
+### 💬 对话（Conversation）模块全面优化 (Task #80)
+
+> 对话模块后端路由、领域服务、前端组件、状态管理、E2E 测试全链路优化，修复 4 个 TS 错误 + 2 个后端 500 错误。
+
+#### 后端 — 修复 2 个 P0 500 错误
+
+| 端点 | 错误 | 修复 |
+|------|------|------|
+| `POST /tree/conversation/{conv_id}/migrate` | 调用 `migrate_temporary_conversation`（不存在）→ 500 | 改用 `tree_ops.migrate_conv`（等价语义） |
+| `POST /tree/switch` | 调用 `move_subtree_to_conversation`（不存在）→ 500 | 明确返回 `501 Not Implemented`（Phase B 待办） |
+
+#### 前端 — 修复 4 个 TS 错误
+
+| 文件 | 错误 | 修复 |
+|------|------|------|
+| `QuestionBlock.tsx:240` | `Property 'questions' does not exist` | 修正 `PersistedAnswersView` 函数签名，统一 prop 名 `fallbackQuestions` |
+| `ToolCallBlock.tsx:86-87` | `Property 'dir_id' / 'conv_id' does not exist` | 移除对未定义字段的读取，用空串代替 |
+| `StudySidebar.tsx:57` | `Property 'expandAncestors' does not exist` | 在 `tree-store` 新增 `expandAncestors` action，展开节点的祖先链 |
+
+#### 前端 — 新增 `expandAncestors` Store Action
+
+| 变更 | 文件 | 说明 |
+|------|------|------|
+| 新增 `expandAncestors(path)` | `frontend/src/store/conversation/tree-store.ts` | 根据祖先链路径批量展开节点，初始化时自动展开从根到当前节点的路径 |
+| 配套 `persistExpandedSet` | `tree-store.ts` | 同步持久化展开状态 |
+
+#### 新增 E2E 测试
+
+- `backend/tests/test_conversation_e2e_full.py`：**51 个测试用例**
+- 覆盖：树节点 CRUD、对话 CRUD、消息操作、工具结果/流控制、子支、情绪、SSE 流、知识树对话、AssistantReplied 事件、SessionCompleted 事件、跨用户数据隔离、ETag 缓存、错误码（400/401/404/422）
+
+#### 文档
+
+- 新增 `docs/temp/task-80-conversation-audit.md`：摸底数据、修复计划、测试计划、验收结果
+- 更新 `docs/modules/conversation-system/frontend-design.md`：新增 `expandAncestors` 方法文档、修复历史和配套测试章节
+
+#### 验证
+
+| 项目 | 结果 |
+|------|------|
+| `tests/test_conversation_e2e_full.py` | 51 passed in 8.45s |
+| TS 错误 | 4/4 修复 |
+| 后端 500 错误 | 2/2 修复（一个改为 501） |
+| 端点不变 | 44 个对话相关端点结构未变 |
+
+---
+
+## [8.4.3] - 2026-07-04
+
+### 🎨 Professional 风格 Design Token 应用 + Cockpit 视觉精修 (Task #79)
+
+> Cockpit 视觉从"可用"升级为"专业 Linear/Notion 风格"，统一套用 design-language.md 规范。
+
+#### 前端 — Design Token 调整
+
+| 变更 | 文件 | 说明 |
+|------|------|------|
+| professional+light 颜色 slate 化 | `app/globals.css` | `--color-page` #fbfaf7→#fff、`--color-ink-primary` #1c1917→#171717、`--color-divider` #e7e3de→#e5e5e5 |
+| professional+dark 去暖色 | `app/globals.css` | `--color-page` #1a1816→#0a0a0a、`--color-surface` #2a2826→#141414 |
+| 圆角覆盖 | `app/globals.css` | `--radius-md` 10→8px、`--radius-lg` 14→12px（符合 professional 设计语言） |
+| 阴影调整 | `app/globals.css` | `--shadow-sm` 0 1px 3px / .06→0 1px 2px / .04，`--shadow-md` 0 4px 16px / .08→0 4px 12px / .06 |
+| 间距覆盖 | `app/globals.css` | `--space-3/4/5` 12/16/24→10/14/20px |
+| Inter 字体强化 | `app/globals.css` | Google Fonts 引入 Inter 400-700 权重 |
+| 新增工具类 | `app/globals.css` | `.cockpit-card`（阴影+hover）、`.cockpit-data-card`、`.tabular`、`.skeleton-block` |
+
+#### 前端 — Cockpit 视觉精修
+
+| 变更 | 文件 | 说明 |
+|------|------|------|
+| 卡片统一阴影 | `Cockpit.tsx` | 应用 `cockpit-card` 类，shadow-sm + hover translateY(-1px) + 阴影加深 |
+| 焦点区强调 | `Cockpit.tsx` | 左侧 3px 蓝边 + shadow-sm |
+| 数字 22→28px | `Cockpit.tsx` | 强化统计数字的视觉权重 |
+| 数字 tabular 强化 | `Cockpit.tsx` | 改用 `.tabular` 工具类（tnum font-feature） |
+| 加载态 skeleton | `Cockpit.tsx` | 新增 `CockpitSkeleton` 组件，4 块 shimmer 占位 |
+| 空态图标 | `Cockpit.tsx` | 新增 `EmptyHint` 组件（icon-in-rounded-square + 引导文字） |
+| Primary 按钮升级 | `Cockpit.tsx` | 12px h-8→13px h-9 + shadow-sm + active scale |
+| 时长文案 11→12-13px | `Cockpit.tsx` | 提升可读性 |
+| 标题 20→22px semibold | `Cockpit.tsx` | tracking-tight 强化标题层级 |
+
+#### 前端 — AppShell 外壳统一
+
+| 变更 | 文件 | 说明 |
+|------|------|------|
+| 平板 header 半透明 | `AppShell.tsx` | `bg-page/95 backdrop-blur` 强化层次感 |
+| 按钮 rounded-md | `AppShell.tsx` | 与 cockpit-card 一致 |
+
+#### 验证
+
+| 项目 | 结果 |
+|------|------|
+| Design Token 套用 | 16/16 通过 |
+| 数字 tabular-nums | ✅ |
+| 数字 28px | ✅ |
+| 卡片 12px 圆角 + shadow-sm | ✅ |
+| console error | 0 |
+| 1240 pytest passed | ✅（与 1236 baseline 一致） |
+| API endpoints | 未改后端 |
+
+#### 截图
+
+- `screenshots/task79/before-cockpit-desktop.png` vs `after-cockpit-desktop.png`
+- `screenshots/task79/before-cockpit-mobile.png` vs `after-cockpit-mobile.png`
+
+---
+
 ## [8.4.2] - 2026-06-16
 
 ### 🛠️ 练习系统体验修复 + 组卷功能

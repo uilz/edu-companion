@@ -165,6 +165,14 @@ def get_exam_time(session_id: str, user_id: str) -> dict:
         return {"valid": True, "remaining_seconds": 99999, "status": "active"}
 
     now = datetime.now()
+    # DB TIMESTAMPTZ 字段读出可能带 tzinfo, 而 datetime.now() 是 naive;
+    # 需要 tzinfo 对齐才能相减。
+    if hasattr(deadline, "tzinfo") and deadline.tzinfo is not None and now.tzinfo is None:
+        from datetime import timezone
+        now = now.replace(tzinfo=timezone.utc)
+    elif hasattr(deadline, "tzinfo") and deadline.tzinfo is None and now.tzinfo is not None:
+        from datetime import timezone
+        deadline = deadline.replace(tzinfo=timezone.utc)
     remaining = (deadline - now).total_seconds()
 
     if remaining <= 0:
@@ -178,11 +186,20 @@ def get_exam_time(session_id: str, user_id: str) -> dict:
             "message": "考试时间到，已自动交卷",
         }
 
+    # 同样处理 started_at 的 tzinfo
+    started_at_raw = session["started_at"].isoformat() if hasattr(session["started_at"], 'isoformat') else session["started_at"]
+    started_at_dt = datetime.fromisoformat(started_at_raw)
+    if hasattr(started_at_dt, "tzinfo") and started_at_dt.tzinfo is not None and now.tzinfo is None:
+        from datetime import timezone
+        now_aware = now.replace(tzinfo=timezone.utc)
+    else:
+        now_aware = now
+    elapsed = (now_aware - started_at_dt).total_seconds()
     return {
         "valid": True,
         "status": "active",
         "remaining_seconds": int(remaining),
-        "elapsed_seconds": int((now - datetime.fromisoformat(session["started_at"].isoformat() if hasattr(session["started_at"], 'isoformat') else session["started_at"])).total_seconds()),
+        "elapsed_seconds": int(elapsed),
         "deadline": deadline_str,
         "auto_submitted": False,
     }

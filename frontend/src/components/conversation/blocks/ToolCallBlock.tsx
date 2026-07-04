@@ -83,8 +83,8 @@ export default function ToolCallBlock({ block }: ToolCallBlockProps) {
                 block={{
                   id: block.tool_call_id,
                   message_id: "",
-                  dir_id: block.dir_id || "",
-                  conv_id: block.conv_id || "",
+                  dir_id: "",
+                  conv_id: "",
                   type: block.result_block_type as ResponseBlock["type"],
                   status: "ready",
                   content: block.result_content || {},

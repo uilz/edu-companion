@@ -22,6 +22,51 @@ class TreeDirectoryMixin:
     """DirectoryNode 层级 CRUD — 取代旧的 Partition/Domain/Topic/Conversation 四层模型"""
 
     ROOT_NAME = "我的知识库"
+    TEMP_NAME = "💬 临时"
+
+    # ── 内部辅助 ──
+
+    def _find_root(self, data: UserData) -> DirectoryNode | None:
+        """查找顶级根目录（parent_id 为 None 的 dir 节点）。"""
+        for dn in data.directory_nodes.values():
+            if dn.node_type == "dir" and dn.parent_id is None:
+                return dn
+        return None
+
+    def _ensure_root(self, user_id: str, data: UserData) -> DirectoryNode:
+        """确保根目录存在，存在则直接返回，不存在则创建。"""
+        existing = self._find_root(data)
+        if existing is not None:
+            return existing
+        root = DirectoryNode(
+            user_id=user_id,
+            parent_id=None,
+            node_type="dir",
+            kind="general",
+            name=self.ROOT_NAME,
+        )
+        data.directory_nodes[root.id] = root
+        get_data_repo().save(user_id, data)
+        return root
+
+    def _ensure_temp_dir(self, user_id: str, data: UserData) -> DirectoryNode:
+        """确保临时目录存在（懒创建，挂在根目录下）。"""
+        for dn in data.directory_nodes.values():
+            if dn.node_type == "dir" and dn.kind == "temp":
+                return dn
+        root = self._ensure_root(user_id, data)
+        temp = DirectoryNode(
+            user_id=user_id,
+            parent_id=root.id,
+            node_type="dir",
+            kind="temp",
+            name=self.TEMP_NAME,
+            path=root.path + [root.id],
+        )
+        data.directory_nodes[temp.id] = temp
+        root.add_child(temp.id)
+        get_data_repo().save(user_id, data)
+        return temp
 
     # ── 创建节点 ──
 
@@ -139,11 +184,13 @@ class TreeDirectoryMixin:
     # ── 重命名 ──
 
     def rename_node(self, user_id: str, node_id: str, name: str) -> DirectoryNode:
-        """重命名节点。"""
+        """重命名节点。临时节点不可重命名。"""
         data = get_data_repo().load(user_id)
         node = data.directory_nodes.get(node_id)
         if not node:
             raise ValueError(f"节点 {node_id} 不存在")
+        if node.kind == "temp":
+            raise ValueError("临时节点不可重命名")
         node.user_name = name
         node.updated_at = time.time()
         get_data_repo().save(user_id, data)

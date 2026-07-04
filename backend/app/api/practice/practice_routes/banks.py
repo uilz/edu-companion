@@ -46,6 +46,24 @@ async def api_create_bank(body: dict, user_id: str = Depends(current_user_id)):
     )
 
 
+@router.get("/banks/search")
+async def api_search_banks(
+    keyword: str = Query("", description="搜索关键词"),
+    user_id: str = Depends(current_user_id),
+):
+    """按名称/描述搜索题库"""
+    _ensure_tables()
+    banks = list_banks(user_id)
+    if keyword:
+        kw = keyword.lower()
+        banks = [
+            b for b in banks
+            if kw in (b.get("name") or "").lower()
+            or kw in (b.get("description") or "").lower()
+        ]
+    return {"total": len(banks), "items": banks}
+
+
 @router.get("/banks/{bank_id}")
 async def api_get_bank(
     bank_id: str,
@@ -99,24 +117,6 @@ async def api_update_bank(bank_id: str, body: dict, user_id: str = Depends(curre
     if not result:
         raise HTTPException(404, "题库不存在")
     return result
-
-
-@router.get("/banks/search")
-async def api_search_banks(
-    keyword: str = Query("", description="搜索关键词"),
-    user_id: str = Depends(current_user_id),
-):
-    """按名称/描述搜索题库"""
-    _ensure_tables()
-    banks = list_banks(user_id)
-    if keyword:
-        kw = keyword.lower()
-        banks = [
-            b for b in banks
-            if kw in (b.get("name") or "").lower()
-            or kw in (b.get("description") or "").lower()
-        ]
-    return {"total": len(banks), "items": banks}
 
 
 @router.get("/questions/search")

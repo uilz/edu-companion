@@ -43,6 +43,7 @@ export interface TreeState {
   loadRootNodes: () => Promise<void>;
   loadChildren: (nodeId: string, level?: string) => Promise<GraphNode[]>;
   toggleExpand: (node: GraphNode) => void;
+  expandAncestors: (path: string[]) => void;
   setChildMap: (m: Map<string, GraphNode[]>) => void;
 }
 
@@ -198,6 +199,34 @@ export const useTreeStore = create<TreeState>()((set, get) => ({
     });
     if (!wasExpanded) {
       if (!get().childMap.has(node.id)) get().loadChildren(node.id, node.level);
+    }
+  },
+
+  /**
+   * 展开祖先链：把 path 数组中的所有节点 ID 全部加入 expandedSet。
+   * 用于：页面初始化时从 URL 恢复 selectedNode、SwitchBanner 切换、节点搜索跳转。
+   * 同时保证 ROOT_KEY 始终展开，确保顶层分区可见。
+   *
+   * 副作用：对 childMap 中尚未加载的祖先 ID 触发 loadChildren，保证
+   * expandAncestors 调用后树视图能正确渲染。
+   */
+  expandAncestors: (path: string[]) => {
+    if (!Array.isArray(path) || path.length === 0) return;
+    set(s => {
+      const next = new Set(s.expandedSet);
+      next.add(ROOT_KEY);
+      for (const id of path) {
+        if (id) next.add(id);
+      }
+      persistExpandedSet(next);
+      return { expandedSet: next };
+    });
+    // 异步加载未缓存的子节点（避免祖先链"展开但无子节点"的视觉空窗）
+    for (const id of path) {
+      if (id && !get().childMap.has(id)) {
+        // 不 await — fire & forget
+        void get().loadChildren(id);
+      }
     }
   },
 
