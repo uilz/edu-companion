@@ -18,11 +18,14 @@ export function useBreakpoint(): {
   isDesktop: boolean;
   width: number;
   height: number;
+  /** 首次挂载（同步过 window.innerWidth） */
+  isMounted: boolean;
 } {
   const [info, setInfo] = useState({
     width: 0,
     height: 0,
     breakpoint: "desktop" as Breakpoint,
+    isMounted: false,
   });
 
   useEffect(() => {
@@ -38,6 +41,7 @@ export function useBreakpoint(): {
         width: w,
         height: window.innerHeight,
         breakpoint: bp,
+        isMounted: true,
       });
     };
 
@@ -53,6 +57,7 @@ export function useBreakpoint(): {
     isDesktop: info.breakpoint === "desktop",
     width: info.width,
     height: info.height,
+    isMounted: info.isMounted,
   };
 }
 

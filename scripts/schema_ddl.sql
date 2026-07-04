@@ -714,3 +714,89 @@ CREATE TABLE IF NOT EXISTS public.users (
     last_active_at timestamp without time zone,
     token_version integer DEFAULT 0
 );
+
+-- ── FlashCard 模块表 (docs/modules/flashcard/data-model.md) ──
+CREATE TABLE IF NOT EXISTS public.flashcards (
+    id text NOT NULL,
+    user_id text NOT NULL,
+    type smallint NOT NULL,
+    source character varying(30) NOT NULL,
+    front_text text NOT NULL,
+    back_text text,
+    back_context text,
+    language character varying(20),
+    source_ref jsonb DEFAULT '{}'::jsonb,
+    status character varying(20) DEFAULT 'pending'::text,
+    suspended_at timestamp without time zone,
+    is_resolved boolean DEFAULT false,
+    stability double precision,
+    difficulty double precision,
+    forgetting_rate double precision,
+    last_review_at timestamp without time zone,
+    next_review_at timestamp without time zone,
+    review_count integer DEFAULT 0,
+    lapse_count integer DEFAULT 0,
+    target_retention double precision DEFAULT 0.85,
+    linked_node_ids jsonb DEFAULT '[]'::jsonb,
+    node_link_roles jsonb DEFAULT '{}'::jsonb,
+    tags jsonb DEFAULT '[]'::jsonb,
+    error_book_entry_id text,
+    response_history jsonb DEFAULT '[]'::jsonb,
+    field_versions jsonb DEFAULT '{}'::jsonb,
+    created_at timestamp without time zone DEFAULT now() NOT NULL,
+    updated_at timestamp without time zone DEFAULT NOW(),
+    deleted_at timestamp without time zone
+);
+
+CREATE TABLE IF NOT EXISTS public.review_sessions (
+    id text NOT NULL,
+    user_id text NOT NULL,
+    started_at timestamp without time zone NOT NULL,
+    ended_at timestamp without time zone,
+    card_count integer DEFAULT 0,
+    difficult_count integer DEFAULT 0,
+    good_count integer DEFAULT 0,
+    easy_count integer DEFAULT 0,
+    duration_seconds integer,
+    source_module character varying(30)
+);
+
+CREATE TABLE IF NOT EXISTS public.review_history (
+    id text NOT NULL,
+    card_id text NOT NULL,
+    session_id text,
+    user_id text NOT NULL,
+    self_assessment character varying(10) NOT NULL,
+    stability_before double precision,
+    stability_after double precision,
+    difficulty_before double precision,
+    difficulty_after double precision,
+    interval_before integer,
+    interval_after integer,
+    elapsed_days integer,
+    reviewed_at timestamp without time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.flashcard_tags (
+    id text NOT NULL,
+    user_id text NOT NULL,
+    name character varying(128) NOT NULL,
+    parent_id text,
+    level smallint DEFAULT 0 NOT NULL,
+    color character varying(7),
+    created_at timestamp without time zone DEFAULT now() NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_fc_user_status ON public.flashcards USING btree (user_id, status);
+CREATE INDEX IF NOT EXISTS idx_fc_next_review ON public.flashcards USING btree (user_id, next_review_at) WHERE (status::text = 'pending'::text);
+CREATE INDEX IF NOT EXISTS idx_fc_source ON public.flashcards USING btree (user_id, source);
+CREATE INDEX IF NOT EXISTS idx_fc_type ON public.flashcards USING btree (user_id, type);
+CREATE INDEX IF NOT EXISTS idx_fc_user_created ON public.flashcards USING btree (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_fc_tags ON public.flashcards USING gin (tags);
+CREATE INDEX IF NOT EXISTS idx_fc_linked_nodes ON public.flashcards USING gin (linked_node_ids);
+CREATE INDEX IF NOT EXISTS idx_fc_error_book ON public.flashcards USING btree (error_book_entry_id) WHERE (error_book_entry_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_rsessions_user ON public.review_sessions USING btree (user_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rhistory_card ON public.review_history USING btree (card_id, reviewed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rhistory_session ON public.review_history USING btree (session_id);
+CREATE INDEX IF NOT EXISTS idx_rhistory_user ON public.review_history USING btree (user_id, reviewed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_fctags_user_parent ON public.flashcard_tags USING btree (user_id, parent_id);

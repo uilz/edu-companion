@@ -5,23 +5,24 @@
 import { useState, useEffect } from "react";
 import Card from "@/components/ui/Card";
 import { RetentionData } from "@/components/dashboard/analytics/utils";
-import { useCurrentUserId } from "@/hooks/useCurrentUserId";
+import { useAuth } from "@/contexts/AuthContext";
 import { authedFetch, API_BASE } from "@/lib/api/api";
 
 export function RetentionPanel() {
-  const userId = useCurrentUserId();
+  const { user, loading: authLoading } = useAuth();
   const [data, setData] = useState<RetentionData | null>(null);
   const [loading, setLoading] = useState(true);
 
   // 请求遗忘曲线数据
   useEffect(() => {
-    if (!userId) { setLoading(false); return; }
+    if (authLoading || !user) { setLoading(false); return; }
+    const userId = user.id;
     authedFetch(`/api/knowledge-tree/retention?user_id=${userId}`)
       .then((r) => r.json())
       .then(setData)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [userId]);
+  }, [authLoading, user]);
 
   if (loading) return null;
   if (!data || data.skills.length === 0) return null;

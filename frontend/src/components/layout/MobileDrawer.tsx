@@ -1,28 +1,22 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  Brain, Dumbbell, GitGraph, Bell, Library, Settings,
-  Sun, Moon, LogOut, X,
+  Settings, Sun, Moon, LogOut, X,
 } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import SecretaryBellBadge from '@/components/secretary/SecretaryBellBadge';
+import { getNavItemsFor, isPathActive, type NavContext } from '@/lib/navConfig';
+import { useUser } from '@/hooks/useUser';
+import NavBadge from './NavBadge';
 
 interface MobileDrawerProps {
   open: boolean;
   onClose: () => void;
 }
-
-const navItems = [
-  { href: '/conversation',         label: '学习空间', icon: Brain },
-  { href: '/practice',      label: '练习',     icon: Dumbbell },
-  { href: '/knowledge-tree', label: '知识树',   icon: GitGraph },
-  { href: '/secretary',     label: '秘书',     icon: Bell },
-  { href: '/resources',     label: '我的资源',  icon: Library },
-];
 
 /**
  * MobileDrawer — 从左侧滑出的导航抽屉 (平板模式)
@@ -31,7 +25,14 @@ export default function MobileDrawer({ open, onClose }: MobileDrawerProps) {
   const pathname = usePathname();
   const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
+  const { navContext } = useUser();
   const overlayRef = useRef<HTMLDivElement>(null);
+
+  // 任务 #34：根据用户角色 + 订阅档位过滤入口
+  const navItems = useMemo<ReturnType<typeof getNavItemsFor>>(
+    () => getNavItemsFor('drawer', navContext as NavContext),
+    [navContext],
+  );
 
   // ESC 键关闭
   useEffect(() => {
@@ -53,7 +54,7 @@ export default function MobileDrawer({ open, onClose }: MobileDrawerProps) {
     return () => { document.body.style.overflow = ''; };
   }, [open]);
 
-  const isActive = (href: string) => pathname?.startsWith(href);
+  const isActive = (href: string) => isPathActive(pathname, href);
 
   return (
     <>
@@ -100,12 +101,12 @@ export default function MobileDrawer({ open, onClose }: MobileDrawerProps) {
           <div className="space-y-0.5">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const active = isActive(item.href);
+              const active = isActive(item.path);
 
               return (
                 <Link
-                  key={item.href}
-                  href={item.href}
+                  key={item.path}
+                  href={item.path}
                   onClick={onClose}
                   className={`
                     flex items-center gap-3 px-3 py-3 text-sm rounded-md
@@ -121,7 +122,8 @@ export default function MobileDrawer({ open, onClose }: MobileDrawerProps) {
                     <Icon size={20} strokeWidth={active ? 2.2 : 1.6} />
                     {item.label === '秘书' && <SecretaryBellBadge />}
                   </span>
-                  <span>{item.label}</span>
+                  <span className="truncate">{item.label}</span>
+                  <NavBadge item={item} />
                   {active && (
                     <span className="ml-auto w-1.5 h-1.5 rounded-full bg-accent" />
                   )}

@@ -12,6 +12,7 @@ import { useConversationStore, getActiveConvId } from "@/store/conversation/conv
 import { useMessageStore } from "@/store/conversation/message-store";
 import { setSending } from "@/store/conversation/actions/send-message";
 import { useDraftPersistence } from "@/hooks/conversation/useDraftPersistence";
+import { toast } from "@/components/ui/Toast";
 
 // --- 组件属性接口 ---
 interface ConversationChatInputProps {
@@ -85,8 +86,11 @@ export default function ConversationChatInput({
         fileId: data.material_id,
         materialId: data.material_id,
       }]);
+      toast.success("文件已上传", file.name);
     } catch (e) {
-      setUploadError(e instanceof Error ? e.message : "上传失败");
+      const msg = e instanceof Error ? e.message : "上传失败";
+      setUploadError(msg);
+      toast.error("上传失败", msg);
     } finally {
       setUploading(false);
     }
@@ -186,7 +190,12 @@ export default function ConversationChatInput({
   const clearPendingQuote = useConversationStore((s) => s.clearPendingQuote);
 
   return (
-    <div className="border-t border-[var(--color-border)] bg-[var(--color-bg)]">
+    <div
+      className="border-t border-[var(--color-border)] bg-[var(--color-bg)]"
+      // iOS safe-area：键盘弹起 + 底部 notch 留出空间
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+      data-testid="chat-input-container"
+    >
       <div className="max-w-xl mx-auto px-4 py-3">
         {/* QuotePreview: show when pendingQuote is set */}
         {pendingQuote && (
@@ -201,8 +210,8 @@ export default function ConversationChatInput({
           <div className="flex items-center gap-1.5 mb-2 flex-wrap">
             {uploadedFiles.map((f, i) => (
               <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] border border-[var(--color-border)] text-[var(--color-text-secondary)]">
-                {f.type === "image" ? "🖼️" : "📎"} {f.name}
-                <button onClick={() => removeFile(i)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
+                {f.type === "image" ? "🖼️" : "📎"} <span className="truncate max-w-[80px] sm:max-w-[120px]">{f.name}</span>
+                <button onClick={() => removeFile(i)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]" aria-label="移除附件" style={{ minWidth: 24, minHeight: 24 }}>
                   <X size={10} />
                 </button>
               </span>
@@ -221,6 +230,7 @@ export default function ConversationChatInput({
             disabled={disabled || uploading}
             className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface)] transition-colors disabled:opacity-30"
             title="上传图片"
+            style={{ minWidth: 36, minHeight: 36 }}
           >
             {uploading ? <Loader2 size={16} className="animate-spin" /> : <Image size={16} />}
           </button>
@@ -229,6 +239,7 @@ export default function ConversationChatInput({
             disabled={disabled || uploading}
             className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface)] transition-colors disabled:opacity-30"
             title="上传文件"
+            style={{ minWidth: 36, minHeight: 36 }}
           >
             <Paperclip size={16} />
           </button>
@@ -258,6 +269,7 @@ export default function ConversationChatInput({
             disabled={disabled}
             className="p-1.5 text-[var(--color-text-muted)] hover:text-violet-500 hover:bg-violet-500/10 rounded transition-colors disabled:opacity-30"
             title="引用我的资源"
+            style={{ minWidth: 36, minHeight: 36 }}
           >
             <Library size={16} />
           </button>
@@ -268,7 +280,9 @@ export default function ConversationChatInput({
                 ? "text-[var(--color-accent)] bg-[var(--color-accent)]/10"
                 : "text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
             }`}
+            style={{ minWidth: 36, minHeight: 36 }}
             title={voiceAutoSend ? "语音自动发送：开" : "语音自动发送：关"}
+            aria-pressed={voiceAutoSend}
           >
             {voiceAutoSend ? "🚀" : "🎙️"}
           </button>
@@ -276,7 +290,7 @@ export default function ConversationChatInput({
 
         {/* 上传错误提示 */}
         {uploadError && (
-          <div className="text-[10px] text-[#ef4444] mb-1">{uploadError}</div>
+          <div className="text-[10px] text-[var(--color-error)] mb-1" role="alert">{uploadError}</div>
         )}
 
         {/* 输入区域：文本框 + 发送按钮 */}
@@ -289,7 +303,8 @@ export default function ConversationChatInput({
             disabled={disabled}
             placeholder={placeholder || "输入你的问题... (Shift+Enter 换行)"}
             rows={1}
-            className="flex-1 resize-none bg-transparent text-[var(--color-text)] placeholder-[var(--color-text-muted)] px-4 py-2 text-sm focus:outline-none disabled:opacity-50 min-h-[40px] max-h-[160px] leading-relaxed"
+            aria-label="消息输入框"
+            className="flex-1 resize-none bg-transparent text-[var(--color-text)] placeholder-[var(--color-text-muted)] px-4 py-2 text-base sm:text-sm focus:outline-none disabled:opacity-50 min-h-[40px] max-h-[160px] leading-relaxed"
           />
           {pendingQuote ? (
             /* Dual-button mode when pendingQuote is set */
@@ -300,6 +315,7 @@ export default function ConversationChatInput({
                 className="text-[10px] px-2 py-1 text-[var(--color-text-muted)] border border-[var(--color-border)]
                            hover:bg-[var(--color-surface)] active:scale-[0.97] transition-all disabled:opacity-30 rounded-full"
                 title="普通发送（带引用块）"
+                style={{ minHeight: 32 }}
               >
                 普通发送
               </button>
@@ -310,6 +326,7 @@ export default function ConversationChatInput({
                            bg-[var(--color-accent)] text-white text-xs font-medium disabled:opacity-30
                            hover:bg-[var(--color-accent-hover)] active:scale-[0.97] transition-colors rounded-full"
                 title="创建子支对话"
+                style={{ minHeight: 32 }}
               >
                 📎子支
               </button>
@@ -320,6 +337,7 @@ export default function ConversationChatInput({
               onClick={handleSend}
               disabled={(!text.trim() && uploadedFiles.length === 0)}
               className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-[var(--color-accent)] text-white rounded-full disabled:opacity-30 hover:bg-[var(--color-accent-hover)] active:scale-[0.97] transition-colors"
+              aria-label="发送消息"
             >
               {disabled ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
             </button>

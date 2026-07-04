@@ -5,6 +5,8 @@
 import Link from 'next/link';
 // 导入自定义的空状态组件，用于展示占位内容
 import EmptyState from '@/components/ui/EmptyState';
+// 集中导航配置 — 统一 404 跳链
+import { HOME_PATH } from '@/lib/navConfig';
 
 /**
  * 自定义 404 页面组件
@@ -18,9 +20,10 @@ export default function NotFound() {
       title="页面未找到"                            // 主标题
       description="你访问的页面不存在或已被移除"       // 副标题说明
       action={
-        // 提供返回首页的导航按钮
+        // 提供返回首页的导航按钮 — 统一跳 HOME_PATH (/) 而非 /dashboard
+        // 理由：HOME_PATH 是登录后落点、所有 Logo 点击的汇聚点、无需鉴权即可访问
         <Link
-          href="/dashboard"
+          href={HOME_PATH}
           className="px-4 py-2 bg-[var(--color-accent)] text-white rounded-lg hover:bg-[var(--color-accent-hover)] active:scale-[0.97] transition-colors inline-block"
         >
           返回首页

@@ -45,7 +45,7 @@ export default function ForceGraph({
     let cancelled = false;
     const svgEl = svgRef.current;
 
-    getD3().then((d3) => {
+    getD3().then((d3: any) => {
       if (cancelled) return;
 
       const svg = d3.select(svgEl);
@@ -88,66 +88,66 @@ export default function ForceGraph({
         .join("g")
         .style("cursor", "pointer")
         .call(
-          d3.drag<SVGGElement, LayoutNode>()
-            .on("start", (event, d) => {
+          (d3.drag() as any)
+            .on("start", (event: any, d: any) => {
               if (!event.active) simulation.alphaTarget(0.3).restart();
               d.fx = d.x;
               d.fy = d.y;
             })
-            .on("drag", (event, d) => {
+            .on("drag", (event: any, d: any) => {
               d.fx = event.x;
               d.fy = event.y;
             })
-            .on("end", (event, d) => {
+            .on("end", (event: any, d: any) => {
               if (!event.active) simulation.alphaTarget(0);
               d.fx = null;
               d.fy = null;
-            }) as any
+            })
         );
 
       nodeGroup
         .append("circle")
-        .attr("r", (d) => getNodeRadius(d.level))
-        .attr("fill", (d) => getMasteryColor(d.mastery))
-        .attr("stroke", (d) =>
+        .attr("r", (d: any) => getNodeRadius(d.level))
+        .attr("fill", (d: any) => getMasteryColor(d.mastery))
+        .attr("stroke", (d: any) =>
           d.id === selectedNodeIdRef.current
             ? "var(--color-accent)"
             : "var(--color-surface)"
         )
-        .attr("stroke-width", (d) =>
+        .attr("stroke-width", (d: any) =>
           d.id === selectedNodeIdRef.current ? 3 : 1.5
         )
         .attr("opacity", 0.9);
 
       nodeGroup
         .append("text")
-        .text((d) =>
+        .text((d: any) =>
           d.label.length > 8 ? d.label.slice(0, 8) + "\u2026" : d.label
         )
-        .attr("dx", (d) => getNodeRadius(d.level) + 4)
+        .attr("dx", (d: any) => getNodeRadius(d.level) + 4)
         .attr("dy", 4)
-        .attr("font-size", (d) => (d.level === "partition" ? 11 : 9))
+        .attr("font-size", (d: any) => (d.level === "partition" ? 11 : 9))
         .attr("fill", "var(--color-text)")
         .attr("opacity", 0.8);
 
-      nodeGroup.on("click", (event, d) => {
+      nodeGroup.on("click", (event: any, d: any) => {
         event.stopPropagation();
         onNodeSelectRef.current?.(d, { x: d.x, y: d.y });
       });
 
-      nodeGroup.on("contextmenu", (event, d) => {
+      nodeGroup.on("contextmenu", (event: any, d: any) => {
         event.preventDefault();
         event.stopPropagation();
         onNodeContextMenuRef.current?.(d, event);
       });
 
       const simulation = d3
-        .forceSimulation<LayoutNode>(layoutNodes)
+        .forceSimulation(layoutNodes)
         .force(
           "link",
           d3
-            .forceLink<LayoutNode, any>(data.edges)
-            .id((d) => d.id)
+            .forceLink(data.edges)
+            .id((d: any) => d.id)
             .distance(100)
             .strength(0.3)
         )

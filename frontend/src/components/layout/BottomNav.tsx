@@ -1,39 +1,24 @@
 'use client';
 
+import { useMemo } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import {
-  Dumbbell,
-  MessageSquare,
-  GitGraph,
-  Bell,
-  Settings, Library,
-  LucideIcon,
-} from 'lucide-react';
 import SecretaryBellBadge from '@/components/secretary/SecretaryBellBadge';
-
-interface NavItem {
-  href: string;
-  label: string;
-  icon: LucideIcon;
-}
-
-const navItems: NavItem[] = [
-  { href: '/conversation', label: '学习空间', icon: MessageSquare },
-  { href: '/practice', label: '练习', icon: Dumbbell },
-  { href: '/knowledge-tree', label: '知识树', icon: GitGraph },
-  { href: '/resources', label: '资源', icon: Library },
-  { href: '/secretary', label: '秘书', icon: Bell },
-  { href: '/settings', label: '设置', icon: Settings },
-];
+import { getNavItemsFor, isPathActive, type NavContext } from '@/lib/navConfig';
+import { useUser } from '@/hooks/useUser';
 
 // 移动端底部导航栏
 export default function BottomNav() {
   const pathname = usePathname();
+  const { navContext } = useUser();
 
-  const isActive = (href: string) => {
-    return pathname.startsWith(href);
-  };
+  // 任务 #34：根据用户角色 + 订阅档位过滤入口
+  const navItems = useMemo<ReturnType<typeof getNavItemsFor>>(
+    () => getNavItemsFor('bottomNav', navContext as NavContext),
+    [navContext],
+  );
+
+  const isActive = (href: string) => isPathActive(pathname, href);
 
   return (
     <nav
@@ -46,12 +31,14 @@ export default function BottomNav() {
       <div className="flex items-center justify-around h-full px-2">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const active = isActive(item.href);
+          // 移动端用短 label 避免 6 个 Tab 拥挤
+          const label = item.mobileLabel ?? item.label;
+          const active = isActive(item.path);
 
           return (
             <Link
-              key={item.href}
-              href={item.href}
+              key={item.path}
+              href={item.path}
               className={`
                 flex flex-col items-center justify-center
                 flex-1 h-full
@@ -64,7 +51,7 @@ export default function BottomNav() {
                     : 'text-ink-secondary hover:text-ink-primary'
                 }
               `}
-              aria-label={item.label}
+              aria-label={label}
               style={{ minWidth: 44, minHeight: 44 }}
             >
               {active && (
@@ -87,7 +74,7 @@ export default function BottomNav() {
                 className="leading-none"
                 style={{ fontSize: '10px', letterSpacing: '0.02em' }}
               >
-                {item.label}
+                {label}
               </span>
             </Link>
           );

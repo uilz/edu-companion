@@ -14,8 +14,8 @@
 
 @import 'katex/dist/katex.min.css';
 
-/* JetBrains Mono for code/data */
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* Inter (primary UI font, Linear/Notion style) + JetBrains Mono for code/data */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 /* ═══════════════════════════════════════════════════════════════
    SHARED DESIGN TOKENS — Common across ALL styles
@@ -69,31 +69,31 @@
    Current warm paper-ink theme values kept as Professional style.
    ═══════════════════════════════════════════════════════════════ */
 
-/* ── Professional: Dark (default) ── */
+/* Professional: Dark (Task #79: slate-based Linear/Notion style) */
 :root,
 [data-style="professional"],
 [data-style="professional"][data-theme="dark"],
 [data-theme="dark"] {
-  /* Page & Surface */
-  --color-page: #1a1816;
-  --color-page-secondary: #21201e;
-  --color-surface: #2a2826;
-  --color-surface-alt: #232120;
-  --color-surface-hover: #343230;
-  --color-surface-elevated: #2a2826;
+  /* Page & Surface - true neutral dark */
+  --color-page: #0a0a0a;
+  --color-page-secondary: #0f0f0f;
+  --color-surface: #141414;
+  --color-surface-alt: #0f0f0f;
+  --color-surface-hover: #1f1f1f;
+  --color-surface-elevated: #141414;
 
   /* Ink */
-  --color-ink-primary: #f5f3ef;
-  --color-ink-secondary: #b0a99e;
-  --color-ink-muted: #78726a;
-  --color-ink-on-dark: #f5f3ef;
+  --color-ink-primary: #fafafa;
+  --color-ink-secondary: #a3a3a3;
+  --color-ink-muted: #525252;
+  --color-ink-on-dark: #fafafa;
   --color-ink-link: #60a5fa;
 
   /* Accent */
-  --color-accent: #60a5fa;
-  --color-accent-hover: #93bbfd;
-  --color-accent-soft: rgba(96, 165, 250, 0.12);
-  --color-accent-glow: rgba(96, 165, 250, 0.15);
+  --color-accent: #3b82f6;
+  --color-accent-hover: #60a5fa;
+  --color-accent-soft: rgba(59, 130, 246, 0.12);
+  --color-accent-glow: rgba(59, 130, 246, 0.15);
 
   /* Status */
   --color-success: #4ade80;
@@ -102,20 +102,29 @@
   --color-info: #22d3ee;
 
   /* Dividers */
-  --color-divider: #3d3a37;
-  --color-divider-hover: #524f4b;
-  --color-divider-soft: #2e2c2a;
+  --color-divider: #262626;
+  --color-divider-hover: #404040;
+  --color-divider-soft: #1a1a1a;
 
   /* Graph */
-  --color-graph-node: #60a5fa;
-  --color-graph-edge-active: #93c5fd;
+  --color-graph-node: #3b82f6;
+  --color-graph-edge-active: #60a5fa;
   --color-graph-edge-pending: #fbbf24;
-  --color-graph-edge-suggested: #524f4b;
+  --color-graph-edge-suggested: #404040;
   --color-graph-node-mastered: #4ade80;
   --color-graph-node-weak: #f87171;
 
   /* Selection */
-  --color-selection: rgba(96, 165, 250, 0.15);
+  --color-selection: rgba(59, 130, 246, 0.15);
+
+  /* Radius (professional override per design-language.md) */
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Spacing override (professional: slightly tighter) */
+  --space-3: 10px;
+  --space-4: 14px;
+  --space-5: 20px;
 
   /* Typography scale */
   --text-hero-size: 2rem;
@@ -168,11 +177,13 @@
   --text-code-weight: 400;
   --text-code-tracking: 0;
 
-  /* ── Input (legacy, can be merged into surface) ── */
-  --color-input: #2a2826;
-  --color-input-focus: #343230;
+  /* Input (legacy, can be merged into surface) */
+  --color-input: #141414;
+  --color-input-focus: #1f1f1f;
 
-  /* ── Shadow (light override for dark) ── */
+  /* Shadow (subtle on dark) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
   --shadow-glow: 0 0 20px var(--color-accent-glow);
 
   /* ── Backward-compatible aliases ── */
@@ -192,28 +203,28 @@
   --color-graph-weak: var(--color-graph-node-weak);
 }
 
-/* ── Professional: Light ── */
+/* ── Professional: Light (Task #79: slate-based Linear/Notion style) ── */
 [data-style="professional"][data-theme="light"],
 [data-theme="light"] {
-  /* Page & Surface */
-  --color-page: #fbfaf7;
-  --color-page-secondary: #f5f3ef;
+  /* Page & Surface — slate-50/white based */
+  --color-page: #ffffff;
+  --color-page-secondary: #fafafa;
   --color-surface: #ffffff;
-  --color-surface-alt: #faf9f5;
-  --color-surface-hover: #f0ede8;
+  --color-surface-alt: #fafafa;
+  --color-surface-hover: #f5f5f5;
   --color-surface-elevated: #ffffff;
 
-  /* Ink */
-  --color-ink-primary: #1c1917;
-  --color-ink-secondary: #5c5650;
-  --color-ink-muted: #948f89;
-  --color-ink-on-dark: #fbfaf7;
+  /* Ink — slate-900/600/400 */
+  --color-ink-primary: #171717;
+  --color-ink-secondary: #525252;
+  --color-ink-muted: #a3a3a3;
+  --color-ink-on-dark: #fafafa;
   --color-ink-link: #2563eb;
 
-  /* Accent */
+  /* Accent — Blue 600/700/50 */
   --color-accent: #2563eb;
   --color-accent-hover: #1d4ed8;
-  --color-accent-soft: #eff3ff;
+  --color-accent-soft: #eff6ff;
   --color-accent-glow: rgba(37, 99, 235, 0.10);
 
   /* Status */
@@ -222,29 +233,38 @@
   --color-danger: #dc2626;
   --color-info: #0891b2;
 
-  /* Dividers */
-  --color-divider: #e7e3de;
-  --color-divider-hover: #d4cfc8;
-  --color-divider-soft: #f0ede8;
+  /* Dividers — slate-200/neutral-200 */
+  --color-divider: #e5e5e5;
+  --color-divider-hover: #d4d4d4;
+  --color-divider-soft: #f5f5f5;
 
   /* Graph */
   --color-graph-node: #2563eb;
   --color-graph-edge-active: #1e40af;
   --color-graph-edge-pending: #d97706;
-  --color-graph-edge-suggested: #cbd5e1;
+  --color-graph-edge-suggested: #d4d4d4;
   --color-graph-node-mastered: #16a34a;
   --color-graph-node-weak: #dc2626;
 
   /* Selection */
   --color-selection: rgba(37, 99, 235, 0.12);
 
-  /* Shadows */
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
+  /* Shadows (Linear/Notion style: subtle elevation) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
+
+  /* Radius (professional override per design-language.md) */
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Spacing override (professional: slightly tighter) */
+  --space-3: 10px;
+  --space-4: 14px;
+  --space-5: 20px;
 
   /* Input */
   --color-input: #ffffff;
-  --color-input-focus: #faf9f5;
+  --color-input-focus: #fafafa;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -753,6 +773,56 @@
   }
   .swiss-card:hover {
     border-color: var(--color-divider-hover);
+  }
+
+  /* Cockpit elevated card: shadow + hover lift (Task #79) */
+  .cockpit-card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow var(--motion-normal) var(--ease-out),
+                transform var(--motion-normal) var(--ease-out),
+                border-color var(--motion-normal) var(--ease-out);
+  }
+  .cockpit-card:hover {
+    box-shadow: var(--shadow-md);
+    border-color: var(--color-divider-hover);
+    transform: translateY(-1px);
+  }
+
+  /* Cockpit data card: same as cockpit-card + tighter padding */
+  .cockpit-data-card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: var(--space-4);
+    transition: box-shadow var(--motion-normal) var(--ease-out),
+                border-color var(--motion-normal) var(--ease-out);
+  }
+  .cockpit-data-card:hover {
+    box-shadow: var(--shadow-md);
+    border-color: var(--color-divider-hover);
+  }
+
+  /* Tabular number rendering for stat displays (Task #79) */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  /* Skeleton shimmer block */
+  .skeleton-block {
+    background: linear-gradient(
+      90deg,
+      var(--color-surface-hover) 0%,
+      var(--color-divider-soft) 50%,
+      var(--color-surface-hover) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+    border-radius: var(--radius-sm);
   }
 
   /* ── Button ── */

@@ -270,3 +270,109 @@ frontend/src/
   9. TestCrossModuleEvents (3) - 事件联动
   10. TestDataIsolation (5) - 数据隔离
   11. TestFullLifecycle (3) - 完整生命周期
+
+---
+
+## 性能优化与移动端适配（Task #85 — 2026-07-04）
+
+### 1. 虚拟化（react-virtuoso）
+
+**选型理由**：
+- 原生支持流式追加（`followOutput="smooth"`，匹配"会话状态流式接受"需求）
+- 动态高度（消息长短不一，react-window 固定/动态模式都偏弱）
+- 完善的 `scrollToIndex` API
+- 体积约 30kb，对桌面+移动端项目可接受
+
+**应用范围**：
+- `MessageList`（`core/MessageList.tsx`）：长消息流虚拟化
+- `FlatConversationList`（`panels/FlatConversationList.tsx`）：侧边栏扁平列表虚拟化
+
+**配置**：
+- `overscan={400}` — 上下各预渲染 400px 区域
+- `followOutput={atBottom ? "smooth" : false}` — 用户在底部时自动跟随流式输出
+- `atBottomStateChange={setAtBottom}` — 状态机驱动 scroll button 显示
+- `initialTopMostItemIndex={messages.length - 1}` — 首次加载跳到底部
+
+**自动滚动状态机**：
+- 离开底部：用户主动上滑（wheel deltaY < 0 或 touchmove dy > 1）→ 退出 autoFollow
+- 回到底部：滚到底部 / 点击"滚到底部"按钮 / 发送新消息 → 重新进入 autoFollow
+- 与原 MessageList 的 autoFollow 状态机语义保持一致
+
+### 2. 组件拆分 + React.memo
+
+| 组件 | 优化 | 收益 |
+|------|------|------|
+| `MessageItem` | 提取单条消息渲染为独立组件 + memo + 自定义比较 | 避免同级消息无关更新导致整列表重渲染 |
+| `SidebarTreeNode` | memo + 自定义比较（childMap/expandedSet 引用稳定性） | 树节点单独更新不影响兄弟 |
+| `FlatRow` | memo + 自定义比较（按显示字段） | 扁平列表行级别重渲染控制 |
+| `itemContent` (Virtuoso) | useCallback + 完整依赖列表 | Virtuoso 不会因回调引用变化重建 |
+
+### 3. UI/UX 一致性
+
+**统一三态组件**：
+- `EmptyState` — 空状态（icon + title + description）
+- `Skeleton` — 加载骨架（text/card/circle/rect 4 种变体）
+- `Toast` — 操作反馈（success/info/warning/error 4 种，自动 2.5s 消失）
+
+**应用位置**：
+- `FlatConversationList` — loading/error/empty 三态用统一组件
+- `StudySidebar` — 树根列表 + 加载/空态
+- `MessageList` — 消息列表空态（"开始一段对话"）
+- `ChatInput` — 文件上传成功/失败 toast
+- 侧边栏菜单操作 — 重命名成功 toast
+
+**TestID 锚点**（E2E 用）：
+- `data-testid="message-virtuoso"` — Virtuoso 容器
+- `data-testid="message-list-scroll-btn"` — 滚到底部按钮
+- `data-testid="chat-input-container"` — 输入框容器
+- `data-testid="sidebar-tree"` — 侧边栏树容器
+- `data-testid="text-selection-toolbar"` — 文本选择工具栏
+- `data-testid="mobile-bottom-sheet"` — 移动端抽屉
+
+### 4. 移动端适配
+
+**已支持**：
+- `<meta name="viewport" content="width=device-width, initial-scale=1">` — `frontend/src/app/layout.tsx`
+- `env(safe-area-inset-bottom)` — `ChatInput` 容器底部内边距
+- `useBreakpoint` hook（mobile < 640 / tablet 640-1023 / desktop ≥ 1024）— 已有
+- `MobileBottomSheet` — swipe-to-close（> 80px 或速度 > 0.4 px/ms 触发）
+- 触摸目标最小 44x44px（按钮/菜单项）
+
+**关键断点行为**：
+- `mobile/tablet`（< 1024px）：ConversationPanel 切换为单列布局
+  - 侧边栏 → 抽屉（默认隐藏，菜单按钮打开）
+  - BottomSheet 80% 高度 + swipe 手势关闭
+  - 顶部 nav 包含菜单/模式切换/新建按钮
+- `desktop`（≥ 1024px）：5 栏 Workbench 中的左/右栏
+  - 侧边栏固定 280px 宽，可折叠
+  - 无 BottomSheet 抽屉
+
+### 5. 浏览器 E2E（Playwright）
+
+**配置**：
+- `playwright.config.ts` — 3 个 project：desktop (1280x800) / tablet (768x1024) / mobile (375x667)
+- `e2e/conversation.spec.ts` — 16 个测试用例
+- `e2e/helpers.ts` — API 登录 + localStorage 注入（比 UI 登录稳定）
+
+**用例覆盖**：
+- Desktop (10)：页面加载、模式切换、消息发送/编辑/复制、虚拟化、滚动按钮、错误恢复、console 错误检测、scrollToIndex API
+- Mobile (5)：默认布局、抽屉、safe-area、输入框聚焦、消息发送
+- Tablet (1)：消息发送
+
+**运行**：
+```bash
+npx playwright test --project=desktop   # 仅 desktop
+npx playwright test --project=mobile    # 仅 mobile
+npx playwright test                       # 全部
+```
+
+**截图归档**：`playwright-report/screenshots/`（每个用例自动 fullPage 截图）
+
+### 6. 已知问题与权衡
+
+| 项 | 状态 | 说明 |
+|----|------|------|
+| Virtuoso 不支持 IntersectionObserver | ✅ 替代方案 | 用 `rangeChanged` 触发懒加载（visibleRange + 上下各 3 条） |
+| 流式响应中 ExplanationMarkers 重计算 | ⚠️ 可优化 | 后续可加 debounce |
+| 编辑中转 Virtuoso scroll 时位置错乱 | ⚠️ 已知 | 临时方案：编辑时禁用 scroll-to-bottom |
+

@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { Hash, FolderOpen } from "lucide-react";
+import { FolderOpen } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { NewNodeDialog } from "@/components/ui/NewNodeDialog";
+import EmptyState from "@/components/ui/EmptyState";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { SidebarTreeNode } from "@/components/conversation/tree/SidebarTreeNode";
 import { FlatConversationList } from "@/components/conversation/panels/FlatConversationList";
 import { useTreeNavigation } from "@/hooks/graph/useTreeNavigation";
@@ -95,20 +97,27 @@ export default function StudySidebar({
           </div>
         </div>
       )}
-      <div className="flex-1 overflow-y-auto py-1">
+      <div className="flex-1 overflow-hidden py-1" data-testid="sidebar-tree">
         {sidebarMode === "flat" ? (
           <FlatConversationList
             onRenameConv={nav.handleRenameConv}
             onDeleteConv={nav.setDeleteTarget}
           />
         ) : loading ? (
-          <div className="px-4 py-8 text-center text-xs text-[var(--color-text-muted)]">加载中...</div>
-        ) : nav.rootNodes.length === 0 ? (
-          <div className="px-4 py-8 text-center">
-            <Hash size={18} className="text-[var(--color-text-muted)] mx-auto mb-2" />
-            <div className="text-xs text-[var(--color-text-muted)]">暂无分区</div>
-            <div className="text-[10px] text-[var(--color-text-muted)] mt-1 opacity-60">发送消息将自动创建</div>
+          <div className="p-3 space-y-2" aria-busy="true" aria-label="加载中">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="flex items-center gap-2">
+                <Skeleton variant="circle" className="h-3 w-3" />
+                <Skeleton variant="text" className="h-3 flex-1" />
+              </div>
+            ))}
           </div>
+        ) : nav.rootNodes.length === 0 ? (
+          <EmptyState
+            icon="📂"
+            title="暂无分区"
+            description="发送消息将自动创建"
+          />
         ) : (
           nav.rootNodes.map(node => (
             <SidebarTreeNode

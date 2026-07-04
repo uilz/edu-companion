@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, memo } from "react";
 import {
   Plus, Pencil, Trash2, MessageSquare, MoreVertical,
   ChevronRight, ChevronDown, FolderOpen,
@@ -122,8 +122,9 @@ const variantClass = (variant: NodeVariant): string => {
 
 // ══════════════════════════════════════════════════════════════
 //  SidebarTreeNode — 递归树节点渲染组件 v3（统一 dir + conv）
+//  用 React.memo 包装：避免同级节点无关更新时整树重渲染
 //  ══════════════════════════════════════════════════════════════
-export function SidebarTreeNode({
+function SidebarTreeNodeInner({
   node, depth, partitionId,
   expandedSet, loadingSet, childMap,
   selectedNode, ancestorIds,
@@ -170,11 +171,12 @@ export function SidebarTreeNode({
 
   const vc = variantClass(nodeState);
 
-  // 祖先节点的左边框：由大到小的灰蓝色；选中节点保持 accent
+  // 左侧 border 颜色由节点状态决定；选中用 accent，祖先用半透明
+  // 宽度统一 3px（避免死代码）
   const [borderWidth, borderColor] = nodeState === "selected"
     ? [3, "var(--color-accent)"]
     : nodeState === "ancestor"
-      ? [Math.max(3.25, 4 / (depth + 2) + 3.25), "color-mix(in srgb, var(--color-text-muted) 35%, transparent)"]
+      ? [3, "color-mix(in srgb, var(--color-text-muted) 35%, transparent)"]
       : [3, "transparent"];
 
   // 统一点击：目录只展开/收起，会话走 selectGraphNode
@@ -346,3 +348,32 @@ export function SidebarTreeNode({
     </div>
   );
 }
+
+// ── 浅比较 memo：避免同级节点状态变化导致整树重渲染 ──
+// 关键：childMap 引用由 store 控制（同 Map），展开/选中变化时需要重渲染
+// 父节点传入的 expandedSet/loadingSet 是 Set，引用可能在父组件新建（需调用方传稳定引用）
+function areSidebarTreeNodePropsEqual(prev: SidebarTreeNodeProps, next: SidebarTreeNodeProps): boolean {
+  return (
+    prev.node === next.node &&
+    prev.depth === next.depth &&
+    prev.partitionId === next.partitionId &&
+    prev.expandedSet === next.expandedSet &&
+    prev.loadingSet === next.loadingSet &&
+    prev.childMap === next.childMap &&
+    prev.selectedNode === next.selectedNode &&
+    prev.ancestorIds === next.ancestorIds &&
+    prev.editingId === next.editingId &&
+    prev.editValue === next.editValue &&
+    prev.toggleExpand === next.toggleExpand &&
+    prev.handleCreateChild === next.handleCreateChild &&
+    prev.handleNewConvClick === next.handleNewConvClick &&
+    prev.setEditingId === next.setEditingId &&
+    prev.setEditValue === next.setEditValue &&
+    prev.setDeleteTarget === next.setDeleteTarget &&
+    prev.handleRename === next.handleRename &&
+    prev.handleRenameConv === next.handleRenameConv &&
+    prev.onSelectGraphNode === next.onSelectGraphNode
+  );
+}
+
+export const SidebarTreeNode = memo(SidebarTreeNodeInner, areSidebarTreeNodePropsEqual);

@@ -1,10 +1,14 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
-import { MessageSquare, Hash, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import React, { useEffect, useState, useCallback, memo } from "react";
+import { Virtuoso } from "react-virtuoso";
+import { MessageSquare, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { tree } from "@/lib/api/api";
 import { useConversationStore } from "@/store/conversation/conversation-store";
 import { useTreeStore } from "@/store/conversation/tree-store";
+import EmptyState from "@/components/ui/EmptyState";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { toast } from "@/components/ui/Toast";
 import type { GraphNode } from "@/components/conversation/tree/SidebarTreeNode";
 
 // ══════════════════════════════════════════════════════════════
@@ -43,6 +47,143 @@ function isRecentlyActive(updatedAt: number): boolean {
   return Date.now() - updatedAt * 1000 < ONE_DAY_MS;
 }
 
+function buildBreadcrumb(conv: RecentConversation): string {
+  if (conv.ancestors && conv.ancestors.length > 0) {
+    return conv.ancestors.map((a) => a.name).join(" / ");
+  }
+  return "";
+}
+
+// ══════════════════════════════════════════════════════════════
+//  FlatRow — 单行（React.memo 化，避免列表重渲染）
+// ══════════════════════════════════════════════════════════════
+
+interface FlatRowProps {
+  conv: RecentConversation;
+  isSelected: boolean;
+  isOpenMenu: boolean;
+  onClick: (conv: RecentConversation) => void;
+  onToggleMenu: (id: string) => void;
+  onCloseMenu: () => void;
+  onRename: (conv: RecentConversation) => void;
+  onDelete: (conv: RecentConversation) => void;
+}
+
+const FlatRow = memo(function FlatRow({
+  conv, isSelected, isOpenMenu,
+  onClick, onToggleMenu, onCloseMenu,
+  onRename, onDelete,
+}: FlatRowProps) {
+  const breadcrumb = buildBreadcrumb(conv);
+  const recent = isRecentlyActive(conv.updated_at);
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={`切换到会话：${conv.display_name || conv.name}`}
+      className={`group flex cursor-pointer items-start px-3 py-3 transition-colors ${
+        isSelected
+          ? "bg-[var(--color-surface)] font-semibold text-[var(--color-text)]"
+          : "bg-transparent text-[var(--color-text-secondary)] hover:bg-[rgb(245_245_247)] dark:hover:bg-[rgb(30_30_32)]"
+      }`}
+      onClick={() => onClick(conv)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick(conv);
+        }
+      }}
+    >
+      {/* 图标 */}
+      <span className="mr-2 mt-0.5 flex-shrink-0 text-[var(--color-text-muted)]">
+        <MessageSquare size={13} />
+      </span>
+
+      {/* 文字区 */}
+      <div className="flex-1 min-w-0">
+        {/* 名称行 */}
+        <div className="flex items-center gap-1.5">
+          <span className={`truncate text-xs ${
+            isSelected
+              ? "text-[var(--color-text)] font-semibold"
+              : "text-[var(--color-text-secondary)] font-normal"
+          }`}>
+            {conv.display_name || conv.name}
+          </span>
+          {recent && (
+            <span className="flex-shrink-0 rounded bg-[var(--color-accent)]/10 px-1.5 py-0.5 text-[10px] text-[var(--color-accent)]">
+              活跃
+            </span>
+          )}
+        </div>
+
+        {/* 面包屑路径 */}
+        {breadcrumb && (
+          <div className="mt-0.5 truncate text-[10px] text-[var(--color-text-muted)] opacity-60">
+            {breadcrumb}
+          </div>
+        )}
+      </div>
+
+      {/* 三点菜单 */}
+      <div
+        className="ml-1 flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100 max-lg:opacity-100"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="relative">
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleMenu(conv.id); }}
+            className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] rounded"
+            style={{ minWidth: 44, minHeight: 44 }}
+            title="更多操作"
+            aria-label="更多操作"
+            aria-haspopup="menu"
+            aria-expanded={isOpenMenu}
+          >
+            <MoreVertical size={11} />
+          </button>
+          {isOpenMenu && (
+            <div
+              role="menu"
+              className="absolute right-0 top-full mt-1 z-50 min-w-[120px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] py-1 shadow-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                role="menuitem"
+                onClick={() => { onRename(conv); onCloseMenu(); }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)]"
+                style={{ minHeight: 44 }}
+              >
+                <Pencil size={12} /> 重命名
+              </button>
+              <button
+                role="menuitem"
+                onClick={() => { onDelete(conv); onCloseMenu(); }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)]"
+                style={{ minHeight: 44 }}
+              >
+                <Trash2 size={12} /> 删除
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}, (prev, next) => {
+  // 自定义比较：仅关心显示/交互相关的字段
+  return (
+    prev.conv.id === next.conv.id &&
+    prev.conv.display_name === next.conv.display_name &&
+    prev.conv.name === next.conv.name &&
+    prev.conv.parent_id === next.conv.parent_id &&
+    prev.conv.updated_at === next.conv.updated_at &&
+    prev.isSelected === next.isSelected &&
+    prev.isOpenMenu === next.isOpenMenu
+  );
+});
+
 // ══════════════════════════════════════════════════════════════
 //  FlatConversationList
 // ══════════════════════════════════════════════════════════════
@@ -52,6 +193,23 @@ interface FlatConversationListProps {
   onDeleteConv?: (target: { id: string; label: string; parentId?: string; isConv?: boolean; parent?: string | null }) => void;
 }
 
+/** 骨架（避免与 loading 文字"加载中..."不一致） */
+function FlatListSkeleton() {
+  return (
+    <div className="p-3 space-y-2" aria-busy="true" aria-label="加载中">
+      {[0, 1, 2, 3, 4].map((i) => (
+        <div key={i} className="flex items-start gap-2">
+          <Skeleton variant="circle" className="h-3 w-3 mt-0.5" />
+          <div className="flex-1 space-y-1.5">
+            <Skeleton variant="text" className="h-3 w-3/4" />
+            <Skeleton variant="text" className="h-2 w-1/2" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function FlatConversationList({ onRenameConv, onDeleteConv }: FlatConversationListProps) {
   const [conversations, setConversations] = useState<RecentConversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,23 +217,16 @@ export function FlatConversationList({ onRenameConv, onDeleteConv }: FlatConvers
 
   // ── 三点菜单状态 ──
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const menuLeaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  function clearMenuTimer() {
-    if (menuLeaveTimerRef.current) { clearTimeout(menuLeaveTimerRef.current); menuLeaveTimerRef.current = null; }
-  }
-  function startMenuTimer() {
-    clearMenuTimer();
-    menuLeaveTimerRef.current = setTimeout(() => setOpenMenuId(null), 350);
-  }
-  React.useEffect(() => {
+  // 监听外部点击关闭菜单
+  useEffect(() => {
     if (!openMenuId) return;
     const handler = () => setOpenMenuId(null);
-    document.addEventListener('click', handler);
-    return () => document.removeEventListener('click', handler);
+    document.addEventListener("click", handler);
+    return () => document.removeEventListener("click", handler);
   }, [openMenuId]);
 
-  const selectGraphNode = useConversationStore(s => s.selectGraphNode);
-  const selectedNodeId = useConversationStore(s => s.selectedNode?.id);
+  const selectGraphNode = useConversationStore((s) => s.selectGraphNode);
+  const selectedNodeId = useConversationStore((s) => s.selectedNode?.id);
 
   // ── 获取最近的会话 ──
   const fetchRecent = useCallback(async () => {
@@ -126,28 +277,34 @@ export function FlatConversationList({ onRenameConv, onDeleteConv }: FlatConvers
     await selectGraphNode(node, partitionId);
   }, [selectGraphNode]);
 
-  // ── 构建面包屑路径文字 ──
-  const buildBreadcrumb = (conv: RecentConversation): string => {
-    if (conv.ancestors && conv.ancestors.length > 0) {
-      return conv.ancestors.map(a => a.name).join(" / ");
+  const handleRename = useCallback((conv: RecentConversation) => {
+    const newName = window.prompt("输入新名称", conv.display_name || conv.name);
+    if (newName && newName.trim()) {
+      onRenameConv?.(conv.id, newName.trim(), conv.parent_id || "");
+      toast.success("已重命名", newName.trim());
     }
-    return "";
-  };
+  }, [onRenameConv]);
+
+  const handleDelete = useCallback((conv: RecentConversation) => {
+    onDeleteConv?.({
+      id: conv.id,
+      label: conv.display_name || conv.name,
+      parentId: conv.parent_id || undefined,
+      isConv: true,
+      parent: conv.parent_id,
+    });
+  }, [onDeleteConv]);
 
   // ── 加载状态 ──
   if (loading) {
-    return (
-      <div className="px-4 py-8 text-center text-xs text-[var(--color-text-muted)]">
-        加载中...
-      </div>
-    );
+    return <FlatListSkeleton />;
   }
 
   // ── 错误状态 ──
   if (error) {
     return (
       <div className="px-4 py-8 text-center">
-        <div className="text-xs text-[var(--color-error)]">{error}</div>
+        <div className="text-xs text-[var(--color-error)]" role="alert">{error}</div>
         <button
           onClick={fetchRecent}
           className="mt-2 text-xs text-[var(--color-accent)] hover:underline"
@@ -161,126 +318,35 @@ export function FlatConversationList({ onRenameConv, onDeleteConv }: FlatConvers
   // ── 空状态 ──
   if (conversations.length === 0) {
     return (
-      <div className="px-4 py-8 text-center">
-        <Hash size={18} className="text-[var(--color-text-muted)] mx-auto mb-2" />
-        <div className="text-xs text-[var(--color-text-muted)]">暂无会话</div>
-        <div className="text-[10px] text-[var(--color-text-muted)] mt-1 opacity-60">
-          发送消息将自动创建
-        </div>
-      </div>
+      <EmptyState
+        icon="💬"
+        title="暂无会话"
+        description="发送消息将自动创建"
+      />
     );
   }
 
-  // ── 列表 ──
+  // ── 列表（虚拟化：react-virtuoso）──
   return (
-    <div className="py-1">
-      {conversations.map(conv => {
-        const isSelected = selectedNodeId === conv.id;
-        const breadcrumb = buildBreadcrumb(conv);
-        const recent = isRecentlyActive(conv.updated_at);
-
-        return (
-          <div
-            key={conv.id}
-            role="button"
-            tabIndex={0}
-            className={`group flex cursor-pointer items-start px-3 py-3 transition-colors ${
-              isSelected
-                ? "bg-[var(--color-surface)] font-semibold text-[var(--color-text)]"
-                : "bg-transparent text-[var(--color-text-secondary)] hover:bg-[rgb(245_245_247)] dark:hover:bg-[rgb(30_30_32)]"
-            }`}
-            onClick={() => handleRowClick(conv)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                handleRowClick(conv);
-              }
-            }}
-          >
-            {/* 图标 */}
-            <span className="mr-2 mt-0.5 flex-shrink-0 text-[var(--color-text-muted)]">
-              <MessageSquare size={13} />
-            </span>
-
-            {/* 文字区 */}
-            <div className="flex-1 min-w-0">
-              {/* 名称行 */}
-              <div className="flex items-center gap-1.5">
-                <span className={`truncate text-xs ${
-                  isSelected
-                    ? "text-[var(--color-text)] font-semibold"
-                    : "text-[var(--color-text-secondary)] font-normal"
-                }`}>
-                  {conv.display_name || conv.name}
-                </span>
-                {recent && (
-                  <span className="flex-shrink-0 rounded bg-[var(--color-accent)]/10 px-1.5 py-0.5 text-[10px] text-[var(--color-accent)]">
-                    活跃
-                  </span>
-                )}
-              </div>
-
-              {/* 面包屑路径 */}
-              {breadcrumb && (
-                <div className="mt-0.5 truncate text-[10px] text-[var(--color-text-muted)] opacity-60">
-                  {breadcrumb}
-                </div>
-              )}
-            </div>
-
-            {/* 三点菜单 */}
-            <div
-              className="ml-1 flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100 max-lg:opacity-100"
-              onClick={(e) => e.stopPropagation()}
-              onMouseEnter={clearMenuTimer}
-              onMouseLeave={startMenuTimer}
-            >
-              <div className="relative">
-                <button
-                  onClick={(e) => { e.stopPropagation(); setOpenMenuId(prev => prev === conv.id ? null : conv.id); }}
-                  className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] rounded"
-                  style={{ minWidth: 44, minHeight: 44 }}
-                  title="更多操作"
-                >
-                  <MoreVertical size={11} />
-                </button>
-                {openMenuId === conv.id && (
-                  <div
-                    className="absolute right-0 top-full mt-1 z-50 min-w-[120px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] py-1 shadow-lg"
-                    onClick={(e) => e.stopPropagation()}
-                    onMouseEnter={clearMenuTimer}
-                    onMouseLeave={startMenuTimer}
-                  >
-                    <button
-                      onClick={() => {
-                        const newName = window.prompt("输入新名称", conv.display_name || conv.name);
-                        if (newName && newName.trim()) {
-                          onRenameConv?.(conv.id, newName.trim(), conv.parent_id || "");
-                        }
-                        setOpenMenuId(null);
-                      }}
-                      className="flex w-full items-center gap-2 px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)]"
-                      style={{ minHeight: 44 }}
-                    >
-                      <Pencil size={12} /> 重命名
-                    </button>
-                    <button
-                      onClick={() => {
-                        onDeleteConv?.({ id: conv.id, label: conv.display_name || conv.name, parentId: conv.parent_id || undefined, isConv: true, parent: conv.parent_id });
-                        setOpenMenuId(null);
-                      }}
-                      className="flex w-full items-center gap-2 px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)]"
-                      style={{ minHeight: 44 }}
-                    >
-                      <Trash2 size={12} /> 删除
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })}
+    <div className="h-full py-1" role="list">
+      <Virtuoso
+        style={{ height: "100%" }}
+        data={conversations}
+        itemContent={(_index, conv) => (
+          <FlatRow
+            conv={conv}
+            isSelected={selectedNodeId === conv.id}
+            isOpenMenu={openMenuId === conv.id}
+            onClick={handleRowClick}
+            onToggleMenu={setOpenMenuId}
+            onCloseMenu={() => setOpenMenuId(null)}
+            onRename={handleRename}
+            onDelete={handleDelete}
+          />
+        )}
+        overscan={200}
+        computeItemKey={(_index, conv) => conv.id}
+      />
     </div>
   );
 }

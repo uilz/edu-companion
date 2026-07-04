@@ -1,5 +1,9 @@
 {
   "dependencies": {
-    "next": "^16.2.9"
+    "next": "^16.2.9",
+    "playwright": "^1.61.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
   }
 }

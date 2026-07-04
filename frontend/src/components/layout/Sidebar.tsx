@@ -1,43 +1,40 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  Dumbbell,
-  Brain,
-  Bell,
   Settings,
   Sun,
   Moon,
-  Library,
   LogOut,
-  GitGraph,
   PanelLeftClose,
   PanelLeftOpen,
-} from 'lucide-react';
+} from "lucide-react";
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import SecretaryBellBadge from '@/components/secretary/SecretaryBellBadge';
+import { getNavItemsFor, isPathActive, type NavContext } from '@/lib/navConfig';
+import { useUser } from '@/hooks/useUser';
+import NavBadge from './NavBadge';
 
 const SIDEBAR_COLLAPSED_KEY = 'edu-sidebar-collapsed';
 const COLLAPSED_WIDTH = 60;
-
-const navItems = [
-  { href: '/conversation',    label: '学习空间', icon: Brain },
-  { href: '/practice', label: '练习', icon: Dumbbell },
-  { href: '/knowledge-tree', label: '知识树', icon: GitGraph },
-  { href: '/secretary', label: '秘书', icon: Bell },
-  { href: '/resources', label: '我的资源', icon: Library },
-];
 
 // ── 桌面端侧边栏导航组件 ──
 export default function Sidebar() {
   const pathname = usePathname();
   const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
+  const { navContext } = useUser();
   const [collapsed, setCollapsed] = useState(false);
   const [mounted, setMounted] = useState(false);
+
+  // 任务 #34：根据用户角色 + 订阅档位过滤入口
+  const navItems = useMemo<ReturnType<typeof getNavItemsFor>>(
+    () => getNavItemsFor('sidebar', navContext as NavContext),
+    [navContext],
+  );
 
   // 从 localStorage 恢复折叠状态
   useEffect(() => {
@@ -66,10 +63,8 @@ export default function Sidebar() {
     setCollapsed((prev) => !prev);
   }, []);
 
-  const isActive = (href: string) => {
-    if (href === '/') return pathname === '/';
-    return pathname?.startsWith(href);
-  };
+  // 当前路径是否高亮（统一规则来自 navConfig）
+  const isActive = (href: string) => isPathActive(pathname, href);
 
   // 未挂载前不渲染（避免 SSR 闪烁）
   if (!mounted) {
@@ -111,12 +106,12 @@ export default function Sidebar() {
         <div className="space-y-0.5">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const active = isActive(item.href);
+            const active = isActive(item.path);
 
             return (
               <Link
-                key={item.href}
-                href={item.href}
+                key={item.path}
+                href={item.path}
                 title={collapsed ? item.label : undefined}
                 className={`
                   flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-md
@@ -132,7 +127,10 @@ export default function Sidebar() {
                   <Icon size={18} strokeWidth={active ? 2.2 : 1.6} />
                   {!collapsed && item.label === '秘书' && <SecretaryBellBadge />}
                 </span>
-                {!collapsed && <span>{item.label}</span>}
+                {!collapsed && <span className="truncate">{item.label}</span>}
+                {!collapsed && (
+                  <NavBadge item={item} />
+                )}
                 {!collapsed && active && (
                   <span className="ml-auto w-1.5 h-1.5 rounded-full bg-accent" />
                 )}

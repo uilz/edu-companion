@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Loader2, Target } from "lucide-react";
 import Card from "@/components/ui/Card";
 import { knowledgeNodesApi, type KnowledgeNode } from "@/lib/api/knowledge-tree-api";
-import { useCurrentUserId } from "@/hooks/useCurrentUserId";
+import { useAuth } from "@/contexts/AuthContext";
 
 // ── Types ──
 
@@ -218,14 +218,14 @@ function RadarSVG({
 // ── Main component ──
 
 export default function RadarChart() {
-  const userId = useCurrentUserId();
+  const { user, loading: authLoading } = useAuth();
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [subject, setSubject] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const fetchGraph = async (subj: string) => {
-    if (!userId) return;
+    if (authLoading || !user) return;
     setLoading(true);
     try {
       const json = await knowledgeNodesApi.list();
@@ -256,7 +256,7 @@ export default function RadarChart() {
 
   useEffect(() => {
     fetchGraph(subject);
-  }, [subject]);
+  }, [subject, authLoading, user]);
 
   const nodes = graphData?.nodes || [];
   // Take up to 8 nodes sorted by mastery (lowest first = most need attention)

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { api } from "@/lib/api/api";
-import { useCurrentUserId } from "@/hooks/useCurrentUserId";
+import { useAuth } from "@/contexts/AuthContext";
 
 /** 学习计划中的单个任务项 */
 export interface PlanItem {
@@ -37,9 +37,12 @@ export interface SuggestionData {
 /**
  * useStudyPlan — 学习规划页面的数据逻辑
  * 加载计划、进度、建议，支持生成/刷新和完成标记
+ *
+ * 任务 #49：使用 useAuth 直接读取 userId，避免 useCurrentUserId 死锁。
+ * 数据加载 effect 显式等待 authLoading=false + user!=null。
  */
 export function useStudyPlan() {
-  const userId = useCurrentUserId();
+  const { user, loading: authLoading } = useAuth();
   const [planItems, setPlanItems] = useState<PlanItem[]>([]);
   const [planMeta, setPlanMeta] = useState<PlanData | null>(null);
   const [progress, setProgress] = useState<ProgressData | null>(null);
@@ -49,9 +52,10 @@ export function useStudyPlan() {
   const [error, setError] = useState("");
 
   const loadData = useCallback(async () => {
-    if (!userId) return;
+    if (authLoading || !user) return;
     setLoading(true); setError("");
     try {
+      const userId = user.id;
       const [planData, progData, suggData] = await Promise.all([
         api<any>(`/api/study/plan/${userId}`).catch(() => null),
         api<any>(`/api/study/plan/${userId}/progress`).catch(() => null),
@@ -64,13 +68,15 @@ export function useStudyPlan() {
       if (suggData) setSuggestions(suggData);
     } catch { setError("加载失败，请检查后端服务"); }
     finally { setLoading(false); }
-  }, [userId]);
+  }, [authLoading, user]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
   const handleGenerate = async () => {
+    if (!user) return;
     setGenerating(true);
     try {
+      const userId = user.id;
       await api(`/api/study/plan/generate?user_id=${userId}&reason=manual`, { method: "POST" });
       await loadData();
     } catch { /* ignore */ }
@@ -78,6 +84,8 @@ export function useStudyPlan() {
   };
 
   const handleComplete = async (taskId: string) => {
+    if (!user) return;
+    const userId = user.id;
     try {
       await api(`/api/study/plan/${userId}/${taskId}/complete`, { method: "PUT" });
       const progData = await api<any>(`/api/study/plan/${userId}/progress`);

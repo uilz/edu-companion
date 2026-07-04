@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { authedFetch } from "@/lib/api/api";
-import { useCurrentUserId } from "@/hooks/useCurrentUserId";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface DayEntry {
   date: string;
@@ -121,17 +121,18 @@ export default function CalendarTab() {
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState<DayEntry | null>(null);
 
-  const userId = useCurrentUserId();
+  const { user, loading: authLoading } = useAuth();
   const fetchCalendar = useCallback(async (y: number, m: number) => {
-    if (!userId) { setLoading(false); return; }
+    if (authLoading || !user) { setLoading(false); return; }
     setLoading(true);
     try {
+      const userId = user.id;
       const res = await authedFetch(`/api/progress/${userId}/calendar?year=${y}&month=${m}`);
       if (!res.ok) throw new Error("Failed");
       setData(await res.json());
     } catch { setData(null); }
     setLoading(false);
-  }, [userId]);
+  }, [authLoading, user]);
 
   useEffect(() => { fetchCalendar(year, month); }, [year, month, fetchCalendar]);
 
