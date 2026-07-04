@@ -18,17 +18,18 @@ logger = logging.getLogger(__name__)
 class ZPDScheduler:
     """
     基于Vygotsky最近发展区的自适应调度
-    
+
     核心思想：每道题都应该在"刚好够挑战"的甜蜜点
-    
-    |θ - b| ∈ [0.3, 1.2] → ZPD甜蜜点
-    |θ - b| < 0.3 → 太简单
-    |θ - b| > 1.2 → 太难
-    
+
+    难度差 |θ - b| ∈ [ZPD_MIN_GAP, ZPD_MAX_GAP] → ZPD甜蜜点
+    难度差 |θ - b| < ZPD_MIN_GAP                 → 太简单
+    难度差 |θ - b| > ZPD_MAX_GAP                 → 太难
+
     其中 θ = 学生能力, b = 题目难度
+    默认参数: [0.3, 1.0]，最优点 0.6
     """
 
-    # ZPD窗口参数
+    # ZPD窗口参数 (修复 2026-07-04: 注释与代码统一为 [0.3, 1.0])
     ZPD_MIN_GAP = 0.3   # 最小难度差（避免太简单）
     ZPD_MAX_GAP = 1.0   # 最大难度差（避免太难）
     ZPD_OPTIMAL = 0.6   # 最优难度差

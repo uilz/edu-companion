@@ -1,9 +1,13 @@
 """
 PersistentEventBus — 持久化事件总线
 
-基于 events 表实现可靠事件分发。publish() → INSERT 到 events 表，
+基于 events 表实现可靠事件分发。publish() → EventStore.append() (单一写入路径)，
 后台轮询 pending 事件 → dispatch → mark done。
 进程崩溃后事件不丢失，重启后可恢复。
+
+修复 (2026-07-04 B1)：
+原本 EventStore.append() + EventsRepository.insert() 双写会产生重复行，
+现统一走 EventStore.append() 单一写入路径。
 """
 
 from __future__ import annotations
@@ -31,6 +35,9 @@ class PersistentEventBus:
         self._task: asyncio.Task | None = None
         self._published_count = 0
         self._error_count = 0
+        # 递归深度保护 (修复 B4)
+        self._depth = 0
+        self._max_depth = 8
 
     def subscribe(self, event_type: str, handler: EventHandler) -> None:
         """订阅事件类型"""
@@ -45,78 +52,78 @@ class PersistentEventBus:
             logger.debug("取消订阅 %s ← %s", event_type, handler.__qualname__)
 
     async def publish(self, event: DomainEvent) -> str:
-        """发布事件 → EventStore 写入 + 立即 dispatch + 短期记忆，返回 event_id
+        """发布事件 → EventStore 单一写入 + 立即 dispatch + 短期记忆，返回 event_id
 
-        EventStore 写入保证单一真相源；
-        立即 dispatch 保证与内存 EventBus 行为一致；
+        修复 (B1 2026-07-04)：
+        EventStore.append() 已经是单一写入路径，移除重复的 EventsRepository.insert。
         EventMemory 短期记忆供 AI 上下文注入。
+
+        修复 (B4 2026-07-04)：
+        递归深度保护 — handler 内 publish 嵌套事件时不会无限递归。
         """
-        from app.infrastructure.db.events_repository import Event, EventsRepository
-
-        event_type = type(event).__name__
-        self._published_count += 1
-
-        # 提取元信息
-        user_id = getattr(event, "user_id", "") or "system"
-        source_type = getattr(event, "source_type", "") or "system"
-        source_id = getattr(event, "source_id", "") or ""
-
-        # 写入 EventStore (统一存储)
-        try:
-            from app.infrastructure.event_store import get_event_store
-            store = get_event_store()
-            await store.append(
-                event,
-                stream_type=source_type,
-                stream_id=source_id,
-                compute_embedding=False,  # 按需开启，节省计算
+        # 递归深度保护
+        if self._depth >= self._max_depth:
+            logger.warning(
+                "⛔ [%s] PersistentEventBus 递归深度 %d 超限，阻断",
+                type(event).__name__, self._depth,
             )
-        except Exception:
-            logger.debug("EventStore 写入失败，回退到直接 DB 写入", exc_info=True)
+            return ""
 
-        # 写入 DB (保留兼容)
-        repo = EventsRepository()
-        db_event = Event(
-            user_id=user_id,
-            event_type=event_type,
-            source_type=source_type,
-            source_id=source_id,
-            status="pending",
-            payload=asdict(event),
-        )
-        repo.insert(db_event)
-
-        # 写入短期记忆 (供 AI 上下文)
+        self._depth += 1
         try:
-            from app.infrastructure.event_memory import get_event_memory
-            from app.infrastructure.event_store import EventRecord
-            record = EventRecord(
-                id=db_event.id,
-                user_id=user_id,
-                event_type=event_type,
-                stream_type=source_type,
-                stream_id=source_id,
-                source_type=source_type,
-                source_id=source_id,
-                payload=asdict(event),
-                created_at=db_event.created_at,
-            )
-            memory = get_event_memory()
-            memory.remember(user_id, record)
-            # 工作记忆 (如果在会话中)
-            if source_type == "conversation" and source_id:
-                memory.working_event(user_id, source_id, record)
-            elif source_type == "practice" and source_id:
-                memory.working_event(user_id, source_id, record)
-        except Exception:
-            logger.debug("EventMemory 写入失败", exc_info=True)
+            event_type = type(event).__name__
+            self._published_count += 1
 
-        # 立即 dispatch（与内存 EventBus 行为一致）
-        await self._dispatch_to_handlers(event_type, event)
+            # 提取元信息
+            user_id = getattr(event, "user_id", "") or "system"
+            source_type = getattr(event, "source_type", "") or "system"
+            source_id = getattr(event, "source_id", "") or ""
 
-        # 标记完成
-        repo.mark_done(db_event.id)
-        return db_event.id
+            # 单一写入路径: EventStore.append() (修复 B1)
+            try:
+                from app.infrastructure.event_store import get_event_store
+                store = get_event_store()
+                event_id = await store.append(
+                    event,
+                    stream_type=source_type,
+                    stream_id=source_id,
+                    compute_embedding=False,  # 按需开启，节省计算
+                )
+            except Exception:
+                logger.debug("EventStore 写入失败", exc_info=True)
+                event_id = ""
+
+            # 写入短期记忆 (供 AI 上下文)
+            try:
+                from app.infrastructure.event_memory import get_event_memory
+                from app.infrastructure.event_store import EventRecord
+                record = EventRecord(
+                    id=event_id,
+                    user_id=user_id,
+                    event_type=event_type,
+                    stream_type=source_type,
+                    stream_id=source_id,
+                    source_type=source_type,
+                    source_id=source_id,
+                    payload=asdict(event),
+                    created_at=__import__("time").time(),
+                )
+                memory = get_event_memory()
+                memory.remember(user_id, record)
+                # 工作记忆 (如果在会话中)
+                if source_type == "conversation" and source_id:
+                    memory.working_event(user_id, source_id, record)
+                elif source_type == "practice" and source_id:
+                    memory.working_event(user_id, source_id, record)
+            except Exception:
+                logger.debug("EventMemory 写入失败", exc_info=True)
+
+            # 立即 dispatch（与内存 EventBus 行为一致）
+            await self._dispatch_to_handlers(event_type, event)
+
+            return event_id
+        finally:
+            self._depth -= 1
 
     async def poll_once(self) -> int:
         """单次轮询 pending 事件并分发，返回处理的事件数

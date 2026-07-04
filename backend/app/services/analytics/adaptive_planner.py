@@ -16,26 +16,20 @@ import logging
 from datetime import datetime, timedelta
 
 from app.domain.cognitive import get_repo
+from app.domain.cognitive import constants as C
 from app.domain.knowledge.checker import PrerequisiteChecker
 from app.domain.knowledge.prerequisites import SKILL_TO_SUBJECT
 from app.infrastructure.db.database import get_db
 
 logger = logging.getLogger("adaptive_planner")
 
-# ── 掌握度阈值（与 BKT get_mastery_level 保持一致）──
-_MASTERY_THRESHOLD = 0.8
+# 掌握度阈值已统一到 app.domain.cognitive.constants (与 BKT 一致)
+_MASTERY_THRESHOLD = C.MASTERY_THRESHOLD
 
 
 def _proficiency_to_level(p: float) -> str:
-    """CognitiveNode proficiency_mean → 掌握等级字符串"""
-    if p < 0.3:
-        return "初学"
-    elif p < 0.6:
-        return "发展中"
-    elif p < _MASTERY_THRESHOLD:
-        return "接近掌握"
-    else:
-        return "已掌握"
+    """CognitiveNode proficiency_mean → 掌握等级字符串 (统一实现)"""
+    return C.proficiency_to_mastery_level(p)
 
 
 class AdaptivePlanGenerator:

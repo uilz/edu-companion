@@ -1,7 +1,12 @@
 """事件处理器 — 认知事件全生命周期
 
-保留 18 步 practice_response / dialogue_context_update / conversation_assessment 处理器,
-改用 CognitiveOperationRegistry + Event 模型.
+保留 practice_response / dialogue_context_update / conversation_assessment 处理器,
+改用 CognitiveOperationRegistry + CognitiveEventsAdapter 统一持久化路径.
+
+修复 (2026-07-04)：
+- `_get_repo()` 之前回退到 `container.event_bus` (PersistentEventBus)，
+  但 EventBus 没有 `insert` / `mark_status` 方法 → submit_practice 静默失败
+- 现统一走 `CognitiveEventsAdapter`（单例，包装 EventsRepository）
 """
 
 from __future__ import annotations
@@ -10,6 +15,7 @@ import logging
 import time
 from typing import Any
 
+from app.domain.cognitive.events_repository import get_cognitive_events_adapter
 from app.domain.cognitive.models import (
     Activation,
     Belief,
@@ -47,29 +53,33 @@ class CognitiveEventRecord:
         self.payload = payload or {}
 
 
-# 可注入的事件仓储协议
+# 可注入的事件仓储协议 — 默认使用 CognitiveEventsAdapter 单例
 _events_repo = None
 
 
 def set_events_repo(repo: Any) -> None:
-    """注入事件仓储实现（由 DI 容器调用）"""
+    """注入事件仓储实现（由 DI 容器或测试覆写）"""
     global _events_repo
     _events_repo = repo
 
 
 def _get_repo():
+    """获取事件仓储 — 优先使用注入的，否则用单例 adapter
+
+    修复 (2026-07-04)：
+    之前 fallback 是 `container.event_bus`，但 EventBus 没有
+    `insert` / `mark_status` 方法。
+    """
     global _events_repo
     if _events_repo is None:
-        from app.application.di import container
-        # 使用 container 获取事件仓库（见 application/di.py）
-        _events_repo = container.event_bus  # fallback
+        _events_repo = get_cognitive_events_adapter()
     return _events_repo
 
-# ── 认知事件 (已废弃, 仅保留兼容) ──
+# ── 认知事件（统一走 _get_repo()，不再回退到 EventBus） ──
 
 def append_event(event: CognitiveEventRecord):
     """追加事件记录（委托到注入的仓储）"""
-    _get_repo().append_event(event)
+    _get_repo().insert(event)
 
 
 def get_unprocessed_events(limit: int = 100) -> list:
@@ -114,7 +124,7 @@ def get_handler(event_type: str):
     return _HANDLERS.get(event_type)
 
 
-def process_event(event: Event) -> dict[str, Any]:
+def process_event(event: CognitiveEventRecord) -> dict[str, Any]:
     """Process a single cognitive event via registry operations.
 
     Returns a dict of effects for logging/debugging.
@@ -243,11 +253,20 @@ def handle_practice_response(event: CognitiveEventRecord) -> dict[str, Any]:
 
     # ─── 11. 元认知校准 ───
     confidence_before = payload.get("confidence_before")
-    if confidence_before is not None and isinstance(confidence_before, int):
+    # 兼容两种格式:
+    #   int 1-4  (旧 API: 1=very unsure, 4=very sure)
+    #   float 0-1 (新 API: 0.0-1.0)
+    cb_norm: int | None = None
+    if confidence_before is not None:
+        if isinstance(confidence_before, int) and not isinstance(confidence_before, bool):
+            cb_norm = max(1, min(4, confidence_before))
+        elif isinstance(confidence_before, float) and 0.0 <= confidence_before <= 1.0:
+            cb_norm = max(1, min(4, round(confidence_before * 4) or 1))
+    if cb_norm is not None:
         metacog = node.metacognition or Metacognition()
         # 计算偏差：confidence_before (1-4) vs correctness_score (4 if correct, 0 if not)
         correctness_score = 4 if success else 0
-        gap = confidence_before - correctness_score
+        gap = cb_norm - correctness_score
         # 更新方向
         if abs(gap) <= 1:
             direction = "accurate"
@@ -262,7 +281,7 @@ def handle_practice_response(event: CognitiveEventRecord) -> dict[str, Any]:
         # 计算校准误差（历史均值绝对值）
         calibration_error = sum(abs(h) for h in history) / len(history) if history else 0.0
         node.metacognition = Metacognition(
-            self_assessment=confidence_before / 4.0,
+            self_assessment=cb_norm / 4.0,
             calibration_error=round(calibration_error, 3),
             direction=direction,
             recent_history=history,
@@ -420,7 +439,7 @@ def handle_dialogue_context_update(event: Event) -> dict[str, Any]:
     get_repo().upsert_node(node, user_id)
 
     # 记录事件
-    _repo.insert(Event(
+    _get_repo().insert(CognitiveEventRecord(
         event_type="cognitive_update",
         user_id=user_id,
         source_type="conversation",

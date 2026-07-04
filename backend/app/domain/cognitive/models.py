@@ -234,6 +234,7 @@ class Metacognition(BaseModel):
 class Engagement(BaseModel):
     xp: float = 0.0
     streak_current: int = 0
+    streak_longest: int = 0
     effort_estimate: float = 0.5
 
 

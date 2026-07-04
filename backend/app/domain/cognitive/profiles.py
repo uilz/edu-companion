@@ -142,12 +142,6 @@ def extract_diagnosis_profile(node) -> DiagnosisProfile:
 
 
 def _get_mastery_label(mean: float) -> str:
-    if mean < 0.3:
-        return "未接触"
-    elif mean < 0.6:
-        return "初学"
-    elif mean < 0.8:
-        return "发展中"
-    elif mean < 0.9:
-        return "接近掌握"
-    return "已掌握"
+    """[DEPRECATED] 使用 constants.proficiency_to_mastery_level 替代"""
+    from app.domain.cognitive import constants as C
+    return C.proficiency_to_mastery_level(mean)
