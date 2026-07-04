@@ -210,6 +210,67 @@ class CognitiveNodeUpdated(DomainEvent):
 
 
 # ──────────────────────────────────────────────
+# MoodStress 域事件 (Task #87)
+# ──────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class MoodStressRecorded(DomainEvent):
+    """用户主动记录心情/压力/能量 — 手动优先"""
+    user_id: str = ""
+    id: str = ""
+    emotion_tags: list[str] = field(default_factory=list)
+    pressure_score: int = 0
+    energy_score: int = 0
+    text_note: str = ""
+    related_event_ids: list[str] = field(default_factory=list)
+
+    @property
+    def event_type(self) -> str:
+        return "MoodStressRecorded"
+
+
+@dataclass(frozen=True)
+class MoodStressInterventionTriggered(DomainEvent):
+    """干预工具被使用 — 不修改学习数据"""
+    user_id: str = ""
+    id: str = ""
+    intervention_type: str = ""
+    duration_seconds: int = 0
+    trigger_event: str = ""
+    notes: str = ""
+
+    @property
+    def event_type(self) -> str:
+        return "MoodStressInterventionTriggered"
+
+
+@dataclass(frozen=True)
+class MoodStressBehaviorSignalDetected(DomainEvent):
+    """行为信号被检测 — 仅提示，不自动修改"""
+    user_id: str = ""
+    id: str = ""
+    signal_type: str = ""
+    signal_data: dict = field(default_factory=dict)
+    severity: int = 1
+
+    @property
+    def event_type(self) -> str:
+        return "MoodStressBehaviorSignalDetected"
+
+
+@dataclass(frozen=True)
+class MoodStressPrefsUpdated(DomainEvent):
+    """心情压力偏好更新 — 增量覆盖"""
+    user_id: str = ""
+    changed_fields: list[str] = field(default_factory=list)
+
+    @property
+    def event_type(self) -> str:
+        return "MoodStressPrefsUpdated"
+
+
+# ──────────────────────────────────────────────
 # 事件类型注册表（用于 event_bus 订阅路由）
 # ──────────────────────────────────────────────
 
@@ -226,5 +287,9 @@ EVENT_TYPES: dict[str, type[DomainEvent]] = {
         NodeCreated,
         ProposalAccepted,
         PendingCrossTopic,
+        MoodStressRecorded,
+        MoodStressInterventionTriggered,
+        MoodStressBehaviorSignalDetected,
+        MoodStressPrefsUpdated,
     ]
 }
