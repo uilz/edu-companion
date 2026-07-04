@@ -61,29 +61,76 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [style, setStyleState] = useState<DesignStyle>(DEFAULT_STYLE);
   const [mounted, setMounted] = useState(false);
 
-  // 初始化：从 localStorage 恢复设置并应用到 document
+  // 初始化：先 localStorage 缓存（同 tab 立即生效）, 再从服务端拉取（跨设备一致）
   useEffect(() => {
-    const savedTheme = localStorage.getItem(STORAGE_THEME_KEY) as Theme | null;
-    const savedStyle = localStorage.getItem(STORAGE_STYLE_KEY) as DesignStyle | null;
-    const initialTheme = savedTheme || DEFAULT_THEME;
-    const initialStyle = savedStyle || DEFAULT_STYLE;
-
+    if (typeof window === 'undefined') return;
+    // 1. 立即从 localStorage 恢复（防闪烁）
+    const cachedTheme = localStorage.getItem(STORAGE_THEME_KEY) as Theme | null;
+    const cachedStyle = localStorage.getItem(STORAGE_STYLE_KEY) as DesignStyle | null;
+    const initialTheme = cachedTheme || DEFAULT_THEME;
+    const initialStyle = cachedStyle || DEFAULT_STYLE;
     setThemeState(initialTheme);
     setStyleState(initialStyle);
-
     const root = document.documentElement;
     root.setAttribute('data-theme', initialTheme);
     root.setAttribute('data-style', initialStyle);
-
     setMounted(true);
+
+    // 2. Task #84: B4 修复 — 从服务端拉取最新值（跨设备一致）
+    (async () => {
+      try {
+        const token = localStorage.getItem('access_token');
+        if (!token) return; // 未登录, 用 localStorage 即可
+        const res = await fetch('/api/settings/ui', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data) return;
+        if (data.theme && (data.theme === 'dark' || data.theme === 'light')
+            && data.theme !== initialTheme) {
+          setThemeState(data.theme);
+          localStorage.setItem(STORAGE_THEME_KEY, data.theme);
+          root.setAttribute('data-theme', data.theme);
+        }
+        if (data.style && STYLE_LIST.find(s => s.id === data.style)
+            && data.style !== initialStyle) {
+          setStyleState(data.style);
+          localStorage.setItem(STORAGE_STYLE_KEY, data.style);
+          root.setAttribute('data-style', data.style);
+        }
+      } catch { /* 静默 — 用 localStorage 即可 */ }
+    })();
   }, []);
 
-  // 设置主题并持久化
+  // 同步到服务端 (Task #84: B4 修复)
+  const persistUi = useCallback(async (patch: { theme?: Theme; style?: DesignStyle }) => {
+    if (typeof window === 'undefined') return;
+    const token = localStorage.getItem('access_token');
+    if (!token) return; // 未登录, 仅 localStorage
+    try {
+      await fetch('/api/settings/ui', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(patch),
+      });
+    } catch (e) {
+      console.warn('[theme] 同步服务端失败:', e);
+    }
+  }, []);
+
+  // 设置主题并持久化（localStorage 立即生效 + 服务端异步）
   const setTheme = useCallback((t: Theme) => {
     setThemeState(t);
-    localStorage.setItem(STORAGE_THEME_KEY, t);
-    document.documentElement.setAttribute('data-theme', t);
-  }, []);
+    try { localStorage.setItem(STORAGE_THEME_KEY, t); } catch { /* */ }
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', t);
+    }
+    persistUi({ theme: t });
+  }, [persistUi]);
 
   // 切换主题
   const toggleTheme = useCallback(() => {
@@ -93,9 +140,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // 设置风格并持久化
   const setStyle = useCallback((s: DesignStyle) => {
     setStyleState(s);
-    localStorage.setItem(STORAGE_STYLE_KEY, s);
-    document.documentElement.setAttribute('data-style', s);
-  }, []);
+    try { localStorage.setItem(STORAGE_STYLE_KEY, s); } catch { /* */ }
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-style', s);
+    }
+    persistUi({ style: s });
+  }, [persistUi]);
 
   // 当前风格元数据
   const currentStyleMeta = STYLE_LIST.find(s => s.id === style) || STYLE_LIST[0];

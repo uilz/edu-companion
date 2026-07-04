@@ -5,16 +5,19 @@ import {
   Sun, Moon, Key, Cpu, MessageSquare, Brain,
   User, Shield, LogOut, Eye, EyeOff, Check, Loader2,
   Monitor, Smartphone, MapPin, X, Database, Download,
-  AlertTriangle, RefreshCw,
+  AlertTriangle, RefreshCw, Layout, PanelTop, PanelBottom,
+  PanelLeft, PanelRight, RotateCcw,
 } from "lucide-react";
 import Link from "next/link";
 import { useTheme, STYLE_LIST } from "@/contexts/ThemeContext";
 import { useRouter } from "next/navigation";
 import { authedFetch, AuthUser } from "@/lib/api/auth";
+import { useLayoutPrefs, PANEL_BOUNDS, type PanelKey } from "@/hooks/useLayoutPrefs";
 
 const SETTINGS_TABS = [
   { key: "account", label: "账户", icon: User },
   { key: "security", label: "安全", icon: Shield },
+  { key: "layout", label: "布局", icon: Layout },
   { key: "llm", label: "LLM 配置", icon: Cpu },
   { key: "preferences", label: "学习偏好", icon: Brain },
   { key: "appearance", label: "外观", icon: Sun },
@@ -88,6 +91,7 @@ export default function SettingsPage() {
       <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-xl p-5">
         {activeTab === "account" && <AccountTab user={user} />}
         {activeTab === "security" && <SecurityTab user={user} />}
+        {activeTab === "layout" && <LayoutTab />}
         {activeTab === "llm" && <LlmTab user={user} />}
         {activeTab === "preferences" && <PreferencesTab />}
         {activeTab === "appearance" && (
@@ -285,9 +289,12 @@ function SecurityTab({ user }: { user: AuthUser | null }) {
 
   const logout = useCallback(async () => {
     try {
-      localStorage.removeItem("token");
-      localStorage.removeItem("conversation-page-state");
-      sessionStorage.clear();
+      // Task #84: B1 bug 修复 — 之前用 "token" 错误 key, 实际是 "access_token"
+      // 统一用 clearAuth() 清理所有认证态
+      const { clearAuth } = await import("@/lib/api/auth");
+      clearAuth();
+      try { localStorage.removeItem("conversation-page-state"); } catch { /* */ }
+      try { sessionStorage.clear(); } catch { /* */ }
       router.push("/login");
     } catch { router.push("/login"); }
   }, [router]);
@@ -487,46 +494,56 @@ function LlmTab({ user }: { user: AuthUser | null }) {
   useEffect(() => {
     if (!user) return;
     setLoading(true);
-    authedFetch<any>("/api/settings/llm")
-      .then((data: any) => {
-        if (data?.has_custom_config) {
-          setSettings({
-            apiEndpoint: data.api_base || "",
-            apiKey: data.api_key || "",
-            modelName: data.model_name || "",
-            systemPrompt: settings.systemPrompt,
-            temperature: settings.temperature,
-            maxTokens: settings.maxTokens,
-          });
-          setHasCustom(true);
-        }
+    Promise.all([
+      authedFetch<any>("/api/settings/llm").catch(() => null),
+      authedFetch<any>("/api/settings/llm-behavior").catch(() => null),
+    ])
+      .then(([llm, behavior]) => {
+        // Task #84: B2 修复 — 优先从服务端读取, localStorage 作为临时缓存
+        setSettings((s) => {
+          const next = { ...s };
+          if (llm?.has_custom_config) {
+            next.apiEndpoint = llm.api_base || "";
+            next.apiKey = llm.api_key || "";
+            next.modelName = llm.model_name || "";
+            setHasCustom(true);
+          }
+          if (behavior) {
+            next.temperature = behavior.temperature ?? 0.7;
+            next.maxTokens = behavior.max_tokens ?? 2048;
+            next.systemPrompt = behavior.system_prompt || "";
+          }
+          return next;
+        });
       })
-      .catch(() => {})
       .finally(() => setLoading(false));
   }, [user]);
 
-  useEffect(() => {
-    const saved = localStorage.getItem("edu-companion-settings-llm-system-prompt");
-    if (saved) {
-      try {
-        const p = JSON.parse(saved);
-        setSettings((s) => ({
-          ...s,
-          systemPrompt: p.systemPrompt || "",
-          temperature: p.temperature ?? 0.7,
-          maxTokens: p.maxTokens ?? 2048,
-        }));
-      } catch { /* */ }
+  // Task #84: B2 修复 — system prompt / 温度 / max_tokens 同步到服务端
+  // localStorage 仍作为离线缓存, 减少刷新闪烁
+  const persistBehavior = useCallback(async (patch: Partial<typeof settings>) => {
+    // 写本地缓存 (防闪烁)
+    try {
+      localStorage.setItem("edu-companion-settings-llm-system-prompt", JSON.stringify({
+        systemPrompt: patch.systemPrompt ?? settings.systemPrompt,
+        temperature: patch.temperature ?? settings.temperature,
+        maxTokens: patch.maxTokens ?? settings.maxTokens,
+      }));
+    } catch { /* */ }
+    // 同步服务端
+    try {
+      await authedFetch("/api/settings/llm-behavior", {
+        method: "PUT",
+        body: JSON.stringify({
+          temperature: patch.temperature,
+          max_tokens: patch.maxTokens,
+          system_prompt: patch.systemPrompt,
+        }),
+      });
+    } catch (e) {
+      console.warn("[settings] LLM behavior 同步服务端失败:", e);
     }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem("edu-companion-settings-llm-system-prompt", JSON.stringify({
-      systemPrompt: settings.systemPrompt,
-      temperature: settings.temperature,
-      maxTokens: settings.maxTokens,
-    }));
-  }, [settings.systemPrompt, settings.temperature, settings.maxTokens]);
+  }, [settings]);
 
   const saveConfig = async () => {
     if (!user) return;
@@ -541,11 +558,12 @@ function LlmTab({ user }: { user: AuthUser | null }) {
           model_name: settings.modelName,
         }),
       });
-      // 同时持久化温度/最大长度到本地
-      localStorage.setItem("edu-companion-settings-llm-ext", JSON.stringify({
+      // Task #84: B2 修复 — 同步 LLM 行为参数到服务端
+      await persistBehavior({
         temperature: settings.temperature,
         maxTokens: settings.maxTokens,
-      }));
+        systemPrompt: settings.systemPrompt,
+      });
       setMsg("配置已保存");
       setHasCustom(true);
     } catch (e: any) {
@@ -561,7 +579,15 @@ function LlmTab({ user }: { user: AuthUser | null }) {
     setMsg("");
     try {
       await authedFetch("/api/settings/llm", { method: "DELETE" });
-      setSettings((s) => ({ ...s, apiEndpoint: "", apiKey: "", modelName: "" }));
+      // Task #84: 重置 LLM 行为参数
+      await authedFetch("/api/settings/llm-behavior", { method: "PUT",
+        body: JSON.stringify({ temperature: 0.7, max_tokens: 2048, system_prompt: "" }),
+      });
+      setSettings((s) => ({
+        ...s,
+        apiEndpoint: "", apiKey: "", modelName: "",
+        temperature: 0.7, maxTokens: 2048, systemPrompt: "",
+      }));
       setHasCustom(false);
       setMsg("已恢复为系统默认");
     } catch (e: any) {
@@ -733,28 +759,85 @@ function PreferencesTab() {
   const [socraticFollowUp, setSocraticFollowUp] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState("");
   const [autoScrollOnLoad, setAutoScrollOnLoad] = useState(true);
+  const [loaded, setLoaded] = useState(false);
 
+  // Task #84: B3 修复 — 学习偏好跨设备一致
   useEffect(() => {
-    const saved = localStorage.getItem("edu-companion-settings-prefs");
-    if (saved) {
-      try {
+    // 先读 localStorage 缓存, 减少刷新闪烁
+    try {
+      const saved = localStorage.getItem("edu-companion-settings-prefs");
+      if (saved) {
         const parsed = JSON.parse(saved);
         setSocratic(parsed.socraticMode || false);
         setSocraticFollowUp(parsed.socraticFollowUpMode || false);
         setSystemPrompt(parsed.systemPrompt || "");
         setAutoScrollOnLoad(parsed.autoScrollOnLoad ?? true);
-      } catch { /* */ }
-    }
+      }
+    } catch { /* */ }
+    // 再从服务端拉取最新值
+    authedFetch<any>("/api/settings/learning")
+      .then((data: any) => {
+        if (data) {
+          setSocratic(Boolean(data.socratic_mode));
+          setSocraticFollowUp(Boolean(data.socratic_follow_up_mode));
+          setAutoScrollOnLoad(Boolean(data.auto_scroll_on_load));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoaded(true));
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem("edu-companion-settings-prefs", JSON.stringify({
-      socraticMode: socratic,
-      socraticFollowUpMode: socraticFollowUp,
-      systemPrompt,
-      autoScrollOnLoad,
-    }));
+  // 同步到 localStorage (cache) + 服务端 (Task #84: B3)
+  const persistLearning = useCallback(async (patch: {
+    socratic_mode?: boolean;
+    socratic_follow_up_mode?: boolean;
+    auto_scroll_on_load?: boolean;
+  }) => {
+    // 写本地缓存
+    try {
+      localStorage.setItem("edu-companion-settings-prefs", JSON.stringify({
+        socraticMode: patch.socratic_mode ?? socratic,
+        socraticFollowUpMode: patch.socratic_follow_up_mode ?? socraticFollowUp,
+        systemPrompt: patch.socratic_mode != null ? "" : systemPrompt,
+        autoScrollOnLoad: patch.auto_scroll_on_load ?? autoScrollOnLoad,
+      }));
+    } catch { /* */ }
+    // 同步服务端
+    try {
+      await authedFetch("/api/settings/learning", {
+        method: "PUT",
+        body: JSON.stringify(patch),
+      });
+    } catch (e) {
+      console.warn("[settings] learning prefs 同步服务端失败:", e);
+    }
   }, [socratic, socraticFollowUp, systemPrompt, autoScrollOnLoad]);
+
+  // 兼容旧逻辑: 单独切换时立即写 localStorage（保持流畅）
+  useEffect(() => {
+    if (!loaded) return; // 首次加载不写
+    try {
+      localStorage.setItem("edu-companion-settings-prefs", JSON.stringify({
+        socraticMode: socratic,
+        socraticFollowUpMode: socraticFollowUp,
+        systemPrompt,
+        autoScrollOnLoad,
+      }));
+    } catch { /* */ }
+  }, [socratic, socraticFollowUp, systemPrompt, autoScrollOnLoad, loaded]);
+
+  const toggleSocratic = (v: boolean) => {
+    setSocratic(v);
+    persistLearning({ socratic_mode: v });
+  };
+  const toggleSocraticFollowUp = (v: boolean) => {
+    setSocraticFollowUp(v);
+    persistLearning({ socratic_follow_up_mode: v });
+  };
+  const toggleAutoScroll = (v: boolean) => {
+    setAutoScrollOnLoad(v);
+    persistLearning({ auto_scroll_on_load: v });
+  };
 
   return (
     <div className="space-y-5">
@@ -773,7 +856,7 @@ function PreferencesTab() {
             </p>
           </div>
           <button
-            onClick={() => setSocratic(!socratic)}
+            onClick={() => toggleSocratic(!socratic)}
             className={`relative w-11 h-6 rounded-full transition-colors ${socratic ? "bg-[var(--color-accent)]" : "bg-[var(--color-surface)] border border-[var(--color-border)]"}`}
           >
             <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${socratic ? "translate-x-[22px]" : "translate-x-[2px]"}`} />
@@ -823,7 +906,7 @@ function PreferencesTab() {
             </p>
           </div>
           <button
-            onClick={() => setAutoScrollOnLoad(!autoScrollOnLoad)}
+            onClick={() => toggleAutoScroll(!autoScrollOnLoad)}
             className={`relative w-11 h-6 rounded-full transition-colors ${autoScrollOnLoad ? "bg-[var(--color-accent)]" : "bg-[var(--color-surface)] border border-[var(--color-border)]"}`}
           >
             <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${autoScrollOnLoad ? "translate-x-[22px]" : "translate-x-[2px]"}`} />
@@ -1128,6 +1211,116 @@ function DataTab() {
         className="block text-center text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-accent)] underline">
         查看详细数据管理 →
       </Link>
+    </div>
+  );
+}
+
+// ══════════════════ 布局 Tab (任务 #76) ══════════════════
+const PANEL_LABELS: Record<PanelKey, { title: string; desc: string; icon: typeof PanelTop }> = {
+  topBar: { title: "顶栏", desc: "搜索/同步/Pro/头像/AI", icon: PanelTop },
+  bottomBar: { title: "底栏", desc: "心情/通知/快速记录/进度", icon: PanelBottom },
+  leftPanel: { title: "左栏", desc: "导航 4 分组", icon: PanelLeft },
+  rightPanel: { title: "右栏", desc: "AI/上下文/详情/状态", icon: PanelRight },
+};
+
+function LayoutTab() {
+  const { pref, toggleVisible, resetAll } = useLayoutPrefs();
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-semibold text-[var(--color-text)] flex items-center gap-2">
+          <Layout size={18} />
+          布局
+        </h2>
+        <button
+          onClick={() => {
+            if (confirm("确定重置布局为默认值？此操作会清除你当前的尺寸 / 折叠 / 可见性偏好。")) {
+              resetAll();
+            }
+          }}
+          className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+        >
+          <RotateCcw size={12} />
+          重置布局
+        </button>
+      </div>
+
+      <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">
+        控制桌面端 5 栏驾驶舱中 4 个侧栏的可见性。可在工作台直接拖动分隔条改尺寸 / 双击分隔条折叠。
+        所有偏好自动保存到本地（localStorage）。
+      </p>
+
+      <div className="space-y-2.5">
+        {(Object.keys(PANEL_LABELS) as PanelKey[]).map((key) => {
+          const meta = PANEL_LABELS[key];
+          const Icon = meta.icon;
+          const p = pref[key];
+          const bounds = PANEL_BOUNDS[key];
+          return (
+            <div
+              key={key}
+              className="flex items-center justify-between p-3.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-md bg-[var(--color-bg)] flex items-center justify-center text-[var(--color-accent)] shrink-0">
+                  <Icon size={16} />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-[var(--color-text)]">{meta.title}</div>
+                  <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5 truncate">
+                    {meta.desc} · 范围 {bounds.min}–{bounds.max}px
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[10px] text-[var(--color-text-muted)]">
+                  {p.visible ? "显示" : "隐藏"}
+                </span>
+                <button
+                  onClick={() => toggleVisible(key)}
+                  className={`relative w-11 h-6 rounded-full transition-colors ${
+                    p.visible
+                      ? "bg-[var(--color-accent)]"
+                      : "bg-[var(--color-surface)] border border-[var(--color-border)]"
+                  }`}
+                  aria-label={`切换 ${meta.title} 可见性`}
+                >
+                  <div
+                    className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${
+                      p.visible ? "translate-x-[22px]" : "translate-x-[2px]"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 快捷键说明 */}
+      <div className="mt-4 p-3.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
+        <div className="text-[12px] font-semibold text-[var(--color-text)] mb-2">快捷键</div>
+        <div className="space-y-1.5 text-[11px] text-[var(--color-text-muted)]">
+          <div className="flex items-center justify-between">
+            <span>打开命令面板</span>
+            <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)]">⌘K / Ctrl+K</kbd>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>唤起 AI 助手</span>
+            <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)]">⌘J / Ctrl+J</kbd>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>拖动调整 panel 尺寸</span>
+            <span>鼠标按住分隔条</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>双击分隔条 = 折叠/展开</span>
+            <span>—</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

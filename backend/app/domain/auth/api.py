@@ -2,6 +2,8 @@
 认证 API — 注册/登录/刷新/当前用户
 
 路由前缀: /api/auth
+
+Task #84: 所有写操作发布 UserProfileUpdated 事件。
 """
 from __future__ import annotations
 
@@ -15,6 +17,20 @@ from app.domain.auth.service import get_auth_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["认证"])
+
+
+def _publish_profile_event(user_id: str, changed_fields: list[str], change_type: str) -> None:
+    """发布 UserProfileUpdated 事件 (Task #84)."""
+    try:
+        from app.infrastructure.event_bus_utils import publish_event_safe
+        from shared.events import UserProfileUpdated
+        publish_event_safe(UserProfileUpdated(
+            user_id=user_id,
+            changed_fields=changed_fields,
+            change_type=change_type,
+        ))
+    except Exception as e:
+        logger.debug("UserProfileUpdated 事件发布失败: %s", e)
 
 
 # ── 请求/响应模型 ──
@@ -124,7 +140,7 @@ async def get_me(request: Request):
 
 @router.patch("/me", summary="更新当前用户资料")
 async def update_me(body: UpdateProfileRequest, request: Request):
-    """更新当前用户资料"""
+    """更新当前用户资料 (Task #84: 同步发布 UserProfileUpdated 事件)"""
     user = getattr(request.state, "user", None)
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
@@ -136,12 +152,15 @@ async def update_me(body: UpdateProfileRequest, request: Request):
         display_name=body.display_name,
         email=body.email,
     )
+    changed = [f for f in ("display_name", "email") if getattr(body, f, None) is not None]
+    if changed:
+        _publish_profile_event(user["user_id"], changed, "profile")
     return repo.find_by_id(user["user_id"])
 
 
 @router.post("/change-password", summary="修改密码")
 async def change_password(body: ChangePasswordRequest, request: Request):
-    """修改当前用户密码"""
+    """修改当前用户密码 (Task #84: 同步发布 UserProfileUpdated 事件)"""
     user = getattr(request.state, "user", None)
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
@@ -159,6 +178,7 @@ async def change_password(body: ChangePasswordRequest, request: Request):
     new_hash = svc.hash_password(body.new_password)
     repo = get_user_repo()
     repo.update_password(user["user_id"], new_hash)
+    _publish_profile_event(user["user_id"], ["password"], "password")
     return {"ok": True}
 
 
@@ -208,17 +228,17 @@ async def logout_other_devices(request: Request):
         raise HTTPException(status_code=401, detail="未登录")
 
     from app.domain.auth.login_event_repo import get_login_event_repo
-    
+
     user_id = user["user_id"]
-    
+
     # 递增 token_version 使其他设备的 token 失效
     from app.domain.auth.repository import get_user_repo
     repo = get_user_repo()
     repo.increment_token_version(user_id)
-    
+
     # 清除其他设备的 is_current 标记
     repo.clear_login_sessions(user_id)
-    
+
     # 重新标记当前会话为 is_current
     # 当前会话通过当前请求的 IP + UA 来识别
     ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
@@ -228,7 +248,8 @@ async def logout_other_devices(request: Request):
     from app.domain.auth.login_event_repo import get_login_event_repo
     login_repo = get_login_event_repo()
     login_repo.mark_current_session(user_id, ip, ua[:500])
-    
+
+    _publish_profile_event(user_id, ["token_version"], "logout_others")
     return {"ok": True, "message": "其他设备已下线"}
 
 
@@ -251,4 +272,5 @@ async def deactivate_account(body: DeactivateRequest, request: Request):
 
     repo = get_user_repo()
     repo.deactivate_account(user["user_id"], full_user["username"])
+    _publish_profile_event(user["user_id"], ["status"], "deactivate")
     return {"ok": True, "message": "账号已注销"}

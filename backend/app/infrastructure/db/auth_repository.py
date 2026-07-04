@@ -10,7 +10,7 @@ import json
 import logging
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from app.infrastructure.crypto import encrypt, decrypt
 
@@ -142,6 +142,38 @@ class UserRepo:
             "UPDATE users SET display_name = %s, updated_at = NOW() WHERE id = %s",
             (display_name, user_id),
         )
+
+    def update_profile(
+        self,
+        user_id: str,
+        display_name: str | None = None,
+        email: str | None = None,
+    ) -> bool:
+        """更新用户资料 (display_name / email, Task #84)
+
+        只更新非 None 字段, 保留其他字段原值。
+        """
+        try:
+            fields: list[str] = []
+            params: list[Any] = []
+            if display_name is not None:
+                fields.append("display_name = %s")
+                params.append(display_name)
+            if email is not None:
+                fields.append("email = %s")
+                params.append(email)
+            if not fields:
+                return False
+            fields.append("updated_at = NOW()")
+            params.append(user_id)
+            self._db.execute(
+                f"UPDATE users SET {', '.join(fields)} WHERE id = %s",
+                tuple(params),
+            )
+            return True
+        except Exception as e:
+            logger.warning("更新资料失败: %s", e)
+            return False
 
     def deactivate_user(self, user_id: str) -> None:
         """停用用户"""

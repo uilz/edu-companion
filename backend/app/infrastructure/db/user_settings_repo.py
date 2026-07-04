@@ -96,6 +96,88 @@ class UserSettingsRepo:
             (user_id,),
         )
 
+    # ── Task #84: 统一偏好读写 (typed) ──
+
+    # 顶层 key 命名空间 (SSOT)
+    NS_LLM_CONFIG = "llm_config"
+    NS_LLM_BEHAVIOR = "llm_behavior"     # temperature / max_tokens / system_prompt
+    NS_UI = "ui"                          # theme / style
+    NS_LEARNING = "learning"              # socratic_mode / socratic_follow_up / auto_scroll_on_load
+    NS_NOTIFICATION = "notification"      # 通知偏好
+
+    def get_user_preferences(self, user_id: str) -> dict:
+        """读取所有用户偏好 (D16 兼容) — 返回顶层 dict."""
+        return self.get_all(user_id)
+
+    def get_llm_behavior(self, user_id: str) -> dict:
+        """读取 LLM 行为参数 (temperature / max_tokens / system_prompt)."""
+        return self.get_key(user_id, self.NS_LLM_BEHAVIOR, default={
+            "temperature": 0.7,
+            "max_tokens": 2048,
+            "system_prompt": "",
+        })
+
+    def set_llm_behavior(self, user_id: str, behavior: dict) -> dict:
+        """写入 LLM 行为参数 (合并写, 缺省补全)."""
+        current = self.get_llm_behavior(user_id)
+        merged = {**current, **{k: v for k, v in behavior.items() if v is not None}}
+        merged.setdefault("temperature", 0.7)
+        merged.setdefault("max_tokens", 2048)
+        merged.setdefault("system_prompt", "")
+        # 范围校验
+        try:
+            t = float(merged["temperature"])
+            merged["temperature"] = max(0.0, min(2.0, t))
+        except (TypeError, ValueError):
+            merged["temperature"] = 0.7
+        try:
+            m = int(merged["max_tokens"])
+            merged["max_tokens"] = max(64, min(8192, m))
+        except (TypeError, ValueError):
+            merged["max_tokens"] = 2048
+        if not isinstance(merged["system_prompt"], str):
+            merged["system_prompt"] = str(merged["system_prompt"])[:4000]
+        else:
+            merged["system_prompt"] = merged["system_prompt"][:4000]
+        self.set_key(user_id, self.NS_LLM_BEHAVIOR, merged)
+        return merged
+
+    def get_ui_prefs(self, user_id: str) -> dict:
+        """读取 UI 偏好 (theme / style)."""
+        return self.get_key(user_id, self.NS_UI, default={
+            "theme": "dark",
+            "style": "professional",
+        })
+
+    def set_ui_prefs(self, user_id: str, prefs: dict) -> dict:
+        """写入 UI 偏好 (合并写)."""
+        current = self.get_ui_prefs(user_id)
+        merged = {**current, **{k: v for k, v in prefs.items() if v is not None}}
+        if merged.get("theme") not in ("dark", "light"):
+            merged["theme"] = current.get("theme", "dark")
+        if merged.get("style") not in ("professional", "playful", "knowledge", "soft-data", "gamified"):
+            merged["style"] = current.get("style", "professional")
+        self.set_key(user_id, self.NS_UI, merged)
+        return merged
+
+    def get_learning_prefs(self, user_id: str) -> dict:
+        """读取学习偏好 (socratic / auto_scroll)."""
+        return self.get_key(user_id, self.NS_LEARNING, default={
+            "socratic_mode": False,
+            "socratic_follow_up_mode": False,
+            "auto_scroll_on_load": True,
+        })
+
+    def set_learning_prefs(self, user_id: str, prefs: dict) -> dict:
+        """写入学习偏好 (合并写)."""
+        current = self.get_learning_prefs(user_id)
+        merged = {**current, **{k: v for k, v in prefs.items() if v is not None}}
+        for k in ("socratic_mode", "socratic_follow_up_mode", "auto_scroll_on_load"):
+            if k in merged and not isinstance(merged[k], bool):
+                merged[k] = bool(merged[k])
+        self.set_key(user_id, self.NS_LEARNING, merged)
+        return merged
+
 
 # ── 全局单例 ──
 
