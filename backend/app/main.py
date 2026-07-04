@@ -52,6 +52,21 @@ from app.api.knowledge_tree import router as knowledge_tree_router
 from app.api.knowledge_tree_sse import router as knowledge_tree_sse_router
 from app.api.knowledge_tree_ai import router as knowledge_tree_ai_router
 
+# 项目工作台
+from app.api.project import router as project_router
+
+# 规划模块（ADR 0006）
+from app.api.planning import router as planning_router
+
+# 阅读模块（ADR 0003）
+from app.api.reading import router as reading_router
+
+# LanguageRoom 实时语音房间（ADR 0004）
+from app.api.liveroom import router as liveroom_router
+
+# InterestExplorer 学术信息发现（ADR 0007）
+from app.api.interest.routes import router as interest_router
+
 # 用户自定义 LLM 配置
 from app.domain.auth.settings_api import router as settings_router
 
@@ -165,11 +180,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # 注册知识树操作工具
         from app.infrastructure.llm.knowledge_ops_tools import TOOL_DEFINITIONS as KTOOL_DEFINITIONS
         repo.register_raw_tools(KTOOL_DEFINITIONS)
+        # 注册 LanguageRoom 工具 (ADR 0004 决策 5)
+        from app.infrastructure.llm.liveroom_tools import TOOL_DEFINITIONS as LROOM_DEFINITIONS
+        repo.register_raw_tools(LROOM_DEFINITIONS)
         logger.info("🔧 ToolRepository 已初始化 (%d 个工具)", len(repo.list_tools()))
     except Exception as e:
         logger.warning("ToolRepository 初始化失败: %s", e)
 
     try:
+        from app.infrastructure.db.secretary_schema import _ensure_tables as _ensure_secretary_tables
+        _ensure_secretary_tables()
         from app.infrastructure.db.proposal_store import ProposalStore
         _store = ProposalStore()
         from app.domain.secretary.engines.active_checker import active_checker
@@ -189,6 +209,69 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("📡 秘书事件处理器已订阅")
     except Exception as e:
         logger.warning("秘书事件处理器订阅失败: %s", e)
+
+    # 订阅 Planning 事件（ADR 0006：完成回写不重发源事件）
+    try:
+        from app.services.planning.completion_writer import planning_completion_writer
+        planning_completion_writer.subscribe(container.event_bus)
+        logger.info("📡 PlanningCompletionWriter 已订阅事件总线")
+    except Exception as e:
+        logger.warning("PlanningCompletionWriter 订阅失败: %s", e)
+
+    # 初始化 Planning 数据表
+    try:
+        from app.services.planning import _ensure_tables as _ensure_planning_tables
+        _ensure_planning_tables()
+        logger.info("📋 planning_* 表已就绪")
+    except Exception as e:
+        logger.warning("Planning 表初始化失败: %s", e)
+
+    # 初始化 Reading 数据表 (ADR 0003)
+    try:
+        from app.services.reading import _ensure_tables as _ensure_reading_tables
+        _ensure_reading_tables()
+        logger.info("📖 reading_* 表已就绪")
+    except Exception as e:
+        logger.warning("Reading 表初始化失败: %s", e)
+
+    # 初始化 LanguageRoom 数据表 (ADR 0004)
+    try:
+        from app.services.liveroom import _ensure_tables as _ensure_liveroom_tables
+        _ensure_liveroom_tables()
+        logger.info("🎙️ liveroom_* 表已就绪")
+        # 种子化系统预置 AI 角色
+        try:
+            from app.services.liveroom.ai_persona import seed_default_personas
+            seed_default_personas()
+        except Exception as e:
+            logger.warning("默认 AI 角色种子化失败: %s", e)
+        # 种子化系统预置场景
+        try:
+            from app.services.liveroom.ai_persona import seed_default_scenarios
+            seed_default_scenarios()
+        except Exception as e:
+            logger.warning("默认场景种子化失败: %s", e)
+    except Exception as e:
+        logger.warning("LanguageRoom 表初始化失败: %s", e)
+
+    # 确保 FlashCard 表存在
+    try:
+        from app.api.flashcard.service import FlashCardService
+        FlashCardService.ensure_tables()
+        logger.info("📇 flashcards 表已就绪")
+    except Exception as e:
+        logger.warning("FlashCard 表初始化失败: %s", e)
+
+    # 初始化 InterestExplorer 数据表 (ADR 0007)
+    try:
+        from app.services.interest.migration import ensure_interest_tables
+        ensure_interest_tables()
+        # 种子内置信息源
+        from app.api.interest import service as interest_api_service
+        interest_api_service.seed_builtin_sources()
+        logger.info("🔍 interest_* 表已就绪 + 内置源已种子")
+    except Exception as e:
+        logger.warning("InterestExplorer 初始化失败: %s", e)
 
     # ── 初始化对话摘要表 ──
     try:
@@ -212,6 +295,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.scheduler.add_task("event_bus", 0.5, event_bus_poll)
     app.state.scheduler.add_task("event_consumer", 5.0, event_consumer)
     app.state.scheduler.add_task("event_cleanup", 3600, event_cleanup)  # 每小时清理过期事件
+
+    # InterestExplorer 推送调度（ADR 0007）
+    # 每 30 分钟检查一次推送时间窗口
+    try:
+        from app.services.interest.push_scheduler import interest_push_tick
+        app.state.scheduler.add_task("interest_push", 1800, interest_push_tick)
+        logger.info("🔍 InterestExplorer 推送任务已注册")
+    except Exception as e:
+        logger.warning("InterestExplorer 调度注册失败: %s", e)
 
     await app.state.scheduler.start_all()
     logger.info("✅ 中央调度器已启动: %d 个后台任务", len(app.state.scheduler._tasks))
@@ -361,7 +453,10 @@ app.include_router(achievements_router)
 # P1 全站搜索
 app.include_router(search_router)
 app.include_router(secretary_router)
-# 认知图驱动分类
+
+# MoodStress 心情压力模块 API
+from app.api.secretary.mood_stress import router as mood_stress_router  # noqa: E402
+app.include_router(mood_stress_router)
 app.include_router(learning_router)
 app.include_router(summaries_router)
 
@@ -385,6 +480,10 @@ app.include_router(references_router)
 # 解释卡片
 app.include_router(explain_cards_router)
 
+# FlashCard 间隔重复记忆卡
+from app.api.flashcard.routes import router as flashcard_router
+app.include_router(flashcard_router)
+
 # 学习数据管理
 app.include_router(data_router)
 
@@ -396,6 +495,25 @@ app.include_router(_tools_router)
 app.include_router(knowledge_tree_router)
 app.include_router(knowledge_tree_sse_router)
 app.include_router(knowledge_tree_ai_router)
+
+# 知识图谱 (硬编码 / 动态加载)
+from app.api.knowledge.knowledge import router as knowledge_graph_router
+app.include_router(knowledge_graph_router)
+
+# 规划（ADR 0006）
+app.include_router(planning_router)
+
+# 阅读（ADR 0003）
+app.include_router(reading_router)
+
+# 项目工作台
+app.include_router(project_router)
+
+# LanguageRoom 实时语音房间（ADR 0004）
+app.include_router(liveroom_router)
+
+# InterestExplorer 学术信息发现 (ADR 0007)
+app.include_router(interest_router)
 
 
 # ── 健康检查 ──

@@ -36,6 +36,7 @@ PUBLIC_PATHS = frozenset({
     "/api/auth/register",
     "/api/auth/refresh",
     "/api/auth/verify",
+    "/api/secretary/mood-stress/constants",  # 公开枚举 (Task #83)
     "/docs",
     "/redoc",
     "/openapi.json",

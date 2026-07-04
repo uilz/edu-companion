@@ -175,7 +175,7 @@ def test_event_handler():
     
     # EventBus 的 _handlers 是 dict[type_str, list[callable]]
     _check("SessionCompleted 已订阅", "SessionCompleted" in bus._handlers)
-    _check("CognitiveNodeUpdated 已订阅", "CognitiveNodeUpdated" in bus._handlers)
+    _check("CognitiveNodeMetadataChanged 已订阅", "CognitiveNodeMetadataChanged" in bus._handlers)
     _check("PracticeSubmitted 已订阅", "PracticeSubmitted" in bus._handlers)
 
     handler.unsubscribe()

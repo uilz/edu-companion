@@ -28,11 +28,17 @@ router = APIRouter(prefix="/api/secretary", tags=["秘书系统"])
 
 
 def _load_prefs(user_id: str) -> dict:
-    """加载用户偏好（从 DataRepository 读取）"""
+    """加载用户偏好（从 DataRepository 读取）
+
+    默认值与 SecretaryPrefs 模型保持一致 (Task #83 B-22):
+      enabled_extensions = ["review_reminder", "fatigue_manager", "daily_brief"]
+    """
     from app.services.common import get_data_repo
     data = get_data_repo().load(user_id)
     return data.secretary_prefs or {
-        "enabled_extensions": [],
+        "enabled_extensions": [
+            "review_reminder", "fatigue_manager", "daily_brief"
+        ],
         "quiet_hours_start": "22:00",
         "quiet_hours_end": "08:00",
         "max_proactive_per_day": 5,
@@ -57,18 +63,49 @@ def _get_proposal_by_id(store: ProposalStore, proposal_id: str, user_id: str) ->
         )
         if row:
             from app.domain.secretary.models import Proposal
+
+            # created_at: DB 返回 datetime → 转为 float 时间戳 (匹配 Proposal 模型)
+            created_at_raw = row.get("created_at")
+            if created_at_raw is None:
+                created_at_val = time.time()
+            elif isinstance(created_at_raw, datetime):
+                created_at_val = created_at_raw.timestamp()
+            else:
+                created_at_val = float(created_at_raw)
+
+            # expires_at: 同上
+            expires_at_raw = row.get("expires_at")
+            if expires_at_raw is None:
+                expires_at_val = None
+            elif isinstance(expires_at_raw, datetime):
+                expires_at_val = expires_at_raw.timestamp()
+            else:
+                expires_at_val = float(expires_at_raw)
+
+            # payload 可能是 JSON 字符串或已解析的 dict
+            payload_raw = row.get("payload")
+            if isinstance(payload_raw, str):
+                try:
+                    payload_val = json.loads(payload_raw)
+                except (json.JSONDecodeError, TypeError):
+                    payload_val = {}
+            elif payload_raw is None:
+                payload_val = {}
+            else:
+                payload_val = payload_raw
+
             return Proposal(
                 id=row["id"],
-                emoji=row.get("emoji", "💡"),
+                emoji=row.get("emoji", "💡") or "💡",
                 title=row["title"],
-                description=row.get("description", ""),
+                description=row.get("description", "") or "",
                 action_type=row["action_type"],
-                payload=row.get("payload", {}),
-                priority=row.get("priority", 3),
-                generated_by=row.get("generated_by", ""),
+                payload=payload_val,
+                priority=row.get("priority", 3) or 3,
+                generated_by=row.get("generated_by", "") or "",
                 overrideable=row.get("overrideable", True),
-                created_at=row.get("created_at", datetime.now(timezone.utc)),
-                expires_at=row.get("expires_at"),
+                created_at=created_at_val,
+                expires_at=expires_at_val,
             )
     except Exception as e:
         logger.debug("获取提案失败: %s", e)
@@ -76,35 +113,14 @@ def _get_proposal_by_id(store: ProposalStore, proposal_id: str, user_id: str) ->
 
 
 async def _ensure_db_schema(store: ProposalStore):
-    """确保数据库表存在"""
+    """确保数据库 secretary_proposals 表存在 (Task #83 B-1/B-2 修复)
+
+    委托给 ProposalStore._ensure_table() 静态方法, 统一 schema 入口。
+    """
     try:
-        db = store._get_db()
-        db.execute(
-            "SELECT 1 FROM secretary_proposals LIMIT 1",
-        )
-    except Exception:
-        logger.info("创建 secretary_proposals 表")
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS secretary_proposals (
-                id TEXT PRIMARY KEY,
-                user_id TEXT NOT NULL,
-                session_id TEXT,
-                emoji TEXT DEFAULT '💡',
-                title TEXT NOT NULL,
-                description TEXT DEFAULT '',
-                action_type TEXT NOT NULL,
-                payload JSONB DEFAULT '{}',
-                priority INTEGER DEFAULT 3,
-                generated_by TEXT DEFAULT '',
-                overrideable BOOLEAN DEFAULT TRUE,
-                status TEXT DEFAULT 'pending',
-                metadata JSONB DEFAULT '{}',
-                snoozed_until TIMESTAMP,
-                created_at TIMESTAMP DEFAULT NOW(),
-                expires_at TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT NOW()
-            )
-        """)
+        ProposalStore._ensure_table()
+    except Exception as e:
+        logger.debug("_ensure_table 调用失败 (表可能已存在): %s", e)
 
 
 # ── 依赖 ──
@@ -134,6 +150,7 @@ async def get_preferences(
         "quiet_hours_start": prefs.get("quiet_hours_start", "22:00"),
         "quiet_hours_end": prefs.get("quiet_hours_end", "08:00"),
         "max_proactive_per_day": prefs.get("max_proactive_per_day", 5),
+        "check_interval": prefs.get("check_interval", None),  # Task #83 B-3
     }
 
 
@@ -142,20 +159,31 @@ async def get_preferences(
 # ═══════════════════════════════════════════
 
 
+# ── 短期内存缓存 (Task #83 B-18) ──
+_snapshot_cache: dict[str, tuple[float, dict]] = {}
+_SNAPSHOT_TTL = 30.0  # 30s
+
+
 @router.get("/snapshot")
 async def get_snapshot(
     user_id: str = Depends(current_user_id),
     service: SecretaryService = Depends(_get_service),
 ) -> dict:
-    """获取当前学习状态快照"""
+    """获取当前学习状态快照 (Task #83 B-18: 30s 内存缓存)"""
+    now = time.time()
+    cached = _snapshot_cache.get(user_id)
+    if cached and (now - cached[0]) < _SNAPSHOT_TTL:
+        return cached[1]
     assess = await service.quick_assess(user_id=user_id)
-    return {
+    result = {
         "cognitive_load": assess.get("cognitive_load", 0),
         "weak_count": assess.get("weak_count", 0),
         "stagnant_count": assess.get("stagnant_count", 0),
         "streak_days": assess.get("streak_days", 0),
         "summary": assess.get("summary", ""),
     }
+    _snapshot_cache[user_id] = (now, result)
+    return result
 
 
 # ═══════════════════════════════════════════
@@ -239,10 +267,14 @@ async def accept_proposal(
             # 记录策略交互
             policy_engine.record_interaction(user_id, proposal, "accepted")
 
-            # 触发学习路径调整
+            # 触发学习路径调整 (Task #83 B-9/B-20: 单独 try/except)
             if action_result.get("success"):
-                from app.domain.secretary.engines.secretary_plan_bridge import plan_bridge
-                plan_adjustment = await plan_bridge.on_proposal_accepted(proposal, user_id)
+                try:
+                    from app.domain.secretary.engines.secretary_plan_bridge import plan_bridge
+                    plan_adjustment = await plan_bridge.on_proposal_accepted(proposal, user_id)
+                except Exception as pe:
+                    logger.warning("plan_bridge.on_proposal_accepted 失败: %s", pe)
+                    plan_adjustment = None
 
             # v6: 发射 ProposalAccepted 事件 → EventBus
             try:
@@ -278,7 +310,9 @@ async def dismiss_proposal(
     store: ProposalStore = Depends(_get_store),
 ) -> dict:
     """忽略提案 — 更新状态 + 记录关系记忆"""
-    store.update_status(proposal_id, "dismissed", user_id, {"action": "user_dismissed", "reason": reason})
+    ok = store.update_status(proposal_id, "dismissed", user_id, {"action": "user_dismissed", "reason": reason})
+    if not ok:
+        raise HTTPException(404, "提案不存在或已处理")
 
     # WS 已移除，跳过广播（由 TokenBuffer 等机制取代）
 
@@ -378,8 +412,12 @@ async def generate_llm_proposals(
     service: SecretaryService = Depends(_get_service),
     store: ProposalStore = Depends(_get_store),
 ) -> list[dict]:
-    """使用 LLM 生成润色提案"""
-    report = await service.diagnose(user_id=user_id)
+    """使用 LLM 生成润色提案 (Task #83 B-15/B-23: try/except 包裹整体)"""
+    try:
+        report = await service.diagnose(user_id=user_id)
+    except Exception as e:
+        logger.warning("诊断失败，返回空列表: %s", e)
+        return []
 
     from app.domain.secretary.engines.llm_proposal_generator import LLMProposalGenerator
     llm = None
@@ -389,11 +427,18 @@ async def generate_llm_proposals(
     except Exception as e:
         logger.warning("LLM service unavailable, proceeding without LLM: %s", e)
 
-    gen = LLMProposalGenerator(llm_service=llm)
-    proposals = await gen.generate_suggestion(report, max_proposals=3)
+    try:
+        gen = LLMProposalGenerator(llm_service=llm)
+        proposals = await gen.generate_suggestion(report, max_proposals=3)
+    except Exception as e:
+        logger.warning("LLM 提案生成失败，返回空列表: %s", e)
+        return []
 
     for p in proposals:
-        store.save_proposal(p, user_id=user_id, session_id="api")
+        try:
+            store.save_proposal(p, user_id=user_id, session_id="api")
+        except Exception as e:
+            logger.debug("提案保存失败: %s", e)
 
     return [p.model_dump() for p in proposals]
 
@@ -503,6 +548,8 @@ async def configure_checker(
     Body:
         check_interval: int | None — 检查间隔（秒），默认 600
         enable_modules: list[str] | None — 启用模块列表
+
+    Task #83 B-3: 持久化 check_interval 到 user_settings.secretary_prefs
     """
     from app.domain.secretary.engines.active_checker import active_checker
     from app.domain.secretary.engines.module_registry import module_registry
@@ -510,6 +557,13 @@ async def configure_checker(
     interval = body.get("check_interval")
     if interval and isinstance(interval, (int, float)) and 60 <= interval <= 3600:
         active_checker._check_interval = int(interval)
+        # 持久化偏好 (Task #83 B-3)
+        try:
+            prefs = _load_prefs(user_id)
+            prefs["check_interval"] = int(interval)
+            _save_prefs(user_id, prefs)
+        except Exception as e:
+            logger.debug("持久化 check_interval 失败: %s", e)
         logger.info("主动检查间隔已更新: %ds", interval)
 
     enable_modules = body.get("enable_modules")
@@ -517,6 +571,13 @@ async def configure_checker(
         for name in module_registry._modules:
             enabled = name in enable_modules
             module_registry._enabled[name] = enabled
+        # 持久化 enable_modules
+        try:
+            prefs = _load_prefs(user_id)
+            prefs["enabled_extensions"] = list(enable_modules)
+            _save_prefs(user_id, prefs)
+        except Exception as e:
+            logger.debug("持久化 enabled_extensions 失败: %s", e)
 
     return {
         "status": "ok",
@@ -534,31 +595,43 @@ async def configure_checker(
 async def get_onboarding_status(
     user_id: str = Depends(current_user_id),
 ) -> dict:
-    """获取冷启动状态与引导信息"""
+    """获取冷启动状态与引导信息 (Task #83 B-5: 改进 cold_start 判定)
+
+    新判定: 基于 mastery > 0.5 的有效节点数 (有学习数据)
+      - cold_start: 有效节点 < 5
+      - 引导步骤: 第 1 步仅当 total_nodes == 0
+    """
     try:
         from app.domain.cognitive import get_repo
         nodes = get_repo().list_all_nodes(user_id)
-        # 排除虚拟分区根节点（系统自动创建的 partition 级别节点）
+        # 排除虚拟分区根节点
         real_nodes = [n for n in nodes if not (n.level == "partition" and n.created_by == "system")]
         total_nodes = len(real_nodes) if real_nodes else 0
+        # B-5: 有效学习节点 (有 mastery 进展)
+        learned_nodes = sum(
+            1 for n in real_nodes
+            if n.belief and n.belief.alpha + n.belief.beta > 4
+        )
     except Exception:
         total_nodes = 0
+        learned_nodes = 0
 
-    is_cold_start = total_nodes < 5
+    is_cold_start = total_nodes < 5 or learned_nodes == 0
     has_suggestions = total_nodes > 0
 
     guide_steps = [
         {"step": 1, "title": "开始学习", "description": "打开任意分区开始你的第一次学习对话", "link": "/", "done": has_suggestions},
-        {"step": 2, "title": "完成练习", "description": "做几道练习题，秘书系统会根据错题生成个性化建议", "link": "/practice", "done": total_nodes > 3},
-        {"step": 3, "title": "查看秘书建议", "description": "回到秘书页面，查看系统为你生成的个性化学习建议", "link": "/secretary", "done": False},
+        {"step": 2, "title": "完成练习", "description": "做几道练习题，秘书系统会根据错题生成个性化建议", "link": "/practice", "done": learned_nodes > 0},
+        {"step": 3, "title": "查看秘书建议", "description": "回到秘书页面，查看系统为你生成的个性化学习建议", "link": "/secretary", "done": learned_nodes > 2},
         {"step": 4, "title": "个性化配置", "description": "关闭不需要的模块，设置安静时段，定制秘书行为", "link": "/secretary/settings", "done": False},
     ]
 
     return {
         "is_cold_start": is_cold_start,
         "total_nodes": total_nodes,
+        "learned_nodes": learned_nodes,
         "guide_steps": guide_steps,
-        "current_step": 1 if total_nodes == 0 else 2 if total_nodes < 3 else 3 if total_nodes < 5 else 4,
+        "current_step": 1 if total_nodes == 0 else 2 if learned_nodes == 0 else 3 if learned_nodes < 3 else 4,
         "message": "你好！我是你的学习秘书，欢迎开始学习之旅 🎉" if is_cold_start else "感谢继续使用！你的学习数据正在丰富中 📈",
     }
 
@@ -792,7 +865,7 @@ async def get_event_summary(
 
     # 统计各类型事件数量
     types = ["AssistantReplied", "AnswerSubmitted", "SessionCompleted",
-             "CognitiveNodeUpdated", "NodeCreated",
+             "CognitiveNodeMetadataChanged", "CognitiveNodeLinked", "NodeCreated",
              "EpisodeDigest", "TopicDigest", "TypeDigest",
              "PracticeSessionSummary", "DailyDigest"]
     counts = {}
@@ -890,7 +963,10 @@ async def agent_chat(body: AgentChatRequest, user_id: str = Depends(current_user
     """Agent 助手对话 — SSE 流式返回
 
     流程: 用户输入 → 加载工具 schema → LLM 分析意图 → 流式返回 token + tool_call 事件
+
+    Task #83 B-13: 移除多余的 `if user_id is None` 检查 (Depends 已保证非 None)
     """
+
     from app.domain.secretary.tools.tool_registry import ToolRegistry
     from app.services.common import get_data_repo
     from app.schemas.directory_node import DirectoryNode
@@ -1031,7 +1107,11 @@ async def set_agent_preferences(
     body: AgentPreferencesRequest,
     user_id: str = Depends(current_user_id),
 ):
-    """设置 Agent 助手偏好"""
+    """设置 Agent 助手偏好
+
+    Task #83 B-6: 发布 UserPreferencesUpdated 事件用于跨模块联动
+    """
+    # Pydantic 字段已用 Literal 约束, 但保留手动验证以兼容老版本
     valid_modes = {"smart", "always", "never"}
     if body.confirm_mode not in valid_modes:
         raise HTTPException(
@@ -1046,6 +1126,18 @@ async def set_agent_preferences(
     data.secretary_prefs["agent"]["confirm_mode"] = body.confirm_mode
     data.secretary_prefs["agent"]["auto_jump_threshold"] = body.auto_jump_threshold
     get_data_repo().save(user_id, data)
+
+    # 发布 UserPreferencesUpdated 事件 (B-6)
+    try:
+        from app.infrastructure.event_bus_utils import publish_event_safe
+        from shared.events import UserPreferencesUpdated
+        publish_event_safe(UserPreferencesUpdated(
+            user_id=user_id,
+            changed_keys=["agent.confirm_mode", "agent.auto_jump_threshold"],
+            source="secretary_api",
+        ))
+    except Exception as e:
+        logger.debug("UserPreferencesUpdated 发布失败: %s", e)
 
     return {
         "confirm_mode": body.confirm_mode,

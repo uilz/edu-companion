@@ -30,6 +30,16 @@ class ProposalStore(SecretaryRepository):
             self._db = get_db()
         return self._db
 
+    @staticmethod
+    def _ensure_table() -> None:
+        """确保 secretary_proposals 表存在（幂等）
+
+        Task #83 B-1/B-2: 委派给 secretary_schema._ensure_tables()
+        统一在 secretary_schema.sql 中定义, 避免重复字段定义
+        """
+        from app.infrastructure.db.secretary_schema import _ensure_tables
+        _ensure_tables()
+
     def save_proposal(self, proposal: Proposal, user_id: str, session_id: str | None = None) -> str:
         """保存提案到数据库（自动去重：同用户+同标题+同来源 的 pending 提案不重复插入）"""
         db = self._get_db()
@@ -139,7 +149,7 @@ class ProposalStore(SecretaryRepository):
         user_id: str,
         extra_log: dict | None = None,
     ) -> bool:
-        """更新提案状态（将日志追加到 metadata）"""
+        """更新提案状态（将日志追加到 metadata），返回是否真实更新"""
         db = self._get_db()
         from datetime import datetime, timezone
         now = datetime.now(timezone.utc)
@@ -148,15 +158,21 @@ class ProposalStore(SecretaryRepository):
         extra["updated_at"] = now.isoformat()
 
         # 在 metadata 中记录状态变更
-        db.execute(
-            "UPDATE secretary_proposals SET status = %s, "
-            "metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb, "
-            "updated_at = %s "
-            "WHERE id = %s AND user_id = %s",
-            (status, json.dumps({"status_change": {"to": status, "at": now.isoformat(), **extra}}),
-             now, proposal_id, user_id),
-        )
-        return True
+        cur = db.get_conn().cursor()
+        try:
+            cur.execute(
+                "UPDATE secretary_proposals SET status = %s, "
+                "metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb, "
+                "updated_at = %s "
+                "WHERE id = %s AND user_id = %s",
+                (status, json.dumps({"status_change": {"to": status, "at": now.isoformat(), **extra}}),
+                 now, proposal_id, user_id),
+            )
+            return cur.rowcount > 0
+        finally:
+            cur.connection.commit()
+            cur.close()
+            db.put_conn(cur.connection)
 
     def get_pending_proposals(
         self, user_id: str, limit: int = 20,
@@ -281,16 +297,22 @@ class ProposalStore(SecretaryRepository):
         ]
 
     def expire_old_proposals(self, user_id: str) -> int:
-        """将过期提案标记为 expired"""
+        """将过期提案标记为 expired，返回真实更新数"""
         db = self._get_db()
-        db.execute(
-            """UPDATE secretary_proposals
-               SET status = 'expired'
-               WHERE user_id = %s AND status = 'pending'
-               AND expires_at IS NOT NULL AND expires_at < NOW()""",
-            (user_id,),
-        )
-        return db.conn.status
+        cur = db.get_conn().cursor()
+        try:
+            cur.execute(
+                """UPDATE secretary_proposals
+                   SET status = 'expired'
+                   WHERE user_id = %s AND status = 'pending'
+                   AND expires_at IS NOT NULL AND expires_at < NOW()""",
+                (user_id,),
+            )
+            return cur.rowcount
+        finally:
+            cur.connection.commit()
+            cur.close()
+            db.put_conn(cur.connection)
 
     def get_stats(self, user_id: str) -> dict[str, int]:
         """获取提案统计"""
@@ -334,7 +356,7 @@ class ProposalStore(SecretaryRepository):
         self, proposal_id: str, user_id: str,
         until_timestamp: float | None = None,
     ) -> bool:
-        """延后提案 — status → snoozed + 记录 snoozed_until"""
+        """延后提案 — status → snoozed + 记录 snoozed_until，返回是否真实更新"""
         db = self._get_db()
         from datetime import datetime, timezone
         now = datetime.now(timezone.utc)
@@ -343,59 +365,86 @@ class ProposalStore(SecretaryRepository):
         if until_timestamp:
             meta_update["snoozed_until"] = until_timestamp
 
-        db.execute(
-            "UPDATE secretary_proposals SET status = 'snoozed', "
-            "metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb, "
-            "updated_at = %s "
-            "WHERE id = %s AND user_id = %s",
-            (json.dumps({"snooze": meta_update}),
-             now, proposal_id, user_id),
-        )
-        return True
+        cur = db.get_conn().cursor()
+        try:
+            cur.execute(
+                "UPDATE secretary_proposals SET status = 'snoozed', "
+                "metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb, "
+                "updated_at = %s "
+                "WHERE id = %s AND user_id = %s",
+                (json.dumps({"snooze": meta_update}),
+                 now, proposal_id, user_id),
+            )
+            return cur.rowcount > 0
+        finally:
+            cur.connection.commit()
+            cur.close()
+            db.put_conn(cur.connection)
 
     def delete_proposal(self, proposal_id: str, user_id: str) -> bool:
-        """删除提案 — status → deleted"""
+        """删除提案 — status → deleted，返回是否真实更新"""
         db = self._get_db()
         from datetime import datetime, timezone
         now = datetime.now(timezone.utc)
-        db.execute(
-            "UPDATE secretary_proposals SET status = 'deleted', updated_at = %s "
-            "WHERE id = %s AND user_id = %s",
-            (now, proposal_id, user_id),
-        )
-        return True
+        cur = db.get_conn().cursor()
+        try:
+            cur.execute(
+                "UPDATE secretary_proposals SET status = 'deleted', updated_at = %s "
+                "WHERE id = %s AND user_id = %s",
+                (now, proposal_id, user_id),
+            )
+            return cur.rowcount > 0
+        finally:
+            cur.connection.commit()
+            cur.close()
+            db.put_conn(cur.connection)
 
     def restore_proposal(self, proposal_id: str, user_id: str) -> bool:
-        """恢复提案 — snoozed/deleted → pending"""
+        """恢复提案 — snoozed/deleted → pending，返回是否真实更新"""
         db = self._get_db()
         from datetime import datetime, timezone
         now = datetime.now(timezone.utc)
-        db.execute(
-            "UPDATE secretary_proposals SET status = 'pending', "
-            "metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb, "
-            "updated_at = %s "
-            "WHERE id = %s AND user_id = %s "
-            "AND status IN ('snoozed', 'deleted')",
-            (json.dumps({"restored_at": now.isoformat()}),
-             now, proposal_id, user_id),
-        )
-        return True
+        cur = db.get_conn().cursor()
+        try:
+            cur.execute(
+                "UPDATE secretary_proposals SET status = 'pending', "
+                "metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb, "
+                "updated_at = %s "
+                "WHERE id = %s AND user_id = %s "
+                "AND status IN ('snoozed', 'deleted')",
+                (json.dumps({"restored_at": now.isoformat()}),
+                 now, proposal_id, user_id),
+            )
+            return cur.rowcount > 0
+        finally:
+            cur.connection.commit()
+            cur.close()
+            db.put_conn(cur.connection)
 
     def batch_update_status(
-        self, proposal_ids: list[str], status: str, user_id: str,
+        self,
+        proposal_ids: list[str],
+        status: str,
+        user_id: str,
     ) -> int:
-        """批量更新提案状态，返回更新的记录数"""
+        """批量更新提案状态，返回真实更新的记录数"""
         if not proposal_ids:
             return 0
         db = self._get_db()
         from datetime import datetime, timezone
         now = datetime.now(timezone.utc)
 
-        placeholders = ", ".join("%s" for _ in proposal_ids)
-        sql = (
-            f"UPDATE secretary_proposals SET status = %s, updated_at = %s "
-            f"WHERE id IN ({placeholders}) AND user_id = %s"
-        )
-        params = [status, now] + proposal_ids + [user_id]
-        db.execute(sql, tuple(params))
-        return len(proposal_ids)
+        cur = db.get_conn().cursor()
+        try:
+            placeholders = ", ".join("%s" for _ in proposal_ids)
+            sql = (
+                f"UPDATE secretary_proposals SET status = %s, updated_at = %s "
+                f"WHERE id IN ({placeholders}) AND user_id = %s"
+            )
+            params = [status, now] + list(proposal_ids) + [user_id]
+            cur.execute(sql, tuple(params))
+            return cur.rowcount
+        finally:
+            cur.connection.commit()
+            cur.close()
+            db.put_conn(cur.connection)
