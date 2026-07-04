@@ -30,8 +30,8 @@ export default function FlashcardPage() {
         <div>
           <p className="font-medium text-amber-700 dark:text-amber-300">页面正在重建中</p>
           <p className="text-sm text-amber-600/80 dark:text-amber-400/80 mt-1">
-            路由可达，但功能未就绪。后端 services (fsrs_scheduler/belief_writer) 正在从 .pyc 缓存反编译恢复，
-            <br />后续会按模块任务（Task #88+）逐步推出。
+            路由可达，但功能未就绪。后端 services（fsrs_scheduler/belief_writer）源文件不在 git 历史中，<br />
+            已确认 git / stash 中均无副本。等待按模块任务（Task #88+）重新实现。
           </p>
         </div>
       </div>
