@@ -53,6 +53,44 @@ interface TimelineItem {
   source_module?: string;
 }
 
+interface StudyPlanItem {
+  task_id: string;
+  skill_id: string;
+  title: string;
+  description?: string;
+  subject?: string;
+  estimated_minutes: number;
+  difficulty: number;
+  priority: number;
+  daily_questions: number;
+  completed: boolean;
+  level?: string;
+}
+
+interface StudyPlanData {
+  plan?: {
+    items?: StudyPlanItem[];
+    estimated_total_minutes?: number;
+    habit_level?: string;
+    week_number?: number;
+  };
+}
+
+interface SuggestionItem {
+  skill_id: string;
+  label: string;
+  level?: string;
+  p_known?: number;
+  subject?: string;
+}
+
+interface SuggestionData {
+  urgent?: SuggestionItem[];
+  building?: SuggestionItem[];
+  new_topic?: SuggestionItem[];
+  suggestion?: string;
+}
+
 interface DailyData {
   date?: string;
   timeline_items?: TimelineItem[];
@@ -60,6 +98,10 @@ interface DailyData {
   status_bar?: any;
   pending_pool?: any[];
   adaptive_recommendations?: any[];
+  /** 学习计划元数据（来自 /api/study/plan） */
+  plan_meta?: StudyPlanData["plan"];
+  /** AI 学习建议（来自 /api/study/suggestions） */
+  suggestion?: SuggestionData;
 }
 
 interface AnalyticsData {
@@ -94,22 +136,41 @@ export default function Cockpit() {
     if (!user) return;
     setLoading(true);
     try {
-      const [d, a, i, s] = await Promise.allSettled([
-        api<DailyData>("/api/planning/daily").catch(() => null),
+      const [planRes, sugRes, a, s] = await Promise.allSettled([
+        // 今日学习计划：来自 /api/study/plan/{user_id}
+        api<StudyPlanData>(`/api/study/plan/${user.id}`).catch(() => null),
+        // AI 学习建议：来自 /api/study/suggestions
+        api<SuggestionData>(`/api/study/suggestions`).catch(() => null),
         api<AnalyticsData>("/api/practice/stats/overview").catch(() => null),
-        api<{ items?: InterestItem[] }>("/api/interest/push/today").catch(() => null),
+        // 连续天数：来自 /api/progress/{user_id}/summary
         api<{ streak?: number }>(`/api/progress/${user.id}/summary`).catch(() => null),
       ]);
-      if (d.status === "fulfilled" && d.value) setDaily(d.value);
+      if (planRes.status === "fulfilled" && planRes.value) {
+        const items = planRes.value.plan?.items || [];
+        setDaily({
+          date: new Date().toLocaleDateString("zh-CN"),
+          timeline_items: items.map((it) => ({
+            id: it.task_id,
+            title: it.title,
+            status: it.completed ? "completed" : "pending",
+            scheduled_for: it.completed ? undefined : `约 ${it.estimated_minutes} 分钟`,
+            source_module: it.subject,
+          })),
+          plan_meta: planRes.value.plan,
+        });
+      }
+      if (sugRes.status === "fulfilled" && sugRes.value) {
+        setDaily((prev) => prev ? { ...prev, suggestion: sugRes.value } : {
+          date: new Date().toLocaleDateString("zh-CN"),
+          suggestion: sugRes.value,
+        });
+      }
       if (a.status === "fulfilled" && a.value) {
         const overview = a.value;
         const streak = s.status === "fulfilled" ? s.value?.streak : undefined;
         setAnalytics({ ...overview, streak_days: streak });
       }
-      if (i.status === "fulfilled" && i.value) {
-        const data = i.value as any;
-        setInterest(data?.items || data?.pushes || data?.recommendations || []);
-      }
+      // interest 模块 (Task #88+) 暂未提供真实 endpoint，留空由 EmptyHint 兜底
     } finally {
       setLoading(false);
     }
@@ -167,6 +228,11 @@ export default function Cockpit() {
             <h2 className="text-[12px] font-semibold text-ink-secondary uppercase tracking-wider">
               今日焦点
             </h2>
+            {daily?.plan_meta && (
+              <span className="text-[11px] text-ink-muted ml-1">
+                · {daily.plan_meta.week_number ? `第 ${daily.plan_meta.week_number} 周` : "新计划"}
+              </span>
+            )}
           </div>
           {focus ? (
             <div className="flex items-center justify-between gap-3">
@@ -182,7 +248,7 @@ export default function Cockpit() {
                 )}
               </div>
               <button
-                onClick={() => router.push("/planning")}
+                onClick={() => router.push("/study")}
                 className="flex items-center gap-1.5 px-3.5 h-9 rounded-md bg-accent text-white text-[13px] font-medium hover:bg-accent-hover active:scale-[0.98] transition-all shrink-0 shadow-sm"
               >
                 开始
@@ -194,7 +260,9 @@ export default function Cockpit() {
               icon={<Inbox size={20} className="text-ink-muted" />}
               message={
                 extractBriefSummary(daily?.brief_summary) ||
-                "今日暂未安排任务，可到「规划」页面创建。"
+                (daily?.plan_meta
+                  ? "今日所有任务已完成 🎉"
+                  : "还没有学习计划，到「学习规划」生成个性化计划")
               }
             />
           )}
@@ -251,12 +319,43 @@ export default function Cockpit() {
               <ArrowRight size={11} />
             </button>
           </div>
-          {interest.length === 0 ? (
-            <EmptyHint
-              icon={<Lightbulb size={20} className="text-ink-muted" />}
-              message="今日暂无推荐 — 到「兴趣探索」添加信息源"
-            />
-          ) : (
+          {daily?.suggestion?.suggestion ? (
+            <div className="space-y-3">
+              <div className="p-3 rounded-md bg-warning/5 border border-warning/20">
+                <div className="flex items-start gap-2.5">
+                  <Lightbulb size={14} className="text-warning mt-0.5 shrink-0" />
+                  <p className="text-[13px] text-ink-primary leading-relaxed">
+                    {daily.suggestion.suggestion}
+                  </p>
+                </div>
+              </div>
+              {/* 三组优先级建议：紧急 / 巩固 / 新知 */}
+              {[
+                { title: "🔥 紧急补强", items: daily.suggestion.urgent || [], color: "red" },
+                { title: "📈 巩固提升", items: daily.suggestion.building || [], color: "green" },
+                { title: "🔭 新知识", items: daily.suggestion.new_topic || [], color: "accent" },
+              ].filter(g => g.items.length > 0).slice(0, 2).map((g) => (
+                <div key={g.title}>
+                  <div className="text-[11px] text-ink-muted mb-1.5 font-medium">{g.title}</div>
+                  <div className="space-y-1">
+                    {g.items.slice(0, 3).map((s) => (
+                      <div key={s.skill_id} className="flex items-center justify-between text-[12.5px] px-2.5 py-1.5 rounded hover:bg-surface-hover transition-colors">
+                        <span className="text-ink-primary truncate flex-1">{s.label}</span>
+                        {s.p_known != null && (
+                          <span className={`text-[11px] font-medium tabular ml-2 ${
+                            g.color === "red" ? "text-red-500" :
+                            g.color === "green" ? "text-green-500" : "text-accent"
+                          }`}>
+                            {(s.p_known * 100).toFixed(0)}%
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : interest.length > 0 ? (
             <div className="space-y-1.5">
               {interest.slice(0, 3).map((it) => (
                 <button
@@ -281,6 +380,11 @@ export default function Cockpit() {
                 </button>
               ))}
             </div>
+          ) : (
+            <EmptyHint
+              icon={<Lightbulb size={20} className="text-ink-muted" />}
+              message="开始练习后，AI 会基于你的薄弱点生成推荐"
+            />
           )}
         </section>
 

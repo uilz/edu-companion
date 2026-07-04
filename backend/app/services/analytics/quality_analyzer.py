@@ -168,7 +168,7 @@ class QualityAnalyzer:
         if len(attempts) < self.MIN_ATTEMPTS:
             return QuestionQuality(
                 question_id=question_id,
-                text=q.get("text", ""),
+                text=q.get("stem", ""),
                 skill_id=q.get("skill_id", ""),
                 subject=q.get("subject", ""),
                 total_attempts=len(attempts),

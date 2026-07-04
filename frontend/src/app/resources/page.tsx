@@ -675,15 +675,15 @@ export default function ResourcesPage() {
                 {/* ── 桌面端表格视图（hidden sm:block） ── */}
                 <div className="hidden sm:block">
                   <div className="space-y-1">
-                    {/* 表头 */}
-                    <div className="grid grid-cols-[36px_minmax(0,1fr)_100px_80px_90px_100px_100px] gap-3 px-4 py-2.5 text-[11px] font-medium text-[var(--color-text-muted)] border-b border-[var(--color-border)]/50">
+                    {/* 表头：复选框 / 文件名(弹性) / 标签 / 大小 / 状态 / 日期 / 操作 */}
+                    <div className="grid grid-cols-[28px_minmax(220px,1fr)_minmax(0,120px)_64px_minmax(0,90px)_minmax(0,110px)_72px] gap-2 px-3 py-2.5 text-[11px] font-medium text-[var(--color-text-muted)] border-b border-[var(--color-border)]/50">
                       <div><input type="checkbox" checked={selectedFiles.size === files.length && files.length > 0} onChange={selectAll} className="rounded accent-[var(--color-accent)]" /></div>
                       <span>文件名</span>
                       <span>标签</span>
                       <span>大小</span>
                       <span>状态</span>
                       <span>日期</span>
-                      <span>操作</span>
+                      <span className="text-right">操作</span>
                     </div>
                     {/* 文件行 */}
                     {files.map((f) => {
@@ -693,7 +693,7 @@ export default function ResourcesPage() {
                       const isSelected = selectedFiles.has(f.material_id);
                       return (
                         <div key={f.material_id}
-                          className={`group grid grid-cols-[36px_minmax(0,1fr)_100px_80px_90px_100px_100px] gap-3 items-center px-4 py-2.5 rounded-xl border transition-all ${
+                          className={`group grid grid-cols-[28px_minmax(220px,1fr)_minmax(0,120px)_64px_minmax(0,90px)_minmax(0,110px)_72px] gap-2 items-center px-3 py-2.5 rounded-xl border transition-all ${
                             isSelected
                               ? "border-[var(--color-accent)]/30 bg-[var(--color-accent)]/5"
                               : "border-transparent hover:bg-[var(--color-surface)] hover:border-[var(--color-border)]/50"
@@ -701,15 +701,17 @@ export default function ResourcesPage() {
                           <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(f.material_id)} className="rounded accent-[var(--color-accent)]" />
                           {f.is_folder ? (
                             <div onClick={() => navigateToFolder(f.material_id, f.file_name)}
-                              className="flex items-center gap-2.5 min-w-0 text-[var(--color-text)] hover:text-[var(--color-accent)] cursor-pointer transition-colors">
+                              className="flex items-center gap-2 min-w-0 text-[var(--color-text)] hover:text-[var(--color-accent)] cursor-pointer transition-colors">
                               <FolderOpen size={15} className="text-amber-500 shrink-0" />
                               <span className="text-[13px] truncate font-medium">{f.file_name || "未命名文件夹"}</span>
                             </div>
                           ) : (
                             <Link href={`/files/${f.material_id}`}
-                              className="flex items-center gap-2.5 min-w-0 text-[var(--color-text)] hover:text-[var(--color-accent)] transition-colors group/link">
+                              className="flex items-center gap-2 min-w-0 hover:text-[var(--color-accent)] transition-colors group/link">
                               {getFileIcon(ext)}
-                              <span className="text-[13px] truncate">{f.file_name || `未命名·${ext || "文件"}`}</span>
+                              <span className="text-[13px] truncate flex-1 !text-[var(--color-text)]" title={f.file_name || ""}>
+                                {f.file_name || `未命名·${ext || "文件"}`}
+                              </span>
                               <ExternalLink size={10} className="text-[var(--color-text-muted)] opacity-0 group-hover/link:opacity-100 shrink-0 transition-opacity" />
                             </Link>
                           )}
@@ -719,7 +721,7 @@ export default function ResourcesPage() {
                             ))}
                             {(f.tags || []).length > 2 && <span className="text-[9px] text-[var(--color-text-muted)] shrink-0">+{f.tags.length - 2}</span>}
                           </div>
-                          <span className="text-[12px] text-[var(--color-text-muted)]">{f.is_folder ? `${f.toc_count}项` : formatSize(f.file_size)}</span>
+                          <span className="text-[12px] text-[var(--color-text-muted)] truncate">{f.is_folder ? `${f.toc_count}项` : formatSize(f.file_size)}</span>
                           <span>
                             {isIndexing ? (
                               <span className="inline-flex items-center gap-1 text-[11px] text-blue-500"><Loader2 size={11} className="animate-spin" /> 索引中</span>
@@ -729,8 +731,8 @@ export default function ResourcesPage() {
                               <span className="inline-flex items-center gap-1 text-[11px] text-green-500"><CheckCircle size={11} /> {f.chunk_count}块</span>
                             )}
                           </span>
-                          <span className="text-[12px] text-[var(--color-text-muted)]">{formatDate(f.created_at)}</span>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <span className="text-[12px] text-[var(--color-text-muted)] truncate">{formatDate(f.created_at)}</span>
+                          <div className="flex items-center gap-0.5 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                             {!f.is_folder && (
                               <button onClick={() => handlePreview(f)} className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-blue-500 hover:bg-blue-500/10 transition-colors" title="预览"><Eye size={13} /></button>
                             )}
