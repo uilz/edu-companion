@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import {
   Sun, Moon, Key, Cpu, MessageSquare, Brain,
   User, Shield, LogOut, Eye, EyeOff, Check, Loader2,
@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useTheme, STYLE_LIST } from "@/contexts/ThemeContext";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { authedFetch, AuthUser } from "@/lib/api/auth";
 import { useLayoutPrefs, PANEL_BOUNDS, type PanelKey } from "@/hooks/useLayoutPrefs";
 
@@ -27,12 +27,52 @@ const SETTINGS_TABS = [
 
 type TabKey = (typeof SETTINGS_TABS)[number]["key"];
 
-export default function SettingsPage() {
-  const { theme, setTheme, style, setStyle } = useTheme();
+const VALID_TABS = new Set<string>(SETTINGS_TABS.map((t) => t.key));
+const isValidTab = (k: string | null): k is TabKey =>
+  !!k && VALID_TABS.has(k);
 
-  const [activeTab, setActiveTab] = useState<TabKey>("account");
+// useSearchParams 在 client component 里需要 Suspense 边界
+export default function SettingsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-64">
+          <Loader2 size={24} className="animate-spin text-[var(--color-text-muted)]" />
+        </div>
+      }
+    >
+      <SettingsContent />
+    </Suspense>
+  );
+}
+
+function SettingsContent() {
+  const { theme, setTheme, style, setStyle } = useTheme();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // activeTab 完全派生自 URL，URL 是唯一真相源（避免 setState + router.replace 异步 race）
+  const tabFromUrl = searchParams.get("tab");
+  const activeTab: TabKey = isValidTab(tabFromUrl) ? tabFromUrl : "account";
+
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // 切 tab → 只更新 URL（router.replace 不污染 history）
+  const switchTab = useCallback(
+    (tab: TabKey) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (tab === "account") {
+        // account 是默认 tab，省略 ?tab 让 URL 更干净
+        params.delete("tab");
+      } else {
+        params.set("tab", tab);
+      }
+      const qs = params.toString();
+      router.replace(qs ? `/settings?${qs}` : "/settings", { scroll: false });
+    },
+    [router, searchParams],
+  );
 
   useEffect(() => {
     authedFetch<AuthUser>("/api/auth/me")
@@ -68,7 +108,7 @@ export default function SettingsPage() {
         {SETTINGS_TABS.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => switchTab(tab.key)}
             className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg whitespace-nowrap transition-colors ${
               activeTab === tab.key
                 ? "bg-[var(--color-accent)] text-white shadow-sm"

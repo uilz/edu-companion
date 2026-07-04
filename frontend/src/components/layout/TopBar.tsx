@@ -344,7 +344,7 @@ export default function TopBar() {
                       <SettingsIcon size={14} /> 设置
                     </Link>
                     <Link
-                      href="/settings/account"
+                      href="/settings?tab=account"
                       onClick={() => setUserMenuOpen(false)}
                       className="flex items-center gap-2 px-3 py-1.5 text-ink-secondary hover:bg-surface-hover hover:text-ink-primary"
                     >
