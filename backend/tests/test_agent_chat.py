@@ -48,7 +48,7 @@ class TestAgentChatEndpoint:
         """发送消息应返回 SSE 流式响应"""
         with client.stream(
             "POST",
-            "/api/secretary/agent/chat",
+            "/api/secretary/agent/chat?user_id=test_user",
             json={"message": "帮我复习微积分", "current_page": "/dashboard"},
         ) as response:
             assert response.status_code == 200
@@ -74,7 +74,7 @@ class TestAgentChatEndpoint:
         ):
             with client.stream(
                 "POST",
-                "/api/secretary/agent/chat",
+                "/api/secretary/agent/chat?user_id=test_user",
                 json={"message": "你好", "current_page": "/learn"},
             ) as response:
                 assert response.status_code == 200
@@ -83,7 +83,7 @@ class TestAgentChatEndpoint:
         """传入已有 conv_id 应复用会话"""
         with client.stream(
             "POST",
-            "/api/secretary/agent/chat",
+            "/api/secretary/agent/chat?user_id=test_user",
             json={
                 "message": "继续",
                 "current_page": "/learn",
@@ -96,7 +96,7 @@ class TestAgentChatEndpoint:
         """空消息应返回 422 (Pydantic 验证失败)"""
         with client.stream(
             "POST",
-            "/api/secretary/agent/chat",
+            "/api/secretary/agent/chat?user_id=test_user",
             json={"message": "", "current_page": "/learn"},
         ) as response:
             assert response.status_code == 422

@@ -119,25 +119,40 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_quf_user_q_type ON question_user_flags(use
 CREATE TABLE IF NOT EXISTS error_book (
     entry_id        TEXT PRIMARY KEY,
     user_id         TEXT NOT NULL,
-    question_id     TEXT NOT NULL,
+    question_id     TEXT,                          -- 兼容非练习来源 (language_room): 来源 ID 存 source_ref_id
     skill_id        TEXT DEFAULT '',             -- 待迁移至 cognitive_links
     error_type      TEXT DEFAULT '',
+    source_type     VARCHAR(20) DEFAULT 'practice',  -- practice / language_room (扩展支持多源)
+    source_ref_id   TEXT DEFAULT '',                -- language_room 存 transcript_id; practice 存 question_id
     misconception   TEXT DEFAULT '',
     user_answer     TEXT DEFAULT '',
+    correct_answer  TEXT DEFAULT '',
     question_text   TEXT DEFAULT '',
     review_count    INT DEFAULT 0,
     next_review     TIMESTAMPTZ DEFAULT NOW(),
     mastery_after_review DOUBLE PRECISION DEFAULT 0,
     is_resolved     BOOLEAN DEFAULT false,
     consecutive_correct INT DEFAULT 0,
-    referenced_materials JSONB DEFAULT '[]',
+    referenced_materials_json JSONB DEFAULT '[]',
     attribution     JSONB DEFAULT '{}',
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 兼容迁移: 旧表 question_id NOT NULL 解除, 新增 source_type / source_ref_id
+ALTER TABLE error_book ALTER COLUMN question_id DROP NOT NULL;
+ALTER TABLE error_book ALTER COLUMN skill_id SET DEFAULT '';
+ALTER TABLE error_book ALTER COLUMN skill_id DROP NOT NULL;
+ALTER TABLE error_book ADD COLUMN IF NOT EXISTS source_type VARCHAR(20) DEFAULT 'practice';
+ALTER TABLE error_book ADD COLUMN IF NOT EXISTS source_ref_id TEXT DEFAULT '';
+ALTER TABLE error_book ADD COLUMN IF NOT EXISTS correct_answer TEXT DEFAULT '';
+ALTER TABLE error_book ADD COLUMN IF NOT EXISTS mastery_after_review DOUBLE PRECISION DEFAULT 0;
+ALTER TABLE error_book ADD COLUMN IF NOT EXISTS consecutive_correct INT DEFAULT 0;
+ALTER TABLE error_book ADD COLUMN IF NOT EXISTS attribution JSONB DEFAULT '{}';
+
 CREATE INDEX IF NOT EXISTS idx_eb_user ON error_book(user_id);
 CREATE INDEX IF NOT EXISTS idx_eb_skill ON error_book(skill_id);
 CREATE INDEX IF NOT EXISTS idx_eb_resolved ON error_book(user_id, is_resolved);
+CREATE INDEX IF NOT EXISTS idx_eb_source ON error_book(user_id, source_type, source_ref_id);
 
 -- 7.0.8 统一关联表 (取代 cognitive_node_ids 数组 + knowledge_edges + conversation_node_links + material_chunks.skill_ids_json)
 CREATE TABLE IF NOT EXISTS cognitive_links (

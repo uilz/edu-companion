@@ -150,7 +150,7 @@ def test_contract_snapshot_matches():
     # 如果本测试失败，说明 Protocol 签名已变更：
     #   - 有意变更 → 更新 EXPECTED_HASH
     #   - 无意变更 → 这是 breaking change，请修复
-    EXPECTED_HASH = "0804e32c62ef30cc"
+    EXPECTED_HASH = "5fbf8612ac4e53ee"
 
     assert actual_hash == EXPECTED_HASH, (
         f"契约快照哈希变化!\n"

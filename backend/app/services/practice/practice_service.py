@@ -103,22 +103,9 @@ def update_cognitive_after_practice(
     except Exception:
         p_after = p_before
 
-    # 发布 CognitiveNodeUpdated 事件
-    try:
-        from shared.events import CognitiveNodeUpdated
-        from app.application.di import container
-        import asyncio
-        asyncio.create_task(container.event_bus.publish(CognitiveNodeUpdated(
-            user_id=user_id,
-            node_id=skill_id,
-            label=skill_id,
-            level="atom",
-            proficiency_before=p_before,
-            proficiency_after=p_after,
-            update_type="practice",
-        )))
-    except Exception as e:
-        logger.warning("CognitiveNodeUpdated event publish failed: %s", e)
+    # 掌握度（Belief）变化由 cognitive engine 通过 CognitiveEventRecord 内部处理，
+    # 不再发布 CognitiveNodeUpdated（旧事件已拆分为 Linked / MetadataChanged）。
+    # 此处不发布任何 DomainEvent；如需事件通知，请通过 cognitive.events.append_event 写入。
 
     return {
         "p_before": p_before,

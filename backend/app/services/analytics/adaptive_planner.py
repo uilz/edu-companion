@@ -178,27 +178,19 @@ class AdaptivePlanGenerator:
         return recs[:top_n]
 
     async def on_knowledge_updated(self, event) -> dict | None:
-        """处理 CognitiveNodeUpdated 事件"""
-        from shared.events import CognitiveNodeUpdated
-        if not isinstance(event, CognitiveNodeUpdated):
-            return None
+        """处理 CognitiveNodeMetadataChanged 事件
 
-        # 显著提升阈值：proficiency 提升超过 0.15 才触发重调
-        delta = event.proficiency_after - event.proficiency_before
-        if delta < 0.15:
-            return None
-
-        old_level = _proficiency_to_level(event.proficiency_before)
-        new_level = _proficiency_to_level(event.proficiency_after)
-        if old_level == new_level:
+        旧 CognitiveNodeUpdated 已拆分为 Linked / MetadataChanged。
+        本规划器只关心元数据变化（描述/标签/层级调整）触发的重排。
+        """
+        from shared.events import CognitiveNodeMetadataChanged
+        if not isinstance(event, CognitiveNodeMetadataChanged):
             return None
 
         return await self.generate(
             event.user_id,
             reason=(
-                f"knowledge_upgrade:{event.node_id}:{event.label}"
-                f":{old_level}→{new_level}"
-                f"(Δ{delta:+.2f})"
+                f"knowledge_metadata_change:{event.node_id}:{','.join(event.changed_fields)}"
             ),
         )
 

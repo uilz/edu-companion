@@ -3,26 +3,69 @@
 
   所有工具的中文名、图标、LLM schema、block 类型、快慢分类 均在此定义。
   其他模块（tool_repository / tool_executor）从本文件派生所需结构，不再各自维护。
+
+本模块同时提供三层 dataclass：
+
+  ToolInfo        — 工具元信息（LLM 可见，名称/描述/参数/block_type）
+  ToolResult      — 工具执行结果（统一所有工具的返回类型）
+  ToolDefinition  — ToolInfo + handler/route/require_confirmation（可执行）
+
+向后兼容：
+  `from app.domain.secretary.tools.base import ToolDefinition, ToolResult`
+  仍然可用（base.py 改为 re-export 本模块的类）。
 """
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Callable, Any
+from typing import Callable, Any, Awaitable
 
 
 @dataclass
 class ToolInfo:
-    """单个工具的完整元信息"""
+    """单个工具的完整元信息（LLM 可见，秘书系统可继承）"""
     name: str                        # 工具名（LLM function name）
-    zh_name: str                     # 中文显示名
-    icon: str                        # emoji 图标
-    description: str                 # LLM function calling 描述
+    zh_name: str = ""                # 中文显示名
+    icon: str = "🔧"                 # emoji 图标
+    description: str = ""            # LLM function calling 描述
     parameters: dict = field(default_factory=lambda: {"type": "object", "properties": {}})
     required: list[str] = field(default_factory=list)
     block_type: str | None = None    # 对应 ResponseBlock.type（video / practice / image / ...）
     is_slow: bool = False            # 是否耗时工具（需要后台轮询）
     is_inline: bool = False          # 是否在 pipeline 内直接处理（不经过 ToolExecutor）
     is_suspending: bool = False      # 是否需要挂起管线等待外部输入（如用户回答提问）
+
+
+@dataclass
+class ToolResult:
+    """工具执行结果 — 统一所有工具的返回类型
+
+    - 普通 LLM 工具：填 data / success / error
+    - 秘书 Agent 工具：再填 route_target / route_params / confirmation_text
+    """
+    success: bool = True
+    data: dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
+    route_target: str | None = None       # 秘书 Agent 跳转目标页面
+    route_params: dict[str, Any] | None = None  # 跳转参数
+    confirmation_text: str = ""           # 用户确认提示
+
+
+@dataclass
+class ToolDefinition(ToolInfo):
+    """统一工具定义 — 继承 ToolInfo 增加执行能力
+
+    用于：
+      - 秘书 Agent 工具（domain/secretary/tools/*_tools.py）
+      - 任何同时需要 LLM 元信息 + handler 的工具
+
+    字段增量（相对 ToolInfo）：
+      handler              — 异步执行函数
+      route                — 静态路由描述（与 handler 返回的 route_target 二选一）
+      require_confirmation — 前端是否需要确认弹窗
+    """
+    handler: Callable[[dict[str, Any]], Awaitable[ToolResult]] | None = None
+    route: dict[str, Any] | None = None
+    require_confirmation: bool = True
 
 
 # ══════════════════════════════════════════════════════════════
@@ -321,71 +364,112 @@ ALL_TOOL_INFO: dict[str, ToolInfo] = {
             "required": [],
         },
     ),
-    # ── LanguageRoom 共享工具 (Task #35) ──
+
+    # ══════════════════════════════════════════
+    #  LanguageRoom AI 工具 (ADR 0004 决策 5)
+    #  AI 角色 / 用户 / 服务 都通过共享 tool registry 调用
+    # ══════════════════════════════════════════
     "tool_vocabulary_capture": ToolInfo(
         name="tool_vocabulary_capture",
-        zh_name="捕获生词",
+        zh_name="捕获词汇便签",
         icon="📝",
-        description="在 LanguageRoom 房间内捕获生词, 自动生成 FlashCard 数据卡",
+        description=(
+            "在 LanguageRoom 房间内捕获生词，自动生成 FlashCard 数据卡 "
+            "(source=language_room)，同步写入 vocabulary_captures 表"
+        ),
         parameters={
             "type": "object",
             "properties": {
-                "user_id": {"type": "string"},
-                "room_id": {"type": "string"},
-                "transcript_id": {"type": "string"},
-                "word": {"type": "string"},
-                "translation": {"type": "string"},
+                "user_id": {"type": "string", "description": "用户 ID"},
+                "room_id": {"type": "string", "description": "房间 ID"},
+                "transcript_id": {"type": "string", "description": "转写片段 ID (可空)"},
+                "word": {"type": "string", "description": "生词"},
+                "translation": {"type": "string", "description": "释义/翻译"},
+                "context_sentence": {"type": "string", "description": "上下文例句"},
+                "language": {"type": "string", "description": "目标语言，如 en/zh"},
+                "linked_node_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "关联知识点 ID 列表",
+                },
             },
-            "required": ["user_id", "room_id", "word"],
+            "required": ["word"],
         },
+        is_inline=True,
     ),
     "tool_error_mark": ToolInfo(
         name="tool_error_mark",
         zh_name="标记错误",
-        icon="❌",
-        description="在 LanguageRoom 房间内标记用户转写片段为错误, 复用 ErrorBookEntry",
+        icon="⚠️",
+        description=(
+            "在 LanguageRoom 房间内标记用户转写片段为错误, "
+            "复用 ErrorBookEntry (source_type=language_room), 同步更新 room_transcripts.is_error"
+        ),
         parameters={
             "type": "object",
             "properties": {
-                "user_id": {"type": "string"},
-                "room_id": {"type": "string"},
-                "transcript_id": {"type": "string"},
-                "error_type": {"type": "string"},
-                "linked_node_ids": {"type": "array", "items": {"type": "string"}},
+                "user_id": {"type": "string", "description": "用户 ID"},
+                "room_id": {"type": "string", "description": "房间 ID"},
+                "transcript_id": {"type": "string", "description": "转写片段 ID"},
+                "error_type": {
+                    "type": "string",
+                    "enum": ["grammar", "vocabulary", "pronunciation", "coherence"],
+                    "default": "grammar",
+                },
+                "user_note": {"type": "string", "description": "用户备注"},
+                "linked_node_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "关联知识点 ID 列表",
+                },
             },
-            "required": ["user_id", "room_id", "transcript_id"],
+            "required": ["transcript_id"],
         },
+        is_inline=True,
     ),
     "tool_message_post": ToolInfo(
         name="tool_message_post",
-        zh_name="发送消息",
+        zh_name="发送文字辅助",
         icon="💬",
-        description="在 LanguageRoom 房间内发送文字辅助消息, 复用 ExplainCard 浮卡",
+        description=(
+            "在 LanguageRoom 房间内发送文字辅助消息, "
+            "复用 ExplainCard 浮卡机制 (source_module=language_room)"
+        ),
         parameters={
             "type": "object",
             "properties": {
-                "user_id": {"type": "string"},
-                "room_id": {"type": "string"},
-                "text": {"type": "string"},
-                "message_type": {"type": "string"},
+                "user_id": {"type": "string", "description": "用户 ID"},
+                "room_id": {"type": "string", "description": "房间 ID"},
+                "text": {"type": "string", "description": "消息内容"},
+                "message_type": {
+                    "type": "string",
+                    "enum": ["text", "link", "spelling", "note"],
+                    "default": "text",
+                },
+                "reference_url": {"type": "string", "description": "参考链接 (可选)"},
             },
-            "required": ["user_id", "room_id", "text"],
+            "required": ["text"],
         },
+        is_inline=True,
     ),
     "tool_knowledge_search": ToolInfo(
         name="tool_knowledge_search",
-        zh_name="知识搜索",
+        zh_name="搜索知识节点",
         icon="🔍",
-        description="在知识树中搜索节点, AI 辅助者 (ai_helper) 在生成回答前调用以获取相关上下文",
+        description=(
+            "在知识树中搜索节点, AI 辅助者 (ai_helper) 在生成回答前调用以获取相关上下文"
+        ),
         parameters={
             "type": "object",
             "properties": {
-                "user_id": {"type": "string"},
-                "query": {"type": "string"},
-                "top_k": {"type": "integer"},
+                "user_id": {"type": "string", "description": "用户 ID"},
+                "query": {"type": "string", "description": "搜索关键词"},
+                "max_results": {"type": "integer", "default": 5, "description": "最大返回数量"},
+                "scope_node_id": {"type": "string", "description": "限定在某个节点子树内搜索 (可选)"},
             },
-            "required": ["user_id", "query"],
+            "required": ["query"],
         },
+        is_inline=True,
     ),
 }
 

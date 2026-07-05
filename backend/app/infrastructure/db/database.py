@@ -234,6 +234,9 @@ class Database:
                 "knowledge_after_json", "referenced_materials_json", "dimensions",
                 "misconception_flags", "pseudo_mastery_flags", "skills_covered_json",
                 "image_urls_json", "skill_ids_json",
+                # FlashCard 模块 (docs/modules/flashcard/data-model.md)
+                "source_ref", "linked_node_ids", "node_link_roles",
+                "response_history", "field_versions",
             }
         result = {}
         for k, v in row.items():

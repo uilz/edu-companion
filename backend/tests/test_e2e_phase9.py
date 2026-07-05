@@ -113,11 +113,14 @@ try:
     check("事件总线有注册 handler", handler_count > 0, f"{handler_count} handlers")
     event_types = list(container.event_bus._handlers.keys())
     check("AnswerSubmitted 已订阅", "AnswerSubmitted" in event_types, str(event_types))
-    check("CognitiveNodeUpdated 已订阅", "CognitiveNodeUpdated" in event_types, str(event_types))
+    check("CognitiveNodeMetadataChanged 已订阅", "CognitiveNodeMetadataChanged" in event_types, str(event_types))
 except Exception as e:
     check("事件总线检查", False, str(e))
 
 print("\n" + "=" * 60)
 print(f"  测试结果: ✅ {ok} 通过  |  ❌ {fail} 失败  |  总计 {ok + fail}")
 print("=" * 60)
-sys.exit(0 if fail == 0 else 1)
+
+# 作为 pytest 收集时不 exit（避免 SystemExit INTERNALERROR）
+if __name__ == "__main__":
+    sys.exit(0 if fail == 0 else 1)

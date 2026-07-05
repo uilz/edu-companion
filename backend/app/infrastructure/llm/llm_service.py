@@ -418,7 +418,7 @@ class LLMService:
                 full_content = msg
                 yield {"type": "token", "content": msg}
 
-            yield {"type": "done", "full_text": full_content}
+            yield {"type": "done", "full_text": full_content, "reasoning_content": last_reasoning or None}
 
         except Exception as e:
             logger.error("LLM 流式生成失败 [%s]: %s", model, str(e))

@@ -9,6 +9,7 @@ from app.schemas.conversation import ResponseBlock
 from app.infrastructure.llm.tool_repository import TOOL_DEFINITIONS, FAST_TOOLS, SLOW_TOOLS, _TOOL_TO_BLOCK_TYPE
 from app.services.secretary.tool_handler import handle_secretary_diagnose
 from app.infrastructure.llm.knowledge_ops_tools import TOOL_HANDLERS as KTOOL_HANDLERS, TOOL_DEFINITIONS as KTOOL_DEFINITIONS
+from app.infrastructure.llm.liveroom_tools import TOOL_HANDLERS as LROOM_HANDLERS
 
 logger = logging.getLogger(__name__)
 
@@ -416,12 +417,8 @@ TOOL_HANDLERS = {
 }
 # 合并知识树操作工具
 TOOL_HANDLERS.update(KTOOL_HANDLERS)
-# 合并 liveroom 共享工具 (Task #35 - shared tool registry)
-try:
-    from app.infrastructure.llm.liveroom_tools import SYNC_HANDLERS as _LR_SYNC
-    TOOL_HANDLERS.update(_LR_SYNC)
-except ImportError:
-    pass
+# 合并 LanguageRoom 工具 (ADR 0004 决策 5)
+TOOL_HANDLERS.update(LROOM_HANDLERS)
 
 class ToolExecutor:
     """统一的工具执行器"""

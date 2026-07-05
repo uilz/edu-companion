@@ -138,29 +138,105 @@ In `main.py`, both `TOOL_DEFINITIONS` (from tool_registry via tool_repository) a
 
 ### 2.4 (Optional) Agent Tool
 
-If tool = secretary agent-only, add `*_tools.py` file in `backend/app/domain/secretary/tools/`:
+Agent tools (secretary page) live in `backend/app/domain/secretary/tools/`. Since **Task #37**, agent `ToolDefinition` and LLM `ToolInfo` are **unified** into a single dataclass in `backend/app/infrastructure/llm/tool_registry.py` — the same class drives both LLM tool registry and Secretary Agent.
+
+#### Dataclass hierarchy (single source of truth)
+
+```python
+# backend/app/infrastructure/llm/tool_registry.py
+
+@dataclass
+class ToolInfo:
+    """LLM 工具元信息（轻量、无 handler）"""
+    name: str
+    zh_name: str = ""
+    icon: str = "🔧"
+    description: str = ""
+    parameters: dict = field(default_factory=lambda: {"type": "object", "properties": {}})
+    required: list[str] = field(default_factory=list)
+    block_type: str | None = None
+    is_slow: bool = False
+    is_inline: bool = False
+    is_suspending: bool = False
+
+
+@dataclass
+class ToolResult:
+    """工具执行结果 — 统一所有工具的返回类型
+
+    - 普通 LLM 工具：填 data / success / error
+    - 秘书 Agent 工具：再填 route_target / route_params / confirmation_text
+    """
+    success: bool = True
+    data: dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
+    route_target: str | None = None       # 秘书 Agent 跳转目标页面
+    route_params: dict[str, Any] | None = None
+    confirmation_text: str = ""           # 用户确认提示
+
+
+@dataclass
+class ToolDefinition(ToolInfo):
+    """统一工具定义 — 继承 ToolInfo 增加执行能力
+
+    字段增量（相对 ToolInfo）：
+      handler              — 异步执行函数
+      route                — 静态路由描述（与 handler 返回的 route_target 二选一）
+      require_confirmation — 前端是否需要确认弹窗
+    """
+    handler: Callable[[dict[str, Any]], Awaitable[ToolResult]] | None = None
+    route: dict[str, Any] | None = None
+    require_confirmation: bool = True
+```
+
+**Recommended import** (new code):
+```python
+from app.infrastructure.llm.tool_registry import ToolDefinition, ToolResult
+```
+
+**Backward-compat import** (still works via re-export):
+```python
+from app.domain.secretary.tools.base import ToolDefinition, ToolResult
+```
+
+#### Agent tool example
 
 ```python
 # backend/app/domain/secretary/tools/my_feature_tools.py
-from ..base import ToolDefinition, ToolResult
+from app.infrastructure.llm.tool_registry import ToolDefinition, ToolResult
+# or: from app.domain.secretary.tools.base import ToolDefinition, ToolResult  # 后向兼容
+
 
 async def _handler(params: dict) -> ToolResult:
-    data = await some_service.some_method(params)
-    return ToolResult(data=data, route_target="/some-page")
+    return ToolResult(
+        data={"key": "value"},
+        route_target="/some-page",
+        route_params={"param": params.get("x", "")},
+        confirmation_text="确认跳转到目标页？",
+    )
+
 
 TOOLS = [
     ToolDefinition(
         name="my_tool",
+        zh_name="我的工具",               # 来自 ToolInfo
+        icon="✨",                        # 来自 ToolInfo
         description="LLM description",
-        parameters={"param1": {"type": "string", "description": "..."}},
-        handler=_handler,
-        route=None,
-        require_confirmation=True,
+        parameters={
+            "type": "object",
+            "properties": {
+                "x": {"type": "string", "description": "输入"},
+            },
+        },
+        handler=_handler,                 # 来自 ToolDefinition
+        require_confirmation=True,        # 来自 ToolDefinition
     ),
 ]
 ```
 
-Agent tools auto-discovered by `ToolRegistry.discover()` → available to secretary agent.
+Agent tools auto-discovered by **two paths**:
+- `ToolRegistry.discover()` in `backend/app/domain/secretary/tools/tool_registry.py` → Secretary Agent `/api/secretary/agent/chat`
+- `ToolRepository.discover()` in `backend/app/infrastructure/llm/tool_repository.py` → LLM tool schema, regex intent detection
 
 ### 2.5 (Optional) Composite Tool Registration
 
@@ -292,13 +368,13 @@ Test with conversation triggering the tool.
 
 | File | Role |
 |------|------|
-| `backend/app/infrastructure/llm/tool_registry.py` | **SSoT** — all tool metadata |
+| `backend/app/infrastructure/llm/tool_registry.py` | **SSoT** — `ToolInfo` (LLM 元信息) + `ToolResult` (执行结果) + `ToolDefinition` (继承 ToolInfo 加 handler/route/require_confirmation) |
 | `backend/app/infrastructure/llm/tool_repository.py` | Aggregation + merge + LLM schema + intent detection |
 | `backend/app/infrastructure/llm/tool_executor.py` | Fast/slow execution with handlers |
 | `backend/app/infrastructure/llm/tool_dispatch.py` | Dispatch orchestrator (regex + LLM function calling) |
 | `backend/app/infrastructure/llm/knowledge_ops_tools.py` | Knowledge tree tool definitions + 8 handlers |
-| `backend/app/domain/secretary/tools/base.py` | Agent `ToolDefinition` + `ToolResult` base |
-| `backend/app/domain/secretary/tools/tool_registry.py` | Agent auto-discovery + execution |
+| `backend/app/domain/secretary/tools/base.py` | 后向兼容 re-export (Task #37 后仅 re-export `tool_registry` 中的类) |
+| `backend/app/domain/secretary/tools/tool_registry.py` | Secretary Agent `ToolRegistry` — auto-discovery + execution |
 | `backend/app/domain/secretary/tools/*_tools.py` | Agent tool definitions (practice, learning, knowledge_tree, navigation) |
 | `backend/app/domain/secretary/agent_llm.py` | Agent LLM streaming with tool schema |
 | `backend/app/domain/conversation/reply_pipeline.py` | Streaming pipeline — inline tool handling |

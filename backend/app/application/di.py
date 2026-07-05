@@ -213,28 +213,41 @@ class AppContainer:
         bus.subscribe("SessionCompleted", self.session_bridge.on_session_completed)
         bus.subscribe("SessionCompleted", self.planning_service.on_session_completed)
 
-        # CognitiveNode 更新 → 计划重调 + ZPD 调度
-        async def _on_cognitive_updated(event: DomainEvent) -> None:
-            from shared.events import CognitiveNodeUpdated
-            if not isinstance(event, CognitiveNodeUpdated):
+        # CognitiveNode 元数据/链接变化 → 计划重调 + ZPD 调度
+        # 旧 CognitiveNodeUpdated 已拆分为 CognitiveNodeLinked / CognitiveNodeMetadataChanged。
+        # 掌握度（Belief）变化由 cognitive engine 内部处理，不再走 DomainEvent 总线。
+        async def _on_cognitive_metadata_changed(event: DomainEvent) -> None:
+            from shared.events import CognitiveNodeMetadataChanged
+            if not isinstance(event, CognitiveNodeMetadataChanged):
                 return
             logger.debug(
-                "CognitiveNode updated: %s (%s) %.3f→%.3f",
-                event.label, event.level,
-                event.proficiency_before, event.proficiency_after,
+                "CognitiveNode metadata changed: %s fields=%s",
+                event.node_id, event.changed_fields,
             )
             # 计划重调
             try:
                 await self.planning_service.on_knowledge_updated(event)
             except Exception:
-                logger.debug("Planning service failed to handle CognitiveNodeUpdated")
+                logger.debug("Planning service failed to handle CognitiveNodeMetadataChanged")
             # ZPD 调度器重算
             try:
                 from app.services.knowledge.zpd_scheduler import zpd_scheduler
                 zpd_scheduler.on_knowledge_change(event.user_id, event.node_id)
             except Exception:
                 logger.debug("ZPD scheduler not available, skipping")
-        bus.subscribe("CognitiveNodeUpdated", _on_cognitive_updated)
+        bus.subscribe("CognitiveNodeMetadataChanged", _on_cognitive_metadata_changed)
+
+        # CognitiveNode 链接变化 → 知识图谱展示更新
+        async def _on_cognitive_linked(event: DomainEvent) -> None:
+            from shared.events import CognitiveNodeLinked
+            if not isinstance(event, CognitiveNodeLinked):
+                return
+            logger.debug(
+                "CognitiveNode link %s: %s -> %s/%s (%s)",
+                event.action, event.node_id,
+                event.target_ref_type, event.target_ref_id, event.link_type,
+            )
+        bus.subscribe("CognitiveNodeLinked", _on_cognitive_linked)
 
         # AI 回复 → 多媒体生成
         bus.subscribe("AssistantReplied", self.multimedia_service.on_assistant_replied)
@@ -242,6 +255,14 @@ class AppContainer:
         # AI 回复 → 对话副作用 (认知同步 / 知识证据 / 元历史)
         from app.domain.conversation.reply_hooks import reply_hooks
         reply_hooks.subscribe(bus)
+
+        # ═══ Project 跨模块联动 — ProjectNodeExported 派发 (Task #50) ═══
+        # Project 节点导出时, 根据 target_module 自动创建目标实体。
+        # 5 target: flashcard / material / cognitive_node / plan / language_room
+        from app.application.handlers.project_export_handlers import (
+            handle_project_node_exported,
+        )
+        bus.subscribe("ProjectNodeExported", handle_project_node_exported)
 
         # ═══ EventSystem: 旧事件迁移 → EventBus 统一订阅 ═══
 
@@ -424,17 +445,17 @@ class AppContainer:
 
         # ═══ 跨模块反馈桥梁 ═══
 
-        # CognitiveNodeUpdated → 练习系统: 掌握度变化 → 调整练习难度
+        # CognitiveNodeMetadataChanged → 练习系统: 元数据/层级变化 → 调整练习难度
         async def _on_cognitive_to_practice(event: DomainEvent) -> None:
-            from shared.events import CognitiveNodeUpdated
-            if not isinstance(event, CognitiveNodeUpdated):
+            from shared.events import CognitiveNodeMetadataChanged
+            if not isinstance(event, CognitiveNodeMetadataChanged):
                 return
             try:
-                # 通知练习系统节点掌握度已变化，下次选题时自适应调整
+                # 通知练习系统节点元数据已变化，下次选题时自适应调整
                 await self.practice_service.on_knowledge_updated(event)
             except Exception:
-                logger.debug("Practice service failed to handle CognitiveNodeUpdated")
-        bus.subscribe("CognitiveNodeUpdated", _on_cognitive_to_practice)
+                logger.debug("Practice service failed to handle CognitiveNodeMetadataChanged")
+        bus.subscribe("CognitiveNodeMetadataChanged", _on_cognitive_to_practice)
 
         # AssistantReplied → 秘书系统: 对话内容 → 更新秘书上下文
         async def _on_assistant_to_secretary(event: DomainEvent) -> None:

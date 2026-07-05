@@ -1,8 +1,8 @@
 """秘书事件处理器 — 订阅领域事件，驱动诊断与情境更新
 
 订阅事件:
-  - CognitiveNodeUpdated → 触发学习路径调整
-  - SessionCompleted    → 更新认知负荷统计 + 疲劳检查
+  - CognitiveNodeMetadataChanged  → 触发学习路径调整
+  - SessionCompleted              → 更新认知负荷统计 + 疲劳检查
 
 使用方式:
     from app.infrastructure.event_bus import EventBus
@@ -16,7 +16,7 @@ import logging
 from typing import Any
 
 from shared.events import (
-    CognitiveNodeUpdated,
+    CognitiveNodeMetadataChanged,
     DomainEvent,
     SessionCompleted,
     PracticeSubmitted,
@@ -48,17 +48,17 @@ class SecretaryEventHandler:
             return
 
         bus.subscribe("SessionCompleted", self._on_session_completed)
-        bus.subscribe("CognitiveNodeUpdated", self._on_cognitive_updated)
+        bus.subscribe("CognitiveNodeMetadataChanged", self._on_cognitive_metadata_changed)
         bus.subscribe("PracticeSubmitted", self._on_practice_submitted)
         self._subscribed = True
-        logger.info("📡 秘书已订阅领域事件: SessionCompleted / CognitiveNodeUpdated / PracticeSubmitted")
+        logger.info("📡 秘书已订阅领域事件: SessionCompleted / CognitiveNodeMetadataChanged / PracticeSubmitted")
 
     def unsubscribe(self) -> None:
         """取消订阅"""
         if not self._bus or not self._subscribed:
             return
         self._bus.unsubscribe("SessionCompleted", self._on_session_completed)
-        self._bus.unsubscribe("CognitiveNodeUpdated", self._on_cognitive_updated)
+        self._bus.unsubscribe("CognitiveNodeMetadataChanged", self._on_cognitive_metadata_changed)
         self._bus.unsubscribe("PracticeSubmitted", self._on_practice_submitted)
         self._subscribed = False
         logger.info("📡 秘书已取消事件订阅")
@@ -135,20 +135,19 @@ class SecretaryEventHandler:
         except Exception as e:
             logger.debug("练习行为触发失败: %s", e)
 
-    async def _on_cognitive_updated(self, event: DomainEvent) -> None:
-        """CognitiveNode 更新事件 → 触发学习路径调整"""
-        if not isinstance(event, CognitiveNodeUpdated):
+    async def _on_cognitive_metadata_changed(self, event: DomainEvent) -> None:
+        """CognitiveNode 元数据变化事件 → 触发学习路径调整"""
+        if not isinstance(event, CognitiveNodeMetadataChanged):
             return
 
-        logger.debug("CognitiveNode 更新: user=%s label=%s %.3f→%.3f",
-                     event.user_id, event.label,
-                     event.proficiency_before, event.proficiency_after)
+        logger.debug("CognitiveNode 元数据变化: user=%s node=%s fields=%s",
+                     event.user_id, event.node_id, event.changed_fields)
 
         try:
             from .secretary_plan_bridge import plan_bridge
             await plan_bridge.planner.generate(
                 event.user_id,
-                reason=f"cognitive_update:{event.label}:{event.proficiency_before:.2f}→{event.proficiency_after:.2f}",
+                reason=f"cognitive_metadata_change:{event.node_id}:{','.join(event.changed_fields)}",
             )
         except Exception as e:
             logger.debug("计划调整失败: %s", e)

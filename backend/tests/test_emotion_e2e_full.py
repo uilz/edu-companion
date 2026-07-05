@@ -899,7 +899,7 @@ class TestMoodStressEndToEnd:
 
     def test_03_purge_old_records(self, client, user_id, db, auth_headers):
         """data_retention_days=1 时旧记录可清理"""
-        from app.services.secretary import mood_stress_store
+        from app.services.secretary.mood_stress_store import mood_stress_store as store
         # 写一条 created_at = 100 天前
         old_id = str(uuid.uuid4())
         from datetime import datetime, timedelta, timezone
@@ -923,7 +923,7 @@ class TestMoodStressEndToEnd:
             json={"data_retention_days": 1},
         )
         # 清理
-        purged = mood_stress_store.purge_old_records(user_id, retention_days=1)
+        purged = store.purge_old_records(user_id, retention_days=1)
         assert purged >= 1
         # 验证旧的不在
         r = client.get("/api/secretary/mood-stress/records?days=365", headers=auth_headers)

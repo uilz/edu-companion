@@ -6,7 +6,7 @@ import {
   RotateCcw, EyeOff, Timer, Activity,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useCurrentUserId } from "@/hooks/useCurrentUserId";
+import { useAuth } from "@/contexts/AuthContext";
 import { useNotificationStore } from "@/store/notification/notification-store";
 import { authedFetch } from "@/lib/api/api";
 import {
@@ -140,18 +140,19 @@ export default function SecretaryPage() {
     id: string; message: string; success: boolean;
   } | null>(null);
 
-  const userId = useCurrentUserId();
+  const { user, loading: authLoading } = useAuth();
 
   // ── 初始化 ──
   useEffect(() => {
-    if (!userId) return;
+    if (authLoading || !user) return;
     loadData();
-  }, [userId]);
+  }, [authLoading, user]);
 
   const loadData = async () => {
-    if (!userId) return;
+    if (authLoading || !user) return;
     setLoading(true);
     try {
+      const userId = user.id;
       const [snapRes, propRes] = await Promise.all([
         authedFetch(`/api/secretary/snapshot?user_id=${userId}`),
         authedFetch(`/api/secretary/proposals/pending?user_id=${userId}`),
@@ -235,7 +236,9 @@ export default function SecretaryPage() {
 
   // ── 处理函数 ──
   const handleAccept = useCallback(async (id: string, options?: { navigate?: boolean }) => {
+    if (!user) return;
     try {
+      const userId = user.id;
       const res = await authedFetch(`/api/secretary/proposals/${id}/accept?user_id=${userId}`, {
         method: "POST",
       });
@@ -276,7 +279,7 @@ export default function SecretaryPage() {
       // 即使 API 失败也更新本地状态
       acceptNotification(id);
     }
-  }, [notifications, acceptNotification, addActionFeedback]);
+  }, [user, notifications, acceptNotification, addActionFeedback]);
 
   const handleDismiss = useCallback((id: string) => {
     dismissNotification(id);
@@ -293,16 +296,18 @@ export default function SecretaryPage() {
   }, [hideNotification]);
 
   const handleRestore = useCallback((id: string) => {
+    if (!user) return;
     restoreNotification(id);
     // also call backend if needed
-    authedFetch(`/api/secretary/proposals/${id}/restore?user_id=${userId}`, { method: "POST" }).catch(() => {});
-  }, [restoreNotification]);
+    authedFetch(`/api/secretary/proposals/${id}/restore?user_id=${user.id}`, { method: "POST" }).catch(() => {});
+  }, [user, restoreNotification]);
 
   // ── 生成提案 ──
   const handleGenerate = async () => {
+    if (!user) return;
     setGenerating(true);
     try {
-      const res = await authedFetch(`/api/secretary/generate-llm-proposals?user_id=${userId}`, {
+      const res = await authedFetch(`/api/secretary/generate-llm-proposals?user_id=${user.id}`, {
         method: "POST",
       });
       if (res.ok) {
@@ -323,10 +328,11 @@ export default function SecretaryPage() {
 
   // ── 手动主动检查 ──
   const handleRunCheck = async () => {
+    if (!user) return;
     setChecking(true);
     setCheckerResult(null);
     try {
-      const res = await authedFetch(`/api/secretary/checker/run?user_id=${userId}`, {
+      const res = await authedFetch(`/api/secretary/checker/run?user_id=${user.id}`, {
         method: "POST",
       });
       if (res.ok) {

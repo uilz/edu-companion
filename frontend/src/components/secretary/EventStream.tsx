@@ -7,7 +7,7 @@ import {
   AlertCircle, Loader2,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useCurrentUserId } from "@/hooks/useCurrentUserId";
+import { useAuth } from "@/contexts/AuthContext";
 import { authedFetch } from "@/lib/api/api";
 
 // ══════════════════════════════════════════════════════════════
@@ -393,7 +393,7 @@ function EventTimelineItem({
 // ══════════════════════════════════════════════════════════════
 
 export default function EventStream() {
-  const userId = useCurrentUserId();
+  const { user, loading: authLoading } = useAuth();
 
   // ── 状态 ──
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -439,7 +439,8 @@ export default function EventStream() {
 
   // ── 数据加载 ──
   const loadEvents = useCallback(async () => {
-    if (!userId) return;
+    if (authLoading || !user) return;
+    const userId = user.id;
     setError(null);
     try {
       let evtRes: Response;
@@ -479,26 +480,26 @@ export default function EventStream() {
       setError("网络错误，请检查连接后重试");
       console.error("EventStream load failed:", err);
     }
-  }, [userId, viewMode, dimension, filterStreamType, filterEventType, filterTimeRange]);
+  }, [authLoading, user, viewMode, dimension, filterStreamType, filterEventType, filterTimeRange]);
 
   useEffect(() => {
-    if (!userId) return;
+    if (authLoading || !user) return;
     setLoading(true);
     setExpandedIds(new Set());
     childrenMapRef.current = {};
     setChildrenMap({});
     loadEvents().finally(() => setLoading(false));
-  }, [loadEvents, userId]);
+  }, [loadEvents, authLoading, user]);
 
   // 自动刷新 (30s)
   useEffect(() => {
-    if (!userId) return;
+    if (authLoading || !user) return;
     const interval = setInterval(() => {
       setRefreshing(true);
       loadEvents().finally(() => setRefreshing(false));
     }, 30000);
     return () => clearInterval(interval);
-  }, [loadEvents, userId]);
+  }, [loadEvents, authLoading, user]);
 
   const handleRefresh = async () => {
     setRefreshing(true);

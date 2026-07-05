@@ -125,6 +125,19 @@ class PersistentEventBus:
         finally:
             self._depth -= 1
 
+    def publish_sync(self, event: DomainEvent) -> str:
+        """
+        同步发布事件 — 阻塞直到所有 handler 完成
+
+        适用场景: 无 event loop 的同步代码路径 (如后台线程、CLI 脚本)。
+        内部使用 `asyncio.run` 创建临时 loop, **不能在已有 running loop
+        的线程中调用** (会抛 RuntimeError)。
+
+        推荐使用 `app.infrastructure.event_bus_utils.publish_event_safe()`,
+        它会自动选择 async / sync 路径。
+        """
+        return asyncio.run(self.publish(event))
+
     async def poll_once(self) -> int:
         """单次轮询 pending 事件并分发，返回处理的事件数
 

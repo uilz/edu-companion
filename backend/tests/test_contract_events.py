@@ -10,8 +10,10 @@
 """
 
 import json
-from dataclasses import asdict
+import typing
+from dataclasses import asdict, fields
 from datetime import datetime, timezone
+from typing import get_type_hints
 
 import pytest
 
@@ -19,7 +21,10 @@ from shared.events import (
     DomainEvent,
     AnswerSubmitted,
     AssistantReplied,
-    CognitiveNodeUpdated,
+    CognitiveNodeLinked,
+    CognitiveNodeMetadataChanged,
+    ErrorBookEntryReviewed,
+    ErrorBookEntryResolved,
     ErrorRecorded,
     MessageClassified,
     NodeCreated,
@@ -32,20 +37,35 @@ from shared.events import (
 
 # ── 全部领域事件（须与 EVENT_TYPES 注册表一致） ──
 
-ALL_EVENTS = [
-    AnswerSubmitted,
-    ErrorRecorded,
-    SessionCompleted,
-    AssistantReplied,
-    CognitiveNodeUpdated,
-    MessageClassified,
-    PracticeSubmitted,
-    NodeCreated,
-    ProposalAccepted,
-    PendingCrossTopic,
-]
+ALL_EVENTS = list(EVENT_TYPES.values())
 
-# ── 注册表完整性 ──
+
+def _is_datetime_type(tp) -> bool:
+    """判断类型注解是否为 datetime (兼容 Optional[datetime])。"""
+    origin = typing.get_origin(tp)
+    if origin is typing.Union or (hasattr(typing, "Union") and origin is typing.Union):
+        return any(_is_datetime_type(arg) for arg in typing.get_args(tp))
+    if tp is datetime:
+        return True
+    return False
+
+
+def _field_actual_type(cls, field_name: str):
+    """获取事件类字段的真实运行时类型（基于 default_factory 实例）。"""
+    # 优先从 __annotations__ 取（解包 Optional/Union/ForwardRef）
+    try:
+        hints = get_type_hints(cls)
+    except Exception:
+        hints = {}
+    if field_name in hints:
+        return hints[field_name]
+    # 退化：从 dataclass fields 中取
+    for f in fields(cls):
+        if f.name == field_name:
+            return f.type
+    return None
+
+
 # ═══════════════════════════════════════════
 # 注册表完整性
 # ═══════════════════════════════════════════
@@ -135,18 +155,46 @@ def test_asdict_roundtrip():
     assert d["user_id"] == "u1"
     assert d["is_correct"] is True
     assert d["event_id"] == e.event_id
+    # AnswerSubmitted 既有 occurred_at 也有 submitted_at
     assert isinstance(d["occurred_at"], datetime)
+    if "submitted_at" in d:
+        assert isinstance(d["submitted_at"], datetime)
 
 
 def test_all_events_json_serializable():
-    """所有事件序列化为 dict 后应可 JSON 序列化"""
+    """所有事件序列化为 dict 后应可 JSON 序列化。
+
+    判定规则：基于事件类字段的 *声明类型* 决定运行时值是否允许。
+    - datetime 字段 → 运行时值必须是 datetime
+    - 其他字段   → 运行时值必须在 JSON 白名单 (str/int/float/bool/list/dict/None)
+    """
     for cls in ALL_EVENTS:
         e = cls()
         d = asdict(e)
-        # datetime is fine in dict, but check no other weird types
         for key, val in d.items():
-            if key == "occurred_at":
-                assert isinstance(val, datetime)
+            field_type = _field_actual_type(cls, key)
+            if _is_datetime_type(field_type):
+                assert isinstance(val, datetime), \
+                    f"{cls.__name__}.{key} 声明为 datetime, 实际 {type(val).__name__}"
             else:
-                assert isinstance(val, (str, int, float, bool, list, type(None))), \
-                    f"{cls.__name__}.{key} = {type(val).__name__}"
+                assert isinstance(val, (str, int, float, bool, list, dict, type(None))), \
+                    f"{cls.__name__}.{key} = {type(val).__name__} 不在 JSON 序列化白名单"
+
+
+def test_all_events_have_event_type_property():
+    """每个事件类必须返回非空字符串 event_type。"""
+    for cls in ALL_EVENTS:
+        e = cls()
+        assert isinstance(e.event_type, str)
+        assert len(e.event_type) > 0
+        # event_type 字符串与类名保持一致（约定）
+        assert e.event_type == cls.__name__, \
+            f"{cls.__name__}.event_type={e.event_type!r} 与类名不一致"
+
+
+def test_all_events_have_occurred_at():
+    """所有事件必须包含基类的 occurred_at 字段。"""
+    for cls in ALL_EVENTS:
+        e = cls()
+        assert hasattr(e, "occurred_at")
+        assert isinstance(e.occurred_at, datetime)

@@ -178,7 +178,8 @@ _Avoid_: 徽章系统（achievement 是正式术语）
 ### 事件驱动系统
 
 **Domain Event (领域事件)**:
-通过 EventBus 发布-订阅的事件类型。重要事件：AnswerSubmitted / ErrorRecorded / SessionCompleted / MessageClassified / NodeCreated / ProposalAccepted / AssistantReplied / CognitiveNodeUpdated / PracticeSubmitted / PendingCrossTopic。
+通过 EventBus 发布-订阅的事件类型。重要事件：AnswerSubmitted / ErrorRecorded / SessionCompleted / ErrorBookEntryReviewed / ErrorBookEntryResolved / MessageClassified / NodeCreated / ProposalAccepted / AssistantReplied / CognitiveNodeLinked / CognitiveNodeMetadataChanged / PracticeSubmitted / PendingCrossTopic。
+> 旧 CognitiveNodeUpdated 已拆分为 CognitiveNodeLinked + CognitiveNodeMetadataChanged。
 _Avoid_: 消息事件（与 Message 区分）
 
 **Event Bus:**

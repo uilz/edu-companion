@@ -641,26 +641,9 @@ def sync_from_practice_event(
 
     upsert_node(node, user_id)
 
-    # 发布 CognitiveNodeUpdated 事件（fire-and-forget）
-    try:
-        import asyncio
-        from app.application.di import container
-        from shared.events import CognitiveNodeUpdated
-
-        event = CognitiveNodeUpdated(
-            user_id=user_id,
-            node_id=node.id,
-            label=node.label,
-            path_id=node.path_id,
-            level=node.level,
-            proficiency_before=proficiency_before,
-            proficiency_after=node.belief.proficiency_mean,
-            update_type="practice",
-        )
-        asyncio.create_task(container.event_bus.publish(event))
-    except Exception:
-        logger.debug("CognitiveNodeUpdated 事件发布失败", exc_info=True)
-
+    # 掌握度（Belief）变化由 cognitive engine 通过 CognitiveEventRecord 内部处理。
+    # 旧 CognitiveNodeUpdated 已拆分为 CognitiveNodeLinked / CognitiveNodeMetadataChanged，
+    # 不再发布 DomainEvent。
     logger.info(
         "✅ Practice synced to CognitiveNode: skill=%s correct=%s "
         "belief=%.3f→%.3f (α=%d β=%d)",

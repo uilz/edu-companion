@@ -127,6 +127,14 @@ class SecretaryModuleRegistry:
         self.register(LateralExpansionModule())
         self.register(TempConversationCleanupModule())
 
+        # ── MoodStress 扩展模块 (ADR 0005) ──
+        if "mood_stress" not in self._modules:
+            try:
+                from app.services.secretary.modules.mood_stress import MoodStressModule
+                self.register(MoodStressModule())
+            except Exception as e:
+                logger.warning("MoodStress 模块注册失败: %s", e)
+
         return len(self._modules)
 
     def get_module(self, name: str) -> SecretaryModule | None:

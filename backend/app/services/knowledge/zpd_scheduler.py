@@ -121,8 +121,9 @@ class ZPDScheduler:
         return 0.3
 
     def on_knowledge_change(self, user_id: str, node_id: str) -> None:
-        """知识点变化回调 — 由 DI 容器在 CognitiveNodeUpdated 事件时调用
+        """知识点变化回调 — 由 DI 容器在 CognitiveNodeMetadataChanged 事件时调用
 
+        旧 CognitiveNodeUpdated 已拆分为 Linked / MetadataChanged。
         当前无需实时重调度，记录日志即可。
         未来可在此触发 plan_session 的增量重算。
         """

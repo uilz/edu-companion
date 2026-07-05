@@ -59,8 +59,15 @@ class ToolAction:
 
 
 @dataclass
-class ToolDefinition:
-    """统一工具定义（合并后）"""
+class CompositeTool:
+    """复合工具定义（合并多个同模块 tool → 1 个 tool + action 参数）
+
+    与 `app.infrastructure.llm.tool_registry.ToolDefinition` 的区别：
+      - ToolDefinition：单一工具定义（LLM metadata + handler）
+      - CompositeTool：把同一 *_tools.py 中的多个 ToolDefinition 合并为
+                       一个"带 action 枚举的复合工具"，LLM 一次调用即可
+                       通过 action 区分具体子工具。
+    """
     name: str             # e.g. "tool_practice"
     description: str
     category: str = ""    # practice / media / learning / knowledge / navigation / search
@@ -155,7 +162,7 @@ class ToolRepository:
     _instance: ToolRepository | None = None
 
     def __init__(self) -> None:
-        self._tools: dict[str, ToolDefinition] = {}
+        self._tools: dict[str, CompositeTool] = {}
         self._categories: dict[str, list[str]] = {}  # "practice" → ["tool_practice"]
         self._detector: IntentStrategy = RegexIntentDetector()
 
@@ -212,7 +219,7 @@ class ToolRepository:
 
     def _merge_tools(
         self, tool_name: str, module_name: str, tools: list,
-    ) -> ToolDefinition:
+    ) -> CompositeTool:
         """合并同一模块的多个工具 → 1 个工具 + action 参数"""
         actions: dict[str, ToolAction] = {}
         all_params: set[str] = set()
@@ -244,7 +251,7 @@ class ToolRepository:
         # 公共参数：所有 action 共享的参数
         common_param_names = set.intersection(*[set(a.params.keys()) for a in actions.values()]) if actions else set()
 
-        return ToolDefinition(
+        return CompositeTool(
             name=tool_name,
             description=f"复合工具 — {module_name}（{len(actions)} 个操作）",
             category=category,
@@ -256,7 +263,7 @@ class ToolRepository:
             is_composite=len(actions) > 1,
         )
 
-    def _categorize(self, tool: ToolDefinition) -> None:
+    def _categorize(self, tool: CompositeTool) -> None:
         """按类别索引工具"""
         cat = tool.category or "general"
         if cat not in self._categories:
@@ -294,23 +301,23 @@ class ToolRepository:
 
             # 不合并 — 每个 LLM 工具独立存在
             if name not in self._tools:
-                self._tools[name] = ToolDefinition(
+                self._tools[name] = CompositeTool(
                     name=name,
                     description=func.get("description", ""),
                     category="llm_raw",
                     actions=actions,
                 )
 
-    def register(self, tool: ToolDefinition) -> None:
+    def register(self, tool: CompositeTool) -> None:
         self._tools[tool.name] = tool
         self._categorize(tool)
 
     # ── 查询 ──
 
-    def get_tool(self, name: str) -> ToolDefinition | None:
+    def get_tool(self, name: str) -> CompositeTool | None:
         return self._tools.get(name)
 
-    def by_category(self, cat: str) -> list[ToolDefinition]:
+    def by_category(self, cat: str) -> list[CompositeTool]:
         names = self._categories.get(cat, [])
         return [t for t in (self._tools.get(n) for n in names) if t]
 
@@ -344,7 +351,7 @@ class ToolRepository:
             schemas.append(schema)
         return schemas
 
-    def _build_composite_schema(self, tool: ToolDefinition) -> dict:
+    def _build_composite_schema(self, tool: CompositeTool) -> dict:
         """构建复合工具 schema"""
         action_enum = list(tool.actions.keys())
         action_desc_map = {
@@ -383,7 +390,7 @@ class ToolRepository:
             },
         }
 
-    def _build_simple_schema(self, tool: ToolDefinition) -> dict:
+    def _build_simple_schema(self, tool: CompositeTool) -> dict:
         """构建简单工具 schema（非复合）"""
         properties = {}
         required = []

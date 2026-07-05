@@ -221,8 +221,10 @@ def _event_brief(self: EventRecord) -> str:
         return content[:80] + ("..." if len(content) > 80 else "")
     if self.event_type == "SessionCompleted":
         return f"练习完成 准确率{p.get('accuracy', 0):.0%}"
-    if self.event_type == "CognitiveNodeUpdated":
-        return f"知识更新 {p.get('label', '')} {p.get('proficiency_before', 0):.2f}→{p.get('proficiency_after', 0):.2f}"
+    if self.event_type == "CognitiveNodeMetadataChanged":
+        return f"知识元数据变化 {p.get('node_id', '')} 字段:{','.join(p.get('changed_fields', []))}"
+    if self.event_type == "CognitiveNodeLinked":
+        return f"知识链接 {p.get('action', '')} {p.get('node_id', '')} → {p.get('target_ref_type', '')}/{p.get('target_ref_id', '')}"
     return p.get("label", "") or p.get("question", "") or ""
 
 

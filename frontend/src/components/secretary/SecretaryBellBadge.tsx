@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useCurrentUserId } from "@/hooks/useCurrentUserId";
+import { useAuth } from "@/contexts/AuthContext";
 import { authedFetch } from "@/lib/api/api";
 
 /**
@@ -12,11 +12,12 @@ import { authedFetch } from "@/lib/api/api";
  * 无需父组件传 props，直接放在导航项旁边即可。
  */
 export default function SecretaryBellBadge() {
-  const userId = useCurrentUserId();
+  const { user, loading: authLoading } = useAuth();
   const [count, setCount] = useState(0);
 
   useEffect(() => {
-    if (!userId) return;
+    if (authLoading || !user) return;
+    const userId = user.id;
     let active = true;
 
     const fetchCount = async () => {
@@ -41,7 +42,7 @@ export default function SecretaryBellBadge() {
       active = false;
       clearInterval(interval);
     };
-  }, [userId]);
+  }, [authLoading, user]);
 
   if (count === 0) return null;
 

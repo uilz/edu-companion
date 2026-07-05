@@ -109,33 +109,44 @@ class TestBeliefUpdate:
 
 
 class TestCognitiveEvent:
-    """CognitiveNodeUpdated 事件测试"""
+    """CognitiveNodeMetadataChanged / CognitiveNodeLinked 事件测试"""
 
-    def test_event_creation(self):
-        """CognitiveNodeUpdated 应包含所有必要字段"""
-        from shared.events import CognitiveNodeUpdated
+    def test_metadata_event_creation(self):
+        """CognitiveNodeMetadataChanged 应包含所有必要字段"""
+        from shared.events import CognitiveNodeMetadataChanged
 
-        event = CognitiveNodeUpdated(
+        event = CognitiveNodeMetadataChanged(
             user_id="test_user",
             node_id="node_001",
-            label="微积分.导数",
-            level="atom",
-            proficiency_before=0.5,
-            proficiency_after=0.72,
-            update_type="practice",
+            changed_fields=["label", "tags"],
         )
         assert event.user_id == "test_user"
         assert event.node_id == "node_001"
-        assert event.proficiency_before == 0.5
-        assert event.proficiency_after == 0.72
-        assert event.update_type == "practice"
-        assert event.event_type == "CognitiveNodeUpdated"
+        assert event.changed_fields == ["label", "tags"]
+        assert event.event_type == "CognitiveNodeMetadataChanged"
 
-    def test_event_in_registry(self):
-        """CognitiveNodeUpdated 应在 EVENT_TYPES 注册表中"""
+    def test_metadata_event_in_registry(self):
+        """CognitiveNodeMetadataChanged 应在 EVENT_TYPES 注册表中"""
         from shared.events import EVENT_TYPES
 
-        assert "CognitiveNodeUpdated" in EVENT_TYPES
+        assert "CognitiveNodeMetadataChanged" in EVENT_TYPES
+
+    def test_linked_event_creation(self):
+        """CognitiveNodeLinked 应包含所有必要字段"""
+        from shared.events import CognitiveNodeLinked
+
+        event = CognitiveNodeLinked(
+            user_id="test_user",
+            node_id="node_001",
+            link_type="prerequisite",
+            target_ref_type="flashcard",
+            target_ref_id="card_99",
+            action="created",
+        )
+        assert event.link_type == "prerequisite"
+        assert event.target_ref_type == "flashcard"
+        assert event.action == "created"
+        assert event.event_type == "CognitiveNodeLinked"
 
 
 class TestEventBusChain:
@@ -148,11 +159,11 @@ class TestEventBusChain:
         handlers = container.event_bus._handlers.get("AnswerSubmitted", [])
         assert len(handlers) >= 3  # analytics + habits + knowledge
 
-    def test_cognitive_updated_handler(self):
-        """CognitiveNodeUpdated 应有至少 1 个 handler"""
+    def test_cognitive_metadata_handler(self):
+        """CognitiveNodeMetadataChanged 应有至少 1 个 handler"""
         from app.application.di import container
 
-        handlers = container.event_bus._handlers.get("CognitiveNodeUpdated", [])
+        handlers = container.event_bus._handlers.get("CognitiveNodeMetadataChanged", [])
         assert len(handlers) >= 1
 
     def test_secretary_subscribable(self):
@@ -163,8 +174,8 @@ class TestEventBusChain:
         )
 
         secretary_event_handler.subscribe(container.event_bus)
-        # Secretary 订阅 CognitiveNodeUpdated / SessionCompleted / PracticeSubmitted
-        handlers = container.event_bus._handlers.get("CognitiveNodeUpdated", [])
+        # Secretary 订阅 CognitiveNodeMetadataChanged / SessionCompleted / PracticeSubmitted
+        handlers = container.event_bus._handlers.get("CognitiveNodeMetadataChanged", [])
         handler_names = [h.__qualname__ for h in handlers]
         assert any("SecretaryEventHandler" in h for h in handler_names)
 

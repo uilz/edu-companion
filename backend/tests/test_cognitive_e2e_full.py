@@ -97,7 +97,7 @@ from app.infrastructure.event_bus import EventBus
 from shared.events import (
     AnswerSubmitted,
     AssistantReplied,
-    CognitiveNodeUpdated,
+    CognitiveNodeMetadataChanged,
     DomainEvent,
     ErrorRecorded,
     PracticeSubmitted,
@@ -862,20 +862,25 @@ class TestCrossModuleEventChain:
     """cognitive → practice/secretary/learning 链路"""
 
     @pytest.mark.asyncio
-    async def test_cognitive_node_updated_triggers_planner(self):
-        """CognitiveNodeUpdated 事件被订阅者接收"""
+    async def test_cognitive_node_metadata_changed_triggers_planner(self):
+        """CognitiveNodeMetadataChanged 事件被订阅者接收
+
+        旧 CognitiveNodeUpdated 已被拆分:
+        - 节点元数据 (描述/标签/层级) → CognitiveNodeMetadataChanged (走 DomainEvent 总线)
+        - 掌握度 (Belief) → CognitiveEventRecord 内部处理, 不再走总线
+        """
         bus = EventBus()
         received = []
 
-        async def on_cognitive(event: CognitiveNodeUpdated):
-            received.append(event)
+        async def on_metadata(e: CognitiveNodeMetadataChanged):
+            received.append(e)
 
-        bus.subscribe("CognitiveNodeUpdated", on_cognitive)
-        await bus.publish(CognitiveNodeUpdated(
-            user_id="u1", node_id="n1", proficiency_before=0.5, proficiency_after=0.8,
+        bus.subscribe("CognitiveNodeMetadataChanged", on_metadata)
+        await bus.publish(CognitiveNodeMetadataChanged(
+            user_id="u1", node_id="n1", changed_fields=["label", "tags"],
         ))
         assert len(received) == 1
-        assert received[0].proficiency_after == 0.8
+        assert received[0].changed_fields == ["label", "tags"]
 
     @pytest.mark.asyncio
     async def test_practice_then_assistant_chain(self):
