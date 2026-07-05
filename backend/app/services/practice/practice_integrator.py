@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
 
@@ -28,7 +29,7 @@ async def integrate_practice_to_branch(
 ) -> TreeNode | None:
     """
     将练习结果写入对话branch
-    
+
     在branch中追加一条系统元数据消息（不占token），
     记录练习结果和薄弱点。
     """
@@ -38,13 +39,49 @@ async def integrate_practice_to_branch(
         logger.warning(f"Branch {branch_id} not found for practice integration")
         return None
 
+    # ── 从 DB 查询错题详情（替代旧的 session.attempts / question_ids / struggling_skills） ──
+    from app.infrastructure.db.database import get_db
+    db = get_db()
+
+    # 查询本 session 中答错的题目及其认知节点 + 错因分析
+    wrong_attempts = db.fetchall(
+        """SELECT pa.error_analysis, q.cognitive_node_ids
+           FROM practice_attempts pa
+           JOIN questions q ON pa.question_id = q.id
+           WHERE pa.session_id = %s AND pa.is_wrong = true""",
+        (session.id,),
+    )
+
+    error_patterns: list[str] = []
+    struggling_nodes: list[str] = []
+    for wa in wrong_attempts:
+        # error_analysis: JSONB 字段，可能是 dict 或 str
+        ea = wa.get("error_analysis") or {}
+        if isinstance(ea, str):
+            try:
+                ea = json.loads(ea)
+            except (json.JSONDecodeError, TypeError):
+                ea = {}
+        et = ea.get("error_type", "")
+        if et:
+            error_patterns.append(et)
+        nodes = wa.get("cognitive_node_ids") or []
+        struggling_nodes.extend(nodes)
+
+    # 去重
+    struggling_skills = list(dict.fromkeys(struggling_nodes))
+
+    total_questions = session.total_count or 0
+    duration_min = (session.duration_seconds or 0) / 60
+    skills_tested = session.cognitive_node_ids or []
+
     # 构建练习摘要文本
     summary_parts = [
-        f"练习记录：{session.correct_count}/{len(session.question_ids)}正确",
-        f"用时{session.duration_minutes:.0f}分钟",
+        f"练习记录：{session.correct_count}/{total_questions}正确",
+        f"用时{duration_min:.0f}分钟",
     ]
-    if session.struggling_skills:
-        summary_parts.append(f"薄弱点：{', '.join(session.struggling_skills[:3])}")
+    if struggling_skills:
+        summary_parts.append(f"薄弱点：{', '.join(struggling_skills[:3])}")
 
     summary_text = "，".join(summary_parts)
 
@@ -55,23 +92,19 @@ async def integrate_practice_to_branch(
         summary_text,
         metadata={
             "type": "practice_summary",
-            "session_id": session.session_id,
+            "session_id": session.id,
             "accuracy": session.accuracy,
-            "skills_tested": session.planned_skills,
-            "error_patterns": [
-                a.error_analysis.error_type.value
-                for a in session.attempts
-                if a.error_analysis and not a.is_correct
-            ],
+            "skills_tested": skills_tested,
+            "error_patterns": error_patterns,
         },
     )
 
     # 更新branch的练习字段（metadata 方式）
-    branch.metadata.setdefault("practice_sessions", []).append(session.session_id)
+    branch.metadata.setdefault("practice_sessions", []).append(session.id)
     branch.metadata["practice_summary"] = (
-        f"已练{len(session.question_ids)}题,"
+        f"已练{total_questions}题,"
         f"正确率{session.accuracy:.0%},"
-        f"薄弱:{','.join(session.struggling_skills[:2]) or '无'}"
+        f"薄弱:{','.join(struggling_skills[:2]) or '无'}"
     )
 
     # 更新分区上下文
@@ -79,7 +112,7 @@ async def integrate_practice_to_branch(
     if partition and partition.node_type == "dir":
         partition.summary_short += (
             f"\n练习({datetime.now().strftime('%m/%d')}): "
-            f"{session.planned_skills} 正确率{session.accuracy:.0%}"
+            f"{skills_tested} 正确率{session.accuracy:.0%}"
         )
 
     get_data_repo().save(user_id, data)
@@ -93,7 +126,7 @@ async def integrate_practice_to_branch(
     try:
         from app.infrastructure.files.search import material_search as ms
         enriched = []
-        for skill in (session.struggling_skills or [])[:3]:
+        for skill in struggling_skills[:3]:
             chunks = await ms.search(user_id, query=skill, top_k=2)
             for c in chunks:
                 src = c.get("material_name", c.get("source_file", "未知"))
@@ -111,7 +144,7 @@ async def integrate_practice_to_branch(
 def inject_practice_context(user_id: str, dir_id: str) -> str:
     """
     获取练习上下文，注入到LLM系统提示中
-    
+
     格式：
     [Practice] 最近练习: 极限(70%), 导数(40%←薄弱), 积分(85%)
     """

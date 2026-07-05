@@ -75,10 +75,11 @@ def _check_error_accumulation(user_id: str, session_id: str) -> bool:
     db = get_db()
 
     rows = db.fetchall(
-        """SELECT sq.question_id, q.cognitive_node_ids
+        """SELECT pa.question_id, q.cognitive_node_ids
            FROM session_questions sq
            JOIN questions q ON sq.question_id = q.id
-           WHERE sq.session_id = %s AND sq.is_correct = false""",
+           JOIN practice_attempts pa ON pa.session_id = sq.session_id AND pa.question_id = sq.question_id
+           WHERE sq.session_id = %s AND pa.is_wrong = true""",
         (session_id,),
     )
 
@@ -159,7 +160,8 @@ def _generate_error_alert(user_id: str, session_id: str) -> bool:
         """SELECT q.cognitive_node_ids, q.stem
            FROM session_questions sq
            JOIN questions q ON sq.question_id = q.id
-           WHERE sq.session_id = %s AND sq.is_correct = false
+           JOIN practice_attempts pa ON pa.session_id = sq.session_id AND pa.question_id = sq.question_id
+           WHERE sq.session_id = %s AND pa.is_wrong = true
            ORDER BY sq.sort_order
            LIMIT 3""",
         (session_id,),

@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class PracticeRecallInConversation:
     """
     在对话中回答关于练习表现的问题
-    
+
     触发关键词：
     - "掌握得怎么样|学得怎么样|练得怎么样"
     - "薄弱|弱点|薄弱点"
@@ -52,12 +52,12 @@ class PracticeRecallInConversation:
     ) -> str:
         """
         生成练习回顾自然语言回复
-        
+
         参数:
             sessions: 最近的练习session列表
             days: 时间范围（天数）
-            subject_filter: 可选的主题过滤
-        
+            subject_filter: 可选的主题过滤（仅用于回复文案，session 无 subject 字段）
+
         返回:
             可直接发送给用户的自然语言回复
         """
@@ -70,14 +70,6 @@ class PracticeRecallInConversation:
             if s.started_at and s.started_at >= cutoff
         ]
 
-        if subject_filter:
-            recent_sessions = [
-                s for s in recent_sessions
-                if subject_filter.lower() in (
-                    (s.subject or "").lower()
-                )
-            ]
-
         if not recent_sessions:
             if subject_filter:
                 return (
@@ -86,34 +78,62 @@ class PracticeRecallInConversation:
                 )
             return f"过去{days}天还没有做过练习，要不要现在开始？📝"
 
-        # 汇总统计
-        total_questions = sum(len(s.question_ids or []) for s in recent_sessions)
+        # 汇总统计（替代旧的 s.question_ids）
+        total_questions = sum(s.total_count or 0 for s in recent_sessions)
         total_correct = sum(s.correct_count or 0 for s in recent_sessions)
         accuracy = total_correct / total_questions if total_questions > 0 else 0
 
-        # 找薄弱和擅长
-        skill_performance: dict[str, tuple[int, int]] = {}
-        for s in recent_sessions:
-            for a in (s.attempts or []):
-                if not hasattr(a, "skill_id"):
-                    continue
-                sid = a.skill_id or "未知"
-                if sid not in skill_performance:
-                    skill_performance[sid] = (0, 0)
-                total, correct = skill_performance[sid]
-                skill_performance[sid] = (total + 1, correct + (1 if a.is_correct else 0))
+        # 从 DB 查询各 session 的知识点级表现（替代旧的 s.attempts / a.skill_id）
+        from app.infrastructure.db.database import get_db
+        db = get_db()
 
-        weak_skills = []
-        strong_skills = []
-        for sid, (total, correct) in skill_performance.items():
+        session_ids = [s.id for s in recent_sessions if s.id]
+        skill_performance: dict[str, list[int]] = {}  # node_id → [total, correct]
+        if session_ids:
+            placeholders = ", ".join("%s" for _ in session_ids)
+            rows = db.fetchall(
+                f"""SELECT pa.is_correct, pa.cognitive_node_ids
+                    FROM practice_attempts pa
+                    WHERE pa.session_id IN ({placeholders})""",
+                tuple(session_ids),
+            )
+
+            for row in rows:
+                is_correct = row.get("is_correct", False)
+                node_ids = row.get("cognitive_node_ids") or []
+                if isinstance(node_ids, (list, tuple)):
+                    pass
+                elif isinstance(node_ids, str):
+                    import json
+                    try:
+                        node_ids = json.loads(node_ids)
+                    except (json.JSONDecodeError, TypeError):
+                        node_ids = []
+                else:
+                    node_ids = []
+
+                for node_id in node_ids:
+                    if node_id not in skill_performance:
+                        skill_performance[node_id] = [0, 0]
+                    skill_performance[node_id][0] += 1
+                    if is_correct:
+                        skill_performance[node_id][1] += 1
+
+        weak_skills: list[tuple[str, float]] = []
+        strong_skills: list[tuple[str, float]] = []
+        for node_id, (total, correct) in skill_performance.items():
             rate = correct / total if total > 0 else 0
             if total >= 2 and rate < 0.5:
-                weak_skills.append((sid, rate))
+                weak_skills.append((node_id, rate))
             elif total >= 3 and rate > 0.85:
-                strong_skills.append((sid, rate))
+                strong_skills.append((node_id, rate))
+
+        # 按正确率排序
+        weak_skills.sort(key=lambda x: x[1])
+        strong_skills.sort(key=lambda x: -x[1])
 
         # 构建回复
-        lines = []
+        lines: list[str] = []
         time_desc = f"过去{days}天" if days > 1 else "今天"
 
         if subject_filter:

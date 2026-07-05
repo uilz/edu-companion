@@ -39,7 +39,6 @@ from app.api.practice.explain_cards import router as explain_cards_router
 
 # 智能题库
 from app.api.practice.practice_routes import router as practice_routes_router
-from app.api.practice.references import router as references_router
 
 # 学习数据管理
 from app.api.system.data_routes import router as data_router
@@ -475,7 +474,6 @@ app.include_router(auth_router)
 
 # 智能题库
 app.include_router(practice_routes_router)
-app.include_router(references_router)
 
 # 解释卡片
 app.include_router(explain_cards_router)

@@ -13,10 +13,10 @@ from app.domain.auth.dependencies import current_user_id
 from app.infrastructure.media.bilibili_search import search_bilibili
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/practice/references", tags=["参考资料"])
+router = APIRouter(prefix="", tags=["参考资料"])
 
 
-@router.get("/search")
+@router.get("/references/search")
 async def api_search_references(
     q: str = Query("", description="搜索关键词"),
     source: str = Query("bilibili", description="资源来源: bilibili"),
@@ -40,7 +40,7 @@ async def api_search_references(
     raise HTTPException(400, f"不支持的资源来源: {source}")
 
 
-@router.get("/for-node")
+@router.get("/references/for-node")
 async def api_references_for_node(
     node_id: str = Query("", description="知识点ID"),
     source: str = Query("bilibili"),
@@ -141,7 +141,7 @@ async def _generate_search_query(question: dict, user_id: str) -> str:
     return query.strip()
 
 
-@router.get("/for-question")
+@router.get("/references/for-question")
 async def api_references_for_question(
     question_id: str = Query("", description="题目ID"),
     source: str = Query("bilibili"),
