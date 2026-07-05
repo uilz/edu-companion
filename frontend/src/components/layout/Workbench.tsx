@@ -165,7 +165,7 @@ export default function Workbench({ children }: WorkbenchProps) {
       )}
 
       {/* ── 中心 Main (row 2, col 2) ── */}
-      <div className="row-start-2 col-start-2 min-h-0 min-w-0 overflow-hidden bg-page">
+      <div className="row-start-2 col-start-2 min-h-0 min-w-0 overflow-y-auto bg-page">
         {isCockpit ? <Cockpit /> : children}
       </div>
 
