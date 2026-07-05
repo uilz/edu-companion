@@ -101,3 +101,23 @@ design.md
 
 # Generated schema sync file
 scripts/schema_ddl.sql
+
+# ── 测试/调试产物 (Task #56 之后) ─────────────────────────
+# Playwright 报告 + 浏览器截图
+playwright-report/
+test-results/
+.browser_screenshots/
+screenshots/
+
+# E2E 测试运行时产物
+.planning_e2e/
+
+# pnpm 工件 (项目用 npm, 这些是历史遗留)
+pnpm-lock.yaml
+pnpm-workspace.yaml
+
+# 一次性调试脚本 (按 task 编号 / debug_* 模式)
+scripts/task[0-9][0-9]_*.py
+scripts/debug_*.py
+scripts/browser_e2e_test.py
+backend/scripts/task[0-9][0-9]_*.py
