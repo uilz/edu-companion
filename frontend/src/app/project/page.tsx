@@ -205,16 +205,16 @@ export default function ProjectListPage() {
             长期主题性研究的工作台 — 树形大纲、字段级版本、@引用、跨模块输出
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={() => setShowFromTemplate(true)}
-            className="px-4 py-2 rounded-lg border border-divider text-ink-primary hover:bg-surface-hover transition flex items-center gap-2"
+            className="px-4 py-2 rounded-lg border border-divider text-ink-primary hover:bg-surface-hover transition flex items-center gap-2 whitespace-nowrap"
           >
             <FileText size={16} /> 从模板创建
           </button>
           <button
             onClick={() => setShowCreate(true)}
-            className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 transition flex items-center gap-2"
+            className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 transition flex items-center gap-2 whitespace-nowrap"
           >
             <Plus size={16} /> 新建项目
           </button>
@@ -244,7 +244,7 @@ export default function ProjectListPage() {
         </select>
         <Link
           href="/project/templates"
-          className="px-3 py-2 rounded-lg text-ink-secondary hover:text-ink-primary hover:bg-surface-hover transition text-sm flex items-center gap-1"
+          className="px-3 py-2 rounded-lg text-ink-secondary hover:text-ink-primary hover:bg-surface-hover transition text-sm flex items-center gap-1 whitespace-nowrap"
         >
           管理模板 <ChevronRight size={14} />
         </Link>

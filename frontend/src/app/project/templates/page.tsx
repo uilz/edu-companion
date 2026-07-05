@@ -150,17 +150,17 @@ export default function TemplatesPage() {
         </div>
         <button
           onClick={() => setShowCreate(true)}
-          className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 flex items-center gap-2"
+          className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 flex items-center gap-2 whitespace-nowrap flex-shrink-0"
         >
           <Plus size={16} /> 新建模板
         </button>
       </div>
 
       {/* Filter */}
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 flex-wrap mb-4">
         <button
           onClick={() => setFilterCategory("all")}
-          className={`px-3 py-1.5 rounded-lg text-sm ${
+          className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
             filterCategory === "all"
               ? "bg-[var(--color-accent)] text-white"
               : "bg-surface text-ink-secondary hover:text-ink-primary"
@@ -172,7 +172,7 @@ export default function TemplatesPage() {
           <button
             key={c.value}
             onClick={() => setFilterCategory(c.value)}
-            className={`px-3 py-1.5 rounded-lg text-sm ${
+            className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
               filterCategory === c.value
                 ? "bg-[var(--color-accent)] text-white"
                 : "bg-surface text-ink-secondary hover:text-ink-primary"

@@ -528,7 +528,7 @@ function OutlineView({
         </h3>
         <button
           onClick={() => onAddNode(null, 1)}
-          className="text-sm text-[var(--color-accent)] hover:opacity-80 flex items-center gap-1"
+          className="text-sm text-[var(--color-accent)] hover:opacity-80 flex items-center gap-1 whitespace-nowrap flex-shrink-0"
         >
           <Plus size={14} /> 根节点
         </button>
@@ -922,10 +922,10 @@ export default function ProjectDetailPage() {
             <p className="text-sm text-ink-secondary mt-1">{project.description}</p>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={() => setShowMilestone(true)}
-            className="px-3 py-2 rounded-lg border border-divider text-ink-primary hover:bg-surface-hover flex items-center gap-1"
+            className="px-3 py-2 rounded-lg border border-divider text-ink-primary hover:bg-surface-hover flex items-center gap-1 whitespace-nowrap"
           >
             <Flag size={14} /> 里程碑
           </button>
