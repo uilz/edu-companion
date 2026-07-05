@@ -3,8 +3,8 @@
 import { useRouter, useParams } from "next/navigation";
 import { useEffect } from "react";
 
-// Timeline 已重写为 Activity (Task #89),此路由保留以兼容老链接
-export default function TimelineViewPage() {
+// 活动流视图重定向 (Task #89: Timeline 重写为 Activity)
+export default function ActivityViewPage() {
   const router = useRouter();
   const params = useParams();
   const projectId = params?.id as string;

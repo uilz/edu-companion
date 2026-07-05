@@ -8,6 +8,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from app.domain.auth.dependencies import current_user_id
 from app.services import project as project_service
@@ -310,6 +311,59 @@ async def complete_node(
             linked_node_ids=node.get("linked_node_ids") or [],
         ))
     return node
+
+
+# Task #89: 节点 status 变更 (看板拖拽用)
+class NodeStatusUpdate(BaseModel):
+    status: str = Field(..., description="pending | active | completed | archived")
+
+
+@router.patch(
+    "/{project_id}/nodes/{node_id}/status",
+    summary="更新节点 status (Task #89 看板)",
+)
+async def update_node_status(
+    project_id: str,
+    node_id: str,
+    body: NodeStatusUpdate,
+    user_id: str = Depends(current_user_id),
+):
+    if not user_id:
+        raise HTTPException(status_code=401, detail="请先登录")
+    try:
+        node = project_service.update_node_status(
+            user_id, project_id, node_id, body.status,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if not node:
+        raise HTTPException(status_code=404, detail="节点不存在")
+    return node
+
+
+# Task #89: 节点 reorder (拖拽重排用)
+class NodeReorderRequest(BaseModel):
+    parent_id: str | None = None
+    node_ids_in_order: list[str] = Field(..., min_length=1)
+
+
+@router.post(
+    "/{project_id}/nodes/reorder",
+    summary="重排同父级节点顺序 (Task #89 拖拽)",
+)
+async def reorder_nodes(
+    project_id: str,
+    body: NodeReorderRequest,
+    user_id: str = Depends(current_user_id),
+):
+    if not user_id:
+        raise HTTPException(status_code=401, detail="请先登录")
+    ok = project_service.reorder_nodes(
+        user_id, project_id, body.node_ids_in_order,
+    )
+    if not ok:
+        raise HTTPException(status_code=400, detail="重排失败")
+    return {"status": "reordered", "count": len(body.node_ids_in_order)}
 
 
 # ───────────────────────────────────────────────

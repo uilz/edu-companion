@@ -65,7 +65,9 @@ export default function FlashCardReviewPage() {
     const duration = Math.round((Date.now() - sessionStartedAt) / 1000);
     try {
       await flashcardService.endSession(sessionId, {
-        ...stats,
+        difficult_count: stats.difficult,
+        good_count: stats.good,
+        easy_count: stats.easy,
         duration_seconds: duration,
       });
     } catch (e: any) {

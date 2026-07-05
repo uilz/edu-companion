@@ -104,6 +104,12 @@ class UserSettingsRepo:
     NS_UI = "ui"                          # theme / style
     NS_LEARNING = "learning"              # socratic_mode / socratic_follow_up / auto_scroll_on_load
     NS_NOTIFICATION = "notification"      # 通知偏好
+    NS_VIEW = "view"                      # 项目详情页视图偏好 (Task #89): view.{project_id}
+
+    # 项目视图白名单 (Task #89)
+    PROJECT_VIEW_NAMES: tuple[str, ...] = (
+        "document", "outline", "kanban", "knowledge", "activity",
+    )
 
     def get_user_preferences(self, user_id: str) -> dict:
         """读取所有用户偏好 (D16 兼容) — 返回顶层 dict."""
@@ -177,6 +183,34 @@ class UserSettingsRepo:
                 merged[k] = bool(merged[k])
         self.set_key(user_id, self.NS_LEARNING, merged)
         return merged
+
+    # ── Task #89: 项目视图偏好 (per-user × per-project) ──
+
+    def get_view_pref(self, user_id: str, project_id: str, default: str = "document") -> str:
+        """读取项目详情页视图偏好。
+
+        存储结构: settings["view"][project_id] = "document" | "outline" | "kanban" | "knowledge" | "activity"
+        """
+        all_views = self.get_key(user_id, self.NS_VIEW, default={})
+        if not isinstance(all_views, dict):
+            return default
+        view = all_views.get(project_id)
+        if view in self.PROJECT_VIEW_NAMES:
+            return view
+        return default
+
+    def set_view_pref(self, user_id: str, project_id: str, view: str) -> str:
+        """写入项目详情页视图偏好（合并写）。非法值会抛 ValueError。"""
+        if view not in self.PROJECT_VIEW_NAMES:
+            raise ValueError(
+                f"view 必须是 {self.PROJECT_VIEW_NAMES} 之一, 当前: {view}"
+            )
+        all_views = self.get_key(user_id, self.NS_VIEW, default={})
+        if not isinstance(all_views, dict):
+            all_views = {}
+        all_views[project_id] = view
+        self.set_key(user_id, self.NS_VIEW, all_views)
+        return view
 
 
 # ── 全局单例 ──

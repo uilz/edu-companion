@@ -160,9 +160,9 @@ export default function Cockpit() {
         });
       }
       if (sugRes.status === "fulfilled" && sugRes.value) {
-        setDaily((prev) => prev ? { ...prev, suggestion: sugRes.value } : {
+        setDaily((prev) => prev ? { ...prev, suggestion: sugRes.value ?? undefined } : {
           date: new Date().toLocaleDateString("zh-CN"),
-          suggestion: sugRes.value,
+          suggestion: sugRes.value ?? undefined,
         });
       }
       if (a.status === "fulfilled" && a.value) {

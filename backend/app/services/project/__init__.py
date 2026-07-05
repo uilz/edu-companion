@@ -484,6 +484,69 @@ def complete_node(user_id: str, project_id: str, node_id: str, completed: bool =
     return get_node(user_id, project_id, node_id)
 
 
+# Task #89: 节点 status 字段（看板列）
+NODE_STATUS_VALUES: tuple[str, ...] = ("pending", "active", "completed", "archived")
+
+
+def update_node_status(
+    user_id: str,
+    project_id: str,
+    node_id: str,
+    status: str,
+) -> dict | None:
+    """更新节点 status 字段（看板拖拽用）。
+
+    status 是非版本化字段，直接 UPDATE project_nodes。
+    与 completed_at 保持一致：status='completed' 时若 completed_at 为空则自动补上。
+    """
+    if status not in NODE_STATUS_VALUES:
+        raise ValueError(f"status 必须是 {NODE_STATUS_VALUES} 之一, 当前: {status}")
+    ensure_tables()
+    db = get_db()
+    # 同步 completed_at：进 completed 时打时间戳
+    if status == "completed":
+        db.execute(
+            "UPDATE project_nodes SET status = %s, completed_at = COALESCE(completed_at, NOW()), updated_at = NOW() "
+            "WHERE id = %s AND project_id = %s AND user_id = %s",
+            (status, node_id, project_id, user_id),
+        )
+    else:
+        db.execute(
+            "UPDATE project_nodes SET status = %s, updated_at = NOW() "
+            "WHERE id = %s AND project_id = %s AND user_id = %s",
+            (status, node_id, project_id, user_id),
+        )
+    # 维护 projects.completed_node_count
+    if status == "completed":
+        db.execute(
+            "UPDATE projects SET completed_node_count = "
+            "(SELECT COUNT(*) FROM project_nodes "
+            " WHERE project_id = %s AND user_id = %s AND status = 'completed'), "
+            "updated_at = NOW() "
+            "WHERE id = %s",
+            (project_id, user_id, project_id),
+        )
+    return get_node(user_id, project_id, node_id)
+
+
+# Task #89: 节点 reorder（拖拽重排用）
+def reorder_nodes(
+    user_id: str,
+    project_id: str,
+    node_ids_in_order: list[str],
+) -> bool:
+    """按给定顺序重排同父级的节点（更新 order_in_parent）。"""
+    ensure_tables()
+    db = get_db()
+    for idx, nid in enumerate(node_ids_in_order):
+        db.execute(
+            "UPDATE project_nodes SET order_in_parent = %s, updated_at = NOW() "
+            "WHERE id = %s AND project_id = %s AND user_id = %s",
+            (idx, nid, project_id, user_id),
+        )
+    return True
+
+
 # ────────────────────────────────────────────────────────────────
 # 里程碑
 # ────────────────────────────────────────────────────────────────

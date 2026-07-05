@@ -13,7 +13,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Sparkles, ArrowLeft, Plus, Loader2,
-  PROFICIENCY_LABELS as _,
 } from "lucide-react";
 import {
   liveroomService, AIPersona, ProficiencyLevel, SpeechRate, Behavior,

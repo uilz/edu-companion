@@ -8,6 +8,7 @@
   - /api/settings/llm-behavior  GET/PUT         LLM 行为参数 (temperature / max_tokens / system_prompt)
   - /api/settings/ui            GET/PUT         UI 偏好 (theme / style)
   - /api/settings/learning      GET/PUT         学习偏好 (socratic / auto_scroll)
+  - /api/settings/view/{pid}    GET/PUT         项目详情页视图偏好 (Task #89: per-user × per-project)
   - /api/settings/all           GET             全部偏好 (D16 JSONB)
 
 设计:
@@ -264,3 +265,69 @@ async def get_all_preferences(request: Request):
     user = _require_user(request)
     repo = get_user_settings_repo()
     return {"ok": True, "settings": repo.get_all(user["user_id"])}
+
+
+# ════════════════════════════════════════════
+# 项目视图偏好 (Task #89: per-user × per-project)
+# ════════════════════════════════════════════
+
+
+class ProjectViewPrefRequest(BaseModel):
+    view: str = Field(
+        ...,
+        description="document | outline | kanban | knowledge | activity",
+    )
+
+    @field_validator("view")
+    @classmethod
+    def _validate_view(cls, v: str) -> str:
+        valid = ("document", "outline", "kanban", "knowledge", "activity")
+        if v not in valid:
+            raise ValueError(f"view 必须是 {valid} 之一, 当前: {v}")
+        return v
+
+
+class ProjectViewPrefResponse(BaseModel):
+    project_id: str
+    view: str
+
+
+@router.get(
+    "/view/{project_id}",
+    response_model=ProjectViewPrefResponse,
+    summary="获取项目详情页视图偏好 (Task #89)",
+)
+async def get_view_pref(project_id: str, request: Request):
+    """读取当前用户在指定项目详情页的视图偏好。
+
+    跨设备一致：存储在 user_settings JSONB。
+    若未设置则返回默认值 "document" (手稿视图)。
+    """
+    user = _require_user(request)
+    repo = get_user_settings_repo()
+    view = repo.get_view_pref(user["user_id"], project_id, default="document")
+    return ProjectViewPrefResponse(project_id=project_id, view=view)
+
+
+@router.put(
+    "/view/{project_id}",
+    response_model=ProjectViewPrefResponse,
+    summary="保存项目详情页视图偏好 (Task #89)",
+)
+async def set_view_pref(
+    project_id: str,
+    body: ProjectViewPrefRequest,
+    request: Request,
+):
+    """保存当前用户在指定项目详情页的视图偏好。
+
+    写入后立即可用于下次访问；同步发布 UserPreferencesUpdated 事件 (Task #84)。
+    """
+    user = _require_user(request)
+    repo = get_user_settings_repo()
+    try:
+        saved = repo.set_view_pref(user["user_id"], project_id, body.view)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    _publish_prefs_event(user["user_id"], changed_keys=[f"view.{project_id}"])
+    return ProjectViewPrefResponse(project_id=project_id, view=saved)

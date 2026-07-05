@@ -767,8 +767,7 @@ class TestPlanningModule:
     def test_source_module_enum_validation(self, client, user_id, db, auth_headers):
         """架构 P0 验证: source_module 必须是 PlanningSourceModule 合法值
 
-        7 个合法值: flashcard/practice/project/reading/language_room/
-                   manual/interest_explorer/mood_stress
+        合法值集合由 PlanningSourceModule 枚举派生（Task #57: 禁止硬编码模块数）
         """
         from app.api.planning import service as svc
         svc._ensure_tables()
@@ -798,14 +797,16 @@ class TestPlanningModule:
         assert r2.status_code == 422, (
             f"非法 source_module 应被 422 拒绝, 实际 {r2.status_code}: {r2.text}"
         )
-        # 3) 验证枚举覆盖所有模块入口
+        # 3) 验证枚举包含所有核心模块入口（从枚举动态派生）
         from shared.events import PlanningSourceModule
         all_sources = {m.value for m in PlanningSourceModule}
-        expected = {
+        # 必须包含的核心模块（新增模块需追加到此集合）
+        required_core = {
             "flashcard", "practice", "project", "reading",
             "language_room", "manual", "interest_explorer", "mood_stress",
         }
-        assert all_sources == expected, f"枚举值变化: {all_sources} vs {expected}"
+        missing = required_core - all_sources
+        assert not missing, f"核心模块缺失: {missing}; 当前枚举: {all_sources}"
 
 
 # ════════════════════════════════════════════════════════════════════

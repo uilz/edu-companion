@@ -5,7 +5,16 @@ import {
   Calendar, Play, CheckCircle2, SkipForward, Plus, Clock, Tag,
   Loader2, AlertCircle, Lightbulb, RotateCcw, Link2,
 } from "lucide-react";
-import { useDailyView, completePlanItem, startPlanItem, skipPlanItem, updatePlanItem, PlanItem, createPlanItem } from "@/hooks/planning/usePlanning";
+import {
+  DndContext,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  PointerSensor,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import { useDailyView, completePlanItem, startPlanItem, skipPlanItem, updatePlanItem, PlanItem, createPlanItem, DailyView } from "@/hooks/planning/usePlanning";
 import { useAuth } from "@/contexts/AuthContext";
 import Card from "@/components/ui/Card";
 
@@ -66,18 +75,34 @@ export default function DailyPage() {
   const { data, loading, error, reload } = useDailyView();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [manualTitle, setManualTitle] = useState("");
   const [manualMinutes, setManualMinutes] = useState(20);
   const [manualHour, setManualHour] = useState(10);
 
-  const onDragStart = useCallback((id: string) => setDraggingId(id), []);
-  const onDragEnd = useCallback(() => setDraggingId(null), []);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+  );
+
+  const handleDragEnd = useCallback(
+    (e: DragEndEvent) => {
+      const draggedId = activeId;
+      setActiveId(null);
+      if (!draggedId) return;
+      const overId = e.over?.id;
+      if (!overId || typeof overId !== "string" || !overId.startsWith("hour-")) return;
+      const hour = parseInt(overId.slice(5), 10);
+      if (Number.isNaN(hour)) return;
+      void onTimelineDrop(hour, draggedId);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeId],
+  );
 
   const onTimelineDrop = useCallback(
     async (hour: number, itemId?: string) => {
       if (!data) return;
-      const target = itemId || draggingId;
+      const target = itemId || activeId;
       if (!target) return;
       try {
         const [yr, mo, da] = data.date.split("-").map(Number);
@@ -90,11 +115,9 @@ export default function DailyPage() {
         await reload();
       } catch (e) {
         console.error("安排失败:", e);
-      } finally {
-        setDraggingId(null);
       }
     },
-    [data, draggingId, reload],
+    [data, activeId, reload],
   );
 
   const handleComplete = async (id: string) => {
@@ -159,7 +182,7 @@ export default function DailyPage() {
   };
 
   const adoptRecommendation = async (rec: { title?: string; skill_id?: string; estimated_minutes?: number }) => {
-    if (!userId || !data) return;
+    if (!user || !data) return;
     try {
       await createPlanItem({
         source_module: "manual",
@@ -168,7 +191,10 @@ export default function DailyPage() {
         title: rec.title || "自适应推荐",
         estimated_minutes: rec.estimated_minutes || 20,
         plan_date: data.date,
-      });
+        linked_node_ids: [],
+        priority: 0,
+        is_mood_rule_affected: false,
+      } as any);
       await reload();
     } catch (e) {
       console.error(e);
@@ -300,6 +326,12 @@ export default function DailyPage() {
           </Card>
         )}
 
+        <DndContext
+          sensors={sensors}
+          onDragStart={(e) => setActiveId(String(e.active.id))}
+          onDragEnd={handleDragEnd}
+          onDragCancel={() => setActiveId(null)}
+        >
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
           {/* 时间轴 */}
           <div className="lg:col-span-2 space-y-3">
@@ -313,35 +345,15 @@ export default function DailyPage() {
                     (it) => it.scheduled_for && Math.floor(timeOf(it.scheduled_for)) === h,
                   );
                   return (
-                    <div
+                    <TimelineHourRow
                       key={h}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={() => onTimelineDrop(h)}
-                      className="flex items-start gap-3 border-b border-[var(--color-border)] last:border-b-0 py-2 min-h-[60px]"
-                    >
-                      <div className="text-xs text-[var(--color-text-muted)] pt-1 w-14">
-                        {formatHour(h)}
-                      </div>
-                      <div className="flex-1 space-y-2">
-                        {items.map((it) => (
-                          <PlanItemCard
-                            key={it.id}
-                            item={it}
-                            busy={busyId === it.id}
-                            onStart={() => handleStart(it.id)}
-                            onComplete={() => handleComplete(it.id)}
-                            onSkip={() => handleSkip(it.id)}
-                            onDragStart={() => onDragStart(it.id)}
-                            onDragEnd={onDragEnd}
-                          />
-                        ))}
-                        {items.length === 0 && (
-                          <div className="text-xs text-[var(--color-text-muted)] opacity-50">
-                            拖入项目 →
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                      hour={h}
+                      items={items}
+                      busyId={busyId}
+                      onStart={handleStart}
+                      onComplete={handleComplete}
+                      onSkip={handleSkip}
+                    />
                   );
                 })}
               </div>
@@ -360,39 +372,13 @@ export default function DailyPage() {
               ) : (
                 <div className="space-y-2">
                   {data.pending_pool.map((p) => (
-                    <div
+                    <PendingPoolCard
                       key={p.id}
-                      draggable
-                      onDragStart={() => onDragStart(p.id)}
-                      onDragEnd={onDragEnd}
-                      className="p-3 border border-[var(--color-border)] cursor-move hover:border-[var(--color-accent)]"
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs px-1.5 py-0.5 bg-[var(--color-card)] border border-[var(--color-border)]">
-                          {SOURCE_LABELS[p.source_module] || p.source_module}
-                        </span>
-                        <span className="text-xs text-[var(--color-text-muted)]">
-                          {p.estimated_minutes} min
-                        </span>
-                      </div>
-                      <div className="text-sm font-medium text-[var(--color-text)]">{p.title}</div>
-                      <div className="mt-2 flex items-center gap-1">
-                        <button
-                          onClick={() => handleComplete(p.id)}
-                          disabled={busyId === p.id}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-[var(--color-accent)] text-white disabled:opacity-50"
-                        >
-                          <CheckCircle2 size={12} /> 完成
-                        </button>
-                        <button
-                          onClick={() => handleSkip(p.id)}
-                          disabled={busyId === p.id}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs border border-[var(--color-border)] disabled:opacity-50"
-                        >
-                          <SkipForward size={12} /> 跳过
-                        </button>
-                      </div>
-                    </div>
+                      item={p}
+                      busy={busyId === p.id}
+                      onComplete={() => handleComplete(p.id)}
+                      onSkip={() => handleSkip(p.id)}
+                    />
                   ))}
                 </div>
               )}
@@ -452,12 +438,108 @@ export default function DailyPage() {
             )}
           </div>
         </div>
+        </DndContext>
       </div>
     </div>
   );
 }
 
-// ── 计划项卡片 ──
+// ── 时间格（Task #89 改用 @dnd-kit useDroppable） ──
+
+interface TimelineHourRowProps {
+  hour: number;
+  items: PlanItem[];
+  busyId: string | null;
+  onStart: (id: string) => void;
+  onComplete: (id: string) => void;
+  onSkip: (id: string) => void;
+}
+
+function TimelineHourRow({ hour, items, busyId, onStart, onComplete, onSkip }: TimelineHourRowProps) {
+  const { setNodeRef, isOver } = useDroppable({ id: `hour-${hour}` });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex items-start gap-3 border-b border-[var(--color-border)] last:border-b-0 py-2 min-h-[60px] transition-colors ${
+        isOver ? "bg-[var(--color-accent)]/5" : ""
+      }`}
+    >
+      <div className="text-xs text-[var(--color-text-muted)] pt-1 w-14">
+        {formatHour(hour)}
+      </div>
+      <div className="flex-1 space-y-2">
+        {items.map((it) => (
+          <PlanItemCard
+            key={it.id}
+            item={it}
+            busy={busyId === it.id}
+            onStart={() => onStart(it.id)}
+            onComplete={() => onComplete(it.id)}
+            onSkip={() => onSkip(it.id)}
+          />
+        ))}
+        {items.length === 0 && (
+          <div className="text-xs text-[var(--color-text-muted)] opacity-50">
+            拖入项目 →
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── 待安排池卡片（Task #89 改用 @dnd-kit useDraggable） ──
+
+type PendingPoolItem = DailyView["pending_pool"][number];
+
+interface PendingPoolCardProps {
+  item: PendingPoolItem;
+  busy: boolean;
+  onComplete: () => void;
+  onSkip: () => void;
+}
+
+function PendingPoolCard({ item, busy, onComplete, onSkip }: PendingPoolCardProps) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: item.id });
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      className={`p-3 border border-[var(--color-border)] cursor-grab active:cursor-grabbing touch-none hover:border-[var(--color-accent)] ${
+        isDragging ? "opacity-40" : ""
+      }`}
+    >
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs px-1.5 py-0.5 bg-[var(--color-card)] border border-[var(--color-border)]">
+          {SOURCE_LABELS[item.source_module] || item.source_module}
+        </span>
+        <span className="text-xs text-[var(--color-text-muted)]">
+          {item.estimated_minutes} min
+        </span>
+      </div>
+      <div className="text-sm font-medium text-[var(--color-text)]">{item.title}</div>
+      <div className="mt-2 flex items-center gap-1">
+        <button
+          onClick={onComplete}
+          disabled={busy}
+          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-[var(--color-accent)] text-white disabled:opacity-50"
+        >
+          <CheckCircle2 size={12} /> 完成
+        </button>
+        <button
+          onClick={onSkip}
+          disabled={busy}
+          className="inline-flex items-center gap-1 px-2 py-1 text-xs border border-[var(--color-border)] disabled:opacity-50"
+        >
+          <SkipForward size={12} /> 跳过
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── 计划项卡片（Task #89 改用 @dnd-kit useDraggable） ──
 
 interface PlanItemCardProps {
   item: PlanItem;
@@ -465,21 +547,20 @@ interface PlanItemCardProps {
   onStart: () => void;
   onComplete: () => void;
   onSkip: () => void;
-  onDragStart: () => void;
-  onDragEnd: () => void;
 }
 
-function PlanItemCard({ item, busy, onStart, onComplete, onSkip, onDragStart, onDragEnd }: PlanItemCardProps) {
+function PlanItemCard({ item, busy, onStart, onComplete, onSkip }: PlanItemCardProps) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: item.id });
   const status = item.status;
   const accent = STATUS_COLORS[status] || "border-l-[var(--color-border)]";
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      className={`p-3 border border-[var(--color-border)] border-l-4 ${accent} bg-[var(--color-card)] cursor-move ${
-        item.is_mood_rule_affected ? "ring-2 ring-amber-300" : ""
-      }`}
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      className={`p-3 border border-[var(--color-border)] border-l-4 ${accent} bg-[var(--color-card)] cursor-grab active:cursor-grabbing touch-none ${
+        isDragging ? "opacity-40" : ""
+      } ${item.is_mood_rule_affected ? "ring-2 ring-amber-300" : ""}`}
     >
       <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
         <div className="flex items-center gap-1.5">

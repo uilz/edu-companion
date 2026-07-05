@@ -161,7 +161,7 @@ export default function ForceGraph({
             .attr("x2", (d: any) => d.target.x)
             .attr("y2", (d: any) => d.target.y);
 
-          nodeGroup.attr("transform", (d) => `translate(${d.x},${d.y})`);
+          nodeGroup.attr("transform", (d: any) => `translate(${d.x},${d.y})`);
         });
 
       return () => {

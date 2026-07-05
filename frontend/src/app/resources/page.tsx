@@ -11,6 +11,7 @@ import { Upload, FileText, Image, Search, Trash2, Loader2,
 import { authedFetch, API_BASE } from "@/lib/api/api";
 import { getAccessToken } from "@/lib/api/auth";
 import FilePreview, { getExt } from "@/components/ui/FilePreview";
+import { FileDropZone } from "@/lib/dnd/FileDropZone";
 
 // ── 类型 ──
 
@@ -312,13 +313,8 @@ export default function ResourcesPage() {
     }
   };
 
-  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(true); };
-  const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(false); };
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    const droppedFiles = Array.from(e.dataTransfer.files);
-    for (const file of droppedFiles) await uploadFile(file);
+  const handleDroppedFiles = async (files: File[]) => {
+    for (const file of files) await uploadFile(file);
   };
 
   const handleDelete = async (id: string) => {
@@ -617,24 +613,16 @@ export default function ResourcesPage() {
               </div>
             )}
 
-            {/* ── 拖拽上传区域 ── */}
-            <div ref={dropZoneRef} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
-              className={`mb-4 rounded-xl border-2 border-dashed transition-all ${
-                isDragOver
-                  ? "border-[var(--color-accent)] bg-[var(--color-accent)]/5"
-                  : "border-[var(--color-border)]/40 hover:border-[var(--color-border)]"
-              }`}>
-              {isDragOver ? (
-                <div className="py-8 text-center">
-                  <Upload size={28} className="mx-auto text-[var(--color-accent)] mb-2" />
-                  <p className="text-[14px] text-[var(--color-accent)] font-medium">松开鼠标上传文件</p>
-                </div>
-              ) : (
-                <div className="py-4 text-center">
-                  <p className="text-[12px] text-[var(--color-text-muted)]">拖拽文件到此处上传，或点击上传按钮</p>
-                </div>
-              )}
-            </div>
+            {/* ── 拖拽上传区域 (Task #89 改用 @dnd-kit FileDropZone) ── */}
+            <FileDropZone
+              onFiles={handleDroppedFiles}
+              className="mb-4 rounded-xl border-2 border-dashed"
+              activeClassName="border-[var(--color-accent)] bg-[var(--color-accent)]/5"
+            >
+              <div className="py-4 text-center">
+                <p className="text-[12px] text-[var(--color-text-muted)]">拖拽文件到此处上传，或点击上传按钮</p>
+              </div>
+            </FileDropZone>
 
             {/* ── 文件夹列表（桌面列表视图） ── */}
             {folders.length > 0 && viewMode === "list" && (

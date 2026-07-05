@@ -10,6 +10,7 @@ import {
   GripVertical,
 } from "lucide-react";
 import QuestionStem from "@/components/practice/components/QuestionStem";
+import { FileDropZone } from "@/lib/dnd/FileDropZone";
 
 // ── 类型 ──
 
@@ -52,7 +53,6 @@ const TYPE_LABELS: Record<string, string> = {
 export default function ImportPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const dragRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<"text" | "file">("text");
   const [rawText, setRawText] = useState("");
   const [preview, setPreview] = useState<PreviewResult | null>(null);
@@ -64,9 +64,6 @@ export default function ImportPage() {
   const [importResult, setImportResult] = useState<any>(null);
   const [showImportHistory, setShowImportHistory] = useState(false);
   const [importHistory, setImportHistory] = useState<ImportHistoryItem[]>([]);
-
-  // 拖拽状态
-  const [dragOver, setDragOver] = useState(false);
 
   // 编辑状态
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
@@ -381,33 +378,25 @@ D. $x=\\frac{-b\\pm\\sqrt{b^2-4ac}}{a}$
             </>
           ) : (
             <>
-              {/* 文件上传拖拽区 */}
-              <div ref={dragRef}
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setDragOver(false);
-                  const file = e.dataTransfer.files?.[0];
+              {/* 文件上传拖拽区 (Task #89 改用 @dnd-kit FileDropZone) */}
+              <FileDropZone
+                onFiles={(files) => {
+                  const file = files[0];
                   if (file) handleFileSelect(file);
                 }}
                 onClick={() => fileInputRef.current?.click()}
-                className={`text-center py-12 px-6 rounded-xl border-2 border-dashed transition-all cursor-pointer ${
-                  dragOver
-                    ? "border-[var(--color-accent)] bg-[var(--color-accent)]/5"
-                    : "border-[var(--color-border)]/50 hover:border-[var(--color-accent)]/30"
-                }`}>
+                className="text-center py-12 px-6 rounded-xl border-2 border-dashed transition-all cursor-pointer border-[var(--color-border)]/50 hover:border-[var(--color-accent)]/30"
+                activeClassName="border-[var(--color-accent)] bg-[var(--color-accent)]/5"
+              >
                 <input ref={fileInputRef} type="file" accept=".docx,.xlsx,.txt,.json,.pdf"
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) handleFileSelect(file);
                   }} />
-                <Upload size={32} className={`mx-auto mb-3 transition-colors ${
-                  dragOver ? "text-[var(--color-accent)]" : "text-[var(--color-text-muted)]"
-                }`} />
+                <Upload size={32} className="mx-auto mb-3 transition-colors text-[var(--color-text-muted)]" />
                 <p className="text-[13px] text-[var(--color-text)] mb-2">
-                  {dragOver ? "松开以上传文件" : "拖拽文件到此处或点击选择"}
+                  拖拽文件到此处或点击选择
                 </p>
                 <p className="text-[10px] text-[var(--color-text-muted)] mb-4">
                   支持 docx / xlsx / txt / json / pdf，自动解析为题目
@@ -416,7 +405,7 @@ D. $x=\\frac{-b\\pm\\sqrt{b^2-4ac}}{a}$
                   {loading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
                   {loading ? "上传中..." : "选择文件"}
                 </div>
-              </div>
+              </FileDropZone>
               {/* 模板下载 */}
               <div className="mt-3 flex items-center justify-center gap-4 text-[10px] text-[var(--color-text-muted)]">
                 <a href="#" onClick={(e) => {
