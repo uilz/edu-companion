@@ -416,6 +416,12 @@ TOOL_HANDLERS = {
 }
 # 合并知识树操作工具
 TOOL_HANDLERS.update(KTOOL_HANDLERS)
+# 合并 liveroom 共享工具 (Task #35 - shared tool registry)
+try:
+    from app.infrastructure.llm.liveroom_tools import SYNC_HANDLERS as _LR_SYNC
+    TOOL_HANDLERS.update(_LR_SYNC)
+except ImportError:
+    pass
 
 class ToolExecutor:
     """统一的工具执行器"""

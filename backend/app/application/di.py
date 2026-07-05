@@ -492,8 +492,14 @@ class AppContainer:
                     )
                 )
             except Exception:
-                logger.debug("EventMemory hook failed", exc_info=True)
+                    logger.debug("EventMemory hook failed", exc_info=True)
         bus.subscribe("AssistantReplied", _on_assistant_replied)
+
+        # ── Task #50: ProjectNodeExported 跨模块联动 5 订阅者 ──
+        from app.application.handlers.project_export_handlers import (
+            handle_project_node_exported,
+        )
+        bus.subscribe("ProjectNodeExported", handle_project_node_exported)
 
         logger.info("🔗 注册 %d 个事件订阅", sum(len(v) for v in bus._handlers.values()))
 

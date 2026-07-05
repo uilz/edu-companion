@@ -954,7 +954,7 @@ class TestMoodStressEvents:
             MoodStressRecorded, MoodStressInterventionTriggered,
             MoodStressBehaviorSignalDetected, MoodStressPrefsUpdated,
         )
-        e1 = MoodStressRecorded(user_id="u1", id="r1", emotion_tags=["calm"])
+        e1 = MoodStressRecorded(user_id="u1", record_id="r1", emotion_tags=["calm"])
         assert e1.event_id != ""
         assert e1.event_type == "MoodStressRecorded"
         assert e1.user_id == "u1"

@@ -1,0 +1,1070 @@
+{
+  "start_time": "2026-07-03T09:35:40.724327",
+  "base": "http://localhost:8080",
+  "modules": {
+    "flashcard": {
+      "desktop": {
+        "module": "flashcard",
+        "url": "http://localhost:8080/flashcard",
+        "current_url": "http://localhost:8080/flashcard",
+        "viewport": "desktop",
+        "width": 1280,
+        "height": 800,
+        "load_ok": true,
+        "page_title": "苹果果 - 个人知识体系",
+        "body_length": 277,
+        "body_preview": "果 苹果果 学习空间 练习 知识树 秘书 我的资源 E E2E Admin @e2e_admin 设置 浅色模式 苹果果 v1.0 📚 FlashCard 间隔重复记忆卡  基于知识点的可追溯复习材料 · FSRS 调度 · 多源提取  统计 ▶ 开始复习 + 新建卡片 全部状态 待复习 稍后 处理中 已完成 已暂停 已归档 全部类型 基础问答 填空 对比 流程 应用场景 错题溯源 反思 全部来源",
+        "still_loading": false,
+        "h1": 1,
+        "h2": 0,
+        "main": 1,
+        "section": 0,
+        "buttons": 7,
+        "links": 7,
+        "inputs": 1,
+        "sidebar_links": [
+          "/",
+          "/conversation",
+          "/practice",
+          "/knowledge-tree",
+          "/secretary",
+          "/resources",
+          "/settings"
+        ],
+        "screenshot": "/home/deploy/edu-companion/docs/temp/task-42-screenshots/flashcard_desktop_1280x800.png",
+        "console_errors": [
+          {
+            "type": "error",
+            "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+          },
+          {
+            "type": "error",
+            "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+          }
+        ],
+        "console_warns": [],
+        "page_errors": [],
+        "net_errors": []
+      },
+      "tablet": {
+        "module": "flashcard",
+        "url": "http://localhost:8080/flashcard",
+        "current_url": "http://localhost:8080/flashcard",
+        "viewport": "tablet",
+        "width": 768,
+        "height": 1024,
+        "load_ok": true,
+        "page_title": "苹果果 - 个人知识体系",
+        "body_length": 281,
+        "body_preview": "苹果果 果 苹果果 学习空间 练习 知识树 秘书 我的资源 E E2E Admin @e2e_admin 设置 浅色模式 苹果果 v1.0 📚 FlashCard 间隔重复记忆卡  基于知识点的可追溯复习材料 · FSRS 调度 · 多源提取  统计 ▶ 开始复习 + 新建卡片 全部状态 待复习 稍后 处理中 已完成 已暂停 已归档 全部类型 基础问答 填空 对比 流程 应用场景 错题溯源 反思 ",
+        "still_loading": false,
+        "h1": 1,
+        "h2": 0,
+        "main": 1,
+        "section": 0,
+        "buttons": 8,
+        "links": 7,
+        "inputs": 1,
+        "sidebar_links": [
+          "/",
+          "/conversation",
+          "/practice",
+          "/knowledge-tree",
+          "/secretary",
+          "/resources",
+          "/settings"
+        ],
+        "screenshot": "/home/deploy/edu-companion/docs/temp/task-42-screenshots/flashcard_tablet_768x1024.png",
+        "console_errors": [
+          {
+            "type": "error",
+            "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+          },
+          {
+            "type": "error",
+            "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+          },
+          {
+            "type": "error",
+            "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+          },
+          {
+            "type": "error",
+            "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+          }
+        ],
+        "console_warns": [],
+        "page_errors": [],
+        "net_errors": [
+          {
+            "url": "http://localhost:8080/api/flashcards/stats/summary",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/flashcards/?limit=100",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/agent/preferences",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/proposals/pending?user_id=u_4159cd8deac9",
+            "failure": "net::ERR_ABORTED"
+          }
+        ]
+      },
+      "mobile": {
+        "module": "flashcard",
+        "url": "http://localhost:8080/flashcard",
+        "current_url": "http://localhost:8080/flashcard",
+        "viewport": "mobile",
+        "width": 375,
+        "height": 667,
+        "load_ok": true,
+        "page_title": "苹果果 - 个人知识体系",
+        "body_length": 232,
+        "body_preview": "学习空间 练习 知识树 资源 秘书 设置 📚 FlashCard 间隔重复记忆卡  基于知识点的可追溯复习材料 · FSRS 调度 · 多源提取  统计 ▶ 开始复习 + 新建卡片 全部状态 待复习 稍后 处理中 已完成 已暂停 已归档 全部类型 基础问答 填空 对比 流程 应用场景 错题溯源 反思 全部来源 手动 练习错题 阅读笔记 对话 项目 语言房间 兴趣探索 ↻ ⚠ API 401: {\"",
+        "still_loading": false,
+        "h1": 1,
+        "h2": 0,
+        "main": 1,
+        "section": 0,
+        "buttons": 4,
+        "links": 6,
+        "inputs": 1,
+        "sidebar_links": null,
+        "screenshot": "/home/deploy/edu-companion/docs/temp/task-42-screenshots/flashcard_mobile_375x667.png",
+        "console_errors": [
+          {
+            "type": "error",
+            "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+          },
+          {
+            "type": "error",
+            "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+          }
+        ],
+        "console_warns": [],
+        "page_errors": [],
+        "net_errors": [
+          {
+            "url": "http://localhost:8080/api/secretary/agent/preferences",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/proposals/pending?user_id=u_4159cd8deac9",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/flashcards/?limit=100",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/flashcards/stats/summary",
+            "failure": "net::ERR_ABORTED"
+          }
+        ]
+      }
+    },
+    "reading": {
+      "desktop": {
+        "module": "reading",
+        "url": "http://localhost:8080/reading",
+        "current_url": "http://localhost:8080/reading",
+        "viewport": "desktop",
+        "width": 1280,
+        "height": 800,
+        "load_ok": true,
+        "page_title": "苹果果 - 个人知识体系",
+        "body_length": 355,
+        "body_preview": "果 苹果果 学习空间 练习 知识树 秘书 我的资源 E E2E Admin @e2e_admin 设置 浅色模式 苹果果 v1.0 知识加工车间  阅读体验 + 加工工具 — 5 色标注 · 反思笔记 · 回顾提醒  材料库 笔记 API 401: {\"detail\":\"未登录或令牌已失效，请重新登录\"} 总会话 0 包括已结束和进行中 进行中 0 未结束的会话 笔记数 0 通过 FlashCar",
+        "still_loading": false,
+        "h1": 1,
+        "h2": 0,
+        "main": 1,
+        "section": 0,
+        "buttons": 8,
+        "links": 7,
+        "inputs": 0,
+        "sidebar_links": [
+          "/",
+          "/conversation",
+          "/practice",
+          "/knowledge-tree",
+          "/secretary",
+          "/resources",
+          "/settings"
+        ],
+        "screenshot": "/home/deploy/edu-companion/docs/temp/task-42-screenshots/reading_desktop_1280x800.png",
+        "console_errors": [
+          {
+            "type": "error",
+            "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+          },
+          {
+            "type": "error",
+            "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+          },
+          {
+            "type": "error",
+            "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+          }
+        ],
+        "console_warns": [],
+        "page_errors": [],
+        "net_errors": [
+          {
+            "url": "http://localhost:8080/api/secretary/proposals/pending?user_id=u_4159cd8deac9",
+            "failure": "net::ERR_ABORTED"
+          }
+        ]
+      },
+      "tablet": {
+        "module": "reading",
+        "url": "http://localhost:8080/reading",
+        "current_url": "http://localhost:8080/reading",
+        "viewport": "tablet",
+        "width": 768,
+        "height": 1024,
+        "load_ok": true,
+        "page_title": "苹果果 - 个人知识体系",
+        "body_length": 359,
+        "body_preview": "苹果果 果 苹果果 学习空间 练习 知识树 秘书 我的资源 E E2E Admin @e2e_admin 设置 浅色模式 苹果果 v1.0 知识加工车间  阅读体验 + 加工工具 — 5 色标注 · 反思笔记 · 回顾提醒  材料库 笔记 API 401: {\"detail\":\"未登录或令牌已失效，请重新登录\"} 总会话 0 包括已结束和进行中 进行中 0 未结束的会话 笔记数 0 通过 Flas",
+        "still_loading": false,
+        "h1": 1,
+        "h2": 0,
+        "main": 1,
+        "section": 0,
+        "buttons": 9,
+        "links": 7,
+        "inputs": 0,
+        "sidebar_links": [
+          "/",
+          "/conversation",
+          "/practice",
+          "/knowledge-tree",
+          "/secretary",
+          "/resources",
+          "/settings"
+        ],
+        "screenshot": "/home/deploy/edu-companion/docs/temp/task-42-screenshots/reading_tablet_768x1024.png",
+        "console_errors": [
+          {
+            "type": "error",
+            "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+          },
+          {
+            "type": "error",
+            "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+          },
+          {
+            "type": "error",
+            "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+          },
+          {
+            "type": "error",
+            "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+          },
+          {
+            "type": "error",
+            "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+          },
+          {
+            "type": "error",
+            "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+          }
+        ],
+        "console_warns": [],
+        "page_errors": [],
+        "net_errors": [
+          {
+            "url": "http://localhost:8080/api/reading/sessions?limit=20",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/agent/preferences",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/proposals/pending?user_id=u_4159cd8deac9",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/reading/review-reminder",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/reading/prefs",
+            "failure": "net::ERR_ABORTED"
+          }
+        ]
+      },
+      "mobile": {
+        "module": "reading",
+        "url": "http://localhost:8080/reading",
+        "current_url": "http://localhost:8080/reading",
+        "viewport": "mobile",
+        "width": 375,
+        "height": 667,
+        "load_ok": true,
+        "page_title": "苹果果 - 个人知识体系",
+        "body_length": 310,
+        "body_preview": "学习空间 练习 知识树 资源 秘书 设置 知识加工车间  阅读体验 + 加工工具 — 5 色标注 · 反思笔记 · 回顾提醒  材料库 笔记 API 401: {\"detail\":\"未登录或令牌已失效，请重新登录\"} 总会话 0 包括已结束和进行中 进行中 0 未结束的会话 笔记数 0 通过 FlashCard 反思型 待回顾 0 由 PlanItem 调度 阅读材料  从材料库选择材料进入阅读会",
+        "still_loading": false,
+        "h1": 1,
+        "h2": 0,
+        "main": 1,
+        "section": 0,
+        "buttons": 5,
+        "links": 6,
+        "inputs": 0,
+        "sidebar_links": null,
+        "screenshot": "/home/deploy/edu-companion/docs/temp/task-42-screenshots/reading_mobile_375x667.png",
+        "console_errors": [
+          {
+            "type": "error",
+            "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+          },
+          {
+            "type": "error",
+            "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+          },
+          {
+            "type": "error",
+            "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+          }
+        ],
+        "console_warns": [],
+        "page_errors": [],
+        "net_errors": [
+          {
+            "url": "http://localhost:8080/api/reading/sessions?limit=20",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/reading/review-reminder",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/reading/prefs",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/agent/preferences",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/proposals/pending?user_id=u_4159cd8deac9",
+            "failure": "net::ERR_ABORTED"
+          }
+        ]
+      }
+    },
+    "liveroom": {
+      "desktop": {
+        "module": "liveroom",
+        "url": "http://localhost:8080/liveroom",
+        "current_url": "http://localhost:8080/liveroom",
+        "viewport": "desktop",
+        "width": 1280,
+        "height": 800,
+        "load_ok": true,
+        "page_title": "苹果果 - 个人知识体系",
+        "body_length": 335,
+        "body_preview": "果 苹果果 学习空间 练习 知识树 秘书 我的资源 E E2E Admin @e2e_admin 设置 浅色模式 苹果果 v1.0 实时语音房间  场景化对话练习 · AI 角色 · 转写 · 错误标记 — 不评判、不主导  场景库 AI 角色 创建房间 总房间 0 我参与或创建的房间 进行中 0 可加入或继续 已结束 0 可查看回顾 开启录音 0 录音可选 (决策 10) 创建房间 设定场景与 ",
+        "still_loading": false,
+        "h1": 1,
+        "h2": 0,
+        "main": 1,
+        "section": 0,
+        "buttons": 9,
+        "links": 7,
+        "inputs": 0,
+        "sidebar_links": [
+          "/",
+          "/conversation",
+          "/practice",
+          "/knowledge-tree",
+          "/secretary",
+          "/resources",
+          "/settings"
+        ],
+        "screenshot": "/home/deploy/edu-companion/docs/temp/task-42-screenshots/liveroom_desktop_1280x800.png",
+        "console_errors": [],
+        "console_warns": [],
+        "page_errors": [],
+        "net_errors": []
+      },
+      "tablet": {
+        "module": "liveroom",
+        "url": "http://localhost:8080/liveroom",
+        "current_url": "http://localhost:8080/liveroom",
+        "viewport": "tablet",
+        "width": 768,
+        "height": 1024,
+        "load_ok": true,
+        "page_title": "苹果果 - 个人知识体系",
+        "body_length": 339,
+        "body_preview": "苹果果 果 苹果果 学习空间 练习 知识树 秘书 我的资源 E E2E Admin @e2e_admin 设置 浅色模式 苹果果 v1.0 实时语音房间  场景化对话练习 · AI 角色 · 转写 · 错误标记 — 不评判、不主导  场景库 AI 角色 创建房间 总房间 0 我参与或创建的房间 进行中 0 可加入或继续 已结束 0 可查看回顾 开启录音 0 录音可选 (决策 10) 创建房间 设定",
+        "still_loading": false,
+        "h1": 1,
+        "h2": 0,
+        "main": 1,
+        "section": 0,
+        "buttons": 10,
+        "links": 7,
+        "inputs": 0,
+        "sidebar_links": [
+          "/",
+          "/conversation",
+          "/practice",
+          "/knowledge-tree",
+          "/secretary",
+          "/resources",
+          "/settings"
+        ],
+        "screenshot": "/home/deploy/edu-companion/docs/temp/task-42-screenshots/liveroom_tablet_768x1024.png",
+        "console_errors": [],
+        "console_warns": [],
+        "page_errors": [],
+        "net_errors": [
+          {
+            "url": "http://localhost:8080/api/liveroom/rooms?limit=30",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/proposals/pending?user_id=u_4159cd8deac9",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/agent/preferences",
+            "failure": "net::ERR_ABORTED"
+          }
+        ]
+      },
+      "mobile": {
+        "module": "liveroom",
+        "url": "http://localhost:8080/liveroom",
+        "current_url": "http://localhost:8080/liveroom",
+        "viewport": "mobile",
+        "width": 375,
+        "height": 667,
+        "load_ok": true,
+        "page_title": "苹果果 - 个人知识体系",
+        "body_length": 290,
+        "body_preview": "学习空间 练习 知识树 资源 秘书 设置 实时语音房间  场景化对话练习 · AI 角色 · 转写 · 错误标记 — 不评判、不主导  场景库 AI 角色 创建房间 总房间 0 我参与或创建的房间 进行中 0 可加入或继续 已结束 0 可查看回顾 开启录音 0 录音可选 (决策 10) 创建房间 设定场景与 AI 角色，邀请伙伴开始对话 创建新房间 → 场景库 系统预置和自定义场景模板 — 咖啡馆",
+        "still_loading": false,
+        "h1": 1,
+        "h2": 0,
+        "main": 1,
+        "section": 0,
+        "buttons": 6,
+        "links": 6,
+        "inputs": 0,
+        "sidebar_links": null,
+        "screenshot": "/home/deploy/edu-companion/docs/temp/task-42-screenshots/liveroom_mobile_375x667.png",
+        "console_errors": [],
+        "console_warns": [],
+        "page_errors": [],
+        "net_errors": [
+          {
+            "url": "http://localhost:8080/api/liveroom/rooms?limit=30",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/agent/preferences",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/proposals/pending?user_id=u_4159cd8deac9",
+            "failure": "net::ERR_ABORTED"
+          }
+        ]
+      }
+    },
+    "emotion": {
+      "desktop": {
+        "module": "emotion",
+        "url": "http://localhost:8080/emotion",
+        "current_url": "http://localhost:8080/emotion",
+        "viewport": "desktop",
+        "width": 1280,
+        "height": 800,
+        "load_ok": true,
+        "page_title": "苹果果 - 个人知识体系",
+        "body_length": 132,
+        "body_preview": "果 苹果果 学习空间 练习 知识树 秘书 我的资源 E E2E Admin @e2e_admin 设置 浅色模式 苹果果 v1.0 情绪陪伴  和 AI 多聊聊，我会感知你的学习情绪，\\n在你挫败时鼓励、焦虑时安慰、进步时庆祝 🫂  开始对话后，情绪数据会自动收集",
+        "still_loading": false,
+        "h1": 1,
+        "h2": 0,
+        "main": 1,
+        "section": 0,
+        "buttons": 3,
+        "links": 7,
+        "inputs": 0,
+        "sidebar_links": [
+          "/",
+          "/conversation",
+          "/practice",
+          "/knowledge-tree",
+          "/secretary",
+          "/resources",
+          "/settings"
+        ],
+        "screenshot": "/home/deploy/edu-companion/docs/temp/task-42-screenshots/emotion_desktop_1280x800.png",
+        "console_errors": [],
+        "console_warns": [],
+        "page_errors": [],
+        "net_errors": [
+          {
+            "url": "http://localhost:8080/api/secretary/proposals/pending?user_id=u_4159cd8deac9",
+            "failure": "net::ERR_ABORTED"
+          }
+        ]
+      },
+      "tablet": {
+        "module": "emotion",
+        "url": "http://localhost:8080/emotion",
+        "current_url": "http://localhost:8080/emotion",
+        "viewport": "tablet",
+        "width": 768,
+        "height": 1024,
+        "load_ok": true,
+        "page_title": "苹果果 - 个人知识体系",
+        "body_length": 136,
+        "body_preview": "苹果果 果 苹果果 学习空间 练习 知识树 秘书 我的资源 E E2E Admin @e2e_admin 设置 浅色模式 苹果果 v1.0 情绪陪伴  和 AI 多聊聊，我会感知你的学习情绪，\\n在你挫败时鼓励、焦虑时安慰、进步时庆祝 🫂  开始对话后，情绪数据会自动收集",
+        "still_loading": false,
+        "h1": 1,
+        "h2": 0,
+        "main": 1,
+        "section": 0,
+        "buttons": 4,
+        "links": 7,
+        "inputs": 0,
+        "sidebar_links": [
+          "/",
+          "/conversation",
+          "/practice",
+          "/knowledge-tree",
+          "/secretary",
+          "/resources",
+          "/settings"
+        ],
+        "screenshot": "/home/deploy/edu-companion/docs/temp/task-42-screenshots/emotion_tablet_768x1024.png",
+        "console_errors": [
+          {
+            "type": "error",
+            "text": "TypeError: Failed to fetch\n    at x (http://localhost:8080/_next/static/chunks/app/layout-7a7f4b75e9959158.js:1:43768)\n    at http://localhost:8080/_next/static/chunks/app/emotion/page-0fe60a3c24a21a94.js:1:6878\n    at aW (http://localhost:8080/_next/static/chunks/fd9d1056-f83cc1f41be61a71.js:1:7324"
+          }
+        ],
+        "console_warns": [],
+        "page_errors": [],
+        "net_errors": [
+          {
+            "url": "http://localhost:8080/api/conversations/emotion/recent?limit=20",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/agent/preferences",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/conversations/emotion/stats",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/proposals/pending?user_id=u_4159cd8deac9",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/conversations/emotion/trend?window_hours=168",
+            "failure": "net::ERR_ABORTED"
+          }
+        ]
+      },
+      "mobile": {
+        "module": "emotion",
+        "url": "http://localhost:8080/emotion",
+        "current_url": "http://localhost:8080/emotion",
+        "viewport": "mobile",
+        "width": 375,
+        "height": 667,
+        "load_ok": true,
+        "page_title": "苹果果 - 个人知识体系",
+        "body_length": 87,
+        "body_preview": "学习空间 练习 知识树 资源 秘书 设置 情绪陪伴  和 AI 多聊聊，我会感知你的学习情绪，\\n在你挫败时鼓励、焦虑时安慰、进步时庆祝 🫂  开始对话后，情绪数据会自动收集",
+        "still_loading": false,
+        "h1": 1,
+        "h2": 0,
+        "main": 1,
+        "section": 0,
+        "buttons": 0,
+        "links": 6,
+        "inputs": 0,
+        "sidebar_links": null,
+        "screenshot": "/home/deploy/edu-companion/docs/temp/task-42-screenshots/emotion_mobile_375x667.png",
+        "console_errors": [
+          {
+            "type": "error",
+            "text": "TypeError: Failed to fetch\n    at x (http://localhost:8080/_next/static/chunks/app/layout-7a7f4b75e9959158.js:1:43768)\n    at http://localhost:8080/_next/static/chunks/app/emotion/page-0fe60a3c24a21a94.js:1:6806\n    at aW (http://localhost:8080/_next/static/chunks/fd9d1056-f83cc1f41be61a71.js:1:7324"
+          }
+        ],
+        "console_warns": [],
+        "page_errors": [],
+        "net_errors": [
+          {
+            "url": "http://localhost:8080/api/secretary/proposals/pending?user_id=u_4159cd8deac9",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/conversations/emotion/stats",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/conversations/emotion/recent?limit=20",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/conversations/emotion/trend?window_hours=168",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/agent/preferences",
+            "failure": "net::ERR_ABORTED"
+          }
+        ]
+      }
+    },
+    "planning": {
+      "desktop": {
+        "module": "planning",
+        "url": "http://localhost:8080/planning",
+        "current_url": "http://localhost:8080/planning",
+        "viewport": "desktop",
+        "width": 1280,
+        "height": 800,
+        "load_ok": true,
+        "page_title": "苹果果 - 个人知识体系",
+        "body_length": 316,
+        "body_preview": "果 苹果果 学习空间 练习 知识树 秘书 我的资源 E E2E Admin @e2e_admin 设置 浅色模式 苹果果 v1.0 规划工作台  后端调度引擎的前端用户工作台 — 汇聚 · 编排 · 追踪  视图方案 0 · 目标 0 · 回顾 0 日视图 周视图 知识视图 目标 周期回顾 顶部状态条 疲劳风险 疲劳低 压力值 — / 10 能量值 — / 10 习惯等级 🌱 初学 🍅 专注力很强",
+        "still_loading": false,
+        "h1": 1,
+        "h2": 0,
+        "main": 1,
+        "section": 0,
+        "buttons": 11,
+        "links": 7,
+        "inputs": 0,
+        "sidebar_links": [
+          "/",
+          "/conversation",
+          "/practice",
+          "/knowledge-tree",
+          "/secretary",
+          "/resources",
+          "/settings"
+        ],
+        "screenshot": "/home/deploy/edu-companion/docs/temp/task-42-screenshots/planning_desktop_1280x800.png",
+        "console_errors": [],
+        "console_warns": [],
+        "page_errors": [],
+        "net_errors": [
+          {
+            "url": "http://localhost:8080/api/secretary/proposals/pending?user_id=u_4159cd8deac9",
+            "failure": "net::ERR_ABORTED"
+          }
+        ]
+      },
+      "tablet": {
+        "module": "planning",
+        "url": "http://localhost:8080/planning",
+        "current_url": "http://localhost:8080/planning",
+        "viewport": "tablet",
+        "width": 768,
+        "height": 1024,
+        "load_ok": true,
+        "page_title": "苹果果 - 个人知识体系",
+        "body_length": 320,
+        "body_preview": "苹果果 果 苹果果 学习空间 练习 知识树 秘书 我的资源 E E2E Admin @e2e_admin 设置 浅色模式 苹果果 v1.0 规划工作台  后端调度引擎的前端用户工作台 — 汇聚 · 编排 · 追踪  视图方案 0 · 目标 0 · 回顾 0 日视图 周视图 知识视图 目标 周期回顾 顶部状态条 疲劳风险 疲劳低 压力值 — / 10 能量值 — / 10 习惯等级 🌱 初学 🍅 专",
+        "still_loading": false,
+        "h1": 1,
+        "h2": 0,
+        "main": 1,
+        "section": 0,
+        "buttons": 12,
+        "links": 7,
+        "inputs": 0,
+        "sidebar_links": [
+          "/",
+          "/conversation",
+          "/practice",
+          "/knowledge-tree",
+          "/secretary",
+          "/resources",
+          "/settings"
+        ],
+        "screenshot": "/home/deploy/edu-companion/docs/temp/task-42-screenshots/planning_tablet_768x1024.png",
+        "console_errors": [],
+        "console_warns": [],
+        "page_errors": [],
+        "net_errors": [
+          {
+            "url": "http://localhost:8080/api/planning/reviews",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/proposals/pending?user_id=u_4159cd8deac9",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/planning/view-layouts",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/planning/daily",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/agent/preferences",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/planning/goals",
+            "failure": "net::ERR_ABORTED"
+          }
+        ]
+      },
+      "mobile": {
+        "module": "planning",
+        "url": "http://localhost:8080/planning",
+        "current_url": "http://localhost:8080/planning",
+        "viewport": "mobile",
+        "width": 375,
+        "height": 667,
+        "load_ok": true,
+        "page_title": "苹果果 - 个人知识体系",
+        "body_length": 271,
+        "body_preview": "学习空间 练习 知识树 资源 秘书 设置 规划工作台  后端调度引擎的前端用户工作台 — 汇聚 · 编排 · 追踪  视图方案 0 · 目标 0 · 回顾 0 日视图 周视图 知识视图 目标 周期回顾 顶部状态条 疲劳风险 疲劳低 压力值 — / 10 能量值 — / 10 习惯等级 🌱 初学 🍅 专注力很强（45分钟），可以用长番茄钟：45+10 🍅 日视图  时间轴上 0 个已安排项，待安排池",
+        "still_loading": false,
+        "h1": 1,
+        "h2": 0,
+        "main": 1,
+        "section": 0,
+        "buttons": 8,
+        "links": 6,
+        "inputs": 0,
+        "sidebar_links": null,
+        "screenshot": "/home/deploy/edu-companion/docs/temp/task-42-screenshots/planning_mobile_375x667.png",
+        "console_errors": [],
+        "console_warns": [],
+        "page_errors": [],
+        "net_errors": [
+          {
+            "url": "http://localhost:8080/api/planning/goals",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/planning/view-layouts",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/planning/reviews",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/planning/daily",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/agent/preferences",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/proposals/pending?user_id=u_4159cd8deac9",
+            "failure": "net::ERR_ABORTED"
+          }
+        ]
+      }
+    },
+    "interest": {
+      "desktop": {
+        "module": "interest",
+        "url": "http://localhost:8080/interest",
+        "current_url": "http://localhost:8080/interest",
+        "viewport": "desktop",
+        "width": 1280,
+        "height": 800,
+        "load_ok": true,
+        "page_title": "苹果果 - 个人知识体系",
+        "body_length": 170,
+        "body_preview": "果 苹果果 学习空间 练习 知识树 秘书 我的资源 E E2E Admin @e2e_admin 设置 浅色模式 苹果果 v1.0 学术信息探索 标签 信息源 偏好 本地权重  严格遵循 ADR 0007: 不调用 LLM · 链接级别去重 · 本地权重  今日推送(0) 历史 立即推送  暂无推送内容  配置兴趣标签和信息源后会显示推送",
+        "still_loading": false,
+        "h1": 1,
+        "h2": 0,
+        "main": 1,
+        "section": 0,
+        "buttons": 11,
+        "links": 7,
+        "inputs": 1,
+        "sidebar_links": [
+          "/",
+          "/conversation",
+          "/practice",
+          "/knowledge-tree",
+          "/secretary",
+          "/resources",
+          "/settings"
+        ],
+        "screenshot": "/home/deploy/edu-companion/docs/temp/task-42-screenshots/interest_desktop_1280x800.png",
+        "console_errors": [],
+        "console_warns": [],
+        "page_errors": [],
+        "net_errors": []
+      },
+      "tablet": {
+        "module": "interest",
+        "url": "http://localhost:8080/interest",
+        "current_url": "http://localhost:8080/interest",
+        "viewport": "tablet",
+        "width": 768,
+        "height": 1024,
+        "load_ok": true,
+        "page_title": "苹果果 - 个人知识体系",
+        "body_length": 174,
+        "body_preview": "苹果果 果 苹果果 学习空间 练习 知识树 秘书 我的资源 E E2E Admin @e2e_admin 设置 浅色模式 苹果果 v1.0 学术信息探索 标签 信息源 偏好 本地权重  严格遵循 ADR 0007: 不调用 LLM · 链接级别去重 · 本地权重  今日推送(0) 历史 立即推送  暂无推送内容  配置兴趣标签和信息源后会显示推送",
+        "still_loading": false,
+        "h1": 1,
+        "h2": 0,
+        "main": 1,
+        "section": 0,
+        "buttons": 12,
+        "links": 7,
+        "inputs": 1,
+        "sidebar_links": [
+          "/",
+          "/conversation",
+          "/practice",
+          "/knowledge-tree",
+          "/secretary",
+          "/resources",
+          "/settings"
+        ],
+        "screenshot": "/home/deploy/edu-companion/docs/temp/task-42-screenshots/interest_tablet_768x1024.png",
+        "console_errors": [],
+        "console_warns": [],
+        "page_errors": [],
+        "net_errors": [
+          {
+            "url": "http://localhost:8080/api/secretary/proposals/pending?user_id=u_4159cd8deac9",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/interest/push/today",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/agent/preferences",
+            "failure": "net::ERR_ABORTED"
+          }
+        ]
+      },
+      "mobile": {
+        "module": "interest",
+        "url": "http://localhost:8080/interest",
+        "current_url": "http://localhost:8080/interest",
+        "viewport": "mobile",
+        "width": 375,
+        "height": 667,
+        "load_ok": true,
+        "page_title": "苹果果 - 个人知识体系",
+        "body_length": 125,
+        "body_preview": "学习空间 练习 知识树 资源 秘书 设置 学术信息探索 标签 信息源 偏好 本地权重  严格遵循 ADR 0007: 不调用 LLM · 链接级别去重 · 本地权重  今日推送(0) 历史 立即推送  暂无推送内容  配置兴趣标签和信息源后会显示推送",
+        "still_loading": false,
+        "h1": 1,
+        "h2": 0,
+        "main": 1,
+        "section": 0,
+        "buttons": 8,
+        "links": 6,
+        "inputs": 1,
+        "sidebar_links": null,
+        "screenshot": "/home/deploy/edu-companion/docs/temp/task-42-screenshots/interest_mobile_375x667.png",
+        "console_errors": [],
+        "console_warns": [],
+        "page_errors": [],
+        "net_errors": [
+          {
+            "url": "http://localhost:8080/api/secretary/proposals/pending?user_id=u_4159cd8deac9",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/interest/push/today",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/agent/preferences",
+            "failure": "net::ERR_ABORTED"
+          }
+        ]
+      }
+    },
+    "project": {
+      "desktop": {
+        "module": "project",
+        "url": "http://localhost:8080/project",
+        "current_url": "http://localhost:8080/project",
+        "viewport": "desktop",
+        "width": 1280,
+        "height": 800,
+        "load_ok": true,
+        "page_title": "苹果果 - 个人知识体系",
+        "body_length": 141,
+        "body_preview": "果 苹果果 学习空间 练习 知识树 秘书 我的资源 E E2E Admin @e2e_admin 设置 浅色模式 苹果果 v1.0 项目工作台  长期主题性研究的工作台 — 树形大纲、字段级版本、@引用、跨模块输出  从模板创建 新建项目 全部状态 进行中 已归档 已完成 管理模板",
+        "still_loading": false,
+        "h1": 1,
+        "h2": 0,
+        "main": 1,
+        "section": 0,
+        "buttons": 5,
+        "links": 8,
+        "inputs": 1,
+        "sidebar_links": [
+          "/",
+          "/conversation",
+          "/practice",
+          "/knowledge-tree",
+          "/secretary",
+          "/resources",
+          "/settings"
+        ],
+        "screenshot": "/home/deploy/edu-companion/docs/temp/task-42-screenshots/project_desktop_1280x800.png",
+        "console_errors": [],
+        "console_warns": [],
+        "page_errors": [],
+        "net_errors": []
+      },
+      "tablet": {
+        "module": "project",
+        "url": "http://localhost:8080/project",
+        "current_url": "http://localhost:8080/project",
+        "viewport": "tablet",
+        "width": 768,
+        "height": 1024,
+        "load_ok": true,
+        "page_title": "苹果果 - 个人知识体系",
+        "body_length": 145,
+        "body_preview": "苹果果 果 苹果果 学习空间 练习 知识树 秘书 我的资源 E E2E Admin @e2e_admin 设置 浅色模式 苹果果 v1.0 项目工作台  长期主题性研究的工作台 — 树形大纲、字段级版本、@引用、跨模块输出  从模板创建 新建项目 全部状态 进行中 已归档 已完成 管理模板",
+        "still_loading": false,
+        "h1": 1,
+        "h2": 0,
+        "main": 1,
+        "section": 0,
+        "buttons": 6,
+        "links": 8,
+        "inputs": 1,
+        "sidebar_links": [
+          "/",
+          "/conversation",
+          "/practice",
+          "/knowledge-tree",
+          "/secretary",
+          "/resources",
+          "/settings"
+        ],
+        "screenshot": "/home/deploy/edu-companion/docs/temp/task-42-screenshots/project_tablet_768x1024.png",
+        "console_errors": [],
+        "console_warns": [],
+        "page_errors": [],
+        "net_errors": [
+          {
+            "url": "http://localhost:8080/api/secretary/proposals/pending?user_id=u_4159cd8deac9",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/agent/preferences",
+            "failure": "net::ERR_ABORTED"
+          }
+        ]
+      },
+      "mobile": {
+        "module": "project",
+        "url": "http://localhost:8080/project",
+        "current_url": "http://localhost:8080/project",
+        "viewport": "mobile",
+        "width": 375,
+        "height": 667,
+        "load_ok": true,
+        "page_title": "苹果果 - 个人知识体系",
+        "body_length": 96,
+        "body_preview": "学习空间 练习 知识树 资源 秘书 设置 项目工作台  长期主题性研究的工作台 — 树形大纲、字段级版本、@引用、跨模块输出  从模板创建 新建项目 全部状态 进行中 已归档 已完成 管理模板",
+        "still_loading": false,
+        "h1": 1,
+        "h2": 0,
+        "main": 1,
+        "section": 0,
+        "buttons": 2,
+        "links": 7,
+        "inputs": 1,
+        "sidebar_links": null,
+        "screenshot": "/home/deploy/edu-companion/docs/temp/task-42-screenshots/project_mobile_375x667.png",
+        "console_errors": [],
+        "console_warns": [],
+        "page_errors": [],
+        "net_errors": [
+          {
+            "url": "http://localhost:8080/api/secretary/proposals/pending?user_id=u_4159cd8deac9",
+            "failure": "net::ERR_ABORTED"
+          },
+          {
+            "url": "http://localhost:8080/api/secretary/agent/preferences",
+            "failure": "net::ERR_ABORTED"
+          }
+        ]
+      }
+    }
+  },
+  "role_tests": {
+    "admin": {
+      "sidebar_links": [
+        "/",
+        "/conversation",
+        "/practice",
+        "/knowledge-tree",
+        "/secretary",
+        "/resources",
+        "/settings"
+      ],
+      "has_admin": false,
+      "switcher_visible": false
+    },
+    "student": {
+      "sidebar_links": [
+        "/",
+        "/conversation",
+        "/practice",
+        "/knowledge-tree",
+        "/secretary",
+        "/resources",
+        "/settings"
+      ],
+      "has_admin": false,
+      "switcher_visible": false
+    },
+    "guest": {
+      "sidebar_links": [
+        "/",
+        "/conversation",
+        "/practice",
+        "/knowledge-tree",
+        "/secretary",
+        "/resources",
+        "/settings"
+      ],
+      "has_admin": false,
+      "switcher_visible": false
+    }
+  },
+  "logged_in": true,
+  "end_time": "2026-07-03T09:36:04.265038"
+}

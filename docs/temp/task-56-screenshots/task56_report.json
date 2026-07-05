@@ -1,0 +1,232 @@
+{
+  "task": "Task #56 Reading 模块 UI 验收",
+  "start_time": "2026-07-03T16:57:15.323108",
+  "test_data": {
+    "material_ids": [
+      "8a8f5a85-a77e-4954-916d-4d13c41957fb",
+      "578f6e3b-07ae-48b8-bcbe-9c17af3592dd"
+    ],
+    "node_id": "kn_162a097bcbb0"
+  },
+  "pages": {
+    "reading_home": {
+      "page": "reading_home",
+      "url": "http://localhost:8080/reading",
+      "load_ok": true,
+      "load_ms": 2625,
+      "h1": " 知识加工车间",
+      "button_count": 11,
+      "body_len": 476,
+      "has_loading": false,
+      "has_error": false,
+      "error_msg": "",
+      "console_errors": [
+        {
+          "label": "reading_home",
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        },
+        {
+          "label": "reading_home",
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        }
+      ],
+      "page_errors": [],
+      "request_failed": [
+        {
+          "label": "reading_home",
+          "url": "http://localhost:8080/api/auth/me",
+          "failure": "net::ERR_ABORTED"
+        },
+        {
+          "label": "reading_home",
+          "url": "http://localhost:8080/api/auth/me",
+          "failure": "net::ERR_ABORTED"
+        }
+      ],
+      "screenshot": "/home/deploy/edu-companion/docs/temp/task-56-screenshots/01_reading_home.png"
+    },
+    "reading_notes": {
+      "page": "reading_notes",
+      "url": "http://localhost:8080/reading/notes",
+      "load_ok": true,
+      "load_ms": 2433,
+      "h1": " 笔记管理",
+      "button_count": 7,
+      "note_count": 1,
+      "has_notes": true,
+      "has_loading": false,
+      "has_error": false,
+      "console_errors": [
+        {
+          "label": "reading_notes",
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        },
+        {
+          "label": "reading_notes",
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        }
+      ],
+      "page_errors": [],
+      "request_failed": [],
+      "screenshot": "/home/deploy/edu-companion/docs/temp/task-56-screenshots/02_reading_notes.png"
+    },
+    "reading_compare": {
+      "page": "reading_compare",
+      "url": "http://localhost:8080/reading/compare",
+      "load_ok": true,
+      "load_ms": 176,
+      "h1": " 对比阅读",
+      "button_count": 5,
+      "has_columns": true,
+      "has_compare_result": true,
+      "has_loading": false,
+      "has_error": false,
+      "console_errors": [
+        {
+          "label": "reading_compare",
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        },
+        {
+          "label": "reading_compare",
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        }
+      ],
+      "page_errors": [],
+      "request_failed": [],
+      "screenshot": "/home/deploy/edu-companion/docs/temp/task-56-screenshots/03_reading_compare.png"
+    },
+    "reading_material": {
+      "page": "reading_material",
+      "url": "http://localhost:8080/reading/materials/8a8f5a85-a77e-4954-916d-4d13c41957fb",
+      "load_ok": true,
+      "load_ms": 3016,
+      "h1": "材料 8a8f5a85-a77e-49",
+      "button_count": 21,
+      "mode_btns": 3,
+      "has_session": true,
+      "has_loading": false,
+      "has_error": false,
+      "console_errors": [
+        {
+          "label": "reading_material",
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        },
+        {
+          "label": "reading_material",
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        }
+      ],
+      "page_errors": [],
+      "request_failed": [],
+      "screenshot": "/home/deploy/edu-companion/docs/temp/task-56-screenshots/04_reading_material.png"
+    }
+  },
+  "reading_flow": {
+    "mode_switches": [
+      {
+        "to": "略读",
+        "ok": true
+      },
+      {
+        "to": "回顾",
+        "ok": true
+      },
+      {
+        "to": "精读",
+        "ok": true
+      }
+    ],
+    "annotations_created": [
+      {
+        "color": "yellow",
+        "ok": true
+      },
+      {
+        "color": "blue",
+        "ok": true
+      },
+      {
+        "color": "green",
+        "ok": true
+      },
+      {
+        "color": "purple",
+        "ok": true
+      },
+      {
+        "color": "orange",
+        "ok": true
+      }
+    ],
+    "note_created": true,
+    "reminder_set": true,
+    "errors": [],
+    "console_errors": [
+      {
+        "label": "reading_flow",
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+      }
+    ],
+    "page_errors": [],
+    "request_failed": []
+  },
+  "console_errors": [
+    {
+      "label": "reading_material",
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "label": "reading_flow",
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    }
+  ],
+  "page_errors": [],
+  "request_failed": [
+    {
+      "label": "reading_home",
+      "url": "http://localhost:8080/api/auth/me",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "label": "reading_home",
+      "url": "http://localhost:8080/api/auth/me",
+      "failure": "net::ERR_ABORTED"
+    }
+  ],
+  "ui_bugs": [
+    {
+      "type": "console_error",
+      "label": "reading_material",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "type": "console_error",
+      "label": "reading_flow",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "type": "request_failed",
+      "label": "reading_home",
+      "url": "http://localhost:8080/api/auth/me",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "type": "request_failed",
+      "label": "reading_home",
+      "url": "http://localhost:8080/api/auth/me",
+      "failure": "net::ERR_ABORTED"
+    }
+  ],
+  "end_time": "2026-07-03T16:57:52.839312"
+}

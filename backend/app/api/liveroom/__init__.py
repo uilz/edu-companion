@@ -1,3 +1,5 @@
-"""liveroom API 占位 (Task #87 临时桩)"""
-from fastapi import APIRouter
-router = APIRouter(prefix="/api/liveroom", tags=["liveroom(占位)"])
+"""LanguageRoom API 路由 + 服务 + schemas"""
+from __future__ import annotations
+from app.api.liveroom.routes import router
+
+__all__ = ["router"]

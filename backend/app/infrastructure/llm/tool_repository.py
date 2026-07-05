@@ -443,6 +443,14 @@ SUSPENDING_TOOLS: set[str] = get_suspending_tools()
 TOOL_DISPLAY_NAMES: dict[str, dict] = get_tool_display_map()
 _TOOL_TO_BLOCK_TYPE: dict[str, str] = get_tool_block_types()
 
+# 合并 liveroom 共享工具到 FAST_TOOLS (Task #35 - 这些都是同步快速操作)
+FAST_TOOLS.update({
+    "tool_vocabulary_capture",
+    "tool_error_mark",
+    "tool_message_post",
+    "tool_knowledge_search",
+})
+
 # 知识树工具的 handler 仍从 knowledge_ops_tools 加载
 from app.infrastructure.llm.knowledge_ops_tools import (  # noqa: E402
     TOOL_DEFINITIONS as KTOOL_DEFINITIONS,

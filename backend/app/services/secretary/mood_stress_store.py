@@ -1,37 +1,37 @@
 """
-MoodStress 模块数据访问层 (Task #87)
+MoodStress 模块 — 数据访问层
 
-负责 5 张表的数据访问：
-  - mood_stress_prefs        — 用户偏好 (19 项)
-  - emotion_records          — 情绪/压力/能量记录 (manual + auto)
-  - mood_stress_intervention_logs — 干预工具日志
-  - mood_stress_rules        — 用户自定义规则
-  - behavior_signals         — 行为信号 (7 种类型)
+封装以下表的 CRUD：
+  - emotion_records (扩展自 ADR 0005 前的 emotion 缓存)
+  - mood_stress_prefs
+  - mood_stress_intervention_logs
+  - mood_stress_rules
+  - behavior_signals
 
-设计：
-1. **单一职责**：本文件只做数据 CRUD，业务逻辑在 modules/mood_stress.py
-2. **跨用户隔离**：所有方法都必须接受 user_id 并在 SQL 中过滤
-3. **不抛业务异常**：404 / 验证错误由 API 层处理，store 仅返回 bool / row
-4. **JSON 字段**：emotion_tags / related_event_ids / signal_data 等用 psycopg2 JSONB
-5. **UUID**：所有主键为 str(uuid4())，删除/查找时用 UUID 格式校验
+设计原则：
+  - 手动记录 (source='manual') 优先于自动检测 (source='auto')
+  - 行为信号只读消费, 不写回学习数据
+  - 干预工具不进入知识图谱, 仅本地记录
 """
 from __future__ import annotations
 
 import json
 import logging
 import uuid
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Iterable
+
+from app.infrastructure.db.database import get_db
 
 logger = logging.getLogger(__name__)
 
 
 # ──────────────────────────────────────────────
-# 19 项偏好默认值
+# 偏好默认值
 # ──────────────────────────────────────────────
 
-DEFAULT_PREFS: dict[str, Any] = {
+MOOD_STRESS_DEFAULT_PREFS: dict[str, Any] = {
     "reminder_enabled": False,
     "reminder_frequency": None,
     "reminder_time": None,
@@ -42,7 +42,7 @@ DEFAULT_PREFS: dict[str, Any] = {
     "auto_collect_undo": True,
     "auto_collect_session_anomaly": True,
     "auto_collect_flashcard_failure": True,
-    "auto_collect_voice_features": False,
+    "auto_collect_voice_features": False,   # 语音特征默认关闭
     "output_to_planning": True,
     "output_to_conversation": True,
     "output_to_language_room": True,
@@ -52,593 +52,658 @@ DEFAULT_PREFS: dict[str, Any] = {
     "planning_rules": {},
 }
 
-# 19 项偏好字段（用于 SQL 动态构建）
-PREFS_COLUMNS: list[str] = [
-    "reminder_enabled",
-    "reminder_frequency",
-    "reminder_time",
-    "data_retention_days",
-    "auto_collect_task_switch",
-    "auto_collect_stay_duration",
-    "auto_collect_error_rate",
-    "auto_collect_undo",
-    "auto_collect_session_anomaly",
-    "auto_collect_flashcard_failure",
-    "auto_collect_voice_features",
-    "output_to_planning",
-    "output_to_conversation",
-    "output_to_language_room",
-    "knowledge_breathing_excluded_node_ids",
-    "environment_theme",
-    "environment_sound",
-    "planning_rules",
-]
-
-
-# ──────────────────────────────────────────────
-# 数据类
-# ──────────────────────────────────────────────
 
 @dataclass
-class EmotionRecord:
-    """emotion_records 表的一行"""
+class EmotionRecordRow:
+    """emotion_records 行的 Python 表示"""
     id: str
     user_id: str
     source: str  # manual / auto
-    emotion_tags: list[str] = field(default_factory=list)
-    pressure_score: Optional[int] = None
-    energy_score: Optional[int] = None
-    text_note: Optional[str] = None
-    related_event_ids: list[str] = field(default_factory=list)
-    created_at: Optional[str] = None
+    emotion_tags: list[str]
+    pressure_score: int | None
+    energy_score: int | None
+    text_note: str | None
+    related_event_ids: list[str]
+    created_at: datetime
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "source": self.source,
+            "emotion_tags": self.emotion_tags,
+            "pressure_score": self.pressure_score,
+            "energy_score": self.energy_score,
+            "text_note": self.text_note,
+            "related_event_ids": self.related_event_ids,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
 
 
 @dataclass
-class InterventionLog:
-    """mood_stress_intervention_logs 表的一行"""
+class InterventionLogRow:
     id: str
     user_id: str
     intervention_type: str
-    duration_seconds: Optional[int] = None
-    trigger_event: Optional[str] = None
-    notes: Optional[str] = None
-    created_at: Optional[str] = None
+    duration_seconds: int | None
+    trigger_event: str | None
+    notes: str | None
+    created_at: datetime
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "intervention_type": self.intervention_type,
+            "duration_seconds": self.duration_seconds,
+            "trigger_event": self.trigger_event,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
 
 
 @dataclass
-class BehaviorSignal:
-    """behavior_signals 表的一行"""
+class BehaviorSignalRow:
     id: str
     user_id: str
     signal_type: str
-    signal_data: dict = field(default_factory=dict)
-    severity: int = 1
-    is_read: bool = False
-    created_at: Optional[str] = None
+    signal_data: dict
+    severity: int
+    is_read: bool
+    created_at: datetime
 
     def to_dict(self) -> dict:
-        return asdict(self)
-
-
-# ──────────────────────────────────────────────
-# 工具
-# ──────────────────────────────────────────────
-
-def _new_id() -> str:
-    """生成完整 UUID 字符串（36 字符含连字符）
-
-    数据库 emotion_records.id / mood_stress_intervention_logs.id /
-    mood_stress_rules.id / behavior_signals.id 都是 uuid 类型。
-    """
-    return str(uuid.uuid4())
-
-
-def _is_uuid_like(s: str) -> bool:
-    """判断字符串是否像 UUID（包含连字符的 36 字符或纯 12+ 字符 hex）"""
-    if not s or not isinstance(s, str):
-        return False
-    s = s.strip()
-    # 完整 UUID 36 字符
-    if len(s) == 36 and s.count("-") == 4:
-        try:
-            uuid.UUID(s)
-            return True
-        except ValueError:
-            return False
-    # 短 UUID 12 字符 hex
-    if len(s) >= 12 and all(c in "0123456789abcdefABCDEF" for c in s):
-        return True
-    return False
-
-
-def _to_jsonb(value: Any) -> str:
-    """list/dict → JSON 字符串（psycopg2 不能直接传 list 给 JSONB 参数）"""
-    if value is None:
-        return "[]"
-    if isinstance(value, str):
-        return value
-    return json.dumps(value, ensure_ascii=False)
-
-
-def _from_jsonb(value: Any, default: Any = None) -> Any:
-    """JSONB → list/dict（psycopg2 取出的 JSONB 字段是 str/None）"""
-    if value is None:
-        return default
-    if isinstance(value, (list, dict)):
-        return value
-    if isinstance(value, str):
-        try:
-            return json.loads(value)
-        except (json.JSONDecodeError, TypeError):
-            return default
-    return default
-
-
-# ──────────────────────────────────────────────
-# 偏好 (mood_stress_prefs)
-# ──────────────────────────────────────────────
-
-def get_prefs(user_id: str) -> dict:
-    """读取用户偏好 — 缺失时返回默认 19 项"""
-    from app.infrastructure.db.database import get_db
-    db = get_db()
-
-    row = db.fetchone(
-        "SELECT * FROM mood_stress_prefs WHERE user_id = %s",
-        (user_id,),
-    )
-
-    if not row:
-        return dict(DEFAULT_PREFS)
-
-    # 解析 JSONB 字段
-    out = dict(DEFAULT_PREFS)
-    out["user_id"] = user_id
-    for col in PREFS_COLUMNS:
-        if col in row:
-            val = row[col]
-            if col in ("knowledge_breathing_excluded_node_ids", "planning_rules"):
-                out[col] = _from_jsonb(val, default=DEFAULT_PREFS.get(col))
-            else:
-                out[col] = val
-    out["created_at"] = row.get("created_at").isoformat() if row.get("created_at") else None
-    out["updated_at"] = row.get("updated_at").isoformat() if row.get("updated_at") else None
-    return out
-
-
-def upsert_prefs(user_id: str, delta: dict) -> dict:
-    """
-    增量更新偏好 — 只覆盖 delta 中显式提供的字段。
-
-    设计：保留不在 delta 中的字段不变 (真正增量)。
-    """
-    from app.infrastructure.db.database import get_db
-    db = get_db()
-
-    # 过滤掉不在 PREFS_COLUMNS 的字段
-    safe_delta = {k: v for k, v in delta.items() if k in PREFS_COLUMNS}
-    if not safe_delta:
-        return get_prefs(user_id)
-
-    # JSONB 字段序列化
-    payload: dict[str, Any] = {}
-    for k, v in safe_delta.items():
-        if k in ("knowledge_breathing_excluded_node_ids", "planning_rules"):
-            payload[k] = _to_jsonb(v)
-        else:
-            payload[k] = v
-
-    columns = list(payload.keys())
-    placeholders = ", ".join(f"%({k})s" for k in columns)
-    update_clause = ", ".join(f"{k} = EXCLUDED.{k}" for k in columns)
-    update_clause += ", updated_at = NOW()"
-
-    sql = (
-        f"INSERT INTO mood_stress_prefs (user_id, {', '.join(columns)}, created_at, updated_at) "
-        f"VALUES (%(user_id)s, {placeholders}, NOW(), NOW()) "
-        f"ON CONFLICT (user_id) DO UPDATE SET {update_clause}"
-    )
-    params = {**payload, "user_id": user_id}
-    db.execute(sql, params)
-
-    return get_prefs(user_id)
-
-
-# ──────────────────────────────────────────────
-# 情绪记录 (emotion_records)
-# ──────────────────────────────────────────────
-
-def insert_emotion_record(
-    user_id: str,
-    source: str,
-    emotion_tags: list[str],
-    pressure_score: Optional[int],
-    energy_score: Optional[int],
-    text_note: Optional[str],
-    related_event_ids: Optional[list[str]] = None,
-    record_id: Optional[str] = None,
-) -> EmotionRecord:
-    """插入一条情绪记录"""
-    from app.infrastructure.db.database import get_db
-    db = get_db()
-
-    rid = record_id or _new_id()
-    sql = (
-        "INSERT INTO emotion_records "
-        "(id, user_id, source, emotion_tags, pressure_score, energy_score, text_note, related_event_ids, created_at) "
-        "VALUES (%(id)s, %(user_id)s, %(source)s, %(emotion_tags)s, %(pressure_score)s, "
-        "%(energy_score)s, %(text_note)s, %(related_event_ids)s, NOW())"
-    )
-    db.execute(sql, {
-        "id": rid,
-        "user_id": user_id,
-        "source": source,
-        "emotion_tags": _to_jsonb(emotion_tags or []),
-        "pressure_score": pressure_score,
-        "energy_score": energy_score,
-        "text_note": text_note,
-        "related_event_ids": _to_jsonb(related_event_ids or []),
-    })
-    return get_emotion_record(user_id=user_id, record_id=rid) or EmotionRecord(
-        id=rid, user_id=user_id, source=source,
-        emotion_tags=emotion_tags, pressure_score=pressure_score,
-        energy_score=energy_score, text_note=text_note,
-        related_event_ids=related_event_ids or [],
-    )
-
-
-def get_emotion_record(user_id: str, record_id: str) -> Optional[EmotionRecord]:
-    """读取单条情绪记录"""
-    from app.infrastructure.db.database import get_db
-    db = get_db()
-
-    row = db.fetchone(
-        "SELECT * FROM emotion_records WHERE user_id = %s AND id = %s",
-        (user_id, record_id),
-    )
-    if not row:
-        return None
-    return _row_to_emotion_record(row)
-
-
-def _row_to_emotion_record(row: dict) -> EmotionRecord:
-    return EmotionRecord(
-        id=row["id"],
-        user_id=row["user_id"],
-        source=row["source"],
-        emotion_tags=_from_jsonb(row.get("emotion_tags"), default=[]),
-        pressure_score=row.get("pressure_score"),
-        energy_score=row.get("energy_score"),
-        text_note=row.get("text_note"),
-        related_event_ids=_from_jsonb(row.get("related_event_ids"), default=[]),
-        created_at=row.get("created_at").isoformat() if row.get("created_at") else None,
-    )
-
-
-def list_emotion_records(
-    user_id: str,
-    source: Optional[str] = None,
-    days: int = 30,
-    limit: int = 50,
-) -> list[EmotionRecord]:
-    """列出用户情绪记录（按时间倒序）"""
-    from app.infrastructure.db.database import get_db
-    db = get_db()
-
-    conditions = ["user_id = %s", "created_at >= NOW() - (%s || ' days')::INTERVAL"]
-    params: list[Any] = [user_id, str(days)]
-    if source:
-        conditions.append("source = %s")
-        params.append(source)
-
-    params.append(limit)
-    sql = (
-        f"SELECT * FROM emotion_records "
-        f"WHERE {' AND '.join(conditions)} "
-        f"ORDER BY created_at DESC LIMIT %s"
-    )
-    rows = db.fetchall(sql, tuple(params))
-    return [_row_to_emotion_record(r) for r in rows]
-
-
-def delete_emotion_record(user_id: str, record_id: str) -> bool:
-    """删除单条情绪记录（遗忘权）"""
-    if not _is_uuid_like(record_id):
-        return False
-    from app.infrastructure.db.database import get_db
-    db = get_db()
-    try:
-        conn = db.get_conn()
-        cur = conn.cursor()
-        cur.execute(
-            "DELETE FROM emotion_records WHERE user_id = %s AND id = %s",
-            (user_id, record_id),
-        )
-        rowcount = cur.rowcount
-        conn.commit()
-        cur.close()
-        db.put_conn(conn)
-        return rowcount > 0
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("delete_emotion_record 失败: %s", exc)
-        return False
-
-
-# ──────────────────────────────────────────────
-# 干预日志 (mood_stress_intervention_logs)
-# ──────────────────────────────────────────────
-
-def insert_intervention(
-    user_id: str,
-    intervention_type: str,
-    duration_seconds: Optional[int] = None,
-    trigger_event: Optional[str] = None,
-    notes: Optional[str] = None,
-    intervention_id: Optional[str] = None,
-) -> InterventionLog:
-    """记录一次干预工具使用"""
-    from app.infrastructure.db.database import get_db
-    db = get_db()
-
-    iid = intervention_id or _new_id()
-    sql = (
-        "INSERT INTO mood_stress_intervention_logs "
-        "(id, user_id, intervention_type, duration_seconds, trigger_event, notes, created_at) "
-        "VALUES (%(id)s, %(user_id)s, %(type)s, %(duration)s, %(trigger)s, %(notes)s, NOW())"
-    )
-    db.execute(sql, {
-        "id": iid,
-        "user_id": user_id,
-        "type": intervention_type,
-        "duration": duration_seconds,
-        "trigger": trigger_event,
-        "notes": notes,
-    })
-    return InterventionLog(
-        id=iid, user_id=user_id, intervention_type=intervention_type,
-        duration_seconds=duration_seconds, trigger_event=trigger_event,
-        notes=notes, created_at=datetime.now(timezone.utc).isoformat(),
-    )
-
-
-def list_interventions(
-    user_id: str,
-    days: int = 30,
-    limit: int = 50,
-) -> list[InterventionLog]:
-    """列出干预日志"""
-    from app.infrastructure.db.database import get_db
-    db = get_db()
-
-    rows = db.fetchall(
-        "SELECT * FROM mood_stress_intervention_logs "
-        "WHERE user_id = %s AND created_at >= NOW() - (%s || ' days')::INTERVAL "
-        "ORDER BY created_at DESC LIMIT %s",
-        (user_id, str(days), limit),
-    )
-    return [
-        InterventionLog(
-            id=r["id"],
-            user_id=r["user_id"],
-            intervention_type=r["intervention_type"],
-            duration_seconds=r.get("duration_seconds"),
-            trigger_event=r.get("trigger_event"),
-            notes=r.get("notes"),
-            created_at=r["created_at"].isoformat() if r.get("created_at") else None,
-        )
-        for r in rows
-    ]
-
-
-# ──────────────────────────────────────────────
-# 行为信号 (behavior_signals)
-# ──────────────────────────────────────────────
-
-def insert_behavior_signal(
-    user_id: str,
-    signal_type: str,
-    signal_data: dict,
-    severity: int = 1,
-    signal_id: Optional[str] = None,
-) -> BehaviorSignal:
-    """记录一条行为信号"""
-    from app.infrastructure.db.database import get_db
-    db = get_db()
-
-    sid = signal_id or _new_id()
-    sql = (
-        "INSERT INTO behavior_signals "
-        "(id, user_id, signal_type, signal_data, severity, is_read, created_at) "
-        "VALUES (%(id)s, %(user_id)s, %(type)s, %(data)s, %(severity)s, FALSE, NOW())"
-    )
-    db.execute(sql, {
-        "id": sid,
-        "user_id": user_id,
-        "type": signal_type,
-        "data": _to_jsonb(signal_data or {}),
-        "severity": severity,
-    })
-    return BehaviorSignal(
-        id=sid, user_id=user_id, signal_type=signal_type,
-        signal_data=signal_data or {}, severity=severity, is_read=False,
-        created_at=datetime.now(timezone.utc).isoformat(),
-    )
-
-
-def list_unread_signals(user_id: str, limit: int = 50) -> list[BehaviorSignal]:
-    """列出未读行为信号（按时间倒序）"""
-    from app.infrastructure.db.database import get_db
-    db = get_db()
-
-    rows = db.fetchall(
-        "SELECT * FROM behavior_signals "
-        "WHERE user_id = %s AND is_read = FALSE "
-        "ORDER BY created_at DESC LIMIT %s",
-        (user_id, limit),
-    )
-    return [_row_to_behavior_signal(r) for r in rows]
-
-
-def _row_to_behavior_signal(row: dict) -> BehaviorSignal:
-    return BehaviorSignal(
-        id=row["id"],
-        user_id=row["user_id"],
-        signal_type=row["signal_type"],
-        signal_data=_from_jsonb(row.get("signal_data"), default={}),
-        severity=row.get("severity", 1),
-        is_read=row.get("is_read", False),
-        created_at=row["created_at"].isoformat() if row.get("created_at") else None,
-    )
-
-
-def mark_signals_read(user_id: str, ids: list[str]) -> int:
-    """批量标记信号已读 — 返回成功标记数
-
-    静默忽略非法 ID（防止 422），但返回 0 表示无任何变更。
-    """
-    if not ids:
-        return 0
-    valid_ids = [i for i in ids if _is_uuid_like(i)]
-    if not valid_ids:
-        return 0
-
-    from app.infrastructure.db.database import get_db
-    db = get_db()
-
-    placeholders = ", ".join(["%s"] * len(valid_ids))
-    sql = (
-        f"UPDATE behavior_signals SET is_read = TRUE "
-        f"WHERE user_id = %s AND id IN ({placeholders}) AND is_read = FALSE"
-    )
-    # psycopg2.execute 的第二个参数是 tuple，多个 %s 需要展开
-    conn = db.get_conn()
-    try:
-        cur = conn.cursor()
-        cur.execute(sql, (user_id, *valid_ids))
-        rowcount = cur.rowcount
-        conn.commit()
-        cur.close()
-        db.put_conn(conn)
-        return rowcount
-    except Exception as exc:  # noqa: BLE001
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        db.put_conn(conn)
-        logger.debug("mark_signals_read 失败: %s", exc)
-        return 0
-
-
-# ──────────────────────────────────────────────
-# 规则 (mood_stress_rules)
-# ──────────────────────────────────────────────
-
-def add_rule(
-    user_id: str,
-    rule_name: str,
-    trigger_metric: str,
-    trigger_operator: str,
-    trigger_value: Any,
-    action: str,
-) -> str:
-    """新增规则 — 返回新规则 ID"""
-    from app.infrastructure.db.database import get_db
-    db = get_db()
-
-    rid = _new_id()
-    sql = (
-        "INSERT INTO mood_stress_rules "
-        "(id, user_id, rule_name, trigger_metric, trigger_operator, trigger_value, action, is_enabled, created_at) "
-        "VALUES (%(id)s, %(user_id)s, %(name)s, %(metric)s, %(op)s, %(value)s, %(action)s, TRUE, NOW())"
-    )
-    db.execute(sql, {
-        "id": rid,
-        "user_id": user_id,
-        "name": rule_name,
-        "metric": trigger_metric,
-        "op": trigger_operator,
-        "value": _to_jsonb(trigger_value),
-        "action": action,
-    })
-    return rid
-
-
-def list_rules(user_id: str) -> list[dict]:
-    """列出用户所有规则"""
-    from app.infrastructure.db.database import get_db
-    db = get_db()
-
-    rows = db.fetchall(
-        "SELECT * FROM mood_stress_rules WHERE user_id = %s ORDER BY created_at DESC",
-        (user_id,),
-    )
-    return [
-        {
-            "id": r["id"],
-            "user_id": r["user_id"],
-            "rule_name": r["rule_name"],
-            "trigger_metric": r["trigger_metric"],
-            "trigger_operator": r["trigger_operator"],
-            "trigger_value": _from_jsonb(r.get("trigger_value"), default=None),
-            "action": r["action"],
-            "is_enabled": r.get("is_enabled", True),
-            "created_at": r["created_at"].isoformat() if r.get("created_at") else None,
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "signal_type": self.signal_type,
+            "signal_data": self.signal_data,
+            "severity": self.severity,
+            "is_read": self.is_read,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
-        for r in rows
-    ]
-
-
-def delete_rule(user_id: str, rule_id: str) -> bool:
-    """删除规则 — UUID 格式校验后物理删除"""
-    if not _is_uuid_like(rule_id):
-        return False
-    from app.infrastructure.db.database import get_db
-    db = get_db()
-    try:
-        conn = db.get_conn()
-        cur = conn.cursor()
-        cur.execute(
-            "DELETE FROM mood_stress_rules WHERE user_id = %s AND id = %s",
-            (user_id, rule_id),
-        )
-        rowcount = cur.rowcount
-        conn.commit()
-        cur.close()
-        db.put_conn(conn)
-        return rowcount > 0
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("delete_rule 失败: %s", exc)
-        return False
 
 
 # ──────────────────────────────────────────────
-# 清理（可选 — 由 scheduler 调用）
+# 仓库
 # ──────────────────────────────────────────────
 
-def purge_old_records(user_id: str, retention_days: int) -> int:
-    """按 prefs.data_retention_days 清理旧记录 — 返回清理数"""
-    from app.infrastructure.db.database import get_db
-    db = get_db()
-    try:
-        conn = db.get_conn()
-        cur = conn.cursor()
-        cur.execute(
-            "DELETE FROM emotion_records "
-            "WHERE user_id = %s AND created_at < NOW() - (%s || ' days')::INTERVAL",
-            (user_id, str(retention_days)),
+class MoodStressStore:
+    """情绪/压力/能量与干预工具的数据仓储"""
+
+    def __init__(self) -> None:
+        self._db = None
+
+    def _get_db(self):
+        if self._db is None:
+            self._db = get_db()
+        return self._db
+
+    # ── 偏好 ──
+
+    def get_prefs(self, user_id: str) -> dict:
+        """获取偏好（缺失则返回默认）"""
+        db = self._get_db()
+        row = db.fetchone(
+            "SELECT * FROM mood_stress_prefs WHERE user_id = %s",
+            (user_id,),
         )
-        rowcount = cur.rowcount
-        conn.commit()
-        cur.close()
-        db.put_conn(conn)
-        return rowcount
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("purge_old_records 失败: %s", exc)
-        return 0
+        if not row:
+            return dict(MOOD_STRESS_DEFAULT_PREFS)
+
+        merged = dict(MOOD_STRESS_DEFAULT_PREFS)
+        for k, v in row.items():
+            if k in ("created_at", "updated_at"):
+                continue
+            if k in ("knowledge_breathing_excluded_node_ids", "planning_rules") and v is not None:
+                merged[k] = v if isinstance(v, (list, dict)) else json.loads(v)
+            else:
+                merged[k] = v
+        return merged
+
+    def upsert_prefs(self, user_id: str, prefs: dict) -> dict:
+        """更新偏好（增量覆盖）"""
+        db = self._get_db()
+        current = self.get_prefs(user_id)
+        current.update(prefs)
+        now = datetime.now(timezone.utc)
+
+        # 序列化 JSONB 字段
+        excluded = current.get("knowledge_breathing_excluded_node_ids") or []
+        planning_rules = current.get("planning_rules") or {}
+
+        db.execute(
+            """
+            INSERT INTO mood_stress_prefs (
+                user_id, reminder_enabled, reminder_frequency, reminder_time,
+                data_retention_days,
+                auto_collect_task_switch, auto_collect_stay_duration,
+                auto_collect_error_rate, auto_collect_undo,
+                auto_collect_session_anomaly, auto_collect_flashcard_failure,
+                auto_collect_voice_features,
+                output_to_planning, output_to_conversation, output_to_language_room,
+                knowledge_breathing_excluded_node_ids,
+                environment_theme, environment_sound, planning_rules,
+                created_at, updated_at
+            ) VALUES (
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s,
+                %s, %s, %s, %s,
+                NOW(), NOW()
+            )
+            ON CONFLICT (user_id) DO UPDATE SET
+                reminder_enabled = EXCLUDED.reminder_enabled,
+                reminder_frequency = EXCLUDED.reminder_frequency,
+                reminder_time = EXCLUDED.reminder_time,
+                data_retention_days = EXCLUDED.data_retention_days,
+                auto_collect_task_switch = EXCLUDED.auto_collect_task_switch,
+                auto_collect_stay_duration = EXCLUDED.auto_collect_stay_duration,
+                auto_collect_error_rate = EXCLUDED.auto_collect_error_rate,
+                auto_collect_undo = EXCLUDED.auto_collect_undo,
+                auto_collect_session_anomaly = EXCLUDED.auto_collect_session_anomaly,
+                auto_collect_flashcard_failure = EXCLUDED.auto_collect_flashcard_failure,
+                auto_collect_voice_features = EXCLUDED.auto_collect_voice_features,
+                output_to_planning = EXCLUDED.output_to_planning,
+                output_to_conversation = EXCLUDED.output_to_conversation,
+                output_to_language_room = EXCLUDED.output_to_language_room,
+                knowledge_breathing_excluded_node_ids = EXCLUDED.knowledge_breathing_excluded_node_ids,
+                environment_theme = EXCLUDED.environment_theme,
+                environment_sound = EXCLUDED.environment_sound,
+                planning_rules = EXCLUDED.planning_rules,
+                updated_at = NOW()
+            """,
+            (
+                user_id,
+                current.get("reminder_enabled", False),
+                current.get("reminder_frequency"),
+                current.get("reminder_time"),
+                int(current.get("data_retention_days", 90)),
+                current.get("auto_collect_task_switch", True),
+                current.get("auto_collect_stay_duration", True),
+                current.get("auto_collect_error_rate", True),
+                current.get("auto_collect_undo", True),
+                current.get("auto_collect_session_anomaly", True),
+                current.get("auto_collect_flashcard_failure", True),
+                current.get("auto_collect_voice_features", False),
+                current.get("output_to_planning", True),
+                current.get("output_to_conversation", True),
+                current.get("output_to_language_room", True),
+                json.dumps(excluded, ensure_ascii=False),
+                current.get("environment_theme", "default"),
+                current.get("environment_sound", "none"),
+                json.dumps(planning_rules, ensure_ascii=False),
+            ),
+        )
+        return self.get_prefs(user_id)
+
+    # ── 情绪记录 ──
+
+    def insert_emotion_record(
+        self,
+        user_id: str,
+        source: str,
+        emotion_tags: list[str],
+        pressure_score: int | None = None,
+        energy_score: int | None = None,
+        text_note: str | None = None,
+        related_event_ids: list[str] | None = None,
+    ) -> EmotionRecordRow:
+        """写入心情/压力/能量记录"""
+        assert source in ("manual", "auto"), f"非法 source: {source}"
+        if pressure_score is not None:
+            assert 1 <= pressure_score <= 10, "pressure_score 必须在 1-10"
+        if energy_score is not None:
+            assert 1 <= energy_score <= 10, "energy_score 必须在 1-10"
+
+        db = self._get_db()
+        record_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc)
+
+        db.execute(
+            """
+            INSERT INTO emotion_records
+                (id, user_id, source, emotion_tags,
+                 pressure_score, energy_score,
+                 text_note, related_event_ids, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                record_id,
+                user_id,
+                source,
+                json.dumps(emotion_tags or [], ensure_ascii=False),
+                pressure_score,
+                energy_score,
+                text_note,
+                json.dumps(related_event_ids or [], ensure_ascii=False),
+                now,
+            ),
+        )
+        return EmotionRecordRow(
+            id=record_id,
+            user_id=user_id,
+            source=source,
+            emotion_tags=emotion_tags or [],
+            pressure_score=pressure_score,
+            energy_score=energy_score,
+            text_note=text_note,
+            related_event_ids=related_event_ids or [],
+            created_at=now,
+        )
+
+    def list_emotion_records(
+        self,
+        user_id: str,
+        source: str | None = None,
+        days: int = 30,
+        limit: int = 200,
+    ) -> list[EmotionRecordRow]:
+        """获取情绪记录（默认按时间倒序，手动优先展示）"""
+        db = self._get_db()
+        params: list[Any] = [user_id]
+        where = ["user_id = %s"]
+        if source:
+            where.append("source = %s")
+            params.append(source)
+        params.append(days)
+        params.append(limit)
+
+        rows = db.fetchall(
+            f"""
+            SELECT id, user_id, source, emotion_tags, pressure_score,
+                   energy_score, text_note, related_event_ids, created_at
+            FROM emotion_records
+            WHERE {' AND '.join(where)}
+              AND created_at > NOW() - INTERVAL '%s days'
+            ORDER BY created_at DESC
+            LIMIT %s
+            """,
+            tuple(params),
+        )
+        return [self._row_to_emotion(r) for r in (rows or [])]
+
+    def latest_manual_record(self, user_id: str) -> EmotionRecordRow | None:
+        """最近一次手动记录（仪表盘顶部展示）"""
+        db = self._get_db()
+        row = db.fetchone(
+            """
+            SELECT id, user_id, source, emotion_tags, pressure_score,
+                   energy_score, text_note, related_event_ids, created_at
+            FROM emotion_records
+            WHERE user_id = %s AND source = 'manual'
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            (user_id,),
+        )
+        return self._row_to_emotion(row) if row else None
+
+    def emotion_stats(
+        self,
+        user_id: str,
+        days: int = 7,
+    ) -> dict:
+        """周期统计：压力均值、能量均值、心情分布"""
+        db = self._get_db()
+        rows = db.fetchall(
+            """
+            SELECT source, emotion_tags, pressure_score, energy_score
+            FROM emotion_records
+            WHERE user_id = %s
+              AND created_at > NOW() - INTERVAL '%s days'
+            """,
+            (user_id, days),
+        )
+        if not rows:
+            return {
+                "days": days,
+                "total": 0,
+                "manual_total": 0,
+                "auto_total": 0,
+                "avg_pressure": None,
+                "avg_energy": None,
+                "tag_distribution": {},
+            }
+
+        manual_total = sum(1 for r in rows if r["source"] == "manual")
+        auto_total = sum(1 for r in rows if r["source"] == "auto")
+        pressures = [r["pressure_score"] for r in rows if r["pressure_score"] is not None]
+        energies = [r["energy_score"] for r in rows if r["energy_score"] is not None]
+
+        tag_dist: dict[str, int] = {}
+        for r in rows:
+            tags = r["emotion_tags"]
+            if isinstance(tags, str):
+                try:
+                    tags = json.loads(tags)
+                except Exception:
+                    tags = []
+            for t in (tags or []):
+                tag_dist[t] = tag_dist.get(t, 0) + 1
+
+        return {
+            "days": days,
+            "total": len(rows),
+            "manual_total": manual_total,
+            "auto_total": auto_total,
+            "avg_pressure": round(sum(pressures) / len(pressures), 2) if pressures else None,
+            "avg_energy": round(sum(energies) / len(energies), 2) if energies else None,
+            "tag_distribution": tag_dist,
+        }
+
+    def delete_emotion_record(self, user_id: str, record_id: str) -> bool:
+        # 校验 UUID 格式以避免 PG "invalid input syntax for type uuid" 错误
+        import re
+        if not isinstance(record_id, str) or not re.match(
+            r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            record_id,
+        ):
+            return False
+        db = self._get_db()
+        cur = db.get_conn().cursor()
+        try:
+            cur.execute(
+                "DELETE FROM emotion_records WHERE id = %s AND user_id = %s",
+                (record_id, user_id),
+            )
+            return cur.rowcount > 0
+        finally:
+            cur.connection.commit()
+            cur.close()
+            db.put_conn(cur.connection)
+
+    def purge_old_records(self, user_id: str, retention_days: int) -> int:
+        """按数据保留期清理过期记录"""
+        db = self._get_db()
+        cur = db.get_conn().cursor()
+        try:
+            cur.execute(
+                """
+                DELETE FROM emotion_records
+                WHERE user_id = %s
+                  AND created_at < NOW() - INTERVAL '%s days'
+                """,
+                (user_id, retention_days),
+            )
+            count = cur.rowcount
+            return count
+        finally:
+            cur.connection.commit()
+            cur.close()
+            db.put_conn(cur.connection)
+
+    # ── 干预工具 ──
+
+    def log_intervention(
+        self,
+        user_id: str,
+        intervention_type: str,
+        duration_seconds: int | None = None,
+        trigger_event: str | None = None,
+        notes: str | None = None,
+    ) -> InterventionLogRow:
+        assert intervention_type in {
+            "breathing", "knowledge_breathing",
+            "cognitive_reappraisal", "environment",
+        }
+        db = self._get_db()
+        log_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc)
+        db.execute(
+            """
+            INSERT INTO mood_stress_intervention_logs
+                (id, user_id, intervention_type,
+                 duration_seconds, trigger_event, notes, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                log_id, user_id, intervention_type,
+                duration_seconds, trigger_event, notes, now,
+            ),
+        )
+        return InterventionLogRow(
+            id=log_id,
+            user_id=user_id,
+            intervention_type=intervention_type,
+            duration_seconds=duration_seconds,
+            trigger_event=trigger_event,
+            notes=notes,
+            created_at=now,
+        )
+
+    def list_interventions(
+        self,
+        user_id: str,
+        days: int = 30,
+        limit: int = 100,
+    ) -> list[InterventionLogRow]:
+        db = self._get_db()
+        rows = db.fetchall(
+            """
+            SELECT id, user_id, intervention_type, duration_seconds,
+                   trigger_event, notes, created_at
+            FROM mood_stress_intervention_logs
+            WHERE user_id = %s
+              AND created_at > NOW() - INTERVAL '%s days'
+            ORDER BY created_at DESC LIMIT %s
+            """,
+            (user_id, days, limit),
+        )
+        result: list[InterventionLogRow] = []
+        for r in (rows or []):
+            result.append(InterventionLogRow(
+                id=r["id"],
+                user_id=r["user_id"],
+                intervention_type=r["intervention_type"],
+                duration_seconds=r["duration_seconds"],
+                trigger_event=r["trigger_event"],
+                notes=r["notes"],
+                created_at=r["created_at"],
+            ))
+        return result
+
+    # ── 行为信号 ──
+
+    def log_behavior_signal(
+        self,
+        user_id: str,
+        signal_type: str,
+        signal_data: dict,
+        severity: int = 1,
+    ) -> BehaviorSignalRow:
+        """写入行为信号（仅提示用户，不修改学习数据）"""
+        assert signal_type in {
+            "task_switch", "stay_duration", "error_rate",
+            "undo", "session_anomaly", "flashcard_failure", "voice_features",
+        }
+        assert 1 <= severity <= 3
+        db = self._get_db()
+        sig_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc)
+        db.execute(
+            """
+            INSERT INTO behavior_signals
+                (id, user_id, signal_type, signal_data, severity, is_read, created_at)
+            VALUES (%s, %s, %s, %s, %s, FALSE, %s)
+            """,
+            (
+                sig_id, user_id, signal_type,
+                json.dumps(signal_data, ensure_ascii=False),
+                severity, now,
+            ),
+        )
+        return BehaviorSignalRow(
+            id=sig_id, user_id=user_id, signal_type=signal_type,
+            signal_data=signal_data, severity=severity, is_read=False, created_at=now,
+        )
+
+    def list_unread_signals(
+        self,
+        user_id: str,
+        limit: int = 50,
+    ) -> list[BehaviorSignalRow]:
+        db = self._get_db()
+        rows = db.fetchall(
+            """
+            SELECT id, user_id, signal_type, signal_data, severity, is_read, created_at
+            FROM behavior_signals
+            WHERE user_id = %s AND is_read = FALSE
+            ORDER BY created_at DESC LIMIT %s
+            """,
+            (user_id, limit),
+        )
+        return [self._row_to_signal(r) for r in (rows or [])]
+
+    def mark_signals_read(self, user_id: str, ids: Iterable[str]) -> int:
+        ids = list(ids)
+        if not ids:
+            return 0
+        # 仅保留合法 UUID 字符串, 避免 "invalid input syntax for type uuid" 错误
+        import re
+        uuid_re = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+        valid_ids = [i for i in ids if isinstance(i, str) and uuid_re.match(i)]
+        if not valid_ids:
+            return 0
+        db = self._get_db()
+        cur = db.get_conn().cursor()
+        try:
+            cur.execute(
+                "UPDATE behavior_signals SET is_read = TRUE "
+                "WHERE user_id = %s AND id = ANY(%s::uuid[])",
+                (user_id, valid_ids),
+            )
+            return cur.rowcount
+        finally:
+            cur.connection.commit()
+            cur.close()
+            db.put_conn(cur.connection)
+
+    # ── 规则 ──
+
+    def add_rule(
+        self,
+        user_id: str,
+        rule_name: str,
+        trigger_metric: str,
+        trigger_operator: str,
+        trigger_value: Any,
+        action: str,
+    ) -> str:
+        db = self._get_db()
+        rule_id = str(uuid.uuid4())
+        db.execute(
+            """
+            INSERT INTO mood_stress_rules
+                (id, user_id, rule_name, trigger_metric, trigger_operator,
+                 trigger_value, action, is_enabled)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, TRUE)
+            """,
+            (
+                rule_id, user_id, rule_name, trigger_metric, trigger_operator,
+                json.dumps(trigger_value, ensure_ascii=False), action,
+            ),
+        )
+        return rule_id
+
+    def list_rules(self, user_id: str, enabled_only: bool = False) -> list[dict]:
+        db = self._get_db()
+        sql = """
+            SELECT id, user_id, rule_name, trigger_metric, trigger_operator,
+                   trigger_value, action, is_enabled, created_at
+            FROM mood_stress_rules
+            WHERE user_id = %s
+        """
+        if enabled_only:
+            sql += " AND is_enabled = TRUE"
+        sql += " ORDER BY created_at DESC"
+        rows = db.fetchall(sql, (user_id,)) or []
+        result = []
+        for r in rows:
+            tv = r["trigger_value"]
+            if isinstance(tv, str):
+                try:
+                    tv = json.loads(tv)
+                except Exception:
+                    tv = tv
+            result.append({
+                "id": r["id"],
+                "rule_name": r["rule_name"],
+                "trigger_metric": r["trigger_metric"],
+                "trigger_operator": r["trigger_operator"],
+                "trigger_value": tv,
+                "action": r["action"],
+                "is_enabled": r["is_enabled"],
+                "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+            })
+        return result
+
+    def delete_rule(self, user_id: str, rule_id: str) -> bool:
+        # 校验 UUID 格式以避免 PG "invalid input syntax for type uuid" 错误
+        import re
+        if not isinstance(rule_id, str) or not re.match(
+            r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            rule_id,
+        ):
+            return False
+        db = self._get_db()
+        cur = db.get_conn().cursor()
+        try:
+            cur.execute(
+                "DELETE FROM mood_stress_rules WHERE id = %s AND user_id = %s",
+                (rule_id, user_id),
+            )
+            return cur.rowcount > 0
+        finally:
+            cur.connection.commit()
+            cur.close()
+            db.put_conn(cur.connection)
+
+    # ── 工具方法 ──
+
+    @staticmethod
+    def _row_to_emotion(row: dict) -> EmotionRecordRow:
+        tags = row.get("emotion_tags")
+        if isinstance(tags, str):
+            try:
+                tags = json.loads(tags)
+            except Exception:
+                tags = []
+        related = row.get("related_event_ids")
+        if isinstance(related, str):
+            try:
+                related = json.loads(related)
+            except Exception:
+                related = []
+        return EmotionRecordRow(
+            id=row["id"],
+            user_id=row["user_id"],
+            source=row["source"],
+            emotion_tags=tags or [],
+            pressure_score=row.get("pressure_score"),
+            energy_score=row.get("energy_score"),
+            text_note=row.get("text_note"),
+            related_event_ids=related or [],
+            created_at=row.get("created_at"),
+        )
+
+    @staticmethod
+    def _row_to_signal(row: dict) -> BehaviorSignalRow:
+        data = row.get("signal_data")
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except Exception:
+                data = {}
+        return BehaviorSignalRow(
+            id=row["id"],
+            user_id=row["user_id"],
+            signal_type=row["signal_type"],
+            signal_data=data or {},
+            severity=row.get("severity", 1),
+            is_read=row.get("is_read", False),
+            created_at=row.get("created_at"),
+        )
+
+
+# 全局实例
+mood_stress_store = MoodStressStore()

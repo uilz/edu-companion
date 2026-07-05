@@ -321,6 +321,72 @@ ALL_TOOL_INFO: dict[str, ToolInfo] = {
             "required": [],
         },
     ),
+    # ── LanguageRoom 共享工具 (Task #35) ──
+    "tool_vocabulary_capture": ToolInfo(
+        name="tool_vocabulary_capture",
+        zh_name="捕获生词",
+        icon="📝",
+        description="在 LanguageRoom 房间内捕获生词, 自动生成 FlashCard 数据卡",
+        parameters={
+            "type": "object",
+            "properties": {
+                "user_id": {"type": "string"},
+                "room_id": {"type": "string"},
+                "transcript_id": {"type": "string"},
+                "word": {"type": "string"},
+                "translation": {"type": "string"},
+            },
+            "required": ["user_id", "room_id", "word"],
+        },
+    ),
+    "tool_error_mark": ToolInfo(
+        name="tool_error_mark",
+        zh_name="标记错误",
+        icon="❌",
+        description="在 LanguageRoom 房间内标记用户转写片段为错误, 复用 ErrorBookEntry",
+        parameters={
+            "type": "object",
+            "properties": {
+                "user_id": {"type": "string"},
+                "room_id": {"type": "string"},
+                "transcript_id": {"type": "string"},
+                "error_type": {"type": "string"},
+                "linked_node_ids": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["user_id", "room_id", "transcript_id"],
+        },
+    ),
+    "tool_message_post": ToolInfo(
+        name="tool_message_post",
+        zh_name="发送消息",
+        icon="💬",
+        description="在 LanguageRoom 房间内发送文字辅助消息, 复用 ExplainCard 浮卡",
+        parameters={
+            "type": "object",
+            "properties": {
+                "user_id": {"type": "string"},
+                "room_id": {"type": "string"},
+                "text": {"type": "string"},
+                "message_type": {"type": "string"},
+            },
+            "required": ["user_id", "room_id", "text"],
+        },
+    ),
+    "tool_knowledge_search": ToolInfo(
+        name="tool_knowledge_search",
+        zh_name="知识搜索",
+        icon="🔍",
+        description="在知识树中搜索节点, AI 辅助者 (ai_helper) 在生成回答前调用以获取相关上下文",
+        parameters={
+            "type": "object",
+            "properties": {
+                "user_id": {"type": "string"},
+                "query": {"type": "string"},
+                "top_k": {"type": "integer"},
+            },
+            "required": ["user_id", "query"],
+        },
+    ),
 }
 
 

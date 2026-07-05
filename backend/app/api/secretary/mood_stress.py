@@ -29,27 +29,27 @@ from app.domain.auth.dependencies import current_user_id
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(
-    prefix="/api/secretary/mood-stress",
-    tags=["心情压力"],
-)
-
-VALID_EMOTION_TAGS = frozenset({
-    "frustration", "anxiety", "confusion", "boredom", "overwhelm",
-    "procrastination", "motivated", "achievement", "curious", "calm", "neutral",
-})
-
-VALID_INTERVENTION_TYPES = frozenset({
-    "breathing", "knowledge_breathing", "cognitive_reappraisal", "environment",
-})
+router = APIRouter(prefix="/api/secretary/mood-stress", tags=["心情压力"])
 
 
 # ──────────────────────────────────────────────
-# 请求/响应模型
+# Pydantic 模型
 # ──────────────────────────────────────────────
+
+VALID_EMOTION_TAGS = {
+    "frustration", "anxiety", "confusion", "boredom",
+    "overwhelm", "procrastination",
+    "motivated", "achievement", "curious",
+    "calm", "neutral",
+}
+
+VALID_INTERVENTION_TYPES = {
+    "breathing", "knowledge_breathing",
+    "cognitive_reappraisal", "environment",
+}
+
 
 class RecordRequest(BaseModel):
-    """用户主动记录心情/压力/能量"""
     emotion_tags: list[str] = Field(default_factory=list)
     pressure_score: int | None = Field(default=None, ge=1, le=10)
     energy_score: int | None = Field(default=None, ge=1, le=10)
@@ -61,12 +61,13 @@ class RecordRequest(BaseModel):
     def _validate_tags(cls, v: list[str]) -> list[str]:
         invalid = [t for t in v if t not in VALID_EMOTION_TAGS]
         if invalid:
-            raise ValueError(f"非法的情绪标签: {invalid}; 必须是 11 类之一")
+            raise ValueError(
+                f"非法的情绪标签: {invalid}; 必须是 11 类之一"
+            )
         return v
 
 
 class InterventionRequest(BaseModel):
-    """记录干预工具使用"""
     intervention_type: str
     duration_seconds: int | None = Field(default=None, ge=0, le=3600)
     trigger_event: str | None = None
@@ -81,7 +82,6 @@ class InterventionRequest(BaseModel):
 
 
 class PrefsRequest(BaseModel):
-    """心情压力偏好（19 项可增量覆盖）"""
     reminder_enabled: bool | None = None
     reminder_frequency: Optional[str] = None
     reminder_time: Optional[str] = None
@@ -103,12 +103,11 @@ class PrefsRequest(BaseModel):
 
 
 class RuleRequest(BaseModel):
-    """自定义规则：trigger_metric × trigger_operator × trigger_value → action"""
     rule_name: str = Field(..., min_length=1, max_length=64)
-    trigger_metric: str
-    trigger_operator: str
+    trigger_metric: str  # pressure_score | energy_score | emotion_tag
+    trigger_operator: str  # >= | <= | == | != | > | <
     trigger_value: Any
-    action: str
+    action: str  # postpone_high_intensity | only_flashcard | suggest_break
 
     @field_validator("trigger_metric")
     @classmethod
@@ -127,13 +126,12 @@ class RuleRequest(BaseModel):
     @field_validator("action")
     @classmethod
     def _validate_action(cls, v: str) -> str:
-        if v not in {"suggest_break", "only_flashcard", "postpone_high_intensity"}:
+        if v not in {"postpone_high_intensity", "only_flashcard", "suggest_break"}:
             raise ValueError(f"非法的 action: {v}")
         return v
 
 
 class SignalEmitRequest(BaseModel):
-    """手动触发行为信号（一般由事件消费自动调用）"""
     signal_type: str
     signal_data: dict = Field(default_factory=dict)
     severity: int = Field(default=1, ge=1, le=3)
@@ -142,8 +140,8 @@ class SignalEmitRequest(BaseModel):
     @classmethod
     def _validate_sig(cls, v: str) -> str:
         valid = {
-            "task_switch", "stay_duration", "error_rate", "undo",
-            "session_anomaly", "flashcard_failure", "voice_features",
+            "task_switch", "stay_duration", "error_rate",
+            "undo", "session_anomaly", "flashcard_failure", "voice_features",
         }
         if v not in valid:
             raise ValueError(f"非法的 signal_type: {v}")
@@ -157,11 +155,11 @@ class SignalEmitRequest(BaseModel):
 @router.get("/dashboard")
 async def get_dashboard(
     user_id: str = Depends(current_user_id),
-    days: int = Query(7, ge=1, le=90),
+    days: int = Query(default=7, ge=1, le=90),
 ) -> dict:
     """情绪仪表盘 — 手动优先 + 自动检测 + 行为信号 + 干预日志"""
     from app.services.secretary.modules.mood_stress import build_dashboard
-    return await build_dashboard(user_id=user_id, days=days)
+    return await build_dashboard(user_id, days=days)
 
 
 @router.post("/record")
@@ -185,17 +183,15 @@ async def post_record(
 @router.get("/records")
 async def get_records(
     user_id: str = Depends(current_user_id),
-    source: str | None = Query(None),
-    days: int = Query(30, ge=1, le=365),
-    limit: int = Query(50, ge=1, le=200),
+    source: str | None = None,
+    days: int = Query(default=30, ge=1, le=365),
+    limit: int = Query(default=50, ge=1, le=200),
 ) -> dict:
     """情绪记录列表"""
     if source and source not in ("manual", "auto"):
-        raise HTTPException(status_code=422, detail="source 必须为 manual / auto")
-    from app.services.secretary import mood_stress_store
-    rows = mood_stress_store.list_emotion_records(
-        user_id=user_id, source=source, days=days, limit=limit,
-    )
+        raise HTTPException(422, "source 必须为 manual / auto")
+    from app.services.secretary.mood_stress_store import mood_stress_store
+    rows = mood_stress_store.list_emotion_records(user_id, source=source, days=days, limit=limit)
     return {
         "status": "ok",
         "records": [r.to_dict() for r in rows],
@@ -209,10 +205,10 @@ async def delete_record(
     user_id: str = Depends(current_user_id),
 ) -> dict:
     """删除单条情绪记录（遗忘权）"""
-    from app.services.secretary import mood_stress_store
-    ok = mood_stress_store.delete_emotion_record(user_id=user_id, record_id=record_id)
+    from app.services.secretary.mood_stress_store import mood_stress_store
+    ok = mood_stress_store.delete_emotion_record(user_id, record_id)
     if not ok:
-        raise HTTPException(status_code=404, detail="记录不存在")
+        raise HTTPException(404, "记录不存在")
     return {"status": "deleted"}
 
 
@@ -236,14 +232,12 @@ async def post_intervention(
 @router.get("/interventions")
 async def get_interventions(
     user_id: str = Depends(current_user_id),
-    days: int = Query(30, ge=1, le=365),
-    limit: int = Query(50, ge=1, le=200),
+    days: int = Query(default=30, ge=1, le=365),
+    limit: int = Query(default=50, ge=1, le=200),
 ) -> dict:
     """干预日志列表"""
-    from app.services.secretary import mood_stress_store
-    rows = mood_stress_store.list_interventions(
-        user_id=user_id, days=days, limit=limit,
-    )
+    from app.services.secretary.mood_stress_store import mood_stress_store
+    rows = mood_stress_store.list_interventions(user_id, days=days, limit=limit)
     return {
         "status": "ok",
         "interventions": [r.to_dict() for r in rows],
@@ -254,11 +248,11 @@ async def get_interventions(
 @router.get("/signals")
 async def get_signals(
     user_id: str = Depends(current_user_id),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(default=50, ge=1, le=200),
 ) -> dict:
     """未读行为信号"""
-    from app.services.secretary import mood_stress_store
-    rows = mood_stress_store.list_unread_signals(user_id=user_id, limit=limit)
+    from app.services.secretary.mood_stress_store import mood_stress_store
+    rows = mood_stress_store.list_unread_signals(user_id, limit=limit)
     return {
         "status": "ok",
         "signals": [r.to_dict() for r in rows],
@@ -272,8 +266,8 @@ async def mark_signals_read(
     user_id: str = Depends(current_user_id),
 ) -> dict:
     """批量标记行为信号已读"""
-    from app.services.secretary import mood_stress_store
-    count = mood_stress_store.mark_signals_read(user_id=user_id, ids=ids)
+    from app.services.secretary.mood_stress_store import mood_stress_store
+    count = mood_stress_store.mark_signals_read(user_id, ids)
     return {"status": "ok", "marked": count}
 
 
@@ -294,10 +288,12 @@ async def emit_signal(
 
 
 @router.get("/prefs")
-async def get_prefs(user_id: str = Depends(current_user_id)) -> dict:
+async def get_prefs(
+    user_id: str = Depends(current_user_id),
+) -> dict:
     """读取用户偏好"""
-    from app.services.secretary import mood_stress_store
-    prefs = mood_stress_store.get_prefs(user_id=user_id)
+    from app.services.secretary.mood_stress_store import mood_stress_store
+    prefs = mood_stress_store.get_prefs(user_id)
     return {"status": "ok", "prefs": prefs}
 
 
@@ -307,22 +303,22 @@ async def put_prefs(
     user_id: str = Depends(current_user_id),
 ) -> dict:
     """更新用户偏好（增量覆盖）"""
-    from app.services.secretary import mood_stress_store
-    # 仅取用户显式 set 的字段（增量合并）
+    from app.services.secretary.mood_stress_store import mood_stress_store
+
     delta = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
     if not delta:
-        return {"status": "ok", "prefs": mood_stress_store.get_prefs(user_id=user_id)}
-    prefs = mood_stress_store.upsert_prefs(user_id=user_id, delta=delta)
-    # 发布事件
-    try:
-        from app.infrastructure.event_bus_utils import publish_event_safe
-        from shared.events import MoodStressPrefsUpdated
-        publish_event_safe(MoodStressPrefsUpdated(
-            user_id=user_id,
-            changed_fields=list(delta.keys()),
-        ))
-    except Exception as e:
-        logger.debug("MoodStressPrefsUpdated 事件发布失败: %s", e)
+        return {"status": "ok", "prefs": mood_stress_store.get_prefs(user_id)}
+
+    prefs = mood_stress_store.upsert_prefs(user_id, delta)
+
+    # 发布偏好更新事件 (Task 架构 P0-1: 委托 publish_event_safe, 统一 sync/async 上下文)
+    from app.infrastructure.event_bus_utils import publish_event_safe
+    from shared.events import MoodStressPrefsUpdated
+    publish_event_safe(MoodStressPrefsUpdated(
+        user_id=user_id,
+        changed_fields=list(delta.keys()),
+    ))
+
     return {"status": "ok", "prefs": prefs}
 
 
@@ -332,7 +328,7 @@ async def add_rule(
     user_id: str = Depends(current_user_id),
 ) -> dict:
     """新增心情压力规则"""
-    from app.services.secretary import mood_stress_store
+    from app.services.secretary.mood_stress_store import mood_stress_store
     rule_id = mood_stress_store.add_rule(
         user_id=user_id,
         rule_name=body.rule_name,
@@ -345,10 +341,12 @@ async def add_rule(
 
 
 @router.get("/rules")
-async def get_rules(user_id: str = Depends(current_user_id)) -> dict:
+async def get_rules(
+    user_id: str = Depends(current_user_id),
+) -> dict:
     """规则列表"""
-    from app.services.secretary import mood_stress_store
-    rules = mood_stress_store.list_rules(user_id=user_id)
+    from app.services.secretary.mood_stress_store import mood_stress_store
+    rules = mood_stress_store.list_rules(user_id)
     return {"status": "ok", "rules": rules, "total": len(rules)}
 
 
@@ -358,44 +356,46 @@ async def delete_rule(
     user_id: str = Depends(current_user_id),
 ) -> dict:
     """删除规则"""
-    from app.services.secretary import mood_stress_store
-    ok = mood_stress_store.delete_rule(user_id=user_id, rule_id=rule_id)
+    from app.services.secretary.mood_stress_store import mood_stress_store
+    ok = mood_stress_store.delete_rule(user_id, rule_id)
     if not ok:
-        raise HTTPException(status_code=404, detail="规则不存在")
+        raise HTTPException(404, "规则不存在")
     return {"status": "deleted"}
 
+
+# ──────────────────────────────────────────────
+# 元数据：常量暴露给前端
+# ──────────────────────────────────────────────
 
 @router.get("/constants")
 async def get_constants() -> dict:
     """暴露给前端：合法情绪标签 + 干预类型 + 行为信号类型 + 默认偏好"""
-    emotion_tags = [
-        {"value": "frustration", "label": "挫败", "emoji": "😤", "severity": "negative"},
-        {"value": "anxiety", "label": "焦虑", "emoji": "😰", "severity": "negative"},
-        {"value": "confusion", "label": "困惑", "emoji": "🤔", "severity": "neutral"},
-        {"value": "boredom", "label": "无聊", "emoji": "😴", "severity": "negative"},
-        {"value": "overwhelm", "label": "压力大", "emoji": "😵", "severity": "negative"},
-        {"value": "procrastination", "label": "拖延", "emoji": "🥱", "severity": "negative"},
-        {"value": "motivated", "label": "有动力", "emoji": "💪", "severity": "positive"},
-        {"value": "achievement", "label": "成就感", "emoji": "🎉", "severity": "positive"},
-        {"value": "curious", "label": "好奇", "emoji": "🔍", "severity": "positive"},
-        {"value": "calm", "label": "平静", "emoji": "😌", "severity": "positive"},
-        {"value": "neutral", "label": "中性", "emoji": "📝", "severity": "neutral"},
-    ]
-    intervention_types = [
-        {"value": "breathing", "label": "5 分钟呼吸引导", "emoji": "🫁", "side": "client"},
-        {"value": "knowledge_breathing", "label": "知识呼吸（复习）", "emoji": "🌬️", "side": "client+read_cards"},
-        {"value": "cognitive_reappraisal", "label": "认知重评", "emoji": "🧭", "side": "client"},
-        {"value": "environment", "label": "环境切换", "emoji": "🎨", "side": "client"},
-    ]
     return {
-        "emotion_tags": emotion_tags,
-        "intervention_types": intervention_types,
-        "behavior_signal_types": list([
+        "emotion_tags": [
+            {"value": "frustration", "label": "挫败", "emoji": "😤", "severity": "negative"},
+            {"value": "anxiety", "label": "焦虑", "emoji": "😰", "severity": "negative"},
+            {"value": "confusion", "label": "困惑", "emoji": "🤔", "severity": "neutral"},
+            {"value": "boredom", "label": "无聊", "emoji": "😴", "severity": "negative"},
+            {"value": "overwhelm", "label": "压力大", "emoji": "😵", "severity": "negative"},
+            {"value": "procrastination", "label": "拖延", "emoji": "🥱", "severity": "negative"},
+            {"value": "motivated", "label": "有动力", "emoji": "💪", "severity": "positive"},
+            {"value": "achievement", "label": "成就感", "emoji": "🎉", "severity": "positive"},
+            {"value": "curious", "label": "好奇", "emoji": "🔍", "severity": "positive"},
+            {"value": "calm", "label": "平静", "emoji": "😌", "severity": "positive"},
+            {"value": "neutral", "label": "中性", "emoji": "📝", "severity": "neutral"},
+        ],
+        "intervention_types": [
+            {"value": "breathing", "label": "5 分钟呼吸引导", "emoji": "🫁", "side": "client"},
+            {"value": "knowledge_breathing", "label": "知识呼吸（复习）", "emoji": "🌬️", "side": "client+read_cards"},
+            {"value": "cognitive_reappraisal", "label": "认知重评", "emoji": "🧭", "side": "client"},
+            {"value": "environment", "label": "环境切换", "emoji": "🎨", "side": "client"},
+        ],
+        "behavior_signal_types": [
             "task_switch", "stay_duration", "error_rate", "undo",
             "session_anomaly", "flashcard_failure", "voice_features",
-        ]),
-        "rule_metrics": list(["pressure_score", "energy_score", "emotion_tag"]),
-        "rule_operators": list([">=", "<=", "==", "!=", ">", "<"]),
+        ],
+        "rule_metrics": ["pressure_score", "energy_score", "emotion_tag"],
+        "rule_operators": [">=", "<=", "==", "!=", ">", "<"],
         "rule_actions": [
             {"value": "postpone_high_intensity", "label": "推迟高强度任务"},
             {"value": "only_flashcard", "label": "仅安排卡片复习"},

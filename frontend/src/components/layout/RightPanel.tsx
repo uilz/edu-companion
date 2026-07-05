@@ -1,211 +1,366 @@
 // ============================================================
-// RightPanel — 右栏工作面板
+// RightPanel — 右栏 (任务 #76)
 //
-// 任务 #76 5 栏驾驶舱的右槽：
-//   - 快速入口：直达 4 个核心模块
-//   - 学习状态：接入 /api/practice/stats/overview + /api/progress/{user_id}/summary
-//   - 唤起 AI：直接跳转 /conversation
+// 设计目标：
+//   - 宽度 320px (默认)，可被 Workbench 拖动调整 (200-500)
+//   - 4 个 tab：AI 助手 / 上下文 / 详情 / 状态
+//   - 用户可自由切换；tab 选择也持久化到 localStorage
+//
+// 风格遵循 design-language.md professional 风格
 // ============================================================
 
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import {
-  Sparkles, Target, Clock, TrendingUp,
-  Dumbbell, MessageSquare, Bell, ChevronRight,
+  Sparkles,
+  ListTree,
+  FileText,
+  Activity,
+  Send,
   Loader2,
+  Bot,
+  User as UserIcon,
 } from "lucide-react";
-import { api } from "@/lib/api/api";
-import { useCurrentUserId } from "@/hooks/useCurrentUserId";
+import { useAuth } from "@/contexts/AuthContext";
+import { usePathname } from "next/navigation";
+import { authedFetch, api } from "@/lib/api/api";
 
-const QUICK_ACTIONS = [
-  { href: "/practice", icon: Dumbbell, label: "开始练习", desc: "智能推荐" },
-  { href: "/conversation", icon: MessageSquare, label: "问 AI", desc: "对话助手" },
-  { href: "/knowledge-tree", icon: "graph", label: "查看知识树", desc: "图谱浏览" },
-  { href: "/secretary", icon: Bell, label: "秘书通知", desc: "智能提醒" },
+// authedFetch 在 AI tab 使用（POST 请求），api 在其他 tab 使用（GET JSON）
+
+// ── Tab 类型 ──
+type RightTab = "ai" | "context" | "details" | "status";
+const TAB_KEY = "workbench-right-tab";
+const TABS: { key: RightTab; label: string; icon: typeof Sparkles }[] = [
+  { key: "ai", label: "AI 助手", icon: Sparkles },
+  { key: "context", label: "上下文", icon: ListTree },
+  { key: "details", label: "详情", icon: FileText },
+  { key: "status", label: "状态", icon: Activity },
 ];
 
-function GitGraphIcon(props: { size?: number; className?: string }) {
-  return (
-    <svg
-      width={props.size || 16}
-      height={props.size || 16}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={props.className}
-    >
-      <circle cx="5" cy="6" r="2.5" />
-      <circle cx="5" cy="18" r="2.5" />
-      <circle cx="19" cy="12" r="2.5" />
-      <path d="M7.5 6h3a4 4 0 0 1 4 4v0a4 4 0 0 0 4 4" />
-    </svg>
-  );
-}
-
-interface LearningStats {
-  todayQuestions: number | null;
-  studyMinutes: number | null;
-  streakDays: number | null;
-  accuracy: number | null;
+// ── AI 对话消息 ──
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  ts: number;
 }
 
 export default function RightPanel() {
-  const userId = useCurrentUserId();
-  const [stats, setStats] = useState<LearningStats | null>(null);
-  const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
+  const pathname = usePathname() || "/";
 
-  const loadStats = useCallback(async () => {
-    if (!userId) return;
-    setLoading(true);
-    try {
-      const [overviewRes, progressRes] = await Promise.allSettled([
-        api<{ today_questions?: number; study_minutes?: number; accuracy?: number }>(
-          "/api/practice/stats/overview",
-        ),
-        api<{ streak?: number; yesterday?: { total: number; accuracy: number } }>(
-          `/api/progress/${userId}/summary`,
-        ),
-      ]);
-      const overview = overviewRes.status === "fulfilled" ? overviewRes.value : null;
-      const progress = progressRes.status === "fulfilled" ? progressRes.value : null;
-      setStats({
-        todayQuestions: overview?.today_questions ?? null,
-        studyMinutes: overview?.study_minutes ?? null,
-        streakDays: progress?.streak ?? null,
-        accuracy: overview?.accuracy ?? null,
-      });
-    } catch {
-      setStats(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [userId]);
-
+  // 当前 tab，持久化
+  const [activeTab, setActiveTab] = useState<RightTab>("ai");
   useEffect(() => {
-    loadStats();
-  }, [loadStats]);
+    try {
+      const saved = localStorage.getItem(TAB_KEY) as RightTab | null;
+      if (saved && TABS.find((t) => t.key === saved)) setActiveTab(saved);
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem(TAB_KEY, activeTab);
+    } catch {}
+  }, [activeTab]);
+
+  // 监听 AI 唤起事件
+  useEffect(() => {
+    const handler = () => setActiveTab("ai");
+    window.addEventListener("workbench-ai-invoke", handler);
+    return () => window.removeEventListener("workbench-ai-invoke", handler);
+  }, []);
 
   return (
-    <div
-      data-testid="right-panel"
-      className="h-full w-full overflow-y-auto text-[var(--color-text)] text-xs p-3 space-y-4"
-    >
-      {/* ── 快速入口 ── */}
-      <section>
-        <h3 className="text-[10px] font-medium uppercase tracking-wider text-[var(--color-text-muted)] mb-2 px-1">
-          快速入口
-        </h3>
-        <div className="space-y-1">
-          {QUICK_ACTIONS.map((a) => {
-            const Icon = a.icon === "graph" ? GitGraphIcon : a.icon;
-            return (
-              <Link
-                key={a.href}
-                href={a.href}
-                className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors group"
-              >
-                <div className="p-1.5 rounded-md bg-[var(--color-surface)] text-[var(--color-accent)] group-hover:bg-[var(--color-accent)]/10">
-                  <Icon size={13} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-[12px]">{a.label}</div>
-                  <div className="text-[10px] text-[var(--color-text-muted)]">{a.desc}</div>
-                </div>
-                <ChevronRight size={12} className="text-[var(--color-text-muted)] opacity-0 group-hover:opacity-100 transition-opacity" />
-              </Link>
-            );
-          })}
-        </div>
-      </section>
+    <div className="h-full w-full flex flex-col">
+      {/* Tab 栏 */}
+      <div className="flex border-b border-divider bg-page-secondary/40">
+        {TABS.map((t) => {
+          const Icon = t.icon;
+          const active = activeTab === t.key;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setActiveTab(t.key)}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[12px] font-medium transition-colors ${
+                active
+                  ? "text-accent border-b-2 border-accent bg-accent/5"
+                  : "text-ink-muted hover:text-ink-primary border-b-2 border-transparent"
+              }`}
+            >
+              <Icon size={13} />
+              <span>{t.label}</span>
+            </button>
+          );
+        })}
+      </div>
 
-      {/* ── 学习状态（实时数据） ── */}
-      <section>
-        <div className="flex items-center justify-between mb-2 px-1">
-          <h3 className="text-[10px] font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-            学习状态
-          </h3>
-          {loading && <Loader2 size={9} className="animate-spin text-[var(--color-text-muted)]" />}
-        </div>
-        <div className="space-y-1.5">
-          <StatusRow
-            icon={Clock}
-            label="今日学习"
-            value={
-              stats?.todayQuestions != null
-                ? `${stats.todayQuestions} 题`
-                : stats?.studyMinutes != null
-                ? `${Math.round(stats.studyMinutes)}m`
-                : "—"
-            }
-            tone="accent"
-          />
-          <StatusRow
-            icon={TrendingUp}
-            label="正确率"
-            value={
-              stats?.accuracy != null
-                ? `${Math.round(stats.accuracy * 100)}%`
-                : "—"
-            }
-            tone={stats?.accuracy != null && stats.accuracy >= 0.8 ? "good" : "default"}
-          />
-          <StatusRow
-            icon={Target}
-            label="连续天数"
-            value={
-              stats?.streakDays != null
-                ? `${stats.streakDays} 天`
-                : "—"
-            }
-            tone={stats?.streakDays && stats.streakDays >= 7 ? "good" : "default"}
-          />
-        </div>
-      </section>
-
-      {/* ── AI 助手入口 ── */}
-      <section>
-        <Link
-          href="/conversation"
-          className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-gradient-to-br from-[var(--color-accent)]/10 to-[var(--color-accent)]/5 border border-[var(--color-accent)]/20 hover:from-[var(--color-accent)]/20 hover:to-[var(--color-accent)]/10 transition-colors"
-        >
-          <Sparkles size={14} className="text-[var(--color-accent)]" />
-          <div className="flex-1 min-w-0">
-            <div className="text-[12px] font-medium">唤起 AI 助手</div>
-            <div className="text-[10px] text-[var(--color-text-muted)]">⌘J 快捷键</div>
-          </div>
-        </Link>
-      </section>
+      {/* Tab 内容 */}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        {activeTab === "ai" && <AITab user={user} />}
+        {activeTab === "context" && <ContextTab pathname={pathname} />}
+        {activeTab === "details" && <DetailsTab pathname={pathname} />}
+        {activeTab === "status" && <StatusTab />}
+      </div>
     </div>
   );
 }
 
-function StatusRow({
-  icon: Icon,
-  label,
-  value,
-  tone = "default",
-}: {
-  icon: typeof Clock;
-  label: string;
-  value: string;
-  tone?: "default" | "accent" | "good";
-}) {
-  const valueColor =
-    tone === "accent"
-      ? "text-[var(--color-accent)]"
-      : tone === "good"
-      ? "text-[#10b981]"
-      : "text-[var(--color-text)]";
+// ════════════════ AI 助手 Tab ════════════════
+function AITab({ user }: { user: ReturnType<typeof useAuth>["user"] }) {
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      role: "assistant",
+      content: "你好，我是你的学习助手。可以问学习问题、生成练习、推荐资源。",
+      ts: Date.now(),
+    },
+  ]);
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages, sending]);
+
+  const send = useCallback(async () => {
+    const q = input.trim();
+    if (!q || sending) return;
+    const userMsg: ChatMessage = { role: "user", content: q, ts: Date.now() };
+    setMessages((m) => [...m, userMsg]);
+    setInput("");
+    setSending(true);
+    try {
+      // 简化：使用 secretary agent chat 端点（SSE 流，但非流场景下取首条）
+      const res = await authedFetch(
+        `/api/secretary/agent/chat?user_id=${user?.id || "guest"}`,
+        {
+          method: "POST",
+          body: JSON.stringify({ message: q, stream: false }),
+        },
+      );
+      // 尝试解析 JSON
+      let reply = "（无回复）";
+      try {
+        const data = await res.json();
+        reply = data?.reply || data?.content || data?.text || reply;
+      } catch {
+        reply = "（回复非 JSON 格式）";
+      }
+      setMessages((m) => [...m, { role: "assistant", content: reply, ts: Date.now() }]);
+    } catch (e: any) {
+      setMessages((m) => [
+        ...m,
+        {
+          role: "assistant",
+          content: "（AI 接口暂不可用）" + (e?.message ? `：${e.message}` : ""),
+          ts: Date.now(),
+        },
+      ]);
+    } finally {
+      setSending(false);
+    }
+  }, [input, sending, user]);
+
   return (
-    <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-[var(--color-surface)]/50">
-      <Icon size={12} className="text-[var(--color-text-muted)]" />
-      <span className="text-[11px] text-[var(--color-text-muted)] flex-1">{label}</span>
-      <span className={`text-[12px] font-semibold tabular-nums ${valueColor}`}>{value}</span>
+    <div className="h-full flex flex-col">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
+        {messages.map((m, i) => (
+          <div
+            key={i}
+            className={`flex gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}
+          >
+            {m.role === "assistant" && (
+              <div className="w-6 h-6 rounded-full bg-accent/15 text-accent flex items-center justify-center shrink-0">
+                <Bot size={12} />
+              </div>
+            )}
+            <div
+              className={`max-w-[80%] px-2.5 py-1.5 rounded-md text-[12px] leading-relaxed ${
+                m.role === "user"
+                  ? "bg-accent text-white"
+                  : "bg-surface text-ink-primary"
+              }`}
+            >
+              {m.content}
+            </div>
+            {m.role === "user" && (
+              <div className="w-6 h-6 rounded-full bg-surface text-ink-secondary flex items-center justify-center shrink-0">
+                <UserIcon size={12} />
+              </div>
+            )}
+          </div>
+        ))}
+        {sending && (
+          <div className="flex items-center gap-2 text-ink-muted text-[11px]">
+            <Loader2 size={12} className="animate-spin" />
+            思考中…
+          </div>
+        )}
+      </div>
+      <div className="border-t border-divider p-2 flex gap-1.5">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              send();
+            }
+          }}
+          placeholder="向 AI 提问…"
+          className="flex-1 h-8 px-2 text-[12px] bg-surface text-ink-primary rounded border border-divider focus:outline-none focus:border-accent"
+          disabled={sending}
+        />
+        <button
+          onClick={send}
+          disabled={sending || !input.trim()}
+          className="px-2 h-8 rounded bg-accent text-white disabled:opacity-50 hover:opacity-90 transition-opacity"
+        >
+          {sending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════ 上下文 Tab ════════════════
+function ContextTab({ pathname }: { pathname: string }) {
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    // 当前路径作为上下文：尝试加载对话树 / 相关笔记
+    api<any>(`/api/conversations/tree/conversations/recent?limit=20`)
+      .then((d) => {
+        if (!active) return;
+        setItems(d?.conversations || d?.items || []);
+      })
+      .catch(() => {})
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [pathname]);
+
+  return (
+    <div className="h-full overflow-y-auto px-3 py-3">
+      <div className="text-[11px] uppercase tracking-wider text-ink-muted mb-2">当前路径</div>
+      <div className="text-[12px] text-ink-primary px-2 py-1.5 rounded bg-surface mb-3 truncate">
+        {pathname}
+      </div>
+
+      <div className="text-[11px] uppercase tracking-wider text-ink-muted mb-2">最近对话</div>
+      {loading ? (
+        <div className="flex justify-center py-4">
+          <Loader2 size={14} className="animate-spin text-ink-muted" />
+        </div>
+      ) : items.length === 0 ? (
+        <div className="text-[12px] text-ink-muted text-center py-4">暂无对话</div>
+      ) : (
+        <div className="space-y-1">
+          {items.slice(0, 10).map((it, i) => (
+            <div
+              key={i}
+              className="px-2 py-1.5 text-[12px] text-ink-secondary rounded hover:bg-surface-hover truncate"
+              title={it.title || it.name || it.id}
+            >
+              {it.title || it.name || `对话 ${i + 1}`}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ════════════════ 详情 Tab ════════════════
+function DetailsTab({ pathname }: { pathname: string }) {
+  return (
+    <div className="h-full overflow-y-auto px-3 py-3 text-[12px] text-ink-secondary space-y-3">
+      <div>
+        <div className="text-[11px] uppercase tracking-wider text-ink-muted mb-1.5">路径</div>
+        <div className="px-2 py-1.5 rounded bg-surface text-ink-primary font-mono text-[11px] break-all">
+          {pathname}
+        </div>
+      </div>
+      <div>
+        <div className="text-[11px] uppercase tracking-wider text-ink-muted mb-1.5">说明</div>
+        <p className="leading-relaxed">
+          这里是当前页面的详情面板。不同路由可在此处展示：
+        </p>
+        <ul className="list-disc pl-4 mt-1.5 space-y-0.5 text-[11px] text-ink-muted">
+          <li>知识节点信息（学习页面）</li>
+          <li>任务元数据（规划页面）</li>
+          <li>数据统计（仪表盘）</li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════ 状态 Tab ════════════════
+function StatusTab() {
+  const [health, setHealth] = useState<{ ok: boolean; latency: number } | null>(null);
+  const [userInfo, setUserInfo] = useState<any>(null);
+
+  useEffect(() => {
+    const t0 = Date.now();
+    api<any>("/api/auth/me")
+      .then((u) => {
+        setUserInfo(u);
+        setHealth({ ok: true, latency: Date.now() - t0 });
+      })
+      .catch(() => setHealth({ ok: false, latency: -1 }));
+  }, []);
+
+  return (
+    <div className="h-full overflow-y-auto px-3 py-3 text-[12px] text-ink-secondary space-y-3">
+      <div>
+        <div className="text-[11px] uppercase tracking-wider text-ink-muted mb-1.5">系统</div>
+        <div className="flex items-center gap-2">
+          <div className={`w-2 h-2 rounded-full ${health?.ok ? "bg-success" : "bg-error"}`} />
+          <span className="text-ink-primary">
+            {health?.ok ? "在线" : health ? "离线" : "检测中…"}
+          </span>
+          {health && health.latency >= 0 && (
+            <span className="text-ink-muted text-[11px]">{health.latency}ms</span>
+          )}
+        </div>
+      </div>
+
+      {userInfo && (
+        <div>
+          <div className="text-[11px] uppercase tracking-wider text-ink-muted mb-1.5">账户</div>
+          <div className="space-y-1 text-[12px]">
+            <div className="flex justify-between">
+              <span className="text-ink-muted">用户</span>
+              <span className="text-ink-primary">{userInfo.username}</span>
+            </div>
+            {userInfo.role && (
+              <div className="flex justify-between">
+                <span className="text-ink-muted">角色</span>
+                <span className="text-ink-primary">{userInfo.role}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div>
+        <div className="text-[11px] uppercase tracking-wider text-ink-muted mb-1.5">快捷键</div>
+        <div className="space-y-1 text-[11px]">
+          <div className="flex justify-between">
+            <span>命令面板</span>
+            <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-divider text-ink-muted">⌘K</kbd>
+          </div>
+          <div className="flex justify-between">
+            <span>AI 助手</span>
+            <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-divider text-ink-muted">⌘J</kbd>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

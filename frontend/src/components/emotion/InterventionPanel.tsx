@@ -1,222 +1,243 @@
 "use client";
 
 /**
- * InterventionPanel — 4 种干预工具面板
+ * MoodStress 干预工具面板
  *
- * Task #87 重建（原源文件丢失）
- *
- * 设计原则：
- *   - 干预不修改学习数据（Belief/FSRS/Scheduling）
- *   - 仅本地记录 + 事件流
- *   - 4 种类型：breathing / knowledge_breathing / cognitive_reappraisal / environment
- *   - "side" 字段标识是纯客户端还是有服务端联动
+ * 4 种工具：呼吸引导 / 知识呼吸 / 认知重评 / 环境切换
+ * 设计原则：用户手动触发；不修改学习数据；仅本地记录 + 事件流
  */
 
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Wind, Brain, Palette, Sparkles, Loader2 } from "lucide-react";
 import { authedFetch } from "@/lib/api/api";
 
 interface InterventionType {
   value: string;
   label: string;
   emoji: string;
-  side: "client" | "client+read_cards";
+  side: string;
 }
 
-interface InterventionPanelProps {
+interface Props {
   types: InterventionType[];
   onUsed: () => void;
 }
 
-const SIDE_LABELS: Record<string, string> = {
-  client: "本地工具",
-  "client+read_cards": "联动复习",
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  breathing: Wind,
+  knowledge_breathing: Sparkles,
+  cognitive_reappraisal: Brain,
+  environment: Palette,
 };
 
-export function InterventionPanel({ types, onUsed }: InterventionPanelProps) {
-  const [using, setUsing] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [activeType, setActiveType] = useState<string | null>(null);
-  const [duration, setDuration] = useState(180); // 默认 3 分钟
-  const [notes, setNotes] = useState("");
+const BREATH_STEPS = [
+  { phase: "吸气", duration: 4, color: "from-cyan-300 to-blue-400" },
+  { phase: "屏息", duration: 4, color: "from-indigo-300 to-purple-400" },
+  { phase: "呼气", duration: 6, color: "from-emerald-300 to-teal-400" },
+  { phase: "屏息", duration: 2, color: "from-indigo-300 to-purple-400" },
+];
 
-  // 客户端干预引导
-  const runClientGuidance = (type: InterventionType) => {
-    if (type.value === "breathing") {
-      // 4-7-8 呼吸法引导
-      return {
-        title: "4-7-8 呼吸法",
-        steps: [
-          "1. 用鼻子缓慢吸气，数 4 秒",
-          "2. 屏住呼吸，数 7 秒",
-          "3. 用嘴缓慢呼气，数 8 秒",
-          "4. 重复 4-5 个循环",
-        ],
-        duration: 180,
-      };
-    } else if (type.value === "cognitive_reappraisal") {
-      return {
-        title: "认知重评 — 3 步法",
-        steps: [
-          "1. 识别当下的负面想法",
-          "2. 问自己：这是事实还是解读？",
-          "3. 换一个角度：如果朋友遇到同样情况，我会怎么建议？",
-        ],
-        duration: 120,
-      };
-    } else if (type.value === "environment") {
-      return {
-        title: "环境切换建议",
-        steps: [
-          "1. 离开当前座位 5 分钟",
-          "2. 打开窗户或换到另一个房间",
-          "3. 改变一下灯光（暖光 → 冷光，或反之）",
-          "4. 播放白噪音/雨声/咖啡馆背景音",
-        ],
-        duration: 300,
-      };
-    } else if (type.value === "knowledge_breathing") {
-      return {
-        title: "知识呼吸 — 闪卡轻复习",
-        steps: [
-          "1. 选 5 张今天学过的卡片",
-          "2. 快速浏览，不评分",
-          "3. 把不熟悉的标记为「待复习」",
-        ],
-        duration: 240,
-      };
-    }
-    return null;
-  };
+const COG_REAPPRAISAL_PROMPTS = [
+  "发生了什么？(客观事实，不评判)",
+  "我的想法是什么？",
+  "有没有其他解释？",
+  "我能做什么？(微小、可执行的步骤)",
+];
 
-  const handleUse = async (type: InterventionType) => {
-    setError(null);
-    const guidance = runClientGuidance(type);
+const ENV_THEMES: Array<{ value: string; label: string; gradient: string }> = [
+  { value: "default", label: "默认", gradient: "from-slate-200 to-slate-300" },
+  { value: "warm", label: "暖阳", gradient: "from-amber-200 to-orange-300" },
+  { value: "cool", label: "冷月", gradient: "from-blue-200 to-indigo-300" },
+  { value: "forest", label: "森林", gradient: "from-green-200 to-emerald-300" },
+  { value: "sunset", label: "日落", gradient: "from-pink-200 to-rose-300" },
+];
 
-    if (guidance) {
-      // 显示引导面板
-      setActiveType(type.value);
-      setDuration(guidance.duration);
-      setNotes("");
-      return;
-    }
+export function InterventionPanel({ types, onUsed }: Props) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [breathing, setBreathing] = useState(false);
+  const [breathStep, setBreathStep] = useState(0);
+  const [cogReappraisal, setCogReappraisal] = useState(false);
+  const [cogAnswers, setCogAnswers] = useState<string[]>(["", "", "", ""]);
+  const [envOpen, setEnvOpen] = useState(false);
+  const [currentTheme, setCurrentTheme] = useState("default");
 
-    // 无引导，直接记录
-    await submitUsage(type.value, duration, "");
-  };
-
-  const submitUsage = async (type: string, dur: number, note: string) => {
-    setUsing(type);
+  // 记录到后端
+  const log = async (t: string, duration = 0) => {
+    setBusy(t);
     try {
       const res = await authedFetch("/api/secretary/mood-stress/intervention", {
         method: "POST",
         body: JSON.stringify({
-          intervention_type: type,
-          duration_seconds: dur,
-          notes: note,
+          intervention_type: t,
+          duration_seconds: duration,
         }),
       });
-      if (!res.ok) {
-        const detail = await res.json().catch(() => ({}));
-        throw new Error(detail?.detail || `记录失败 (${res.status})`);
-      }
-      onUsed();
-      setActiveType(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (res.ok) onUsed();
+    } catch {
+      // 静默失败
     } finally {
-      setUsing(null);
+      setBusy(null);
     }
   };
 
-  const activeGuidance = activeType
-    ? runClientGuidance(types.find((t) => t.value === activeType) || types[0])
-    : null;
+  // 呼吸引导
+  const startBreathing = () => {
+    setBreathing(true);
+    setBreathStep(0);
+    let total = 0;
+    const run = () => {
+      if (total >= 4) {
+        // 约 1 分钟，简化处理
+        setBreathing(false);
+        log("breathing", 60);
+        return;
+      }
+      setBreathStep(total % BREATH_STEPS.length);
+      total += 1;
+      setTimeout(run, 1000);
+    };
+    setTimeout(run, 1000);
+  };
+
+  // 知识呼吸
+  const startKnowledgeBreathing = () => {
+    log("knowledge_breathing", 30);
+    // 跳转 FlashCard 复习（复用入口）
+    if (typeof window !== "undefined") {
+      window.location.href = "/practice/review?source=mood_stress";
+    }
+  };
+
+  // 认知重评
+  const startCogReappraisal = () => {
+    setCogReappraisal(true);
+    setCogAnswers(["", "", "", ""]);
+  };
+
+  const submitCogReappraisal = () => {
+    log("cognitive_reappraisal", 120);
+    setCogReappraisal(false);
+    setCogAnswers(["", "", "", ""]);
+  };
+
+  // 环境切换
+  const applyEnvTheme = (theme: string) => {
+    setCurrentTheme(theme);
+    if (typeof document !== "undefined") {
+      document.documentElement.dataset.theme = theme;
+    }
+    log("environment", 0);
+    setEnvOpen(false);
+  };
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {types.map((type) => {
-          const isLoading = using === type.value;
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        {types.map((t) => {
+          const Icon = ICON_MAP[t.value] || Wind;
+          const disabled = busy !== null;
           return (
             <button
-              key={type.value}
-              onClick={() => handleUse(type)}
-              disabled={!!using}
-              className="text-left p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 hover:border-indigo-300 hover:shadow-sm transition disabled:opacity-50"
+              key={t.value}
+              onClick={() => {
+                if (t.value === "breathing") startBreathing();
+                else if (t.value === "knowledge_breathing") startKnowledgeBreathing();
+                else if (t.value === "cognitive_reappraisal") startCogReappraisal();
+                else if (t.value === "environment") setEnvOpen(true);
+              }}
+              disabled={disabled}
+              className="p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 hover:border-indigo-300 hover:shadow-sm transition text-left disabled:opacity-50"
             >
-              <div className="flex items-start gap-3">
-                <div className="text-3xl shrink-0">{type.emoji}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm text-gray-800 dark:text-gray-100">
-                    {type.label}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-0.5">
-                    {SIDE_LABELS[type.side] || type.side}
-                  </div>
-                </div>
-                {isLoading && (
-                  <Loader2 className="w-4 h-4 animate-spin text-indigo-500 shrink-0" />
-                )}
-              </div>
+              <div className="text-2xl mb-1">{t.emoji}</div>
+              <div className="text-sm font-medium text-gray-800 dark:text-gray-100">{t.label}</div>
+              {busy === t.value && (
+                <Loader2 className="w-3 h-3 animate-spin inline mt-1 text-indigo-400" />
+              )}
             </button>
           );
         })}
       </div>
 
-      {/* 引导面板 */}
-      {activeGuidance && activeType && (
-        <div className="rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/30 p-4 space-y-3">
-          <div className="font-medium text-indigo-700 dark:text-indigo-200 flex items-center gap-2">
-            <span>📋</span>
-            {activeGuidance.title}
-          </div>
-          <ol className="text-sm text-gray-700 dark:text-gray-200 space-y-1.5 pl-4 list-decimal">
-            {activeGuidance.steps.map((step, i) => (
-              <li key={i}>{step}</li>
-            ))}
-          </ol>
-          <div className="text-xs text-gray-500 pt-1 border-t border-indigo-100 dark:border-indigo-900/50">
-            完成后请记录到干预日志（系统不会自动记录时长）。
-          </div>
-          <div className="flex items-end gap-2 pt-1">
-            <div className="flex-1">
-              <label className="text-xs text-gray-500 block mb-1">实际时长（秒）</label>
-              <input
-                type="number"
-                min={0}
-                max={3600}
-                value={duration}
-                onChange={(e) => setDuration(Math.max(0, Math.min(3600, Number(e.target.value))))}
-                className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-1 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-indigo-400"
-              />
+      {/* 呼吸动画 */}
+      {breathing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="text-center text-white">
+            <div
+              className={`w-48 h-48 rounded-full bg-gradient-to-br ${
+                BREATH_STEPS[breathStep].color
+              } mx-auto flex items-center justify-center text-3xl font-bold animate-pulse`}
+            >
+              {BREATH_STEPS[breathStep].phase}
             </div>
+            <p className="mt-6 text-sm opacity-80">跟随圆圈呼吸 5 分钟</p>
             <button
-              onClick={() => setActiveType(null)}
-              disabled={!!using}
-              className="px-3 py-1.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+              onClick={() => {
+                setBreathing(false);
+                log("breathing", 30);
+              }}
+              className="mt-4 text-xs underline opacity-60"
             >
-              取消
-            </button>
-            <button
-              onClick={() => submitUsage(activeType, duration, notes)}
-              disabled={!!using}
-              className="px-3 py-1.5 rounded-lg text-sm bg-indigo-500 hover:bg-indigo-600 text-white disabled:opacity-50 flex items-center gap-1"
-            >
-              {using && <Loader2 className="w-3 h-3 animate-spin" />}
-              记录
+              结束
             </button>
           </div>
         </div>
       )}
 
-      {error && (
-        <div className="text-sm text-rose-500 bg-rose-50 dark:bg-rose-950/30 rounded-lg px-3 py-2">
-          {error}
+      {/* 认知重评 */}
+      {cogReappraisal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setCogReappraisal(false)}>
+          <div
+            className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-800 p-5 space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-semibold flex items-center gap-2"><Brain className="w-4 h-4" /> 认知重评引导</h3>
+            <p className="text-xs text-gray-500">仅提供框架，请填写你自己的想法</p>
+            {COG_REAPPRAISAL_PROMPTS.map((p, i) => (
+              <div key={i}>
+                <label className="text-xs text-gray-600 dark:text-gray-300">{i + 1}. {p}</label>
+                <textarea
+                  value={cogAnswers[i]}
+                  onChange={(e) => {
+                    const next = [...cogAnswers];
+                    next[i] = e.target.value;
+                    setCogAnswers(next);
+                  }}
+                  rows={2}
+                  className="w-full mt-1 px-3 py-2 rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm resize-none"
+                />
+              </div>
+            ))}
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setCogReappraisal(false)} className="px-3 py-1.5 text-sm rounded text-gray-500">取消</button>
+              <button onClick={submitCogReappraisal} className="px-3 py-1.5 text-sm rounded bg-indigo-500 text-white">完成</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 环境切换 */}
+      {envOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setEnvOpen(false)}>
+          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-800 p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-semibold flex items-center gap-2"><Palette className="w-4 h-4" /> 选择主题色调</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {ENV_THEMES.map((t) => (
+                <button
+                  key={t.value}
+                  onClick={() => applyEnvTheme(t.value)}
+                  className={`p-3 rounded-xl border ${
+                    currentTheme === t.value ? "border-indigo-500" : "border-gray-200"
+                  }`}
+                >
+                  <div className={`h-12 rounded bg-gradient-to-br ${t.gradient}`} />
+                  <div className="text-xs mt-1 text-center">{t.label}</div>
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500">仅前端 UI 变化，不修改学习数据</p>
+          </div>
         </div>
       )}
     </div>
   );
 }
-
-export default InterventionPanel;

@@ -1,0 +1,311 @@
+{
+  "totalTests": 49,
+  "ok": 47,
+  "warn": 0,
+  "fail": 0,
+  "info": 2,
+  "tagNames": {
+    "TAG_A": "E2E-AI-534bz1",
+    "TAG_M": "E2E-ML-534bz1",
+    "SRC_NAME": "E2E-Src-534bz1"
+  },
+  "results": [
+    {
+      "name": "seed-data",
+      "status": "OK",
+      "detail": "seeded push records",
+      "time": "2026-07-03T15:25:05.163Z"
+    },
+    {
+      "name": "login-page",
+      "status": "OK",
+      "detail": "login page loaded",
+      "time": "2026-07-03T15:25:06.360Z"
+    },
+    {
+      "name": "login-submit",
+      "status": "OK",
+      "detail": "landed at http://localhost:8080/dashboard",
+      "time": "2026-07-03T15:25:07.600Z"
+    },
+    {
+      "name": "token-in-localstorage",
+      "status": "OK",
+      "detail": "token len: 253",
+      "time": "2026-07-03T15:25:07.606Z"
+    },
+    {
+      "name": "interest-main-title",
+      "status": "OK",
+      "detail": "学术信息探索",
+      "time": "2026-07-03T15:25:10.805Z"
+    },
+    {
+      "name": "interest-no-blank",
+      "status": "OK",
+      "detail": "content length: 5225",
+      "time": "2026-07-03T15:25:10.862Z"
+    },
+    {
+      "name": "interest-tabs",
+      "status": "OK",
+      "detail": "today:1, history:1",
+      "time": "2026-07-03T15:25:10.868Z"
+    },
+    {
+      "name": "interest-today-seed",
+      "status": "OK",
+      "detail": "today items: 3",
+      "time": "2026-07-03T15:25:10.890Z"
+    },
+    {
+      "name": "tags-page-title",
+      "status": "OK",
+      "detail": "兴趣标签",
+      "time": "2026-07-03T15:25:13.618Z"
+    },
+    {
+      "name": "tag-create-l0",
+      "status": "OK",
+      "detail": "E2E-AI-534bz1 visible: 1",
+      "time": "2026-07-03T15:25:17.272Z"
+    },
+    {
+      "name": "tags-parent-selected",
+      "status": "OK",
+      "detail": "parent: ada14cfe",
+      "time": "2026-07-03T15:25:18.952Z"
+    },
+    {
+      "name": "tag-a-row-found",
+      "status": "OK",
+      "detail": "TAG_A L0 row located: 1",
+      "time": "2026-07-03T15:25:21.647Z"
+    },
+    {
+      "name": "tag-a-chevron-count",
+      "status": "INFO",
+      "detail": "chevrons in TAG_A row: 1",
+      "time": "2026-07-03T15:25:21.649Z"
+    },
+    {
+      "name": "tag-create-l1",
+      "status": "OK",
+      "detail": "E2E-ML-534bz1 visible: 1",
+      "time": "2026-07-03T15:25:22.498Z"
+    },
+    {
+      "name": "tag-a-row-for-edit",
+      "status": "OK",
+      "detail": "TAG_A row found: 1",
+      "time": "2026-07-03T15:25:22.500Z"
+    },
+    {
+      "name": "tag-edit-btn-found",
+      "status": "OK",
+      "detail": "edit btn: 1",
+      "time": "2026-07-03T15:25:22.504Z"
+    },
+    {
+      "name": "tag-edit-input-found",
+      "status": "OK",
+      "detail": "edit input via value selector: 1",
+      "time": "2026-07-03T15:25:24.138Z"
+    },
+    {
+      "name": "tag-edit-save-btn",
+      "status": "OK",
+      "detail": "save btn via lucide-save: 1",
+      "time": "2026-07-03T15:25:24.652Z"
+    },
+    {
+      "name": "tag-edit",
+      "status": "OK",
+      "detail": "edited name visible: 1",
+      "time": "2026-07-03T15:25:27.277Z"
+    },
+    {
+      "name": "tag-delete-ml-row",
+      "status": "OK",
+      "detail": "ML L1 row found: 1",
+      "time": "2026-07-03T15:25:27.279Z"
+    },
+    {
+      "name": "tag-delete-ml-btn",
+      "status": "OK",
+      "detail": "delete btn: 1",
+      "time": "2026-07-03T15:25:27.281Z"
+    },
+    {
+      "name": "tag-delete-l1",
+      "status": "OK",
+      "detail": "ML after delete: 0",
+      "time": "2026-07-03T15:25:35.188Z"
+    },
+    {
+      "name": "sources-page-title",
+      "status": "OK",
+      "detail": "信息源管理",
+      "time": "2026-07-03T15:25:37.941Z"
+    },
+    {
+      "name": "sources-builtin-section",
+      "status": "OK",
+      "detail": "builtin header: 1",
+      "time": "2026-07-03T15:25:38.055Z"
+    },
+    {
+      "name": "source-create",
+      "status": "OK",
+      "detail": "E2E-Src-534bz1 visible: 1",
+      "time": "2026-07-03T15:25:41.754Z"
+    },
+    {
+      "name": "source-opml-import",
+      "status": "OK",
+      "detail": "OPML import submitted",
+      "time": "2026-07-03T15:25:45.886Z"
+    },
+    {
+      "name": "source-toggle",
+      "status": "OK",
+      "detail": "toggled: true -> false",
+      "time": "2026-07-03T15:25:48.081Z"
+    },
+    {
+      "name": "source-delete",
+      "status": "OK",
+      "detail": "after delete: 0",
+      "time": "2026-07-03T15:25:50.724Z"
+    },
+    {
+      "name": "prefs-page-title",
+      "status": "OK",
+      "detail": "推送偏好",
+      "time": "2026-07-03T15:25:53.419Z"
+    },
+    {
+      "name": "prefs-sliders",
+      "status": "OK",
+      "detail": "sliders: 3",
+      "time": "2026-07-03T15:25:53.531Z"
+    },
+    {
+      "name": "prefs-save-enabled",
+      "status": "OK",
+      "detail": "save enabled: true",
+      "time": "2026-07-03T15:25:54.810Z"
+    },
+    {
+      "name": "prefs-save",
+      "status": "OK",
+      "detail": "preferences saved",
+      "time": "2026-07-03T15:25:56.944Z"
+    },
+    {
+      "name": "weight-page-title",
+      "status": "OK",
+      "detail": "本地权重",
+      "time": "2026-07-03T15:25:59.669Z"
+    },
+    {
+      "name": "push-today-before",
+      "status": "OK",
+      "detail": "today items: 3",
+      "time": "2026-07-03T15:26:02.956Z"
+    },
+    {
+      "name": "push-attempt",
+      "status": "INFO",
+      "detail": "attempt 1: 5 items (status: 200)",
+      "time": "2026-07-03T15:26:08.020Z"
+    },
+    {
+      "name": "push-trigger",
+      "status": "OK",
+      "detail": "pushed_count: 5",
+      "time": "2026-07-03T15:26:08.116Z"
+    },
+    {
+      "name": "push-items-count",
+      "status": "OK",
+      "detail": "push items visible: 5",
+      "time": "2026-07-03T15:26:10.123Z"
+    },
+    {
+      "name": "push-expand",
+      "status": "OK",
+      "detail": "first item expanded",
+      "time": "2026-07-03T15:26:11.280Z"
+    },
+    {
+      "name": "push-feedback-read",
+      "status": "OK",
+      "detail": "marked as read",
+      "time": "2026-07-03T15:26:13.421Z"
+    },
+    {
+      "name": "push-import-flashcard",
+      "status": "OK",
+      "detail": "imported to flashcard",
+      "time": "2026-07-03T15:26:16.836Z"
+    },
+    {
+      "name": "push-import-cog",
+      "status": "OK",
+      "detail": "imported to cognitive_node",
+      "time": "2026-07-03T15:26:20.274Z"
+    },
+    {
+      "name": "push-feedback-dislike",
+      "status": "OK",
+      "detail": "marked as dislike",
+      "time": "2026-07-03T15:26:22.922Z"
+    },
+    {
+      "name": "push-feedback-later",
+      "status": "OK",
+      "detail": "marked as later",
+      "time": "2026-07-03T15:26:25.574Z"
+    },
+    {
+      "name": "weight-adjustments",
+      "status": "OK",
+      "detail": "dislike adjustments: 1",
+      "time": "2026-07-03T15:26:28.322Z"
+    },
+    {
+      "name": "weight-sampling-section",
+      "status": "OK",
+      "detail": "sampling section: 1",
+      "time": "2026-07-03T15:26:28.322Z"
+    },
+    {
+      "name": "weight-clear",
+      "status": "OK",
+      "detail": "weights reset",
+      "time": "2026-07-03T15:26:30.452Z"
+    },
+    {
+      "name": "nav-sidebar-entry",
+      "status": "OK",
+      "detail": "nav links: 2",
+      "time": "2026-07-03T15:26:33.312Z"
+    },
+    {
+      "name": "nav-link-click",
+      "status": "OK",
+      "detail": "landed: http://localhost:8080/interest",
+      "time": "2026-07-03T15:26:35.462Z"
+    },
+    {
+      "name": "mobile-nav",
+      "status": "OK",
+      "detail": "mobile interest links: 2",
+      "time": "2026-07-03T15:26:38.498Z"
+    }
+  ],
+  "consoleErrors": [],
+  "networkErrors": [],
+  "pageErrors": []
+}
