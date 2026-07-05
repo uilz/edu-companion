@@ -3,7 +3,6 @@
 import React from "react";
 import MessageList from "@/components/conversation/core/MessageList";
 import ConversationChatInput from "@/components/conversation/core/ChatInput";
-import SubBranchBanner from "@/components/conversation/banners/SubBranchBanner";
 import SwitchBanner from "@/components/conversation/banners/SwitchBanner";
 import ErrorBanner from "@/components/conversation/banners/ErrorBanner";
 import SecretaryInlineBanner from "@/components/notification/SecretaryInlineBanner";
@@ -32,10 +31,6 @@ export interface ConversationMessageAreaProps {
   handleSwitchConfirm?: () => void;
   handleSwitchDismiss?: () => void;
 
-  isInSubBranch?: boolean;
-  subBranchQuotedText?: string;
-  exitSubBranch?: () => void;
-
   isFeynmanMode?: boolean;
   onFeynmanTeach?: (messageId: string, messageText: string, conversationId: string) => void;
 
@@ -47,8 +42,6 @@ export interface ConversationMessageAreaProps {
 
   renderBottomControls?: () => React.ReactNode;
   placeholder?: string;
-
-  breadcrumb?: React.ReactNode;
 }
 
 /**
@@ -71,9 +64,6 @@ export default function ConversationMessageArea(props: ConversationMessageAreaPr
     switchBannerPartitionName,
     handleSwitchConfirm,
     handleSwitchDismiss,
-    isInSubBranch,
-    subBranchQuotedText,
-    exitSubBranch,
     isFeynmanMode,
     onFeynmanTeach,
     convError,
@@ -82,15 +72,10 @@ export default function ConversationMessageArea(props: ConversationMessageAreaPr
     setFollowUpMode,
     renderBottomControls,
     placeholder,
-    breadcrumb,
   } = props;
 
   return (
     <>
-      {isInSubBranch && exitSubBranch && subBranchQuotedText && (
-        <SubBranchBanner quotedText={subBranchQuotedText} onExit={exitSubBranch} />
-      )}
-
       {switchBanner && handleSwitchConfirm && handleSwitchDismiss && (
         <SwitchBanner
           domainName={switchBanner.domainName}
@@ -116,7 +101,6 @@ export default function ConversationMessageArea(props: ConversationMessageAreaPr
             onEditMessage={onEditMessage}
             onSend={onSend}
             onFeynmanTeach={onFeynmanTeach}
-            breadcrumb={breadcrumb}
           />
         </div>
 

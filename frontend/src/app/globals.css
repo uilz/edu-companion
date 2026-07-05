@@ -201,6 +201,16 @@
   --color-error: var(--color-danger);
   --color-graph-mastered: var(--color-graph-node-mastered);
   --color-graph-weak: var(--color-graph-node-weak);
+
+  /* ── Conversation module semantic tokens (Task #1: warm paper-ink palette) ── */
+  --color-ai-msg: #f7f3ea;          /* AI 文本 + 所有工具块统一米色背景 */
+  --color-ai-msg-strong: #efe9d8;   /* hover / 强调 */
+  --color-user-msg: #ebe7dd;        /* 用户消息气泡背景 */
+  --color-user-thumb: #ebe7dd;      /* 用户图片缩略图占位 */
+  --color-input-bg: #ffffff;         /* 输入框背景 */
+  --color-page-paper: #faf9f6;      /* 主区页面纸感背景 */
+  --color-sidebar-paper: #f4f2ec;   /* 侧栏纸感背景 */
+  --color-topbar-paper: #fbfaf6;    /* 顶栏纸感背景 */
 }
 
 /* ── Professional: Light (Task #79: slate-based Linear/Notion style) ── */
@@ -265,6 +275,16 @@
   /* Input */
   --color-input: #ffffff;
   --color-input-focus: #fafafa;
+
+  /* ── Conversation module semantic tokens (Task #1: warm paper-ink palette) ── */
+  --color-ai-msg: #f7f3ea;
+  --color-ai-msg-strong: #efe9d8;
+  --color-user-msg: #ebe7dd;
+  --color-user-thumb: #ebe7dd;
+  --color-input-bg: #ffffff;
+  --color-page-paper: #faf9f6;
+  --color-sidebar-paper: #f4f2ec;
+  --color-topbar-paper: #fbfaf6;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -355,6 +375,16 @@
 
   --color-input: #ffffff;
   --color-input-focus: #fff5f5;
+
+  /* ── Conversation module semantic tokens (warm paper-ink, light playful) ── */
+  --color-ai-msg: #f7f3ea;
+  --color-ai-msg-strong: #efe9d8;
+  --color-user-msg: #ebe7dd;
+  --color-user-thumb: #ebe7dd;
+  --color-input-bg: #ffffff;
+  --color-page-paper: #faf9f6;
+  --color-sidebar-paper: #f4f2ec;
+  --color-topbar-paper: #fbfaf6;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -453,8 +483,18 @@
 
   --color-selection: rgba(37, 99, 235, 0.1);
 
-  --color-input: #ffffff;
+  --color-input: #fafafa;
   --color-input-focus: #f8f8f8;
+
+  /* ── Conversation module semantic tokens (warm paper-ink, light knowledge) ── */
+  --color-ai-msg: #f7f3ea;
+  --color-ai-msg-strong: #efe9d8;
+  --color-user-msg: #ebe7dd;
+  --color-user-thumb: #ebe7dd;
+  --color-input-bg: #ffffff;
+  --color-page-paper: #faf9f6;
+  --color-sidebar-paper: #f4f2ec;
+  --color-topbar-paper: #fbfaf6;
 
   --text-body-size: 0.9375rem;
   --text-body-lineheight: 1.7;
@@ -566,6 +606,16 @@
   --color-input: #ffffff;
   --color-input-focus: #fafafa;
 
+  /* ── Conversation module semantic tokens (warm paper-ink, light soft-data) ── */
+  --color-ai-msg: #f7f3ea;
+  --color-ai-msg-strong: #efe9d8;
+  --color-user-msg: #ebe7dd;
+  --color-user-thumb: #ebe7dd;
+  --color-input-bg: #ffffff;
+  --color-page-paper: #faf9f6;
+  --color-sidebar-paper: #f4f2ec;
+  --color-topbar-paper: #fbfaf6;
+
   --radius-sm: 8px;
   --radius-md: 14px;
   --radius-lg: 18px;
@@ -674,6 +724,16 @@
 
   --color-input: #ffffff;
   --color-input-focus: #fef9c3;
+
+  /* ── Conversation module semantic tokens (warm paper-ink, light gamified) ── */
+  --color-ai-msg: #f7f3ea;
+  --color-ai-msg-strong: #efe9d8;
+  --color-user-msg: #ebe7dd;
+  --color-user-thumb: #ebe7dd;
+  --color-input-bg: #ffffff;
+  --color-page-paper: #faf9f6;
+  --color-sidebar-paper: #f4f2ec;
+  --color-topbar-paper: #fbfaf6;
 
   --radius-sm: 8px;
   --radius-md: 14px;
@@ -953,6 +1013,28 @@
     border-color: transparent;
   }
 
+  /* ── Icon button (通用图标按钮) ── */
+  .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    color: var(--color-ink-secondary);
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    transition: background-color var(--motion-fast) var(--ease-out),
+                color var(--motion-fast) var(--ease-out);
+  }
+  .icon-btn:hover {
+    background-color: var(--color-sidebar-paper);
+  }
+  .icon-btn:active {
+    background-color: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  }
+
   /* ── Section header ── */
   .swiss-section-header {
     display: flex;
@@ -981,6 +1063,163 @@
   .katex .mord, .katex .mbin, .katex .mrel,
   .katex .mopen, .katex .mclose, .katex .mpunct, .katex .mop {
     color: var(--color-ink-primary);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CONVERSATION MODULE — Paper-ink palette utilities (Task #1/2/3)
+   所有 AI 工具块统一米色背景，与 AI 文本块视觉连续
+   ═══════════════════════════════════════════════════════════════ */
+@layer components {
+  /* ── AI 消息体（统一米色背景）── */
+  .ai-msg-paper {
+    background-color: var(--color-ai-msg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 12px 16px;
+    color: var(--color-ink-primary);
+    font-family: var(--font-sans);
+  }
+
+  /* ── AI 工具块（与 AI 文本同色，靠 margin 区分）── */
+  .ai-tool-block {
+    margin-top: 8px;
+    background-color: var(--color-ai-msg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    color: var(--color-ink-secondary);
+    transition: border-color var(--motion-fast) ease;
+  }
+  .ai-tool-block:hover { border-color: var(--color-border-hover); }
+
+  /* ── AI 工具块内部嵌套（option/code/canvas）─ 浅一档对比 ── */
+  .ai-tool-block-inner {
+    background-color: var(--color-page);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  /* ── AI 建议 pill（追问/提问）── */
+  .ai-suggestion-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 8px;
+    background-color: var(--color-ai-msg);
+    border: 1px solid var(--color-border);
+    border-radius: 9999px;
+    font-size: 11.5px;
+    color: var(--color-ink-primary);
+    cursor: pointer;
+    transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease;
+  }
+  .ai-suggestion-pill:hover {
+    background-color: var(--color-page);
+    border-color: var(--color-ink-secondary);
+  }
+  .ai-suggestion-pill .kind {
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: var(--radius-xs);
+    line-height: 1.3;
+    display: inline-flex; align-items: center; gap: 2px;
+    color: var(--color-ink-muted);
+    background-color: var(--color-page);
+    border: 1px solid var(--color-border);
+  }
+
+  /* ── 用户消息：图片缩略图 ── */
+  .user-thumb {
+    width: 80px; height: 80px;
+    background-color: var(--color-user-thumb);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    display: grid; place-items: center;
+    color: var(--color-ink-muted);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+  }
+  .user-thumb:hover { border-color: var(--color-ink-secondary); }
+  .user-thumb .more-count {
+    position: absolute; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.55); color: white;
+    font-size: 10px; padding: 1px 5px;
+    border-radius: 6px 0 6px 0;
+  }
+
+  /* ── 用户消息：文件 chip ── */
+  .user-file-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 8px;
+    background-color: var(--color-user-msg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    color: var(--color-ink-primary);
+    cursor: pointer;
+  }
+  .user-file-chip:hover { border-color: var(--color-ink-secondary); }
+
+  /* ── 用户消息：引用片段 ── */
+  .user-quote-strip {
+    display: flex; align-items: center; gap: 5px;
+    padding: 4px 8px;
+    background-color: var(--color-user-msg);
+    border: 1px solid var(--color-border);
+    border-left: 2px solid var(--color-ink-muted);
+    border-radius: var(--radius-sm);
+    font-size: 10.5px;
+    color: var(--color-ink-secondary);
+    cursor: pointer;
+    max-width: 100%;
+  }
+  .user-quote-strip:hover {
+    border-color: var(--color-ink-secondary);
+    border-left-color: var(--color-ink-secondary);
+  }
+  .user-quote-strip .text {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* ── 用户消息：头像（圆角矩形，区别 AI 圆形）── */
+  .user-avatar-chip {
+    width: 24px; height: 24px;
+    flex-shrink: 0;
+    border-radius: 6px;
+    background-color: var(--color-accent);
+    color: var(--color-text-on-dark);
+    display: grid; place-items: center;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  /* ── AI 消息：头像（圆形）── */
+  .ai-avatar-chip {
+    width: 24px; height: 24px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #c4a3d4 0%, #7a5a8c 100%);
+    color: white;
+    display: grid; place-items: center;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  /* ── 顶栏纸感 ── */
+  .topbar-paper {
+    background-color: var(--color-topbar-paper);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .sidebar-paper {
+    background-color: var(--color-sidebar-paper);
+    border-right: 1px solid var(--color-border);
+  }
+  .page-paper {
+    background-color: var(--color-page-paper);
   }
 }
 

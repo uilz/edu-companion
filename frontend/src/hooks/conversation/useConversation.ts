@@ -241,6 +241,7 @@ export function useConversation() {
   return {
     // State
     dirList,
+    selectedNode,
     selectedNodeId,
     selectedNodeType,
     activeConversationId: selectedNode?.level === "conv" ? selectedNode.id : null,

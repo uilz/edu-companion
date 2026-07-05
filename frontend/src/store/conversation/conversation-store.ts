@@ -57,6 +57,7 @@ export type RecommendationBanner = {
 
 export interface UseConversationReturn {
   dirList: DirInfo[];
+  selectedNode: SelectedNode | null;
   selectedNodeId: string | null;
   selectedNodeType: "dir" | "conv" | null;
   messages: MessageNode[];

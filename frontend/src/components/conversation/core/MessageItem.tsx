@@ -1,11 +1,8 @@
 "use client";
 
 import React, { memo, useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { User, Bot, GraduationCap, BookOpen, ImageIcon, FileText, ExternalLink } from "lucide-react";
-import ResponseBlockRenderer from "./../blocks/ResponseBlockRenderer";
-import QuoteBlockRenderer from "./../blocks/QuoteBlockRenderer";
+import { GraduationCap, BookOpen, ImageIcon, FileText, ExternalLink, Quote as QuoteIcon, X } from "lucide-react";
 import { BLOCK_RENDERERS } from "@/components/conversation/blocks/registry";
-import SubBranchInline from "./../blocks/SubBranchInline";
 import MarkdownRenderer from "./../blocks/MarkdownRenderer";
 import SelfExplainCard from "./../cards/SelfExplainCard";
 import MessageActions from "./MessageActions";
@@ -13,7 +10,8 @@ import MessageEditArea from "./MessageEditArea";
 import { useExplainStore, getCardsForMessage } from "@/store/explain/explain-store";
 import type { ExplainCardData } from "@/store/explain/explain-store";
 import KnowledgeExplainCard from "@/components/conversation/cards/KnowledgeExplainCard";
-import type { MessageNode, SubBranchInfo } from "@/types";
+import { useAuth } from "@/contexts/AuthContext";
+import type { MessageNode, ContentBlock } from "@/types";
 
 // ── Feynman evaluation type ──
 export interface FeynmanEval {
@@ -34,7 +32,6 @@ const ExplainMarkers = memo(function ExplainMarkers({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [badgePositions, setBadgePositions] = useState<Array<{id:string;x:number;y:number;depth:number}>>([]);
-  // 过滤有效卡片，减少循环
   const validCards = useMemo(() => cards.filter(c => c.depth === 1 && !!c.selected_text), [cards]);
 
   useEffect(() => {
@@ -161,6 +158,14 @@ const FloatingExplainCard = memo(function FloatingExplainCard({ card }: { card: 
   );
 });
 
+// ── User avatar initial (从 useAuth.user 取首字符) ──
+function getUserInitial(displayName?: string | null, username?: string | null, email?: string | null): string {
+  const s = (displayName || username || email || "U").trim();
+  if (!s) return "U";
+  // 优先取 display_name 首字符；含中文/emoji 时直接用第一个字符
+  return Array.from(s)[0]!.toUpperCase();
+}
+
 // ── MessageItem props ──
 export interface MessageItemProps {
   message: MessageNode;
@@ -172,7 +177,6 @@ export interface MessageItemProps {
   loaded: boolean;
   displayText: string;
   cardsForMsg: ExplainCardData[];
-  subBranches: SubBranchInfo[];
   replyingToId: string | null;
   isLoading: boolean;
   // Edit handlers
@@ -185,7 +189,6 @@ export interface MessageItemProps {
   onCopy: () => void;
   onVersionNav: (dir: "prev" | "next") => void;
   onFeynmanTeach?: () => void;
-  onEnterSubBranch: (convId: string) => void;
   // Text selection handlers
   handleTextMouseDown: (e: React.MouseEvent) => void;
   handleTextMouseUp: (e: React.MouseEvent) => void;
@@ -193,6 +196,84 @@ export interface MessageItemProps {
   handleTextClick: (e: React.MouseEvent, messageId: string, convId: string, blockText: string) => void;
   onBadgeClick: (cardId: string) => void;
 }
+
+// ── 分组 content_blocks 方便后续按类型渲染 ──
+function groupBlocks(blocks: ContentBlock[] | undefined) {
+  const result = { quotes: [] as ContentBlock[], images: [] as ContentBlock[], files: [] as ContentBlock[], others: [] as ContentBlock[] };
+  if (!blocks) return result;
+  for (const b of blocks) {
+    if (b.type === "quote") result.quotes.push(b);
+    else if (b.type === "image") result.images.push(b);
+    else if (b.type === "file") result.files.push(b);
+    else if (b.type !== "text") result.others.push(b);
+  }
+  return result;
+}
+
+// ── User 多输入片段：缩略图 ──
+const UserImageThumbs = memo(function UserImageThumbs({ images }: { images: ContentBlock[] }) {
+  if (images.length === 0) return null;
+  const MAX_VISIBLE = 4;
+  const visible = images.slice(0, MAX_VISIBLE);
+  const more = images.length - visible.length;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {visible.map((img, idx) => {
+        const name = img.name || img.preview_text || "图片";
+        return (
+          <div key={idx} className="user-thumb" title={name}>
+            <ImageIcon size={20} />
+            {more > 0 && idx === visible.length - 1 && (
+              <span className="more-count">+{more}</span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+});
+
+// ── User 多输入片段：文件 chip ──
+const UserFileChips = memo(function UserFileChips({ files }: { files: ContentBlock[] }) {
+  if (files.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {files.map((f, idx) => {
+        const name = f.name || "未命名文件";
+        const mid = f.material_id;
+        return (
+          <a
+            key={idx}
+            href={mid ? `/files/${mid}` : undefined}
+            target={mid ? "_blank" : undefined}
+            rel="noreferrer"
+            className="user-file-chip"
+            title={name}
+          >
+            <FileText size={11} />
+            <span className="truncate" style={{ maxWidth: 140 }}>{name}</span>
+            {mid ? <ExternalLink size={9} className="opacity-60" /> : (
+              <span className="text-[9px] text-[var(--color-text-muted)]">索引中</span>
+            )}
+          </a>
+        );
+      })}
+    </div>
+  );
+});
+
+// ── User 多输入片段：引用片段 ──
+const UserQuoteStrip = memo(function UserQuoteStrip({ quote }: { quote: ContentBlock }) {
+  const text = quote.quoted_text || quote.preview_text || quote.text_content || "";
+  if (!text) return null;
+  const trimmed = text.length > 80 ? text.slice(0, 80) + "…" : text;
+  return (
+    <div className="user-quote-strip" title={text}>
+      <QuoteIcon size={11} className="shrink-0" />
+      <span className="text">{trimmed}</span>
+    </div>
+  );
+});
 
 // ── MessageItem — single message rendering (memoized) ──
 function MessageItemInner({
@@ -205,7 +286,6 @@ function MessageItemInner({
   loaded,
   displayText,
   cardsForMsg,
-  subBranches,
   replyingToId,
   isLoading,
   onStartEdit,
@@ -216,7 +296,6 @@ function MessageItemInner({
   onCopy,
   onVersionNav,
   onFeynmanTeach,
-  onEnterSubBranch,
   handleTextMouseDown,
   handleTextMouseUp,
   handleTextContextMenu,
@@ -224,36 +303,23 @@ function MessageItemInner({
   onBadgeClick,
 }: MessageItemProps) {
   const isUser = message.role === "user";
+  const { user } = useAuth();
+  const userInitial = isUser ? getUserInitial(user?.display_name, user?.username, user?.email) : "";
 
-  // Loading indicator
-  const loadingIndicator = useMemo(() => (
-    <div className="flex gap-4">
-      <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-[var(--color-surface)] text-[var(--color-accent)] border border-[var(--color-border)]">
-        <Bot size={16} />
-      </div>
-      <div className="flex items-center gap-2 px-4 py-2.5">
-        <div className="flex gap-1.5 items-center">
-          <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
-          <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "200ms" }} />
-          <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "400ms" }} />
-        </div>
-      </div>
-    </div>
-  ), []);
+  const grouped = useMemo(() => groupBlocks(message.content_blocks as ContentBlock[] | undefined), [message.content_blocks]);
 
   if (!loaded && !isEditing) {
     return (
-      <div className={`flex gap-4 ${isUser ? "flex-row-reverse" : ""} animate-pulse`}>
-        <div className={`flex-shrink-0 w-8 h-8 rounded-full ${isUser ? "bg-[var(--color-accent)]/30" : "bg-blue-500/30"}`} />
-        <div className={`flex-1 min-w-0 ${isUser ? "flex justify-end" : ""}`}>
-          <div className={`${isUser ? "max-w-[85%]" : ""} space-y-2 py-2`}>
+      <div className={`${isUser ? "flex justify-end" : ""}`}>
+        <div className={`${isUser ? "w-full max-w-[85%]" : "w-full"}`}>
+          <div className={`${isUser ? "ai-msg-paper" : "ai-msg-paper"} animate-pulse space-y-2`}>
             {isUser ? (
-              <div className="h-4 bg-[var(--color-surface)] rounded-lg w-3/4" />
+              <div className="h-4 bg-[var(--color-page)] rounded-lg w-3/4" />
             ) : (
               <>
-                <div className="h-4 bg-[var(--color-surface-alt)] rounded-lg w-full" />
-                <div className="h-4 bg-[var(--color-surface-alt)] rounded-lg w-5/6" />
-                <div className="h-4 bg-[var(--color-surface-alt)] rounded-lg w-2/3" />
+                <div className="h-4 bg-[var(--color-page-secondary)] rounded-lg w-full" />
+                <div className="h-4 bg-[var(--color-page-secondary)] rounded-lg w-5/6" />
+                <div className="h-4 bg-[var(--color-page-secondary)] rounded-lg w-2/3" />
               </>
             )}
           </div>
@@ -264,143 +330,130 @@ function MessageItemInner({
 
   return (
     <div>
-      {/* AI Avatar + label — above the message for assistant */}
-      {!isUser && (
+      {/* Avatar row: 独立成行，不再与内容同行（解决挤压宽度问题） */}
+      {isUser ? (
+        <div className="flex items-center gap-1.5 mb-1.5 px-1 justify-end">
+          <span className="text-xs font-medium text-[var(--color-text-muted)]">你</span>
+          <div className="user-avatar-chip" aria-label="你">
+            {userInitial}
+          </div>
+        </div>
+      ) : (
         <div className="flex items-center gap-2 mb-1.5 px-1">
-          <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-white ${isFeynmanMode ? "bg-emerald-500" : "bg-blue-500"}`}>
-            {isFeynmanMode ? <BookOpen size={16} /> : <GraduationCap size={16} />}
+          <div className={`ai-avatar-chip`}>
+            {isFeynmanMode ? <BookOpen size={13} /> : <GraduationCap size={13} />}
           </div>
           <span className="text-xs font-medium text-[var(--color-text-muted)]">
             {isFeynmanMode ? "费曼学生" : "教学助手"}
           </span>
         </div>
       )}
-      <div className={`message-enter ${isUser ? "flex gap-4 flex-row-reverse" : ""}`}>
-        {isUser && (
-          <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-[var(--color-accent)] text-white">
-            <User size={16} />
-          </div>
-        )}
 
-        <div className={`flex-1 min-w-0 ${isUser ? "flex justify-end" : ""}`}>
-          <div className={`relative pb-7 ${isUser ? "max-w-[85%]" : ""}`}
-            style={{ overflow: 'visible', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-            <div className="group">
-              {/* Quote blocks */}
-              {(message.content_blocks || []).filter(b => b.type === "quote").map((b, qi) => (
-                <QuoteBlockRenderer key={`quote-${qi}`} quotedText={b.quoted_text || ""}
-                  sourceConversationId={b.source_conv_id} sourceMessageId={b.source_message_id} />
-              ))}
-
-              {/* Uploaded file attachments */}
-              {(message.content_blocks || []).filter(b => b.type === "file" || b.type === "image").length > 0 && (
-                <div className="mb-2 flex flex-wrap gap-1.5">
-                  {(message.content_blocks || []).filter(b => b.type === "file" || b.type === "image").map((b, fi) => {
-                    const mid = (b as any).material_id;
+      <div className="message-enter">
+        <div className={`relative pb-7 ${isUser ? "flex justify-end" : ""}`}
+          style={{ overflow: 'visible', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          <div className={`group ${isUser ? "max-w-[85%]" : "max-w-full"}`}>
+            {/* === AI 消息：paper-ink 风格，文本与工具块米色一致 === */}
+            {!isUser && (
+              <div className="ai-msg-paper space-y-1">
+                {(message.content_blocks || []).map((b, bi) => {
+                  if (b.type === "text") {
+                    const blockText = b.text || "";
+                    if (!blockText) return null;
                     return (
-                      <div key={`file-${fi}`}
-                        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]/60 text-[11px] text-[var(--color-text-secondary)]">
-                        {b.type === "image" ? <ImageIcon size={12} className="text-blue-500" /> : <FileText size={12} className="text-[var(--color-accent)]" />}
-                        <span className="truncate max-w-[120px]">{b.name || "未命名文件"}</span>
-                        {mid ? (
-                          <a href={`/files/${mid}`} target="_blank" rel="noreferrer"
-                            className="text-[var(--color-text-muted)] hover:text-[var(--color-accent)] ml-0.5">
-                            <ExternalLink size={10} />
-                          </a>
-                        ) : (
-                          <span className="text-[9px] text-green-500/70 animate-pulse">索引中</span>
-                        )}
+                      <div key={`text-${bi}`}
+                        data-message-id={message.id} data-conv-id={message.conv_id} data-full-text={blockText}
+                        className="text-base leading-[1.65] whitespace-pre-wrap break-words select-text"
+                        onMouseDown={handleTextMouseDown} onMouseUp={handleTextMouseUp} onContextMenu={handleTextContextMenu}
+                        onClick={(e) => { e.stopPropagation(); handleTextClick(e, message.id, message.conv_id || "", blockText); }}
+                      >
+                        <ExplainMarkers text={blockText} cards={cardsForMsg} messageId={message.id} onBadgeClick={onBadgeClick} />
                       </div>
                     );
-                  })}
-                </div>
-              )}
-
-              {/* Content bubble */}
-              <div className={`relative ${isUser
-                ? "bg-[var(--color-surface)] border border-[var(--color-border)] px-4 pb-2.5 pt-2.5 rounded-[14px] rounded-tr-[14px] rounded-br-none"
-                : "bg-[var(--color-surface-alt)] text-[var(--color-text)] px-4 py-3 rounded-[14px] rounded-tl-[14px] rounded-bl-none"
-              }`}>
-                {isEditing ? (
-                  <MessageEditArea text={editingText} onChange={onEditTextChange} onSave={onSaveEdit} onCancel={onCancelEdit} />
-                ) : isUser ? (
-                  <div data-message-id={message.id} data-conv-id={message.conv_id} data-full-text={displayText}
-                    className="text-base leading-[1.65] text-[var(--color-text)] whitespace-pre-wrap break-words select-text">
-                    <ExplainMarkers text={displayText} cards={cardsForMsg} messageId={message.id} onBadgeClick={onBadgeClick} />
+                  }
+                  const Renderer = BLOCK_RENDERERS[b.type];
+                  if (!Renderer) return null;
+                  return (
+                    <div key={`block-${bi}`} className="ai-tool-block">
+                      <Renderer block={b} />
+                    </div>
+                  );
+                })}
+                {!(message.content_blocks || []).some(b => b.type === "text") && isLoading && (
+                  <div className="flex gap-1.5 items-center py-1 px-1">
+                    <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
+                    <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "200ms" }} />
+                    <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "400ms" }} />
                   </div>
-                ) : (
-                  <>
-                    {(message.content_blocks || []).map((b, bi) => {
-                      if (b.type === "text") {
-                        const blockText = b.text || "";
-                        if (!blockText) return null;
-                        return (
-                          <div key={`text-${bi}`}
-                            data-message-id={message.id} data-conv-id={message.conv_id} data-full-text={blockText}
-                            className="text-base leading-[1.65] whitespace-pre-wrap break-words select-text"
-                            onMouseDown={handleTextMouseDown} onMouseUp={handleTextMouseUp} onContextMenu={handleTextContextMenu}
-                            onClick={(e) => { e.stopPropagation(); handleTextClick(e, message.id, message.conv_id || "", blockText); }}
-                          >
-                            <ExplainMarkers text={blockText} cards={cardsForMsg} messageId={message.id} onBadgeClick={onBadgeClick} />
-                          </div>
-                        );
-                      }
-                      const Renderer = BLOCK_RENDERERS[b.type];
-                      return Renderer ? <Renderer key={`block-${bi}`} block={b} /> : null;
-                    })}
-                    {!(message.content_blocks || []).some(b => b.type === "text") && isLoading && (
-                      <div className="flex gap-1.5 items-center py-1 px-1">
-                        <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
-                        <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "200ms" }} />
-                        <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "400ms" }} />
-                      </div>
-                    )}
-                  </>
                 )}
 
-                {/* Floating explain cards */}
-                {cardsForMsg.filter(ec => ec.depth === 1).map((ec) => (
-                  <FloatingExplainCard key={ec.id} card={ec} />
-                ))}
-                {cardsForMsg.filter(ec => ec.depth >= 2).map((ec) => (
-                  <FloatingExplainCard key={ec.id} card={ec} />
-                ))}
-
-                {/* Self-explain card */}
-                {!isUser && message.cognitive_node_ids && message.cognitive_node_ids.length > 0 && (
+                {/* 自我解释卡（仅 AI） */}
+                {message.cognitive_node_ids && message.cognitive_node_ids.length > 0 && (
                   <SelfExplainCard
                     knowledgeNodeId={message.cognitive_node_ids[0]}
                     messageId={message.id}
                   />
                 )}
               </div>
+            )}
 
-              {/* Sub-branch inline */}
-              {subBranches.length > 0 && (
-                <div className="mt-1">
-                  <SubBranchInline messageId={message.id} subBranches={subBranches} onEnter={onEnterSubBranch} />
-                </div>
-              )}
+            {/* === 用户消息：单气泡内集成引用/图片/文件/文本 === */}
+            {isUser && (
+              <div className="ai-msg-paper" style={{ backgroundColor: 'var(--color-user-msg)' }}>
+                {isEditing ? (
+                  <MessageEditArea text={editingText} onChange={onEditTextChange} onSave={onSaveEdit} onCancel={onCancelEdit} />
+                ) : (
+                  <>
+                    {/* 引用片段：紧凑条带 */}
+                    {grouped.quotes.map((q, qi) => (
+                      <UserQuoteStrip key={`uq-${qi}`} quote={q} />
+                    ))}
 
-              {/* Action buttons */}
-              {!isEditing && (
-                <MessageActions
-                  role={isUser ? "user" : "assistant"}
-                  vInfo={vInfo}
-                  hasVersions={hasVersions}
-                  text={displayText}
-                  onEdit={isUser ? () => onStartEdit(message.id, displayText) : undefined}
-                  onDelete={onDelete}
-                  onCopy={onCopy}
-                  onVersionNav={isUser ? onVersionNav : undefined}
-                  onFeynmanTeach={(!isUser && !isFeynmanMode && onFeynmanTeach) ? onFeynmanTeach : undefined}
-                />
-              )}
+                    {/* 图片缩略图：80x80 grid */}
+                    {grouped.images.length > 0 && (
+                      <UserImageThumbs images={grouped.images} />
+                    )}
+
+                    {/* 文件 chip */}
+                    {grouped.files.length > 0 && (
+                      <UserFileChips files={grouped.files} />
+                    )}
+
+                    {/* 文本气泡 */}
+                    {displayText && (
+                      <div data-message-id={message.id} data-conv-id={message.conv_id} data-full-text={displayText}
+                        className="text-base leading-[1.65] text-[var(--color-text)] whitespace-pre-wrap break-words select-text">
+                        <ExplainMarkers text={displayText} cards={cardsForMsg} messageId={message.id} onBadgeClick={onBadgeClick} />
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Floating explain cards (跨 AI/用户消息; 通常 AI) */}
+            <div className="relative">
+              {cardsForMsg.map((ec) => (
+                <FloatingExplainCard key={ec.id} card={ec} />
+              ))}
             </div>
+
+            {/* Action buttons */}
+            {!isEditing && (
+              <MessageActions
+                role={isUser ? "user" : "assistant"}
+                vInfo={vInfo}
+                hasVersions={hasVersions}
+                text={displayText}
+                onEdit={isUser ? () => onStartEdit(message.id, displayText) : undefined}
+                onDelete={onDelete}
+                onCopy={onCopy}
+                onVersionNav={isUser ? onVersionNav : undefined}
+                onFeynmanTeach={(!isUser && !isFeynmanMode && onFeynmanTeach) ? onFeynmanTeach : undefined}
+              />
+            )}
           </div>
         </div>
-        {/* Loading indicator below the message being edited */}
-        {replyingToId === message.id && loadingIndicator}
       </div>
     </div>
   );
@@ -420,7 +473,6 @@ const areMessageItemPropsEqual = (prev: MessageItemProps, next: MessageItemProps
     prev.loaded === next.loaded &&
     prev.displayText === next.displayText &&
     prev.cardsForMsg === next.cardsForMsg &&
-    prev.subBranches === next.subBranches &&
     prev.replyingToId === next.replyingToId &&
     prev.isLoading === next.isLoading
   );

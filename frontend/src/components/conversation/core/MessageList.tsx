@@ -11,7 +11,7 @@ import { useExplainStore, getCardsForMessage } from "@/store/explain/explain-sto
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import EmptyState from "@/components/ui/EmptyState";
 import { useConversationStore, useMessageStore } from "@/store/conversation/conversation-store";
-import type { MessageNode, SubBranchInfo } from "@/types";
+import type { MessageNode } from "@/types";
 import type { FeynmanEval } from "./MessageItem";
 
 // ══════════════════════════════════════════════════════════════
@@ -37,7 +37,6 @@ export interface MessageListProps {
   onEditMessage?: (messageId: string, newText: string) => Promise<number>;
   onSend?: (text: string) => void;
   onFeynmanTeach?: (messageId: string, messageText: string, conversationId: string) => void;
-  breadcrumb?: React.ReactNode;
 }
 
 export default function MessageList({
@@ -51,10 +50,7 @@ export default function MessageList({
   onEditMessage,
   onSend,
   onFeynmanTeach,
-  breadcrumb,
 }: MessageListProps) {
-  const breadcrumbRef = useRef<HTMLDivElement>(null);
-  const [breadcrumbHeight, setBreadcrumbHeight] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const virtuosoRef = useRef<VirtuosoHandle>(null);
@@ -63,12 +59,9 @@ export default function MessageList({
   const [atBottom, setAtBottom] = useState(true);
   const lastWheelDeltaYRef = useRef(0);
   const initialLoadDoneRef = useRef(false);
-  const [subBranchData, setSubBranchData] = useState<Record<string, SubBranchInfo[]>>({});
   const [noteCard, setNoteCard] = useState<{ text: string; position: { x: number; y: number } } | null>(null);
 
   const setPendingQuote = useConversationStore((s) => s.setPendingQuote);
-  const enterSubBranch = useConversationStore((s) => s.enterSubBranch);
-  const loadSubBranches = useConversationStore((s) => s.loadSubBranches);
 
   // ── Explain cards from store ──
   const explainCards = useExplainStore((s) => s.cards);
@@ -85,18 +78,6 @@ export default function MessageList({
   }, [conversationId, loadFromConversation]);
 
   const { selection, handleTextMouseDown, handleTextClick, handleTextMouseUp, handleTextContextMenu, handleQuote, handleSelectionCopy } = useTextSelection(setPendingQuote);
-
-  // Load sub-branches
-  useEffect(() => {
-    for (const msg of messages) {
-      if (msg.has_sub_branches && !subBranchData[msg.id]) {
-        loadSubBranches(msg.id).then((branches) => {
-          if (branches.length > 0) setSubBranchData((prev) => ({ ...prev, [msg.id]: branches }));
-        });
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages.map((m) => m.id).join(",")]);
 
   const handleCopyMessage = useCallback(async (text: string) => {
     try { await navigator.clipboard.writeText(text); }
@@ -196,19 +177,6 @@ export default function MessageList({
       lazyLoadBatch(toLoad);
     }
   }, [visibleRange, messages, lazyLoadBatch, loadedContent, loadingContents]);
-
-  // ── 动态测量面包屑实际高度 ──
-  useEffect(() => {
-    if (!breadcrumbRef.current) return;
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const h = entry.contentRect.height;
-        if (h > 0) setBreadcrumbHeight(h);
-      }
-    });
-    ro.observe(breadcrumbRef.current);
-    return () => ro.disconnect();
-  }, [breadcrumb]);
 
   // ── 加载设置（尊重用户的"加载时滚动到底部"设置）──
   const [autoScrollOnLoad, setAutoScrollOnLoad] = useState(true);
@@ -310,7 +278,6 @@ export default function MessageList({
       ? { index: group.activeIndex + 1, total: group.total }
       : { index: 1, total: 1 };
     const cardsForMsg = getCardsForMessage(message.id, explainCards);
-    const subBranches = subBranchData[message.id] || [];
 
     return (
       <div data-lazy-id={message.id} className="py-1.5">
@@ -324,7 +291,6 @@ export default function MessageList({
           loaded={loaded}
           displayText={displayText}
           cardsForMsg={cardsForMsg}
-          subBranches={subBranches}
           replyingToId={replyingToId ?? null}
           isLoading={isLoading}
           onStartEdit={handleStartEdit}
@@ -335,7 +301,6 @@ export default function MessageList({
           onCopy={() => handleCopyMessage(displayText)}
           onVersionNav={(dir) => handleVersionNav(message.id, dir)}
           onFeynmanTeach={onFeynmanTeach ? () => onFeynmanTeach(message.id, displayText, message.conv_id || "") : undefined}
-          onEnterSubBranch={enterSubBranch}
           handleTextMouseDown={handleTextMouseDown}
           handleTextMouseUp={handleTextMouseUp}
           handleTextContextMenu={handleTextContextMenu}
@@ -349,10 +314,10 @@ export default function MessageList({
     );
   }, [
     editingId, editingText, isContentLoaded, getDisplayText,
-    versionGroupByMessage, versionGroups, explainCards, subBranchData,
+    versionGroupByMessage, versionGroups, explainCards,
     replyingToId, isLoading, isFeynmanMode,
     handleStartEdit, handleSaveEdit, handleCancelEdit,
-    handleCopyMessage, handleVersionNav, onDeleteMessage, onFeynmanTeach, enterSubBranch,
+    handleCopyMessage, handleVersionNav, onDeleteMessage, onFeynmanTeach,
     handleTextMouseDown, handleTextMouseUp, handleTextContextMenu, handleTextClick,
   ]);
 
@@ -380,12 +345,6 @@ export default function MessageList({
     return <div className="px-4 py-2">{loadingIndicator}</div>;
   }, [isLoading, replyingToId, messages, loadingIndicator]);
 
-  // ── Virtuoso Header (Breadcrumb spacer) ──
-  const Header = useCallback(() => {
-    if (!breadcrumb) return null;
-    return <div style={{ height: breadcrumbHeight || 48 }} />;
-  }, [breadcrumb, breadcrumbHeight]);
-
   // ── 消息为空时的空状态 ──
   if (messages.length === 0) {
     return (
@@ -399,24 +358,6 @@ export default function MessageList({
             />
           </div>
         </ErrorBoundary>
-        {breadcrumb && (
-          <div ref={breadcrumbRef} className="absolute top-0 inset-x-0" style={{ zIndex: 10 }}>
-            <div className="absolute inset-0 pointer-events-none" style={{
-              zIndex: 1,
-              background: 'linear-gradient(to top, transparent 0%, var(--color-bg) 60%)',
-            }} />
-            <div className="absolute inset-0 pointer-events-none" style={{
-              zIndex: 2,
-              backdropFilter: 'blur(6px) saturate(140%)',
-              WebkitBackdropFilter: 'blur(6px) saturate(140%)',
-              maskImage: 'linear-gradient(to top, transparent 0%, black 60%)',
-              WebkitMaskImage: 'linear-gradient(to top, transparent 0%, black 60%)',
-            }} />
-            <div className="relative" style={{ zIndex: 3, background: 'transparent' }}>
-              {breadcrumb}
-            </div>
-          </div>
-        )}
       </div>
     );
   }
@@ -435,33 +376,11 @@ export default function MessageList({
         initialTopMostItemIndex={messages.length - 1}
         overscan={400}
         components={{
-          Header: Header,
           Footer: Footer,
         }}
         className="scrollbar-thin"
         data-testid="message-virtuoso"
       />
-
-      {breadcrumb && (
-        <div
-          ref={breadcrumbRef}
-          className="absolute top-0 inset-x-0"
-          style={{ zIndex: 10 }}
-        >
-          <div className="absolute inset-0 pointer-events-none" style={{
-            zIndex: 1,
-            background: 'linear-gradient(to top, transparent 0%, var(--color-bg) 60%)',
-          }} />
-          <div className="absolute inset-0 pointer-events-none" style={{
-            zIndex: 2,
-            backdropFilter: 'blur(6px) saturate(140%)',
-            WebkitMaskImage: 'linear-gradient(to top, transparent 0%, black 60%)',
-          }} />
-          <div className="relative" style={{ zIndex: 3, background: 'transparent' }}>
-            {breadcrumb}
-          </div>
-        </div>
-      )}
       </ErrorBoundary>
 
       {/* Text Selection Toolbar */}

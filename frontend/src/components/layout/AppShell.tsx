@@ -17,7 +17,7 @@ interface AppShellProps {
   children: React.ReactNode;
 }
 
-const FULLSCREEN_ROUTES = ['/conversation', '/focus'];
+const FULLSCREEN_ROUTES = ['/focus'];
 
 /**
  * 判断当前路径是否是 Cockpit 驾驶舱路由

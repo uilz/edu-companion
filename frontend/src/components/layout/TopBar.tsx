@@ -36,6 +36,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUser } from "@/hooks/useUser";
 import { useLayoutPrefs } from "@/hooks/useLayoutPrefs";
+import { usePanelContent } from "@/contexts/PanelContentContext";
 import { primaryNavItems } from "@/lib/navConfig";
 import { authedFetch } from "@/lib/api/api";
 
@@ -70,6 +71,7 @@ export default function TopBar() {
   const { user, logout } = useAuth();
   const { navContext } = useUser();
   const { pref, toggleCollapsed } = useLayoutPrefs();
+  const { breadcrumbs } = usePanelContent();
   const router = useRouter();
   const pathname = usePathname();
   const { status: syncStatus } = useSyncStatus();
@@ -244,10 +246,39 @@ export default function TopBar() {
           <span className="font-semibold text-ink-primary tracking-tight text-sm">苹果果</span>
         </Link>
 
-        {/* 路径指示 */}
-        <span className="text-ink-muted text-[12px] hidden md:inline">
-          {pathname === "/" ? "首页" : pathname}
-        </span>
+        {/* 路径指示 / 面包屑（由页面通过 PanelContentContext 设置） */}
+        {breadcrumbs.length > 0 ? (
+          <nav className="hidden md:flex items-center gap-1 min-w-0" style={{ fontSize: 12.5 }}>
+            {breadcrumbs.map((crumb, i) => {
+              const isLast = i === breadcrumbs.length - 1;
+              return (
+                <span key={i} className="inline-flex items-center gap-1 whitespace-nowrap min-w-0">
+                  {crumb.href ? (
+                    <Link
+                      href={crumb.href}
+                      className="text-ink-muted hover:text-ink-primary transition-colors truncate"
+                    >
+                      {crumb.label}
+                    </Link>
+                  ) : (
+                    <span className={isLast ? "text-ink-primary font-medium" : "text-ink-muted"}>
+                      {crumb.label}
+                    </span>
+                  )}
+                  {!isLast && (
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-ink-muted/50 shrink-0">
+                      <path d="m9 18 6-6-6-6" />
+                    </svg>
+                  )}
+                </span>
+              );
+            })}
+          </nav>
+        ) : (
+          <span className="text-ink-muted text-[12px] hidden md:inline">
+            {pathname === "/" ? "首页" : pathname}
+          </span>
+        )}
 
         {/* 中部：搜索框 */}
         <button

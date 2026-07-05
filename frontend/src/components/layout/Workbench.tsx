@@ -28,6 +28,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useBreakpoint } from "@/hooks/useBreakpoint";
 import { useLayoutPrefs, PANEL_BOUNDS } from "@/hooks/useLayoutPrefs";
+import { PanelContentProvider, usePanelContent } from "@/contexts/PanelContentContext";
 import ResizableContainer from "./ResizableContainer";
 import TopBar from "./TopBar";
 import BottomBar from "./BottomBar";
@@ -48,6 +49,16 @@ export interface WorkbenchProps {
 function useIsCockpitRoute(): boolean {
   const pathname = usePathname() || "/";
   return pathname === "/" || pathname === "/dashboard" || pathname.startsWith("/dashboard/");
+}
+
+// ── 内部组件：读取 context 决定 RightPanel 内容 ──
+function WorkbenchInner({ children }: WorkbenchProps) {
+  const { rightPanel } = usePanelContent();
+
+  // 当页面设置了自定义右栏时使用，否则用默认
+  const renderRight = rightPanel ?? <RightPanel />;
+
+  return <>{renderRight}</>;
 }
 
 export default function Workbench({ children }: WorkbenchProps) {
@@ -95,129 +106,131 @@ export default function Workbench({ children }: WorkbenchProps) {
   ].join(" ");
 
   return (
-    <div
-      className="h-screen w-screen overflow-hidden bg-page text-ink-primary"
-      style={{
-        display: "grid",
-        gridTemplateRows: gridRows,
-        gridTemplateColumns: gridCols,
-      }}
-    >
-      {/* ── 顶栏 (row 1, col 1 / -1) ── */}
-      {pref.topBar.visible && (
-        <div
-          className="row-start-1 col-span-3 min-w-0 overflow-hidden"
-          style={{ gridColumn: "1 / -1" }}
-        >
-          <ResizableContainer
-            visible
-            size={topH}
-            collapsed={pref.topBar.collapsed}
-            direction="vertical"
-            minSize={PANEL_BOUNDS.topBar.min}
-            maxSize={PANEL_BOUNDS.topBar.max}
-            collapsedSize={PANEL_BOUNDS.topBar.collapsed}
-            onResize={(s) => setHeight("topBar", s)}
-            onResizeEnd={(s) => setHeight("topBar", s)}
-            onToggleCollapse={() => toggleCollapsed("topBar")}
-            title="顶栏"
-            hideHeader
-            resizable
-            className="h-full"
+    <PanelContentProvider>
+      <div
+        className="h-screen w-screen overflow-hidden bg-page text-ink-primary"
+        style={{
+          display: "grid",
+          gridTemplateRows: gridRows,
+          gridTemplateColumns: gridCols,
+        }}
+      >
+        {/* ── 顶栏 (row 1, col 1 / -1) ── */}
+        {pref.topBar.visible && (
+          <div
+            className="row-start-1 col-span-3 min-w-0 overflow-hidden"
+            style={{ gridColumn: "1 / -1" }}
           >
-            <TopBar />
-          </ResizableContainer>
-        </div>
-      )}
+            <ResizableContainer
+              visible
+              size={topH}
+              collapsed={pref.topBar.collapsed}
+              direction="vertical"
+              minSize={PANEL_BOUNDS.topBar.min}
+              maxSize={PANEL_BOUNDS.topBar.max}
+              collapsedSize={PANEL_BOUNDS.topBar.collapsed}
+              onResize={(s) => setHeight("topBar", s)}
+              onResizeEnd={(s) => setHeight("topBar", s)}
+              onToggleCollapse={() => toggleCollapsed("topBar")}
+              title="顶栏"
+              hideHeader
+              resizable
+              className="h-full"
+            >
+              <TopBar />
+            </ResizableContainer>
+          </div>
+        )}
 
-      {/* ── 左栏 (row 2, col 1) ── */}
-      {pref.leftPanel.visible && (
-        <div className="row-start-2 col-start-1 min-h-0 overflow-hidden border-r border-divider">
-          <ResizableContainer
-            visible
-            size={leftW}
-            collapsed={pref.leftPanel.collapsed}
-            direction="horizontal"
-            minSize={PANEL_BOUNDS.leftPanel.min}
-            maxSize={PANEL_BOUNDS.leftPanel.max}
-            collapsedSize={PANEL_BOUNDS.leftPanel.collapsed}
-            onResize={(s) => setWidth("leftPanel", s)}
-            onResizeEnd={(s) => setWidth("leftPanel", s)}
-            onToggleCollapse={() => toggleCollapsed("leftPanel")}
-            title="导航"
-            headerRight={
-              pref.leftPanel.collapsed ? (
-                <button
-                  onClick={() => router.push("/")}
-                  className="p-1 rounded text-ink-muted hover:text-ink-primary hover:bg-surface-hover"
-                  title="首页"
-                >
-                  <Home size={14} />
-                </button>
-              ) : undefined
-            }
-            resizable
-            className="h-full"
+        {/* ── 左栏 (row 2, col 1) ── */}
+        {pref.leftPanel.visible && (
+          <div className="row-start-2 col-start-1 min-h-0 overflow-hidden border-r border-divider">
+            <ResizableContainer
+              visible
+              size={leftW}
+              collapsed={pref.leftPanel.collapsed}
+              direction="horizontal"
+              minSize={PANEL_BOUNDS.leftPanel.min}
+              maxSize={PANEL_BOUNDS.leftPanel.max}
+              collapsedSize={PANEL_BOUNDS.leftPanel.collapsed}
+              onResize={(s) => setWidth("leftPanel", s)}
+              onResizeEnd={(s) => setWidth("leftPanel", s)}
+              onToggleCollapse={() => toggleCollapsed("leftPanel")}
+              title="导航"
+              headerRight={
+                pref.leftPanel.collapsed ? (
+                  <button
+                    onClick={() => router.push("/")}
+                    className="p-1 rounded text-ink-muted hover:text-ink-primary hover:bg-surface-hover"
+                    title="首页"
+                  >
+                    <Home size={14} />
+                  </button>
+                ) : undefined
+              }
+              resizable
+              className="h-full"
+            >
+              <LeftPanel />
+            </ResizableContainer>
+          </div>
+        )}
+
+        {/* ── 中心 Main (row 2, col 2) ── */}
+        <div className="row-start-2 col-start-2 min-h-0 min-w-0 overflow-y-auto bg-page">
+          {isCockpit ? <Cockpit /> : children}
+        </div>
+
+        {/* ── 右栏 (row 2, col 3) ── */}
+        {pref.rightPanel.visible && (
+          <div className="row-start-2 col-start-3 min-h-0 overflow-hidden border-l border-divider">
+            <ResizableContainer
+              visible
+              size={rightW}
+              collapsed={pref.rightPanel.collapsed}
+              direction="horizontal"
+              minSize={PANEL_BOUNDS.rightPanel.min}
+              maxSize={PANEL_BOUNDS.rightPanel.max}
+              collapsedSize={PANEL_BOUNDS.rightPanel.collapsed}
+              onResize={(s) => setWidth("rightPanel", s)}
+              onResizeEnd={(s) => setWidth("rightPanel", s)}
+              onToggleCollapse={() => toggleCollapsed("rightPanel")}
+              title="工作面板"
+              resizable
+              className="h-full"
+            >
+              <WorkbenchInner>{children}</WorkbenchInner>
+            </ResizableContainer>
+          </div>
+        )}
+
+        {/* ── 底栏 (row 3, col 1 / -1) ── */}
+        {pref.bottomBar.visible && (
+          <div
+            className="row-start-3 col-span-3 min-w-0 overflow-hidden"
+            style={{ gridColumn: "1 / -1" }}
           >
-            <LeftPanel />
-          </ResizableContainer>
-        </div>
-      )}
-
-      {/* ── 中心 Main (row 2, col 2) ── */}
-      <div className="row-start-2 col-start-2 min-h-0 min-w-0 overflow-y-auto bg-page">
-        {isCockpit ? <Cockpit /> : children}
+            <ResizableContainer
+              visible
+              size={bottomH}
+              collapsed={pref.bottomBar.collapsed}
+              direction="vertical"
+              minSize={PANEL_BOUNDS.bottomBar.min}
+              maxSize={PANEL_BOUNDS.bottomBar.max}
+              collapsedSize={PANEL_BOUNDS.bottomBar.collapsed}
+              onResize={(s) => setHeight("bottomBar", s)}
+              onResizeEnd={(s) => setHeight("bottomBar", s)}
+              onToggleCollapse={() => toggleCollapsed("bottomBar")}
+              title="底栏"
+              hideHeader
+              resizable
+              className="h-full"
+            >
+              <BottomBar />
+            </ResizableContainer>
+          </div>
+        )}
       </div>
-
-      {/* ── 右栏 (row 2, col 3) ── */}
-      {pref.rightPanel.visible && (
-        <div className="row-start-2 col-start-3 min-h-0 overflow-hidden border-l border-divider">
-          <ResizableContainer
-            visible
-            size={rightW}
-            collapsed={pref.rightPanel.collapsed}
-            direction="horizontal"
-            minSize={PANEL_BOUNDS.rightPanel.min}
-            maxSize={PANEL_BOUNDS.rightPanel.max}
-            collapsedSize={PANEL_BOUNDS.rightPanel.collapsed}
-            onResize={(s) => setWidth("rightPanel", s)}
-            onResizeEnd={(s) => setWidth("rightPanel", s)}
-            onToggleCollapse={() => toggleCollapsed("rightPanel")}
-            title="工作面板"
-            resizable
-            className="h-full"
-          >
-            <RightPanel />
-          </ResizableContainer>
-        </div>
-      )}
-
-      {/* ── 底栏 (row 3, col 1 / -1) ── */}
-      {pref.bottomBar.visible && (
-        <div
-          className="row-start-3 col-span-3 min-w-0 overflow-hidden"
-          style={{ gridColumn: "1 / -1" }}
-        >
-          <ResizableContainer
-            visible
-            size={bottomH}
-            collapsed={pref.bottomBar.collapsed}
-            direction="vertical"
-            minSize={PANEL_BOUNDS.bottomBar.min}
-            maxSize={PANEL_BOUNDS.bottomBar.max}
-            collapsedSize={PANEL_BOUNDS.bottomBar.collapsed}
-            onResize={(s) => setHeight("bottomBar", s)}
-            onResizeEnd={(s) => setHeight("bottomBar", s)}
-            onToggleCollapse={() => toggleCollapsed("bottomBar")}
-            title="底栏"
-            hideHeader
-            resizable
-            className="h-full"
-          >
-            <BottomBar />
-          </ResizableContainer>
-        </div>
-      )}
-    </div>
+    </PanelContentProvider>
   );
 }
