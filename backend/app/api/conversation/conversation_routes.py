@@ -317,21 +317,50 @@ def _merge_cognitive_ids(messages: list[dict], msg_ids: list[str]) -> None:
 async def list_messages(
     conv_id: str, request: Request, user_id: str = Depends(current_user_id),
     limit: int = 50, offset: int = 0,
+    head: int | None = None, tail: int | None = None,
 ):
     """获取会话消息骨架列表（仅 id/parent_id/role/version 等结构字段，无正文）。
-    
-    正文通过 GET /tree/message/{id} 逐条懒加载。
-    前端据此构建消息树，然后按需拉取完整消息。
+
+    支持三种模式（向后兼容）：
+      - limit/offset：传统分页
+      - head=N&tail=M：分段加载，开头 N 条 + 末尾 M 条（用于大型对话）
+      - 仅 limit/offset：默认全量上限 50
     """
     etag = _check_etag(request, user_id)
     data = get_data_repo().load(user_id)
     conv_node = data.directory_nodes.get(conv_id)
     if not conv_node or conv_node.node_type != "conv":
         raise HTTPException(404, "Conversation not found")
-    msg_ids = conv_node.conv_message_ids[offset: offset + limit]
+    total_ids = len(conv_node.conv_message_ids)
+
+    # 分段模式：head + tail（去重）
+    if head is not None or tail is not None:
+        head_n = head if head is not None else 0
+        tail_n = tail if tail is not None else 0
+        head_ids = conv_node.conv_message_ids[:head_n]
+        tail_ids = conv_node.conv_message_ids[-tail_n:] if tail_n > 0 else []
+        # 去重保持顺序
+        seen = set()
+        msg_ids = []
+        for mid in head_ids + tail_ids:
+            if mid not in seen:
+                seen.add(mid)
+                msg_ids.append(mid)
+    else:
+        msg_ids = conv_node.conv_message_ids[offset: offset + limit]
+
+    from app.services.conversation.message_repository import get_message_repo
+    msg_repo = get_message_repo()
+
+    def _get_msg(mid: str):
+        n = data.nodes.get(mid)
+        if n and not getattr(n, "is_deleted", False):
+            return n
+        return msg_repo.get(mid)
+
     messages = []
     for mid in msg_ids:
-        node = data.nodes.get(mid)
+        node = _get_msg(mid)
         if node and not getattr(node, "is_deleted", False):
             # 跳过根占位消息（parent_id 为空的空内容 assistant 消息）
             if node.parent_id is None and node.role == "assistant" and not node.content:
@@ -350,11 +379,12 @@ async def list_messages(
                 "content": "",
                 "content_blocks": [],
                 "text_summary": "",
+                "is_deleted": getattr(node, "is_deleted", False),
+                "status": getattr(node, "status", "done"),
             }
             messages.append(d)
-    total = len(messages)
     return Response(
-        content=json.dumps({"messages": messages, "total": total}),
+        content=json.dumps({"messages": messages, "total": total_ids}),
         media_type="application/json",
         headers={"ETag": etag, "Cache-Control": "no-cache"},
     )
@@ -753,19 +783,19 @@ async def get_conversation_chain(conv_id: str, user_id: str = Depends(current_us
 @router.post("/tree/conversation/{conv_id}/chain/path")
 async def compute_chain_path(conv_id: str, body: dict, user_id: str = Depends(current_user_id)):
     """计算从根到指定消息的完整路径。
-    
+
     请求体: { "from_id": "msg_id" }
     返回: 从根（parent_id=None）到 from_id 的祖先链（含 from_id 自身）
     """
     from_id = body.get("from_id", "")
     if not from_id:
         raise HTTPException(400, "from_id is required")
-    
+
     data = get_data_repo().load(user_id)
     conv_node = data.directory_nodes.get(conv_id)
     if not conv_node or conv_node.node_type != "conv":
         raise HTTPException(404, "Conversation not found")
-    
+
     # 沿 parent_id 回溯到根
     # 消息存储在 PostgreSQL messages 表（D18），通过 message_repository 单条加载
     from app.services.conversation.message_repository import get_message_repo
@@ -792,6 +822,111 @@ async def compute_chain_path(conv_id: str, body: dict, user_id: str = Depends(cu
 
     path.reverse()  # 根 → from_id
     return {"messages": path, "total": len(path), "from_id": from_id}
+
+
+@router.post("/tree/conversation/{conv_id}/chain/skeleton")
+async def get_chain_skeleton(conv_id: str, body: dict, user_id: str = Depends(current_user_id)):
+    """单次链式加载：从 node_id 同时向上回溯到 root + 向下沿长子链到 leaf。
+
+    请求体: { "node_id": "msg_id" }
+    返回: { "ancestors": [...], "descendants": [...] }
+    """
+    node_id = body.get("node_id", "")
+    if not node_id:
+        raise HTTPException(400, "node_id is required")
+
+    data = get_data_repo().load(user_id)
+    conv_node = data.directory_nodes.get(conv_id)
+    if not conv_node or conv_node.node_type != "conv":
+        raise HTTPException(404, "Conversation not found")
+
+    from app.services.conversation.message_repository import get_message_repo
+    msg_repo = get_message_repo()
+
+    def _get_msg(mid: str):
+        n = data.nodes.get(mid)
+        if n and not getattr(n, "is_deleted", False):
+            return n
+        return msg_repo.get(mid)
+
+    # ── 回填 children_by_parent（旧数据 children_ids 为空） ──
+    children_by_parent: dict[str, list[str]] = {}
+    for mid in conv_node.conv_message_ids:
+        n = _get_msg(mid)
+        if n and n.parent_id:
+            children_by_parent.setdefault(n.parent_id, []).append(n.id)
+
+    def _get_children(nid: str) -> list[str]:
+        n = _get_msg(nid)
+        cids = []
+        if n:
+            cids = list(getattr(n, "children_ids", []) or [])
+        if not cids and nid in children_by_parent:
+            cids = children_by_parent[nid]
+        return cids
+
+    def _get_default_child(nid: str) -> str | None:
+        cids = _get_children(nid)
+        if not cids:
+            return None
+        # 按 version 取最新
+        candidates = []
+        for cid in cids:
+            n = _get_msg(cid)
+            if n and not getattr(n, "is_deleted", False):
+                candidates.append(n)
+        if not candidates:
+            return None
+        candidates.sort(key=lambda n: (n.version, getattr(n, "timestamp", 0)), reverse=True)
+        return candidates[0].id
+
+    def _skeleton(n) -> dict:
+        return {
+            "id": n.id,
+            "parent_id": n.parent_id,
+            "children_ids": getattr(n, "children_ids", []),
+            "role": n.role,
+            "version": n.version,
+            "directory_id": getattr(n, "directory_id", ""),
+            "timestamp": getattr(n, "timestamp", 0),
+            "is_deleted": getattr(n, "is_deleted", False),
+            "status": getattr(n, "status", "done"),
+        }
+
+    # ── ancestors：从 node_id 向上回溯到根 ──
+    ancestors = []
+    cur = node_id
+    visited = set()
+    while cur and cur not in visited:
+        visited.add(cur)
+        n = _get_msg(cur)
+        if not n or getattr(n, "is_deleted", False):
+            break
+        ancestors.append(_skeleton(n))
+        cur = n.parent_id
+    ancestors.reverse()  # 根 → node_id
+
+    # ── descendants：从 node_id 沿长子链到 leaf ──
+    descendants = []
+    cur = node_id
+    depth = 0
+    while depth < 1000:  # 防御性上限
+        child = _get_default_child(cur)
+        if not child or child in visited:
+            break
+        visited.add(child)
+        n = _get_msg(child)
+        if not n or getattr(n, "is_deleted", False):
+            break
+        descendants.append(_skeleton(n))
+        cur = child
+        depth += 1
+
+    return {
+        "ancestors": ancestors,
+        "descendants": descendants,
+        "from_id": node_id,
+    }
 
 
 @router.post("/tree/conversation/{conv_id}/chain/tail")
