@@ -362,9 +362,7 @@ async def list_messages(
     for mid in msg_ids:
         node = _get_msg(mid)
         if node and not getattr(node, "is_deleted", False):
-            # 跳过根占位消息（parent_id 为空的空内容 assistant 消息）
-            if node.parent_id is None and node.role == "assistant" and not node.content:
-                continue
+            # 保留根占位消息（前端需要它的 ID 作为 currentPath 起点）
             d = {
                 "id": node.id,
                 "directory_id": getattr(node, "directory_id", ""),
@@ -772,9 +770,7 @@ async def get_conversation_chain(conv_id: str, user_id: str = Depends(current_us
             # 从 PostgreSQL 单条加载（兼容按目录存储的旧消息）
             node = msg_repo.get(mid)
         if node and not getattr(node, "is_deleted", False):
-            # 跳过根占位消息（parent_id 为空的空内容 assistant 消息）
-            if node.parent_id is None and node.role == "assistant" and not node.content:
-                continue
+            # 保留根占位消息（前端需要它的 ID 作为 currentPath 起点）
             messages.append(node.model_dump(mode="json"))
 
     return {"messages": messages, "total": len(messages)}
@@ -978,9 +974,6 @@ async def compute_chain_tail(conv_id: str, body: dict, user_id: str = Depends(cu
         node = _get_msg(nid)
         if not node or getattr(node, "is_deleted", False):
             return
-        # 跳过空的 shell 占位符
-        if node.parent_id is None and node.role == "assistant" and not node.content:
-            pass  # 不跳过根消息，但跳过空的占位 shell
         tail.append(node.model_dump(mode="json"))
         for cid in _get_children(nid):
             dfs(cid)

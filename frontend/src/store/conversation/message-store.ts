@@ -113,6 +113,20 @@ function _isRenderable(n: MessageNode | undefined): boolean {
   return true;
 }
 
+/** 路径过滤：仅过滤 deleted/orphaned（保留根占位） */
+function _isPathNode(n: MessageNode | undefined): boolean {
+  if (!n) return false;
+  if (n.is_deleted) return false;
+  if ((n as any).status === "orphaned") return false;
+  return true;
+}
+
+/** 是否为根占位消息（parent_id=None, role=assistant, content=空） */
+function _isRootShell(n: MessageNode | undefined): boolean {
+  if (!n) return false;
+  return !n.parent_id && n.role === "assistant" && !n.content;
+}
+
 /** 按 version + timestamp 取最新子节点 */
 function _getDefaultChildByVersion(siblings: MessageNode[]): MessageNode | null {
   if (siblings.length === 0) return null;
@@ -290,7 +304,7 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     const { activeConvId, messages } = get();
     // 优先从 nodeMap/messages 本地构建（避免不必要的 API 调用）
     const localNode: MessageNode | undefined = get().nodeMap[msgId] || messages.find(m => m.id === msgId);
-    if (localNode && _isRenderable(localNode)) {
+    if (localNode && _isPathNode(localNode)) {
       // 本地已有：直接构造 ancestors + descendants
       const ancestors: MessageNode[] = [];
       let cur: MessageNode | undefined = localNode;
@@ -392,7 +406,8 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     const siblings: MessageNode[] = [];
     for (const cid of childrenIds) {
       const child = get().nodeMap[cid];
-      if (child && _isRenderable(child)) {
+      // 接受根占位（路径构建需要）+ 正常消息
+      if (child && _isPathNode(child)) {
         siblings.push(child);
       }
     }
@@ -427,9 +442,9 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     if (!msg) return;
     const parentId = msg.parent_id || "__root__";
     const role = msg.role;
-    // 同一 parent + 同 role 的兄弟消息
+    // 同一 parent + 同 role 的兄弟消息（不含根占位）
     const siblings = Object.values(get().nodeMap)
-      .filter(m => (m.parent_id || "__root__") === parentId && m.role === role && _isRenderable(m))
+      .filter(m => (m.parent_id || "__root__") === parentId && m.role === role && !_isRootShell(m) && _isPathNode(m))
       .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
     if (siblings.length <= 1) return;
     const idx = siblings.findIndex(m => m.id === msgId);
