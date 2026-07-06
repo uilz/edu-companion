@@ -30,6 +30,7 @@ from app.domain.conversation.pipeline_stages import (
     ReplyEvent,
     PostProcessInput,
     FEYNMAN_ALLOWED_TOOLS,
+    InitStage,
     ClassifyStage,
     SaveMessageStage,
     ToolLoopStage,
@@ -266,11 +267,12 @@ class ReplyPipeline:
         self._post_processors = post_processors or _default_post_processors()
         self.agent_label = agent_label
         self._stages = [
-            ClassifyStage(),
-            SaveMessageStage(),
-            ToolLoopStage(),
-            PostProcessStage(processors=self._post_processors),
-            DoneStage(),
+            SaveMessageStage(),       # Stage 0: 先存用户消息（确定 parent_id 和 conv_id）
+            InitStage(),              # Stage 1: 再创建 shell（以用户消息为父节点）
+            ClassifyStage(),          # Stage 2
+            ToolLoopStage(),          # Stage 3
+            PostProcessStage(processors=self._post_processors),  # Stage 4
+            DoneStage(),              # Stage 5
         ]
 
     async def invoke(
@@ -280,6 +282,7 @@ class ReplyPipeline:
         user_text: str,
         content_blocks: list[ContentBlock] | None = None,
         conv_id: str = "",
+        parent_id: str = "",
         pending_quote: dict | None = None,
         knowledge_node_id: str | None = None,
         tool_result: ToolResult | None = None,
@@ -287,7 +290,8 @@ class ReplyPipeline:
     ) -> AsyncGenerator[ReplyEvent, None]:
         """流式执行完整回复流程，产出事件序列
 
-        resume_state: 挂起恢复时传入 {llm_messages, tools, _round}，跳过阶段 1-2
+        resume_state: 挂起恢复时传入 {llm_messages, tools, _round}，跳过阶段 0 和 2
+        parent_id: 分支回复时，用户消息的父消息 ID
         """
         ctx = PipelineCtx(
             user_id=user_id,
@@ -295,6 +299,7 @@ class ReplyPipeline:
             user_text=user_text,
             content_blocks=content_blocks,
             conv_id=conv_id,
+            parent_id=parent_id,
             pending_quote=pending_quote,
             knowledge_node_id=knowledge_node_id,
             agent_label=self.agent_label,

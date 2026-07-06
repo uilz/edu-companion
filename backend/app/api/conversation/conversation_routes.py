@@ -42,13 +42,14 @@ class SendMessageRequest(BaseModel):
 
 
 class StreamMessageRequest(BaseModel):
-    """统一消息端点请求体"""
     action: str = "send"  # "send" | "replay" | "stop"
     text: str = ""
     dir_id: str | None = None
+    parent_id: str | None = None  # 分支回复：指定父消息 ID（用户消息的父节点）
     pending_quote: dict | None = None
     knowledge_node_id: str | None = None
     content_blocks: list[dict] = Field(default_factory=list)
+    pending_msg_id: str | None = None  # 仅 replay 使用: 指定要恢复的消息 ID
 
 
 
@@ -400,8 +401,13 @@ async def handle_message(
         return {"ok": ok}
 
     if req.action == "replay":
-        if not await stream_buffer.has_active(conv_id):
-            return {"ok": True, "stream_ended": True}
+        # 支持 pending_msg_id 粒度的 replay
+        if req.pending_msg_id:
+            if not await stream_buffer.has_msg_events(conv_id, req.pending_msg_id):
+                return {"ok": True, "stream_ended": True}
+        else:
+            if not await stream_buffer.has_active(conv_id):
+                return {"ok": True, "stream_ended": True}
         return StreamingResponse(
             _sse_generator(conv_id),
             media_type="text/event-stream",
@@ -423,6 +429,7 @@ async def handle_message(
         await start_background_pipeline(
             user_id, req.text, pid,
             conv_id=conv_id,
+            parent_id=req.parent_id or "",
             pending_quote=req.pending_quote,
             knowledge_node_id=req.knowledge_node_id,
         )
@@ -708,6 +715,98 @@ async def reply_to_edited_message(message_id: str, user_id: str = Depends(curren
     except Exception:
         logger.exception("reply_to_edited_message 失败")
         raise HTTPException(500, "Internal server error")
+
+
+# ═══════════════════════════════════════════
+# 分支对话链式遍历 API
+# ═══════════════════════════════════════════
+
+@router.get("/tree/conversation/{conv_id}/chain")
+async def get_conversation_chain(conv_id: str, user_id: str = Depends(current_user_id)):
+    """返回当前活跃消息链（基于 conv.conv_message_ids）。
+    
+    返回从根到尾部的完整消息列表，跳过空的 shell 占位符。
+    """
+    data = get_data_repo().load(user_id)
+    conv_node = data.directory_nodes.get(conv_id)
+    if not conv_node or conv_node.node_type != "conv":
+        raise HTTPException(404, "Conversation not found")
+    
+    messages = []
+    for mid in conv_node.conv_message_ids:
+        node = data.nodes.get(mid)
+        if node and not getattr(node, "is_deleted", False):
+            # 跳过根占位消息（parent_id 为空的空内容 assistant 消息）
+            if node.parent_id is None and node.role == "assistant" and not node.content:
+                continue
+            messages.append(node.model_dump(mode="json"))
+    
+    return {"messages": messages, "total": len(messages)}
+
+
+@router.post("/tree/conversation/{conv_id}/chain/path")
+async def compute_chain_path(conv_id: str, body: dict, user_id: str = Depends(current_user_id)):
+    """计算从根到指定消息的完整路径。
+    
+    请求体: { "from_id": "msg_id" }
+    返回: 从根（parent_id=None）到 from_id 的祖先链（含 from_id 自身）
+    """
+    from_id = body.get("from_id", "")
+    if not from_id:
+        raise HTTPException(400, "from_id is required")
+    
+    data = get_data_repo().load(user_id)
+    conv_node = data.directory_nodes.get(conv_id)
+    if not conv_node or conv_node.node_type != "conv":
+        raise HTTPException(404, "Conversation not found")
+    
+    # 沿 parent_id 回溯到根
+    path = []
+    current_id = from_id
+    visited = set()
+    while current_id and current_id not in visited:
+        visited.add(current_id)
+        node = data.nodes.get(current_id)
+        if not node or getattr(node, "is_deleted", False):
+            break
+        path.append(node.model_dump(mode="json"))
+        current_id = node.parent_id
+    
+    path.reverse()  # 根 → from_id
+    return {"messages": path, "total": len(path), "from_id": from_id}
+
+
+@router.post("/tree/conversation/{conv_id}/chain/tail")
+async def compute_chain_tail(conv_id: str, body: dict, user_id: str = Depends(current_user_id)):
+    """计算从指定消息开始的尾部路径（沿 children_ids 向下）。
+    
+    请求体: { "from_id": "msg_id" }
+    返回: from_id 及其后代消息列表（DFS 顺序，不含 from_id 的祖先）
+    """
+    from_id = body.get("from_id", "")
+    if not from_id:
+        raise HTTPException(400, "from_id is required")
+    
+    data = get_data_repo().load(user_id)
+    conv_node = data.directory_nodes.get(conv_id)
+    if not conv_node or conv_node.node_type != "conv":
+        raise HTTPException(404, "Conversation not found")
+    
+    # DFS 遍历从 from_id 开始
+    tail = []
+    def dfs(nid: str):
+        node = data.nodes.get(nid)
+        if not node or getattr(node, "is_deleted", False):
+            return
+        # 跳过空的 shell 占位符
+        if node.parent_id is None and node.role == "assistant" and not node.content:
+            pass  # 不跳过根消息，但跳过空的占位 shell
+        tail.append(node.model_dump(mode="json"))
+        for cid in node.children_ids:
+            dfs(cid)
+    
+    dfs(from_id)
+    return {"messages": tail, "total": len(tail), "from_id": from_id}
 
 
 @router.get("/tree/stream/active/{conv_id}")

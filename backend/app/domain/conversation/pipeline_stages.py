@@ -110,6 +110,8 @@ class PipelineCtx:
     dir_id: str
     user_text: str
     conv_id: str = ""
+    msg_id: str = ""
+    parent_id: str = ""  # 父消息 ID（分支回复用）：用户消息的父节点
     pending_quote: dict | None = None
     knowledge_node_id: str | None = None
     content_blocks: list[ContentBlock] | None = None
@@ -117,6 +119,7 @@ class PipelineCtx:
     tool_result: ToolResult | None = None  # 工具结果提交（非空时触发注入）
 
     # Stage 产出 (可变)
+    user_msg_id: str = ""  # SaveMessageStage 产出的用户消息 ID，供 InitStage 作为 shell 父节点
     assistant_node: Any = None
     response_blocks: list[ResponseBlock] = field(default_factory=list)
     stream_content_blocks: list[dict] = field(default_factory=list)
@@ -132,6 +135,107 @@ class PipelineStage(Protocol):
 
     async def invoke(self, ctx: PipelineCtx) -> AsyncGenerator[ReplyEvent, None]:
         ...
+
+
+# ═══════════════════════════════════════════════
+# 事件转 content_blocks 工具函数
+# ═══════════════════════════════════════════════
+
+
+def events_to_content_blocks(raw_events: list[dict]) -> list[dict]:
+    """将 Buffer 原始事件合并为 content_blocks。
+
+    规则:
+    - 过滤控制事件: pending_msg, done, error, stage, stream_start, stream_ended
+    - 连续 token → 合并为一个 text 块 (相邻同类型合并)
+    - reasoning 块保持原样 (不做 streaming→done 标记, DB 只需最终态)
+    - tool_block 事件直接包含 (block dict)
+    - tool_calls/tool_call_update/tool_result 事件中包含 tool_call 信息
+    - 保持原始顺序
+    """
+    blocks: list[dict] = []
+    cur_type: str | None = None
+
+    for ev in raw_events:
+        t = ev.get("type", "")
+
+        # 过滤控制事件
+        if t in ("pending_msg", "done", "error", "stage", "stream_start", "stream_ended", "conversation_created", "user_message", "pipeline_suspended"):
+            continue
+
+        if t == "token":
+            content = ev.get("content", "")
+            if cur_type != "text":
+                cur_type = "text"
+                blocks.append({"type": "text", "text": content})
+            else:
+                if blocks:
+                    blocks[-1]["text"] += content
+        elif t == "reasoning":
+            content = ev.get("content", "")
+            if cur_type != "reasoning":
+                cur_type = "reasoning"
+                blocks.append({"type": "reasoning", "text": content})
+            else:
+                if blocks:
+                    blocks[-1]["text"] += content
+        elif t == "tool_block":
+            cur_type = None
+            block = ev.get("block") or ev.get("data", {})
+            if isinstance(block, dict):
+                blocks.append(block)
+        elif t == "tool_calls":
+            cur_type = None
+            # tool_calls 事件主要是前端展示用的, 内容会被 tool_block 覆盖
+            pass
+        elif t == "tool_call_update":
+            cur_type = None
+            pass
+        elif t == "tool_result":
+            cur_type = None
+            pass
+        else:
+            # 未知事件类型 - 保留
+            cur_type = None
+            blocks.append({"type": t, **{k: v for k, v in ev.items() if k != "type"}})
+
+    return blocks
+
+
+# ═══════════════════════════════════════════════
+# Stage 0: 初始化
+# ═══════════════════════════════════════════════
+
+
+class InitStage:
+    """Stage 0: 初始化阶段 — 预分配 msg_id + 写入 shell 消息到 DB。
+
+    注意：在 ReplyPipeline 中 InitStage 在 SaveMessageStage 之后执行，
+    因此 ctx.user_msg_id 已可用，shell 消息以用户消息为父节点。
+    """
+    name = "init"
+
+    async def invoke(self, ctx: PipelineCtx) -> AsyncGenerator[ReplyEvent, None]:
+        from app.services.knowledge.tree_messages import tree_ops
+
+        # 生成 msg_id (通过 add_shell_message 自动分配)
+        # shell 以用户消息为父节点，确保对话树结构：user → assistant
+        shell_parent_id = ctx.user_msg_id or None
+        shell_node = tree_ops.add_shell_message(
+            ctx.user_id, ctx.conv_id,
+            agent_label=ctx.agent_label,
+            parent_id=shell_parent_id,
+        )
+        ctx.msg_id = shell_node.id
+
+        yield ReplyEvent(
+            type="pending_msg",
+            data={
+                "msg_id": shell_node.id,
+                "status": "streaming",
+                "role": "assistant",
+            },
+        )
 
 
 # ═══════════════════════════════════════════════
@@ -188,7 +292,9 @@ class SaveMessageStage:
         user_node = tree_ops.add_message(
             ctx.user_id, ctx.dir_id, "user", blocks, ctx.user_text,
             conv_id=ctx.conv_id,
+            parent_id=ctx.parent_id or None,
         )
+        ctx.user_msg_id = user_node.id
         get_knowledge_query().post_message_hooks(ctx.user_id, ctx.dir_id, user_node)
 
         # Update last_active timestamp
@@ -326,7 +432,6 @@ class ToolLoopStage:
             ctx.response_blocks = []
             order = 0
             ctx.full_reply = ""
-            ctx.stream_content_blocks = []
             _round = 0
 
         while True:
@@ -341,11 +446,9 @@ class ToolLoopStage:
                     if ev["type"] == "token":
                         ctx.full_reply += ev["content"]
                         yield ReplyEvent(type="token", content=ev["content"])
-                        _append_block(ctx.stream_content_blocks, {"type": "text", "text": ev["content"]})
                     elif ev["type"] == "reasoning":
                         current_reasoning += ev["content"]
                         yield ReplyEvent(type="reasoning", content=ev["content"])
-                        _append_block(ctx.stream_content_blocks, {"type": "reasoning", "text": ev["content"], "status": "streaming"})
                     elif ev["type"] == "done":
                         # 流结束：以最后累计的 reasoning_content 为准（覆盖增量拼接的片段）
                         if ev.get("reasoning_content"):
@@ -423,7 +526,6 @@ class ToolLoopStage:
                                 block=tool_block.model_dump(mode="json"),
                                 data={"tool_call_id": tc.get("id", "")},
                             )
-                            _append_tool_to_stream(ctx.stream_content_blocks, tool_block, tool_name, TOOL_DISPLAY_NAMES)
                             llm_messages.append({
                                 "role": "tool",
                                 "tool_call_id": tc.get("id", ""),
@@ -465,7 +567,6 @@ class ToolLoopStage:
                         block=tool_block.model_dump(mode="json"),
                         data={"tool_call_id": tc.get("id", "")},
                     )
-                    _append_tool_to_stream(ctx.stream_content_blocks, tool_block, tool_name, TOOL_DISPLAY_NAMES)
 
                 # 只追加 assistant(tool_calls)，不追加 tool result → 挂起等待用户
                 # deepseek 思考模式：必须附带本轮 reasoning_content，否则 resume 时 API 拒绝
@@ -498,7 +599,7 @@ class ToolLoopStage:
 
 
 class PostProcessStage:
-    """后处理阶段 — 持久化 assistant 消息 + 执行 blocking 处理器链。"""
+    """后处理阶段 — 从 Buffer raw_events 重建 content_blocks + 更新 shell 消息。"""
     name = "post_process"
 
     def __init__(self, processors: list | None = None) -> None:
@@ -506,22 +607,21 @@ class PostProcessStage:
         self._processors = processors or _default_post_processors()
 
     async def invoke(self, ctx: PipelineCtx) -> AsyncGenerator[ReplyEvent, None]:
+        from app.services.conversation.stream_buffer import stream_buffer
+        from app.services.knowledge.tree_messages import tree_ops
 
-        # 标记 reasoning 为 done
-        for b in ctx.stream_content_blocks:
-            if b.get("type") == "reasoning" and b.get("status") == "streaming":
-                b["status"] = "done"
+        # 1. 从 Buffer raw_events 重建 content_blocks
+        raw_events = await stream_buffer.get_raw_events(ctx.conv_id, ctx.msg_id)
+        content_blocks = events_to_content_blocks(raw_events)
 
-        # 把 user_answer 从 stream_content_blocks 同步到 response_blocks，
-        # 让 DoneStage 发送给前端的 response_blocks 也携带 user_answer。
-        _sync_user_answer_to_response_blocks(ctx.response_blocks, ctx.stream_content_blocks)
-
-        ctx.assistant_node = tree_ops.add_message(
-            ctx.user_id, ctx.dir_id, "assistant",
-            ctx.stream_content_blocks, ctx.full_reply,
-            conv_id=ctx.conv_id,
-            agent_label=ctx.agent_label,
+        # 2. 更新 DB shell 消息 → done
+        ctx.assistant_node = tree_ops.update_shell_to_done(
+            ctx.user_id, ctx.msg_id, content_blocks,
+            text_summary=ctx.full_reply,
         )
+
+        # 3. 执行 blocking 后处理器链
+        _sync_user_answer_to_response_blocks(ctx.response_blocks, content_blocks)
 
         pp_input = PostProcessInput(
             user_id=ctx.user_id,
@@ -546,8 +646,7 @@ class PostProcessStage:
 
         yield ReplyEvent(type="stage", stage="post_process")
 
-    def _report_error(self, processor_name: str, user_id: str, exc: Exception,
-                      conv_id: str, dir_id: str) -> None:
+    def _report_error(self, processor_name, user_id, exc, conv_id, dir_id):
         try:
             from app.services.admin.error_service import admin_error_service
             admin_error_service.report_error(
@@ -567,11 +666,12 @@ class PostProcessStage:
 
 
 class DoneStage:
-    """Done 阶段 — 产出管线完成事件，携带 assistant 消息和 response_blocks。"""
+    """Done 阶段 — 产出管线完成事件，携带 msg_id 和 response_blocks。"""
     name = "done"
 
     async def invoke(self, ctx: PipelineCtx) -> AsyncGenerator[ReplyEvent, None]:
         data: dict = {
+            "msg_id": ctx.msg_id,
             "assistant_message": ctx.assistant_node.model_dump(mode="json") if ctx.assistant_node else {},
             "response_blocks": [b.model_dump(mode="json") for b in ctx.response_blocks],
             "reply_text": ctx.full_reply,

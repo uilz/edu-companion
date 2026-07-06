@@ -29,6 +29,7 @@ async def process_message(
     text: str,
     dir_id: str,
     conv_id: str = "",
+    parent_id: str = "",
     pending_quote: dict | None = None,
 ) -> AsyncGenerator[ReplyEvent, None]:
     """统一消息处理入口 — 保留兼容性，同时发布到 StreamBuffer。
@@ -49,18 +50,22 @@ async def process_message(
     await active_streams.mark_start(conv_id)
     assistant_text = ""
     assistant_message_id = ""
+    current_msg_id = ""
 
     try:
         async for event in pipeline.invoke(
             user_id, dir_id, text,
             conv_id=conv_id,
+            parent_id=parent_id,
             pending_quote=pending_quote,
         ):
             yield event
             assistant_text += event.content or ""
             if event.type == "done":
                 assistant_message_id = event.data.get("assistant_message", {}).get("id", "")
-            await _publish_event_to_buffer(conv_id, event)
+            if event.type == "pending_msg" and event.data:
+                current_msg_id = event.data.get("msg_id", "")
+            await _publish_event_to_buffer(conv_id, event, msg_id=current_msg_id)
     except Exception as e:
         logger.error("process_message 异常: %s", str(e), exc_info=True)
         err_event = ReplyEvent(type="error", data={"error": str(e)})
@@ -81,6 +86,7 @@ async def start_background_pipeline(
     text: str,
     dir_id: str,
     conv_id: str,
+    parent_id: str = "",
     pending_quote: dict | None = None,
     knowledge_node_id: str | None = None,
     tool_result: ToolResult | None = None,
@@ -91,12 +97,19 @@ async def start_background_pipeline(
     """
     # 清理上一次对话的缓冲区，避免旧事件回放导致消息重复
     await stream_buffer.cleanup(conv_id)
+
+    # ── stale streaming 检测：清理残留的 streaming 消息 ──
+    try:
+        _cleanup_stale_streaming(user_id, conv_id)
+    except Exception:
+        logger.debug("stale streaming 清理失败（非关键）", exc_info=True)
+
     # 预创建缓冲区，确保 streaming 时 entry 已存在
     await stream_buffer.publish(conv_id, {"type": "stream_start"})
     await active_streams.mark_start(conv_id)
 
     task = asyncio.create_task(_run_pipeline_task(
-        user_id, text, dir_id, conv_id, pending_quote, knowledge_node_id, tool_result,
+        user_id, text, dir_id, conv_id, parent_id, pending_quote, knowledge_node_id, tool_result,
     ))
     await stream_buffer.set_task(conv_id, task)
 
@@ -147,6 +160,8 @@ async def resume_background_pipeline(
     ctx.stream_content_blocks = saved_ctx.stream_content_blocks
     ctx.full_reply = saved_ctx.full_reply
     ctx.conversation = saved_ctx.conversation
+    ctx.user_msg_id = saved_ctx.user_msg_id
+    ctx.parent_id = saved_ctx.parent_id
 
     resume_state = {
         "llm_messages": state.llm_messages,
@@ -156,6 +171,7 @@ async def resume_background_pipeline(
 
     pipeline = ReplyPipeline(agent_label=AGENT_LABEL)
     assistant_text = ""
+    current_msg_id = ""
 
     try:
         async for event in pipeline.invoke(
@@ -164,7 +180,9 @@ async def resume_background_pipeline(
             resume_state=resume_state,
         ):
             assistant_text += event.content or ""
-            await _publish_event_to_buffer(conv_id, event)
+            if event.type == "pending_msg" and event.data:
+                current_msg_id = event.data.get("msg_id", "")
+            await _publish_event_to_buffer(conv_id, event, msg_id=current_msg_id)
     except Exception as e:
         logger.error("Resume pipeline 异常 [%s]: %s", conv_id[:8], e, exc_info=True)
         await _publish_event_to_buffer(conv_id, ReplyEvent(
@@ -187,6 +205,7 @@ async def _run_pipeline_task(
     text: str,
     dir_id: str,
     conv_id: str,
+    parent_id: str = "",
     pending_quote: dict | None = None,
     knowledge_node_id: str | None = None,
     tool_result: ToolResult | None = None,
@@ -203,6 +222,7 @@ async def _run_pipeline_task(
     assistant_text = ""
     assistant_message_id = ""
     suspended = False
+    current_msg_id = ""
 
     me = asyncio.current_task()
 
@@ -210,6 +230,7 @@ async def _run_pipeline_task(
         async for event in pipeline.invoke(
             user_id, dir_id, text,
             conv_id=conv_id,
+            parent_id=parent_id,
             pending_quote=pending_quote,
             knowledge_node_id=knowledge_node_id,
             tool_result=tool_result,
@@ -219,8 +240,10 @@ async def _run_pipeline_task(
                 assistant_message_id = event.data.get("assistant_message", {}).get("id", "")
             elif event.type == "pipeline_suspended":
                 suspended = True
+            if event.type == "pending_msg" and event.data:
+                current_msg_id = event.data.get("msg_id", "")
 
-            await _publish_event_to_buffer(conv_id, event)
+            await _publish_event_to_buffer(conv_id, event, msg_id=current_msg_id)
 
     except Exception as e:
         logger.error("后台 pipeline 异常 [%s]: %s", conv_id[:8], e, exc_info=True)
@@ -237,7 +260,7 @@ async def _run_pipeline_task(
             ))
 
 
-async def _publish_event_to_buffer(conv_id: str, event: ReplyEvent) -> None:
+async def _publish_event_to_buffer(conv_id: str, event: ReplyEvent, msg_id: str = "") -> None:
     """将 ReplyEvent 转为 dict 并发布到 StreamBuffer"""
     if not conv_id:
         return
@@ -256,7 +279,7 @@ async def _publish_event_to_buffer(conv_id: str, event: ReplyEvent) -> None:
                 d[k] = v
     if event.type == "done":
         d["done"] = True
-    await stream_buffer.publish(conv_id, d)
+    await stream_buffer.publish(conv_id, d, msg_id=msg_id)
 
 
 async def _publish_reply_event(
@@ -334,3 +357,32 @@ def _persist_user_answer_to_question_block(
         "未找到匹配的 question 工具块: tool_call_id=%s, stream_blocks 数=%d",
         tool_call_id[:8], len(stream_blocks),
     )
+
+
+def _cleanup_stale_streaming(user_id: str, conv_id: str) -> None:
+    """清理残留的 streaming 消息（因崩溃/断连而遗留的 shell 消息）。
+
+    规则：
+      - 查找 conv.conv_message_ids 中 status=streaming 的消息
+      - 标记为 orphaned 并从 conv.conv_message_ids 移除
+      - 同时从 data.nodes 中软删除
+    """
+    from app.services.common import get_data_repo
+    data = get_data_repo().load(user_id)
+    conv_node = data.directory_nodes.get(conv_id)
+    if not conv_node:
+        return
+
+    cleaned = []
+    for mid in conv_node.conv_message_ids:
+        node = data.nodes.get(mid)
+        if node and getattr(node, "status", None) == "streaming":
+            node.status = "orphaned"
+            node.is_deleted = True
+            logger.info("清理 stale streaming 消息: %s (conv=%s)", mid[:8], conv_id[:8])
+        else:
+            cleaned.append(mid)
+
+    if len(cleaned) != len(conv_node.conv_message_ids):
+        conv_node.conv_message_ids = cleaned
+        get_data_repo().save(user_id, data)

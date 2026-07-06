@@ -23,9 +23,14 @@ class TreeMessagesMixin:
     def add_message(
         self, user_id, dir_id, role, content_blocks,
         text_summary="", conv_id="", agent_label="",
+        parent_id=None,
     ) -> TreeNode | MessageNode:
         """添加消息到对话。
 
+        parent_id: 指定父消息 ID。
+          - 提供时，新消息作为该消息的子节点插入（在 conv_message_ids 中紧随其后）
+          - "head" 时，插入到 conv_message_ids 开头（parent 为 None）
+          - None 时，沿用当前行为（父为最后一条消息）
         conv_id 优先；备选 dir_id。需至少有一个有效。
         """
         data = self._get_data_repo().load(user_id)
@@ -55,18 +60,34 @@ class TreeMessagesMixin:
                     text_content = b.get("text", "")
                     break
 
+        # 确定 parent_id 及插入位置
+        if parent_id == "head":
+            # 插入到对话开头
+            resolved_parent = None
+            insert_pos = 0
+        elif parent_id and parent_id in conv_node.conv_message_ids:
+            # 插入到指定消息之后
+            resolved_parent = parent_id
+            insert_pos = conv_node.conv_message_ids.index(parent_id) + 1
+        else:
+            # 默认：父为最后一条消息
+            resolved_parent = conv_node.conv_message_ids[-1] if conv_node.conv_message_ids else None
+            insert_pos = len(conv_node.conv_message_ids)
+
         node = MessageNode(
             directory_id=conv_node.id,
-            parent_id=conv_node.conv_message_ids[-1] if conv_node.conv_message_ids else None,
+            parent_id=resolved_parent,
             role=role, content=text_content, text_summary=text_summary or text_content,
             content_blocks=[
                 b.model_dump(mode="json") if hasattr(b, "model_dump") else b
                 for b in (content_blocks or [])
             ],
+            status="done",
+            stream_started_at=None,
         )
         # 同时也存入 data.nodes 以兼容旧代码
         data.nodes[node.id] = node
-        conv_node.conv_message_ids.append(node.id)
+        conv_node.conv_message_ids.insert(insert_pos, node.id)
         conv_node.updated_at = time.time()
 
         self._get_data_repo().save(user_id, data)
@@ -173,3 +194,78 @@ class TreeMessagesMixin:
         existing_non_text = [b for b in (node.content_blocks or []) if isinstance(b, dict) and b.get("type") != "text"]
         node.content_blocks = [*existing_non_text, {"type": "text", "text": text}]
         self._get_data_repo().save(user_id, data)
+
+    def add_shell_message(self, user_id, conv_id, agent_label="", parent_id=None) -> MessageNode:
+        """添加 shell 消息 (status=streaming) 到对话，返回预分配的 msg_id。
+
+        parent_id: 指定父消息 ID。
+          - 提供时，新消息作为该消息的子节点插入
+          - None 时，沿用当前行为（父为最后一条消息）
+        """
+        data = self._get_data_repo().load(user_id)
+        conv_node = data.directory_nodes.get(conv_id)
+        if not conv_node:
+            raise ValueError(f"对话节点不存在: {conv_id}")
+
+        # 确定 parent_id 及插入位置
+        if parent_id and parent_id in conv_node.conv_message_ids:
+            resolved_parent = parent_id
+            insert_pos = conv_node.conv_message_ids.index(parent_id) + 1
+        else:
+            resolved_parent = conv_node.conv_message_ids[-1] if conv_node.conv_message_ids else None
+            insert_pos = len(conv_node.conv_message_ids)
+
+        node = MessageNode(
+            directory_id=conv_node.id,
+            parent_id=resolved_parent,
+            role="assistant",
+            content="",
+            text_summary="",
+            content_blocks=[],
+            agent_label=agent_label,
+            status="streaming",
+            stream_started_at=time.time(),
+        )
+        data.nodes[node.id] = node
+        conv_node.conv_message_ids.insert(insert_pos, node.id)
+        conv_node.updated_at = time.time()
+        self._get_data_repo().save(user_id, data)
+        return node
+
+    def update_shell_to_done(self, user_id, message_id, content_blocks, text_summary="") -> MessageNode:
+        """将 shell 消息 (status=streaming) 更新为完成态。"""
+        data = self._get_data_repo().load(user_id)
+        node = data.nodes.get(message_id)
+        if not node:
+            raise ValueError(f"消息 {message_id} 不存在")
+
+        # Extract text content from first text block
+        text_content = ""
+        if content_blocks:
+            for b in content_blocks:
+                if isinstance(b, dict) and b.get("type") == "text":
+                    text_content = b.get("text", "")
+                    break
+
+        node.content = text_content
+        node.text_summary = text_summary or text_content
+        node.content_blocks = content_blocks
+        node.status = "done"
+        node.stream_started_at = None
+        self._get_data_repo().save(user_id, data)
+        return node
+
+    def update_message_status(self, user_id, message_id, content_blocks, text_summary="", content="") -> MessageNode:
+        """更新消息状态为 done，更新内容字段。"""
+        data = self._get_data_repo().load(user_id)
+        node = data.nodes.get(message_id)
+        if not node:
+            raise ValueError(f"消息 {message_id} 不存在")
+
+        node.content_blocks = content_blocks
+        node.text_summary = text_summary
+        node.content = content
+        node.status = "done"
+        node.stream_started_at = None
+        self._get_data_repo().save(user_id, data)
+        return node
