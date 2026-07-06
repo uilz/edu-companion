@@ -52,9 +52,37 @@
 | 方法 | 路由 | 说明 |
 |------|------|------|
 | GET | `/tree/conversation/{cid}` | 获取会话信息 |
-| GET | `/tree/conversation/{cid}/messages` | 获取会话消息列表 |
-| POST | `/tree/conversation/{cid}/message` | 发送消息（触发 pipeline） |
+| GET | `/tree/conversation/{cid}/messages` | 获取会话消息列表（支持 `?head=N&tail=M` 分段） |
+| POST | `/tree/conversation/{cid}/chain/skeleton` | 单次链式加载（ancestors + descendants） |
+| POST | `/tree/conversation/{cid}/chain/path` | 回溯祖先链（兼容旧调用） |
+| POST | `/tree/conversation/{cid}/chain/tail` | 计算尾部路径（兼容旧调用） |
+| POST | `/tree/conversation/{cid}/message` | 发送消息（支持 `parent_id` 分支回复） |
 | DELETE | `/tree/conversation/{cid}/message/{mid}` | 删除消息 |
+
+**GET messages 分段加载（分支对话 §加载策略）：**
+
+```
+GET /tree/conversation/{cid}/messages?head=30&tail=20
+
+→ {
+    messages: [skeleton_head + skeleton_tail],
+    total: <conv_message_ids 完整数量>
+  }
+```
+
+**POST chain/skeleton 单次链式补齐：**
+
+```
+POST /tree/conversation/{cid}/chain/skeleton
+{ "node_id": "msg150" }
+
+→ {
+    ancestors:   [skeleton_root, ..., skeleton_msg150],   // 根 → from_id
+    descendants: [skeleton_child1, ..., skeleton_leaf],   // from_id → leaf
+  }
+```
+
+详见 [architecture/message-tree.md](../../architecture/message-tree.md)。
 
 **POST 发送消息：**
 

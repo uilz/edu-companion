@@ -155,3 +155,4 @@ SSE 流期间，REST `loadMessages` 被锁定（不替换消息数组），只�
 | [frontend-design.md](frontend-design.md) | 前端组件架构、Zustand 状态管理 |
 | [specs/02-conversation-messages.md](../../specs/02-conversation-messages.md) | 数据模型定义 |
 | [tool-architecture.md](../../architecture/tool-architecture.md) | AI Tool 系统（LLM Function Calling 定义/注册/执行） |
+| [architecture/message-tree.md](../../architecture/message-tree.md) | 消息树路径架构（分支/版本/加载/恢复） |
