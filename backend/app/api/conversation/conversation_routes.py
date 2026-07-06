@@ -374,9 +374,10 @@ async def list_messages(
                 "token_count": getattr(node, "token_count", 0),
                 "has_sub_branches": getattr(node, "has_sub_branches", False),
                 "sub_branch_ids": getattr(node, "sub_branch_ids", []),
+                # ★ 保留 text_summary（失败消息 content/content_blocks 为空但 text_summary 有错误信息）
                 "content": "",
                 "content_blocks": [],
-                "text_summary": "",
+                "text_summary": getattr(node, "text_summary", "") or "",
                 "is_deleted": getattr(node, "is_deleted", False),
                 "status": getattr(node, "status", "done"),
             }

@@ -157,7 +157,52 @@ export default function MessageList({
 
   const handleCancelEdit = useCallback(() => setEditingId(null), []);
 
+  // ── 屏幕外预加载：Virtuoso 滚动/渲染时触发 ──
+  //   ★ 关键：用户滚动前预加载相邻消息，避免滚动时卡顿
+  //   PREFETCH_BEFORE / PREFETCH_AFTER 控制预加载窗口
+  const PREFETCH_BEFORE = 3;
+  const PREFETCH_AFTER = 5;
+  const lastPrefetchRangeRef = useRef<{ start: number; end: number }>({ start: -1, end: -1 });
+
+  const handleRangeChanged = useCallback((range: { startIndex: number; endIndex: number }) => {
+    const { startIndex, endIndex } = range;
+    // 去重：避免重复触发同一范围
+    const last = lastPrefetchRangeRef.current;
+    if (last.start === startIndex && last.end === endIndex) return;
+    lastPrefetchRangeRef.current = { start: startIndex, end: endIndex };
+
+    const messages = getMessageList();
+    if (messages.length === 0) return;
+
+    // 预加载窗口：[startIndex - PREFETCH_BEFORE, endIndex + PREFETCH_AFTER]
+    const lo = Math.max(0, startIndex - PREFETCH_BEFORE);
+    const hi = Math.min(messages.length - 1, endIndex + PREFETCH_AFTER);
+    const prefetchIds: string[] = [];
+    for (let i = lo; i <= hi; i++) {
+      const m = messages[i];
+      if (m) prefetchIds.push(m.id);
+    }
+    if (prefetchIds.length > 0) {
+      void useMessageStore.getState().loadVisibleContent(prefetchIds);
+    }
+  }, []);
+
+  // 暴露 getMessageList 给上面用（避免循环依赖）
+  // 注意：getMessageList 实际读取当前 props.messages
+  const getMessageList = useCallback(() => {
+    // 通过 ref 读取最新 messages（避免闭包过期）
+    return messagesRef.current;
+  }, []);
+
+  const messagesRef = useRef<MessageNode[]>([]);
+  // 同步最新 messages 到 ref，供 rangeChanged 使用
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
   // ── 内容加载检查：骨架 vs 完整消息（骨架 content_blocks=[]，无正文）──
+  //   ★ 关键：失败消息 content/content_blocks 为空但 text_summary 有错误信息，
+  //     也算"已加载"（getDisplayText 会用 text_summary）
   const isContentLoaded = useCallback((msgId: string) => {
     const state = useMessageStore.getState();
     if (state.streamingId === msgId) return true;
@@ -167,9 +212,10 @@ export default function MessageList({
     const n = state.nodeMap[msgId];
     if (!n) return false;
     if (!n.parent_id && n.role === "assistant" && !n.content) return true;
-    // 必须有正文才算 loaded
+    // 必须有正文（content / content_blocks / text_summary 任一非空）才算 loaded
     if (n.content && n.content.length > 0) return true;
     if (n.content_blocks && n.content_blocks.length > 0) return true;
+    if (n.text_summary && n.text_summary.length > 0) return true;
     return false;
   }, []);
 
@@ -258,7 +304,10 @@ export default function MessageList({
   const getDisplayText = useCallback((msg: MessageNode) => {
     const fromBlocks = msg.content_blocks?.filter(b => b.type === "text").map(b => b.text || "").join("\n\n") || "";
     if (fromBlocks) return fromBlocks;
-    return msg.content || "";
+    if (msg.content) return msg.content;
+    // ★ 失败消息：content/content_blocks 为空但 text_summary 有错误信息
+    if (msg.text_summary) return msg.text_summary;
+    return "";
   }, []);
 
   // ── 渲染单条消息的回调（useCallback 避免 Virtuoso 重新构造）──
@@ -376,6 +425,7 @@ export default function MessageList({
         atBottomStateChange={setAtBottom}
         initialTopMostItemIndex={messages.length - 1}
         overscan={400}
+        rangeChanged={handleRangeChanged}
         components={{
           Footer: Footer,
         }}

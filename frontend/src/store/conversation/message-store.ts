@@ -239,11 +239,14 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   },
 
   // ── 检查消息是否已加载完整正文 ──
+  //   ★ 关键：失败消息 content/content_blocks 为空，但 text_summary 有错误信息
+  //     也算"已加载"（渲染时显示 text_summary）
   hasFullContent: (msgId: string): boolean => {
     const n = get().nodeMap[msgId];
     if (!n) return false;
     if (n.content && n.content.length > 0) return true;
     if (n.content_blocks && n.content_blocks.length > 0) return true;
+    if (n.text_summary && n.text_summary.length > 0) return true;
     return false;
   },
 
