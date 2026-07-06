@@ -91,6 +91,12 @@ export interface MessageState {
   syncFromMessages: () => void;
   /** 根据 currentPath + nodeMap 重建 messages（过滤 is_deleted/orphaned） */
   _rebuildMessages: () => void;
+  /** 检查消息是否已加载完整正文（content_blocks 不为空） */
+  hasFullContent: (msgId: string) => boolean;
+  /** 懒加载完整消息正文（从 /tree/message/{id}） */
+  loadFullContent: (msgId: string) => Promise<void>;
+  /** 批量懒加载可视区消息 */
+  loadVisibleContent: (msgIds: string[]) => Promise<void>;
 
   /** 切换当前路径（同时更新 pathPosMap、localStorage、URL） */
   setCurrentPath: (newPath: string[], persist?: boolean) => void;
@@ -221,6 +227,63 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     get()._rebuildMessages();
   },
 
+  // ── 检查消息是否已加载完整正文 ──
+  hasFullContent: (msgId: string): boolean => {
+    const n = get().nodeMap[msgId];
+    if (!n) return false;
+    if (n.content && n.content.length > 0) return true;
+    if (n.content_blocks && n.content_blocks.length > 0) return true;
+    return false;
+  },
+
+  // ── 懒加载完整消息正文（POST/GET /tree/message/{id}）──
+  loadFullContent: async (msgId: string) => {
+    // 已有正文 → 跳过
+    if (get().hasFullContent(msgId)) return;
+    // 流式消息 → 跳过（SSE 自己会写）
+    if (get().streamingId === msgId) return;
+    // 临时消息 → 跳过
+    if (msgId.startsWith("t_") || msgId.startsWith("a_") || msgId.startsWith("err-")) return;
+
+    try {
+      const data = await apiFetch<{ message: MessageNode }>(`/tree/message/${msgId}`);
+      const fullMsg = data.message;
+      if (fullMsg) {
+        // 合并：保留原有元数据（version, timestamp, status），更新 content 字段
+        const existing = get().nodeMap[msgId];
+        const merged: MessageNode = {
+          ...existing,
+          ...fullMsg,
+          is_deleted: existing?.is_deleted ?? fullMsg.is_deleted ?? false,
+        } as MessageNode;
+        get().upsertNode(merged);
+      }
+    } catch (e) {
+      console.warn(`[loadFullContent] ${msgId} 失败:`, e);
+    }
+  },
+
+  // ── 批量懒加载可视区消息（设计文档 §场景 1: 首屏预加载）──
+  loadVisibleContent: async (msgIds: string[]) => {
+    // 过滤出尚未加载正文的消息
+    const needLoad = msgIds.filter(id => {
+      if (get().hasFullContent(id)) return false;
+      if (get().streamingId === id) return false;
+      if (id.startsWith("t_") || id.startsWith("a_") || id.startsWith("err-")) return false;
+      return true;
+    });
+    if (needLoad.length === 0) return;
+    // 并发加载（限制 5 个并发）
+    const queue = [...needLoad];
+    const workers = Array.from({ length: Math.min(5, queue.length) }, async () => {
+      while (queue.length > 0) {
+        const id = queue.shift();
+        if (id) await get().loadFullContent(id);
+      }
+    });
+    await Promise.all(workers);
+  },
+
   // ── 加载对话消息（设计文档 §场景 1）──
   loadMessages: async (conversationId: string, tipId?: string) => {
     set({
@@ -289,6 +352,13 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
       // ── Step 6: 设置 currentPath + pathReady ──
       get().setCurrentPath(fullPath, true);
       set({ loadingMessages: false, pathReady: true });
+
+      // ── Step 7: 首屏预加载正文（设计文档 §场景 1: 末尾 4 条 + 根占位）──
+      const preloadIds = fullPath.slice(-4);
+      if (fullPath[0] && _isRootShell(get().nodeMap[fullPath[0]])) {
+        preloadIds.unshift(fullPath[0]);
+      }
+      void get().loadVisibleContent(preloadIds);
     } catch (e: unknown) {
       if (e instanceof Error && e.message.includes("404")) {
         set({ convError: "该对话已被删除", loadingMessages: false, pathReady: true });

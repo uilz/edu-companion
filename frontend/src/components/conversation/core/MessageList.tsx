@@ -157,14 +157,20 @@ export default function MessageList({
 
   const handleCancelEdit = useCallback(() => setEditingId(null), []);
 
-  // ── 内容加载检查：chain API 返回完整消息，不再需要逐条懒加载 ──
+  // ── 内容加载检查：骨架 vs 完整消息（骨架 content_blocks=[]，无正文）──
   const isContentLoaded = useCallback((msgId: string) => {
     const state = useMessageStore.getState();
     if (state.streamingId === msgId) return true;
     // 临时消息（乐观写入、流式占位）视为已加载
     if (msgId.startsWith("t_") || msgId.startsWith("a_") || msgId.startsWith("err-")) return true;
-    // 在 nodeMap 中有记录的视为已加载
-    return !!state.nodeMap[msgId];
+    // 根占位（content=空）视为已加载（不显示）
+    const n = state.nodeMap[msgId];
+    if (!n) return false;
+    if (!n.parent_id && n.role === "assistant" && !n.content) return true;
+    // 必须有正文才算 loaded
+    if (n.content && n.content.length > 0) return true;
+    if (n.content_blocks && n.content_blocks.length > 0) return true;
+    return false;
   }, []);
 
   // ── 加载设置（尊重用户的"加载时滚动到底部"设置）──
@@ -260,6 +266,12 @@ export default function MessageList({
     const isUser = message.role === "user";
     const isEditing = editingId === message.id;
     const loaded = isContentLoaded(message.id);
+
+    // ── 触发懒加载：骨架但无正文时加载完整消息 ──
+    if (!loaded && !message.id.startsWith("t_") && !message.id.startsWith("a_") && !message.id.startsWith("err-")) {
+      void useMessageStore.getState().loadFullContent(message.id);
+    }
+
     const displayText = loaded ? getDisplayText(message) : "";
     const groupKey = versionGroupByMessage[message.id];
     const group = groupKey ? versionGroups[groupKey] : undefined;
