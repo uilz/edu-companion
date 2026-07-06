@@ -40,6 +40,15 @@ import { create } from "zustand";
 import type { MessageNode } from "@/types";
 import { apiFetch } from "./tree-helpers";
 
+// ══════════════════════════════════════════════════════════════
+//  模块级并发控制（防重复请求 + 跨会话写入）
+// ══════════════════════════════════════════════════════════════
+
+/** 正在飞行的 loadFullContent 请求，避免重复触发 */
+const _loadingInFlight = new Set<string>();
+/** 加载 Promise 缓存：相同 msgId 并发请求共享同一 Promise */
+const _loadingPromises = new Map<string, Promise<void>>();
+
 export interface MessageState {
   // ── 树数据层 ──
   nodeMap: Record<string, MessageNode>;      // msgId → 完整消息（替代 outlines + loadedContent）
@@ -237,6 +246,10 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   },
 
   // ── 懒加载完整消息正文（POST/GET /tree/message/{id}）──
+  //   ★ 三大防护：
+  //     1. in-flight Set：相同 msgId 并发请求只发 1 次
+  //     2. Promise 缓存：未完成的请求共享同一 Promise
+  //     3. activeConvId 校验：API 返回时若已切换会话则丢弃结果
   loadFullContent: async (msgId: string) => {
     // 已有正文 → 跳过
     if (get().hasFullContent(msgId)) return;
@@ -245,11 +258,26 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     // 临时消息 → 跳过
     if (msgId.startsWith("t_") || msgId.startsWith("a_") || msgId.startsWith("err-")) return;
 
-    try {
-      const data = await apiFetch<{ message: MessageNode }>(`/tree/message/${msgId}`);
-      const fullMsg = data.message;
-      if (fullMsg) {
-        // 合并：保留原有元数据（version, timestamp, status），更新 content 字段
+    // ★ 已在飞行中 → 共享同一 Promise，不发重复请求
+    if (_loadingInFlight.has(msgId)) {
+      return _loadingPromises.get(msgId);
+    }
+
+    // 记录请求发起时的 active conv（用于跨会话校验）
+    const requestConvId = get().activeConvId;
+
+    const promise = (async () => {
+      try {
+        const data = await apiFetch<{ message: MessageNode }>(`/tree/message/${msgId}`);
+        const fullMsg = data.message;
+        if (!fullMsg) return;
+
+        // ★ 跨会话防护：API 返回时若已切换会话，丢弃结果
+        if (get().activeConvId !== requestConvId) {
+          return;
+        }
+
+        // 合并：保留原有元数据，更新 content 字段
         const existing = get().nodeMap[msgId];
         const merged: MessageNode = {
           ...existing,
@@ -257,23 +285,34 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
           is_deleted: existing?.is_deleted ?? fullMsg.is_deleted ?? false,
         } as MessageNode;
         get().upsertNode(merged);
+      } catch (e) {
+        console.warn(`[loadFullContent] ${msgId} 失败:`, e);
+      } finally {
+        _loadingInFlight.delete(msgId);
+        _loadingPromises.delete(msgId);
       }
-    } catch (e) {
-      console.warn(`[loadFullContent] ${msgId} 失败:`, e);
-    }
+    })();
+
+    _loadingInFlight.add(msgId);
+    _loadingPromises.set(msgId, promise);
+    return promise;
   },
 
   // ── 批量懒加载可视区消息（设计文档 §场景 1: 首屏预加载）──
+  //   ★ 同一批次内去重 + 并发限流 5 个
   loadVisibleContent: async (msgIds: string[]) => {
-    // 过滤出尚未加载正文的消息
-    const needLoad = msgIds.filter(id => {
+    // 去重 + 过滤
+    const unique = Array.from(new Set(msgIds));
+    const needLoad = unique.filter(id => {
       if (get().hasFullContent(id)) return false;
       if (get().streamingId === id) return false;
       if (id.startsWith("t_") || id.startsWith("a_") || id.startsWith("err-")) return false;
+      if (_loadingInFlight.has(id)) return false;  // ★ 跳过正在飞行的
       return true;
     });
     if (needLoad.length === 0) return;
-    // 并发加载（限制 5 个并发）
+
+    // 并发加载（限制 5 个）
     const queue = [...needLoad];
     const workers = Array.from({ length: Math.min(5, queue.length) }, async () => {
       while (queue.length > 0) {
@@ -286,11 +325,20 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
 
   // ── 加载对话消息（设计文档 §场景 1）──
   loadMessages: async (conversationId: string, tipId?: string) => {
+    // ★ 切换会话时清空 in-flight（防止旧 conv 请求回来写入新 conv）
+    _loadingInFlight.clear();
+    _loadingPromises.clear();
+
     set({
       loadingMessages: true,
       convError: null,
       activeConvId: conversationId,
       pathReady: false,
+      // 清空 nodeMap 防止旧 conv 残留
+      nodeMap: {},
+      currentPath: [],
+      pathPosMap: new Map(),
+      messages: [],
     });
     try {
       // ── Step 1: 首尾加载（head + tail 分段）──
