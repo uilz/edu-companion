@@ -48,6 +48,8 @@ import { apiFetch } from "./tree-helpers";
 const _loadingInFlight = new Set<string>();
 /** 加载 Promise 缓存：相同 msgId 并发请求共享同一 Promise */
 const _loadingPromises = new Map<string, Promise<void>>();
+/** 已尝试过加载（成功或失败）的 msgId — 防止空 content 死循环 */
+const _loadAttempted = new Set<string>();
 
 export interface MessageState {
   // ── 树数据层 ──
@@ -246,10 +248,11 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   },
 
   // ── 懒加载完整消息正文（POST/GET /tree/message/{id}）──
-  //   ★ 三大防护：
+  //   ★ 四大防护：
   //     1. in-flight Set：相同 msgId 并发请求只发 1 次
   //     2. Promise 缓存：未完成的请求共享同一 Promise
   //     3. activeConvId 校验：API 返回时若已切换会话则丢弃结果
+  //     4. _loadAttempted 标记：API 返回后标记已尝试，防止空 content 死循环
   loadFullContent: async (msgId: string) => {
     // 已有正文 → 跳过
     if (get().hasFullContent(msgId)) return;
@@ -257,6 +260,8 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     if (get().streamingId === msgId) return;
     // 临时消息 → 跳过
     if (msgId.startsWith("t_") || msgId.startsWith("a_") || msgId.startsWith("err-")) return;
+    // ★ 已尝试过 → 跳过（API 返回空 content 也算已尝试，避免死循环）
+    if (_loadAttempted.has(msgId)) return;
 
     // ★ 已在飞行中 → 共享同一 Promise，不发重复请求
     if (_loadingInFlight.has(msgId)) {
@@ -290,6 +295,8 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
       } finally {
         _loadingInFlight.delete(msgId);
         _loadingPromises.delete(msgId);
+        // ★ 无论成功失败都标记为"已尝试"——API 返回空 content 也算已尝试
+        _loadAttempted.add(msgId);
       }
     })();
 
@@ -325,9 +332,10 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
 
   // ── 加载对话消息（设计文档 §场景 1）──
   loadMessages: async (conversationId: string, tipId?: string) => {
-    // ★ 切换会话时清空 in-flight（防止旧 conv 请求回来写入新 conv）
+    // ★ 切换会话时清空 in-flight + 尝试记录（防止旧 conv 缓存污染新 conv）
     _loadingInFlight.clear();
     _loadingPromises.clear();
+    _loadAttempted.clear();
 
     set({
       loadingMessages: true,
