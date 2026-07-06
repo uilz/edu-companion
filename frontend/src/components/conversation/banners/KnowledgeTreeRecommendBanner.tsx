@@ -114,20 +114,30 @@ export default function KnowledgeTreeRecommendBanner() {
       {pendingRecs.map((n) => (
         <div
           key={n.id}
-          className="flex items-center gap-2 px-3 py-2 rounded-md bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800/30 text-xs text-violet-700 dark:text-violet-400"
+          className="flex items-center gap-2 px-3 py-2 rounded-md text-xs"
+          style={{
+            backgroundColor: "var(--banner-recommend-bg)",
+            border: "1px solid var(--banner-recommend-border)",
+            color: "var(--color-green)",
+          }}
         >
           <GitGraph size={14} className="flex-shrink-0" />
-          <span className="flex-1">{n.description}</span>
+          <span className="flex-1" style={{ color: "var(--color-ink-primary)" }}>{n.description}</span>
           <Link
             href="/knowledge-tree"
-            className="px-2 py-0.5 rounded bg-violet-200 dark:bg-violet-800/40 hover:bg-violet-300 dark:hover:bg-violet-700/40 transition-colors font-medium flex-shrink-0"
+            className="px-2 py-0.5 rounded font-medium flex-shrink-0 transition-colors"
+            style={{
+              backgroundColor: "var(--banner-recommend-border)",
+              color: "var(--color-green)",
+            }}
           >
             去知识树
           </Link>
           <button
             type="button"
             onClick={() => handleDismiss(n.id)}
-            className="p-0.5 rounded hover:bg-violet-200/50 dark:hover:bg-violet-800/20 transition-colors flex-shrink-0"
+            className="p-0.5 rounded transition-colors flex-shrink-0"
+            style={{ color: "var(--color-green)" }}
             aria-label="关闭提醒"
           >
             <X size={12} />

@@ -12,10 +12,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-// ── 边界常量 ────────────────────────────────────────
+// ── 边界常量（基于默认宽度 x 的比例） ────────────────
+//   收起阈值 20%x · 最小宽度 30%x · 展开阈值 25%x · 最大宽度 150%x
 export const PANEL_BOUNDS = {
-  leftSidebar: { min: 200, max: 400, default: 280, collapsed: 4 },
-  rightPanel: { min: 240, max: 400, default: 300, collapsed: 0 },
+  leftSidebar: { min: 72, max: 360, default: 240, collapsed: 4 },
+  rightPanel: { min: 90, max: 450, default: 300, collapsed: 0 },
 } as const;
 
 type PanelKey = "leftSidebar" | "rightPanel";

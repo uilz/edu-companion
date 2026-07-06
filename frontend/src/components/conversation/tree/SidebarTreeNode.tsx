@@ -3,7 +3,7 @@
 import React, { useMemo, memo } from "react";
 import {
   Plus, Pencil, Trash2, MessageSquare, MoreVertical,
-  ChevronRight, ChevronDown, FolderOpen,
+  ChevronRight, ChevronDown, FolderOpen, BookOpen,
 } from "lucide-react";
 import { InlineEdit } from "@/components/ui/InlineEdit";
 
@@ -42,12 +42,19 @@ export const CHILD_LEVEL: Record<string, { level: GraphLevel; name: string; emoj
 };
 
 // ══════════════════════════════════════════════════════════════
-//  节点图标 — 基于 node_type + kind
+//  节点图标 — 基于 node_type + kind（demo 配色：文件夹 amber、kind-book blue、message accent）
 // ══════════════════════════════════════════════════════════════
-export function nodeIcon(nodeType: string, _kind?: string) {
+export function nodeIcon(nodeType: string, _kind?: string, isActive?: boolean) {
+  const color = isActive ? "var(--color-accent)" : "";
   switch (nodeType) {
-    case "dir": return <FolderOpen size={13} />;
-    default: return null;
+    case "dir":
+      // 按 kind 区分图标色：practice/secretary 用不同色
+      if (_kind === "practice" || _kind === "secretary") {
+        return <BookOpen size={13} style={{ color: "var(--color-blue)" }} />;
+      }
+      return <FolderOpen size={13} style={{ color: "var(--color-amber)" }} />;
+    default:
+      return <MessageSquare size={12} style={{ color: color || "var(--color-ink-muted)" }} />;
   }
 }
 
@@ -215,7 +222,7 @@ function SidebarTreeNodeInner({
         style={{
           paddingLeft: indent,
           paddingRight: 8,
-          paddingBlock: "max(6px, calc((44px - 1em) / 2))",
+          paddingBlock: "max(4px, calc((32px - 1em) / 2))",
           borderLeft: `${borderWidth}px solid ${borderColor}`,
         }}
         onClick={handleNodeClick}
@@ -227,7 +234,7 @@ function SidebarTreeNodeInner({
           <button
             onClick={handleChevronClick}
             className="mr-1 flex-shrink-0 flex items-center justify-center p-0"
-            style={{ minWidth: 44, minHeight: 44 }}
+            style={{ minWidth: 32, minHeight: 32 }}
             title={isExpanded ? "收起" : "展开"}
             aria-label={isExpanded ? "收起" : "展开"}
           >
@@ -244,7 +251,7 @@ function SidebarTreeNodeInner({
         {node.node_type !== "dir" && <span className="mr-1 w-4 flex-shrink-0" />}
 
         {/* 节点图标 */}
-        <span className="mr-1.5 flex-shrink-0 text-[var(--color-text-muted)]">{nodeIcon(node.node_type, node.kind)}</span>
+        <span className="mr-1.5 flex-shrink-0">{nodeIcon(node.node_type, node.kind, nodeState === "selected")}</span>
 
         {/* 标签 */}
         <span className={`flex-1 truncate text-xs ${nodeState === "selected" ? "text-[var(--color-text)] font-semibold" : "text-[var(--color-text-secondary)] font-normal"}`}>
@@ -262,7 +269,7 @@ function SidebarTreeNodeInner({
             <button
               onClick={(e) => { e.stopPropagation(); toggleMenu(node.id); }}
               className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] rounded"
-              style={{ minWidth: 44, minHeight: 44 }}
+              style={{ minWidth: 32, minHeight: 32 }}
               title="更多操作"
             >
               <MoreVertical size={11} />
@@ -271,26 +278,26 @@ function SidebarTreeNodeInner({
               <div className="absolute right-0 top-full mt-1 z-50 min-w-[120px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] py-1 shadow-lg" onClick={(e) => e.stopPropagation()}>
                 {allowChildCreation && (
                   <button onClick={() => { handleCreateChild(node); setOpenMenuId(null); }}
-                    className="flex w-full items-center gap-2 px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)]"
-                    style={{ minHeight: 44 }}>
+                    className="flex w-full items-center gap-2 px-4 py-2 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)]"
+                    style={{ minHeight: 36 }}>
                     <Plus size={12} /> 新建目录
                   </button>
                 )}
                 {allowChildCreation && (
                   <button onClick={() => { handleNewConvClick(node, partitionId || node.id); setOpenMenuId(null); }}
-                    className="flex w-full items-center gap-2 px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)]"
-                    style={{ minHeight: 44 }}>
+                    className="flex w-full items-center gap-2 px-4 py-2 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)]"
+                    style={{ minHeight: 36 }}>
                     <MessageSquare size={12} /> 新建会话
                   </button>
                 )}
                 <button onClick={() => { setEditingId(node.id); setEditValue(node.label); setOpenMenuId(null); }}
-                  className="flex w-full items-center gap-2 px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)]"
-                  style={{ minHeight: 44 }}>
+                  className="flex w-full items-center gap-2 px-4 py-2 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)]"
+                  style={{ minHeight: 36 }}>
                   <Pencil size={12} /> 重命名
                 </button>
                 <button onClick={() => { setDeleteTarget({ id: node.id, label: node.label, isConv: node.node_type === "conv", parentId: node.node_type === "conv" ? (node.parent || undefined) : undefined, parent: node.parent }); setOpenMenuId(null); }}
-                  className="flex w-full items-center gap-2 px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)]"
-                  style={{ minHeight: 44 }}>
+                  className="flex w-full items-center gap-2 px-4 py-2 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)]"
+                  style={{ minHeight: 36 }}>
                   <Trash2 size={12} /> 删除
                 </button>
               </div>

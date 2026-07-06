@@ -40,7 +40,7 @@ export default function MessageActions({
 }: MessageActionsProps) {
   if (role === "user") {
     return (
-      <div className="absolute bottom-0 right-0 flex items-center gap-1 bg-[var(--color-surface)] rounded-bl-md px-1 py-0.5 opacity-0 group-hover:opacity-100 max-lg:opacity-100 transition-opacity">
+      <div className="absolute bottom-0 right-0 flex items-center gap-1 px-1 py-0.5 opacity-0 group-hover:opacity-100 max-lg:opacity-100 transition-opacity">
         {vInfo.total > 1 && onVersionNav && (
           <div className="flex items-center gap-0.5 text-xs text-[var(--color-text-muted)] mr-1 border-r border-[var(--color-border)] pr-1">
             <button onClick={() => onVersionNav("prev")} className="p-0.5 hover:text-[var(--color-text)]" title="上一版本">
@@ -72,7 +72,7 @@ export default function MessageActions({
   }
 
   return (
-    <div className="absolute bottom-0 left-0 flex items-center gap-1 bg-[var(--color-surface)] rounded-br-md px-1 py-0.5 opacity-0 group-hover:opacity-100 max-lg:opacity-100 transition-opacity">
+    <div className="absolute bottom-0 left-0 flex items-center gap-1 px-1 py-0.5 opacity-0 group-hover:opacity-100 max-lg:opacity-100 transition-opacity">
       {onDelete && (
         <button onClick={onDelete} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-error)]" title="删除">
           <Trash2 size={12} />

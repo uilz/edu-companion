@@ -14,6 +14,7 @@ import { useTreeStore } from "@/store/conversation/tree-store";
 import { NewNodeDialog } from "@/components/ui/NewNodeDialog";
 import KnowledgeTreeRecommendBanner from "@/components/conversation/banners/KnowledgeTreeRecommendBanner";
 import { useBreakpoint } from "@/hooks/useBreakpoint";
+import ResizeHandle from "@/components/ui/ResizeHandle";
 
 /**
  * ConversationPanel — 对话面板主布局
@@ -35,7 +36,7 @@ export default function ConversationPanel(
   const selectedNode = useConversationStore((s) => s.selectedNode);
   const createSubBranch = useConversationStore((s) => s.createSubBranch);
   const isFeynmanMode = conversationMode === "feynman";
-  const { pref, setWidth, toggleCollapsed } = useConversationPanelPrefs();
+  const { pref, setWidth, setCollapsed, toggleCollapsed } = useConversationPanelPrefs();
 
   // ── 费曼讲学回调 ──
   const handleFeynmanTeach = React.useCallback(
@@ -80,59 +81,96 @@ export default function ConversationPanel(
   }, [props.dirList, switchBanner?.dirId]);
 
   // ══════════════════════════════════════════════════════════
-  //  Resize 处理
+  //  Resize 处理（委托给通用 ResizeHandle 组件）
+  //
+  //  使用总位移（totalDelta）：每次拖动始终从 pointerdown 时的
+  //  初始宽度 + 鼠标总位移 计算，避免 rAF 节流下累积误差。
   // ══════════════════════════════════════════════════════════
+  // ── 阈值 & 边界（基于默认宽度 x 的比例）──
+  //   收起阈值 20%x · 展开阈值 25%x · 最小 30%x · 最大 150%x
+  const LX = PANEL_BOUNDS.leftSidebar.default;     // 240
+  const RX = PANEL_BOUNDS.rightPanel.default;       // 300
+  const LEFT_COLLAPSE = Math.round(0.20 * LX);      // 48
+  const LEFT_EXPAND   = Math.round(0.25 * LX);      // 60
+  const RIGHT_COLLAPSE = Math.round(0.20 * RX);     // 60
+  const RIGHT_EXPAND   = Math.round(0.25 * RX);     // 75
+
   const contentRef = React.useRef<HTMLDivElement>(null);
-  const handleResizerRef = React.useRef<{ startX: number; startW: number } | null>(null);
+  const dragStartWidthRef = React.useRef(pref.leftSidebar.width);
+  // 状态切换时记录"已消耗位移"，后续 effectiveDelta = totalDelta - consumed 使切换后从零算起
+  const consumedDeltaRef = React.useRef(0);
 
-  const SIDEBAR_DEFAULT = PANEL_BOUNDS.leftSidebar.default;
-  const MIN_SIDEBAR = PANEL_BOUNDS.leftSidebar.min;
-  const MAX_SIDEBAR = PANEL_BOUNDS.leftSidebar.max;
-  const COLLAPSE_THRESHOLD = 80;
+  const handleResizeStart = React.useCallback(() => {
+    dragStartWidthRef.current = pref.leftSidebar.collapsed ? 0 : pref.leftSidebar.width;
+    consumedDeltaRef.current = 0;
+  }, [pref]);
 
-  const onResizerPointerDown = React.useCallback(
-    (e: React.PointerEvent) => {
-      e.preventDefault();
-      const curW = pref.leftSidebar.collapsed ? 0 : pref.leftSidebar.width;
-      handleResizerRef.current = { startX: e.clientX, startW: curW };
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
+  const handleResize = React.useCallback(
+    (totalDelta: number) => {
+      const eff = totalDelta - consumedDeltaRef.current;
+      const startW = pref.leftSidebar.collapsed ? 0 : dragStartWidthRef.current;
+      const newW = startW + eff;
+
+      if (pref.leftSidebar.collapsed) {
+        // 收起态 → 拖出展开阈值(25%x)即展开
+        if (eff >= LEFT_EXPAND) {
+          const clamped = Math.max(PANEL_BOUNDS.leftSidebar.min, Math.min(PANEL_BOUNDS.leftSidebar.max, newW));
+          setWidth("leftSidebar", clamped);
+          setCollapsed("leftSidebar", false);
+          dragStartWidthRef.current = clamped;
+          consumedDeltaRef.current = totalDelta;
+        }
+      } else {
+        // 展开态 → 拖入收起阈值(20%x)或低于 min 即收起
+        if (eff <= -LEFT_COLLAPSE || newW < PANEL_BOUNDS.leftSidebar.min) {
+          toggleCollapsed("leftSidebar");
+          consumedDeltaRef.current = totalDelta;
+          return;
+        }
+        const clamped = Math.max(PANEL_BOUNDS.leftSidebar.min, Math.min(PANEL_BOUNDS.leftSidebar.max, newW));
+        setWidth("leftSidebar", clamped);
+      }
     },
-    [pref],
+    [pref, setWidth, toggleCollapsed, setCollapsed],
   );
 
-  React.useEffect(() => {
-    const el = contentRef.current;
-    if (!el) return;
+  // ══ 右栏 Drag ══
+  const rightDragStartWidthRef = React.useRef(pref.rightPanel.width);
+  const rightConsumedDeltaRef = React.useRef(0);
 
-    const onMove = (e: PointerEvent) => {
-      const h = handleResizerRef.current;
-      if (!h) return;
-      const delta = e.clientX - h.startX;
-      const newW = h.startW + delta;
+  const handleRightResizeStart = React.useCallback(() => {
+    rightDragStartWidthRef.current = pref.rightPanel.collapsed ? 0 : pref.rightPanel.width;
+    rightConsumedDeltaRef.current = 0;
+  }, [pref]);
 
-      if (newW < COLLAPSE_THRESHOLD) {
-        toggleCollapsed("leftSidebar");
-        handleResizerRef.current = null;
-        return;
+  const handleRightResize = React.useCallback(
+    (totalDelta: number) => {
+      const eff = totalDelta - rightConsumedDeltaRef.current;
+      const startW = pref.rightPanel.collapsed ? 0 : rightDragStartWidthRef.current;
+      const newW = startW - eff; // 向左拖 → totalDelta 负数 → newW 增大
+
+      if (pref.rightPanel.collapsed) {
+        // 收起态 → 向左拖出展开阈值(25%x)即展开
+        if (eff <= -RIGHT_EXPAND) {
+          const clamped = Math.max(PANEL_BOUNDS.rightPanel.min, Math.min(PANEL_BOUNDS.rightPanel.max, newW));
+          setWidth("rightPanel", clamped);
+          setCollapsed("rightPanel", false);
+          rightDragStartWidthRef.current = clamped;
+          rightConsumedDeltaRef.current = totalDelta;
+        }
+      } else {
+        // 展开态 → 向右拖入收起阈值(20%x)或低于 min 即收起
+        if (eff >= RIGHT_COLLAPSE || newW < PANEL_BOUNDS.rightPanel.min) {
+          toggleCollapsed("rightPanel");
+          rightConsumedDeltaRef.current = totalDelta;
+          return;
+        }
+        const clamped = Math.max(PANEL_BOUNDS.rightPanel.min, Math.min(PANEL_BOUNDS.rightPanel.max, newW));
+        setWidth("rightPanel", clamped);
       }
-      const clamped = Math.max(MIN_SIDEBAR, Math.min(MAX_SIDEBAR, newW));
-      setWidth("leftSidebar", clamped);
-    };
-
-    const onUp = () => {
-      handleResizerRef.current = null;
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-  }, [setWidth, toggleCollapsed]);
+    },
+    [pref, setWidth, toggleCollapsed, setCollapsed],
+  );
 
   // ══════════════════════════════════════════════════════════
   //  MOBILE LAYOUT
@@ -210,9 +248,10 @@ export default function ConversationPanel(
   //  由 Workbench 提供 TopBar / LeftPanel / RightPanel
   // ══════════════════════════════════════════════════════════
   const sidebarW = pref.leftSidebar.collapsed ? 0 : pref.leftSidebar.width;
+  const rightPanelW = pref.rightPanel.collapsed ? 0 : pref.rightPanel.width;
 
   return (
-    <div ref={contentRef} className="h-full flex overflow-hidden" style={{ position: "relative" }}>
+    <div ref={contentRef} className="h-full flex" style={{ position: "relative" }}>
       {/* ── Sidebar ── */}
       <div style={{
         width: sidebarW, flexShrink: 0,
@@ -242,9 +281,6 @@ export default function ConversationPanel(
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
               </button>
             )}
-            <button onClick={() => toggleCollapsed("leftSidebar")} className="icon-btn" style={{ width: 26, height: 26 }} title="收起侧栏">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
-            </button>
           </div>
         </div>
 
@@ -275,16 +311,12 @@ export default function ConversationPanel(
       </div>
 
       {/* ── Resize handle ── */}
-      <div
-        onPointerDown={onResizerPointerDown}
+      <ResizeHandle
+        orientation="horizontal"
+        onResizeStart={handleResizeStart}
+        onResize={handleResize}
         onDoubleClick={() => toggleCollapsed("leftSidebar")}
-        style={{
-          position: "absolute", top: 0, bottom: 0, zIndex: 50,
-          left: sidebarW - 3, width: 6,
-          cursor: "col-resize",
-          background: "transparent",
-        }}
-        title="拖动调整 · 双击收起"
+        collapsed={pref.leftSidebar.collapsed}
       />
 
       {/* ── Main: messages + input ── */}
@@ -302,14 +334,81 @@ export default function ConversationPanel(
         />
       </div>
 
-      {/* ── Collapsed expand button ── */}
+      {/* ── 右栏 Resize handle ── */}
+      <ResizeHandle
+        orientation="horizontal"
+        onResizeStart={handleRightResizeStart}
+        onResize={handleRightResize}
+        onDoubleClick={() => toggleCollapsed("rightPanel")}
+        collapsed={pref.rightPanel.collapsed}
+      />
+
+      {/* ── 右栏 ── */}
+      <div style={{
+        width: rightPanelW, flexShrink: 0,
+        overflow: "hidden",
+        display: "flex", flexDirection: "column",
+        borderLeft: "1px solid var(--color-divider)",
+        transition: rightPanelW === 0 ? "width 0.2s" : "none",
+      }}>
+        <div className="flex items-center justify-between px-2.5 py-2 border-b border-[var(--color-divider)]" style={{ flexShrink: 0 }}>
+          <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: "var(--color-ink-primary)" }}>
+            详情
+          </span>
+        </div>
+        <div className="flex-1 flex items-center justify-center text-xs" style={{ color: "var(--color-ink-muted)" }}>
+          右栏内容
+        </div>
+      </div>
+
+      {/* ── 左栏 Collapsed expand button ── */}
       {pref.leftSidebar.collapsed && (
         <button onClick={() => toggleCollapsed("leftSidebar")}
           style={{
-            position: "absolute", left: 0, top: "50%", transform: "translateY(-50%)",
+            position: "absolute", left: 0, bottom: 12, top: "auto",
             width: 24, height: 56, zIndex: 51,
             background: "var(--color-card)", border: "1px solid var(--color-divider)", borderLeft: "none",
             borderRadius: "0 6px 6px 0", cursor: "pointer", color: "var(--color-ink-muted)",
+            display: "grid", placeItems: "center",
+          }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+      )}
+
+      {/* ── Expanded collapse button（在左栏外侧边界） ── */}
+      {!pref.leftSidebar.collapsed && (
+        <button onClick={() => toggleCollapsed("leftSidebar")}
+          style={{
+            position: "absolute", left: sidebarW, bottom: 12, top: "auto",
+            width: 24, height: 56, zIndex: 51,
+            background: "var(--color-card)", border: "1px solid var(--color-divider)", borderLeft: "none",
+            borderRadius: "0 6px 6px 0", cursor: "pointer", color: "var(--color-ink-muted)",
+            display: "grid", placeItems: "center",
+          }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+      )}
+
+      {/* ── 右栏展开/收起按钮 ── */}
+      {pref.rightPanel.collapsed && (
+        <button onClick={() => toggleCollapsed("rightPanel")}
+          style={{
+            position: "absolute", right: 0, bottom: 12,
+            width: 24, height: 56, zIndex: 51,
+            background: "var(--color-card)", border: "1px solid var(--color-divider)", borderRight: "none",
+            borderRadius: "6px 0 0 6px", cursor: "pointer", color: "var(--color-ink-muted)",
+            display: "grid", placeItems: "center",
+          }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+      )}
+      {!pref.rightPanel.collapsed && (
+        <button onClick={() => toggleCollapsed("rightPanel")}
+          style={{
+            position: "absolute", right: rightPanelW, bottom: 12,
+            width: 24, height: 56, zIndex: 51,
+            background: "var(--color-card)", border: "1px solid var(--color-divider)", borderRight: "none",
+            borderRadius: "6px 0 0 6px", cursor: "pointer", color: "var(--color-ink-muted)",
             display: "grid", placeItems: "center",
           }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>

@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import {
   Network, ListChecks, Sparkles, ChevronRight, Edit3, Trash2,
-  Plus, Library,
+  Plus, Library, BookOpen, Pen, Share2, MessageSquare, LayoutDashboard,
 } from "lucide-react";
 import { useNotificationStore } from "@/store/notification/notification-store";
 import { apiFetch } from "@/store/conversation/tree-helpers";
@@ -188,15 +188,19 @@ function RelatedKnowledgeCard({ messages, onOpenKnowledgeTree, selectedNodeId }:
       }
     >
       <div className="flex flex-wrap gap-1.5">
-        {knowledgeIds.slice(0, 6).map((id) => (
-          <span
-            key={id}
-            className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-md bg-[var(--color-accent-soft)] text-[var(--color-accent)] border border-[var(--color-accent)]/20 cursor-default"
-            title={id}
-          >
-            <span className="w-1 h-1 rounded-full bg-[var(--color-accent)]" />
-            {labels.get(id) || id.slice(-6)}
-          </span>
+        {knowledgeIds.slice(0, 6).map((id, idx) => (
+          <div key={id} className="w-full flex items-center gap-1.5">
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-md bg-[var(--color-accent-soft)] text-[var(--color-accent)] border border-[var(--color-accent)]/20 cursor-default"
+              title={id}
+            >
+              <span className="w-1 h-1 rounded-full bg-[var(--color-accent)]" />
+              {labels.get(id) || id.slice(-6)}
+            </span>
+            <span className="ml-auto text-[9px] text-[var(--color-text-muted)] font-mono">
+              {0.8 - idx * 0.1}
+            </span>
+          </div>
         ))}
         {knowledgeIds.length > 6 && (
           <span className="text-[10px] text-[var(--color-text-muted)]">+{knowledgeIds.length - 6}</span>
@@ -287,6 +291,36 @@ function SecretaryHintsCard() {
   );
 }
 
+// ── 快速操作网格 ──
+function QuickActionsCard() {
+  const actions = [
+    { icon: <Pen size={14} />, label: "标注", onClick: undefined },
+    { icon: <LayoutDashboard size={14} />, label: "制卡", onClick: undefined },
+    { icon: <MessageSquare size={14} />, label: "费曼", onClick: undefined },
+    { icon: <BookOpen size={14} />, label: "笔记", onClick: undefined },
+    { icon: <Share2 size={14} />, label: "导图", onClick: undefined },
+    { icon: <Library size={14} />, label: "引用", onClick: undefined },
+  ];
+
+  return (
+    <InfoCard icon={<ListChecks size={12} />} title="快速操作">
+      <div className="grid grid-cols-3 gap-1.5">
+        {actions.map((a, i) => (
+          <button
+            key={i}
+            onClick={a.onClick}
+            disabled={!a.onClick}
+            className="flex flex-col items-center gap-1 px-2 py-2 text-[10px] rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 border border-transparent hover:border-[var(--color-accent)]/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <span className="text-[var(--color-text-muted)] group-hover:text-[var(--color-accent)]">{a.icon}</span>
+            <span>{a.label}</span>
+          </button>
+        ))}
+      </div>
+    </InfoCard>
+  );
+}
+
 // ── 顶层 RightInfoPanel ──
 export default function RightInfoPanel({
   selectedNode,
@@ -316,6 +350,7 @@ export default function RightInfoPanel({
         onCreateConv={onCreateConv}
       />
       <SecretaryHintsCard />
+      <QuickActionsCard />
     </div>
   );
 }

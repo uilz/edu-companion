@@ -119,6 +119,9 @@ export function useChatStream() {
       case "done":
         _handleDone(event, storeApi);
         break;
+      case "pending_msg":
+        _handlePendingMsg(event);
+        break;
       case "error":
         _handleError(event.message as string || "未知错误", storeApi);
         break;
@@ -804,6 +807,27 @@ function _handleUserMessage(data: { message: MessageNode }) {
       (m.role === "user" && m.id.startsWith("t_")) ? data.message : m,
     ),
   }));
+}
+
+function _handlePendingMsg(data: Record<string, unknown>) {
+  const msgId = (data.data as any)?.msg_id || "";
+  if (!msgId) return;
+  useMessageStore.setState((state: { messages: MessageNode[]; streamingId: string | null }) => {
+    // 如果已有 streamingId 且不相同，用后端分配的 msg_id 替换占位
+    if (state.streamingId && state.streamingId !== msgId) {
+      return {
+        streamingId: msgId,
+        messages: state.messages.map((m) => {
+          if (m.id === state.streamingId) {
+            return { ...m, id: msgId };
+          }
+          return m;
+        }),
+      };
+    }
+    // 没有 streamingId 或相同，存入即可
+    return { streamingId: msgId };
+  });
 }
 
 function _handleStage(

@@ -1,12 +1,13 @@
 "use client";
 
 import React, { memo, useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { GraduationCap, BookOpen, ImageIcon, FileText, ExternalLink, Quote as QuoteIcon, X } from "lucide-react";
+import { GraduationCap, BookOpen, ImageIcon, FileText, ExternalLink, Quote as QuoteIcon, X, Copy, Trash2 } from "lucide-react";
 import { BLOCK_RENDERERS } from "@/components/conversation/blocks/registry";
 import MarkdownRenderer from "./../blocks/MarkdownRenderer";
 import SelfExplainCard from "./../cards/SelfExplainCard";
 import MessageActions from "./MessageActions";
 import MessageEditArea from "./MessageEditArea";
+import SpeakButton from "./../media/SpeakButton";
 import { useExplainStore, getCardsForMessage } from "@/store/explain/explain-store";
 import type { ExplainCardData } from "@/store/explain/explain-store";
 import KnowledgeExplainCard from "@/components/conversation/cards/KnowledgeExplainCard";
@@ -329,30 +330,48 @@ function MessageItemInner({
   }
 
   return (
-    <div>
+    <div className="group">
       {/* Avatar row: 独立成行，不再与内容同行（解决挤压宽度问题） */}
       {isUser ? (
         <div className="flex items-center gap-1.5 mb-1.5 px-1 justify-end">
-          <span className="text-xs font-medium text-[var(--color-text-muted)]">你</span>
-          <div className="user-avatar-chip" aria-label="你">
+          <span className="text-xs font-medium text-[var(--color-text-muted)]">{user?.display_name || user?.username || "你"}</span>
+          <div className="user-avatar-chip" aria-label={user?.display_name || user?.username || "你"}>
             {userInitial}
           </div>
         </div>
       ) : (
-        <div className="flex items-center gap-2 mb-1.5 px-1">
+        <div className="flex items-center gap-1.5 mb-1.5 px-1">
           <div className={`ai-avatar-chip`}>
             {isFeynmanMode ? <BookOpen size={13} /> : <GraduationCap size={13} />}
           </div>
           <span className="text-xs font-medium text-[var(--color-text-muted)]">
             {isFeynmanMode ? "费曼学生" : "教学助手"}
           </span>
+          <span className="text-[10px] text-[var(--color-text-muted)] opacity-0 group-hover:opacity-100 transition-opacity">
+            · {new Date(message.timestamp || Date.now()).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
+          </span>
+          <span className="flex-1" />
+          {/* 名称行操作按钮 */}
+          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 max-lg:opacity-100 transition-opacity">
+            <SpeakButton text={displayText} />
+            {onCopy && (
+              <button onClick={onCopy} className="p-1 rounded text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)]" title="复制">
+                <Copy size={12} />
+              </button>
+            )}
+            {onDelete && (
+              <button onClick={onDelete} className="p-1 rounded text-[var(--color-text-muted)] hover:text-[var(--color-error)] hover:bg-[var(--color-surface-hover)]" title="删除">
+                <Trash2 size={12} />
+              </button>
+            )}
+          </div>
         </div>
       )}
 
       <div className="message-enter">
-        <div className={`relative pb-7 ${isUser ? "flex justify-end" : ""}`}
+        <div className={`${isUser ? "flex justify-end" : ""}`}
           style={{ overflow: 'visible', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-          <div className={`group ${isUser ? "max-w-[85%]" : "max-w-full"}`}>
+          <div className={`relative pb-7 ${isUser ? "max-w-[85%]" : "max-w-full"}`}>
             {/* === AI 消息：paper-ink 风格，文本与工具块米色一致 === */}
             {!isUser && (
               <div className="ai-msg-paper space-y-1">
@@ -399,7 +418,7 @@ function MessageItemInner({
 
             {/* === 用户消息：单气泡内集成引用/图片/文件/文本 === */}
             {isUser && (
-              <div className="ai-msg-paper" style={{ backgroundColor: 'var(--color-user-msg)' }}>
+              <div className="user-msg-bubble">
                 {isEditing ? (
                   <MessageEditArea text={editingText} onChange={onEditTextChange} onSave={onSaveEdit} onCancel={onCancelEdit} />
                 ) : (

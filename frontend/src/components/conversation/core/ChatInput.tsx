@@ -294,7 +294,7 @@ export default function ConversationChatInput({
         )}
 
         {/* 输入区域：文本框 + 发送按钮 */}
-        <div className="flex items-center gap-3 bg-[var(--color-input)] border border-[var(--color-border)] rounded-full px-2 py-1.5 focus-within:border-[var(--color-accent)] transition-colors">
+        <div className="flex items-center gap-3 bg-[var(--color-input)] border border-[var(--color-border)] rounded-xl px-2 py-1.5 focus-within:border-[var(--color-accent)] transition-colors">
           <textarea
             ref={textareaRef}
             value={text}
