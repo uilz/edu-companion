@@ -149,10 +149,11 @@ class UserSettingsRepo:
         return merged
 
     def get_ui_prefs(self, user_id: str) -> dict:
-        """读取 UI 偏好 (theme / style)."""
+        """读取 UI 偏好 (theme / style / serif_font)."""
         return self.get_key(user_id, self.NS_UI, default={
             "theme": "dark",
             "style": "professional",
+            "serif_font": False,
         })
 
     def set_ui_prefs(self, user_id: str, prefs: dict) -> dict:

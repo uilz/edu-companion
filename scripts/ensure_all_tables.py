@@ -1,3 +1,4 @@
+#不是垃圾不是临时代码文件，在./rebuild.sh有用到！
 #!/usr/bin/env python3
 """
 数据库表结构同步 — export / import / prune 模式。

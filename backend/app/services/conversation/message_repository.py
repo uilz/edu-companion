@@ -61,6 +61,8 @@ class MessageRepository:
                 version             INTEGER DEFAULT 1,
                 is_deleted          BOOLEAN DEFAULT FALSE,
                 agent_label         TEXT DEFAULT '',
+                status              TEXT DEFAULT 'done',
+                stream_started_at   TIMESTAMPTZ,
                 metadata            JSONB DEFAULT '{}'
             )
         """)
@@ -73,6 +75,20 @@ class MessageRepository:
         self._db.execute(
             "CREATE INDEX IF NOT EXISTS idx_msg_parent ON messages(parent_id)"
         )
+
+        # 迁移：为已有表添加 status / stream_started_at 列（幂等）
+        self._db.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='messages' AND column_name='status'
+                ) THEN
+                    ALTER TABLE messages ADD COLUMN status TEXT DEFAULT 'done';
+                    ALTER TABLE messages ADD COLUMN stream_started_at TIMESTAMPTZ;
+                END IF;
+            END $$;
+        """)
 
     # ── 装载全部 ──
 

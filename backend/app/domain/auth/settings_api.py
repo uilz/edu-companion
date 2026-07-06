@@ -61,6 +61,7 @@ class LlmBehaviorResponse(BaseModel):
 class UiPrefsRequest(BaseModel):
     theme: str | None = Field(default=None, description="dark / light")
     style: str | None = Field(default=None, description="professional / playful / knowledge / soft-data / gamified")
+    serif_font: bool | None = Field(default=None, description="AI 消息使用衬线字体")
 
     @field_validator("theme")
     @classmethod
@@ -81,6 +82,7 @@ class UiPrefsRequest(BaseModel):
 class UiPrefsResponse(BaseModel):
     theme: str = "dark"
     style: str = "professional"
+    serif_font: bool = False
 
 
 class LearningPrefsRequest(BaseModel):

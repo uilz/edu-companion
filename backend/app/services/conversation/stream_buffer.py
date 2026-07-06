@@ -28,12 +28,19 @@ class StreamBuffer:
 
     def __init__(self) -> None:
         self._buffers: dict[str, dict] = {}
+        self._active_msg_ids: dict[str, set[str]] = {}
         self._lock = asyncio.Lock()
 
-    async def publish(self, conv_id: str, event: dict) -> None:
-        """发布事件到缓冲区，通知所有 subscriber"""
+    async def publish(self, conv_id: str, event: dict, msg_id: str = "") -> None:
+        """发布事件到缓冲区，通知所有 subscriber。
+
+        当提供 msg_id 时，事件会被标记该 msg_id 并纳入 msg_id 级别索引。
+        """
         async with self._lock:
             entry = self._get_or_create(conv_id)
+            if msg_id:
+                event["msg_id"] = msg_id
+                self._active_msg_ids.setdefault(conv_id, set()).add(msg_id)
             entry["events"].append(event)
 
             # 限界：超出上限时优先丢弃旧 token 事件
@@ -151,13 +158,35 @@ class StreamBuffer:
             entry = self._get_or_create(conv_id)
             entry["pipeline_task"] = task
 
+    async def get_raw_events(self, conv_id: str, msg_id: str) -> list[dict]:
+        """从会话缓冲区中筛选属于指定 msg_id 的事件列表"""
+        async with self._lock:
+            entry = self._buffers.get(conv_id)
+            if not entry:
+                return []
+            return [ev for ev in entry["events"] if ev.get("msg_id") == msg_id]
+
+    async def has_msg_events(self, conv_id: str, msg_id: str) -> bool:
+        """检查会话缓冲区中是否存在指定 msg_id 的事件"""
+        async with self._lock:
+            entry = self._buffers.get(conv_id)
+            if not entry:
+                return False
+            return any(ev.get("msg_id") == msg_id for ev in entry["events"])
+
+    async def get_active_msg_ids(self, conv_id: str) -> set[str]:
+        """返回会话中所有活跃的 msg_id 集合（不存在时返回空集合）"""
+        async with self._lock:
+            return set(self._active_msg_ids.get(conv_id, set()))
+
     async def cleanup(self, conv_id: str) -> None:
-        """清理会话缓冲区"""
+        """清理会话缓冲区及 msg_id 索引"""
         async with self._lock:
             entry = self._buffers.pop(conv_id, None)
             if entry:
                 for evt in entry.get("subscribers", set()):
                     evt.set()
+            self._active_msg_ids.pop(conv_id, None)
 
     def _get_or_create(self, conv_id: str) -> dict:
         if conv_id not in self._buffers:

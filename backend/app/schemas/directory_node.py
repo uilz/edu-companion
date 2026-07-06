@@ -101,6 +101,10 @@ class MessageNode(BaseModel):
     summary: str | None = None
     cross_partition: dict | None = None       # CrossPartitionMark
 
+    # ── 状态 ──
+    status: str = "done"                      # "streaming" | "done" | "orphaned"
+    stream_started_at: float | None = None    # pipeline 启动时间戳（仅 streaming 时有效）
+
     # ── 元信息 ──
     timestamp: float = Field(default_factory=time.time)
     token_count: int = 0
