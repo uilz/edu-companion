@@ -191,6 +191,24 @@ export function useConversation() {
           const tempAsstId = "r_" + Date.now().toString(36) + "_" + Math.random().toString(36).substr(2, 9);
           useMessageStore.setState((s) => ({
             streamingId: tempAsstId,
+            // 把重连占位写入 nodeMap，buildMessages 时能渲染
+            nodeMap: { ...s.nodeMap, [tempAsstId]: {
+              id: tempAsstId,
+              directory_id: activeConversationId,
+              content: "",
+              version: 1,
+              parent_id: "",
+              children_ids: [],
+              dir_id: "",
+              conv_id: activeConversationId,
+              content_blocks: [],
+              text_summary: "",
+              role: "assistant" as const,
+              timestamp: Date.now(),
+              token_count: 0,
+              is_deleted: false,
+              is_archived: false,
+            }},
             messages: [...s.messages, {
               id: tempAsstId,
               directory_id: activeConversationId,

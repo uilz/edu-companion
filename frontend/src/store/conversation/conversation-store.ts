@@ -233,7 +233,11 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
       selectedNode: { id, level, parent: parent ?? null, path: path || [] },
       switchBanner: null,
     });
-    useMessageStore.setState({ messages: [], loadingMessages: false, convError: null });
+    useMessageStore.setState({
+      messages: [], loadingMessages: false, convError: null,
+      nodeMap: {}, currentPath: [], pathPos: 0, pathReady: false,
+      streamingId: null, sending: false,
+    });
 
     // Phase 2：批量加载数据（通过 tree-store）
     const tree = useTreeStore.getState();

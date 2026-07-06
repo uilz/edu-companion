@@ -559,6 +559,7 @@ function _handleDone(
   const replyData = (data.data || data) as Record<string, unknown>;
   const assistantMessage = replyData.assistant_message as MessageNode | undefined;
   const responseBlocks = (replyData.response_blocks || []) as Array<Record<string, unknown>>;
+  const userMessage = replyData.user_message as MessageNode | undefined;
   const newAsstId = assistantMessage?.id;
 
   const toolBlocksFromSSE: ToolBlock[] = responseBlocks.map((rb: any) => ({
@@ -575,28 +576,55 @@ function _handleDone(
     tool_round: 0,
   }));
 
-  useMessageStore.setState((state: { messages: MessageNode[]; streamingId: string | null }) => {
+  useMessageStore.setState((state: { messages: MessageNode[]; streamingId: string | null; nodeMap: Record<string, MessageNode>; currentPath: string[] }) => {
     const sid = state.streamingId;
+
+    // ── 同步 nodeMap：服务端返回的 assistant_message + user_message 写入节点表 ──
+    const newNodeMap: Record<string, MessageNode> = { ...state.nodeMap };
+    if (assistantMessage) {
+      newNodeMap[assistantMessage.id] = assistantMessage;
+    }
+    if (userMessage) {
+      newNodeMap[userMessage.id] = userMessage;
+    }
+
+    // ── 追加到 currentPath 末尾（如果尚未包含） ──
+    let newPath = state.currentPath;
+    if (assistantMessage && !newPath.includes(assistantMessage.id)) {
+      newPath = [...newPath, assistantMessage.id];
+    }
+    if (userMessage && !newPath.includes(userMessage.id)) {
+      // 找到用户消息应该插入的位置（在它的 parent_id 之后）
+      const parentId = userMessage.parent_id;
+      const insertIdx = parentId
+        ? newPath.indexOf(parentId) + 1 || newPath.length
+        : newPath.length;
+      // 去重插入
+      const newPathArr = [...newPath];
+      if (!newPathArr.includes(userMessage.id)) {
+        newPathArr.splice(insertIdx, 0, userMessage.id);
+      }
+      newPath = newPathArr;
+    }
+
     return {
+      nodeMap: newNodeMap,
+      currentPath: newPath,
+      pathReady: true,
       messages: state.messages.map((msg) => {
         if (msg.id !== sid && msg.id !== newAsstId) return msg;
 
         // 保留流式阶段的交织顺序（reasoning ↔ tool ↔ reasoning ...）
-        // 服务端 toolBlocksFromSSE 按位置合并到流式 tool 块，保留流式状态
         let toolServerIdx = 0;
         const finalBlocks = (msg.content_blocks || []).map((b: any) => {
           if (b.type === "tool") {
             const serverBlock = toolBlocksFromSSE[toolServerIdx];
             toolServerIdx++;
-            // 优先使用流式状态；pending/running 兜底为服务端状态或 done
             const finalStatus: "done" | "error" =
               (b.status !== "pending" && b.status !== "running") ? b.status
               : serverBlock?.status === "error" ? "error"
               : "done";
             if (serverBlock) {
-              // 保留本地 user_answer/answered_at（server 端 response_blocks 来自
-              // 初始 tool_block.content，resume 时虽写入 stream_content_blocks，
-              // 但 ctx.response_blocks 未同步更新，server 不会回传 user_answer）
               const localRc = b.result_content || {};
               const preservedUserAnswer = localRc.user_answer;
               const preservedAnsweredAt = localRc.answered_at;
@@ -619,7 +647,6 @@ function _handleDone(
           return b;
         });
 
-        // 追加多余的尾部服务端 tool 块（如后台任务）
         const extraTools = toolBlocksFromSSE.slice(toolServerIdx);
         if (extraTools.length > 0) finalBlocks.push(...extraTools);
 
@@ -643,7 +670,7 @@ function _handleError(
   const state = storeApi.getState();
   const convId = state.selectedNode?.id || "";
 
-  useMessageStore.setState((s: { messages: MessageNode[]; streamingId: string | null }) => ({
+  useMessageStore.setState((s: { messages: MessageNode[]; streamingId: string | null; sending: boolean }) => ({
     messages: [
       ...s.messages.filter(
         (m: MessageNode) => !(m.id.startsWith("t_") || m.id.startsWith("a_") || m.id === s.streamingId),
@@ -667,6 +694,8 @@ function _handleError(
       } as MessageNode,
     ],
     streamingId: null,
+    // 释放发送锁（防止 stale streaming 卡死）
+    sending: false,
   }));
 }
 

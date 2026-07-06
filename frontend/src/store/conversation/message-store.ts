@@ -40,6 +40,8 @@ export interface MessageState {
   loadMessages: (conversationId: string) => Promise<void>;
   /** 计算从根到指定消息的祖先路径，更新 currentPath */
   fillAncestorPath: (msgId: string) => Promise<string[]>;
+  /** 计算从根到 msgId 的完整路径（祖先 + 尾部，自动选默认分支） */
+  calcPath: (msgId: string) => Promise<string[]>;
   /** 查找指定消息的最佳后继子节点（用于选择分支） */
   getDefaultChild: (msgId: string) => string | null;
   /** 计算从 msgId 开始的尾部路径 */
@@ -168,7 +170,7 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     }
   },
 
-  // ── 计算祖先路径 ──
+  // ── 计算祖先路径（优先本地，回退 API） ──
   fillAncestorPath: async (msgId: string): Promise<string[]> => {
     const { messages } = get();
     // 先从本地 nodeMap/messages 中找
@@ -211,6 +213,27 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     } catch {
       return [];
     }
+  },
+
+  // ── 计算完整路径（祖先 + 尾部，自动选默认分支） ──
+  /**
+   * 计算从根到 msgId 的完整路径，并自动沿 children_ids 选出最佳尾部。
+   * - 用于 send() 时确定 parent_id 的位置
+   * - 用于分支切换时构建完整 currentPath
+   */
+  calcPath: async (msgId: string): Promise<string[]> => {
+    const ancestorPath = await get().fillAncestorPath(msgId);
+    if (ancestorPath.length === 0) return [];
+
+    // 如果 msgId 已在 currentPath 中（祖先路径已含），直接返回
+    if (ancestorPath[ancestorPath.length - 1] === msgId) {
+      return ancestorPath;
+    }
+
+    // 否则计算尾部
+    const tailPath = await get().calcTail(msgId);
+    const tailWithoutHead = tailPath.slice(1);
+    return [...ancestorPath, ...tailWithoutHead.filter(id => !ancestorPath.includes(id))];
   },
 
   // ── 查找默认子节点 ──
