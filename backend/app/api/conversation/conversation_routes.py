@@ -733,14 +733,20 @@ async def get_conversation_chain(conv_id: str, user_id: str = Depends(current_us
         raise HTTPException(404, "Conversation not found")
     
     messages = []
+    # 消息存储在 PostgreSQL messages 表（D18），通过 message_repository 补充查询
+    from app.services.conversation.message_repository import get_message_repo
+    msg_repo = get_message_repo()
     for mid in conv_node.conv_message_ids:
         node = data.nodes.get(mid)
+        if not node or getattr(node, "is_deleted", False):
+            # 从 PostgreSQL 单条加载（兼容按目录存储的旧消息）
+            node = msg_repo.get(mid)
         if node and not getattr(node, "is_deleted", False):
             # 跳过根占位消息（parent_id 为空的空内容 assistant 消息）
             if node.parent_id is None and node.role == "assistant" and not node.content:
                 continue
             messages.append(node.model_dump(mode="json"))
-    
+
     return {"messages": messages, "total": len(messages)}
 
 
@@ -761,17 +767,29 @@ async def compute_chain_path(conv_id: str, body: dict, user_id: str = Depends(cu
         raise HTTPException(404, "Conversation not found")
     
     # 沿 parent_id 回溯到根
+    # 消息存储在 PostgreSQL messages 表（D18），通过 message_repository 单条加载
+    from app.services.conversation.message_repository import get_message_repo
+    msg_repo = get_message_repo()
+
+    def _get_msg(mid: str):
+        # 先查 nodeMap 缓存
+        n = data.nodes.get(mid)
+        if n and not getattr(n, "is_deleted", False):
+            return n
+        # 否则从 PostgreSQL 单条加载（兼容按目录存储的旧消息）
+        return msg_repo.get(mid)
+
     path = []
     current_id = from_id
     visited = set()
     while current_id and current_id not in visited:
         visited.add(current_id)
-        node = data.nodes.get(current_id)
+        node = _get_msg(current_id)
         if not node or getattr(node, "is_deleted", False):
             break
         path.append(node.model_dump(mode="json"))
         current_id = node.parent_id
-    
+
     path.reverse()  # 根 → from_id
     return {"messages": path, "total": len(path), "from_id": from_id}
 
@@ -793,16 +811,43 @@ async def compute_chain_tail(conv_id: str, body: dict, user_id: str = Depends(cu
         raise HTTPException(404, "Conversation not found")
     
     # DFS 遍历从 from_id 开始
+    from app.services.conversation.message_repository import get_message_repo
+    msg_repo = get_message_repo()
+
+    def _get_msg(mid: str):
+        n = data.nodes.get(mid)
+        if n and not getattr(n, "is_deleted", False):
+            return n
+        return msg_repo.get(mid)
+
+    # 回填 children_ids：旧数据 children_ids 为空，按 parent_id 反向构建
+    children_by_parent: dict[str, list[str]] = {}
+    # 收集本 conv 的所有消息（用 conv_message_ids 循环）
+    for mid in conv_node.conv_message_ids:
+        n = _get_msg(mid)
+        if n and n.parent_id:
+            children_by_parent.setdefault(n.parent_id, []).append(n.id)
+
+    def _get_children(nid: str) -> list[str]:
+        # 优先用节点自己的 children_ids，否则用反向构建
+        n = _get_msg(nid)
+        cids = []
+        if n:
+            cids = list(getattr(n, "children_ids", []) or [])
+        if not cids and nid in children_by_parent:
+            cids = children_by_parent[nid]
+        return cids
+
     tail = []
     def dfs(nid: str):
-        node = data.nodes.get(nid)
+        node = _get_msg(nid)
         if not node or getattr(node, "is_deleted", False):
             return
         # 跳过空的 shell 占位符
         if node.parent_id is None and node.role == "assistant" and not node.content:
             pass  # 不跳过根消息，但跳过空的占位 shell
         tail.append(node.model_dump(mode="json"))
-        for cid in node.children_ids:
+        for cid in _get_children(nid):
             dfs(cid)
     
     dfs(from_id)
