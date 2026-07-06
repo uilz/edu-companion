@@ -11,6 +11,8 @@ import { useExplainStore, getCardsForMessage } from "@/store/explain/explain-sto
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import EmptyState from "@/components/ui/EmptyState";
 import { useConversationStore, useMessageStore } from "@/store/conversation/conversation-store";
+import { getLoadStatus } from "@/store/conversation/message-store";
+import { isTempMessage } from "@/store/conversation/actions/message-factory";
 import type { MessageNode } from "@/types";
 import type { FeynmanEval } from "./MessageItem";
 
@@ -204,52 +206,20 @@ export default function MessageList({
   //   ★ 显式状态：placeholder / loading / loaded / broken
   //   与流式状态（streaming/done）和废弃状态（deleted/orphaned）正交
   //
-  //   状态机：
+  //   状态机（统一在 message-store.getLoadStatus 中实现）：
   //     placeholder → 骨架（只有 text_summary 预览）
   //     loading     → 正在 fetch /tree/message/{id}
   //     loaded      → 完整正文已加载（content/content_blocks 非空）
   //     broken      → 加载失败
   //
-  //   派生值：
+  //   派生值（在 MessageList 内部推导 loadState 字符串给 MessageItem）：
   //     isPlaceholder: skeleton only, no real content
   //     isLoading:     fetching full content
   //     isLoaded:      full content available
   //     isBroken:      load failed
   //     isStreaming:   SSE writing (status=streaming)
-  const getLoadStatus = useCallback((msgId: string): {
-    isPlaceholder: boolean;
-    isLoading: boolean;
-    isLoaded: boolean;
-    isBroken: boolean;
-    isStreaming: boolean;
-  } => {
-    const state = useMessageStore.getState();
-    // 临时消息（乐观写入、流式占位）→ loaded
-    if (msgId.startsWith("t_") || msgId.startsWith("a_") || msgId.startsWith("err-")) {
-      return { isPlaceholder: false, isLoading: false, isLoaded: true, isBroken: false, isStreaming: state.streamingId === msgId };
-    }
-    const n = state.nodeMap[msgId];
-    if (!n) {
-      return { isPlaceholder: true, isLoading: false, isLoaded: false, isBroken: false, isStreaming: false };
-    }
-    // 根占位（parent_id=None, role=assistant, content=空）→ 不显示
-    if (!n.parent_id && n.role === "assistant" && !n.content && !(n.content_blocks && n.content_blocks.length > 0)) {
-      return { isPlaceholder: false, isLoading: false, isLoaded: true, isBroken: false, isStreaming: false };
-    }
-    // 流式消息 → loaded + streaming
-    if (state.streamingId === msgId) {
-      return { isPlaceholder: false, isLoading: false, isLoaded: true, isBroken: false, isStreaming: true };
-    }
-    // 根据 load_state 字段显式判断
-    const ls = n.load_state ?? "placeholder";
-    return {
-      isPlaceholder: ls === "placeholder",
-      isLoading: ls === "loading",
-      isLoaded: ls === "loaded",
-      isBroken: ls === "broken",
-      isStreaming: false,
-    };
-  }, []);
+  //
+  //   ★ 2026-07-06 重构：删除内嵌 getLoadStatus 实现，统一调 store 共享 selector
 
   // ── 加载设置（尊重用户的"加载时滚动到底部"设置）──
   const [autoScrollOnLoad, setAutoScrollOnLoad] = useState(true);
@@ -346,6 +316,8 @@ export default function MessageList({
   const itemContent = useCallback((index: number, message: MessageNode) => {
     const isUser = message.role === "user";
     const isEditing = editingId === message.id;
+    // ★ 共享 selector：从 store 取最新 state，统一判断 load_state
+    const storeState = useMessageStore.getState();
 
     // ── 触发懒加载：根据 load_state 显式判断 ──
     //   placeholder → 调 loadFullContent（首次加载）
@@ -354,17 +326,16 @@ export default function MessageList({
     //   broken      → 不触发（已失败，UI 显示错误）
     //   streaming   → SSE 自己会写，不触发
     //   临时消息（t_/a_/err-）→ 不触发
-    const isTemp = message.id.startsWith("t_") || message.id.startsWith("a_") || message.id.startsWith("err-");
-    if (!isTemp) {
-      const status = getLoadStatus(message.id);
+    if (!isTempMessage(message.id)) {
+      const status = getLoadStatus(storeState, message.id);
       if (status.isPlaceholder) {
         // 骨架阶段：调 loadFullContent 加载完整正文
-        void useMessageStore.getState().loadFullContent(message.id);
+        void storeState.loadFullContent(message.id);
       }
     }
 
     // ★ 用 getLoadStatus 替代 isContentLoaded（显式状态机）
-    const status = getLoadStatus(message.id);
+    const status = getLoadStatus(storeState, message.id);
     // 推导 loadState 字符串给 MessageItem
     const loadState: "placeholder" | "loading" | "loaded" | "streaming" | "broken" =
       status.isStreaming ? "streaming" :

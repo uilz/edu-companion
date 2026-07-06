@@ -20,6 +20,7 @@ import { useMessageStore } from "@/store/conversation/message-store";
 import { useNotificationStore } from "@/store/notification/notification-store";
 import type { MessageNode, ToolBlock, ReasoningBlock, ResponseBlock, BackgroundJob } from "@/types";
 import type { SecretaryNotification } from "@/store/notification/types";
+import { hydrateMessage, createErrorMessage, isTempMessage, replaceMessageIdInState } from "@/store/conversation/actions/message-factory";
 
 // ══════════════════════════════════════════════════════════════
 //  SSE stream reader
@@ -390,6 +391,53 @@ function _closeStreamingReasoning(blocks: Array<{ type: string; status?: string 
   return blocks;
 }
 
+/**
+ * 合并流式阶段的 content_blocks 与服务端 responseBlocks：
+ * - tool 块：用服务端数据更新（保留 user_answer），状态从 pending/running → done/error
+ * - reasoning 块：翻 status="done"
+ * - 其它块（text/quote/file/image）：保留流式阶段的内容
+ * - 服务端多出的 tool 块：追加到末尾
+ */
+function _mergeFinalBlocks(
+  streamingBlocks: any[],
+  serverBlocks: ToolBlock[],
+): any[] {
+  let toolServerIdx = 0;
+  const finalBlocks = streamingBlocks.map((b: any) => {
+    if (b.type === "tool") {
+      const serverBlock = serverBlocks[toolServerIdx];
+      toolServerIdx++;
+      const finalStatus: "done" | "error" =
+        (b.status !== "pending" && b.status !== "running") ? b.status
+        : serverBlock?.status === "error" ? "error"
+        : "done";
+      if (serverBlock) {
+        const localRc = b.result_content || {};
+        const preservedUserAnswer = localRc.user_answer;
+        const preservedAnsweredAt = localRc.answered_at;
+        return {
+          ...serverBlock,
+          status: finalStatus,
+          result_content: {
+            ...(serverBlock.result_content || {}),
+            ...(preservedUserAnswer
+              ? { user_answer: preservedUserAnswer, answered_at: preservedAnsweredAt }
+              : {}),
+          },
+        };
+      }
+      return { ...b, status: finalStatus };
+    }
+    if (b.type === "reasoning") {
+      return { ...b, status: "done" as const };
+    }
+    return b;
+  });
+  const extraTools = serverBlocks.slice(toolServerIdx);
+  if (extraTools.length > 0) finalBlocks.push(...extraTools);
+  return finalBlocks;
+}
+
 function _handleToken(content: string) {
   useMessageStore.setState((state: { messages: MessageNode[]; streamingId: string | null }) => {
     const sid = state.streamingId;
@@ -560,7 +608,6 @@ function _handleDone(
   const assistantMessage = replyData.assistant_message as MessageNode | undefined;
   const responseBlocks = (replyData.response_blocks || []) as Array<Record<string, unknown>>;
   const userMessage = replyData.user_message as MessageNode | undefined;
-  const newAsstId = assistantMessage?.id;
 
   const toolBlocksFromSSE: ToolBlock[] = responseBlocks.map((rb: any) => ({
     type: "tool" as const,
@@ -576,20 +623,52 @@ function _handleDone(
     tool_round: 0,
   }));
 
-  useMessageStore.setState((state: { messages: MessageNode[]; streamingId: string | null; nodeMap: Record<string, MessageNode>; currentPath: string[] }) => {
+  useMessageStore.setState((state: { messages: MessageNode[]; streamingId: string | null; nodeMap: Record<string, MessageNode>; currentPath: string[]; pathPosMap: Map<string, number> }) => {
     const sid = state.streamingId;
 
-    // ── 同步 nodeMap：服务端返回的 assistant_message + user_message 写入节点表 ──
-    const newNodeMap: Record<string, MessageNode> = { ...state.nodeMap };
+    // ── Step 1: 计算合并后的 streaming 消息（流式 blocks + 服务端 responseBlocks）──
+    const streamingMsg = sid ? (state.messages.find(m => m.id === sid) || state.nodeMap[sid]) : null;
+    const mergedStreamingBlocks = streamingMsg
+      ? _mergeFinalBlocks(streamingMsg.content_blocks || [], toolBlocksFromSSE)
+      : toolBlocksFromSSE;
+
+    // ── Step 2: 用 replaceMessageIdInState 替换 streaming 占位 → assistantMessage ──
+    let next: any = { ...state };
     if (assistantMessage) {
-      newNodeMap[assistantMessage.id] = assistantMessage;
-    }
-    if (userMessage) {
-      newNodeMap[userMessage.id] = userMessage;
+      const hydratedAsst: MessageNode = hydrateMessage({
+        ...assistantMessage,
+        content_blocks: mergedStreamingBlocks as MessageNode["content_blocks"],
+      });
+      if (sid && sid !== hydratedAsst.id) {
+        // 旧 sid（如 replay 路径的 a_xxx）→ 服务端真实 ID
+        next = { ...next, ...replaceMessageIdInState(next, { oldId: sid, newMsg: hydratedAsst }) };
+      } else {
+        // sid === newAsstId（_handlePendingMsg 已替换）→ 仅 upsert
+        next.nodeMap = { ...next.nodeMap, [hydratedAsst.id]: hydratedAsst };
+        next.messages = next.messages.map((m: MessageNode) => (m.id === hydratedAsst.id ? hydratedAsst : m));
+      }
     }
 
-    // ── 追加到 currentPath 末尾（如果尚未包含） ──
-    let newPath = state.currentPath;
+    // ── Step 3: 替换 user 临时消息 → userMessage（找到当前 user role 的临时消息）──
+    if (userMessage) {
+      const hydratedUser = hydrateMessage(userMessage);
+      // 查找 user role 临时消息：先找 messages 数组，再找 nodeMap
+      const nodeMapValues = Object.values(next.nodeMap as Record<string, MessageNode>);
+      const tempUserMsg = next.messages.find(
+        (m: MessageNode) => m.role === "user" && isTempMessage(m.id),
+      ) || nodeMapValues.find(
+        (m: MessageNode) => m.role === "user" && isTempMessage(m.id),
+      );
+      if (tempUserMsg && tempUserMsg.id !== hydratedUser.id) {
+        next = { ...next, ...replaceMessageIdInState(next, { oldId: tempUserMsg.id, newMsg: hydratedUser }) };
+      } else if (!tempUserMsg) {
+        // 没找到临时 user 消息（如刷新页面后 done）→ 仅 upsert 到 nodeMap
+        next.nodeMap = { ...next.nodeMap, [hydratedUser.id]: hydratedUser };
+      }
+    }
+
+    // ── Step 4: 追加到 currentPath 末尾（如果尚未包含） ──
+    let newPath = next.currentPath;
     if (assistantMessage && !newPath.includes(assistantMessage.id)) {
       newPath = [...newPath, assistantMessage.id];
     }
@@ -599,7 +678,6 @@ function _handleDone(
       const insertIdx = parentId
         ? newPath.indexOf(parentId) + 1 || newPath.length
         : newPath.length;
-      // 去重插入
       const newPathArr = [...newPath];
       if (!newPathArr.includes(userMessage.id)) {
         newPathArr.splice(insertIdx, 0, userMessage.id);
@@ -608,54 +686,11 @@ function _handleDone(
     }
 
     return {
-      nodeMap: newNodeMap,
+      nodeMap: next.nodeMap,
       currentPath: newPath,
+      pathPosMap: next.pathPosMap,
       pathReady: true,
-      messages: state.messages.map((msg) => {
-        if (msg.id !== sid && msg.id !== newAsstId) return msg;
-
-        // 保留流式阶段的交织顺序（reasoning ↔ tool ↔ reasoning ...）
-        let toolServerIdx = 0;
-        const finalBlocks = (msg.content_blocks || []).map((b: any) => {
-          if (b.type === "tool") {
-            const serverBlock = toolBlocksFromSSE[toolServerIdx];
-            toolServerIdx++;
-            const finalStatus: "done" | "error" =
-              (b.status !== "pending" && b.status !== "running") ? b.status
-              : serverBlock?.status === "error" ? "error"
-              : "done";
-            if (serverBlock) {
-              const localRc = b.result_content || {};
-              const preservedUserAnswer = localRc.user_answer;
-              const preservedAnsweredAt = localRc.answered_at;
-              return {
-                ...serverBlock,
-                status: finalStatus,
-                result_content: {
-                  ...(serverBlock.result_content || {}),
-                  ...(preservedUserAnswer
-                    ? { user_answer: preservedUserAnswer, answered_at: preservedAnsweredAt }
-                    : {}),
-                },
-              };
-            }
-            return { ...b, status: finalStatus };
-          }
-          if (b.type === "reasoning") {
-            return { ...b, status: "done" as const };
-          }
-          return b;
-        });
-
-        const extraTools = toolBlocksFromSSE.slice(toolServerIdx);
-        if (extraTools.length > 0) finalBlocks.push(...extraTools);
-
-        return {
-          ...msg,
-          id: newAsstId || msg.id,
-          content_blocks: finalBlocks,
-        };
-      }),
+      messages: next.messages,
       streamingId: null,
     };
   });
@@ -669,29 +704,22 @@ function _handleError(
 
   const state = storeApi.getState();
   const convId = state.selectedNode?.id || "";
+  const dirId = state.selectedNode?.parent || "";
+
+  // ★ 工厂构造错误消息（统一带 load_state: "loaded" + "❌" 前缀）
+  const errorMessage = createErrorMessage({
+    errMsg: msg,
+    convId,
+    dirId,
+    parentId: "",
+  });
 
   useMessageStore.setState((s: { messages: MessageNode[]; streamingId: string | null; sending: boolean }) => ({
     messages: [
       ...s.messages.filter(
-        (m: MessageNode) => !(m.id.startsWith("t_") || m.id.startsWith("a_") || m.id === s.streamingId),
+        (m: MessageNode) => !(isTempMessage(m.id) || m.id === s.streamingId),
       ),
-      {
-        id: "err-" + Date.now(),
-        directory_id: convId,
-        content: msg,
-        version: 1,
-        parent_id: "",
-        children_ids: [],
-        dir_id: state.selectedNode?.parent || "",
-        conv_id: convId,
-        content_blocks: [{ type: "text" as const, text: `❌ ${msg}` }],
-        text_summary: msg,
-        role: "assistant" as const,
-        timestamp: Date.now(),
-        token_count: 0,
-        is_deleted: false,
-        is_archived: false,
-      } as MessageNode,
+      errorMessage,
     ],
     streamingId: null,
     // 释放发送锁（防止 stale streaming 卡死）
@@ -837,28 +865,34 @@ function _handleJobUpdate(data: BackgroundJob) {
 }
 
 function _handleUserMessage(data: { message: MessageNode }) {
+  // ★ 关键：hydrateMessage 强制带 load_state: "loaded"
+  // 否则乐观占位被服务端消息替换后，load_state 字段丢失，
+  // 用户切换会话回来时会被当成 placeholder 重新触发 loadFullContent
+  const hydrated = hydrateMessage(data.message);
   useMessageStore.setState((state: { messages: MessageNode[] }) => ({
-    messages: state.messages.map((m: MessageNode) =>
-      (m.role === "user" && m.id.startsWith("t_")) ? data.message : m,
-    ),
+    messages: state.messages.map((m: MessageNode) => {
+      // 安全判断：m.id 可能为 undefined（旧数据 / 服务端缺字段），用 isTempMessage 防御
+      if (!m.id || m.role !== "user" || !isTempMessage(m.id)) return m;
+      return hydrated;
+    }),
   }));
 }
 
 function _handlePendingMsg(data: Record<string, unknown>) {
   const msgId = (data.data as any)?.msg_id || "";
   if (!msgId) return;
-  useMessageStore.setState((state: { messages: MessageNode[]; streamingId: string | null }) => {
-    // 如果已有 streamingId 且不相同，用后端分配的 msg_id 替换占位
+  useMessageStore.setState((state: { messages: MessageNode[]; streamingId: string | null; nodeMap: Record<string, MessageNode>; currentPath: string[]; pathPosMap: Map<string, number> }) => {
+    // 已有 streamingId 且不相同：用 replaceMessageIdInState 一次性同步
+    // nodeMap（删旧 key 加新 key）、currentPath、pathPosMap、messages、streamingId
     if (state.streamingId && state.streamingId !== msgId) {
-      return {
-        streamingId: msgId,
-        messages: state.messages.map((m) => {
-          if (m.id === state.streamingId) {
-            return { ...m, id: msgId };
-          }
-          return m;
-        }),
-      };
+      const streamingMsg = state.messages.find(m => m.id === state.streamingId)
+        || state.nodeMap[state.streamingId];
+      if (streamingMsg) {
+        const renamed: MessageNode = { ...streamingMsg, id: msgId, load_state: "loaded" };
+        return replaceMessageIdInState(state, { oldId: state.streamingId, newMsg: renamed });
+      }
+      // 找不到旧消息对象 → 仅同步 streamingId
+      return { streamingId: msgId };
     }
     // 没有 streamingId 或相同，存入即可
     return { streamingId: msgId };

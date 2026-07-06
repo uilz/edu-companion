@@ -39,6 +39,101 @@
 import { create } from "zustand";
 import type { MessageNode } from "@/types";
 import { apiFetch } from "./tree-helpers";
+import { isTempMessage } from "./actions/message-factory";
+
+// ══════════════════════════════════════════════════════════════
+//  显式 load_state 状态机 — 共享 selector
+// ══════════════════════════════════════════════════════════════
+
+/** 显式 load_state 推导结果（每条消息的渲染状态） */
+export interface LoadStatus {
+  /** 仅骨架（head/tail 列表的预览），需要调 /tree/message/{id} 取完整正文 */
+  isPlaceholder: boolean;
+  /** 正在请求 /tree/message/{id} */
+  isLoading: boolean;
+  /** 完整正文已在内存（无论是乐观写入还是 SSE 返回） */
+  isLoaded: boolean;
+  /** 请求失败 */
+  isBroken: boolean;
+  /** SSE 正在写入（status=streaming，正交于 load_state） */
+  isStreaming: boolean;
+}
+
+/** getLoadStatus 所需最小 state 形状（避免循环依赖） */
+export type LoadStatusState = Pick<MessageState, "nodeMap" | "streamingId">;
+
+/**
+ * 显式 load_state 状态机的统一判断。
+ *
+ * 设计原则：所有判断"消息是否在加载"的逻辑都走此函数，
+ *   任何组件不得自行派生 isPlaceholder/isLoaded。
+ *
+ * 状态机（与 streamingId 正交）：
+ *   placeholder → 骨架（仅 text_summary 预览）
+ *   loading     → 正在 fetch /tree/message/{id}
+ *   loaded      → 完整正文已加载
+ *   broken      → 加载失败
+ *
+ * 特殊处理：
+ *   - 临时消息（t_/a_/err-）→ 直接 isLoaded=true
+ *   - 根占位消息（parent_id=None, role=assistant, content=空）→ 视为 loaded=true 但不渲染
+ *   - streamingId === msgId → isStreaming=true（与 isLoaded 不冲突）
+ *   - 缺失 load_state 字段（旧数据）→ 默认 placeholder
+ */
+export function getLoadStatus(
+  state: LoadStatusState,
+  msgId: string,
+): LoadStatus {
+  // 临时消息（乐观写入、流式占位）→ loaded
+  if (isTempMessage(msgId)) {
+    return {
+      isPlaceholder: false,
+      isLoading: false,
+      isLoaded: true,
+      isBroken: false,
+      isStreaming: state.streamingId === msgId,
+    };
+  }
+  const n = state.nodeMap[msgId];
+  if (!n) {
+    return {
+      isPlaceholder: true,
+      isLoading: false,
+      isLoaded: false,
+      isBroken: false,
+      isStreaming: false,
+    };
+  }
+  // 根占位（parent_id=None, role=assistant, content=空）→ 不显示
+  if (!n.parent_id && n.role === "assistant" && !n.content && !(n.content_blocks && n.content_blocks.length > 0)) {
+    return {
+      isPlaceholder: false,
+      isLoading: false,
+      isLoaded: true,
+      isBroken: false,
+      isStreaming: false,
+    };
+  }
+  // 流式消息 → loaded + streaming
+  if (state.streamingId === msgId) {
+    return {
+      isPlaceholder: false,
+      isLoading: false,
+      isLoaded: true,
+      isBroken: false,
+      isStreaming: true,
+    };
+  }
+  // 根据 load_state 字段显式判断
+  const ls = n.load_state ?? "placeholder";
+  return {
+    isPlaceholder: ls === "placeholder",
+    isLoading: ls === "loading",
+    isLoaded: ls === "loaded",
+    isBroken: ls === "broken",
+    isStreaming: false,
+  };
+}
 
 // ══════════════════════════════════════════════════════════════
 //  模块级并发控制（防重复请求 + 跨会话写入）
@@ -242,15 +337,21 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
 
   // ── 检查消息是否已加载完整正文 ──
   //   ★ 关键判断：是否需要再调 /tree/message/{id} 加载完整正文
-  //   - content 非空 → 已加载完整正文
-  //   - content_blocks 非空 → 已加载完整正文
-  //   - 都不空但只有 text_summary（如失败消息）→ 仍需加载（content_blocks 可能有 reasoning）
-  //     ★ 但 text_summary 本身可作为骨架阶段的预览文本（避免 UI 空白）
+  //   ★ 2026-07-06 重构：统一为 load_state === "loaded" 单一来源
+  //   - 临时消息（t_/a_/err-）→ 已有完整内容
+  //   - load_state === "loaded" → 已有
+  //   - load_state 缺失（旧数据）→ 退回 content/content_blocks 检查（兼容）
+  //   - placeholder / loading / broken → 未有（但 loading/broken 仍可由 loadFullContent 处理）
   hasFullContent: (msgId: string): boolean => {
     const n = get().nodeMap[msgId];
     if (!n) return false;
-    if (n.content && n.content.length > 0) return true;
-    if (n.content_blocks && n.content_blocks.length > 0) return true;
+    if (isTempMessage(msgId)) return true;
+    if (n.load_state === "loaded") return true;
+    if (n.load_state === undefined) {
+      // 兼容旧数据（无 load_state 字段）
+      if (n.content && n.content.length > 0) return true;
+      if (n.content_blocks && n.content_blocks.length > 0) return true;
+    }
     return false;
   },
 
@@ -274,7 +375,7 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     // 流式消息 → 跳过（SSE 自己会写）
     if (get().streamingId === msgId) return;
     // 临时消息 → 跳过
-    if (msgId.startsWith("t_") || msgId.startsWith("a_") || msgId.startsWith("err-")) return;
+    if (isTempMessage(msgId)) return;
     // ★ 已尝试过（成功或失败）→ 跳过，避免空 content 死循环
     if (_loadAttempted.has(msgId)) return;
     // ★ 已在飞行中 → 共享同一 Promise，不发重复请求
@@ -357,7 +458,7 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     const needLoad = unique.filter(id => {
       if (get().hasFullContent(id)) return false;
       if (get().streamingId === id) return false;
-      if (id.startsWith("t_") || id.startsWith("a_") || id.startsWith("err-")) return false;
+      if (isTempMessage(id)) return false;
       if (_loadingInFlight.has(id)) return false;  // ★ 跳过正在飞行的
       return true;
     });
