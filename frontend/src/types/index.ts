@@ -21,6 +21,18 @@ export interface MessageNode {
   is_deleted: boolean;                       // 是否已删除
   is_archived: boolean;                      // 是否已归档
 
+  // ── 加载状态（前端视图）──
+  //   placeholder: 只有骨架（content="" content_blocks=[]），未调过 /tree/message/{id}
+  //   loading:     正在 fetch /tree/message/{id}
+  //   loaded:      完整正文已加载（content/content_blocks 非空，或 text_summary 兜底）
+  //   broken:      加载失败（API 错误）
+  //   ★ 与后端 status 字段正交：
+  //     - 后端 status: "streaming" / "done" / "orphaned" 描述生成状态
+  //     - 前端 loadState: "placeholder" / "loading" / "loaded" / "broken" 描述加载状态
+  //   ★ 流式消息（status="streaming"）的 loadState="loaded"（内容在持续追加）
+  load_state?: "placeholder" | "loading" | "loaded" | "broken";
+  load_error?: string;                       // 加载错误信息
+
   // 链接
   links_to?: string[];                       // 指向的其他节点 ID 列表
   linked_from?: string[];                    // 被哪些节点引用

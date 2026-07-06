@@ -200,26 +200,55 @@ export default function MessageList({
     messagesRef.current = messages;
   }, [messages]);
 
-  // ── 内容加载检查：骨架 vs 完整消息（骨架 content_blocks=[]，无正文）──
-  //   ★ 关键：text_summary 是骨架阶段预览，content/content_blocks 是完整正文
-  //     - 骨架阶段：nodeMap[id].text_summary 有值 → loaded=true（避免 UI 空白）
-  //       但 itemContent 会再触发 loadFullContent 加载完整正文
-  //     - 完整正文阶段：content/content_blocks 非空 → loaded=true，无需再加载
-  const isContentLoaded = useCallback((msgId: string) => {
+  // ── 渲染状态机（每条消息）──
+  //   ★ 显式状态：placeholder / loading / loaded / broken
+  //   与流式状态（streaming/done）和废弃状态（deleted/orphaned）正交
+  //
+  //   状态机：
+  //     placeholder → 骨架（只有 text_summary 预览）
+  //     loading     → 正在 fetch /tree/message/{id}
+  //     loaded      → 完整正文已加载（content/content_blocks 非空）
+  //     broken      → 加载失败
+  //
+  //   派生值：
+  //     isPlaceholder: skeleton only, no real content
+  //     isLoading:     fetching full content
+  //     isLoaded:      full content available
+  //     isBroken:      load failed
+  //     isStreaming:   SSE writing (status=streaming)
+  const getLoadStatus = useCallback((msgId: string): {
+    isPlaceholder: boolean;
+    isLoading: boolean;
+    isLoaded: boolean;
+    isBroken: boolean;
+    isStreaming: boolean;
+  } => {
     const state = useMessageStore.getState();
-    if (state.streamingId === msgId) return true;
-    // 临时消息（乐观写入、流式占位）视为已加载
-    if (msgId.startsWith("t_") || msgId.startsWith("a_") || msgId.startsWith("err-")) return true;
-    // 根占位（content=空）视为已加载（不显示）
+    // 临时消息（乐观写入、流式占位）→ loaded
+    if (msgId.startsWith("t_") || msgId.startsWith("a_") || msgId.startsWith("err-")) {
+      return { isPlaceholder: false, isLoading: false, isLoaded: true, isBroken: false, isStreaming: state.streamingId === msgId };
+    }
     const n = state.nodeMap[msgId];
-    if (!n) return false;
-    if (!n.parent_id && n.role === "assistant" && !n.content) return true;
-    // ★ 完整正文判断：content 或 content_blocks 非空
-    if (n.content && n.content.length > 0) return true;
-    if (n.content_blocks && n.content_blocks.length > 0) return true;
-    // 骨架阶段：text_summary 非空（预览），getDisplayText 会用 text_summary 兜底
-    if (n.text_summary && n.text_summary.length > 0) return true;
-    return false;
+    if (!n) {
+      return { isPlaceholder: true, isLoading: false, isLoaded: false, isBroken: false, isStreaming: false };
+    }
+    // 根占位（parent_id=None, role=assistant, content=空）→ 不显示
+    if (!n.parent_id && n.role === "assistant" && !n.content && !(n.content_blocks && n.content_blocks.length > 0)) {
+      return { isPlaceholder: false, isLoading: false, isLoaded: true, isBroken: false, isStreaming: false };
+    }
+    // 流式消息 → loaded + streaming
+    if (state.streamingId === msgId) {
+      return { isPlaceholder: false, isLoading: false, isLoaded: true, isBroken: false, isStreaming: true };
+    }
+    // 根据 load_state 字段显式判断
+    const ls = n.load_state ?? "placeholder";
+    return {
+      isPlaceholder: ls === "placeholder",
+      isLoading: ls === "loading",
+      isLoaded: ls === "loaded",
+      isBroken: ls === "broken",
+      isStreaming: false,
+    };
   }, []);
 
   // ── 加载设置（尊重用户的"加载时滚动到底部"设置）──
@@ -318,21 +347,32 @@ export default function MessageList({
     const isUser = message.role === "user";
     const isEditing = editingId === message.id;
 
-    // ── 触发懒加载：如果 nodeMap[id] 中 content/content_blocks 都空，
-    //   无论 text_summary 是否有值，都要调 loadFullContent 加载完整正文
-    //   （text_summary 只是骨架预览，不能代表完整正文）
+    // ── 触发懒加载：根据 load_state 显式判断 ──
+    //   placeholder → 调 loadFullContent（首次加载）
+    //   loading     → 已在飞，不重复触发
+    //   loaded      → 不触发
+    //   broken      → 不触发（已失败，UI 显示错误）
+    //   streaming   → SSE 自己会写，不触发
+    //   临时消息（t_/a_/err-）→ 不触发
     const isTemp = message.id.startsWith("t_") || message.id.startsWith("a_") || message.id.startsWith("err-");
     if (!isTemp) {
-      const n = useMessageStore.getState().nodeMap[message.id];
-      const hasFullBody = (n?.content && n.content.length > 0) ||
-                          (n?.content_blocks && n.content_blocks.length > 0);
-      if (!hasFullBody) {
+      const status = getLoadStatus(message.id);
+      if (status.isPlaceholder) {
+        // 骨架阶段：调 loadFullContent 加载完整正文
         void useMessageStore.getState().loadFullContent(message.id);
       }
     }
 
-    const loaded = isContentLoaded(message.id);
-    const displayText = loaded ? getDisplayText(message) : "";
+    // ★ 用 getLoadStatus 替代 isContentLoaded（显式状态机）
+    const status = getLoadStatus(message.id);
+    // 推导 loadState 字符串给 MessageItem
+    const loadState: "placeholder" | "loading" | "loaded" | "streaming" | "broken" =
+      status.isStreaming ? "streaming" :
+      status.isBroken ? "broken" :
+      status.isLoading ? "loading" :
+      status.isLoaded ? "loaded" :
+      "placeholder";
+    const displayText = (loadState === "loaded" || loadState === "streaming" || loadState === "broken") ? getDisplayText(message) : "";
     const groupKey = versionGroupByMessage[message.id];
     const group = groupKey ? versionGroups[groupKey] : undefined;
     const hasVersions = !!group && group.total > 1;
@@ -350,7 +390,7 @@ export default function MessageList({
           editingText={editingText}
           vInfo={vInfo}
           hasVersions={hasVersions}
-          loaded={loaded}
+          loadState={loadState}
           displayText={displayText}
           cardsForMsg={cardsForMsg}
           replyingToId={replyingToId ?? null}
@@ -375,7 +415,7 @@ export default function MessageList({
       </div>
     );
   }, [
-    editingId, editingText, isContentLoaded, getDisplayText,
+    editingId, editingText, getLoadStatus, getDisplayText,
     versionGroupByMessage, versionGroups, explainCards,
     replyingToId, isLoading, isFeynmanMode,
     handleStartEdit, handleSaveEdit, handleCancelEdit,

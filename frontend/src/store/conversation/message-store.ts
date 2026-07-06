@@ -106,6 +106,8 @@ export interface MessageState {
   hasFullContent: (msgId: string) => boolean;
   /** 懒加载完整消息正文（从 /tree/message/{id}） */
   loadFullContent: (msgId: string) => Promise<void>;
+  /** 重试 broken 状态的消息（清除 _loadAttempted 标记 + 重新加载） */
+  retryLoadContent: (msgId: string) => Promise<void>;
   /** 批量懒加载可视区消息 */
   loadVisibleContent: (msgIds: string[]) => Promise<void>;
 
@@ -253,21 +255,28 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   },
 
   // ── 懒加载完整消息正文（POST/GET /tree/message/{id}）──
-  //   ★ 四大防护：
+  //   ★ 五大防护 + 显式状态机：
   //     1. in-flight Set：相同 msgId 并发请求只发 1 次
   //     2. Promise 缓存：未完成的请求共享同一 Promise
   //     3. activeConvId 校验：API 返回时若已切换会话则丢弃结果
   //     4. _loadAttempted 标记：API 返回后标记已尝试，防止空 content 死循环
+  //     5. loadState 显式状态：placeholder → loading → loaded/broken
+  //        ★ 解耦"是否在加载"和"是否有内容"两个判断（之前用 isLoading 临时推断）
   loadFullContent: async (msgId: string) => {
-    // 已有正文 → 跳过
-    if (get().hasFullContent(msgId)) return;
+    const existing = get().nodeMap[msgId];
+    // 已有正文 → 跳过（loaded 状态）
+    if (get().hasFullContent(msgId)) {
+      if (existing && existing.load_state !== "loaded") {
+        get().upsertNode({ ...existing, load_state: "loaded" });
+      }
+      return;
+    }
     // 流式消息 → 跳过（SSE 自己会写）
     if (get().streamingId === msgId) return;
     // 临时消息 → 跳过
     if (msgId.startsWith("t_") || msgId.startsWith("a_") || msgId.startsWith("err-")) return;
-    // ★ 已尝试过 → 跳过（API 返回空 content 也算已尝试，避免死循环）
+    // ★ 已尝试过（成功或失败）→ 跳过，避免空 content 死循环
     if (_loadAttempted.has(msgId)) return;
-
     // ★ 已在飞行中 → 共享同一 Promise，不发重复请求
     if (_loadingInFlight.has(msgId)) {
       return _loadingPromises.get(msgId);
@@ -275,6 +284,11 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
 
     // 记录请求发起时的 active conv（用于跨会话校验）
     const requestConvId = get().activeConvId;
+
+    // ★ 标记状态为 loading（不依赖 isLoading 外部 prop）
+    if (existing && existing.load_state !== "loading") {
+      get().upsertNode({ ...existing, load_state: "loading" });
+    }
 
     const promise = (async () => {
       try {
@@ -287,16 +301,26 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
           return;
         }
 
-        // 合并：保留原有元数据，更新 content 字段
-        const existing = get().nodeMap[msgId];
+        // 合并：保留原有元数据，更新 content 字段 + 标记 loaded
+        const prev = get().nodeMap[msgId];
         const merged: MessageNode = {
-          ...existing,
+          ...prev,
           ...fullMsg,
-          is_deleted: existing?.is_deleted ?? fullMsg.is_deleted ?? false,
+          is_deleted: prev?.is_deleted ?? fullMsg.is_deleted ?? false,
+          load_state: "loaded",  // ★ 显式标记 loaded
         } as MessageNode;
         get().upsertNode(merged);
       } catch (e) {
         console.warn(`[loadFullContent] ${msgId} 失败:`, e);
+        // ★ 标记 broken 状态
+        const prev = get().nodeMap[msgId];
+        if (prev && get().activeConvId === requestConvId) {
+          get().upsertNode({
+            ...prev,
+            load_state: "broken",
+            load_error: e instanceof Error ? e.message : String(e),
+          });
+        }
       } finally {
         _loadingInFlight.delete(msgId);
         _loadingPromises.delete(msgId);
@@ -308,6 +332,21 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     _loadingInFlight.add(msgId);
     _loadingPromises.set(msgId, promise);
     return promise;
+  },
+
+  // ── 重试 broken 状态的消息：清除 _loadAttempted + reset load_state + 重新加载 ──
+  retryLoadContent: async (msgId: string) => {
+    // 清除已尝试标记（允许再次请求）
+    _loadAttempted.delete(msgId);
+    _loadingInFlight.delete(msgId);
+    _loadingPromises.delete(msgId);
+    // 重置 load_state 为 placeholder
+    const existing = get().nodeMap[msgId];
+    if (existing) {
+      get().upsertNode({ ...existing, load_state: "placeholder", load_error: undefined });
+    }
+    // 重新加载
+    return get().loadFullContent(msgId);
   },
 
   // ── 批量懒加载可视区消息（设计文档 §场景 1: 首屏预加载）──
@@ -362,7 +401,10 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
         if ((m as any).metadata?.follow_up_questions && !(m as any).follow_up_questions) {
           (m as any).follow_up_questions = (m as any).metadata.follow_up_questions;
         }
-        return m;
+        // ★ 标记 skeleton 的 load_state = "placeholder"
+        //   后端 skeleton 没有 content/content_blocks，但可能有 text_summary
+        //   → 视为"未加载完整正文"占位
+        return { ...m, load_state: "placeholder" as const };
       });
 
       // ── Step 2: 构建 nodeMap（首尾去重合并）──
