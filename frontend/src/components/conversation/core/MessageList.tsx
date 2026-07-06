@@ -115,9 +115,27 @@ export default function MessageList({
     return null;
   }, [messages, isFeynmanMode, parseFeynmanEvaluation]);
 
-  // ── 版本切换：纯前端 tip 指针 ──
+  // ── 版本切换：基于 nodeMap 的 DFS 遍历 ──
   const handleVersionNav = useCallback((messageId: string, direction: "prev" | "next") => {
-    useMessageStore.getState().navigateVersion(messageId, direction);
+    const store = useMessageStore.getState();
+    const msg = store.nodeMap[messageId];
+    if (!msg) return;
+    const parentId = msg.parent_id || "__root__";
+    const role = msg.role;
+    // 同一 parent + 同 role 的兄弟消息
+    const siblings = Object.values(store.nodeMap)
+      .filter(m => (m.parent_id || "__root__") === parentId && m.role === role && !m.is_deleted)
+      .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+    if (siblings.length <= 1) return;
+    const idx = siblings.findIndex(m => m.id === messageId);
+    if (idx < 0) return;
+    const newIdx = direction === "prev"
+      ? (idx - 1 + siblings.length) % siblings.length
+      : (idx + 1) % siblings.length;
+    const targetMsg = siblings[newIdx];
+    if (targetMsg) {
+      store.switchBranch(targetMsg.id);
+    }
   }, []);
 
   const handleStartEdit = useCallback((msgId: string, currentText: string) => {
@@ -139,44 +157,15 @@ export default function MessageList({
 
   const handleCancelEdit = useCallback(() => setEditingId(null), []);
 
-  // ── 懒加载：通过 store action + visible range 触发 ──
+  // ── 内容加载检查：chain API 返回完整消息，不再需要逐条懒加载 ──
   const isContentLoaded = useCallback((msgId: string) => {
     const state = useMessageStore.getState();
-    if (!state.outlines.some(o => o.id === msgId)) return true;
     if (state.streamingId === msgId) return true;
-    return !!state.loadedContent[msgId];
+    // 临时消息（乐观写入、流式占位）视为已加载
+    if (msgId.startsWith("t_") || msgId.startsWith("a_") || msgId.startsWith("err-")) return true;
+    // 在 nodeMap 中有记录的视为已加载
+    return !!state.nodeMap[msgId];
   }, []);
-
-  // 跟踪当前可见的 [start, end] 用于懒加载触发
-  const [visibleRange, setVisibleRange] = useState<{ startIndex: number; endIndex: number }>({
-    startIndex: 0,
-    endIndex: 0,
-  });
-  const lazyLoadBatch = useMessageStore((s) => s.lazyLoadBatch);
-  const loadedContent = useMessageStore((s) => s.loadedContent);
-  const loadingContents = useMessageStore((s) => s.loadingContents);
-
-  // 视口变化时，预加载未加载的可见消息
-  useEffect(() => {
-    if (!messages.length) return;
-    const { startIndex, endIndex } = visibleRange;
-    const st = useMessageStore.getState();
-    const toLoad: string[] = [];
-    // 预加载可见范围 + 上下各 3 条
-    const lo = Math.max(0, startIndex - 3);
-    const hi = Math.min(messages.length - 1, endIndex + 3);
-    for (let i = lo; i <= hi; i++) {
-      const m = messages[i];
-      if (!m) continue;
-      if (!st.outlines.some(o => o.id === m.id)) continue;
-      if (st.streamingId === m.id) continue;
-      if (st.loadedContent[m.id] || st.loadingContents.includes(m.id)) continue;
-      toLoad.push(m.id);
-    }
-    if (toLoad.length > 0) {
-      lazyLoadBatch(toLoad);
-    }
-  }, [visibleRange, messages, lazyLoadBatch, loadedContent, loadingContents]);
 
   // ── 加载设置（尊重用户的"加载时滚动到底部"设置）──
   const [autoScrollOnLoad, setAutoScrollOnLoad] = useState(true);
@@ -231,17 +220,18 @@ export default function MessageList({
     };
   }, []);
 
-  // ── 版本感知显示 ──
-  const outlines = useMessageStore((s) => s.outlines);
+  // ── 版本感知显示（基于 nodeMap） ──
+  const nodeMap = useMessageStore((s) => s.nodeMap);
   const { versionGroups, versionGroupByMessage } = useMemo(() => {
     type GroupKey = string;
+    const messages = Object.values(nodeMap);
     const messageGroupKey = new Map<string, GroupKey>();
-    for (const m of outlines) {
+    for (const m of messages) {
       if (m.is_deleted) continue;
       messageGroupKey.set(m.id, `${m.parent_id}::${m.role}`);
     }
     const groupIds = new Map<GroupKey, string[]>();
-    for (const m of outlines) {
+    for (const m of messages) {
       if (m.is_deleted) continue;
       const gk = messageGroupKey.get(m.id)!;
       if (!groupIds.has(gk)) groupIds.set(gk, []);
@@ -256,7 +246,7 @@ export default function MessageList({
     const vgbm: Record<string, string> = {};
     messageGroupKey.forEach((gk, mid) => { vgbm[mid] = gk; });
     return { versionGroups: vg, versionGroupByMessage: vgbm };
-  }, [outlines]);
+  }, [nodeMap]);
 
   // Get display text
   const getDisplayText = useCallback((msg: MessageNode) => {
@@ -372,7 +362,6 @@ export default function MessageList({
         itemContent={itemContent}
         followOutput={atBottom ? "smooth" : false}
         atBottomStateChange={setAtBottom}
-        rangeChanged={setVisibleRange}
         initialTopMostItemIndex={messages.length - 1}
         overscan={400}
         components={{

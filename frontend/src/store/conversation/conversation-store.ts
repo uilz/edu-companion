@@ -324,7 +324,10 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
     if (convId) await useMessageStore.getState().loadMessages(convId);
   },
   editMessage: (msgId, newText) => useMessageStore.getState().editMessage(msgId, newText),
-  versionSwitch: (msgId, dir, idx) => useMessageStore.getState().versionSwitch(msgId, dir, idx),
+  versionSwitch: async (msgId, dir) => {
+    await useMessageStore.getState().switchBranch(msgId);
+    return { index: 1, total: 1 };
+  },
 
   // ── Conversations ──
   handleNewConversation: (level, parentId, dirId) => handleNewConversationImpl(set, get, level, parentId, dirId),

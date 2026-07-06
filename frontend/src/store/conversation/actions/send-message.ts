@@ -3,11 +3,16 @@
  *
  *   Phase 1 (创建新会话) 由 ChatInput 调 store.handleNewConversation 完成
  *   Phase 2 (sendMessageImpl):    乐观写入 + SSE 发送
+ *
+ *   ── 2026-07-06 分支对话 ──
+ *   - 使用 store.sending 锁防止并发发送
+ *   - 从 currentPath 尾部获取 parent_id
+ *   - 发送时将 parent_id 传给后端
  */
 import type { MessageNode } from "@/types";
 import type { MessageState } from "../message-store";
 import { apiFetch } from "../tree-helpers";
-import { getSelectedDirId } from "../conversation-store";
+import { getSelectedDirId, getActiveConvId } from "../conversation-store";
 import { useMessageStore } from "../message-store";
 
 // ══════════════════════════════════════════════════════════════
@@ -15,7 +20,7 @@ import { useMessageStore } from "../message-store";
 // ══════════════════════════════════════════════════════════════
 
 export type ChatStreamAPI = {
-  send: (text: string, convId: string, dirId: string) => Promise<void>;
+  send: (text: string, convId: string, dirId: string, parentId?: string) => Promise<void>;
   stop: () => Promise<void>;
   submitToolResult: (toolCallId: string, answers: string, convId: string) => Promise<void>;
 };
@@ -35,6 +40,7 @@ export function setSending(v: boolean) { _sending = v; }
  * sendMessageImpl — 在已有会话中发送消息。
  *
  * 乐观写入 → fetch SSE（响应体就是流式事件）。
+ * 使用 store.sending 锁防止并发发送。
  */
 export async function sendMessageImpl(
   set: any, get: any,
@@ -46,6 +52,14 @@ export async function sendMessageImpl(
   const chatStream = getChatStreamAPI();
   if (!text.trim() || !chatStream) return;
 
+  // ── sending lock ──
+  const msgStore = useMessageStore.getState();
+  if (msgStore.sending) {
+    console.warn("[sendMessage] 忽略并发发送请求");
+    return;
+  }
+  useMessageStore.setState({ sending: true });
+
   // ── 打断逻辑：等待旧流 done 事件到达后再发新消息 ──
   if (get().isLoading) {
     await chatStream.stop();
@@ -56,13 +70,18 @@ export async function sendMessageImpl(
   const tempAsstId = "a_" + Date.now().toString(36) + "_" + Math.random().toString(36).substr(2, 9);
   const pq = get().pendingQuote;
 
+  // ── 从 currentPath 尾部获取 parent_id ──
+  const currentPath = useMessageStore.getState().currentPath;
+  // parent_id = currentPath 中最后一条消息的 ID（用户回复的对象）
+  const parentId = currentPath.length > 0 ? currentPath[currentPath.length - 1] : "";
+
   // 乐观写入用户消息 + assistant 占位
   const userMsg: MessageNode = {
     id: tempUserId,
     directory_id: convId,
     content: text,
     version: 1,
-    parent_id: "",
+    parent_id: parentId,
     children_ids: [],
     dir_id: dirId,
     conv_id: convId,
@@ -97,7 +116,7 @@ export async function sendMessageImpl(
 
   // ★ 单条 POST：发送消息 + 接收 SSE 流
   try {
-    await chatStream.send(text, convId, dirId);
+    await chatStream.send(text, convId, dirId, parentId);
     // 成功后 SSE done 事件会来置 isLoading=false
   } catch (httpErr: unknown) {
     const errMsg = `无法连接服务器：${httpErr instanceof Error ? httpErr.message : "未知错误"}`;
@@ -119,5 +138,7 @@ export async function sendMessageImpl(
       streamingId: null,
     }));
     set({ isLoading: false, statusMessage: "" });
+  } finally {
+    useMessageStore.setState({ sending: false });
   }
 }

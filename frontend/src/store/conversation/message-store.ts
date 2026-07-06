@@ -4,11 +4,14 @@
 //  职责：管理会话消息列表和响应块数据。
 //  不包含：树/图谱数据、UI 标志（isLoading/statusMessage 等在 ui-store）。
 //
-//  ── 2026-06-28 树会话重构 ──
-//  引入 outline + tipMessageId + loadedContent 三级缓存的懒加载架构。
-//  - loadMessages 只拿骨架（outline），正文逐条异步加载
-//  - tipMessageId 记录"当前浏览路径的尾消息"，版本切换纯前端不走 API
-//  - messages 保持向后兼容，由 outline + tip + loadedContent 推导
+//  ── 2026-07-06 分支对话重构 ──
+//  引入 nodeMap + currentPath 树形存储替代旧的 outline + tipMessageId 架构。
+//  - nodeMap: 所有已加载消息按 ID 索引（替代 outlines + loadedContent 两级缓存）
+//  - currentPath: 当前活跃路径的消息 ID 列表（来自后端 conv_message_ids）
+//  - pathPos: 当前浏览位置（版本切换用）
+//  - pathReady: 路径是否已完全加载
+//  - sending: 防止并发发送的锁
+//  - messages: 保持向后兼容的渲染源，由 currentPath + nodeMap + pipeline 消息推导
 // ══════════════════════════════════════════════════════════════
 
 import { create } from "zustand";
@@ -16,147 +19,123 @@ import type { MessageNode } from "@/types";
 import { apiFetch } from "./tree-helpers";
 
 export interface MessageState {
-  // ── 树状态（骨架层） ──
-  outlines: MessageNode[];                // 全量消息骨架（无正文）
-  tipMessageId: string | null;            // 当前活跃路径尾消息 ID
+  // ── 树结构存储 ──
+  nodeMap: Record<string, MessageNode>;    // msgId → 完整消息（替代 outlines + loadedContent）
+  currentPath: string[];                    // 当前活跃路径消息 ID 列表（根→尾，对应后端 conv_message_ids）
+  pathPos: number;                          // 当前浏览位置索引（版本切换用）
+  pathReady: boolean;                       // currentPath 中所有消息是否已完全加载
 
-  // ── 正文缓存 ──
-  loadedContent: Record<string, MessageNode>; // msgId → 完整消息（含 content_blocks）
-  loadingContents: string[];                  // 正在加载正文的 msgId 列表
+  // ── 并发控制 ──
+  sending: boolean;                         // 发送锁，防止并发 send
 
   // ── 向后兼容：渲染源 ──
-  messages: MessageNode[];                // 推导结果，保持对外接口一致
+  messages: MessageNode[];                  // 推导结果，保持对外接口一致
+  streamingId: string | null;               // 当前正在流式写入的 assistant 消息 ID
 
-  streamingId: string | null;             // 当前正在流式写入的 assistant 消息 ID
   loadingMessages: boolean;
   convError: string | null;
 
   // Actions
+  /** 首次加载对话链：GET /chain → 填充 nodeMap + currentPath */
   loadMessages: (conversationId: string) => Promise<void>;
-  /** 懒加载单条消息正文 */
-  lazyLoadContent: (msgId: string) => Promise<void>;
-  /** 批次懒加载 */
-  lazyLoadBatch: (msgIds: string[]) => Promise<void>;
-  /** 设置 tip（版本切换、初始定位） */
-  setTip: (msgId: string | null) => void;
-  /** 版本导航：在同组版本中翻页 */
-  navigateVersion: (msgId: string, direction: "prev" | "next") => void;
+  /** 计算从根到指定消息的祖先路径，更新 currentPath */
+  fillAncestorPath: (msgId: string) => Promise<string[]>;
+  /** 查找指定消息的最佳后继子节点（用于选择分支） */
+  getDefaultChild: (msgId: string) => string | null;
+  /** 计算从 msgId 开始的尾部路径 */
+  calcTail: (msgId: string) => Promise<string[]>;
+  /** 切换到指定分支：重新计算路径并加载 */
+  switchBranch: (msgId: string) => Promise<void>;
+  /** 删除消息（API 调用） */
   deleteMessage: (messageId: string) => Promise<void>;
+  /** 编辑消息（API 调用 + 触发重新生成） */
   editMessage: (messageId: string, newText: string) => Promise<number>;
-  versionSwitch: (messageId: string, direction: "prev" | "next", currentIndex?: number) => Promise<{
-    index: number; total: number; switchedTo?: string;
-  } | null>;
-
-  // ── 内部重建 ──
-  /** 根据 outlines + tipMessageId + loadedContent 重建 messages */
-  _rebuild: () => void;
+  /** 更新节点（SSE handler 写入消息时同步更新 nodeMap） */
+  upsertNode: (node: MessageNode) => void;
+  /** 从 messages 数组重建 nodeMap（SSE handler 写入后同步） */
+  syncFromMessages: () => void;
+  /** 根据 currentPath + nodeMap 重建 messages */
+  _rebuildMessages: () => void;
 }
 
-function _getOutlineId(node: MessageNode): string {
-  return (node as any).id || "";
-}
-
-function _getParentId(node: MessageNode): string | null {
-  return (node as any).parent_id ?? null;
-}
-
-function _getChildrenIds(node: MessageNode): string[] {
-  return (node as any).children_ids || [];
-}
-
-/** 从 outlines 找出 msgId 的版本组（同 parent_id + 同 role） */
-function _findVersionGroup(outlines: MessageNode[], msgId: string): {
-  ids: string[];
-  activeIndex: number;
-  total: number;
-} | null {
-  const msg = outlines.find(m => m.id === msgId);
-  if (!msg) return null;
-  const parentId = _getParentId(msg);
-  const role = msg.role;
-  const siblings = outlines.filter(
-    m => _getParentId(m) === parentId && m.role === role && !m.is_deleted
-  );
-  if (siblings.length <= 1) return null;
-  const ids = siblings.map(m => m.id);
-  const idx = ids.indexOf(msgId);
-  return { ids, activeIndex: idx >= 0 ? idx : ids.length - 1, total: ids.length };
-}
-
-/** 从 tip 沿 parent_id 链回溯到根，收集有效路径 */
-function _buildPathFromTip(outlines: MessageNode[], tipId: string | null): string[] {
-  if (!tipId) return [];
-  const map = new Map<string, MessageNode>();
-  for (const m of outlines) map.set(m.id, m);
-
-  const path: string[] = [];
-  let cur = map.get(tipId);
-  while (cur) {
-    path.unshift(cur.id);
-    const pid = _getParentId(cur);
-    cur = pid ? map.get(pid) : undefined;
+// ══════════════════════════════════════════════════════════════
+//  Helper: 从 messages 数组重建 nodeMap
+// ══════════════════════════════════════════════════════════════
+function _buildNodeMap(messages: MessageNode[]): Record<string, MessageNode> {
+  const map: Record<string, MessageNode> = {};
+  for (const m of messages) {
+    map[m.id] = m;
   }
-  return path;
+  return map;
 }
 
-/** 从版本组中第 newIdx 个版本 DFS 到叶子，返回叶子 ID */
-function _dfsToLeaf(outlines: MessageNode[], versionId: string): string {
-  const map = new Map<string, MessageNode>();
-  for (const m of outlines) map.set(m.id, m);
-
-  let cur = versionId;
-  let depth = 0;
-  while (depth < 1000) {
-    const node = map.get(cur);
-    if (!node) break;
-    const cids = _getChildrenIds(node);
-    // 取 outlines 中第一个存在的子节点（按 outlines 顺序）
-    const next = cids.find(cid => map.has(cid));
-    if (!next) break;
-    cur = next;
-    depth++;
-  }
-  return cur;
-}
-
+// ══════════════════════════════════════════════════════════════
+//  Store
+// ══════════════════════════════════════════════════════════════
 export const useMessageStore = create<MessageState>()((set, get) => ({
   // ── State ──
-  outlines: [],
-  tipMessageId: null,
-  loadedContent: {},
-  loadingContents: [],
+  nodeMap: {},
+  currentPath: [],
+  pathPos: 0,
+  pathReady: false,
+
+  sending: false,
+
   messages: [],
   streamingId: null,
   loadingMessages: false,
   convError: null,
 
-  // ── Rebuild ──
-  _rebuild: () => {
-    const { outlines, tipMessageId, loadedContent, messages } = get();
-    const pathIds = _buildPathFromTip(outlines, tipMessageId);
-    const fromOutline = pathIds.map(id => {
-      const outline = outlines.find(m => m.id === id);
-      const full = loadedContent[id];
-      // 有正文 → 用正文 | 没有 → 用骨架
-      if (full) return full;
-      if (outline) return outline;
-      return null;
-    }).filter(Boolean) as MessageNode[];
-    // 保留 pipeline 直接写入的消息（在 outlines 之外，如流式消息、乐观写入）
-    const outlineIds = new Set(fromOutline.map(m => m.id));
-    const pipelineMsgs = messages.filter(m => !outlineIds.has(m.id));
-    set({ messages: [...fromOutline, ...pipelineMsgs], loadingMessages: false });
+  // ── 重建 messages ──
+  _rebuildMessages: () => {
+    const { currentPath, nodeMap, messages } = get();
+
+    // 1) 从 currentPath 重建路径消息
+    const pathSet = new Set(currentPath);
+    const pathMsgs = currentPath
+      .map(id => nodeMap[id])
+      .filter(Boolean) as MessageNode[];
+
+    // 2) 保留 pipeline 直接写入的消息（在 nodeMap 之外，如流式消息、乐观写入）
+    const pipelineMsgs = messages.filter(m => !pathSet.has(m.id));
+
+    // 3) 合并：路径消息优先，pipeline 消息排在后面
+    set({ messages: [...pathMsgs, ...pipelineMsgs] });
   },
 
-  // ── Load messages (outline + lazy) ──
+  // ── 同步：messages → nodeMap ──
+  syncFromMessages: () => {
+    const { messages, nodeMap } = get();
+    const newMap = { ...nodeMap };
+    let changed = false;
+    for (const m of messages) {
+      if (!newMap[m.id] || newMap[m.id] !== m) {
+        newMap[m.id] = m;
+        changed = true;
+      }
+    }
+    if (changed) {
+      set({ nodeMap: newMap });
+    }
+  },
+
+  // ── 更新单个节点 ──
+  upsertNode: (node: MessageNode) => {
+    set(state => ({
+      nodeMap: { ...state.nodeMap, [node.id]: node },
+    }));
+    get()._rebuildMessages();
+  },
+
+  // ── 加载对话消息 ──
   loadMessages: async (conversationId: string) => {
     set({ loadingMessages: true, convError: null });
     try {
-      // 1) 获取骨架
-      const outlineData = await apiFetch<{ messages: MessageNode[]; total: number }>(
-        `/tree/conversation/${conversationId}/messages?limit=50&offset=0`,
+      // 1) 调用新版 chain API 获取完整消息链
+      const chainData = await apiFetch<{ messages: MessageNode[]; total: number }>(
+        `/tree/conversation/${conversationId}/chain`,
       );
-      const outlines = (outlineData.messages || []).map(m => {
+      const chainMessages: MessageNode[] = (chainData.messages || []).map(m => {
         // 补全 follow_up_questions 字段（从 metadata）
         if ((m as any).metadata?.follow_up_questions && !(m as any).follow_up_questions) {
           (m as any).follow_up_questions = (m as any).metadata.follow_up_questions;
@@ -164,96 +143,138 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
         return m;
       });
 
-      // 2) 设 tip = 最后一个 outline（最新消息）
-      const tipMessageId = outlines.length > 0 ? outlines[outlines.length - 1].id : null;
-
-      set({ outlines, tipMessageId, loadedContent: {}, loadingMessages: false });
-      get()._rebuild();
-
-      // 3) 首屏预加载最末 4 条（用户打开时看到的是对话底部）
-      const pathIds = _buildPathFromTip(outlines, tipMessageId);
-      if (pathIds.length > 0) {
-        const tail = pathIds.slice(-4);
-        get().lazyLoadBatch(tail);
+      // 2) 构建 currentPath + nodeMap
+      const currentPath = chainMessages.map(m => m.id);
+      const nodeMap: Record<string, MessageNode> = {};
+      for (const m of chainMessages) {
+        nodeMap[m.id] = m;
       }
+
+      set({
+        nodeMap,
+        currentPath,
+        pathPos: currentPath.length > 0 ? currentPath.length - 1 : 0,
+        pathReady: true,
+        loadingMessages: false,
+      });
+      get()._rebuildMessages();
     } catch (e: unknown) {
       if (e instanceof Error && e.message.includes("404")) {
         set({ convError: "该对话已被删除", loadingMessages: false });
       } else {
         set({ convError: "加载失败", loadingMessages: false });
       }
-      set({ outlines: [], messages: [], tipMessageId: null, loadedContent: {} });
+      set({ nodeMap: {}, currentPath: [], messages: [] });
     }
   },
 
-  // ── Lazy load single message content ──
-  lazyLoadContent: async (msgId: string) => {
-    // 跳过临时 ID（乐观写入 / 流式占位 / 重连占位 / 错误占位）
-    if (msgId.startsWith("t_") || msgId.startsWith("a_") || msgId.startsWith("r_") || msgId.startsWith("err-")) return;
-    const { loadedContent, loadingContents } = get();
-    if (loadedContent[msgId] || loadingContents.includes(msgId)) return;
-    set(s => ({ loadingContents: [...s.loadingContents, msgId] }));
-    try {
-      const data = await apiFetch<{ message: MessageNode }>(`/tree/message/${msgId}`);
-      if (data?.message) {
-        set(s => ({
-          loadedContent: { ...s.loadedContent, [msgId]: data.message },
-          loadingContents: s.loadingContents.filter(id => id !== msgId),
-        }));
-        get()._rebuild();
-        return;
+  // ── 计算祖先路径 ──
+  fillAncestorPath: async (msgId: string): Promise<string[]> => {
+    const { messages } = get();
+    // 先从本地 nodeMap/messages 中找
+    const msg = get().nodeMap[msgId] || messages.find(m => m.id === msgId);
+    if (msg) {
+      // 本地回溯 parent_id 链
+      const path: string[] = [];
+      let cur = msg;
+      const visited = new Set<string>();
+      while (cur && !visited.has(cur.id)) {
+        visited.add(cur.id);
+        path.unshift(cur.id);
+        if (!cur.parent_id) break;
+        const parent = get().nodeMap[cur.parent_id] || messages.find(m => m.id === cur.parent_id);
+        cur = parent as MessageNode;
+        if (!cur) break;
       }
-    } catch {
-      // fail silently
+      return path;
     }
-    set(s => ({ loadingContents: s.loadingContents.filter(id => id !== msgId) }));
-  },
 
-  // ── Batch lazy load ──
-  lazyLoadBatch: async (msgIds: string[]) => {
-    const { loadedContent, loadingContents } = get();
-    const toLoad = msgIds.filter(id => !loadedContent[id] && !loadingContents.includes(id));
-    if (toLoad.length === 0) return;
-    // 逐批并行，每次 4 条防激增
-    const BATCH = 4;
-    for (let i = 0; i < toLoad.length; i += BATCH) {
-      const batch = toLoad.slice(i, i + BATCH);
-      await Promise.all(
-        batch.map(id => get().lazyLoadContent(id))
+    // 回退到 API 调用
+    try {
+      const convId = messages.find(m => m.directory_id)?.directory_id || "";
+      if (!convId) return [];
+
+      const data = await apiFetch<{ messages: MessageNode[]; total: number }>(
+        `/tree/conversation/${convId}/chain/path`,
+        { method: "POST", body: JSON.stringify({ from_id: msgId }) },
       );
+
+      const ancestorPath = (data.messages || []).map(m => m.id);
+      // 更新 nodeMap
+      const newMap = { ...get().nodeMap };
+      for (const m of data.messages || []) {
+        newMap[m.id] = m;
+      }
+      set({ nodeMap: newMap });
+
+      return ancestorPath;
+    } catch {
+      return [];
     }
   },
 
-  // ── Set tip ──
-  setTip: (msgId: string | null) => {
-    set({ tipMessageId: msgId });
-    get()._rebuild();
-    // 触发新路径的懒加载
-    const { outlines } = get();
-    const pathIds = _buildPathFromTip(outlines, msgId);
-    if (pathIds.length > 0) {
-      get().lazyLoadBatch(pathIds);
+  // ── 查找默认子节点 ──
+  getDefaultChild: (msgId: string): string | null => {
+    const msg = get().nodeMap[msgId] || get().messages.find(m => m.id === msgId);
+    if (!msg) return null;
+    const childrenIds = msg.children_ids || [];
+    if (childrenIds.length === 0) return null;
+    // 优先选择第一个非 deleted 的子节点
+    const firstChild = childrenIds.find(cid => {
+      const child = get().nodeMap[cid];
+      return child && !child.is_deleted;
+    });
+    return firstChild || null;
+  },
+
+  // ── 计算尾部路径（DFS 遍历） ──
+  calcTail: async (msgId: string): Promise<string[]> => {
+    try {
+      const convId = get().messages.find(m => m.directory_id)?.directory_id || "";
+      if (!convId) return [];
+
+      const data = await apiFetch<{ messages: MessageNode[]; total: number }>(
+        `/tree/conversation/${convId}/chain/tail`,
+        { method: "POST", body: JSON.stringify({ from_id: msgId }) },
+      );
+
+      const tailPath = (data.messages || []).map(m => m.id);
+      // 更新 nodeMap
+      const newMap = { ...get().nodeMap };
+      for (const m of data.messages || []) {
+        newMap[m.id] = m;
+      }
+      set({ nodeMap: newMap });
+
+      return tailPath;
+    } catch {
+      return [];
     }
   },
 
-  // ── Navigate version ──
-  navigateVersion: (msgId: string, direction: "prev" | "next") => {
-    const { outlines } = get();
-    const group = _findVersionGroup(outlines, msgId);
-    if (!group || group.ids.length <= 1) return;
+  // ── 切换分支 ──
+  switchBranch: async (msgId: string) => {
+    // 1) 计算从根到 msgId 的祖先路径
+    const ancestorPath = await get().fillAncestorPath(msgId);
+    if (ancestorPath.length === 0) return;
 
-    let curIdx = group.activeIndex;
-    const newIdx = direction === "prev"
-      ? (curIdx - 1 + group.total) % group.total
-      : (curIdx + 1) % group.total;
-    const newVersionId = group.ids[newIdx];
+    // 2) 计算从 msgId 开始的最佳尾部路径（优先 follow children_ids DFS）
+    const tailPath = await get().calcTail(msgId);
 
-    // 沿 children_ids DFS 到叶子
-    const leafId = _dfsToLeaf(outlines, newVersionId);
-    get().setTip(leafId);
+    // 3) 合并为新 currentPath（祖先 + msgId + 尾部）
+    //    去重：ancestorPath 已包含 msgId，tailPath 从 msgId 开始
+    const tailWithoutHead = tailPath.slice(1);
+    const newPath = [...ancestorPath, ...tailWithoutHead.filter(id => !ancestorPath.includes(id))];
+
+    set({
+      currentPath: newPath,
+      pathPos: newPath.length > 0 ? newPath.length - 1 : 0,
+      pathReady: true,
+    });
+    get()._rebuildMessages();
   },
 
-  // ── Delete ──
+  // ── 删除消息 ──
   deleteMessage: async (messageId: string) => {
     try {
       await apiFetch(`/tree/message/${messageId}`, { method: "DELETE" });
@@ -262,7 +283,7 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     }
   },
 
-  // ── Edit ──
+  // ── 编辑消息 ──
   editMessage: async (messageId: string, newText: string): Promise<number> => {
     try {
       const data = await apiFetch<{ node: MessageNode; version_count: number }>(`/tree/message/${messageId}`, {
@@ -281,22 +302,5 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
       console.error("编辑消息失败:", e);
       return 0;
     }
-  },
-
-  // ── Backward-compat: versionSwitch (no longer calls API) ──
-  versionSwitch: async (messageId: string, direction: "prev" | "next", _currentIndex?: number) => {
-    const { outlines } = get();
-    const group = _findVersionGroup(outlines, messageId);
-    if (!group || group.ids.length <= 1) return null;
-
-    let curIdx = group.activeIndex;
-    const newIdx = direction === "prev"
-      ? (curIdx - 1 + group.total) % group.total
-      : (curIdx + 1) % group.total;
-    const newVersionId = group.ids[newIdx];
-    const leafId = _dfsToLeaf(outlines, newVersionId);
-    get().setTip(leafId);
-
-    return { index: newIdx + 1, total: group.total, switchedTo: leafId };
   },
 }));

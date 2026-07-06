@@ -164,7 +164,7 @@ export function useChatStream() {
    * 发送消息并接收流式回答。
    * 调用前需确保 convId/dirId 有效，且已在 MessageStore 中乐观写入。
    */
-  const send = useCallback(async (text: string, convId: string, dirId: string) => {
+  const send = useCallback(async (text: string, convId: string, dirId: string, parentId?: string) => {
     convIdRef.current = convId;
     dirIdRef.current = dirId;
 
@@ -188,6 +188,16 @@ export function useChatStream() {
     };
 
     const doSend = async () => {
+      const body: Record<string, unknown> = {
+        action: "send",
+        text,
+        dir_id: dirId,
+      };
+      // 传递 parent_id（分支回复用）
+      if (parentId) {
+        body.parent_id = parentId;
+      }
+
       const res = await fetch(
         `/api/conversations/tree/conversation/${convId}/message`,
         {
@@ -196,11 +206,7 @@ export function useChatStream() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({
-            action: "send",
-            text,
-            dir_id: dirId,
-          }),
+          body: JSON.stringify(body),
         },
       );
 

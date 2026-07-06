@@ -46,5 +46,25 @@ export async function editMessageImpl(set: any, get: any, messageId: string, new
 }
 
 export async function versionSwitchImpl(set: any, get: any, messageId: string, direction: "prev" | "next", currentIndex?: number) {
-  return useMessageStore.getState().versionSwitch(messageId, direction, currentIndex);
+  // 版本切换：基于 nodeMap 的 DFS 遍历
+  const store = useMessageStore.getState();
+  const msg = store.nodeMap[messageId];
+  if (!msg) return null;
+  const parentId = msg.parent_id || "__root__";
+  const role = msg.role;
+  const siblings = Object.values(store.nodeMap)
+    .filter(m => (m.parent_id || "__root__") === parentId && m.role === role && !m.is_deleted)
+    .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+  if (siblings.length <= 1) return null;
+  const idx = siblings.findIndex(m => m.id === messageId);
+  if (idx < 0) return null;
+  const newIdx = direction === "prev"
+    ? (idx - 1 + siblings.length) % siblings.length
+    : (idx + 1) % siblings.length;
+  const targetMsg = siblings[newIdx];
+  if (targetMsg) {
+    await store.switchBranch(targetMsg.id);
+    return { index: newIdx + 1, total: siblings.length, switchedTo: targetMsg.id };
+  }
+  return null;
 }
