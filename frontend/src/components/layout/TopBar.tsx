@@ -31,6 +31,9 @@ import {
   Settings as SettingsIcon,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
+  ArrowLeft,
 } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -239,6 +242,15 @@ export default function TopBar() {
           {pref.leftPanel.collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
         </button>
 
+        {/* 返回按钮 */}
+        <button
+          onClick={() => window.history.back()}
+          className="p-1.5 rounded text-ink-muted hover:text-ink-primary hover:bg-surface-hover transition-colors md:hidden lg:block"
+          title="返回"
+        >
+          <ArrowLeft size={16} />
+        </button>
+
         <Link href="/" className="flex items-center gap-2 mr-2 group">
           <div className="w-7 h-7 bg-accent flex items-center justify-center rounded active:scale-[0.97] transition-transform group-hover:scale-105">
             <span className="text-white font-semibold text-xs">果</span>
@@ -294,6 +306,14 @@ export default function TopBar() {
 
         {/* 右侧 */}
         <div className="flex items-center gap-1.5">
+          {/* 右栏切换 */}
+          <button
+            onClick={() => toggleCollapsed("rightPanel")}
+            className="p-1.5 rounded text-ink-muted hover:text-ink-primary hover:bg-surface-hover transition-colors"
+            title={pref.rightPanel.collapsed ? "展开右栏" : "折叠右栏"}
+          >
+            {pref.rightPanel.collapsed ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />}
+          </button>
           {/* 同步状态 */}
           <div
             className="flex items-center gap-1 px-2 h-8 rounded text-[12px] text-ink-muted hover:bg-surface-hover transition-colors cursor-default"
@@ -350,6 +370,9 @@ export default function TopBar() {
                 <div className="w-6 h-6 rounded-full bg-accent flex items-center justify-center text-white text-[11px] font-semibold">
                   {(user.display_name || user.username).charAt(0).toUpperCase()}
                 </div>
+                <span className="hidden lg:inline text-[12px] text-ink-primary font-medium">
+                  {user.display_name || user.username}
+                </span>
                 <ChevronDown size={12} className="text-ink-muted" />
               </button>
               {userMenuOpen && mounted && userMenuPos &&

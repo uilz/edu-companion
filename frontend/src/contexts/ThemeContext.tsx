@@ -30,9 +30,11 @@ export const STYLE_LIST: StyleMeta[] = [
 interface ThemeContextType {
   theme: Theme;
   style: DesignStyle;
+  serifFont: boolean;
   toggleTheme: () => void;
   setTheme: (t: Theme) => void;
   setStyle: (s: DesignStyle) => void;
+  setSerifFont: (v: boolean) => void;
   currentStyleMeta: StyleMeta;
 }
 
@@ -48,9 +50,11 @@ const DEFAULT_STYLE: DesignStyle = 'professional';
 const ThemeContext = createContext<ThemeContextType>({
   theme: DEFAULT_THEME,
   style: DEFAULT_STYLE,
+  serifFont: false,
   toggleTheme: () => {},
   setTheme: () => {},
   setStyle: () => {},
+  setSerifFont: () => {},
   currentStyleMeta: STYLE_LIST[0],
 });
 
@@ -59,6 +63,7 @@ const ThemeContext = createContext<ThemeContextType>({
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(DEFAULT_THEME);
   const [style, setStyleState] = useState<DesignStyle>(DEFAULT_STYLE);
+  const [serifFont, setSerifFontState] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   // 初始化：先 localStorage 缓存（同 tab 立即生效）, 再从服务端拉取（跨设备一致）
@@ -67,13 +72,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     // 1. 立即从 localStorage 恢复（防闪烁）
     const cachedTheme = localStorage.getItem(STORAGE_THEME_KEY) as Theme | null;
     const cachedStyle = localStorage.getItem(STORAGE_STYLE_KEY) as DesignStyle | null;
+    const cachedSerif = localStorage.getItem('edu-companion-serif-font');
     const initialTheme = cachedTheme || DEFAULT_THEME;
     const initialStyle = cachedStyle || DEFAULT_STYLE;
     setThemeState(initialTheme);
     setStyleState(initialStyle);
+    if (cachedSerif === 'true') {
+      setSerifFontState(true);
+    }
     const root = document.documentElement;
     root.setAttribute('data-theme', initialTheme);
     root.setAttribute('data-style', initialStyle);
+    root.setAttribute('data-serif-font', cachedSerif === 'true' ? 'true' : 'false');
     setMounted(true);
 
     // 2. Task #84: B4 修复 — 从服务端拉取最新值（跨设备一致）
@@ -99,12 +109,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
           localStorage.setItem(STORAGE_STYLE_KEY, data.style);
           root.setAttribute('data-style', data.style);
         }
+        if (typeof data.serif_font === 'boolean') {
+          setSerifFontState(data.serif_font);
+          localStorage.setItem('edu-companion-serif-font', String(data.serif_font));
+          root.setAttribute('data-serif-font', String(data.serif_font));
+        }
       } catch { /* 静默 — 用 localStorage 即可 */ }
     })();
   }, []);
 
   // 同步到服务端 (Task #84: B4 修复)
-  const persistUi = useCallback(async (patch: { theme?: Theme; style?: DesignStyle }) => {
+  const persistUi = useCallback(async (patch: { theme?: Theme; style?: DesignStyle; serif_font?: boolean }) => {
     if (typeof window === 'undefined') return;
     const token = localStorage.getItem('access_token');
     if (!token) return; // 未登录, 仅 localStorage
@@ -147,6 +162,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     persistUi({ style: s });
   }, [persistUi]);
 
+  // 设置衬线字体偏好
+  const setSerifFont = useCallback((v: boolean) => {
+    setSerifFontState(v);
+    try { localStorage.setItem('edu-companion-serif-font', String(v)); } catch { /* */ }
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-serif-font', String(v));
+    }
+    persistUi({ serif_font: v });
+  }, [persistUi]);
+
   // 当前风格元数据
   const currentStyleMeta = STYLE_LIST.find(s => s.id === style) || STYLE_LIST[0];
 
@@ -154,7 +179,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   if (!mounted) return <>{children}</>;
 
   return (
-    <ThemeContext.Provider value={{ theme, style, toggleTheme, setTheme, setStyle, currentStyleMeta }}>
+    <ThemeContext.Provider value={{ theme, style, serifFont, toggleTheme, setTheme, setStyle, setSerifFont, currentStyleMeta }}>
       {children}
     </ThemeContext.Provider>
   );

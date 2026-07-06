@@ -964,6 +964,7 @@ function AppearanceTab({ theme, setTheme, style, setStyle }: {
   style: string;
   setStyle: (s: string) => void;
 }) {
+  const { serifFont, setSerifFont } = useTheme();
   return (
     <div className="space-y-6">
       <h2 className="text-base font-semibold text-[var(--color-text)] flex items-center gap-2">
@@ -1017,6 +1018,24 @@ function AppearanceTab({ theme, setTheme, style, setStyle }: {
               {s.label}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* 衬线字体 */}
+      <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-semibold text-[var(--color-text)]">AI 消息衬线字体</div>
+            <p className="text-xs text-[var(--color-text-muted)] mt-1">
+              开启后，AI 回复的正文将使用 Songti SC 衬线字体，更适合长时间阅读
+            </p>
+          </div>
+          <button
+            onClick={() => setSerifFont(!serifFont)}
+            className={`relative w-11 h-6 rounded-full transition-colors ${serifFont ? "bg-[var(--color-accent)]" : "bg-[var(--color-surface)] border border-[var(--color-border)]"}`}
+          >
+            <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${serifFont ? "translate-x-[22px]" : "translate-x-[2px]"}`} />
+          </button>
         </div>
       </div>
     </div>

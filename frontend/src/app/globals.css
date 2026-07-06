@@ -39,6 +39,7 @@
 
   /* ── Typography (font stacks shared, sizes per style) ── */
   --font-sans: 'Inter', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+  --font-display: 'Iowan Old Style', 'Songti SC', 'Noto Serif SC', serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
 
   /* ── Shadows (shared, only for floats) ── */
@@ -60,6 +61,22 @@
 
   /* ── Mobile Touch / Typography (v2) ── */
   --touch-target-min: 44px;
+
+  /* ── Demo palette (paper-ink warm tones, shared across all styles) ── */
+  --color-green:  #4a7c3e;
+  --color-amber:  #c98a2b;
+  --color-blue:   #4a6c9c;
+  --color-red:    #b04444;
+
+  /* ── Banner semantic palette ── */
+  --banner-switch-bg:       #fff8eb;
+  --banner-switch-border:   #f3dca0;
+  --banner-recommend-bg:    #eaf3ec;
+  --banner-recommend-border:#c5e0cb;
+  --banner-secretary-bg:    #ecf0fa;
+  --banner-secretary-border:#c5d3ec;
+  --banner-error-bg:        #fcecec;
+  --banner-error-border:    #f4c7c7;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1071,14 +1088,29 @@
    所有 AI 工具块统一米色背景，与 AI 文本块视觉连续
    ═══════════════════════════════════════════════════════════════ */
 @layer components {
-  /* ── AI 消息体（统一米色背景）── */
+  /* ── AI 消息体（统一米色背景 + demo 非对称圆角）── */
   .ai-msg-paper {
     background-color: var(--color-ai-msg);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
+    border-radius: 3px 16px 16px 16px;
     padding: 12px 16px;
     color: var(--color-ink-primary);
     font-family: var(--font-sans);
+  }
+
+  /* ── 用户消息体（demo 非对称圆角）── */
+  .user-msg-bubble {
+    background-color: var(--color-user-msg);
+    border: 1px solid var(--color-border);
+    border-radius: 16px 16px 3px 16px;
+    padding: 12px 16px;
+    color: var(--color-ink-primary);
+    font-family: var(--font-sans);
+  }
+
+  /* ── AI 消息衬线字体（用户偏好启用时）── */
+  [data-serif-font="true"] .ai-msg-paper {
+    font-family: var(--font-display);
   }
 
   /* ── AI 工具块（与 AI 文本同色，靠 margin 区分）── */

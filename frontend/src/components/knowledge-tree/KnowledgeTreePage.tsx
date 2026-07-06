@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useRef } from "react";
 import { Plus, X, Check, AlertCircle, Sparkles, Loader2, ZoomIn, ZoomOut, Maximize, RefreshCw } from "lucide-react";
 import type { GraphData, GraphNode } from "@/lib/types/graph-types";
 import { filterByLevel, subtreeFilter, findNodeById, getNodeAncestors } from "@/lib/types/graph-types";
@@ -12,7 +12,8 @@ import NodeDetailPopup from "@/components/graph/panels/NodeDetailPopup";
 import LayerPanel from "./LayerPanel";
 import DialogContainer from "./DialogContainer";
 import ContextMenu, { getDefaultContextMenuItems } from "./ContextMenu";
-import { TopBar, StatusBar, FloatDialogWrapper, ResizeHandle } from "./index";
+import { TopBar, StatusBar, FloatDialogWrapper } from "./index";
+import ResizeHandle from "@/components/ui/ResizeHandle";
 import { useTreeLayout } from "@/hooks/graph/useTreeLayout";
 import { useGraphCanvas } from "@/hooks/graph/useGraphCanvas";
 import EmojiPicker from "@/components/ui/EmojiPicker";
@@ -347,15 +348,27 @@ export default function KnowledgeTreePage() {
     return node?.label;
   }, [canvas.focusRootId, canvas.graphData]);
 
-  // ── 稳定的 ResizeHandle 回调（避免每帧重新注册事件） ──
-  const onDialogResize = useCallback((dx: number) => {
-    setLayoutPref(p => ({ ...p, dialogWidth: Math.max(200, Math.min(600, p.dialogWidth + dx)) }));
+  // ── 稳定的 ResizeHandle 回调（总位移，避免 rAF 节流下累积误差） ──
+  const dialogStartWidthRef = useRef(400);
+  const detailStartWidthRef = useRef(400);
+
+  const onDialogResizeStart = useCallback(() => {
+    dialogStartWidthRef.current = layoutPref.dialogWidth;
+  }, [layoutPref.dialogWidth]);
+
+  const onDialogResize = useCallback((totalDelta: number) => {
+    setLayoutPref(p => ({ ...p, dialogWidth: Math.max(200, Math.min(600, dialogStartWidthRef.current + totalDelta)) }));
   }, []);
   const onDialogAutoCollapse = useCallback(() => {
     setLayoutPref(p => ({ ...p, showDialogPanel: false }));
   }, []);
-  const onDetailResize = useCallback((dx: number) => {
-    setLayoutPref(p => ({ ...p, detailWidth: Math.max(200, Math.min(600, p.detailWidth - dx)) }));
+
+  const onDetailResizeStart = useCallback(() => {
+    detailStartWidthRef.current = layoutPref.detailWidth;
+  }, [layoutPref.detailWidth]);
+
+  const onDetailResize = useCallback((totalDelta: number) => {
+    setLayoutPref(p => ({ ...p, detailWidth: Math.max(200, Math.min(600, detailStartWidthRef.current - totalDelta)) }));
   }, []);
   const onDetailAutoCollapse = useCallback(() => {
     setLayoutPref(p => ({ ...p, showDetailPanel: false }));
@@ -423,7 +436,7 @@ export default function KnowledgeTreePage() {
                 onWidthChange={(w) => setLayoutPref(p => ({ ...p, dialogWidth: w }))}
               />
             </div>
-            <ResizeHandle side="left" onResize={onDialogResize} onAutoCollapse={onDialogAutoCollapse} />
+            <ResizeHandle orientation="horizontal" onResizeStart={onDialogResizeStart} onResize={onDialogResize} onDoubleClick={onDialogAutoCollapse} />
           </>
         )}
         {/* 移动端 Dialog 覆盖层 */}
@@ -531,7 +544,7 @@ export default function KnowledgeTreePage() {
 
         {!isMobile && layoutPref.showDetailPanel && canvas.selectedNode && (
           <>
-            <ResizeHandle side="right" onResize={onDetailResize} onAutoCollapse={onDetailAutoCollapse} />
+            <ResizeHandle orientation="horizontal" onResizeStart={onDetailResizeStart} onResize={onDetailResize} onDoubleClick={onDetailAutoCollapse} />
             <div className="border-l border-[var(--color-border)] bg-[var(--color-surface)] overflow-y-auto h-full" style={{ width: `${layoutPref.detailWidth}px` }}>
               <NodeDetailPanel
                 node={canvas.selectedNode} partitionId={canvas.partitionId}

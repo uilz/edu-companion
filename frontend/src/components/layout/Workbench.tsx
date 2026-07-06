@@ -24,7 +24,7 @@
 
 "use client";
 
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useBreakpoint } from "@/hooks/useBreakpoint";
 import { useLayoutPrefs, PANEL_BOUNDS } from "@/hooks/useLayoutPrefs";
@@ -36,6 +36,7 @@ import LeftPanel from "./LeftPanel";
 import RightPanel from "./RightPanel";
 import Cockpit from "@/components/dashboard/Cockpit";
 import { Home } from "lucide-react";
+import ResizeHandle from "@/components/ui/ResizeHandle";
 
 export interface WorkbenchProps {
   /** 当前路由对应的页面内容 */
@@ -49,6 +50,12 @@ export interface WorkbenchProps {
 function useIsCockpitRoute(): boolean {
   const pathname = usePathname() || "/";
   return pathname === "/" || pathname === "/dashboard" || pathname.startsWith("/dashboard/");
+}
+
+/** 对话路由 → 隐藏全局右栏，由 ConversationPanel 自管 */
+function useIsConversationRoute(): boolean {
+  const pathname = usePathname() || "/";
+  return pathname === "/conversation" || pathname.startsWith("/conversation/");
 }
 
 // ── 内部组件：读取 context 决定 RightPanel 内容 ──
@@ -66,6 +73,10 @@ export default function Workbench({ children }: WorkbenchProps) {
   const { pref, setWidth, setHeight, toggleCollapsed } = useLayoutPrefs();
   const router = useRouter();
   const isCockpit = useIsCockpitRoute();
+  const isConversation = useIsConversationRoute();
+
+  // 右栏拖拽初始宽度 ref — 用于总位移计算
+  const rightDragStartWidthRef = useRef(0);
 
   // 移动端：完全不渲染 Workbench，由 AppShell 走 BottomNav / MobileDrawer 分支
   if (!isMounted) {
@@ -181,9 +192,17 @@ export default function Workbench({ children }: WorkbenchProps) {
           {isCockpit ? <Cockpit /> : children}
         </div>
 
-        {/* ── 右栏 (row 2, col 3) ── */}
-        {pref.rightPanel.visible && (
-          <div className="row-start-2 col-start-3 min-h-0 overflow-hidden border-l border-divider">
+        {/* ── 右栏 (row 2, col 3) — 对话路由全局隐藏，由 ConversationPanel 自管 ── */}
+        {!isConversation && pref.rightPanel.visible && (
+          <div className="row-start-2 col-start-3 min-h-0 border-l border-divider relative" style={{ overflow: 'visible' }}>
+            <ResizeHandle
+              orientation="horizontal"
+              onResizeStart={() => { rightDragStartWidthRef.current = pref.rightPanel.collapsed ? 0 : rightW; }}
+              onResize={(totalDelta) => setWidth("rightPanel", rightDragStartWidthRef.current - totalDelta)}
+              onDoubleClick={() => toggleCollapsed("rightPanel")}
+              collapsed={pref.rightPanel.collapsed}
+              style={{ position: 'absolute', left: -3, top: 0, bottom: 0, zIndex: 10 }}
+            />
             <ResizableContainer
               visible
               size={rightW}
@@ -196,11 +215,36 @@ export default function Workbench({ children }: WorkbenchProps) {
               onResizeEnd={(s) => setWidth("rightPanel", s)}
               onToggleCollapse={() => toggleCollapsed("rightPanel")}
               title="工作面板"
-              resizable
               className="h-full"
             >
               <WorkbenchInner>{children}</WorkbenchInner>
             </ResizableContainer>
+
+            {/* ── 右栏展开/收起按钮（放在右栏 div 内，relative 定位） ── */}
+            {pref.rightPanel.collapsed && (
+              <button onClick={() => toggleCollapsed("rightPanel")}
+                style={{
+                  position: "absolute", left: -24, bottom: 12,
+                  width: 24, height: 56, zIndex: 51,
+                  background: "var(--color-card)", border: "1px solid var(--color-divider)", borderRight: "none",
+                  borderRadius: "6px 0 0 6px", cursor: "pointer", color: "var(--color-ink-muted)",
+                  display: "grid", placeItems: "center",
+                }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
+              </button>
+            )}
+            {!pref.rightPanel.collapsed && (
+              <button onClick={() => toggleCollapsed("rightPanel")}
+                style={{
+                  position: "absolute", left: -24, bottom: 12,
+                  width: 24, height: 56, zIndex: 51,
+                  background: "var(--color-card)", border: "1px solid var(--color-divider)", borderRight: "none",
+                  borderRadius: "6px 0 0 6px", cursor: "pointer", color: "var(--color-ink-muted)",
+                  display: "grid", placeItems: "center",
+                }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+              </button>
+            )}
           </div>
         )}
 
