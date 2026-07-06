@@ -201,8 +201,10 @@ export default function MessageList({
   }, [messages]);
 
   // ── 内容加载检查：骨架 vs 完整消息（骨架 content_blocks=[]，无正文）──
-  //   ★ 关键：失败消息 content/content_blocks 为空但 text_summary 有错误信息，
-  //     也算"已加载"（getDisplayText 会用 text_summary）
+  //   ★ 关键：text_summary 是骨架阶段预览，content/content_blocks 是完整正文
+  //     - 骨架阶段：nodeMap[id].text_summary 有值 → loaded=true（避免 UI 空白）
+  //       但 itemContent 会再触发 loadFullContent 加载完整正文
+  //     - 完整正文阶段：content/content_blocks 非空 → loaded=true，无需再加载
   const isContentLoaded = useCallback((msgId: string) => {
     const state = useMessageStore.getState();
     if (state.streamingId === msgId) return true;
@@ -212,9 +214,10 @@ export default function MessageList({
     const n = state.nodeMap[msgId];
     if (!n) return false;
     if (!n.parent_id && n.role === "assistant" && !n.content) return true;
-    // 必须有正文（content / content_blocks / text_summary 任一非空）才算 loaded
+    // ★ 完整正文判断：content 或 content_blocks 非空
     if (n.content && n.content.length > 0) return true;
     if (n.content_blocks && n.content_blocks.length > 0) return true;
+    // 骨架阶段：text_summary 非空（预览），getDisplayText 会用 text_summary 兜底
     if (n.text_summary && n.text_summary.length > 0) return true;
     return false;
   }, []);
@@ -314,13 +317,21 @@ export default function MessageList({
   const itemContent = useCallback((index: number, message: MessageNode) => {
     const isUser = message.role === "user";
     const isEditing = editingId === message.id;
-    const loaded = isContentLoaded(message.id);
 
-    // ── 触发懒加载：骨架但无正文时加载完整消息 ──
-    if (!loaded && !message.id.startsWith("t_") && !message.id.startsWith("a_") && !message.id.startsWith("err-")) {
-      void useMessageStore.getState().loadFullContent(message.id);
+    // ── 触发懒加载：如果 nodeMap[id] 中 content/content_blocks 都空，
+    //   无论 text_summary 是否有值，都要调 loadFullContent 加载完整正文
+    //   （text_summary 只是骨架预览，不能代表完整正文）
+    const isTemp = message.id.startsWith("t_") || message.id.startsWith("a_") || message.id.startsWith("err-");
+    if (!isTemp) {
+      const n = useMessageStore.getState().nodeMap[message.id];
+      const hasFullBody = (n?.content && n.content.length > 0) ||
+                          (n?.content_blocks && n.content_blocks.length > 0);
+      if (!hasFullBody) {
+        void useMessageStore.getState().loadFullContent(message.id);
+      }
     }
 
+    const loaded = isContentLoaded(message.id);
     const displayText = loaded ? getDisplayText(message) : "";
     const groupKey = versionGroupByMessage[message.id];
     const group = groupKey ? versionGroups[groupKey] : undefined;
