@@ -398,7 +398,18 @@ function MessageItemInner({
                     </div>
                   );
                 })}
-                {!(message.content_blocks || []).some(b => b.type === "text") && isLoading && (
+                {/* ★ 兜底：content_blocks 没有 type="text" 时，用 displayText 显示 */}
+                {!(message.content_blocks || []).some(b => b.type === "text") && displayText && !isLoading && (
+                  <div data-message-id={message.id} data-conv-id={message.conv_id} data-full-text={displayText}
+                    className="text-base leading-[1.65] whitespace-pre-wrap break-words select-text"
+                    onMouseDown={handleTextMouseDown} onMouseUp={handleTextMouseUp} onContextMenu={handleTextContextMenu}
+                    onClick={(e) => { e.stopPropagation(); handleTextClick(e, message.id, message.conv_id || "", displayText); }}
+                  >
+                    <ExplainMarkers text={displayText} cards={cardsForMsg} messageId={message.id} onBadgeClick={onBadgeClick} />
+                  </div>
+                )}
+                {/* 加载中：content_blocks 为空且没 displayText 文本时显示 dots */}
+                {!(message.content_blocks || []).some(b => b.type === "text") && !displayText && isLoading && (
                   <div className="flex gap-1.5 items-center py-1 px-1">
                     <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
                     <span className="w-2 h-2 bg-[var(--color-text-muted)] rounded-full animate-pulse" style={{ animationDelay: "200ms" }} />
