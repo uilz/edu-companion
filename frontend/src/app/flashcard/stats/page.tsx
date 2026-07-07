@@ -8,8 +8,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   BarChart3, BookOpen, Calendar, TrendingUp, Brain, Activity,
-  RefreshCw, ChevronLeft, AlertCircle, Loader2, Tag, Layers,
+  RefreshCw, ChevronLeft, AlertCircle, Tag, Layers,
 } from "lucide-react";
+import { PageSkeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
 import Card, { CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Progress } from "@/components/ui/Progress";
@@ -27,8 +28,8 @@ export default function FlashCardStatsPage() {
     try {
       const data = await flashcardService.getStats();
       setStats(data);
-    } catch (e: any) {
-      setError(e.message || "加载失败");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "加载失败");
     } finally {
       setLoading(false);
     }
@@ -39,11 +40,7 @@ export default function FlashCardStatsPage() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="container mx-auto p-6 flex items-center justify-center min-h-[400px]">
-        <Loader2 className="w-8 h-8 animate-spin" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   if (error || !stats) {
@@ -51,7 +48,7 @@ export default function FlashCardStatsPage() {
       <div className="container mx-auto p-6 max-w-2xl">
         <Card>
           <CardContent className="p-12 text-center">
-            <AlertCircle className="w-12 h-12 mx-auto text-red-500 mb-3" />
+            <AlertCircle className="w-12 h-12 mx-auto text-danger mb-3" />
             <div className="text-lg font-medium mb-2">加载失败</div>
             <div className="text-sm text-muted-foreground mb-4">{error}</div>
             <Button onClick={load}>重试</Button>
@@ -100,7 +97,7 @@ export default function FlashCardStatsPage() {
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Calendar className="w-3.5 h-3.5" /> 今日到期
             </div>
-            <div className="text-3xl font-bold mt-1 text-orange-500">{stats.due_today}</div>
+            <div className="text-3xl font-bold mt-1 text-warning">{stats.due_today}</div>
           </CardContent>
         </Card>
         <Card>
@@ -166,21 +163,21 @@ export default function FlashCardStatsPage() {
           title="按类型"
           icon={<Layers className="w-5 h-5" />}
           data={stats.by_type}
-          labels={CARD_TYPE_LABELS as any}
+          labels={CARD_TYPE_LABELS}
           total={stats.total}
         />
         <DistributionCard
           title="按来源"
           icon={<Tag className="w-5 h-5" />}
           data={stats.by_source}
-          labels={CARD_SOURCE_LABELS as any}
+          labels={CARD_SOURCE_LABELS}
           total={stats.total}
         />
         <DistributionCard
           title="按状态"
           icon={<BookOpen className="w-5 h-5" />}
           data={stats.by_status}
-          labels={STATUS_LABELS as any}
+          labels={STATUS_LABELS}
           total={stats.total}
         />
       </div>
@@ -208,7 +205,7 @@ function DistributionCard({
   title: string;
   icon: React.ReactNode;
   data: Record<string, number>;
-  labels: Record<string, string>;
+  labels: Record<string | number, string>;
   total: number;
 }) {
   const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);

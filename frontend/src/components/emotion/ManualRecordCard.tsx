@@ -8,9 +8,9 @@
  * 设计：手动优先（仪表盘顶部展示）
  */
 
-import { useEffect, useState } from "react";
-import { X, Save, Loader2 } from "lucide-react";
-import { authedFetch } from "@/lib/api/api";
+import { useEffect, useState } from"react";
+import { X, Save, Loader2 } from"lucide-react";
+import { authedFetch } from"@/lib/api/api";
 
 interface Constants {
   emotion_tags: Array<{ value: string; label: string; emoji: string; severity: string }>;
@@ -24,9 +24,9 @@ interface Props {
 }
 
 const SEVERITY_COLOR: Record<string, string> = {
-  negative: "border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-900/20",
-  positive: "border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20",
-  neutral: "border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40",
+  negative: "border-danger/30 dark:border-danger/20 bg-danger/10 dark:bg-danger/10",
+  positive: "border-success/30 dark:border-success/70 bg-success/10 dark:bg-success/10",
+  neutral: "border-divider dark:dark:border-divider bg-surface dark:dark:bg-surface-hover",
 };
 
 export function ManualRecordCard({ open, onClose, onSaved }: Props) {
@@ -91,15 +91,15 @@ export function ManualRecordCard({ open, onClose, onSaved }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
-        className="w-full max-w-lg rounded-2xl bg-white dark:bg-gray-800 shadow-2xl overflow-hidden"
+        className="w-full max-w-lg rounded-2xl bg-white dark:bg-surface shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+        <div className="flex items-center justify-between px-5 py-4 border-b border  dark:border">
           <div className="flex items-center gap-2">
             <span className="text-2xl">🌊</span>
             <h2 className="text-lg font-semibold">现在记录一下</h2>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-muted hover:text-muted">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -107,7 +107,7 @@ export function ManualRecordCard({ open, onClose, onSaved }: Props) {
         <div className="p-5 space-y-5 max-h-[70vh] overflow-y-auto">
           {/* 情绪标签 */}
           <div>
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-200 block mb-2">
+            <label className="text-sm font-medium text dark:text block mb-2">
               当前心情（可多选）
             </label>
             <div className="flex flex-wrap gap-2">
@@ -119,9 +119,9 @@ export function ManualRecordCard({ open, onClose, onSaved }: Props) {
                     onClick={() => toggleTag(t.value)}
                     className={`px-3 py-1.5 rounded-full border text-sm transition ${
                       selected
-                        ? "border-indigo-500 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-200"
+                        ? "border-accent bg-accent/20 dark:bg-accent/10 text-accent dark:text-accent"
                         : SEVERITY_COLOR[t.severity] +
-                          " hover:border-indigo-300"
+                          " hover:border-accent/30"
                     }`}
                   >
                     <span className="mr-1">{t.emoji}</span>
@@ -134,8 +134,8 @@ export function ManualRecordCard({ open, onClose, onSaved }: Props) {
 
           {/* 压力自评 */}
           <div>
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-200 block mb-2">
-              压力自评：<span className="font-bold text-rose-500">{pressure ?? "—"}</span> / 10
+            <label className="text-sm font-medium text dark:text block mb-2">
+              压力自评：<span className="font-bold text-danger">{pressure ?? "—"}</span> / 10
             </label>
             <div className="flex gap-1">
               {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
@@ -144,8 +144,8 @@ export function ManualRecordCard({ open, onClose, onSaved }: Props) {
                   onClick={() => setPressure(pressure === n ? null : n)}
                   className={`flex-1 h-9 rounded text-sm font-medium transition ${
                     pressure !== null && n <= pressure
-                      ? "bg-rose-400 text-white"
-                      : "bg-gray-100 dark:bg-gray-700 text-gray-500 hover:bg-rose-100"
+                      ? "bg-danger/80 text-white"
+                      : "bg-surface dark:bg-surface-hover text-muted hover:bg-danger/10"
                   }`}
                 >
                   {n}
@@ -156,8 +156,8 @@ export function ManualRecordCard({ open, onClose, onSaved }: Props) {
 
           {/* 能量自评 */}
           <div>
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-200 block mb-2">
-              能量自评：<span className="font-bold text-emerald-500">{energy ?? "—"}</span> / 10
+            <label className="text-sm font-medium text dark:text block mb-2">
+              能量自评：<span className="font-bold text-success">{energy ?? "—"}</span> / 10
             </label>
             <div className="flex gap-1">
               {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
@@ -166,8 +166,8 @@ export function ManualRecordCard({ open, onClose, onSaved }: Props) {
                   onClick={() => setEnergy(energy === n ? null : n)}
                   className={`flex-1 h-9 rounded text-sm font-medium transition ${
                     energy !== null && n <= energy
-                      ? "bg-emerald-400 text-white"
-                      : "bg-gray-100 dark:bg-gray-700 text-gray-500 hover:bg-emerald-100"
+                      ? "bg-success/80 text-white"
+                      : "bg-surface dark:bg-surface-hover text-muted hover:bg-success/20"
                   }`}
                 >
                   {n}
@@ -178,7 +178,7 @@ export function ManualRecordCard({ open, onClose, onSaved }: Props) {
 
           {/* 备注 */}
           <div>
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-200 block mb-2">
+            <label className="text-sm font-medium text dark:text block mb-2">
               备注（可选）
             </label>
             <textarea
@@ -187,28 +187,28 @@ export function ManualRecordCard({ open, onClose, onSaved }: Props) {
               maxLength={500}
               rows={2}
               placeholder="今天状态有点疲惫，可能需要早点睡…"
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm resize-none focus:outline-none focus:border-indigo-400"
+              className="w-full px-3 py-2 rounded-lg border border dark:border  bg-white dark:bg-surface text-sm resize-none focus:outline-none focus:border-accent"
             />
           </div>
 
           {error && (
-            <div className="text-sm text-rose-600 bg-rose-50 dark:bg-rose-900/30 rounded-lg px-3 py-2">
+            <div className="text-sm text-danger bg-danger/10 dark:bg-danger/10 rounded-lg px-3 py-2">
               {error}
             </div>
           )}
         </div>
 
-        <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-end gap-2 bg-gray-50 dark:bg-gray-900/40">
+        <div className="px-5 py-3 border-t border  dark:border flex items-center justify-end gap-2 bg-surface dark:bg-surface/40">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+            className="px-4 py-2 rounded-lg text-sm text-muted dark:text-muted hover:bg-surface dark:hover:bg-surface-hover"
           >
             取消
           </button>
           <button
             onClick={submit}
             disabled={submitting}
-            className="px-4 py-2 rounded-lg text-sm bg-indigo-500 hover:bg-indigo-600 text-white flex items-center gap-1.5 disabled:opacity-50"
+            className="px-4 py-2 rounded-lg text-sm bg-accent hover:bg-accent-hover text-white flex items-center gap-1.5 disabled:opacity-50"
           >
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             保存

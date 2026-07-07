@@ -39,7 +39,7 @@ export default function MermaidBlock({ chart }: Props) {
 
   if (error) {
     return (
-      <div className="my-2 p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 text-xs text-red-600 dark:text-red-400">
+      <div className="my-2 p-3 rounded-lg bg-danger/10 dark:bg-danger/10 border border-danger/20 dark:border-danger/20 text-xs text-danger dark:text-danger">
         <p className="font-medium mb-1">图表渲染失败</p>
         <pre className="whitespace-pre-wrap">{chart}</pre>
       </div>

@@ -34,17 +34,17 @@ export function KnowledgeView({ nodes, onOpenNode }: ProjectViewProps) {
               footer={
                 <div className="flex flex-wrap gap-1 text-xs mt-2">
                   {n.linked_node_ids && n.linked_node_ids.length > 0 && (
-                    <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-500">
+                    <span className="px-2 py-0.5 rounded bg-info/10 text-info">
                       {n.linked_node_ids.length} 知识点
                     </span>
                   )}
                   {n.linked_material_ids && n.linked_material_ids.length > 0 && (
-                    <span className="px-2 py-0.5 rounded bg-green-500/10 text-green-500">
+                    <span className="px-2 py-0.5 rounded bg-success/10 text-success">
                       {n.linked_material_ids.length} 材料
                     </span>
                   )}
                   {n.linked_card_ids && n.linked_card_ids.length > 0 && (
-                    <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-500">
+                    <span className="px-2 py-0.5 rounded bg-warning/10 text-warning">
                       {n.linked_card_ids.length} 卡片
                     </span>
                   )}

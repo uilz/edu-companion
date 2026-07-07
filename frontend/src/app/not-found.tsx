@@ -24,7 +24,7 @@ export default function NotFound() {
         // 理由：HOME_PATH 是登录后落点、所有 Logo 点击的汇聚点、无需鉴权即可访问
         <Link
           href={HOME_PATH}
-          className="px-4 py-2 bg-[var(--color-accent)] text-white rounded-lg hover:bg-[var(--color-accent-hover)] active:scale-[0.97] transition-colors inline-block"
+          className="px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-hover active:scale-[0.97] transition-colors inline-block"
         >
           返回首页
         </Link>

@@ -58,7 +58,7 @@ function RadarSVG({
 
   if (nodes.length < 3) {
     return (
-      <div className="flex items-center justify-center h-[400px] text-xs text-[var(--color-text-muted)]">
+      <div className="flex items-center justify-center h-[400px] text-xs text-muted">
         需要 ≥3 个知识点才能绘制雷达图
       </div>
     );
@@ -271,7 +271,7 @@ export default function RadarChart() {
     return (
       <Card title="🎯 知识雷达图" className="!p-5">
         <div className="flex items-center justify-center py-12">
-          <Loader2 size={20} className="animate-spin text-[var(--color-accent)]" />
+          <Loader2 size={20} className="animate-spin text-accent" />
         </div>
       </Card>
     );
@@ -280,7 +280,7 @@ export default function RadarChart() {
   if (nodes.length === 0) {
     return (
       <Card title="🎯 知识雷达图" className="!p-5">
-        <p className="text-xs text-[var(--color-text-muted)] py-8 text-center">
+        <p className="text-xs text-muted py-8 text-center">
           暂无知识图谱数据
         </p>
       </Card>
@@ -292,14 +292,14 @@ export default function RadarChart() {
       {/* Subject filter */}
       {subjects.length > 0 && (
         <div className="flex items-center gap-2 mb-4">
-          <span className="text-[10px] text-[var(--color-text-muted)]">学科:</span>
+          <span className="text-[10px] text-muted">学科:</span>
           <select
             value={subject}
             onChange={(e) => {
               setSubject(e.target.value);
               setSelectedId(null);
             }}
-            className="text-[10px] px-2 py-1 border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] outline-none"
+            className="text-[10px] px-2 py-1 border border bg-surface text outline-none"
           >
             <option value="">全部</option>
             {subjects.map((s) => (
@@ -308,7 +308,7 @@ export default function RadarChart() {
               </option>
             ))}
           </select>
-          <span className="text-[10px] text-[var(--color-text-muted)] ml-auto">
+          <span className="text-[10px] text-muted ml-auto">
             {displayNodes.length}/{nodes.length} 个知识点
           </span>
         </div>
@@ -323,9 +323,9 @@ export default function RadarChart() {
 
       {/* Selected node detail */}
       {selectedNode && (
-        <div className="mt-4 pt-3 border-t border-[var(--color-surface)]">
+        <div className="mt-4 pt-3 border-t border-surface">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-semibold text-[var(--color-text)]">
+            <span className="text-sm font-semibold text">
               {selectedNode.label}
             </span>
             <span
@@ -338,12 +338,12 @@ export default function RadarChart() {
               {selectedNode.mastery}% · {masteryLevelLabel(selectedNode.mastery)}
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-2 text-[10px] text-[var(--color-text-muted)]">
+          <div className="grid grid-cols-2 gap-2 text-[10px] text-muted">
             <div>
-              学科: <span className="text-[var(--color-text-secondary)]">{selectedNode.subject}</span>
+              学科: <span className="text-secondary">{selectedNode.subject}</span>
             </div>
             <div>
-              练习: <span className="text-[var(--color-text-secondary)]">{selectedNode.attempt_count} 次</span>
+              练习: <span className="text-secondary">{selectedNode.attempt_count} 次</span>
             </div>
             <div>
               状态:{" "}
@@ -356,7 +356,7 @@ export default function RadarChart() {
             {selectedNode.blocked_by.length > 0 && (
               <div className="col-span-2">
                 前置依赖:{" "}
-                <span className="text-[var(--color-text-secondary)]">
+                <span className="text-secondary">
                   {selectedNode.blocked_by.join(", ")}
                 </span>
               </div>
@@ -366,7 +366,7 @@ export default function RadarChart() {
       )}
 
       {/* Legend */}
-      <div className="flex items-center gap-3 mt-3 pt-3 border-t border-[var(--color-surface)] text-[9px] text-[var(--color-text-muted)]">
+      <div className="flex items-center gap-3 mt-3 pt-3 border-t border-surface text-[9px] text-muted">
         <span className="flex items-center gap-1">
           <span className="w-2 h-2" style={{ backgroundColor: "#22c55e" }} />
           已掌握 ≥80%

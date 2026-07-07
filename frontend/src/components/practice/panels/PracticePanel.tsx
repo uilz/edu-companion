@@ -188,22 +188,22 @@ export default function PracticePanel({ nodeId, nodeLabel, bankId, onClose }: Pr
       {/* 进度条 */}
       <div className="px-4 pt-3 pb-2">
         <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[10px] text-[var(--color-text-muted)]">
+          <span className="text-[10px] text-muted">
             第 {currentIdx + 1}/{session?.total_count}
           </span>
-          <span className="text-[10px] text-[var(--color-text-muted)]">
+          <span className="text-[10px] text-muted">
             {results.filter(r => r.is_correct).length} 正确 · {results.filter(r => !r.is_correct).length} 错误
           </span>
         </div>
-        <div className="w-full h-1 bg-[var(--color-border)]/50 rounded-full overflow-hidden flex">
-          <div className="h-full bg-green-400 transition-all" style={{ width: `${(answeredCount > 0 ? (results.filter(r => r.is_correct).length / session!.total_count) * 100 : 0)}%` }} />
-          <div className="h-full bg-red-400 transition-all" style={{ width: `${(answeredCount > 0 ? (results.filter(r => !r.is_correct).length / session!.total_count) * 100 : 0)}%` }} />
+        <div className="w-full h-1 bg-divider/50 rounded-full overflow-hidden flex">
+          <div className="h-full bg-success/80 transition-all" style={{ width: `${(answeredCount > 0 ? (results.filter(r => r.is_correct).length / session!.total_count) * 100 : 0)}%` }} />
+          <div className="h-full bg-danger/80 transition-all" style={{ width: `${(answeredCount > 0 ? (results.filter(r => !r.is_correct).length / session!.total_count) * 100 : 0)}%` }} />
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pb-4">
         {submitError && (
-          <div className="mb-3 p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-[11px] text-red-600">
+          <div className="mb-3 p-2 rounded-lg bg-danger/10 border border-danger/20 text-[11px] text-danger">
             {submitError}
           </div>
         )}
@@ -236,8 +236,8 @@ export default function PracticePanel({ nodeId, nodeLabel, bankId, onClose }: Pr
 function LoadingScreen() {
   return (
     <div className="flex flex-col items-center justify-center h-full">
-      <Loader2 size={22} className="animate-spin text-[var(--color-accent)] mb-3" />
-      <p className="text-xs text-[var(--color-text-muted)]">正在出题...</p>
+      <Loader2 size={22} className="animate-spin text-accent mb-3" />
+      <p className="text-xs text-muted">正在出题...</p>
     </div>
   );
 }
@@ -245,10 +245,10 @@ function LoadingScreen() {
 function ErrorScreen({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center h-full px-6">
-      <X size={22} className="text-red-500 mb-3" />
-      <p className="text-sm text-[var(--color-text)] mb-4 text-center">{message}</p>
+      <X size={22} className="text-danger mb-3" />
+      <p className="text-sm text mb-4 text-center">{message}</p>
       <button onClick={onRetry}
-        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-xs font-medium">
+        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-xs font-medium">
         <RotateCcw size={12} />返回重试
       </button>
     </div>
@@ -286,10 +286,10 @@ function IdleScreen({
     <div className="flex flex-col items-center justify-center h-full px-6">
       {/* 标题 */}
       <div className="text-center mb-6">
-        <div className="w-12 h-12 rounded-xl bg-[var(--color-accent)]/10 flex items-center justify-center mx-auto mb-2">
-          <Brain size={22} className="text-[var(--color-accent)]" />
+        <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center mx-auto mb-2">
+          <Brain size={22} className="text-accent" />
         </div>
-        <h3 className="text-sm font-semibold text-[var(--color-text)]">
+        <h3 className="text-sm font-semibold text">
           {nodeLabel || "智能练习"}
         </h3>
       </div>
@@ -297,9 +297,9 @@ function IdleScreen({
       {/* 题库选择 */}
       {banks.length > 1 && (
         <div className="w-full mb-4">
-          <p className="text-[10px] text-[var(--color-text-muted)] mb-2 font-medium">选择题库</p>
+          <p className="text-[10px] text-muted mb-2 font-medium">选择题库</p>
           <select value={selectedBankId} onChange={e => setSelectedBankId(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-xs">
+            className="w-full px-3 py-2 rounded-lg border border bg-surface text-xs">
             {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         </div>
@@ -308,21 +308,21 @@ function IdleScreen({
       {/* 参考资料选择 */}
       <div className="w-full mb-4">
         <button onClick={() => { if (!showPicker) loadMaterials(); setShowPicker(!showPicker); }}
-          className="flex items-center gap-1.5 text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-accent)] mb-2 transition-colors">
+          className="flex items-center gap-1.5 text-[10px] text-muted hover:text-accent mb-2 transition-colors">
           <BookOpen size={12} />{showPicker ? "收起" : selectedMaterialIds.length > 0 ? `已选 ${selectedMaterialIds.length} 份资料` : "基于资料出题"}
         </button>
         {showPicker && (
-          <div className="p-3 rounded-lg border border-[var(--color-border)]/50 bg-[var(--color-surface)] max-h-40 overflow-y-auto">
+          <div className="p-3 rounded-lg border border/50 bg-surface max-h-40 overflow-y-auto">
             {loadingMaterials ? (
-              <div className="flex items-center justify-center py-3"><Loader2 size={12} className="animate-spin text-[var(--color-text-muted)]" /><span className="ml-1.5 text-[10px] text-[var(--color-text-muted)]">加载中...</span></div>
+              <div className="flex items-center justify-center py-3"><Loader2 size={12} className="animate-spin text-muted" /><span className="ml-1.5 text-[10px] text-muted">加载中...</span></div>
             ) : materials.length === 0 ? (
-              <p className="text-[10px] text-[var(--color-text-muted)] text-center py-3">暂无资料</p>
+              <p className="text-[10px] text-muted text-center py-3">暂无资料</p>
             ) : (
               <div className="space-y-1">
                 {materials.map(m => (
-                  <label key={m.material_id} className={`flex items-center gap-2 p-2 rounded-md cursor-pointer ${selectedMaterialIds.includes(m.material_id) ? "bg-[var(--color-accent)]/10" : "hover:bg-[var(--color-bg)]"}`}>
-                    <input type="checkbox" checked={selectedMaterialIds.includes(m.material_id)} onChange={() => toggleMaterial(m.material_id)} className="accent-[var(--color-accent)]" />
-                    <span className="text-[10px] text-[var(--color-text)] truncate">{m.file_name}</span>
+                  <label key={m.material_id} className={`flex items-center gap-2 p-2 rounded-md cursor-pointer ${selectedMaterialIds.includes(m.material_id) ? "bg-accent/10" : "hover:bg-page"}`}>
+                    <input type="checkbox" checked={selectedMaterialIds.includes(m.material_id)} onChange={() => toggleMaterial(m.material_id)} className="accent-accent" />
+                    <span className="text-[10px] text truncate">{m.file_name}</span>
                   </label>
                 ))}
               </div>
@@ -332,7 +332,7 @@ function IdleScreen({
         {selectedMaterialIds.length > 0 && !showPicker && (
           <div className="flex flex-wrap gap-1 mt-1">
             {materials.filter(m => selectedMaterialIds.includes(m.material_id)).map(m => (
-              <span key={m.material_id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--color-accent)]/10 text-[9px] text-[var(--color-accent)] border border-[var(--color-accent)]/30">
+              <span key={m.material_id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 text-[9px] text-accent border border-accent/30">
                 {m.file_name.slice(0, 15)}…
               </span>
             ))}
@@ -342,7 +342,7 @@ function IdleScreen({
 
       {/* 模式选择 */}
       <div className="w-full mb-4">
-        <p className="text-[10px] text-[var(--color-text-muted)] mb-2 font-medium">练习模式</p>
+        <p className="text-[10px] text-muted mb-2 font-medium">练习模式</p>
         <div className="grid grid-cols-3 gap-2">
           {[
             { key: "adaptive", label: "自适应", icon: <Brain size={13} /> },
@@ -350,9 +350,9 @@ function IdleScreen({
             { key: "challenge", label: "挑战", icon: <Sparkles size={13} /> },
           ].map(m => (
             <button key={m.key} onClick={() => setMode(m.key)}
-              className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-all ${mode === m.key ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10" : "border-[var(--color-border)]/50 bg-[var(--color-surface)] hover:border-[var(--color-accent)]/30"}`}>
-              <span className={mode === m.key ? "text-[var(--color-accent)]" : "text-[var(--color-text-muted)]"}>{m.icon}</span>
-              <span className={`text-[11px] font-medium ${mode === m.key ? "text-[var(--color-accent)]" : "text-[var(--color-text)]"}`}>{m.label}</span>
+              className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-all ${mode === m.key ? "border-accent bg-accent/10" : "border/50 bg-surface hover:border-accent/30"}`}>
+              <span className={mode === m.key ? "text-accent" : "text-muted"}>{m.icon}</span>
+              <span className={`text-[11px] font-medium ${mode === m.key ? "text-accent" : "text"}`}>{m.label}</span>
             </button>
           ))}
         </div>
@@ -360,11 +360,11 @@ function IdleScreen({
 
       {/* 题数 */}
       <div className="w-full mb-4">
-        <p className="text-[10px] text-[var(--color-text-muted)] mb-2 font-medium">题数</p>
+        <p className="text-[10px] text-muted mb-2 font-medium">题数</p>
         <div className="flex gap-2">
           {[3, 5, 10].map(n => (
             <button key={n} onClick={() => setCount(n)}
-              className={`flex-1 py-2 rounded-lg border text-center text-sm font-medium transition-all ${count === n ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]" : "border-[var(--color-border)]/50 bg-[var(--color-surface)] text-[var(--color-text)] hover:border-[var(--color-accent)]/30"}`}>
+              className={`flex-1 py-2 rounded-lg border text-center text-sm font-medium transition-all ${count === n ? "border-accent bg-accent/10 text-accent" : "border/50 bg-surface text hover:border-accent/30"}`}>
               {n} 题
             </button>
           ))}
@@ -373,7 +373,7 @@ function IdleScreen({
 
       {/* 难度 */}
       <div className="w-full mb-6">
-        <p className="text-[10px] text-[var(--color-text-muted)] mb-2 font-medium">难度</p>
+        <p className="text-[10px] text-muted mb-2 font-medium">难度</p>
         <div className="flex gap-2">
           {[
             { key: "auto", label: "自适应" },
@@ -382,7 +382,7 @@ function IdleScreen({
             { key: "hard", label: "困难" },
           ].map(d => (
             <button key={d.key} onClick={() => setDifficulty(d.key)}
-              className={`flex-1 py-2 rounded-lg border text-center text-xs font-medium transition-all ${difficulty === d.key ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]" : "border-[var(--color-border)]/50 bg-[var(--color-surface)] text-[var(--color-text)] hover:border-[var(--color-accent)]/30"}`}>
+              className={`flex-1 py-2 rounded-lg border text-center text-xs font-medium transition-all ${difficulty === d.key ? "border-accent bg-accent/10 text-accent" : "border/50 bg-surface text hover:border-accent/30"}`}>
               {d.label}
             </button>
           ))}
@@ -390,10 +390,10 @@ function IdleScreen({
       </div>
 
       <button onClick={onStart}
-        className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity">
+        className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-accent text-white text-sm font-medium hover:opacity-90 transition-opacity">
         <Play size={14} />开始练习
       </button>
-      <p className="mt-3 text-[9px] text-[var(--color-text-muted)]">键盘: 1-4 选答案 · Enter 提交/下一题</p>
+      <p className="mt-3 text-[9px] text-muted">键盘: 1-4 选答案 · Enter 提交/下一题</p>
     </div>
   );
 }

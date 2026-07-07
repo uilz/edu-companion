@@ -90,23 +90,23 @@ export default function ProjectsPanel({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-      <div className="w-full max-w-lg mx-4 max-h-[80vh] flex flex-col bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-xl overflow-hidden">
+      <div className="w-full max-w-lg mx-4 max-h-[80vh] flex flex-col bg-surface border border rounded-xl shadow-xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[var(--color-accent)]/10 flex items-center justify-center text-[var(--color-accent)]">
+            <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center text-accent">
               <Rocket size={16} />
             </div>
             <div>
               <span className="text-sm font-semibold">探索项目</span>
-              <p className="text-[10px] text-[var(--color-text-muted)]">
+              <p className="text-[10px] text-muted">
                 基于知识点生成动手实践任务
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]"
+            className="p-1.5 rounded-lg hover:bg-surface-hover text-muted"
           >
             <X size={14} />
           </button>
@@ -115,7 +115,7 @@ export default function ProjectsPanel({
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {/* Message */}
           {message && (
-            <div className="p-2.5 rounded-lg text-xs bg-[var(--color-accent)]/5 border border-[var(--color-accent])/20">
+            <div className="p-2.5 rounded-lg text-xs bg-accent/5 border border-accent/20">
               {message}
             </div>
           )}
@@ -125,7 +125,7 @@ export default function ProjectsPanel({
             <button
               onClick={handleGenerate}
               disabled={generating}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
+              className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium bg-accent text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
             >
               {generating ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -143,17 +143,17 @@ export default function ProjectsPanel({
           {/* Project list */}
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 size={18} className="animate-spin text-[var(--color-text-muted)]" />
+              <Loader2 size={18} className="animate-spin text-muted" />
             </div>
           ) : projects.length === 0 ? (
             <div className="flex flex-col items-center py-8 text-center">
-              <div className="w-12 h-12 rounded-full bg-[var(--color-surface-hover)] flex items-center justify-center mb-3">
-                <Rocket size={20} className="text-[var(--color-text-muted)]" />
+              <div className="w-12 h-12 rounded-full bg-surface-hover flex items-center justify-center mb-3">
+                <Rocket size={20} className="text-muted" />
               </div>
-              <p className="text-xs text-[var(--color-text-muted)]">
+              <p className="text-xs text-muted">
                 还没有探索项目
               </p>
-              <p className="text-[10px] text-[var(--color-text-muted)] mt-1 opacity-60">
+              <p className="text-[10px] text-muted mt-1 opacity-60">
                 选择一个知识点，点击上方按钮生成
               </p>
             </div>
@@ -164,11 +164,11 @@ export default function ProjectsPanel({
                 return (
                   <div
                     key={project.id}
-                    className="p-3 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] hover:border-[var(--color-accent)]/30 transition-all"
+                    className="p-3 rounded-xl bg-page border border hover:border-accent/30 transition-all"
                   >
                     {/* Title + status */}
                     <div className="flex items-start justify-between gap-2">
-                      <span className="text-sm font-medium text-[var(--color-text)]">
+                      <span className="text-sm font-medium text">
                         {project.title}
                       </span>
                       <span
@@ -184,20 +184,20 @@ export default function ProjectsPanel({
 
                     {/* Description */}
                     {project.description && (
-                      <p className="text-[11px] text-[var(--color-text-muted)] mt-1 line-clamp-2">
+                      <p className="text-[11px] text-muted mt-1 line-clamp-2">
                         {project.description}
                       </p>
                     )}
 
                     {/* Goal */}
                     {project.goal && (
-                      <p className="text-[10px] text-[var(--color-text)] italic mt-1 line-clamp-1">
+                      <p className="text-[10px] text italic mt-1 line-clamp-1">
                         🎯 {project.goal}
                       </p>
                     )}
 
                     {/* Metadata */}
-                    <div className="flex items-center gap-3 mt-2 text-[10px] text-[var(--color-text-muted)]">
+                    <div className="flex items-center gap-3 mt-2 text-[10px] text-muted">
                       {project.difficulty > 0 && (
                         <span className="flex items-center gap-0.5">
                           <BarChart3 size={10} />
@@ -228,7 +228,7 @@ export default function ProjectsPanel({
                         {project.deliverables.map((d, i) => (
                           <span
                             key={i}
-                            className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]"
+                            className="text-[9px] px-1.5 py-0.5 rounded bg-surface-hover text-muted"
                           >
                             {d}
                           </span>
@@ -240,7 +240,7 @@ export default function ProjectsPanel({
               })}
 
               {/* Count */}
-              <p className="text-[10px] text-[var(--color-text-muted)] text-center pt-1">
+              <p className="text-[10px] text-muted text-center pt-1">
                 共 {projects.length} 个项目
               </p>
             </div>

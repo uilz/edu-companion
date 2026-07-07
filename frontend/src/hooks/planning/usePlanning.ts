@@ -425,6 +425,7 @@ export async function createPlanItem(body: {
   priority?: number;
   scheduled_for?: string;
   plan_date?: string;
+  is_mood_rule_affected?: boolean;
 }): Promise<PlanItem> {
   return api<PlanItem>("/api/planning/items", {
     method: "POST",

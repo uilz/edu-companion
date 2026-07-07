@@ -25,7 +25,7 @@ export function FileDropZone({
   onClick,
   className = "",
   children,
-  activeClassName = "ring-2 ring-[var(--color-accent)]",
+  activeClassName = "ring-2 ring-accent",
 }: FileDropZoneProps) {
   const dropId = useId();
   const { setNodeRef, isOver } = useDroppable({ id: `file-drop-${dropId}` });

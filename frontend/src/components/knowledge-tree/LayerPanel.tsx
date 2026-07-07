@@ -65,14 +65,14 @@ export default function LayerPanel({
       return (
         <div key={node.id}>
           <div
-            className={`lp-item flex items-center gap-1 px-3 py-1.5 cursor-pointer text-[11px] transition-colors hover:bg-[var(--color-surface-hover)] ${
-              isSelected ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)] font-medium" : ""
+            className={`lp-item flex items-center gap-1 px-3 py-1.5 cursor-pointer text-[11px] transition-colors hover:bg-surface-hover ${
+              isSelected ? "bg-accent/10 text-accent font-medium" : ""
             }`}
             style={{ paddingLeft: `${12 + depth * 14}px` }}
             onClick={() => onNodeSelect(node)}>
             {/* 折叠/展开 */}
             {children.length > 0 ? (
-              <span className="w-4 flex-shrink-0 flex items-center justify-center text-[var(--color-text-muted)] cursor-pointer"
+              <span className="w-4 flex-shrink-0 flex items-center justify-center text-muted cursor-pointer"
                 onClick={(e) => {
                   e.stopPropagation();
                   const newSet = new Set(collapsedIds);
@@ -84,7 +84,7 @@ export default function LayerPanel({
             ) : <span className="w-4" />}
 
             {/* 名称 */}
-            <span className={`flex-1 truncate ${isMatched ? "text-[var(--color-accent)] font-medium" : ""}`}>
+            <span className={`flex-1 truncate ${isMatched ? "text-accent font-medium" : ""}`}>
               {isMatched ? highlightMatch(node.label, searchQuery) : node.label}
             </span>
 
@@ -106,31 +106,31 @@ export default function LayerPanel({
   }, [graphData, collapsedIds, selectedNodeId, matchedNodeIds, searchQuery, onNodeSelect]);
 
   return (
-    <div className="absolute top-3 left-3 w-[220px] bg-[var(--color-surface-elevated)] border border-[var(--color-border)] rounded-xl shadow-md z-30 overflow-hidden">
+    <div className="absolute top-3 left-3 w-[220px] bg-surface-elevated border border rounded-xl shadow-md z-30 overflow-hidden">
       {/* 标题 */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--color-border)]">
-        <span className="text-[11px] font-semibold text-[var(--color-text)]">📂 层级导航</span>
+      <div className="flex items-center justify-between px-3 py-2 border-b border">
+        <span className="text-[11px] font-semibold text">📂 层级导航</span>
         <div className="flex items-center gap-1">
           <button
             onClick={toggleExpandAll}
-            className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] p-0.5 rounded transition-colors"
+            className="text-muted hover:text p-0.5 rounded transition-colors"
             title={hasAnyCollapsed ? "全部展开" : "全部折叠"}
           >
             {hasAnyCollapsed ? <ChevronsDownUp size={12} /> : <ChevronsUpDown size={12} />}
           </button>
-          <button onClick={onClose} className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] p-0.5 rounded transition-colors">
+          <button onClick={onClose} className="text-muted hover:text p-0.5 rounded transition-colors">
             <X size={12} />
           </button>
         </div>
       </div>
 
       {/* 搜索 */}
-      <div className="px-3 py-2 border-b border-[var(--color-border)]">
+      <div className="px-3 py-2 border-b border">
         <div className="relative">
           <input value={searchQuery} onChange={e => onSearchChange(e.target.value)}
             placeholder="搜索节点…"
-            className="w-full pl-6 pr-2 py-1 text-[11px] border border-[var(--color-border)] rounded-lg bg-[var(--color-page-secondary)] focus:outline-none focus:border-[var(--color-accent)]" />
-          <Search size={11} className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
+            className="w-full pl-6 pr-2 py-1 text-[11px] border border rounded-lg bg-page-secondary focus:outline-none focus:border-accent" />
+          <Search size={11} className="absolute left-1.5 top-1/2 -translate-y-1/2 text-muted" />
         </div>
       </div>
 
@@ -140,15 +140,15 @@ export default function LayerPanel({
       </div>
 
       {/* 掌握度筛选 — 匹配 demo */}
-      <div className="px-3 py-2 border-t border-[var(--color-border)] space-y-1.5">
-        <span className="text-[9px] text-[var(--color-text-muted)] font-medium">掌握度</span>
+      <div className="px-3 py-2 border-t border space-y-1.5">
+        <span className="text-[9px] text-muted font-medium">掌握度</span>
         <div className="flex flex-wrap gap-1">
           {([
-            { key: "mastered", label: "已掌握", icon: "✅", color: "text-[var(--color-success)]" },
-            { key: "learning", label: "学习中", icon: "📖", color: "text-[var(--color-warning)]" },
-            { key: "untouched", label: "未开始", icon: "📐", color: "text-[var(--color-text-muted)]" },
+            { key: "mastered", label: "已掌握", icon: "✅", color: "text-success" },
+            { key: "learning", label: "学习中", icon: "📖", color: "text-warning" },
+            { key: "untouched", label: "未开始", icon: "📐", color: "text-muted" },
           ] as const).map(({ key, label, icon, color }) => (
-            <label key={key} className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] cursor-pointer hover:bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]">
+            <label key={key} className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] cursor-pointer hover:bg-surface-hover text-muted">
               <input
                 type="checkbox"
                 checked={masteryFilterSet.has(key)}
@@ -159,7 +159,7 @@ export default function LayerPanel({
                   else next.delete(key);
                   onMasteryFilterChange(next);
                 }}
-                className="w-2.5 h-2.5 accent-[var(--color-accent)]"
+                className="w-2.5 h-2.5 accent-accent"
               />
               <span className={color}>{icon} {label}</span>
             </label>
@@ -168,15 +168,15 @@ export default function LayerPanel({
       </div>
 
       {/* 层级筛选 */}
-      <div className="px-3 py-2 border-t border-[var(--color-border)] space-y-1.5">
-        <span className="text-[9px] text-[var(--color-text-muted)] font-medium">层级筛选</span>
+      <div className="px-3 py-2 border-t border space-y-1.5">
+        <span className="text-[9px] text-muted font-medium">层级筛选</span>
         <div className="flex flex-wrap gap-1">
           {Object.entries(LEVEL_LABELS).map(([level, label]) => (
             <button key={level} onClick={() => onMaxLevelChange(maxDisplayLevel === level ? undefined : level)}
               className={`px-2 py-0.5 rounded text-[9px] transition-all ${
                 maxDisplayLevel === level
-                  ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)] border border-[var(--color-accent)]/30"
-                  : "text-[var(--color-text-muted)] hover:text-[var(--color-text)] border border-transparent"
+                  ? "bg-accent/10 text-accent border border-accent/30"
+                  : "text-muted hover:text border border-transparent"
               }`}>
               {label}
             </button>
@@ -195,7 +195,7 @@ function highlightMatch(text: string, query: string) {
   return (
     <>
       {text.slice(0, idx)}
-      <span className="bg-[var(--color-accent)]/20 text-[var(--color-accent)] rounded px-0.5">{text.slice(idx, idx + query.length)}</span>
+      <span className="bg-accent/20 text-accent rounded px-0.5">{text.slice(idx, idx + query.length)}</span>
       {text.slice(idx + query.length)}
     </>
   );

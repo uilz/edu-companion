@@ -14,7 +14,7 @@
 //   - 字体：Inter 14-16px / 数字 tabular-nums 28px
 //   - 圆角：8-12px（卡片 12px）
 //   - 阴影：sm 默认 + md hover
-//   - 间距：4/8/12/16/24
+//   - 间距：4/8/16
 //   - 动效：transition 150ms ease-out
 // ============================================================
 
@@ -220,8 +220,7 @@ export default function Cockpit() {
 
         {/* 1 焦点：今日该做什么 */}
         <section
-          className="cockpit-card p-5 border-accent/30"
-          style={{ borderLeftWidth: "3px", borderLeftColor: "var(--color-accent)" }}
+          className="cockpit-card p-5 border-l-[3px] border-l-accent"
         >
           <div className="flex items-center gap-2 mb-2.5">
             <Target size={14} className="text-accent" />
@@ -343,8 +342,8 @@ export default function Cockpit() {
                         <span className="text-ink-primary truncate flex-1">{s.label}</span>
                         {s.p_known != null && (
                           <span className={`text-[11px] font-medium tabular ml-2 ${
-                            g.color === "red" ? "text-red-500" :
-                            g.color === "green" ? "text-green-500" : "text-accent"
+                            g.color === "red" ? "text-danger" :
+                            g.color === "green" ? "text-success" : "text-accent"
                           }`}>
                             {(s.p_known * 100).toFixed(0)}%
                           </span>

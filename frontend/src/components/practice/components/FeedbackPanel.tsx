@@ -19,55 +19,55 @@ export default function FeedbackPanel({ isCorrect, correctAnswer, analysis, skip
   return (
     <div className={`rounded-xl p-4 border ${
       isCorrect
-        ? "bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800"
-        : "bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800"
+        ? "bg-success/10 dark:bg-success/10 border-success/20 dark:border-success/20"
+        : "bg-danger/10 dark:bg-danger/10 border-danger/20 dark:border-danger/20"
     }`}>
       <div className="flex items-center gap-2 mb-2">
         {isCorrect ? (
-          <Check size={16} className="text-green-600 dark:text-green-400" />
+          <Check size={16} className="text-success dark:text-success" />
         ) : (
           skipped
-            ? <AlertTriangle size={16} className="text-amber-500" />
-            : <X size={16} className="text-red-600 dark:text-red-400" />
+            ? <AlertTriangle size={16} className="text-warning" />
+            : <X size={16} className="text-danger dark:text-danger" />
         )}
         <span className={`text-sm font-semibold ${
           isCorrect
-            ? "text-green-700 dark:text-green-300"
+            ? "text-success dark:text-success"
             : skipped
-              ? "text-amber-700 dark:text-amber-300"
-              : "text-red-700 dark:text-red-300"
+              ? "text-warning dark:text-warning"
+              : "text-danger dark:text-danger"
         }`}>
           {isCorrect ? "回答正确！" : skipped ? "已跳过" : "回答错误"}
         </span>
         {score != null && (
-          <span className={`ml-auto text-xs font-bold ${score >= 80 ? "text-green-500" : score >= 60 ? "text-amber-500" : "text-red-500"}`}>
+          <span className={`ml-auto text-xs font-bold ${score >= 80 ? "text-success" : score >= 60 ? "text-warning" : "text-danger"}`}>
             +{score}
           </span>
         )}
       </div>
 
       {!isCorrect && correctAnswer.length > 0 && (
-        <p className="text-xs text-[var(--color-text-muted)] mb-2">
-          正确答案：<span className="font-medium text-[var(--color-text)]">{correctAnswer.join("、")}</span>
+        <p className="text-xs text-muted mb-2">
+          正确答案：<span className="font-medium text">{correctAnswer.join("、")}</span>
         </p>
       )}
 
       {analysis && (
-        <div className="mt-2 text-xs text-[var(--color-text-muted)] leading-relaxed [&_p]:m-0 [&_.katex]:text-xs">
-          <span className="font-medium text-[var(--color-text)]">解析：</span>
+        <div className="mt-2 text-xs text-muted leading-relaxed [&_p]:m-0 [&_.katex]:text-xs">
+          <span className="font-medium text">解析：</span>
           <QuestionStem stem={analysis} />
         </div>
       )}
 
       {metacognitionFeedback && (
-        <div className={`mt-3 pt-3 border-t border-[var(--color-border)]/40 text-xs leading-relaxed ${
+        <div className={`mt-3 pt-3 border-t border/40 text-xs leading-relaxed ${
           isCorrect
             ? confidenceBefore && confidenceBefore >= 3
-              ? "text-green-600 dark:text-green-400"
-              : "text-blue-600 dark:text-blue-400"
+              ? "text-success dark:text-success"
+              : "text-info dark:text-info"
             : confidenceBefore && confidenceBefore >= 3
-              ? "text-red-600 dark:text-red-400"
-              : "text-amber-600 dark:text-amber-400"
+              ? "text-danger dark:text-danger"
+              : "text-warning dark:text-warning"
         }`}>
           💬 {metacognitionFeedback}
         </div>

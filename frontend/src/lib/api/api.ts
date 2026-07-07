@@ -1,6 +1,7 @@
 // ── Shared API base URL ──
 // Import this from other modules instead of re-declaring API_BASE in each file.
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+import { navigateToLogin } from "./navigation";
 
 // ══════════════════════════════════════════════════════════════
 //  Unified request helpers — 自动附加认证令牌
@@ -47,9 +48,7 @@ async function apiFetch<T>(base: string, path: string, options?: RequestInit): P
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     localStorage.removeItem("current_user");
-    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
-      window.location.href = "/login";
-    }
+    navigateToLogin();
     throw new Error("登录已过期");
   }
 
@@ -144,11 +143,25 @@ export async function authedFetch(
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     localStorage.removeItem("current_user");
-    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
-      window.location.href = "/login";
-    }
+    navigateToLogin();
     throw new Error("登录已过期");
   }
 
   return res;
+}
+
+/**
+ * 带认证的 fetch 请求，自动解析 JSON 响应。
+ * 适用于大多数 JSON API 调用，是 auth.ts 中 authedFetch 的替代。
+ */
+export async function authedFetchJson<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
+  const res = await authedFetch(path, options);
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API ${res.status}: ${text.slice(0, 100)}`);
+  }
+  return res.json() as Promise<T>;
 }

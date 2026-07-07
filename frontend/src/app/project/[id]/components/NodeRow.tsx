@@ -69,7 +69,7 @@ export function NodeRow({
       <span className="text-ink-secondary">{typeInfo.icon}</span>
       <button
         onClick={onOpen}
-        className="flex-1 text-left text-ink-primary hover:text-[var(--color-accent)] truncate"
+        className="flex-1 text-left text-ink-primary hover:text-accent truncate"
       >
         {node.title || "(无标题)"}
       </button>
@@ -83,11 +83,11 @@ export function NodeRow({
       {onComplete && (
         <button
           onClick={onComplete}
-          className="p-1 rounded text-ink-secondary hover:text-green-500"
+          className="p-1 rounded text-ink-secondary hover:text-success"
           title={node.completed_at ? "已完成" : "标记完成"}
         >
           {node.completed_at ? (
-            <CheckCircle2 size={14} className="text-green-500" />
+            <CheckCircle2 size={14} className="text-success" />
           ) : (
             <Circle size={14} />
           )}

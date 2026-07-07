@@ -110,7 +110,7 @@ export function ResizeHandle({ side, onResize, onAutoCollapse }: {
       style={{ width: 6 }}
       onMouseDown={handleMouseDown}
     >
-      <div className={`absolute inset-y-0 ${side === "left" ? "right-0.5" : "left-0.5"} w-[2px] bg-[var(--color-border)] group-hover:bg-[var(--color-accent)] transition-colors rounded-full`} />
+      <div className={`absolute inset-y-0 ${side === "left" ? "right-0.5" : "left-0.5"} w-[2px] bg-divider group-hover:bg-accent-hover transition-colors rounded-full`} />
     </div>
   );
 }

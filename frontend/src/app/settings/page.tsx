@@ -11,8 +11,48 @@ import {
 import Link from "next/link";
 import { useTheme, STYLE_LIST } from "@/contexts/ThemeContext";
 import { useRouter, useSearchParams } from "next/navigation";
-import { authedFetch, AuthUser } from "@/lib/api/auth";
+import { authedFetchJson } from "@/lib/api/api";
+import { AuthUser } from "@/lib/api/auth";
 import { useLayoutPrefs, PANEL_BOUNDS, type PanelKey } from "@/hooks/useLayoutPrefs";
+
+interface LlmSettingsResponse {
+  has_custom_config?: boolean;
+  api_base?: string;
+  api_key?: string;
+  model_name?: string;
+}
+
+interface LlmBehaviorResponse {
+  temperature?: number;
+  max_tokens?: number;
+  system_prompt?: string;
+}
+
+interface LearningSettingsResponse {
+  socratic_mode?: boolean;
+  socratic_follow_up_mode?: boolean;
+  auto_scroll_on_load?: boolean;
+}
+
+interface DeviceSession {
+  is_current?: boolean;
+  device_type?: string;
+  browser?: string;
+  os?: string;
+  ip_address?: string;
+  city?: string;
+  region?: string;
+  country?: string;
+  created_at?: string;
+}
+
+interface DataOverview {
+  partitions?: number;
+  domains?: number;
+  conversations?: number;
+  graph_nodes?: number;
+  questions?: number;
+}
 
 const SETTINGS_TABS = [
   { key: "account", label: "账户", icon: User },
@@ -37,7 +77,7 @@ export default function SettingsPage() {
     <Suspense
       fallback={
         <div className="flex items-center justify-center h-64">
-          <Loader2 size={24} className="animate-spin text-[var(--color-text-muted)]" />
+          <Loader2 size={24} className="animate-spin text-muted" />
         </div>
       }
     >
@@ -75,7 +115,7 @@ function SettingsContent() {
   );
 
   useEffect(() => {
-    authedFetch<AuthUser>("/api/auth/me")
+    authedFetchJson<AuthUser>("/api/auth/me")
       .then(setUser)
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
@@ -84,7 +124,7 @@ function SettingsContent() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 size={24} className="animate-spin text-[var(--color-text-muted)]" />
+        <Loader2 size={24} className="animate-spin text-muted" />
       </div>
     );
   }
@@ -94,25 +134,25 @@ function SettingsContent() {
       <div className="flex items-center gap-3 mb-6">
         <Link
           href="/dashboard"
-          className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+          className="text-muted hover:text"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M19 12H5M12 19l-7-7 7-7" />
           </svg>
         </Link>
-        <h1 className="text-xl font-bold text-[var(--color-text)]">设置</h1>
+        <h1 className="text-xl font-bold text">设置</h1>
       </div>
 
       {/* Tab navigation */}
-      <div className="flex gap-1 p-1 mb-6 bg-[var(--color-surface)] rounded-xl overflow-x-auto border border-[var(--color-border)]">
+      <div className="flex gap-1 p-1 mb-6 bg-surface rounded-xl overflow-x-auto border border">
         {SETTINGS_TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => switchTab(tab.key)}
             className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg whitespace-nowrap transition-colors ${
               activeTab === tab.key
-                ? "bg-[var(--color-accent)] text-white shadow-sm"
-                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]"
+                ? "bg-accent text-white shadow-sm"
+                : "text-secondary hover:text hover:bg-surface-hover"
             }`}
           >
             {tab.key === "about" ? (
@@ -128,7 +168,7 @@ function SettingsContent() {
       </div>
 
       {/* Tab content */}
-      <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-xl p-5">
+      <div className="bg-surface border border rounded-xl p-5">
         {activeTab === "account" && <AccountTab user={user} />}
         {activeTab === "security" && <SecurityTab user={user} />}
         {activeTab === "layout" && <LayoutTab />}
@@ -168,14 +208,14 @@ function AccountTab({ user }: { user: AuthUser | null }) {
     setSaving(true);
     setMsg("");
     try {
-      await authedFetch("/api/auth/me", {
+      await authedFetchJson("/api/auth/me", {
         method: "PATCH",
         body: JSON.stringify({ display_name: profileName, email: profileEmail }),
       });
       setEditing(false);
       setMsg("已保存");
-    } catch (e: any) {
-      setMsg(e.message || "保存失败");
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "保存失败");
     } finally {
       setSaving(false);
     }
@@ -185,26 +225,26 @@ function AccountTab({ user }: { user: AuthUser | null }) {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-base font-semibold text-[var(--color-text)] flex items-center gap-2">
+      <h2 className="text-base font-semibold text flex items-center gap-2">
         <User size={18} />
         账户信息
       </h2>
 
       {/* Avatar + basic info */}
-      <div className="flex items-center gap-4 p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
+      <div className="flex items-center gap-4 p-4 rounded-lg bg-surface border border">
         <div className="relative">
-          <div className={`w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold text-white ${user.avatar_url ? "" : "bg-[var(--color-accent)]"}`}
+          <div className={`w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold text-white ${user.avatar_url ? "" : "bg-accent"}`}
             style={user.avatar_url ? { backgroundImage: `url(${user.avatar_url})`, backgroundSize: "cover" } : undefined}
           >
             {user.avatar_url ? "" : (user.display_name || user.username).charAt(0).toUpperCase()}
           </div>
         </div>
         <div>
-          <div className="font-semibold text-[var(--color-text)]">{user.display_name || user.username}</div>
-          <div className="text-sm text-[var(--color-text-muted)]">@{user.username}</div>
-          {user.email && <div className="text-xs text-[var(--color-text-muted)] mt-0.5">{user.email}</div>}
+          <div className="font-semibold text">{user.display_name || user.username}</div>
+          <div className="text-sm text-muted">@{user.username}</div>
+          {user.email && <div className="text-xs text-muted mt-0.5">{user.email}</div>}
           <div className="mt-1">
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${user.role === "super_admin" ? "bg-purple-500/10 text-purple-500" : user.role === "admin" ? "bg-blue-500/10 text-blue-500" : "bg-gray-500/10 text-gray-500"}`}>
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${user.role === "super_admin" ? "bg-accent/10 text-accent" : user.role === "admin" ? "bg-info/10 text-info" : "bg-surface0/10 text-muted"}`}>
               {user.role === "super_admin" ? "超级管理员" : user.role === "admin" ? "管理员" : "用户"}
             </span>
           </div>
@@ -213,24 +253,24 @@ function AccountTab({ user }: { user: AuthUser | null }) {
 
       {/* Edit mode */}
       {editing ? (
-        <div className="space-y-3 p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
+        <div className="space-y-3 p-4 rounded-lg bg-surface border border">
           <div>
-            <label className="text-xs text-[var(--color-text-muted)] mb-1 block">显示名称</label>
+            <label className="text-xs text-muted mb-1 block">显示名称</label>
             <input
               value={profileName}
               onChange={(e) => setProfileName(e.target.value)}
               maxLength={64}
-              className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 rounded focus:outline-none focus:border-[var(--color-border-hover)]"
+              className="w-full bg-input border border text text-sm px-3 py-2 rounded focus:outline-none focus:border-hover"
             />
           </div>
           <div>
-            <label className="text-xs text-[var(--color-text-muted)] mb-1 block">邮箱</label>
+            <label className="text-xs text-muted mb-1 block">邮箱</label>
             <input
               type="email"
               value={profileEmail}
               onChange={(e) => setProfileEmail(e.target.value)}
               maxLength={128}
-              className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 rounded focus:outline-none focus:border-[var(--color-border-hover)]"
+              className="w-full bg-input border border text text-sm px-3 py-2 rounded focus:outline-none focus:border-hover"
               placeholder="可选"
             />
           </div>
@@ -238,20 +278,20 @@ function AccountTab({ user }: { user: AuthUser | null }) {
             <button
               onClick={saveProfile}
               disabled={saving}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs rounded bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50"
+              className="flex items-center gap-1 px-3 py-1.5 text-xs rounded bg-accent text-white hover:opacity-90 disabled:opacity-50"
             >
               {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
               保存
             </button>
             <button
               onClick={() => { setEditing(false); setMsg(""); }}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs rounded border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)]"
+              className="flex items-center gap-1 px-3 py-1.5 text-xs rounded border border text-secondary hover:border-hover"
             >
               <X size={12} />
               取消
             </button>
             {msg && (
-              <span className={`text-xs ml-auto ${msg.includes("失败") ? "text-red-500" : "text-green-500"}`}>
+              <span className={`text-xs ml-auto ${msg.includes("失败") ? "text-danger" : "text-success"}`}>
                 {msg}
               </span>
             )}
@@ -260,7 +300,7 @@ function AccountTab({ user }: { user: AuthUser | null }) {
       ) : (
         <button
           onClick={() => setEditing(true)}
-          className="flex items-center gap-2 text-xs text-[var(--color-accent)] hover:underline"
+          className="flex items-center gap-2 text-xs text-accent hover:underline"
         >
           <User size={12} />
           编辑资料
@@ -282,15 +322,15 @@ function SecurityTab({ user }: { user: AuthUser | null }) {
   const [pwdMsg, setPwdMsg] = useState("");
 
   // Device session data
-  const [sessions, setSessions] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<DeviceSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [kickingDevice, setKickingDevice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
     setSessionsLoading(true);
-    authedFetch<{ sessions: any[] }>("/api/auth/me/active-sessions")
-      .then((d: { sessions: any[] }) => setSessions(d.sessions || []))
+    authedFetchJson<{ sessions: DeviceSession[] }>("/api/auth/me/active-sessions")
+      .then((d) => setSessions(d.sessions || []))
       .catch(() => setSessions([]))
       .finally(() => setSessionsLoading(false));
   }, [user]);
@@ -298,7 +338,7 @@ function SecurityTab({ user }: { user: AuthUser | null }) {
   const handleLogoutOthers = async () => {
     setKickingDevice("all");
     try {
-      await authedFetch("/api/auth/me/logout-other-devices", { method: "POST" });
+      await authedFetchJson("/api/auth/me/logout-other-devices", { method: "POST" });
       setSessions((prev) =>
         prev.filter((s) => s.is_current)
       );
@@ -313,15 +353,15 @@ function SecurityTab({ user }: { user: AuthUser | null }) {
     setPwdSaving(true);
     setPwdMsg("");
     try {
-      await authedFetch("/api/auth/change-password", {
+      await authedFetchJson("/api/auth/change-password", {
         method: "POST",
         body: JSON.stringify({ old_password: oldPwd, new_password: newPwd }),
       });
       setPwdMsg("密码修改成功");
       setPwdOpen(false);
       setOldPwd(""); setNewPwd(""); setNewPwd2("");
-    } catch (e: any) {
-      setPwdMsg(e.message || "修改失败");
+    } catch (e: unknown) {
+      setPwdMsg(e instanceof Error ? e.message : "修改失败");
     } finally {
       setPwdSaving(false);
     }
@@ -343,64 +383,64 @@ function SecurityTab({ user }: { user: AuthUser | null }) {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-base font-semibold text-[var(--color-text)] flex items-center gap-2">
+      <h2 className="text-base font-semibold text flex items-center gap-2">
         <Shield size={18} />
         安全设置
       </h2>
 
       {/* 修改密码 */}
-      <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] space-y-3">
+      <div className="p-4 rounded-lg bg-surface border border space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-sm font-semibold text-[var(--color-text)]">修改密码</div>
-            <p className="text-xs text-[var(--color-text-muted)] mt-0.5">定期修改密码可以提高账户安全性</p>
+            <div className="text-sm font-semibold text">修改密码</div>
+            <p className="text-xs text-muted mt-0.5">定期修改密码可以提高账户安全性</p>
           </div>
           <button
             onClick={() => { setPwdOpen(!pwdOpen); setPwdMsg(""); }}
-            className="px-3 py-1.5 text-xs rounded border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)]"
+            className="px-3 py-1.5 text-xs rounded border border text-secondary hover:border-hover"
           >
             {pwdOpen ? "收起" : "修改"}
           </button>
         </div>
 
         {pwdOpen && (
-          <div className="space-y-3 pt-3 border-t border-[var(--color-border)]">
+          <div className="space-y-3 pt-3 border-t border">
             <div>
-              <label className="text-xs text-[var(--color-text-muted)] mb-1 block">当前密码</label>
+              <label className="text-xs text-muted mb-1 block">当前密码</label>
               <div className="relative">
                 <input
                   type={pwdShow ? "text" : "password"}
                   value={oldPwd}
                   onChange={(e) => setOldPwd(e.target.value)}
-                  className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 pr-10 rounded focus:outline-none focus:border-[var(--color-border-hover)]"
+                  className="w-full bg-input border border text text-sm px-3 py-2 pr-10 rounded focus:outline-none focus:border-hover"
                   placeholder="输入当前密码"
                 />
                 <button
                   type="button"
                   onClick={() => setPwdShow(!pwdShow)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text"
                 >
                   {pwdShow ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
             </div>
             <div>
-              <label className="text-xs text-[var(--color-text-muted)] mb-1 block">新密码</label>
+              <label className="text-xs text-muted mb-1 block">新密码</label>
               <input
                 type="password"
                 value={newPwd}
                 onChange={(e) => setNewPwd(e.target.value)}
-                className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 rounded focus:outline-none focus:border-[var(--color-border-hover)]"
+                className="w-full bg-input border border text text-sm px-3 py-2 rounded focus:outline-none focus:border-hover"
                 placeholder="至少6位"
               />
             </div>
             <div>
-              <label className="text-xs text-[var(--color-text-muted)] mb-1 block">确认新密码</label>
+              <label className="text-xs text-muted mb-1 block">确认新密码</label>
               <input
                 type="password"
                 value={newPwd2}
                 onChange={(e) => setNewPwd2(e.target.value)}
-                className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 rounded focus:outline-none focus:border-[var(--color-border-hover)]"
+                className="w-full bg-input border border text text-sm px-3 py-2 rounded focus:outline-none focus:border-hover"
                 placeholder="再次输入新密码"
               />
             </div>
@@ -408,13 +448,13 @@ function SecurityTab({ user }: { user: AuthUser | null }) {
               <button
                 onClick={handleChangePwd}
                 disabled={pwdSaving}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs rounded bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50"
+                className="flex items-center gap-1 px-3 py-1.5 text-xs rounded bg-accent text-white hover:opacity-90 disabled:opacity-50"
               >
                 {pwdSaving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
                 确认修改
               </button>
               {pwdMsg && (
-                <span className={`text-xs ${pwdMsg.includes("成功") ? "text-green-500" : "text-red-500"}`}>
+                <span className={`text-xs ${pwdMsg.includes("成功") ? "text-success" : "text-danger"}`}>
                   {pwdMsg}
                 </span>
               )}
@@ -424,20 +464,20 @@ function SecurityTab({ user }: { user: AuthUser | null }) {
       </div>
 
       {/* 设备管理 */}
-      <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] space-y-3">
+      <div className="p-4 rounded-lg bg-surface border border space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-sm font-semibold text-[var(--color-text)] flex items-center gap-1.5">
+            <div className="text-sm font-semibold text flex items-center gap-1.5">
               <Monitor size={14} />
               登录设备
             </div>
-            <p className="text-xs text-[var(--color-text-muted)] mt-0.5">最近24小时内登录的设备</p>
+            <p className="text-xs text-muted mt-0.5">最近24小时内登录的设备</p>
           </div>
           {sessions.length > 1 && (
             <button
               onClick={handleLogoutOthers}
               disabled={kickingDevice === "all"}
-              className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded border border-red-500/30 text-red-500 hover:bg-red-500/10 disabled:opacity-50 transition-colors"
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded border border-danger/30 text-danger hover:bg-danger/10 disabled:opacity-50 transition-colors"
             >
               {kickingDevice === "all" ? <Loader2 size={12} className="animate-spin" /> : <LogOut size={12} />}
               踢出其他设备
@@ -447,29 +487,29 @@ function SecurityTab({ user }: { user: AuthUser | null }) {
 
         {sessionsLoading ? (
           <div className="flex justify-center py-4">
-            <Loader2 size={16} className="animate-spin text-[var(--color-text-muted)]" />
+            <Loader2 size={16} className="animate-spin text-muted" />
           </div>
         ) : sessions.length === 0 ? (
-          <p className="text-xs text-[var(--color-text-muted)] text-center py-4">暂无设备记录</p>
+          <p className="text-xs text-muted text-center py-4">暂无设备记录</p>
         ) : (
           <div className="space-y-1.5 max-h-64 overflow-y-auto">
             {sessions.map((session, i) => (
               <div key={i} className={`flex items-center gap-3 py-2 px-3 rounded-lg text-xs border ${
                 session.is_current
-                  ? "border-[var(--color-accent)]/20 bg-[var(--color-accent)]/5"
-                  : "border-[var(--color-border)]/30"
+                  ? "border-accent/20 bg-accent/5"
+                  : "border/30"
               }`}>
                 <span className="text-base">
                   {session.device_type === "mobile" ? <Smartphone size={16} /> : <Monitor size={16} />}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[var(--color-text)] font-medium">
+                  <div className="text font-medium">
                     {session.browser} · {session.os}
                     {session.is_current && (
-                      <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--color-accent)]/15 text-[var(--color-accent)] font-medium">当前</span>
+                      <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-accent/15 text-accent font-medium">当前</span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 text-[var(--color-text-muted)] mt-0.5">
+                  <div className="flex items-center gap-2 text-muted mt-0.5">
                     <MapPin size={10} />
                     <span>{session.ip_address || "未知IP"}</span>
                     {[session.city, session.region, session.country].filter(Boolean).join(" · ") && (
@@ -477,7 +517,7 @@ function SecurityTab({ user }: { user: AuthUser | null }) {
                     )}
                   </div>
                 </div>
-                <span className="text-[10px] text-[var(--color-text-muted)] whitespace-nowrap">
+                <span className="text-[10px] text-muted whitespace-nowrap">
                   {session.created_at?.slice(0, 16)}
                 </span>
               </div>
@@ -487,10 +527,10 @@ function SecurityTab({ user }: { user: AuthUser | null }) {
       </div>
 
       {/* 退出登录 + 注销 */}
-      <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] space-y-3">
+      <div className="p-4 rounded-lg bg-surface border border space-y-3">
         <button
           onClick={logout}
-          className="flex items-center gap-2 text-sm text-red-500 hover:text-red-600"
+          className="flex items-center gap-2 text-sm text-danger hover:text-danger"
         >
           <LogOut size={16} />
           退出登录
@@ -535,8 +575,8 @@ function LlmTab({ user }: { user: AuthUser | null }) {
     if (!user) return;
     setLoading(true);
     Promise.all([
-      authedFetch<any>("/api/settings/llm").catch(() => null),
-      authedFetch<any>("/api/settings/llm-behavior").catch(() => null),
+      authedFetchJson<LlmSettingsResponse>("/api/settings/llm").catch(() => null),
+      authedFetchJson<LlmBehaviorResponse>("/api/settings/llm-behavior").catch(() => null),
     ])
       .then(([llm, behavior]) => {
         // Task #84: B2 修复 — 优先从服务端读取, localStorage 作为临时缓存
@@ -572,7 +612,7 @@ function LlmTab({ user }: { user: AuthUser | null }) {
     } catch { /* */ }
     // 同步服务端
     try {
-      await authedFetch("/api/settings/llm-behavior", {
+      await authedFetchJson("/api/settings/llm-behavior", {
         method: "PUT",
         body: JSON.stringify({
           temperature: patch.temperature,
@@ -590,7 +630,7 @@ function LlmTab({ user }: { user: AuthUser | null }) {
     setSaving(true);
     setMsg("");
     try {
-      await authedFetch("/api/settings/llm", {
+      await authedFetchJson("/api/settings/llm", {
         method: "PUT",
         body: JSON.stringify({
           api_base: settings.apiEndpoint,
@@ -606,8 +646,8 @@ function LlmTab({ user }: { user: AuthUser | null }) {
       });
       setMsg("配置已保存");
       setHasCustom(true);
-    } catch (e: any) {
-      setMsg(e.message || "保存失败");
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "保存失败");
     } finally {
       setSaving(false);
     }
@@ -618,9 +658,9 @@ function LlmTab({ user }: { user: AuthUser | null }) {
     setSaving(true);
     setMsg("");
     try {
-      await authedFetch("/api/settings/llm", { method: "DELETE" });
+      await authedFetchJson("/api/settings/llm", { method: "DELETE" });
       // Task #84: 重置 LLM 行为参数
-      await authedFetch("/api/settings/llm-behavior", { method: "PUT",
+      await authedFetchJson("/api/settings/llm-behavior", { method: "PUT",
         body: JSON.stringify({ temperature: 0.7, max_tokens: 2048, system_prompt: "" }),
       });
       setSettings((s) => ({
@@ -630,8 +670,8 @@ function LlmTab({ user }: { user: AuthUser | null }) {
       }));
       setHasCustom(false);
       setMsg("已恢复为系统默认");
-    } catch (e: any) {
-      setMsg(e.message || "重置失败");
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "重置失败");
     } finally {
       setSaving(false);
     }
@@ -641,31 +681,31 @@ function LlmTab({ user }: { user: AuthUser | null }) {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-base font-semibold text-[var(--color-text)] flex items-center gap-2">
+      <h2 className="text-base font-semibold text flex items-center gap-2">
         <Cpu size={18} />
         LLM 配置
       </h2>
 
       {loading ? (
         <div className="flex justify-center py-4">
-          <Loader2 size={16} className="animate-spin text-[var(--color-text-muted)]" />
+          <Loader2 size={16} className="animate-spin text-muted" />
         </div>
       ) : (
         <div className="space-y-4">
           <div>
-            <label className="flex items-center gap-2 text-xs text-[var(--color-text-muted)] mb-1.5">
+            <label className="flex items-center gap-2 text-xs text-muted mb-1.5">
               <Key size={12} />
               API 端点
             </label>
             <input
               value={settings.apiEndpoint}
               onChange={(e) => setSettings((s) => ({ ...s, apiEndpoint: e.target.value }))}
-              className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 rounded focus:outline-none focus:border-[var(--color-border-hover)] font-mono"
+              className="w-full bg-input border border text text-sm px-3 py-2 rounded focus:outline-none focus:border-hover font-mono"
               placeholder="https://api.openai.com/v1"
             />
           </div>
           <div>
-            <label className="flex items-center gap-2 text-xs text-[var(--color-text-muted)] mb-1.5">
+            <label className="flex items-center gap-2 text-xs text-muted mb-1.5">
               <Shield size={12} />
               API Key
             </label>
@@ -673,26 +713,26 @@ function LlmTab({ user }: { user: AuthUser | null }) {
               value={settings.apiKey}
               onChange={(e) => setSettings((s) => ({ ...s, apiKey: e.target.value }))}
               type="password"
-              className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 rounded focus:outline-none focus:border-[var(--color-border-hover)] font-mono"
+              className="w-full bg-input border border text text-sm px-3 py-2 rounded focus:outline-none focus:border-hover font-mono"
               placeholder="sk-..."
             />
           </div>
           <div>
-            <label className="flex items-center gap-2 text-xs text-[var(--color-text-muted)] mb-1.5">
+            <label className="flex items-center gap-2 text-xs text-muted mb-1.5">
               <Cpu size={12} />
               模型名称
             </label>
             <input
               value={settings.modelName}
               onChange={(e) => setSettings((s) => ({ ...s, modelName: e.target.value }))}
-              className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 rounded focus:outline-none focus:border-[var(--color-border-hover)]"
+              className="w-full bg-input border border text text-sm px-3 py-2 rounded focus:outline-none focus:border-hover"
               placeholder="gpt-4o / deepseek-chat / 等"
             />
           </div>
 
           {/* 预设模型快速选择 */}
           <div>
-            <label className="flex items-center gap-2 text-xs text-[var(--color-text-muted)] mb-1.5">
+            <label className="flex items-center gap-2 text-xs text-muted mb-1.5">
               <Cpu size={12} />
               预设模型
             </label>
@@ -701,8 +741,8 @@ function LlmTab({ user }: { user: AuthUser | null }) {
                 <button key={p.label} onClick={() => applyPreset(p)}
                   className={`px-2.5 py-1 text-[10px] rounded-lg border transition-all ${
                     settings.modelName === p.model
-                      ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                      : "border-[var(--color-border)]/50 text-[var(--color-text-secondary)] hover:border-[var(--color-accent)]/30"
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border/50 text-secondary hover:border-accent/30"
                   }`}>
                   {p.label}
                 </button>
@@ -712,16 +752,16 @@ function LlmTab({ user }: { user: AuthUser | null }) {
 
           {/* 温度 */}
           <div>
-            <label className="flex items-center justify-between text-xs text-[var(--color-text-muted)] mb-1.5">
+            <label className="flex items-center justify-between text-xs text-muted mb-1.5">
               <span className="flex items-center gap-1.5"><Cpu size={12} /> 温度</span>
               <span className="font-mono text-[10px]">{settings.temperature.toFixed(1)}</span>
             </label>
             <input type="range" min="0" max="2" step="0.1"
               value={settings.temperature}
               onChange={(e) => setSettings(s => ({ ...s, temperature: parseFloat(e.target.value) }))}
-              className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-[var(--color-border)] accent-[var(--color-accent)]"
+              className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-divider accent-accent"
             />
-            <div className="flex justify-between text-[9px] text-[var(--color-text-muted)] mt-0.5">
+            <div className="flex justify-between text-[9px] text-muted mt-0.5">
               <span>精确 (0)</span>
               <span>平衡 (1)</span>
               <span>创意 (2)</span>
@@ -730,16 +770,16 @@ function LlmTab({ user }: { user: AuthUser | null }) {
 
           {/* 最大 Token 数 */}
           <div>
-            <label className="flex items-center justify-between text-xs text-[var(--color-text-muted)] mb-1.5">
+            <label className="flex items-center justify-between text-xs text-muted mb-1.5">
               <span className="flex items-center gap-1.5"><MessageSquare size={12} /> 最大回复长度</span>
               <span className="font-mono text-[10px]">{settings.maxTokens}</span>
             </label>
             <input type="range" min="256" max="4096" step="256"
               value={settings.maxTokens}
               onChange={(e) => setSettings(s => ({ ...s, maxTokens: parseInt(e.target.value) }))}
-              className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-[var(--color-border)] accent-[var(--color-accent)]"
+              className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-divider accent-accent"
             />
-            <div className="flex justify-between text-[9px] text-[var(--color-text-muted)] mt-0.5">
+            <div className="flex justify-between text-[9px] text-muted mt-0.5">
               <span>256</span>
               <span>2048</span>
               <span>4096</span>
@@ -747,7 +787,7 @@ function LlmTab({ user }: { user: AuthUser | null }) {
           </div>
 
           <div>
-            <label className="flex items-center gap-2 text-xs text-[var(--color-text-muted)] mb-1.5">
+            <label className="flex items-center gap-2 text-xs text-muted mb-1.5">
               <MessageSquare size={12} />
               系统提示词（本地存储）
             </label>
@@ -755,14 +795,14 @@ function LlmTab({ user }: { user: AuthUser | null }) {
               value={settings.systemPrompt}
               onChange={(e) => setSettings((s) => ({ ...s, systemPrompt: e.target.value }))}
               rows={4}
-              className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 rounded focus:outline-none focus:border-[var(--color-border-hover)] resize-none"
+              className="w-full bg-input border border text text-sm px-3 py-2 rounded focus:outline-none focus:border-hover resize-none"
             />
           </div>
           <div className="flex items-center gap-2 pt-1">
             <button
               onClick={saveConfig}
               disabled={saving || !user}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs rounded bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50"
+              className="flex items-center gap-1 px-3 py-1.5 text-xs rounded bg-accent text-white hover:opacity-90 disabled:opacity-50"
             >
               {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
               保存配置
@@ -771,19 +811,19 @@ function LlmTab({ user }: { user: AuthUser | null }) {
               <button
                 onClick={resetConfig}
                 disabled={saving}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs rounded border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-red-400 hover:text-red-500"
+                className="flex items-center gap-1 px-3 py-1.5 text-xs rounded border border text-secondary hover:border-danger/40 hover:text-danger"
               >
                 <X size={12} />
                 恢复默认
               </button>
             )}
             {msg && (
-              <span className={`text-xs ml-auto ${msg.includes("失败") ? "text-red-500" : "text-green-500"}`}>
+              <span className={`text-xs ml-auto ${msg.includes("失败") ? "text-danger" : "text-success"}`}>
                 {msg}
               </span>
             )}
           </div>
-          <p className="text-[10px] text-[var(--color-text-muted)] leading-relaxed">
+          <p className="text-[10px] text-muted leading-relaxed">
             API Key 将加密存储于服务器，对话时使用你的配置调用模型。
             如只填模型名称而不填 API 端点和 Key，则使用系统默认配置。
           </p>
@@ -815,8 +855,8 @@ function PreferencesTab() {
       }
     } catch { /* */ }
     // 再从服务端拉取最新值
-    authedFetch<any>("/api/settings/learning")
-      .then((data: any) => {
+    authedFetchJson<LearningSettingsResponse>("/api/settings/learning")
+      .then((data) => {
         if (data) {
           setSocratic(Boolean(data.socratic_mode));
           setSocraticFollowUp(Boolean(data.socratic_follow_up_mode));
@@ -844,7 +884,7 @@ function PreferencesTab() {
     } catch { /* */ }
     // 同步服务端
     try {
-      await authedFetch("/api/settings/learning", {
+      await authedFetchJson("/api/settings/learning", {
         method: "PUT",
         body: JSON.stringify(patch),
       });
@@ -881,23 +921,23 @@ function PreferencesTab() {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-base font-semibold text-[var(--color-text)] flex items-center gap-2">
+      <h2 className="text-base font-semibold text flex items-center gap-2">
         <Brain size={18} />
         学习偏好
       </h2>
 
       {/* 启发式追问 */}
-      <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
+      <div className="p-4 rounded-lg bg-surface border border">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-sm font-semibold text-[var(--color-text)]">启发式追问（苏格拉底教学法）</div>
-            <p className="text-xs text-[var(--color-text-muted)] mt-1">
+            <div className="text-sm font-semibold text">启发式追问（苏格拉底教学法）</div>
+            <p className="text-xs text-muted mt-1">
               遇到概念问题时，AI 会先反问引导思考，而不是直接给答案
             </p>
           </div>
           <button
             onClick={() => toggleSocratic(!socratic)}
-            className={`relative w-11 h-6 rounded-full transition-colors ${socratic ? "bg-[var(--color-accent)]" : "bg-[var(--color-surface)] border border-[var(--color-border)]"}`}
+            className={`relative w-11 h-6 rounded-full transition-colors ${socratic ? "bg-accent" : "bg-surface border border"}`}
           >
             <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${socratic ? "translate-x-[22px]" : "translate-x-[2px]"}`} />
           </button>
@@ -905,17 +945,17 @@ function PreferencesTab() {
       </div>
 
       {/* 追问模式 */}
-      <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
+      <div className="p-4 rounded-lg bg-surface border border">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-sm font-semibold text-[var(--color-text)]">追问模式</div>
-            <p className="text-xs text-[var(--color-text-muted)] mt-1">
+            <div className="text-sm font-semibold text">追问模式</div>
+            <p className="text-xs text-muted mt-1">
               开启后，AI 回答完概念问题后会继续追问，深化理解
             </p>
           </div>
           <button
             onClick={() => setSocraticFollowUp(!socraticFollowUp)}
-            className={`relative w-11 h-6 rounded-full transition-colors ${socraticFollowUp ? "bg-[var(--color-accent)]" : "bg-[var(--color-surface)] border border-[var(--color-border)]"}`}
+            className={`relative w-11 h-6 rounded-full transition-colors ${socraticFollowUp ? "bg-accent" : "bg-surface border border"}`}
           >
             <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${socraticFollowUp ? "translate-x-[22px]" : "translate-x-[2px]"}`} />
           </button>
@@ -923,31 +963,31 @@ function PreferencesTab() {
       </div>
 
       {/* 系统提示词 */}
-      <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
-        <label className="text-sm font-semibold text-[var(--color-text)] mb-2 block">
+      <div className="p-4 rounded-lg bg-surface border border">
+        <label className="text-sm font-semibold text mb-2 block">
           自定义系统提示词
         </label>
         <textarea
           value={systemPrompt}
           onChange={(e) => setSystemPrompt(e.target.value)}
           rows={4}
-          className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 rounded focus:outline-none focus:border-[var(--color-border-hover)] resize-none"
+          className="w-full bg-input border border text text-sm px-3 py-2 rounded focus:outline-none focus:border-hover resize-none"
           placeholder="自定义 AI 的角色和行为指令..."
         />
       </div>
 
       {/* 页面加载时滚动到底部 */}
-      <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
+      <div className="p-4 rounded-lg bg-surface border border">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-sm font-semibold text-[var(--color-text)]">页面加载时自动滚动到底部</div>
-            <p className="text-xs text-[var(--color-text-muted)] mt-1">
+            <div className="text-sm font-semibold text">页面加载时自动滚动到底部</div>
+            <p className="text-xs text-muted mt-1">
               刷新页面进入对话时，是否自动滚动到最新消息（仅首次加载生效）
             </p>
           </div>
           <button
             onClick={() => toggleAutoScroll(!autoScrollOnLoad)}
-            className={`relative w-11 h-6 rounded-full transition-colors ${autoScrollOnLoad ? "bg-[var(--color-accent)]" : "bg-[var(--color-surface)] border border-[var(--color-border)]"}`}
+            className={`relative w-11 h-6 rounded-full transition-colors ${autoScrollOnLoad ? "bg-accent" : "bg-surface border border"}`}
           >
             <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${autoScrollOnLoad ? "translate-x-[22px]" : "translate-x-[2px]"}`} />
           </button>
@@ -967,21 +1007,21 @@ function AppearanceTab({ theme, setTheme, style, setStyle }: {
   const { serifFont, setSerifFont } = useTheme();
   return (
     <div className="space-y-6">
-      <h2 className="text-base font-semibold text-[var(--color-text)] flex items-center gap-2">
+      <h2 className="text-base font-semibold text flex items-center gap-2">
         <Sun size={18} />
         外观设置
       </h2>
 
       {/* 主题 */}
       <div>
-        <div className="text-sm font-semibold text-[var(--color-text)] mb-3">主题模式</div>
+        <div className="text-sm font-semibold text mb-3">主题模式</div>
         <div className="flex gap-3">
           <button
             onClick={() => setTheme("dark")}
             className={`flex items-center gap-2 px-4 py-3 rounded-lg border text-sm transition-colors ${
               theme === "dark"
-                ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                : "border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)]"
+                ? "border-accent bg-accent/10 text-accent"
+                : "border text-secondary hover:border-hover"
             }`}
           >
             <Moon size={16} />
@@ -991,8 +1031,8 @@ function AppearanceTab({ theme, setTheme, style, setStyle }: {
             onClick={() => setTheme("light")}
             className={`flex items-center gap-2 px-4 py-3 rounded-lg border text-sm transition-colors ${
               theme === "light"
-                ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                : "border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)]"
+                ? "border-accent bg-accent/10 text-accent"
+                : "border text-secondary hover:border-hover"
             }`}
           >
             <Sun size={16} />
@@ -1003,7 +1043,7 @@ function AppearanceTab({ theme, setTheme, style, setStyle }: {
 
       {/* 设计风格 */}
       <div>
-        <div className="text-sm font-semibold text-[var(--color-text)] mb-3">设计风格</div>
+        <div className="text-sm font-semibold text mb-3">设计风格</div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {STYLE_LIST.map((s) => (
             <button
@@ -1011,8 +1051,8 @@ function AppearanceTab({ theme, setTheme, style, setStyle }: {
               onClick={() => setStyle(s.id)}
               className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm transition-all ${
                 style === s.id
-                  ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/30"
-                  : "border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)]"
+                  ? "border-accent bg-accent/10 text-accent ring-1 ring-accent/30"
+                  : "border text-secondary hover:border-hover"
               }`}
             >
               {s.label}
@@ -1022,17 +1062,17 @@ function AppearanceTab({ theme, setTheme, style, setStyle }: {
       </div>
 
       {/* 衬线字体 */}
-      <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
+      <div className="p-4 rounded-lg bg-surface border border">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-sm font-semibold text-[var(--color-text)]">AI 消息衬线字体</div>
-            <p className="text-xs text-[var(--color-text-muted)] mt-1">
+            <div className="text-sm font-semibold text">AI 消息衬线字体</div>
+            <p className="text-xs text-muted mt-1">
               开启后，AI 回复的正文将使用 Songti SC 衬线字体，更适合长时间阅读
             </p>
           </div>
           <button
             onClick={() => setSerifFont(!serifFont)}
-            className={`relative w-11 h-6 rounded-full transition-colors ${serifFont ? "bg-[var(--color-accent)]" : "bg-[var(--color-surface)] border border-[var(--color-border)]"}`}
+            className={`relative w-11 h-6 rounded-full transition-colors ${serifFont ? "bg-accent" : "bg-surface border border"}`}
           >
             <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${serifFont ? "translate-x-[22px]" : "translate-x-[2px]"}`} />
           </button>
@@ -1046,22 +1086,22 @@ function AppearanceTab({ theme, setTheme, style, setStyle }: {
 function AboutTab() {
   return (
     <div className="space-y-4">
-      <h2 className="text-base font-semibold text-[var(--color-text)]">关于苹果果</h2>
+      <h2 className="text-base font-semibold text">关于苹果果</h2>
       <div className="space-y-3 text-sm">
-        <div className="flex justify-between py-2 border-b border-[var(--color-border)]/30">
-          <span className="text-[var(--color-text-secondary)]">应用名称</span>
-          <span className="text-[var(--color-text)] font-medium">苹果果</span>
+        <div className="flex justify-between py-2 border-b border/30">
+          <span className="text-secondary">应用名称</span>
+          <span className="text font-medium">苹果果</span>
         </div>
-        <div className="flex justify-between py-2 border-b border-[var(--color-border)]/30">
-          <span className="text-[var(--color-text-secondary)]">版本</span>
-          <span className="text-[var(--color-text)] font-medium">v1.0.0</span>
+        <div className="flex justify-between py-2 border-b border/30">
+          <span className="text-secondary">版本</span>
+          <span className="text font-medium">v1.0.0</span>
         </div>
-        <div className="flex justify-between py-2 border-b border-[var(--color-border)]/30">
-          <span className="text-[var(--color-text-secondary)]">框架</span>
-          <span className="text-[var(--color-text)] font-medium">Next.js 14 + Tailwind</span>
+        <div className="flex justify-between py-2 border-b border/30">
+          <span className="text-secondary">框架</span>
+          <span className="text font-medium">Next.js 14 + Tailwind</span>
         </div>
         <div className="pt-3">
-          <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">
+          <p className="text-xs text-muted leading-relaxed">
             苹果果是一个 AI 驱动的个人知识体系构建工具，支持智能对话、练习题生成、
             知识图谱和学情分析。
           </p>
@@ -1083,14 +1123,14 @@ function DeactivateAccount({ onDeactivated }: { onDeactivated: () => void }) {
     setLoading(true);
     setMsg("");
     try {
-      await authedFetch("/api/auth/deactivate", {
+      await authedFetchJson("/api/auth/deactivate", {
         method: "POST",
         body: JSON.stringify({ password }),
       });
       setMsg("账号已注销，即将跳转…");
       setTimeout(() => onDeactivated(), 1500);
-    } catch (e: any) {
-      setMsg(e.message || "注销失败");
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "注销失败");
     } finally {
       setLoading(false);
     }
@@ -1100,7 +1140,7 @@ function DeactivateAccount({ onDeactivated }: { onDeactivated: () => void }) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 text-sm text-red-400 hover:text-red-500"
+        className="flex items-center gap-2 text-sm text-danger hover:text-danger"
       >
         <X size={16} />
         注销账号
@@ -1109,35 +1149,35 @@ function DeactivateAccount({ onDeactivated }: { onDeactivated: () => void }) {
   }
 
   return (
-    <div className="space-y-3 p-3 rounded-lg bg-red-500/5 border border-red-500/20">
-      <p className="text-sm font-medium text-red-500">确认注销账号</p>
-      <p className="text-xs text-[var(--color-text-muted)]">
+    <div className="space-y-3 p-3 rounded-lg bg-danger/5 border border-danger/20">
+      <p className="text-sm font-medium text-danger">确认注销账号</p>
+      <p className="text-xs text-muted">
         注销后账号将被永久停用，数据无法恢复。请输入密码确认。
       </p>
       <input
         type="password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
-        className="w-full bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm px-3 py-2 rounded focus:outline-none focus:border-red-500"
+        className="w-full bg-input border border text text-sm px-3 py-2 rounded focus:outline-none focus:border-danger"
         placeholder="输入当前密码"
       />
       <div className="flex items-center gap-2">
         <button
           onClick={handleDeactivate}
           disabled={loading}
-          className="flex items-center gap-1 px-3 py-1.5 text-xs rounded bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
+          className="flex items-center gap-1 px-3 py-1.5 text-xs rounded bg-danger text-white hover:bg-danger disabled:opacity-50"
         >
           {loading ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />}
           确认注销
         </button>
         <button
           onClick={() => { setOpen(false); setPassword(""); setMsg(""); }}
-          className="px-3 py-1.5 text-xs rounded border border-[var(--color-border)] text-[var(--color-text-secondary)]"
+          className="px-3 py-1.5 text-xs rounded border border text-secondary"
         >
           取消
         </button>
         {msg && (
-          <span className={`text-xs ml-auto ${msg.includes("失败") || msg.includes("密码") ? "text-red-500" : "text-green-500"}`}>
+          <span className={`text-xs ml-auto ${msg.includes("失败") || msg.includes("密码") ? "text-danger" : "text-success"}`}>
             {msg}
           </span>
         )}
@@ -1149,13 +1189,13 @@ function DeactivateAccount({ onDeactivated }: { onDeactivated: () => void }) {
 // ══════════════════ 数据管理 Tab ══════════════════
 function DataTab() {
   const [exporting, setExporting] = useState(false);
-  const [overview, setOverview] = useState<any>(null);
+  const [overview, setOverview] = useState<DataOverview | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchOverview = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await authedFetch<any>("/api/data/overview");
+      const res = await authedFetchJson<{ overview: DataOverview }>("/api/data/overview");
       setOverview(res?.overview || null);
     } catch {} finally { setLoading(false); }
   }, []);
@@ -1185,7 +1225,7 @@ function DataTab() {
     if (!confirm("再次确认：所有数据将被永久删除。")) return;
     try {
       const token = localStorage.getItem("access_token");
-      await authedFetch("/api/data/reset", {
+      await authedFetchJson("/api/data/reset", {
         method: "DELETE",
         headers: token ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } : {},
       });
@@ -1196,42 +1236,42 @@ function DataTab() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-base font-semibold text-[var(--color-text)] flex items-center gap-2">
+      <h2 className="text-base font-semibold text flex items-center gap-2">
         <Database size={18} />
         数据管理
       </h2>
 
       {loading ? (
         <div className="flex justify-center py-4">
-          <Loader2 size={16} className="animate-spin text-[var(--color-text-muted)]" />
+          <Loader2 size={16} className="animate-spin text-muted" />
         </div>
       ) : (
         <>
           {/* 数据概览 */}
           {overview && (
-            <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
+            <div className="p-4 rounded-lg bg-surface border border">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-medium text-[var(--color-text-muted)]">数据概览</span>
-                <button onClick={fetchOverview} className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
+                <span className="text-xs font-medium text-muted">数据概览</span>
+                <button onClick={fetchOverview} className="text-muted hover:text">
                   <RefreshCw size={12} />
                 </button>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <div className="text-center p-2 rounded bg-[var(--color-bg)]">
-                  <div className="text-lg font-bold text-[var(--color-text)]">{overview.partitions ?? 0}</div>
-                  <div className="text-[9px] text-[var(--color-text-muted)]">分区</div>
+                <div className="text-center p-2 rounded bg-page">
+                  <div className="text-lg font-bold text">{overview.partitions ?? 0}</div>
+                  <div className="text-[9px] text-muted">分区</div>
                 </div>
-                <div className="text-center p-2 rounded bg-[var(--color-bg)]">
-                  <div className="text-lg font-bold text-[var(--color-text)]">{overview.domains ?? 0}</div>
-                  <div className="text-[9px] text-[var(--color-text-muted)]">领域</div>
+                <div className="text-center p-2 rounded bg-page">
+                  <div className="text-lg font-bold text">{overview.domains ?? 0}</div>
+                  <div className="text-[9px] text-muted">领域</div>
                 </div>
-                <div className="text-center p-2 rounded bg-[var(--color-bg)]">
-                  <div className="text-lg font-bold text-[var(--color-text)]">{overview.conversations ?? 0}</div>
-                  <div className="text-[9px] text-[var(--color-text-muted)]">对话</div>
+                <div className="text-center p-2 rounded bg-page">
+                  <div className="text-lg font-bold text">{overview.conversations ?? 0}</div>
+                  <div className="text-[9px] text-muted">对话</div>
                 </div>
-                <div className="text-center p-2 rounded bg-[var(--color-bg)]">
-                  <div className="text-lg font-bold text-[var(--color-text)]">{overview.questions ?? overview.graph_nodes ?? 0}</div>
-                  <div className="text-[9px] text-[var(--color-text-muted)]">题目/节点</div>
+                <div className="text-center p-2 rounded bg-page">
+                  <div className="text-lg font-bold text">{overview.questions ?? overview.graph_nodes ?? 0}</div>
+                  <div className="text-[9px] text-muted">题目/节点</div>
                 </div>
               </div>
             </div>
@@ -1239,25 +1279,25 @@ function DataTab() {
 
           {/* 操作区 */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
+            <div className="flex items-center justify-between p-4 rounded-lg bg-surface border border">
               <div>
-                <div className="text-sm font-semibold text-[var(--color-text)]">导出全部数据</div>
-                <p className="text-xs text-[var(--color-text-muted)] mt-0.5">下载 JSON 格式的完整学习数据备份</p>
+                <div className="text-sm font-semibold text">导出全部数据</div>
+                <p className="text-xs text-muted mt-0.5">下载 JSON 格式的完整学习数据备份</p>
               </div>
               <button onClick={handleExport} disabled={exporting}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs rounded bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50">
+                className="flex items-center gap-1 px-3 py-1.5 text-xs rounded bg-accent text-white hover:opacity-90 disabled:opacity-50">
                 {exporting ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
                 {exporting ? "导出中..." : "导出"}
               </button>
             </div>
 
-            <div className="flex items-center justify-between p-4 rounded-lg bg-[var(--color-surface)] border border-red-500/20">
+            <div className="flex items-center justify-between p-4 rounded-lg bg-surface border border-danger/20">
               <div>
-                <div className="text-sm font-semibold text-red-500">清除所有学习数据</div>
-                <p className="text-xs text-[var(--color-text-muted)] mt-0.5">删除所有对话、练习记录、知识图谱，不可恢复</p>
+                <div className="text-sm font-semibold text-danger">清除所有学习数据</div>
+                <p className="text-xs text-muted mt-0.5">删除所有对话、练习记录、知识图谱，不可恢复</p>
               </div>
               <button onClick={handleReset}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs rounded bg-red-500 text-white hover:bg-red-600">
+                className="flex items-center gap-1 px-3 py-1.5 text-xs rounded bg-danger text-white hover:bg-danger">
                 <AlertTriangle size={12} />
                 清除
               </button>
@@ -1267,7 +1307,7 @@ function DataTab() {
       )}
 
       <Link href="/settings/data"
-        className="block text-center text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-accent)] underline">
+        className="block text-center text-[10px] text-muted hover:text-accent underline">
         查看详细数据管理 →
       </Link>
     </div>
@@ -1288,7 +1328,7 @@ function LayoutTab() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-[var(--color-text)] flex items-center gap-2">
+        <h2 className="text-base font-semibold text flex items-center gap-2">
           <Layout size={18} />
           布局
         </h2>
@@ -1298,14 +1338,14 @@ function LayoutTab() {
               resetAll();
             }
           }}
-          className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+          className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded border border text-secondary hover:border-accent hover:text-accent"
         >
           <RotateCcw size={12} />
           重置布局
         </button>
       </div>
 
-      <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">
+      <p className="text-xs text-muted leading-relaxed">
         控制桌面端 5 栏驾驶舱中 4 个侧栏的可见性。可在工作台直接拖动分隔条改尺寸 / 双击分隔条折叠。
         所有偏好自动保存到本地（localStorage）。
       </p>
@@ -1319,30 +1359,30 @@ function LayoutTab() {
           return (
             <div
               key={key}
-              className="flex items-center justify-between p-3.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]"
+              className="flex items-center justify-between p-3.5 rounded-lg bg-surface border border"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-md bg-[var(--color-bg)] flex items-center justify-center text-[var(--color-accent)] shrink-0">
+                <div className="w-9 h-9 rounded-md bg-page flex items-center justify-center text-accent shrink-0">
                   <Icon size={16} />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold text-[var(--color-text)]">{meta.title}</div>
-                  <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5 truncate">
+                  <div className="text-sm font-semibold text">{meta.title}</div>
+                  <p className="text-[11px] text-muted mt-0.5 truncate">
                     {meta.desc} · 范围 {bounds.min}–{bounds.max}px
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[10px] text-[var(--color-text-muted)]">
+                <span className="text-[10px] text-muted">
                   {p.visible ? "显示" : "隐藏"}
                 </span>
                 <button
                   onClick={() => toggleVisible(key)}
                   className={`relative w-11 h-6 rounded-full transition-colors ${
                     p.visible
-                      ? "bg-[var(--color-accent)]"
-                      : "bg-[var(--color-surface)] border border-[var(--color-border)]"
+                      ? "bg-accent"
+                      : "bg-surface border border"
                   }`}
                   aria-label={`切换 ${meta.title} 可见性`}
                 >
@@ -1359,16 +1399,16 @@ function LayoutTab() {
       </div>
 
       {/* 快捷键说明 */}
-      <div className="mt-4 p-3.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
-        <div className="text-[12px] font-semibold text-[var(--color-text)] mb-2">快捷键</div>
-        <div className="space-y-1.5 text-[11px] text-[var(--color-text-muted)]">
+      <div className="mt-4 p-3.5 rounded-lg bg-surface border border">
+        <div className="text-[12px] font-semibold text mb-2">快捷键</div>
+        <div className="space-y-1.5 text-[11px] text-muted">
           <div className="flex items-center justify-between">
             <span>打开命令面板</span>
-            <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)]">⌘K / Ctrl+K</kbd>
+            <kbd className="text-[10px] px-1.5 py-0.5 rounded border border bg-page text">⌘K / Ctrl+K</kbd>
           </div>
           <div className="flex items-center justify-between">
             <span>唤起 AI 助手</span>
-            <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)]">⌘J / Ctrl+J</kbd>
+            <kbd className="text-[10px] px-1.5 py-0.5 rounded border border bg-page text">⌘J / Ctrl+J</kbd>
           </div>
           <div className="flex items-center justify-between">
             <span>拖动调整 panel 尺寸</span>

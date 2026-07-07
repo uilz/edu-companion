@@ -73,7 +73,7 @@ export function OutlineView(props: ProjectViewProps & { projectId: string }) {
         </h3>
         <button
           onClick={() => onAddNode(null, 1)}
-          className="text-sm text-[var(--color-accent)] hover:opacity-80 flex items-center gap-1 whitespace-nowrap flex-shrink-0"
+          className="text-sm text-accent hover:opacity-80 flex items-center gap-1 whitespace-nowrap flex-shrink-0"
         >
           <Plus size={14} /> 根节点
         </button>
@@ -174,7 +174,7 @@ function DescriptionWithRefs({
                 const target = nodes.find((n) => n.id === t.nodeId);
                 if (target) onJump(target);
               }}
-              className="text-[var(--color-accent)] hover:underline mx-0.5"
+              className="text-accent hover:underline mx-0.5"
             >
               {t.value}
             </button>
@@ -184,7 +184,7 @@ function DescriptionWithRefs({
         )}
       </div>
       {reverseCount > 0 && (
-        <span className="flex items-center gap-1 text-[10px] text-blue-500 whitespace-nowrap flex-shrink-0">
+        <span className="flex items-center gap-1 text-[10px] text-info whitespace-nowrap flex-shrink-0">
           <Link2 size={10} /> 被 {reverseCount} 节点引用
         </span>
       )}

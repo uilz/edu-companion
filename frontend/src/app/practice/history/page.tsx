@@ -8,6 +8,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { api } from "@/lib/api/api";
+import { PageSkeleton } from "@/components/ui/Skeleton";
 
 type ViewMode = "detailed" | "compact";
 
@@ -46,6 +47,7 @@ export default function PracticeHistoryPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("detailed");
   const [showFilters, setShowFilters] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   // 题单列表（筛选用）
@@ -113,6 +115,7 @@ export default function PracticeHistoryPage() {
       setHasMore(data.has_more || false);
     } catch (e) {
       console.error("加载历史记录失败", e);
+      setError(e instanceof Error ? e.message : "加载历史记录失败");
     } finally {
       setLoading(false);
       loadingMoreRef.current = false;
@@ -178,10 +181,10 @@ export default function PracticeHistoryPage() {
 
   // 分数颜色
   const scoreColor = (s: number | null) => {
-    if (s === null) return "text-[var(--color-text-muted)]";
-    if (s >= 80) return "text-green-500";
-    if (s >= 60) return "text-yellow-500";
-    return "text-red-500";
+    if (s === null) return "text-muted";
+    if (s >= 80) return "text-success";
+    if (s >= 60) return "text-warning";
+    return "text-danger";
   };
 
   // 重置筛选
@@ -207,18 +210,18 @@ export default function PracticeHistoryPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)]" ref={listRef}>
+    <div className="min-h-screen bg-page" ref={listRef}>
       {/* Top bar */}
-      <div className="sticky top-0 z-30 bg-[var(--color-bg)]/90 backdrop-blur-sm border-b border-[var(--color-border)]/50">
+      <div className="sticky top-0 z-30 bg-page/90 backdrop-blur-sm border-b border/50">
         <div className="max-w-3xl mx-auto px-4 flex items-center h-12 gap-3">
           <button onClick={() => router.back()}
-            className="text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors">
+            className="text-[11px] text-muted hover:text transition-colors">
             ← 返回
           </button>
-          <span className="text-[11px] text-[var(--color-text-muted)]">|</span>
-          <span className="text-[12px] font-medium text-[var(--color-text)]">练习历史</span>
+          <span className="text-[11px] text-muted">|</span>
+          <span className="text-[12px] font-medium text">练习历史</span>
           {total !== null && (
-            <span className="text-[10px] text-[var(--color-text-muted)] ml-auto">共 {total} 条</span>
+            <span className="text-[10px] text-muted ml-auto">共 {total} 条</span>
           )}
         </div>
 
@@ -228,37 +231,37 @@ export default function PracticeHistoryPage() {
             <button onClick={() => setShowFilters(!showFilters)}
               className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-medium transition-colors ${
                 showFilters || hasActiveFilters
-                  ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                  : "bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                  ? "bg-accent/10 text-accent"
+                  : "bg-surface text-muted hover:text"
               }`}>
               <Filter size={12} />
               筛选
-              {hasActiveFilters && <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)]" />}
+              {hasActiveFilters && <span className="w-1.5 h-1.5 rounded-full bg-accent" />}
             </button>
 
             {/* 模式切换 */}
-            <div className="flex bg-[var(--color-surface)] rounded-lg overflow-hidden border border-[var(--color-border)]/50">
+            <div className="flex bg-surface rounded-lg overflow-hidden border border/50">
               <button onClick={() => { setPaginationMode("page"); setPage(1); }}
                 className={`px-2.5 py-1.5 text-[10px] transition-colors ${
-                  paginationMode === "page" ? "bg-[var(--color-accent)] text-white" : "text-[var(--color-text-muted)]"
+                  paginationMode === "page" ? "bg-accent text-white" : "text-muted"
                 }`}>页码</button>
               <button onClick={() => { setPaginationMode("cursor"); setPage(1); }}
                 className={`px-2.5 py-1.5 text-[10px] transition-colors ${
-                  paginationMode === "cursor" ? "bg-[var(--color-accent)] text-white" : "text-[var(--color-text-muted)]"
+                  paginationMode === "cursor" ? "bg-accent text-white" : "text-muted"
                 }`}>滚动</button>
             </div>
 
             {/* 视图切换 */}
-            <div className="flex bg-[var(--color-surface)] rounded-lg overflow-hidden border border-[var(--color-border)]/50">
+            <div className="flex bg-surface rounded-lg overflow-hidden border border/50">
               <button onClick={() => setViewMode("detailed")}
                 className={`p-1.5 transition-colors ${
-                  viewMode === "detailed" ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]" : "text-[var(--color-text-muted)]"
+                  viewMode === "detailed" ? "bg-accent/10 text-accent" : "text-muted"
                 }`} title="详细模式">
                 <List size={14} />
               </button>
               <button onClick={() => setViewMode("compact")}
                 className={`p-1.5 transition-colors ${
-                  viewMode === "compact" ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]" : "text-[var(--color-text-muted)]"
+                  viewMode === "compact" ? "bg-accent/10 text-accent" : "text-muted"
                 }`} title="简明模式">
                 <Grid3X3 size={14} />
               </button>
@@ -271,7 +274,7 @@ export default function PracticeHistoryPage() {
               const [b, o] = e.target.value.split("|");
               setSortBy(b); setSortOrder(o);
             }}
-              className="text-[10px] bg-[var(--color-surface)] border border-[var(--color-border)]/50 rounded-lg px-2 py-1.5 text-[var(--color-text)]">
+              className="text-[10px] bg-surface border border/50 rounded-lg px-2 py-1.5 text">
               <option value="created_at|desc">最新</option>
               <option value="created_at|asc">最早</option>
               <option value="score|desc">高分↓</option>
@@ -281,7 +284,7 @@ export default function PracticeHistoryPage() {
             </select>
 
             <button onClick={resetFilters}
-              className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+              className="p-1.5 rounded-lg text-muted hover:text transition-colors"
               title="重置筛选">
               <RefreshCw size={12} />
             </button>
@@ -289,12 +292,12 @@ export default function PracticeHistoryPage() {
 
           {/* 筛选面板 */}
           {showFilters && (
-            <div className="mt-2 p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50 space-y-2">
+            <div className="mt-2 p-3 rounded-xl bg-surface border border/50 space-y-2">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <div>
-                  <label className="text-[9px] text-[var(--color-text-muted)] block mb-1">状态</label>
+                  <label className="text-[9px] text-muted block mb-1">状态</label>
                   <select value={status} onChange={e => setStatus(e.target.value)}
-                    className="w-full text-[10px] bg-[var(--color-bg)] border border-[var(--color-border)]/50 rounded-lg px-2 py-1.5 text-[var(--color-text)]">
+                    className="w-full text-[10px] bg-page border border/50 rounded-lg px-2 py-1.5 text">
                     <option value="">全部</option>
                     <option value="completed">已完成</option>
                     <option value="cancelled">已取消</option>
@@ -302,9 +305,9 @@ export default function PracticeHistoryPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-[9px] text-[var(--color-text-muted)] block mb-1">模式</label>
+                  <label className="text-[9px] text-muted block mb-1">模式</label>
                   <select value={mode} onChange={e => setMode(e.target.value)}
-                    className="w-full text-[10px] bg-[var(--color-bg)] border border-[var(--color-border)]/50 rounded-lg px-2 py-1.5 text-[var(--color-text)]">
+                    className="w-full text-[10px] bg-page border border/50 rounded-lg px-2 py-1.5 text">
                     <option value="">全部</option>
                     <option value="adaptive">自适应</option>
                     <option value="review">复习</option>
@@ -314,9 +317,9 @@ export default function PracticeHistoryPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-[9px] text-[var(--color-text-muted)] block mb-1">题单</label>
+                  <label className="text-[9px] text-muted block mb-1">题单</label>
                   <select value={selectedBankId} onChange={e => setSelectedBankId(e.target.value)}
-                    className="w-full text-[10px] bg-[var(--color-bg)] border border-[var(--color-border)]/50 rounded-lg px-2 py-1.5 text-[var(--color-text)]">
+                    className="w-full text-[10px] bg-page border border/50 rounded-lg px-2 py-1.5 text">
                     <option value="">全部</option>
                     {banks.map((b: any) => (
                       <option key={b.id} value={b.id}>{b.name}</option>
@@ -324,49 +327,49 @@ export default function PracticeHistoryPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-[9px] text-[var(--color-text-muted)] block mb-1">正确率</label>
+                  <label className="text-[9px] text-muted block mb-1">正确率</label>
                   <div className="flex items-center gap-1">
                     <input type="number" placeholder="最低" value={scoreMin} onChange={e => setScoreMin(e.target.value)}
-                      className="w-full text-[10px] bg-[var(--color-bg)] border border-[var(--color-border)]/50 rounded-lg px-2 py-1.5 text-[var(--color-text)]" />
-                    <span className="text-[10px] text-[var(--color-text-muted)]">~</span>
+                      className="w-full text-[10px] bg-page border border/50 rounded-lg px-2 py-1.5 text" />
+                    <span className="text-[10px] text-muted">~</span>
                     <input type="number" placeholder="最高" value={scoreMax} onChange={e => setScoreMax(e.target.value)}
-                      className="w-full text-[10px] bg-[var(--color-bg)] border border-[var(--color-border)]/50 rounded-lg px-2 py-1.5 text-[var(--color-text)]" />
+                      className="w-full text-[10px] bg-page border border/50 rounded-lg px-2 py-1.5 text" />
                   </div>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[9px] text-[var(--color-text-muted)] block mb-1">开始日期</label>
+                  <label className="text-[9px] text-muted block mb-1">开始日期</label>
                     <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-                      className="w-full text-[10px] bg-[var(--color-bg)] border border-[var(--color-border)]/50 rounded-lg px-2 py-1.5 text-[var(--color-text)]" />
+                      className="w-full text-[10px] bg-page border border/50 rounded-lg px-2 py-1.5 text" />
                   </div>
                   <div>
-                    <label className="text-[9px] text-[var(--color-text-muted)] block mb-1">结束日期</label>
+                    <label className="text-[9px] text-muted block mb-1">结束日期</label>
                     <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-                      className="w-full text-[10px] bg-[var(--color-bg)] border border-[var(--color-border)]/50 rounded-lg px-2 py-1.5 text-[var(--color-text)]" />
+                      className="w-full text-[10px] bg-page border border/50 rounded-lg px-2 py-1.5 text" />
                   </div>
                 </div>
                 {/* 日期快捷选择 */}
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] text-[var(--color-text-muted)]">快捷：</span>
+                  <span className="text-[9px] text-muted">快捷：</span>
                   <button onClick={() => { setDateFrom(new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)); setDateTo(new Date().toISOString().slice(0, 10)); }}
-                    className="px-2 py-1 rounded text-[9px] bg-[var(--color-bg)] border border-[var(--color-border)]/50 text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)]/30 transition-colors">
+                    className="px-2 py-1 rounded text-[9px] bg-page border border/50 text-muted hover:text hover:border-accent/30 transition-colors">
                     最近 7 天
                   </button>
                   <button onClick={() => { setDateFrom(new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)); setDateTo(new Date().toISOString().slice(0, 10)); }}
-                    className="px-2 py-1 rounded text-[9px] bg-[var(--color-bg)] border border-[var(--color-border)]/50 text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)]/30 transition-colors">
+                    className="px-2 py-1 rounded text-[9px] bg-page border border/50 text-muted hover:text hover:border-accent/30 transition-colors">
                     最近 30 天
                   </button>
                   <button onClick={() => { setDateFrom(new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10)); setDateTo(new Date().toISOString().slice(0, 10)); }}
-                    className="px-2 py-1 rounded text-[9px] bg-[var(--color-bg)] border border-[var(--color-border)]/50 text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)]/30 transition-colors">
+                    className="px-2 py-1 rounded text-[9px] bg-page border border/50 text-muted hover:text hover:border-accent/30 transition-colors">
                     最近 90 天
                   </button>
                   <button onClick={() => { const d = new Date(); d.setDate(1); setDateFrom(d.toISOString().slice(0, 10)); setDateTo(new Date().toISOString().slice(0, 10)); }}
-                    className="px-2 py-1 rounded text-[9px] bg-[var(--color-bg)] border border-[var(--color-border)]/50 text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)]/30 transition-colors">
+                    className="px-2 py-1 rounded text-[9px] bg-page border border/50 text-muted hover:text hover:border-accent/30 transition-colors">
                     本月
                   </button>
                   <button onClick={() => { resetDateRange(); }}
-                    className="px-2 py-1 rounded text-[9px] bg-[var(--color-bg)] border border-[var(--color-border)]/50 text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)]/30 transition-colors">
+                    className="px-2 py-1 rounded text-[9px] bg-page border border/50 text-muted hover:text hover:border-accent/30 transition-colors">
                     不限
                   </button>
                 </div>
@@ -378,14 +381,24 @@ export default function PracticeHistoryPage() {
       {/* 列表 */}
       <div className="max-w-3xl mx-auto px-4 py-4">
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 size={20} className="animate-spin text-[var(--color-text-muted)]" />
+          <PageSkeleton />
+        ) : error ? (
+          <div className="text-center py-20">
+            <div className="p-4 border border-danger/20 bg-danger/10 rounded-lg text-danger mb-4 max-w-md mx-auto">
+              {error}
+            </div>
+            <button
+              onClick={() => { setError(null); loadData(); }}
+              className="px-4 py-2 rounded-lg bg-accent text-white hover:opacity-90 text-sm"
+            >
+              重试
+            </button>
           </div>
         ) : items.length === 0 ? (
           <div className="text-center py-20">
-            <Brain size={24} className="mx-auto text-[var(--color-text-muted)] mb-3" />
-            <p className="text-[13px] text-[var(--color-text-muted)]">暂无练习记录</p>
-            <p className="text-[10px] text-[var(--color-text-muted)] mt-1">
+            <Brain size={24} className="mx-auto text-muted mb-3" />
+            <p className="text-[13px] text-muted">暂无练习记录</p>
+            <p className="text-[10px] text-muted mt-1">
               {hasActiveFilters ? "试试调整筛选条件" : "快去开始练习吧"}
             </p>
           </div>
@@ -397,26 +410,26 @@ export default function PracticeHistoryPage() {
                   // ── 详细模式 ──
                   <div key={s.session_id}
                     onClick={() => router.push(`/practice/history/${s.session_id}`)}
-                    className="flex items-center gap-3 p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50 hover:border-[var(--color-accent)]/30 cursor-pointer transition-all group">
+                    className="flex items-center gap-3 p-3 rounded-xl bg-surface border border/50 hover:border-accent/30 cursor-pointer transition-all group">
                     <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                      (s.score || 0) >= 80 ? "bg-green-500/10" :
-                      (s.score || 0) >= 60 ? "bg-yellow-500/10" : "bg-red-500/10"
+                      (s.score || 0) >= 80 ? "bg-success/10" :
+                      (s.score || 0) >= 60 ? "bg-warning/10" : "bg-danger/10"
                     }`}>
                       <Brain size={15} className={
-                        (s.score || 0) >= 80 ? "text-green-500" :
-                        (s.score || 0) >= 60 ? "text-yellow-500" : "text-red-500"
+                        (s.score || 0) >= 80 ? "text-success" :
+                        (s.score || 0) >= 60 ? "text-warning" : "text-danger"
                       } />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-[12px] font-medium text-[var(--color-text)]">
+                        <span className="text-[12px] font-medium text">
                           {s.bank_name || modeName(s.mode)}
                         </span>
-                        <span className="text-[9px] text-[var(--color-text-muted)] bg-[var(--color-bg)] px-1.5 py-0.5 rounded">
+                        <span className="text-[9px] text-muted bg-page px-1.5 py-0.5 rounded">
                           {modeName(s.mode)}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-[var(--color-text-muted)]">
+                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted">
                         <span>{fmtDate(s.started_at || s.created_at)}</span>
                         <span>·</span>
                         <span>{s.total_count} 题 · {s.correct_count}/{s.wrong_count}</span>
@@ -432,26 +445,26 @@ export default function PracticeHistoryPage() {
                         {s.score ?? "—"}
                       </span>
                       <button onClick={(e) => { e.stopPropagation(); handleDelete(s.session_id); }}
-                        className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-500/10 text-[var(--color-text-muted)] hover:text-red-500 transition-all"
+                        className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-danger/10 text-muted hover:text-danger transition-all"
                         title="删除">
                         <Trash2 size={12} />
                       </button>
-                      <ChevronRight size={14} className="text-[var(--color-text-muted)] opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <ChevronRight size={14} className="text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                   </div>
                 ) : (
                   // ── 简明模式 ──
                   <div key={s.session_id}
                     onClick={() => router.push(`/practice/history/${s.session_id}`)}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]/50 hover:border-[var(--color-accent)]/30 cursor-pointer transition-all group text-[11px]">
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface border border/50 hover:border-accent/30 cursor-pointer transition-all group text-[11px]">
                     <span className={`font-bold w-8 text-right ${scoreColor(s.score)}`}>{s.score ?? "—"}</span>
-                    <span className="text-[var(--color-text)] truncate flex-1">
+                    <span className="text truncate flex-1">
                       {s.bank_name || modeName(s.mode)}
                     </span>
-                    <span className="text-[var(--color-text-muted)]">{s.total_count}题</span>
-                    <span className="text-[var(--color-text-muted)]">{fmtDate(s.created_at)}</span>
+                    <span className="text-muted">{s.total_count}题</span>
+                    <span className="text-muted">{fmtDate(s.created_at)}</span>
                     <button onClick={(e) => { e.stopPropagation(); handleDelete(s.session_id); }}
-                      className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/10 text-[var(--color-text-muted)] hover:text-red-500 transition-all">
+                      className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-danger/10 text-muted hover:text-danger transition-all">
                       <Trash2 size={10} />
                     </button>
                   </div>
@@ -466,8 +479,8 @@ export default function PracticeHistoryPage() {
                   <button key={p} onClick={() => setPage(p)}
                     className={`w-7 h-7 rounded-lg text-[11px] font-medium transition-colors ${
                       p === page
-                        ? "bg-[var(--color-accent)] text-white"
-                        : "bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                        ? "bg-accent text-white"
+                        : "bg-surface text-muted hover:text"
                     }`}>
                     {p}
                   </button>
@@ -478,7 +491,7 @@ export default function PracticeHistoryPage() {
             {/* 加载更多指示 */}
             {loadingMore && (
               <div className="flex items-center justify-center py-6">
-                <Loader2 size={16} className="animate-spin text-[var(--color-text-muted)]" />
+                <Loader2 size={16} className="animate-spin text-muted" />
               </div>
             )}
           </>
@@ -488,7 +501,7 @@ export default function PracticeHistoryPage() {
       {/* 回到顶部 */}
       {showScrollTop && (
         <button onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          className="fixed bottom-20 right-4 w-9 h-9 rounded-full bg-[var(--color-accent)] text-white shadow-lg flex items-center justify-center hover:opacity-90 transition-opacity z-40">
+          className="fixed bottom-20 right-4 w-9 h-9 rounded-full bg-accent text-white shadow-lg flex items-center justify-center hover:opacity-90 transition-opacity z-40">
           <ArrowUp size={16} />
         </button>
       )}

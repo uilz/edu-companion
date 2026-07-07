@@ -86,64 +86,64 @@ export default function GoalSettingModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-      <div className="w-full max-w-md mx-4 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-xl overflow-hidden">
+      <div className="w-full max-w-md mx-4 bg-surface border border rounded-xl shadow-xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[var(--color-accent)]/10 flex items-center justify-center text-[var(--color-accent)]">
+            <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center text-accent">
               <Target size={16} />
             </div>
             <div>
               <span className="text-sm font-semibold">
                 {existingGoal ? "更新目标" : "设定学习目标"}
               </span>
-              <p className="text-[10px] text-[var(--color-text-muted)]">{nodeLabel}</p>
+              <p className="text-[10px] text-muted">{nodeLabel}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]">
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-hover text-muted">
             <X size={14} />
           </button>
         </div>
 
         {saved ? (
           <div className="flex flex-col items-center py-10 px-5">
-            <div className="w-14 h-14 rounded-full bg-[var(--color-success)]/10 flex items-center justify-center mb-4">
-              <Star size={28} className="text-[var(--color-success)]" />
+            <div className="w-14 h-14 rounded-full bg-success/10 flex items-center justify-center mb-4">
+              <Star size={28} className="text-success" />
             </div>
-            <p className="text-base font-semibold text-[var(--color-text)]">
+            <p className="text-base font-semibold text">
               目标已{existingGoal ? "更新" : "设定"}！
             </p>
-            <p className="text-xs text-[var(--color-text-muted)] mt-1">
+            <p className="text-xs text-muted mt-1">
               {targetMastery * 100}% 掌握 · {targetDate || "灵活期限"}
             </p>
           </div>
         ) : (
           <>
             {/* Current vs Target */}
-            <div className="px-5 py-4 border-b border-[var(--color-border)]/50">
+            <div className="px-5 py-4 border-b border/50">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] text-[var(--color-text-muted)]">当前掌握度</span>
-                <span className="text-[11px] font-medium text-[var(--color-accent)]">目标</span>
+                <span className="text-[11px] text-muted">当前掌握度</span>
+                <span className="text-[11px] font-medium text-accent">目标</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="flex-1 h-2 rounded-full bg-[var(--color-surface-hover)] overflow-hidden">
+                <div className="flex-1 h-2 rounded-full bg-surface-hover overflow-hidden">
                   <div
-                    className="h-full rounded-full bg-[var(--color-accent)]"
+                    className="h-full rounded-full bg-accent"
                     style={{ width: `${currentMastery * 100}%` }}
                   />
                 </div>
                 <span className="text-xs font-mono">{Math.round(currentMastery * 100)}%</span>
-                <TrendingUp size={14} className="text-[var(--color-accent)]" />
-                <div className="flex-1 h-2 rounded-full bg-[var(--color-surface-hover)] overflow-hidden">
+                <TrendingUp size={14} className="text-accent" />
+                <div className="flex-1 h-2 rounded-full bg-surface-hover overflow-hidden">
                   <div
-                    className="h-full rounded-full bg-[var(--color-success)]"
+                    className="h-full rounded-full bg-success"
                     style={{ width: `${targetMastery * 100}%` }}
                   />
                 </div>
                 <span className="text-xs font-mono">{Math.round(targetMastery * 100)}%</span>
               </div>
               {dailyProgress && (
-                <p className="text-[10px] text-[var(--color-text-muted)] mt-2">
+                <p className="text-[10px] text-muted mt-2">
                   每日需提升 {dailyProgress}% 可达成目标
                 </p>
               )}
@@ -153,9 +153,9 @@ export default function GoalSettingModal({
             <div className="px-5 py-4 space-y-4">
               {/* Target mastery slider */}
               <div>
-                <label className="flex items-center justify-between text-[11px] text-[var(--color-text-muted)] mb-1.5">
+                <label className="flex items-center justify-between text-[11px] text-muted mb-1.5">
                   <span>目标掌握度</span>
-                  <span className="font-mono font-medium text-[var(--color-text)]">
+                  <span className="font-mono font-medium text">
                     {Math.round(targetMastery * 100)}%
                   </span>
                 </label>
@@ -166,9 +166,9 @@ export default function GoalSettingModal({
                   step={0.05}
                   value={targetMastery}
                   onChange={(e) => setTargetMastery(parseFloat(e.target.value))}
-                  className="w-full h-1.5 rounded-full appearance-none bg-[var(--color-surface-hover)] accent-[var(--color-success)] cursor-pointer"
+                  className="w-full h-1.5 rounded-full appearance-none bg-surface-hover accent-success cursor-pointer"
                 />
-                <div className="flex justify-between text-[9px] text-[var(--color-text-muted)] mt-0.5">
+                <div className="flex justify-between text-[9px] text-muted mt-0.5">
                   <span>50%</span>
                   <span>75%</span>
                   <span>100%</span>
@@ -177,7 +177,7 @@ export default function GoalSettingModal({
 
               {/* Target date */}
               <div>
-                <label className="flex items-center gap-1.5 text-[11px] text-[var(--color-text-muted)] mb-1.5">
+                <label className="flex items-center gap-1.5 text-[11px] text-muted mb-1.5">
                   <Calendar size={11} />
                   预计达成日期
                 </label>
@@ -185,10 +185,10 @@ export default function GoalSettingModal({
                   type="date"
                   value={targetDate}
                   onChange={(e) => setTargetDate(e.target.value)}
-                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] focus:outline-none focus:border-[var(--color-accent)]"
+                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border bg-page focus:outline-none focus:border-accent"
                 />
                 {daysRemaining && (
-                  <p className="text-[10px] text-[var(--color-text-muted)] mt-1">
+                  <p className="text-[10px] text-muted mt-1">
                     距目标还有 {daysRemaining} 天
                   </p>
                 )}
@@ -196,7 +196,7 @@ export default function GoalSettingModal({
 
               {/* Priority */}
               <div>
-                <label className="text-[11px] text-[var(--color-text-muted)] mb-1.5 block">优先级</label>
+                <label className="text-[11px] text-muted mb-1.5 block">优先级</label>
                 <div className="flex gap-1.5">
                   {[
                     { value: 1, label: "🔥 紧急" },
@@ -209,8 +209,8 @@ export default function GoalSettingModal({
                       onClick={() => setPriority(opt.value)}
                       className={`flex-1 px-2 py-1.5 rounded-lg text-[10px] font-medium border transition-all ${
                         priority === opt.value
-                          ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                          : "border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-accent)]/30"
+                          ? "border-accent bg-accent/10 text-accent"
+                          : "border text-muted hover:border-accent/30"
                       }`}
                     >
                       {opt.label}
@@ -221,28 +221,28 @@ export default function GoalSettingModal({
 
               {/* Notes */}
               <div>
-                <label className="text-[11px] text-[var(--color-text-muted)] mb-1.5 block">备注</label>
+                <label className="text-[11px] text-muted mb-1.5 block">备注</label>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="设定这个目标的原因..."
-                  className="w-full h-16 px-2.5 py-1.5 text-xs rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] resize-none focus:outline-none focus:border-[var(--color-accent)]"
+                  className="w-full h-16 px-2.5 py-1.5 text-xs rounded-lg border border bg-page resize-none focus:outline-none focus:border-accent"
                 />
               </div>
             </div>
 
             {/* Actions */}
-            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--color-border)]">
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border">
               <button
                 onClick={onClose}
-                className="px-3 py-1.5 rounded-lg text-xs text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors"
+                className="px-3 py-1.5 rounded-lg text-xs text-muted hover:bg-surface-hover transition-colors"
               >
                 取消
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-accent text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
               >
                 {saving ? "保存中..." : existingGoal ? "更新目标" : "设定目标"}
               </button>

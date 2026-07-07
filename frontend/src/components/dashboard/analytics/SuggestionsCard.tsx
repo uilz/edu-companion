@@ -15,15 +15,15 @@ export function SuggestionsCard({ suggestions }: { suggestions: Suggestion[] }) 
         {suggestions.map((s, i) => (
           <div
             key={i}
-            className="flex items-start gap-2 text-sm text-[var(--color-text-secondary)] leading-relaxed"
+            className="flex items-start gap-2 text-sm text-secondary leading-relaxed"
           >
-            <span className="text-[var(--color-accent)] mt-0.5">•</span>
+            <span className="text-accent mt-0.5">•</span>
             <span>
               {s.text}
               {s.link && (
                 <Link
                   href={s.link}
-                  className="ml-1 text-[var(--color-accent)] hover:underline text-xs"
+                  className="ml-1 text-accent hover:underline text-xs"
                 >
                   {s.action || "去看看"} →
                 </Link>

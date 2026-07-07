@@ -48,19 +48,19 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
   return (
     <div
       ref={ref}
-      className="fixed z-[300] min-w-[180px] bg-[var(--color-surface-elevated)] border border-[var(--color-border)] rounded-xl shadow-lg py-1.5 animate-in fade-in duration-100"
+      className="fixed z-[300] min-w-[180px] bg-surface-elevated border border rounded-xl shadow-lg py-1.5 animate-in fade-in duration-100"
       style={{ left: adjustedX, top: adjustedY }}
     >
       {items.map((item, i) => {
         if (item.divider) {
-          return <div key={i} className="h-px bg-[var(--color-border)] my-1 mx-2" />;
+          return <div key={i} className="h-px bg-divider my-1 mx-2" />;
         }
         return (
           <button
             key={item.id}
             onClick={() => { item.onClick(); onClose(); }}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 text-[12px] transition-colors hover:bg-[var(--color-accent)]/10 ${
-              item.danger ? "text-[var(--color-danger)] hover:bg-red-500/10" : "text-[var(--color-text)] hover:text-[var(--color-accent)]"
+            className={`w-full flex items-center gap-2.5 px-3 py-2 text-[12px] transition-colors hover:bg-accent/10 ${
+              item.danger ? "text-danger hover:bg-danger/10" : "text hover:text-accent"
             }`}
           >
             <span className="w-4 h-4 flex items-center justify-center flex-shrink-0">

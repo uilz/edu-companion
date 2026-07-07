@@ -27,7 +27,7 @@ export function NodeCard({
   return (
     <div
       onClick={onOpen}
-      className={`text-left rounded-lg bg-surface border border-divider hover:border-[var(--color-accent)] transition ${
+      className={`text-left rounded-lg bg-surface border border-divider hover:border-accent transition ${
         compact ? "p-2" : "p-3"
       } ${onOpen ? "cursor-pointer" : ""}`}
     >
@@ -39,7 +39,7 @@ export function NodeCard({
         {showCompletion && node.completed_at && (
           <>
             <span>·</span>
-            <span className="text-green-500">已完成</span>
+            <span className="text-success">已完成</span>
           </>
         )}
       </div>

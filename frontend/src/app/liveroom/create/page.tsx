@@ -80,23 +80,23 @@ export default function CreateRoomPage() {
         is_transcript_enabled: isTranscriptEnabled,
         ai_intrusion_level: aiIntrusionLevel,
         settings,
-      } as any);
+      } as Partial<LanguageRoom>);
       router.push(`/liveroom/rooms/${room.id}`);
-    } catch (e: any) {
-      setError(e.message || "创建失败");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "创建失败");
     } finally {
       setCreating(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)]">
+    <div className="min-h-screen bg-page">
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
         {/* 头部 */}
         <div className="flex items-center gap-3 mb-6">
           <button
             onClick={() => router.push("/liveroom")}
-            className="p-1.5 hover:bg-[var(--color-card)] rounded"
+            className="p-1.5 hover:bg-surface rounded"
           >
             <ArrowLeft size={18} />
           </button>
@@ -106,26 +106,26 @@ export default function CreateRoomPage() {
         </div>
 
         {error && (
-          <div className="mb-4 px-4 py-3 border border-red-300 bg-red-50 text-sm text-red-700 rounded flex items-center gap-2">
+          <div className="mb-4 px-4 py-3 border border-danger/30 bg-danger/10 text-sm text-danger rounded flex items-center gap-2">
             <AlertCircle size={15} /> {error}
           </div>
         )}
 
-        <div className="space-y-4 border border-[var(--color-border)] bg-[var(--color-card)] rounded-lg p-5">
+        <div className="space-y-4 border border bg-surface rounded-lg p-5">
           {/* 房间名 */}
           <div>
-            <label className="text-xs text-[var(--color-text-muted)]">房间名 *</label>
+            <label className="text-xs text-muted">房间名 *</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="例: 咖啡馆点餐练习"
-              className="w-full mt-1 px-3 py-2 text-sm border border-[var(--color-border)] rounded bg-[var(--color-bg)]"
+              className="w-full mt-1 px-3 py-2 text-sm border border rounded bg-page"
             />
           </div>
 
           {/* 房间类型 */}
           <div>
-            <label className="text-xs text-[var(--color-text-muted)]">房间类型</label>
+            <label className="text-xs text-muted">房间类型</label>
             <div className="grid grid-cols-4 gap-2 mt-1">
               {(["1v1", "small", "medium", "large"] as RoomType[]).map((t) => (
                 <button
@@ -133,26 +133,26 @@ export default function CreateRoomPage() {
                   onClick={() => setRoomType(t)}
                   className={`px-3 py-2 text-xs border rounded ${
                     roomType === t
-                      ? "bg-emerald-50 border-emerald-300 text-emerald-700"
-                      : "border-[var(--color-border)] hover:bg-[var(--color-surface-2)]"
+                      ? "bg-success/10 border-success/30 text-success"
+                      : "border hover:bg-surface-hover"
                   }`}
                 >
                   {ROOM_TYPE_LABELS[t]}
                 </button>
               ))}
             </div>
-            <div className="text-[10px] text-[var(--color-text-muted)] mt-1.5">
+            <div className="text-[10px] text-muted mt-1.5">
               决策 2: 仅邀请制, 不设公开房间
             </div>
           </div>
 
           {/* 场景 */}
           <div>
-            <label className="text-xs text-[var(--color-text-muted)]">选择场景 (可选)</label>
+            <label className="text-xs text-muted">选择场景 (可选)</label>
             <select
               value={scenarioId}
               onChange={(e) => setScenarioId(e.target.value)}
-              className="w-full mt-1 px-3 py-2 text-sm border border-[var(--color-border)] rounded bg-[var(--color-bg)]"
+              className="w-full mt-1 px-3 py-2 text-sm border border rounded bg-page"
             >
               <option value="">不选 (自由对话)</option>
               {scenarios.map((s) => (
@@ -185,7 +185,7 @@ export default function CreateRoomPage() {
 
           {/* AI 侵入度 */}
           <div>
-            <label className="text-xs text-[var(--color-text-muted)]">AI 辅助者默认侵入度</label>
+            <label className="text-xs text-muted">AI 辅助者默认侵入度</label>
             <div className="grid grid-cols-3 gap-2 mt-1">
               {(["low", "medium", "high"] as const).map((l) => (
                 <button
@@ -193,15 +193,15 @@ export default function CreateRoomPage() {
                   onClick={() => setAiIntrusionLevel(l)}
                   className={`px-3 py-2 text-xs border rounded ${
                     aiIntrusionLevel === l
-                      ? "bg-emerald-50 border-emerald-300 text-emerald-700"
-                      : "border-[var(--color-border)] hover:bg-[var(--color-surface-2)]"
+                      ? "bg-success/10 border-success/30 text-success"
+                      : "border hover:bg-surface-hover"
                   }`}
                 >
                   {l === "low" ? "低" : l === "medium" ? "中" : "高"}
                 </button>
               ))}
             </div>
-            <div className="text-[10px] text-[var(--color-text-muted)] mt-1.5">
+            <div className="text-[10px] text-muted mt-1.5">
               用户可在房间内单独调整自己的侵入度
             </div>
           </div>
@@ -210,13 +210,13 @@ export default function CreateRoomPage() {
 
           {/* AI 同伴选择 */}
           <div>
-            <label className="text-xs text-[var(--color-text-muted)] flex items-center gap-1">
+            <label className="text-xs text-muted flex items-center gap-1">
               <UserCircle2 size={12} /> AI 同伴 (可选)
             </label>
             <select
               value={aiCompanionPersonaId}
               onChange={(e) => setAiCompanionPersonaId(e.target.value)}
-              className="w-full mt-1 px-3 py-2 text-sm border border-[var(--color-border)] rounded bg-[var(--color-bg)]"
+              className="w-full mt-1 px-3 py-2 text-sm border border rounded bg-page"
             >
               <option value="">不选 (无 AI 同伴, 仅真人对话)</option>
               {personas.map((p) => (
@@ -226,20 +226,20 @@ export default function CreateRoomPage() {
                 </option>
               ))}
             </select>
-            <div className="text-[10px] text-[var(--color-text-muted)] mt-1.5">
+            <div className="text-[10px] text-muted mt-1.5">
               AI 同伴将作为 participant 加入房间 (decision 5: ai_companion)
             </div>
           </div>
 
           {/* AI 辅助者选择 */}
           <div>
-            <label className="text-xs text-[var(--color-text-muted)] flex items-center gap-1">
+            <label className="text-xs text-muted flex items-center gap-1">
               <Headphones size={12} /> AI 辅助者 (可选)
             </label>
             <select
               value={aiAssistantPersonaId}
               onChange={(e) => setAiAssistantPersonaId(e.target.value)}
-              className="w-full mt-1 px-3 py-2 text-sm border border-[var(--color-border)] rounded bg-[var(--color-bg)]"
+              className="w-full mt-1 px-3 py-2 text-sm border border rounded bg-page"
             >
               <option value="">不选 (默认辅助者)</option>
               {personas.map((p) => (
@@ -249,14 +249,14 @@ export default function CreateRoomPage() {
                 </option>
               ))}
             </select>
-            <div className="text-[10px] text-[var(--color-text-muted)] mt-1.5">
+            <div className="text-[10px] text-muted mt-1.5">
               AI 辅助者仅在用户个人侧边区显示, 不参与对话 (decision 5: ai_assistant)
             </div>
           </div>
 
           {/* STT 语言 */}
           <div>
-            <label className="text-xs text-[var(--color-text-muted)]">STT 转写语言 (至少 3 选 1)</label>
+            <label className="text-xs text-muted">STT 转写语言 (至少 3 选 1)</label>
             <div className="grid grid-cols-3 gap-2 mt-1">
               {STT_LANGUAGES.map((l) => (
                 <button
@@ -264,22 +264,22 @@ export default function CreateRoomPage() {
                   onClick={() => setSttLanguage(l.value)}
                   className={`px-3 py-2 text-xs border rounded ${
                     sttLanguage === l.value
-                      ? "bg-emerald-50 border-emerald-300 text-emerald-700"
-                      : "border-[var(--color-border)] hover:bg-[var(--color-surface-2)]"
+                      ? "bg-success/10 border-success/30 text-success"
+                      : "border hover:bg-surface-hover"
                   }`}
                 >
                   {l.label}
                 </button>
               ))}
             </div>
-            <div className="text-[10px] text-[var(--color-text-muted)] mt-1.5">
+            <div className="text-[10px] text-muted mt-1.5">
               ADR 待修复 2: 当前需用户主动配置每房间 STT 语言, 未做多语种自动切换
             </div>
           </div>
 
           {/* 3 档纠错倾向 */}
           <div>
-            <label className="text-xs text-[var(--color-text-muted)]">AI 纠错倾向 (3 档)</label>
+            <label className="text-xs text-muted">AI 纠错倾向 (3 档)</label>
             <div className="grid grid-cols-3 gap-2 mt-1">
               {CORRECTION_LEVELS.map((l) => (
                 <button
@@ -287,21 +287,21 @@ export default function CreateRoomPage() {
                   onClick={() => setErrorCorrectionLevel(l.value)}
                   className={`px-3 py-2 text-xs border rounded ${
                     errorCorrectionLevel === l.value
-                      ? "bg-emerald-50 border-emerald-300 text-emerald-700"
-                      : "border-[var(--color-border)] hover:bg-[var(--color-surface-2)]"
+                      ? "bg-success/10 border-success/30 text-success"
+                      : "border hover:bg-surface-hover"
                   }`}
                 >
                   {l.label}
                 </button>
               ))}
             </div>
-            <div className="text-[10px] text-[var(--color-text-muted)] mt-1.5">
+            <div className="text-[10px] text-muted mt-1.5">
               ADR 决策 6: 用户主动选择, AI 默认不评判不纠错
             </div>
           </div>
 
           {/* 关键说明 */}
-          <div className="text-[10px] text-[var(--color-text-muted)] border-t border-[var(--color-border)] pt-3 leading-relaxed">
+          <div className="text-[10px] text-muted border-t border pt-3 leading-relaxed">
             <strong>核心原则</strong>: 房间不评判、不主导、不强制流程。<br />
             AI 纠错 = 用户主动选择。转写数据按参与者各自存储 (隐私优先)。
           </div>
@@ -309,7 +309,7 @@ export default function CreateRoomPage() {
           <button
             onClick={handleCreate}
             disabled={creating}
-            className="w-full py-2.5 bg-emerald-600 text-white rounded-md text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
+            className="w-full py-2.5 bg-success text-white rounded-md text-sm font-medium hover:bg-success disabled:opacity-50"
           >
             {creating ? (
               <><Loader2 size={14} className="inline animate-spin mr-1" /> 创建中...</>

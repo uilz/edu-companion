@@ -27,6 +27,7 @@ export default function ProjectDetailPage() {
   const {
     project,
     loading,
+    refetch,
     saveNode,
     deleteNode,
     completeNode,
@@ -42,6 +43,7 @@ export default function ProjectDetailPage() {
   const { view, setView } = useViewPreference(projectId);
 
   // 本地 UI state
+  const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<ProjectNode | null>(null);
   const [historyNode, setHistoryNode] = useState<ProjectNode | null>(null);
   const [versions, setVersions] = useState<Version[]>([]);
@@ -72,11 +74,11 @@ export default function ProjectDetailPage() {
       if (res.ok) {
         setShowAddChild(null);
         setNewNode({ title: "", type: 1, description: "" });
-        // 触发 useProjectData refetch 通过 reload
-        window.location.reload();
+        refetch();
       }
     } catch (e) {
       console.error(e);
+      setError(e instanceof Error ? e.message : "添加节点失败");
     } finally {
       setAddingNode(false);
     }
@@ -112,6 +114,7 @@ export default function ProjectDetailPage() {
       );
     } catch (e) {
       console.error(e);
+      setError(e instanceof Error ? e.message : "对比版本失败");
     }
   };
 
@@ -123,6 +126,7 @@ export default function ProjectDetailPage() {
       setMilestoneName("");
     } catch (e) {
       console.error(e);
+      setError(e instanceof Error ? e.message : "创建里程碑失败");
     }
   };
 
@@ -134,6 +138,22 @@ export default function ProjectDetailPage() {
     return (
       <div className="flex items-center justify-center min-h-[60vh] text-ink-secondary">
         <Loader2 className="animate-spin" size={24} />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-full p-6 max-w-7xl mx-auto text-center">
+        <div className="p-4 border border-danger/20 bg-danger/10 rounded-lg text-danger mb-4">
+          {error}
+        </div>
+        <button
+          onClick={() => { setError(null); refetch(); }}
+          className="px-4 py-2 rounded-lg bg-accent text-white hover:opacity-90 text-sm"
+        >
+          重试
+        </button>
       </div>
     );
   }
@@ -166,7 +186,7 @@ export default function ProjectDetailPage() {
           <h1 className="text-2xl font-bold text-ink-primary tracking-tight flex items-center gap-2">
             {project.name}
             {project.status === "archived" && (
-              <span className="text-xs px-2 py-0.5 rounded bg-amber-500/10 text-amber-500">
+              <span className="text-xs px-2 py-0.5 rounded bg-warning/10 text-warning">
                 已归档
               </span>
             )}
@@ -193,7 +213,7 @@ export default function ProjectDetailPage() {
         </div>
         <div className="p-3 rounded-lg border border-divider bg-surface">
           <div className="text-xs text-ink-secondary">已完成</div>
-          <div className="text-2xl font-bold text-green-500">{project.completed_node_count}</div>
+          <div className="text-2xl font-bold text-success">{project.completed_node_count}</div>
         </div>
         <div className="p-3 rounded-lg border border-divider bg-surface">
           <div className="text-xs text-ink-secondary">里程碑</div>
@@ -281,7 +301,7 @@ export default function ProjectDetailPage() {
               <button
                 onClick={handleAddNode}
                 disabled={addingNode || !newNode.title.trim()}
-                className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50"
+                className="px-4 py-2 rounded-lg bg-accent text-white hover:opacity-90 disabled:opacity-50"
               >
                 {addingNode ? "添加中..." : "添加"}
               </button>
@@ -295,7 +315,7 @@ export default function ProjectDetailPage() {
         <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4">
           <div className="bg-page rounded-xl border border-divider w-full max-w-md p-4">
             <h3 className="text-lg font-semibold text-ink-primary mb-3 flex items-center gap-2">
-              <Flag size={16} className="text-amber-500" />
+              <Flag size={16} className="text-warning" />
               标记里程碑
             </h3>
             <input
@@ -315,7 +335,7 @@ export default function ProjectDetailPage() {
               <button
                 onClick={handleCreateMilestone}
                 disabled={!milestoneName.trim()}
-                className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50"
+                className="px-4 py-2 rounded-lg bg-accent text-white hover:opacity-90 disabled:opacity-50"
               >
                 标记
               </button>

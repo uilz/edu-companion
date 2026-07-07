@@ -98,7 +98,7 @@ function InlinePreview({ ext, url, fileName, className }: {
         <audio controls className="w-full" src={url}>
           您的浏览器不支持音频播放
         </audio>
-        <p className="text-center text-[11px] text-[var(--color-text-muted)] mt-3">{fileName}</p>
+        <p className="text-center text-[11px] text-muted mt-3">{fileName}</p>
       </div>
     );
   }
@@ -125,15 +125,15 @@ function ImagePreview({ url, fileName, className }: { url: string; fileName: str
     <div className={`relative ${className}`}>
       {!loaded && !errored && (
         <div className="flex items-center justify-center min-h-[200px]">
-          <div className="animate-spin w-8 h-8 border-2 border-[var(--color-accent)] border-t-transparent rounded-full" />
+          <div className="animate-spin w-8 h-8 border-2 border-accent border-t-transparent rounded-full" />
         </div>
       )}
       {errored && (
         <div className="flex flex-col items-center justify-center min-h-[200px] text-center">
-          <svg className="w-8 h-8 text-[var(--color-text-muted)] mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <svg className="w-8 h-8 text-muted mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z" />
           </svg>
-          <p className="text-sm text-[var(--color-text-muted)]">图片加载失败</p>
+          <p className="text-sm text-muted">图片加载失败</p>
         </div>
       )}
       <img src={url} alt={fileName}
@@ -198,8 +198,8 @@ function FetchedPreview({ ext, previewUrl, fileName, className }: {
   if (loading) {
     return (
       <div className={`flex items-center justify-center min-h-[300px] ${className}`}>
-        <div className="animate-spin w-8 h-8 border-2 border-[var(--color-accent)] border-t-transparent rounded-full" />
-        <span className="ml-3 text-sm text-[var(--color-text-muted)]">加载中...</span>
+        <div className="animate-spin w-8 h-8 border-2 border-accent border-t-transparent rounded-full" />
+        <span className="ml-3 text-sm text-muted">加载中...</span>
       </div>
     );
   }
@@ -208,7 +208,7 @@ function FetchedPreview({ ext, previewUrl, fileName, className }: {
   if (error) {
     return (
       <div className={`flex flex-col items-center justify-center min-h-[200px] text-center ${className}`}>
-        <p className="text-sm text-red-400 mb-2">{error}</p>
+        <p className="text-sm text-danger mb-2">{error}</p>
       </div>
     );
   }
@@ -239,7 +239,7 @@ function FetchedPreview({ ext, previewUrl, fileName, className }: {
 
   return (
     <div className={`flex items-center justify-center min-h-[200px] ${className}`}>
-      <p className="text-sm text-[var(--color-text-muted)]">此文件类型暂不支持预览</p>
+      <p className="text-sm text-muted">此文件类型暂不支持预览</p>
     </div>
   );
 }
@@ -269,18 +269,18 @@ function DocxPreview({ buf, className }: { buf: ArrayBuffer; className: string }
   if (loading) {
     return (
       <div className={`flex items-center justify-center min-h-[200px] ${className}`}>
-        <div className="animate-spin w-6 h-6 border-2 border-[var(--color-accent)] border-t-transparent rounded-full" />
+        <div className="animate-spin w-6 h-6 border-2 border-accent border-t-transparent rounded-full" />
       </div>
     );
   }
 
   if (error) {
-    return <div className={`p-4 text-sm text-red-400 ${className}`}>{error}</div>;
+    return <div className={`p-4 text-sm text-danger ${className}`}>{error}</div>;
   }
 
   return (
     <div
-      className={`w-full p-4 max-h-[60vh] overflow-auto text-sm leading-relaxed text-[var(--color-text)] ${className}`}
+      className={`w-full p-4 max-h-[60vh] overflow-auto text-sm leading-relaxed text ${className}`}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
@@ -321,7 +321,7 @@ function CodePreview({ lang, text, className }: { lang: string; text: string; cl
 function PlainText({ text, className = "" }: { text: string; className?: string }) {
   return (
     <div className={`w-full p-4 max-h-[60vh] overflow-auto ${className}`}>
-      <pre className="text-xs leading-relaxed text-[var(--color-text)] whitespace-pre-wrap font-sans">{text}</pre>
+      <pre className="text-xs leading-relaxed text whitespace-pre-wrap font-sans">{text}</pre>
     </div>
   );
 }

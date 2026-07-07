@@ -136,3 +136,14 @@ export async function fetchPartitions(): Promise<
     return [];
   }
 }
+
+
+// ══════════════════════════════════════════════════════════════
+//  Graph Service (unified)
+// ══════════════════════════════════════════════════════════════
+
+export const graphService = {
+  kgNodesToGraphData,
+  fetchGraphData,
+  fetchPartitions,
+};

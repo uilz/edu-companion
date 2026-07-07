@@ -463,6 +463,7 @@ export interface DueQuestion {
   mastered: boolean;
   ef: number;
   interval_days: number;
+  is_cold_start?: boolean;
 }
 
 export interface ReviewStats {

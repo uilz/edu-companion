@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  RotateCcw, Check, X, Loader2, ChevronLeft,
+  RotateCcw, Check, X, ChevronLeft,
 } from "lucide-react";
+import { PageSkeleton } from "@/components/ui/Skeleton";
 import {
   submitAnswer, createPracticeSession, getQuestion,
   type V7Question, type V7SubmitResult,
@@ -83,20 +84,16 @@ export default function ReviewQuestionPage() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center">
-        <Loader2 size={22} className="animate-spin text-[var(--color-accent)]" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   if (error && !question) {
     return (
-      <div className="min-h-screen bg-[var(--color-bg)] flex flex-col items-center justify-center px-6">
-        <X size={22} className="text-red-500 mb-3" />
-        <p className="text-sm text-[var(--color-text)] mb-4">{error}</p>
+      <div className="min-h-screen bg-page flex flex-col items-center justify-center px-6">
+        <X size={22} className="text-danger mb-3" />
+        <p className="text-sm text mb-4">{error}</p>
         <button onClick={handleBack}
-          className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-xs font-medium">
+          className="px-4 py-2 rounded-lg bg-accent text-white text-xs font-medium">
           返回练习
         </button>
       </div>
@@ -104,16 +101,16 @@ export default function ReviewQuestionPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)]">
-      <div className="sticky top-0 z-10 bg-[var(--color-bg)]/80 backdrop-blur-sm border-b border-[var(--color-border)]/50">
+    <div className="min-h-screen bg-page">
+      <div className="sticky top-0 z-10 bg-page/80 backdrop-blur-sm border-b border/50">
         <div className="max-w-3xl mx-auto px-4 flex items-center h-12 gap-3">
           <button onClick={handleBack}
-            className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors">
+            className="text-xs text-muted hover:text transition-colors">
             ← 返回
           </button>
-          <span className="text-[11px] text-[var(--color-text-muted)]">|</span>
-          <RotateCcw size={13} className="text-orange-500" />
-          <span className="text-xs font-medium text-[var(--color-text)]">复习</span>
+          <span className="text-[11px] text-muted">|</span>
+          <RotateCcw size={13} className="text-warning" />
+          <span className="text-xs font-medium text">复习</span>
         </div>
       </div>
 

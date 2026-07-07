@@ -181,3 +181,21 @@ export async function listProjects(params?: {
   const path = `/api/learning/projects${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
   return learningFetch(path);
 }
+
+
+// ════════════════════════════════════════
+//  Learning Service (unified)
+// ════════════════════════════════════════
+
+export const learningService = {
+  createNote,
+  listNotes,
+  getNote,
+  deleteNote,
+  aggregateNotes,
+  createGoal,
+  listGoals,
+  updateGoal,
+  generateProject,
+  listProjects,
+};

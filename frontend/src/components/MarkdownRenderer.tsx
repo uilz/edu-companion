@@ -49,7 +49,7 @@ export default function MarkdownRenderer({
             if (isInline) {
               return (
                 <code
-                  className="bg-[var(--color-surface-hover)] px-1 py-0.5 rounded text-xs"
+                  className="bg-surface-hover px-1 py-0.5 rounded text-xs"
                   {...props}
                 >
                   {codeChildren}
@@ -71,7 +71,7 @@ export default function MarkdownRenderer({
           // ── 表格: 响应式容器 + 边框 ──
           table: ({ children: tblChildren }) => (
             <div className="overflow-x-auto my-2">
-              <table className="min-w-full border-collapse border border-[var(--color-border)] text-xs">
+              <table className="min-w-full border-collapse border border text-xs">
                 {tblChildren}
               </table>
             </div>
@@ -80,12 +80,12 @@ export default function MarkdownRenderer({
           tbody: ({ children }) => <tbody>{children}</tbody>,
           tr: ({ children }) => <tr>{children}</tr>,
           th: ({ children }) => (
-            <th className="border border-[var(--color-border)] bg-[var(--color-surface-hover)] px-2 py-1.5 text-left font-medium whitespace-nowrap">
+            <th className="border border bg-surface-hover px-2 py-1.5 text-left font-medium whitespace-nowrap">
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="border border-[var(--color-border)] px-2 py-1">
+            <td className="border border px-2 py-1">
               {children}
             </td>
           ),
@@ -124,7 +124,7 @@ export default function MarkdownRenderer({
                       type="checkbox"
                       checked={input}
                       readOnly
-                      className="accent-[var(--color-accent)]"
+                      className="accent-accent"
                     />
                     <span>{children}</span>
                   </label>

@@ -69,7 +69,7 @@ export function NodeEditor({ node, onClose, onSave, onVersions, onDelete }: Node
             </button>
             <button
               onClick={onDelete}
-              className="px-3 py-1.5 rounded text-sm text-ink-secondary hover:text-red-500 hover:bg-surface-hover"
+              className="px-3 py-1.5 rounded text-sm text-ink-secondary hover:text-danger hover:bg-surface-hover"
             >
               删除
             </button>
@@ -85,13 +85,13 @@ export function NodeEditor({ node, onClose, onSave, onVersions, onDelete }: Node
         <div className="flex border-b border-divider px-4">
           <button
             onClick={() => setActiveTab("edit")}
-            className={`px-3 py-2 text-sm ${activeTab === "edit" ? "border-b-2 border-[var(--color-accent)] text-[var(--color-accent)]" : "text-ink-secondary"}`}
+            className={`px-3 py-2 text-sm ${activeTab === "edit" ? "border-b-2 border-accent text-accent" : "text-ink-secondary"}`}
           >
             编辑
           </button>
           <button
             onClick={() => setActiveTab("preview")}
-            className={`px-3 py-2 text-sm ${activeTab === "preview" ? "border-b-2 border-[var(--color-accent)] text-[var(--color-accent)]" : "text-ink-secondary"}`}
+            className={`px-3 py-2 text-sm ${activeTab === "preview" ? "border-b-2 border-accent text-accent" : "text-ink-secondary"}`}
           >
             预览
           </button>
@@ -196,7 +196,7 @@ export function NodeEditor({ node, onClose, onSave, onVersions, onDelete }: Node
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+            className="px-4 py-2 rounded-lg bg-accent text-white hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
           >
             {saving && <Loader2 className="animate-spin" size={14} />}
             保存（自动入栈版本）

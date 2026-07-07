@@ -57,7 +57,7 @@ export default function AnalyticsContent() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="animate-spin text-[var(--color-accent)]" size={24} />
+        <Loader2 className="animate-spin text-accent" size={24} />
       </div>
     );
   }
@@ -65,12 +65,12 @@ export default function AnalyticsContent() {
   if (!data || !data.overview || data.overview.total_questions === 0) {
     return (
       <div className="text-center py-16">
-        <BarChart3 size={40} className="mx-auto mb-4 text-[var(--color-text-muted)]" />
-        <h1 className="text-3xl font-semibold text-[var(--color-text)] mb-2">学情分析</h1>
-        <p className="text-[var(--color-text-muted)] mb-6">还没有练习数据</p>
+        <BarChart3 size={40} className="mx-auto mb-4 text-muted" />
+        <h1 className="text-3xl font-semibold text mb-2">学情分析</h1>
+        <p className="text-muted mb-6">还没有练习数据</p>
         <Link
           href="/practice"
-          className="inline-block px-6 py-2.5 bg-[var(--color-accent)] text-white text-sm hover:bg-[var(--color-accent-hover)] active:scale-[0.97] transition-colors"
+          className="inline-block px-6 py-2.5 bg-accent text-white text-sm hover:bg-accent-hover active:scale-[0.97] transition-colors"
         >
           去练习
         </Link>
@@ -84,7 +84,7 @@ export default function AnalyticsContent() {
     <div className="max-w-4xl mx-auto">
       {/* ── 时间范围 + 子 Tab ── */}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <div className="flex bg-[var(--color-surface)] p-0.5 rounded">
+        <div className="flex bg-surface p-0.5 rounded">
           {([
             { key: "analytics" as Tab, label: "数据", icon: <BarChart3 size={12} /> },
             { key: "habits" as Tab, label: "习惯", icon: <Heart size={12} /> },
@@ -94,8 +94,8 @@ export default function AnalyticsContent() {
               onClick={() => setTab(t.key)}
               className={`flex items-center gap-1 px-3 py-1 text-xs font-medium transition-colors ${
                 tab === t.key
-                  ? "bg-[var(--color-accent)] text-white shadow-sm"
-                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                  ? "bg-accent text-white shadow-sm"
+                  : "text-secondary hover:text"
               }`}
               style={{ borderRadius: "2px" }}
             >
@@ -111,8 +111,8 @@ export default function AnalyticsContent() {
               onClick={() => setTimeRange(r)}
               className={`px-3 py-1.5 text-xs font-medium transition-colors rounded ${
                 timeRange === r
-                  ? "bg-[var(--color-accent)] text-white"
-                  : "bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                  ? "bg-accent text-white"
+                  : "bg-surface text-secondary hover:text"
               }`}
             >
               {r === "week" ? "本周" : r === "month" ? "本月" : "全部"}
@@ -120,7 +120,7 @@ export default function AnalyticsContent() {
           ))}
           <Link
             href="/practice/errors"
-            className="ml-2 flex items-center gap-1 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            className="ml-2 flex items-center gap-1 text-xs text-muted hover:text"
           >
             <BookOpen size={13} /> 错题本
           </Link>

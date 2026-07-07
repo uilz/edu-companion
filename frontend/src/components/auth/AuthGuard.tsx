@@ -28,8 +28,8 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)]">
-        <div className="text-[var(--color-text-secondary)] text-sm">加载中...</div>
+      <div className="min-h-screen flex items-center justify-center bg-page">
+        <div className="text-secondary text-sm">加载中...</div>
       </div>
     );
   }
@@ -37,8 +37,8 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   // 未认证 + 非公开页面 → 不渲染 children，等 useEffect 跳转
   if (!user && !(PUBLIC_PATHS.some((p) => pathname?.startsWith(p)))) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)]">
-        <div className="text-[var(--color-text-secondary)] text-sm">正在跳转登录...</div>
+      <div className="min-h-screen flex items-center justify-center bg-page">
+        <div className="text-secondary text-sm">正在跳转登录...</div>
       </div>
     );
   }

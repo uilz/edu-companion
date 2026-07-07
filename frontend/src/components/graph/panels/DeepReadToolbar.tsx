@@ -55,7 +55,7 @@ export default function DeepReadToolbar({
   return (
     <div
       ref={ref}
-      className="fixed z-50 flex items-center gap-0.5 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg p-0.5"
+      className="fixed z-50 flex items-center gap-0.5 bg-surface border border rounded-lg shadow-lg p-0.5"
       style={{
         left: adjusted.x,
         top: adjusted.y,
@@ -63,14 +63,14 @@ export default function DeepReadToolbar({
       }}
     >
       {/* Text info */}
-      <span className="px-2 text-[10px] text-[var(--color-text-muted)] whitespace-nowrap border-r border-[var(--color-border)] mr-0.5">
+      <span className="px-2 text-[10px] text-muted whitespace-nowrap border-r border mr-0.5">
         {levelLabel} · {selectedText.length}字
       </span>
 
       {/* Highlight */}
       <button
         onClick={onHighlight}
-        className="flex items-center gap-1 px-2 py-1.5 rounded text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-warning)] hover:bg-[var(--color-warning)]/5 transition-colors"
+        className="flex items-center gap-1 px-2 py-1.5 rounded text-[11px] text-muted hover:text-warning hover:bg-warning/5 transition-colors"
         title="高亮"
       >
         <Highlighter size={12} />
@@ -80,7 +80,7 @@ export default function DeepReadToolbar({
       {/* Quote */}
       <button
         onClick={onQuote}
-        className="flex items-center gap-1 px-2 py-1.5 rounded text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-info)] hover:bg-[var(--color-info)]/5 transition-colors"
+        className="flex items-center gap-1 px-2 py-1.5 rounded text-[11px] text-muted hover:text-info hover:bg-info/5 transition-colors"
         title="引用"
       >
         <Quote size={12} />
@@ -90,7 +90,7 @@ export default function DeepReadToolbar({
       {/* Explain (self-explanation) */}
       <button
         onClick={onExplain}
-        className="flex items-center gap-1 px-2 py-1.5 rounded text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors"
+        className="flex items-center gap-1 px-2 py-1.5 rounded text-[11px] text-muted hover:text-accent hover:bg-accent/5 transition-colors"
         title="用自己的话解释"
       >
         <Lightbulb size={12} />
@@ -100,7 +100,7 @@ export default function DeepReadToolbar({
       {/* Note */}
       <button
         onClick={onNote}
-        className="flex items-center gap-1 px-2 py-1.5 rounded text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-success)] hover:bg-[var(--color-success)]/5 transition-colors"
+        className="flex items-center gap-1 px-2 py-1.5 rounded text-[11px] text-muted hover:text-success hover:bg-success/5 transition-colors"
         title="记笔记"
       >
         <StickyNote size={12} />
@@ -110,7 +110,7 @@ export default function DeepReadToolbar({
       {/* Close */}
       <button
         onClick={onClose}
-        className="flex items-center px-1.5 py-1.5 rounded text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors ml-0.5 border-l border-[var(--color-border)]"
+        className="flex items-center px-1.5 py-1.5 rounded text-muted hover:text hover:bg-surface-hover transition-colors ml-0.5 border-l border"
         title="关闭"
       >
         <X size={12} />

@@ -316,9 +316,9 @@ export const PUSH_TYPE_LABELS: Record<PushType, string> = {
 };
 
 export const PUSH_TYPE_COLORS: Record<PushType, string> = {
-  research_object: "bg-blue-100 text-blue-800",
-  research_method: "bg-purple-100 text-purple-800",
-  hot_news: "bg-orange-100 text-orange-800",
+  research_object: "bg-info/10 text-info/80",
+  research_method: "bg-accent/10 text-accent/80",
+  hot_news: "bg-warning/10 text-warning/80",
 };
 
 export const FEEDBACK_LABELS: Record<PushFeedback, string> = {
@@ -329,10 +329,10 @@ export const FEEDBACK_LABELS: Record<PushFeedback, string> = {
 };
 
 export const FEEDBACK_COLORS: Record<PushFeedback, string> = {
-  read: "bg-gray-100 text-gray-700",
-  later: "bg-yellow-100 text-yellow-800",
-  dislike: "bg-red-100 text-red-800",
-  imported: "bg-green-100 text-green-800",
+  read: "bg-surface text-muted",
+  later: "bg-warning/10 text-warning/80",
+  dislike: "bg-danger/10 text-danger/80",
+  imported: "bg-success/10 text-success/80",
 };
 
 export const IMPORT_TARGET_LABELS: Record<ImportTarget, string> = {

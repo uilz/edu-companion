@@ -12,6 +12,17 @@
  */
 
 import React, { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+
+interface TurnstileObject {
+  render: (el: HTMLElement, opts: Record<string, unknown>) => string;
+  reset: (id: string) => void;
+  remove: (id: string) => void;
+}
+
+interface TurnstileWindow extends Window {
+  turnstile?: TurnstileObject;
+}
 import { BookOpen, Loader2 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import {
@@ -26,6 +37,7 @@ const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
 type Mode = "login" | "register";
 
 export default function LoginPage() {
+  const router = useRouter();
   const { login, loginByEmail, register } = useAuth();
   const [mode, setMode] = useState<Mode>("login");
   // 当前登录方式（仅在 login 模式下有意义）
@@ -60,7 +72,7 @@ export default function LoginPage() {
     if (!TURNSTILE_SITE_KEY || !turnstileRef.current) return;
 
     // 如果 widget 已渲染，重置
-    const win = window as any;
+    const win = window as unknown as TurnstileWindow;
     if (turnstileWidgetId.current && win.turnstile) {
       win.turnstile.reset(turnstileWidgetId.current);
       return;
@@ -77,15 +89,16 @@ export default function LoginPage() {
         renderTurnstile();
       };
       document.body.appendChild(script);
-    } else if ((window as any).turnstile) {
+    } else if ((window as unknown as TurnstileWindow).turnstile) {
       renderTurnstile();
     }
 
     function renderTurnstile() {
-      if (!turnstileRef.current || !(window as any).turnstile) return;
+      const ts = (window as unknown as TurnstileWindow).turnstile;
+      if (!turnstileRef.current || !ts) return;
       // 清除已有内容
       turnstileRef.current.innerHTML = "";
-      turnstileWidgetId.current = (window as any).turnstile.render(
+      turnstileWidgetId.current = ts.render(
         turnstileRef.current,
         {
           sitekey: TURNSTILE_SITE_KEY,
@@ -105,9 +118,10 @@ export default function LoginPage() {
 
     return () => {
       // 清理 widget
-      if (turnstileWidgetId.current && (window as any).turnstile) {
+      const ts = (window as unknown as TurnstileWindow).turnstile;
+      if (turnstileWidgetId.current && ts) {
         try {
-          (window as any).turnstile.remove(turnstileWidgetId.current);
+          ts.remove(turnstileWidgetId.current);
         } catch {}
         turnstileWidgetId.current = null;
       }
@@ -137,9 +151,9 @@ export default function LoginPage() {
         // 注册始终使用用户名作为主键（邮箱为可选）
         await register(username, password, displayName || username, email, turnstileToken);
       }
-      window.location.href = "/";
-    } catch (err: any) {
-      setError(err.message || "操作失败");
+      router.push("/");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "操作失败");
       // Turnstile 令牌已使用，重置
       resetTurnstile();
     } finally {
@@ -149,7 +163,7 @@ export default function LoginPage() {
 
   const resetTurnstile = () => {
     setTurnstileToken("");
-    const win = window as any;
+    const win = window as unknown as TurnstileWindow;
     if (turnstileWidgetId.current && win.turnstile) {
       win.turnstile.reset(turnstileWidgetId.current);
     }
@@ -177,7 +191,7 @@ export default function LoginPage() {
           className="bg-surface backdrop-blur rounded-2xl shadow-md p-6 space-y-4"
         >
           {error && (
-            <div className="bg-[var(--color-danger)]/10 text-[var(--color-danger)] text-sm rounded-lg px-3 py-2">
+            <div className="bg-danger/10 text-danger text-sm rounded-lg px-3 py-2">
               {error}
             </div>
           )}
@@ -277,7 +291,7 @@ export default function LoginPage() {
                   {p.shortLabel}
                 </button>
               )).reduce<React.ReactNode[]>(
-                (acc, el, i) => (i === 0 ? [el] : [...acc, <span key={`d${i}`} className="text-[var(--color-divider)]">/</span>, el]),
+                (acc, el, i) => (i === 0 ? [el] : [...acc, <span key={`d${i}`} className="text-divider">/</span>, el]),
                 [],
               )}
               <span className="text-ink-muted">登录</span>
@@ -368,7 +382,7 @@ function Field(props: {
         pattern={props.pattern}
         title={props.title}
         placeholder={props.placeholder}
-        className="w-full px-3 py-2 rounded-lg border border-divider bg-[var(--color-input)] text-sm text-ink-primary focus:ring-2 focus:ring-accent/40 focus:border-accent outline-none transition"
+        className="w-full px-3 py-2 rounded-lg border border-divider bg-input text-sm text-ink-primary focus:ring-2 focus:ring-accent/40 focus:border-accent outline-none transition"
       />
     </div>
   );

@@ -31,11 +31,11 @@ export function Progress({
       aria-valuemin={0}
       aria-valuemax={max}
       aria-valuenow={value}
-      className={`relative h-2 w-full overflow-hidden rounded-full bg-[var(--color-surface-hover)] ${trackClassName} ${className}`}
+      className={`relative h-2 w-full overflow-hidden rounded-full bg-surface-hover ${trackClassName} ${className}`}
       style={style}
     >
       <div
-        className={`h-full bg-[var(--color-accent)] transition-all duration-300 ${indicatorClassName}`}
+        className={`h-full bg-accent transition-all duration-300 ${indicatorClassName}`}
         style={{ width: `${pct}%` }}
       />
     </div>

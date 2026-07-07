@@ -54,7 +54,7 @@ export function CardHeader({ className = '', children, ...rest }: DivProps) {
 export function CardTitle({ className = '', children, ...rest }: DivProps) {
   return (
     <h3
-      className={`text-base font-semibold leading-none tracking-tight text-[var(--color-ink-primary)] flex items-center gap-2 ${className}`}
+      className={`text-base font-semibold leading-none tracking-tight text flex items-center gap-2 ${className}`}
       {...rest}
     >
       {children}
@@ -64,7 +64,7 @@ export function CardTitle({ className = '', children, ...rest }: DivProps) {
 
 export function CardDescription({ className = '', children, ...rest }: DivProps) {
   return (
-    <p className={`text-sm text-[var(--color-ink-muted)] ${className}`} {...rest}>
+    <p className={`text-sm text-muted ${className}`} {...rest}>
       {children}
     </p>
   );

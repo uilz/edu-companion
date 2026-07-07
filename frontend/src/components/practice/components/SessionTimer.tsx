@@ -60,7 +60,7 @@ function SessionTimerImpl({ startTime, isExam, examDeadline, running, examRemain
         data-testid="exam-timer"
         data-urgent={urgent ? "true" : "false"}
         className={`flex items-center gap-1 text-xs font-mono flex-shrink-0 tabular ${
-          urgent ? "text-red-500 animate-pulse" : "text-[var(--color-text-muted)]"
+          urgent ? "text-danger animate-pulse" : "text-muted"
         }`}
       >
         <Timer size={12} />
@@ -71,7 +71,7 @@ function SessionTimerImpl({ startTime, isExam, examDeadline, running, examRemain
   }
 
   return (
-    <span data-testid="session-timer" className="flex items-center gap-1 text-xs text-[var(--color-text-muted)] font-mono flex-shrink-0 tabular">
+    <span data-testid="session-timer" className="flex items-center gap-1 text-xs text-muted font-mono flex-shrink-0 tabular">
       <Clock size={12} />
       {fmt(elapsed)}
     </span>

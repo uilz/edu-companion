@@ -25,12 +25,12 @@ export function HeatmapGrid({ data }: { data: HeatmapCell[] }) {
         {/* 表头：星期 */}
         <div />
         {dayNames.map((d) => (
-          <div key={d} className="text-center text-[10px] text-[var(--color-text-muted)] py-1">{d}</div>
+          <div key={d} className="text-center text-[10px] text-muted py-1">{d}</div>
         ))}
         {/* 数据行：各时段 */}
         {hours.map((h) => (
           <div key={h} className="contents">
-            <div className="text-[10px] text-[var(--color-text-muted)] flex items-center justify-end pr-2">
+            <div className="text-[10px] text-muted flex items-center justify-end pr-2">
               {h}:00
             </div>
             {[1, 2, 3, 4, 5, 6, 7].map((day) => {
@@ -38,7 +38,7 @@ export function HeatmapGrid({ data }: { data: HeatmapCell[] }) {
               return (
                 <div
                   key={day}
-                  className="aspect-square flex items-center justify-center text-[9px] font-mono text-[var(--color-text-secondary)]"
+                  className="aspect-square flex items-center justify-center text-[9px] font-mono text-secondary"
                   style={{ backgroundColor: bg(q) }}
                   title={`${dayNames[day - 1]} ${h}:00 — ${q}题`}
                 >
@@ -50,7 +50,7 @@ export function HeatmapGrid({ data }: { data: HeatmapCell[] }) {
         ))}
       </div>
       {/* 图例：少 → 多 */}
-      <div className="flex items-center gap-2 mt-3 justify-end text-[10px] text-[var(--color-text-muted)]">
+      <div className="flex items-center gap-2 mt-3 justify-end text-[10px] text-muted">
         <span>少</span>
         <div className="w-3 h-3" style={{ backgroundColor: "var(--color-surface)" }} />
         <div className="w-3 h-3" style={{ backgroundColor: "rgba(0,102,255,0.3)" }} />

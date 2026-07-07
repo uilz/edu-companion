@@ -38,8 +38,8 @@ export default function EmojiPicker({ value, onChange, label }: EmojiPickerProps
   return (
     <div>
       {label && (
-        <label className="text-[10px] font-medium text-[var(--color-text-muted)] uppercase tracking-wide block mb-1.5">
-          {label} <span className="font-normal normal-case text-[var(--color-text-muted)]">（可选）</span>
+        <label className="text-[10px] font-medium text-muted uppercase tracking-wide block mb-1.5">
+          {label} <span className="font-normal normal-case text-muted">（可选）</span>
         </label>
       )}
       <div className="space-y-2">
@@ -52,8 +52,8 @@ export default function EmojiPicker({ value, onChange, label }: EmojiPickerProps
               onClick={() => onChange(value === e ? "" : e)}
               className={`w-8 h-8 flex items-center justify-center text-base rounded-lg border transition-all ${
                 value === e
-                  ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 scale-110 shadow-sm"
-                  : "border-[var(--color-border)] bg-[var(--color-page-secondary)] hover:border-[var(--color-border-hover)]"
+                  ? "border-accent bg-accent/10 scale-110 shadow-sm"
+                  : "border bg-page-secondary hover:border-hover"
               }`}
             >
               {e}
@@ -64,7 +64,7 @@ export default function EmojiPicker({ value, onChange, label }: EmojiPickerProps
             <button
               type="button"
               onClick={() => onChange("")}
-              className="w-8 h-8 flex items-center justify-center text-base rounded-lg border-2 border-[var(--color-accent)] bg-[var(--color-accent)]/10 scale-110 shadow-sm"
+              className="w-8 h-8 flex items-center justify-center text-base rounded-lg border-2 border-accent bg-accent/10 scale-110 shadow-sm"
               title={`清除自定义图标「${value}」`}
             >
               {value}
@@ -76,8 +76,8 @@ export default function EmojiPicker({ value, onChange, label }: EmojiPickerProps
             onClick={() => onChange("")}
             className={`w-8 h-8 flex items-center justify-center text-xs rounded-lg border transition-all ${
               !value
-                ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10"
-                : "border-[var(--color-border)] bg-[var(--color-page-secondary)] hover:border-[var(--color-border-hover)] text-[var(--color-text-muted)]"
+                ? "border-accent bg-accent/10"
+                : "border bg-page-secondary hover:border-hover text-muted"
             }`}
             title="无图标"
           >
@@ -92,8 +92,8 @@ export default function EmojiPicker({ value, onChange, label }: EmojiPickerProps
             onClick={() => setShowMore((v) => !v)}
             className={`px-2 py-1 text-[10px] rounded-md border transition-colors ${
               showMore
-                ? "border-[var(--color-accent)] text-[var(--color-accent)] bg-[var(--color-accent)]/5"
-                : "border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"
+                ? "border-accent text-accent bg-accent/5"
+                : "border text-muted hover:bg-surface-hover"
             }`}
           >
             {showMore ? "收起" : `+ 更多 (${MORE_EMOJIS.length})`}
@@ -106,12 +106,12 @@ export default function EmojiPicker({ value, onChange, label }: EmojiPickerProps
               onBlur={confirmCustom}
               placeholder="自定义…"
               maxLength={2}
-              className="w-24 px-2 py-1 text-[10px] border border-[var(--color-border)] rounded-md bg-[var(--color-page-secondary)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)]"
+              className="w-24 px-2 py-1 text-[10px] border border rounded-md bg-page-secondary text placeholder:text-muted focus:outline-none focus:border-accent"
             />
             <button
               type="button"
               onClick={confirmCustom}
-              className="px-2 py-1 text-[9px] rounded-md bg-[var(--color-accent)]/10 text-[var(--color-accent)] hover:bg-[var(--color-accent)]/20 transition-colors font-medium"
+              className="px-2 py-1 text-[9px] rounded-md bg-accent/10 text-accent hover:bg-accent/20 transition-colors font-medium"
             >
               确认
             </button>

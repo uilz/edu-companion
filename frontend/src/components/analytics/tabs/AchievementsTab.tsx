@@ -30,9 +30,9 @@ interface BadgeStats {
 }
 
 const TIER_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  bronze: { label: "青铜", color: "text-amber-700", bg: "bg-amber-50 dark:bg-amber-950/30", border: "border-amber-400/50" },
-  silver: { label: "白银", color: "text-slate-500", bg: "bg-slate-50 dark:bg-slate-900/50", border: "border-slate-300/50" },
-  gold: { label: "黄金", color: "text-yellow-600", bg: "bg-yellow-50 dark:bg-yellow-950/30", border: "border-yellow-400/50" },
+  bronze: { label: "青铜", color: "text-warning", bg: "bg-warning/10 dark:bg-warning/10", border: "border-warning/40/50" },
+  silver: { label: "白银", color: "text-muted", bg: "bg-surface dark:bg-surface/50", border: "border-divider/50" },
+  gold: { label: "黄金", color: "text-warning", bg: "bg-warning/10 dark:bg-warning/10/30", border: "border-warning/40/50" },
 };
 
 /** 成就墙标签（嵌入 analytics 页面使用，也可独立路由访问） */
@@ -64,7 +64,7 @@ export default function AchievementsTab() {
   if (loading && achievements.length === 0) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="animate-spin text-[var(--color-accent)]" size={24} />
+        <Loader2 className="animate-spin text-accent" size={24} />
       </div>
     );
   }
@@ -72,11 +72,11 @@ export default function AchievementsTab() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-[var(--color-text)] tracking-tight flex items-center gap-2">
-          <Trophy size={22} className="text-yellow-500" />
+        <h1 className="text-2xl font-semibold text tracking-tight flex items-center gap-2">
+          <Trophy size={22} className="text-warning" />
           成就墙
         </h1>
-        <button onClick={loadData} className="p-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]/60 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors">
+        <button onClick={loadData} className="p-2 rounded-lg bg-surface border border/60 text-muted hover:text transition-colors">
           <RefreshCw size={14} />
         </button>
       </div>
@@ -84,15 +84,15 @@ export default function AchievementsTab() {
       {stats && (
         <div className="grid grid-cols-4 gap-3 mb-6">
           {[
-            { label: "已解锁", value: `${stats.total_unlocked}/${stats.total_possible}`, icon: <Trophy size={16} className="text-yellow-500" /> },
+            { label: "已解锁", value: `${stats.total_unlocked}/${stats.total_possible}`, icon: <Trophy size={16} className="text-warning" /> },
             { label: "青铜", value: stats.bronze, icon: <span className="text-lg">🥉</span> },
             { label: "白银", value: stats.silver, icon: <span className="text-lg">🥈</span> },
             { label: "黄金", value: stats.gold, icon: <span className="text-lg">🥇</span> },
           ].map((c, i) => (
-            <div key={i} className="p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/60 text-center">
+            <div key={i} className="p-3 rounded-xl bg-surface border border/60 text-center">
               <div className="mb-1">{c.icon}</div>
-              <div className="text-xl font-bold text-[var(--color-text)]">{c.value}</div>
-              <div className="text-[10px] text-[var(--color-text-muted)]">{c.label}</div>
+              <div className="text-xl font-bold text">{c.value}</div>
+              <div className="text-[10px] text-muted">{c.label}</div>
             </div>
           ))}
         </div>
@@ -110,8 +110,8 @@ export default function AchievementsTab() {
             onClick={() => setFilter(t.key)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
               filter === t.key
-                ? "bg-[var(--color-accent)] text-white"
-                : "bg-[var(--color-surface)] border border-[var(--color-border)]/60 text-[var(--color-text-muted)] hover:border-[var(--color-accent)]/30"
+                ? "bg-accent text-white"
+                : "bg-surface border border/60 text-muted hover:border-accent/30"
             }`}
           >
             {t.label}
@@ -129,48 +129,48 @@ export default function AchievementsTab() {
               className={`rounded-xl border p-4 transition-all ${
                 isUnlocked
                   ? `${cfg.bg} ${cfg.border}`
-                  : "bg-[var(--color-surface)] border-[var(--color-border)]/40 opacity-60"
+                  : "bg-surface border/40 opacity-60"
               }`}
             >
               <div className="flex items-start gap-3">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl ${
-                  isUnlocked ? cfg.bg : "bg-[var(--color-bg)]"
+                  isUnlocked ? cfg.bg : "bg-page"
                 }`}>
                   {isUnlocked ? ach.icon : "🔒"}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className={`text-sm font-semibold ${
-                      isUnlocked ? "text-[var(--color-text)]" : "text-[var(--color-text-muted)]"
+                      isUnlocked ? "text" : "text-muted"
                     }`}>
                       {ach.name}
                     </span>
                     {ach.max_level > 1 && (
                       <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
-                        isUnlocked ? `${cfg.bg} ${cfg.color}` : "bg-[var(--color-bg)] text-[var(--color-text-muted)]"
+                        isUnlocked ? `${cfg.bg} ${cfg.color}` : "bg-page text-muted"
                       }`}>
                         Lv{ach.level}/{ach.max_level}
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+                  <p className="text-[11px] text-muted mt-0.5">
                     {ach.description}
                   </p>
                   <div className="mt-2">
-                    <div className="w-full h-1.5 bg-[var(--color-border)] rounded-full overflow-hidden">
+                    <div className="w-full h-1.5 bg-divider rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${
-                          isUnlocked ? "bg-[var(--color-accent)]" : "bg-[var(--color-border)]"
+                          isUnlocked ? "bg-accent" : "bg-divider"
                         }`}
                         style={{ width: `${Math.min(ach.progress * 100, 100)}%` }}
                       />
                     </div>
                     <div className="flex items-center justify-between mt-1">
-                      <span className="text-[9px] text-[var(--color-text-muted)]">
+                      <span className="text-[9px] text-muted">
                         {ach.progress_label}
                       </span>
                       {isUnlocked && ach.unlocked_at && (
-                        <span className="text-[9px] text-[var(--color-text-muted)]">
+                        <span className="text-[9px] text-muted">
                           {ach.unlocked_at.slice(0, 10)}
                         </span>
                       )}
@@ -185,8 +185,8 @@ export default function AchievementsTab() {
 
       {filtered.length === 0 && (
         <div className="text-center py-12">
-          <Trophy size={32} className="text-[var(--color-text-muted)] mx-auto mb-2" />
-          <p className="text-sm text-[var(--color-text-muted)]">暂无成就</p>
+          <Trophy size={32} className="text-muted mx-auto mb-2" />
+          <p className="text-sm text-muted">暂无成就</p>
         </div>
       )}
     </div>

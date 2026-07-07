@@ -38,7 +38,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         : variant === 'ghost'
           ? 'swiss-btn-ghost'
           : variant === 'danger'
-            ? 'swiss-btn bg-[var(--color-danger)] text-white hover:opacity-90'
+            ? 'swiss-btn bg-danger text-white hover:opacity-90'
             : 'swiss-btn-primary';
 
   return (

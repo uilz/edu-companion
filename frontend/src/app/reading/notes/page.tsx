@@ -7,8 +7,10 @@
  */
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { StickyNote, ArrowRight, Loader2, AlertCircle, ExternalLink } from "lucide-react";
+import { StickyNote, ArrowRight, AlertCircle, ExternalLink } from "lucide-react";
+import { PageSkeleton } from "@/components/ui/Skeleton";
 import { readingService, COLOR_HEX, COLOR_LABELS } from "@/lib/api/reading-api";
+import { StatCard } from "@/components/ui/StatCard";
 
 export default function ReadingNotesPage() {
   const router = useRouter();
@@ -43,13 +45,13 @@ export default function ReadingNotesPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)]">
+    <div className="min-h-screen bg-page">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
         {/* 头部 */}
         <div className="flex items-center gap-3 mb-6">
           <button
             onClick={() => router.push("/reading")}
-            className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            className="text-muted hover:text"
           >
             ←
           </button>
@@ -57,20 +59,20 @@ export default function ReadingNotesPage() {
             <h1 className="text-2xl font-semibold flex items-center gap-2">
               <StickyNote size={22} /> 笔记管理
             </h1>
-            <p className="text-sm text-[var(--color-text-muted)] mt-1">
+            <p className="text-sm text-muted mt-1">
               笔记 = FlashCard 反思型 · 自动进入 FSRS 调度 · 统一复习入口
             </p>
           </div>
           <button
             onClick={() => router.push("/flashcard?source=reading_note")}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-[var(--color-border)] rounded-md hover:bg-[var(--color-card)]"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border rounded-md hover:bg-surface"
           >
             <ExternalLink size={14} /> 在 FlashCard 中查看
           </button>
         </div>
 
         {error && (
-          <div className="mb-4 px-4 py-3 border border-red-300 bg-red-50 text-sm text-red-700 rounded flex items-center gap-2">
+          <div className="mb-4 px-4 py-3 border border-danger/30 bg-danger/10 text-sm text-danger rounded flex items-center gap-2">
             <AlertCircle size={14} /> {error}
           </div>
         )}
@@ -88,12 +90,12 @@ export default function ReadingNotesPage() {
                   return new Date(n.next_review_at) <= new Date();
                 }).length,
               )}
-              color="text-amber-600"
+              color="text-warning"
             />
             <StatCard
               label="已稳定"
               value={String(notes.filter((n) => (n.stability || 0) > 30).length)}
-              color="text-emerald-600"
+              color="text-success"
             />
           </div>
         )}
@@ -101,13 +103,13 @@ export default function ReadingNotesPage() {
         {/* 筛选 */}
         {!loading && materials.length > 0 && (
           <div className="mb-4 flex items-center gap-2 flex-wrap text-sm">
-            <span className="text-[var(--color-text-muted)]">按材料筛选:</span>
+            <span className="text-muted">按材料筛选:</span>
             <button
               onClick={() => setFilterMaterial("")}
               className={`px-2.5 py-1 text-xs rounded border ${
                 !filterMaterial
-                  ? "bg-[var(--color-accent)] text-white"
-                  : "border-[var(--color-border)] hover:bg-[var(--color-card)]"
+                  ? "bg-accent text-white"
+                  : "border hover:bg-surface"
               }`}
             >
               全部
@@ -118,8 +120,8 @@ export default function ReadingNotesPage() {
                 onClick={() => setFilterMaterial(m)}
                 className={`px-2.5 py-1 text-xs rounded border ${
                   filterMaterial === m
-                    ? "bg-[var(--color-accent)] text-white"
-                    : "border-[var(--color-border)] hover:bg-[var(--color-card)]"
+                    ? "bg-accent text-white"
+                    : "border hover:bg-surface"
                 }`}
               >
                 {m.slice(0, 12)}
@@ -130,18 +132,16 @@ export default function ReadingNotesPage() {
 
         {/* 列表 */}
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 size={24} className="animate-spin text-[var(--color-text-muted)]" />
-          </div>
+          <PageSkeleton />
         ) : filteredNotes.length === 0 ? (
-          <div className="border border-dashed border-[var(--color-border)] rounded-lg p-12 text-center">
+          <div className="border border-dashed border rounded-lg p-12 text-center">
             <StickyNote size={36} className="mx-auto mb-3 opacity-30" />
-            <p className="text-sm text-[var(--color-text-muted)] mb-3">
+            <p className="text-sm text-muted mb-3">
               {filterMaterial ? "该材料暂无笔记" : "还没有阅读笔记"}
             </p>
             <button
               onClick={() => router.push("/files")}
-              className="text-sm text-[var(--color-accent)] hover:underline inline-flex items-center gap-1"
+              className="text-sm text-accent hover:underline inline-flex items-center gap-1"
             >
               去阅读并写笔记 <ArrowRight size={12} />
             </button>
@@ -151,11 +151,11 @@ export default function ReadingNotesPage() {
             {filteredNotes.map((n) => (
               <div
                 key={n.id}
-                className="border border-[var(--color-border)] bg-[var(--color-card)] rounded-lg p-4"
+                className="border border bg-surface rounded-lg p-4"
               >
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 text-xs text-[var(--color-text-muted)] mb-1">
+                    <div className="flex items-center gap-2 text-xs text-muted mb-1">
                       <span>来源: {n.source_ref?.id?.slice(0, 12) || "—"}</span>
                       {n.source_ref?.sub_id && (
                         <span>· 段落: {n.source_ref.sub_id}</span>
@@ -164,7 +164,7 @@ export default function ReadingNotesPage() {
                     </div>
                     <p className="text-sm font-medium">{n.front_text}</p>
                   </div>
-                  <div className="text-right text-xs text-[var(--color-text-muted)] ml-3">
+                  <div className="text-right text-xs text-muted ml-3">
                     <div>
                       复习 {n.review_count || 0} 次
                     </div>
@@ -176,12 +176,12 @@ export default function ReadingNotesPage() {
                   </div>
                 </div>
                 {n.back_context && (
-                  <p className="text-xs text-[var(--color-text-muted)] mt-1 pl-3 border-l-2 border-[var(--color-border)]">
+                  <p className="text-xs text-muted mt-1 pl-3 border-l-2 border">
                     {n.back_context}
                   </p>
                 )}
                 {n.back_text && (
-                  <p className="text-xs text-[var(--color-text)] mt-2 pl-3 border-l-2 border-emerald-300">
+                  <p className="text-xs text mt-2 pl-3 border-l-2 border-success/30">
                     💭 {n.back_text}
                   </p>
                 )}
@@ -190,7 +190,7 @@ export default function ReadingNotesPage() {
                     {n.linked_node_ids.slice(0, 3).map((id: string) => (
                       <span
                         key={id}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-surface-2)] text-[var(--color-text-muted)]"
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-surface-hover text-muted"
                       >
                         {id.slice(0, 12)}
                       </span>
@@ -206,11 +206,4 @@ export default function ReadingNotesPage() {
   );
 }
 
-function StatCard({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div className="border border-[var(--color-border)] bg-[var(--color-card)] rounded-lg p-3">
-      <div className="text-xs text-[var(--color-text-muted)]">{label}</div>
-      <div className={`text-2xl font-bold mt-1 ${color || ""}`}>{value}</div>
-    </div>
-  );
-}
+

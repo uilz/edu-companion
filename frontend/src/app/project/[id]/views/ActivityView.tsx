@@ -62,9 +62,9 @@ export function ActivityView({
       id: `node-${n.id}`,
       ts: n.updated_at,
       icon: n.completed_at ? (
-        <Flag size={14} className="text-green-500" />
+        <Flag size={14} className="text-success" />
       ) : (
-        <Edit3 size={14} className="text-blue-500" />
+        <Edit3 size={14} className="text-info" />
       ),
       color: n.completed_at ? "border-l-green-500" : "border-l-blue-500",
       title: n.completed_at ? `完成节点: ${n.title}` : `编辑节点: ${n.title}`,
@@ -76,7 +76,7 @@ export function ActivityView({
   const milestoneEvents: ActivityEvent[] = milestones.map<ActivityEvent>((m) => ({
     id: `m-${m.id}`,
     ts: m.marked_at,
-    icon: <Flag size={14} className="text-amber-500" />,
+    icon: <Flag size={14} className="text-warning" />,
     color: "border-l-amber-500",
     title: `里程碑: ${m.milestone_name}`,
     detail: formatDate(m.marked_at),
@@ -88,7 +88,7 @@ export function ActivityView({
     .map<ActivityEvent>((n) => ({
       id: `ref-${n.id}`,
       ts: n.updated_at,
-      icon: <Link2 size={14} className="text-purple-500" />,
+      icon: <Link2 size={14} className="text-accent" />,
       color: "border-l-purple-500",
       title: `建立关联: ${n.title} → ${n.linked_node_ids.length} 节点`,
       detail: formatDate(n.updated_at),
@@ -131,7 +131,7 @@ export function ActivityView({
             onClick={ev.onClick}
             disabled={!ev.onClick}
             className={`w-full text-left p-3 rounded-lg bg-surface border border-divider ${
-              ev.onClick ? "hover:border-[var(--color-accent)] cursor-pointer" : "cursor-default"
+              ev.onClick ? "hover:border-accent cursor-pointer" : "cursor-default"
             } border-l-4 ${ev.color} transition`}
           >
             <div className="flex items-center gap-2 text-xs text-ink-secondary mb-1">

@@ -125,13 +125,13 @@ function QuestionCardImpl({
   }, [question.id]);
 
   return (
-    <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)] overflow-hidden message-enter">
+    <div className="rounded-2xl border border bg-page overflow-hidden message-enter">
       {/* ── 头部 ── */}
-      <div className="px-3 sm:px-5 py-3 border-b border-[var(--color-border)]/50 flex items-center gap-2 flex-wrap">
-        <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)] font-medium">
+      <div className="px-3 sm:px-5 py-3 border-b border/50 flex items-center gap-2 flex-wrap">
+        <span className="text-xs px-2 py-0.5 rounded-full bg-accent/10 text-accent font-medium">
           第 {index + 1} 题
         </span>
-        <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-surface)] text-[var(--color-text-muted)]">
+        <span className="text-xs px-2 py-0.5 rounded-full bg-surface text-muted">
           {TYPE_LABELS[qtype] || qtype}
         </span>
         <div className="flex-1" />
@@ -139,7 +139,7 @@ function QuestionCardImpl({
           <div className="flex items-center gap-0.5">
             <IconButton icon={<Volume2 size={13} />} title="朗读" onClick={handleReadAloud} />
             <IconButton
-              icon={<Heart size={13} className={isFav ? "fill-red-500 text-red-500" : ""} />}
+              icon={<Heart size={13} className={isFav ? "fill-danger text-danger" : ""} />}
               title={isFav ? "取消收藏" : "收藏"}
               onClick={handleFav}
             />
@@ -151,12 +151,12 @@ function QuestionCardImpl({
               <IconButton icon={<SkipForward size={13} />} title="跳过" onClick={handleSkip} />
             )}
             {<IconButton
-              icon={<MessageSquareText size={13} className={showExplanation ? "text-[var(--color-accent)]" : ""} />}
+              icon={<MessageSquareText size={13} className={showExplanation ? "text-accent" : ""} />}
               title="讲解"
               onClick={() => setShowExplanation(!showExplanation)}
             />}
             {<IconButton
-              icon={<BookOpen size={13} className={showReference ? "text-blue-500" : ""} />}
+              icon={<BookOpen size={13} className={showReference ? "text-info" : ""} />}
               title="参考资料"
               onClick={() => setShowReference(!showReference)}
             />}
@@ -191,7 +191,7 @@ function QuestionCardImpl({
       {/* ── 自信度选择器（仅答题前） ── */}
       {!showFeedback && onConfidenceChange && (
         <div className="px-3 sm:px-5 pb-3">
-          <p className="text-[10px] text-[var(--color-text-muted)] mb-2">答题前，请先评估你对本题的把握程度：</p>
+          <p className="text-[10px] text-muted mb-2">答题前，请先评估你对本题的把握程度：</p>
           <div className="flex gap-2">
             {[
               { level: 1, label: "完全不确定", emoji: "🤔" },
@@ -208,8 +208,8 @@ function QuestionCardImpl({
                   onClick={() => onConfidenceChange(item.level)}
                   className={`flex-1 py-2 px-1 rounded-xl border text-xs font-medium transition-all ${
                     active
-                      ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                      : "border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-muted)] hover:border-[var(--color-accent)]/50"
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border bg-page text-muted hover:border-accent/50"
                   }`}
                 >
                   <div className="text-sm mb-0.5">{item.emoji}</div>
@@ -256,7 +256,7 @@ function QuestionCardImpl({
             onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && canSubmit) handleSubmitClick(); }}
             placeholder={qtype === "fill" ? "输入你的答案...（Ctrl+Enter 提交）" : "输入你的回答...（Ctrl+Enter 提交）"}
             rows={qtype === "fill" ? 2 : 4}
-            className="w-full px-4 py-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] text-sm resize-none focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+            className="w-full px-4 py-3 rounded-xl border border bg-page text-sm resize-none focus:outline-none focus:border-accent transition-colors"
             disabled={showFeedback}
           />
         </div>
@@ -265,9 +265,9 @@ function QuestionCardImpl({
       {/* ── 填空/简答的反馈：显示用户的回答 ── */}
       {!isOptionType && showFeedback && selected.length > 0 && (
         <div className="px-3 sm:px-5 pb-4">
-          <div className="p-3 rounded-xl border border-[var(--color-border)]/60 bg-[var(--color-surface)]">
-            <p className="text-[10px] text-[var(--color-text-muted)] mb-1">你的回答</p>
-            <p className="text-sm text-[var(--color-text)] whitespace-pre-wrap">{selected[0]}</p>
+          <div className="p-3 rounded-xl border border/60 bg-surface">
+            <p className="text-[10px] text-muted mb-1">你的回答</p>
+            <p className="text-sm text whitespace-pre-wrap">{selected[0]}</p>
           </div>
         </div>
       )}
@@ -307,9 +307,9 @@ function QuestionCardImpl({
       </div>
 
       {/* ── 底部按钮 ── */}
-      <div className="px-3 sm:px-5 py-3 border-t border-[var(--color-border)]/50 flex flex-col gap-2">
+      <div className="px-3 sm:px-5 py-3 border-t border/50 flex flex-col gap-2">
         {submitError && (
-          <div className="text-[10px] text-red-500 text-center">{submitError}</div>
+          <div className="text-[10px] text-danger text-center">{submitError}</div>
         )}
         <div className="flex justify-end gap-2">
           {!showFeedback ? (
@@ -317,7 +317,7 @@ function QuestionCardImpl({
               onClick={handleSubmitClick}
               disabled={!canSubmit || submitting}
               data-testid="submit-answer-btn"
-              className="px-5 py-2 rounded-xl bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 disabled:opacity-30 transition-all flex items-center gap-1.5"
+              className="px-5 py-2 rounded-xl bg-accent text-white text-sm font-medium hover:opacity-90 disabled:opacity-30 transition-all flex items-center gap-1.5"
             >
               {submitting ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -332,7 +332,7 @@ function QuestionCardImpl({
             <button
               onClick={onNext}
               data-testid="next-question-btn"
-              className="px-5 py-2 rounded-xl bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 transition-all"
+              className="px-5 py-2 rounded-xl bg-accent text-white text-sm font-medium hover:opacity-90 transition-all"
             >
               {isLast ? "完成练习" : "下一题"}
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 inline ml-1.5" fill="none" stroke="currentColor" strokeWidth="2">
@@ -350,7 +350,7 @@ function IconButton({ icon, title, onClick }: { icon: React.ReactNode; title: st
   return (
     <button
       onClick={onClick}
-      className="p-1.5 rounded-lg hover:bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+      className="p-1.5 rounded-lg hover:bg-surface text-muted hover:text transition-colors"
       title={title}
     >
       {icon}

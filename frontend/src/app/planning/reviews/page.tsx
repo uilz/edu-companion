@@ -45,6 +45,7 @@ export default function ReviewsPage() {
   const [start, setStart] = useState(lastWeek().start);
   const [end, setEnd] = useState(lastWeek().end);
   const [note, setNote] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const handleGenerate = async () => {
     try {
@@ -53,6 +54,7 @@ export default function ReviewsPage() {
       setNote("");
     } catch (e) {
       console.error(e);
+      setError(e instanceof Error ? e.message : "生成回顾失败");
     }
   };
 
@@ -73,26 +75,44 @@ export default function ReviewsPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 size={24} className="animate-spin text-[var(--color-text-muted)]" />
+        <Loader2 size={24} className="animate-spin text-muted" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-page">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10 text-center">
+          <div className="p-4 border border-danger/20 bg-danger/10 rounded-lg text-danger mb-4">
+            {error}
+          </div>
+          <button
+            onClick={() => { setError(null); reload(); }}
+            className="px-4 py-2 rounded-lg bg-accent text-white hover:opacity-90 text-sm"
+          >
+            重试
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)]">
+    <div className="min-h-screen bg-page">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-semibold text-[var(--color-text)] tracking-tight flex items-center gap-2">
+            <h1 className="text-2xl font-semibold text tracking-tight flex items-center gap-2">
               <ListChecks size={20} /> 周期回顾
             </h1>
-            <p className="text-sm text-[var(--color-text-muted)] mt-1">
+            <p className="text-sm text-muted mt-1">
               周/月汇总：各模块时长、目标完成、偏差
             </p>
           </div>
           <button
             onClick={() => setShowCreate((s) => !s)}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-[var(--color-accent)] text-white hover:opacity-90"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-accent text-white hover:opacity-90"
           >
             <Sparkles size={14} /> 生成回顾
           </button>
@@ -104,13 +124,13 @@ export default function ReviewsPage() {
               <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={() => preset("lastweek")}
-                  className="px-3 py-1.5 text-xs border border-[var(--color-border)] hover:bg-[var(--color-card)]"
+                  className="px-3 py-1.5 text-xs border border hover:bg-surface"
                 >
                   上周
                 </button>
                 <button
                   onClick={() => preset("thismonth")}
-                  className="px-3 py-1.5 text-xs border border-[var(--color-border)] hover:bg-[var(--color-card)]"
+                  className="px-3 py-1.5 text-xs border border hover:bg-surface"
                 >
                   本月
                 </button>
@@ -119,7 +139,7 @@ export default function ReviewsPage() {
                 <select
                   value={periodType}
                   onChange={(e) => setPeriodType(e.target.value as "weekly" | "monthly")}
-                  className="px-3 py-2 text-sm border border-[var(--color-border)] bg-[var(--color-bg)]"
+                  className="px-3 py-2 text-sm border border bg-page"
                 >
                   <option value="weekly">周报</option>
                   <option value="monthly">月报</option>
@@ -128,13 +148,13 @@ export default function ReviewsPage() {
                   type="date"
                   value={start}
                   onChange={(e) => setStart(e.target.value)}
-                  className="px-3 py-2 text-sm border border-[var(--color-border)] bg-[var(--color-bg)]"
+                  className="px-3 py-2 text-sm border border bg-page"
                 />
                 <input
                   type="date"
                   value={end}
                   onChange={(e) => setEnd(e.target.value)}
-                  className="px-3 py-2 text-sm border border-[var(--color-border)] bg-[var(--color-bg)]"
+                  className="px-3 py-2 text-sm border border bg-page"
                 />
               </div>
               <textarea
@@ -142,18 +162,18 @@ export default function ReviewsPage() {
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="用户备注（可选）…"
                 rows={2}
-                className="w-full px-3 py-2 text-sm border border-[var(--color-border)] bg-[var(--color-bg)]"
+                className="w-full px-3 py-2 text-sm border border bg-page"
               />
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleGenerate}
-                  className="px-4 py-2 text-sm bg-[var(--color-accent)] text-white hover:opacity-90"
+                  className="px-4 py-2 text-sm bg-accent text-white hover:opacity-90"
                 >
                   生成
                 </button>
                 <button
                   onClick={() => setShowCreate(false)}
-                  className="px-4 py-2 text-sm border border-[var(--color-border)]"
+                  className="px-4 py-2 text-sm border border"
                 >
                   取消
                 </button>
@@ -165,9 +185,9 @@ export default function ReviewsPage() {
         {reviews.length === 0 ? (
           <Card>
             <div className="text-center py-12">
-              <ListChecks size={40} className="mx-auto mb-3 text-[var(--color-text-muted)]" />
-              <div className="text-sm text-[var(--color-text-muted)]">还没有周期回顾</div>
-              <div className="text-xs text-[var(--color-text-muted)] mt-1">点击右上角"生成回顾"开始</div>
+              <ListChecks size={40} className="mx-auto mb-3 text-muted" />
+              <div className="text-sm text-muted">还没有周期回顾</div>
+              <div className="text-xs text-muted mt-1">点击右上角"生成回顾"开始</div>
             </div>
           </Card>
         ) : (
@@ -193,56 +213,56 @@ function ReviewCard({ review }: { review: PeriodicReview }) {
       <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs px-1.5 py-0.5 bg-[var(--color-card)] border border-[var(--color-border)]">
+            <span className="text-xs px-1.5 py-0.5 bg-surface border border">
               {review.period_type === "weekly" ? "周报" : "月报"}
             </span>
-            <h3 className="text-base font-semibold text-[var(--color-text)]">
+            <h3 className="text-base font-semibold text">
               {review.period_start} → {review.period_end}
             </h3>
           </div>
           {review.user_note && (
-            <div className="text-sm text-[var(--color-text-muted)] mt-1">{review.user_note}</div>
+            <div className="text-sm text-muted mt-1">{review.user_note}</div>
           )}
         </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-        <div className="p-3 border border-[var(--color-border)]">
-          <div className="text-xs text-[var(--color-text-muted)]">总项数</div>
+        <div className="p-3 border border">
+          <div className="text-xs text-muted">总项数</div>
           <div className="text-lg font-semibold">{total}</div>
         </div>
-        <div className="p-3 border border-[var(--color-border)]">
-          <div className="text-xs text-[var(--color-text-muted)]">已完成</div>
-          <div className="text-lg font-semibold text-emerald-600">{completed}</div>
+        <div className="p-3 border border">
+          <div className="text-xs text-muted">已完成</div>
+          <div className="text-lg font-semibold text-success">{completed}</div>
         </div>
-        <div className="p-3 border border-[var(--color-border)]">
-          <div className="text-xs text-[var(--color-text-muted)]">完成率</div>
+        <div className="p-3 border border">
+          <div className="text-xs text-muted">完成率</div>
           <div className="text-lg font-semibold">{completionRate}%</div>
         </div>
-        <div className="p-3 border border-[var(--color-border)]">
-          <div className="text-xs text-[var(--color-text-muted)]">实际时长</div>
+        <div className="p-3 border border">
+          <div className="text-xs text-muted">实际时长</div>
           <div className="text-lg font-semibold">{data.actual_minutes || 0} min</div>
         </div>
       </div>
 
       {byModule.length > 0 && (
         <div className="mt-3">
-          <div className="text-xs uppercase tracking-wider text-[var(--color-text-muted)] mb-2">模块分布</div>
+          <div className="text-xs uppercase tracking-wider text-muted mb-2">模块分布</div>
           <div className="space-y-1">
             {byModule.map((m, i) => (
               <div key={i} className="flex items-center gap-2">
-                <span className="text-xs w-20 text-[var(--color-text-muted)]">
+                <span className="text-xs w-20 text-muted">
                   {SOURCE_LABELS[m.source_module] || m.source_module}
                 </span>
-                <div className="flex-1 bg-[var(--color-card)] border border-[var(--color-border)] h-2">
+                <div className="flex-1 bg-surface border border h-2">
                   <div
-                    className="h-full bg-[var(--color-accent)]"
+                    className="h-full bg-accent"
                     style={{
                       width: `${(m.minutes / Math.max(...byModule.map((x) => x.minutes || 0), 1)) * 100}%`,
                     }}
                   />
                 </div>
-                <span className="text-xs text-[var(--color-text-muted)] w-20 text-right">
+                <span className="text-xs text-muted w-20 text-right">
                   {m.count} 项 · {m.minutes || 0} min
                 </span>
               </div>

@@ -47,7 +47,7 @@ export default function SecretaryBellBadge() {
   if (count === 0) return null;
 
   return (
-    <span className="absolute -top-1 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-[var(--color-error)] text-white text-[10px] font-semibold leading-none px-1">
+    <span className="absolute -top-1 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-error text-white text-[10px] font-semibold leading-none px-1">
       {count > 99 ? "99+" : count}
     </span>
   );

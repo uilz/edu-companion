@@ -7,6 +7,7 @@
 
 import type { ActionType } from "./types";
 import { api } from "@/lib/api/api";
+import { navigate } from "@/lib/api/navigation";
 
 // ══════════════════════════════════════════════════════════════
 //  Types
@@ -161,7 +162,7 @@ export function navigateToProposal(input: ProposalNavigationInput): boolean {
   }
 
   // 执行跳转
-  window.location.href = target.path;
+  navigate(target.path);
   return true;
 }
 

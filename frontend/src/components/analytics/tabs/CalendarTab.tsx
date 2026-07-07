@@ -61,25 +61,25 @@ function DayDetail({ day, onClose }: { day: DayEntry; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div
-        className="bg-[var(--color-card)] border border-[var(--color-border)] w-full max-w-xs mx-4 p-5"
+        className="bg-surface border border w-full max-w-xs mx-4 p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-sm font-semibold text-[var(--color-text)] mb-3">{label}</h3>
+        <h3 className="text-sm font-semibold text mb-3">{label}</h3>
         {day.total === 0 ? (
-          <p className="text-xs text-[var(--color-text-muted)]">这天没有学习记录 🛌</p>
+          <p className="text-xs text-muted">这天没有学习记录 🛌</p>
         ) : (
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-[var(--color-text-muted)]">答题</span>
-              <span className="text-[var(--color-text)] font-medium">{day.total} 题</span>
+              <span className="text-muted">答题</span>
+              <span className="text font-medium">{day.total} 题</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-[var(--color-text-muted)]">正确</span>
-              <span className="text-[var(--color-text)] font-medium">{day.correct} 题</span>
+              <span className="text-muted">正确</span>
+              <span className="text font-medium">{day.correct} 题</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-[var(--color-text-muted)]">正确率</span>
-              <span className="text-[var(--color-text)] font-medium">
+              <span className="text-muted">正确率</span>
+              <span className="text font-medium">
                 {day.accuracy != null ? `${(day.accuracy * 100).toFixed(0)}%` : "—"}
               </span>
             </div>
@@ -88,14 +88,14 @@ function DayDetail({ day, onClose }: { day: DayEntry; onClose: () => void }) {
         <div className="flex gap-2 mt-4">
           <Link
             href="/practice"
-            className="flex-1 text-center text-xs px-3 py-2 bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] active:scale-[0.97] transition-colors"
+            className="flex-1 text-center text-xs px-3 py-2 bg-accent text-white hover:bg-accent-hover active:scale-[0.97] transition-colors"
           >
             去练习
           </Link>
           {day.total > 0 && (
             <Link
               href="/practice/errors"
-              className="flex-1 text-center text-xs px-3 py-2 border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+              className="flex-1 text-center text-xs px-3 py-2 border border text-secondary hover:text transition-colors"
             >
               看错题
             </Link>
@@ -103,7 +103,7 @@ function DayDetail({ day, onClose }: { day: DayEntry; onClose: () => void }) {
         </div>
         <button
           onClick={onClose}
-          className="mt-3 w-full text-center text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+          className="mt-3 w-full text-center text-[10px] text-muted hover:text"
         >
           关闭
         </button>
@@ -155,36 +155,36 @@ export default function CalendarTab() {
   const todayStr = new Date().toISOString().slice(0, 10);
 
   if (loading) {
-    return <div className="flex items-center justify-center py-20"><Loader2 size={24} className="animate-spin text-[var(--color-accent)]" /></div>;
+    return <div className="flex items-center justify-center py-20"><Loader2 size={24} className="animate-spin text-accent" /></div>;
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-text)]">
-          <CalendarDays size={24} className="inline mr-2 text-[var(--color-accent)]" />
+        <h1 className="text-2xl font-semibold tracking-tight text">
+          <CalendarDays size={24} className="inline mr-2 text-accent" />
           学习日历
         </h1>
       </div>
 
       <div className="flex items-center justify-between mb-6">
-        <button onClick={goPrev} className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text)] active:scale-[0.97] transition-all">
+        <button onClick={goPrev} className="p-1.5 text-muted hover:text active:scale-[0.97] transition-all">
           <ChevronLeft size={18} />
         </button>
         <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold text-[var(--color-text)]">{year}年 {MONTH_NAMES[month - 1]}</h2>
-          <button onClick={goToday} className="text-[10px] px-2 py-0.5 border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
+          <h2 className="text-lg font-semibold text">{year}年 {MONTH_NAMES[month - 1]}</h2>
+          <button onClick={goToday} className="text-[10px] px-2 py-0.5 border border text-muted hover:text">
             今天
           </button>
         </div>
-        <button onClick={goNext} className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text)] active:scale-[0.97] transition-all">
+        <button onClick={goNext} className="p-1.5 text-muted hover:text active:scale-[0.97] transition-all">
           <ChevronRight size={18} />
         </button>
       </div>
 
-      <div className="border border-[var(--color-border)] bg-[var(--color-card)] p-4 mb-6">
+      <div className="border border bg-surface p-4 mb-6">
         <div className="grid grid-cols-7 gap-1 mb-2">
-          {DAY_HEADERS.map(h => <div key={h} className="text-center text-[10px] text-[var(--color-text-muted)] py-1">{h}</div>)}
+          {DAY_HEADERS.map(h => <div key={h} className="text-center text-[10px] text-muted py-1">{h}</div>)}
         </div>
         <div className="grid grid-cols-7 gap-1">
           {cells.map((cell, i) => {
@@ -197,7 +197,7 @@ export default function CalendarTab() {
                 onClick={() => !isFuture && setSelectedDay(cell)}
                 disabled={isFuture}
                 className={`aspect-square flex flex-col items-center justify-center text-xs font-medium transition-colors ${
-                  isFuture ? "opacity-30 cursor-default" : "cursor-pointer hover:ring-1 hover:ring-[var(--color-accent)]"
+                  isFuture ? "opacity-30 cursor-default" : "cursor-pointer hover:ring-1 hover:ring-accent"
                 }`}
                 style={{
                   backgroundColor: isFuture ? "var(--color-surface)" : heatColor(cell.total),
@@ -211,7 +211,7 @@ export default function CalendarTab() {
             );
           })}
         </div>
-        <div className="flex items-center gap-2 mt-4 justify-end text-[10px] text-[var(--color-text-muted)]">
+        <div className="flex items-center gap-2 mt-4 justify-end text-[10px] text-muted">
           <span>少</span>
           {[0, 5, 10, 20].map(n => <div key={n} className="w-3 h-3" style={{ backgroundColor: heatColor(n === 0 ? 0 : n) }} />)}
           <div className="w-3 h-3" style={{ backgroundColor: "#39d353" }} />
@@ -220,40 +220,40 @@ export default function CalendarTab() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <div className="border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-center">
-          <div className="text-xl font-semibold text-[var(--color-text)]">{data?.month_total || 0}</div>
-          <div className="text-[10px] text-[var(--color-text-muted)] mt-1">本月答题</div>
+        <div className="border border bg-surface p-4 text-center">
+          <div className="text-xl font-semibold text">{data?.month_total || 0}</div>
+          <div className="text-[10px] text-muted mt-1">本月答题</div>
         </div>
-        <div className="border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-center">
-          <div className="text-xl font-semibold text-[var(--color-text)]">
+        <div className="border border bg-surface p-4 text-center">
+          <div className="text-xl font-semibold text">
             {data?.month_accuracy != null ? `${(data.month_accuracy * 100).toFixed(0)}%` : "—"}
           </div>
-          <div className="text-[10px] text-[var(--color-text-muted)] mt-1">正确率</div>
+          <div className="text-[10px] text-muted mt-1">正确率</div>
         </div>
-        <div className="border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-center">
-          <div className="text-xl font-semibold text-[var(--color-text)] flex items-center justify-center gap-1">
-            <Flame size={16} className="text-[var(--color-warning)]" />
+        <div className="border border bg-surface p-4 text-center">
+          <div className="text-xl font-semibold text flex items-center justify-center gap-1">
+            <Flame size={16} className="text-warning" />
             {data?.month_streak || 0}
           </div>
-          <div className="text-[10px] text-[var(--color-text-muted)] mt-1">连续学习</div>
+          <div className="text-[10px] text-muted mt-1">连续学习</div>
         </div>
-        <div className="border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-center">
-          <div className="text-xl font-semibold text-[var(--color-text)]">
+        <div className="border border bg-surface p-4 text-center">
+          <div className="text-xl font-semibold text">
             {data?.days?.filter(d => d.total > 0).length || 0}
           </div>
-          <div className="text-[10px] text-[var(--color-text-muted)] mt-1">学习天数</div>
+          <div className="text-[10px] text-muted mt-1">学习天数</div>
         </div>
       </div>
 
       {data?.best_day && (
-        <div className="border border-[var(--color-border)] bg-[var(--color-card)] p-4 flex items-center gap-3">
-          <Zap size={18} className="text-[var(--color-warning)] flex-shrink-0" />
+        <div className="border border bg-surface p-4 flex items-center gap-3">
+          <Zap size={18} className="text-warning flex-shrink-0" />
           <div>
-            <p className="text-xs text-[var(--color-text-secondary)]">
-              本月最佳：<span className="font-semibold text-[var(--color-text)]">{data.best_day.date}</span>
+            <p className="text-xs text-secondary">
+              本月最佳：<span className="font-semibold text">{data.best_day.date}</span>
               {" · "}{data.best_day.total} 题
             </p>
-            <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">保持这个势头！💪</p>
+            <p className="text-[10px] text-muted mt-0.5">保持这个势头！💪</p>
           </div>
         </div>
       )}

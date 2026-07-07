@@ -72,13 +72,13 @@ export default function CodeBlock({ language, value }: Props) {
   }, [value]);
 
   const headerBar = (
-    <div className="flex items-center justify-between px-3 py-1.5 bg-[var(--color-surface-hover)] border-b border-[var(--color-border)]">
-      <span className="text-[10px] text-[var(--color-text-muted)] font-mono uppercase tracking-wider">
+    <div className="flex items-center justify-between px-3 py-1.5 bg-surface-hover border-b border">
+      <span className="text-[10px] text-muted font-mono uppercase tracking-wider">
         {language || "text"}
       </span>
       <button
         onClick={handleCopy}
-        className="flex items-center gap-1 text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+        className="flex items-center gap-1 text-[10px] text-muted hover:text transition-colors"
         title="复制代码"
       >
         {copied ? <Check size={12} /> : <Copy size={12} />}
@@ -90,9 +90,9 @@ export default function CodeBlock({ language, value }: Props) {
   // 高亮库加载中时显示纯文本代码块
   if (!SyntaxHighlighter || !style) {
     return (
-      <div className="relative group my-2 rounded-lg overflow-hidden border border-[var(--color-border)]">
+      <div className="relative group my-2 rounded-lg overflow-hidden border border">
         {headerBar}
-        <pre className="m-0 p-3 text-xs leading-relaxed overflow-x-auto bg-[var(--color-surface)] text-[var(--color-text)]">
+        <pre className="m-0 p-3 text-xs leading-relaxed overflow-x-auto bg-surface text">
           <code>{value}</code>
         </pre>
       </div>
@@ -100,7 +100,7 @@ export default function CodeBlock({ language, value }: Props) {
   }
 
   return (
-    <div className="relative group my-2 rounded-lg overflow-hidden border border-[var(--color-border)]">
+    <div className="relative group my-2 rounded-lg overflow-hidden border border">
       {headerBar}
       <SyntaxHighlighter
         language={language || "text"}
@@ -115,7 +115,6 @@ export default function CodeBlock({ language, value }: Props) {
         lineNumberStyle={{
           minWidth: "2.5em",
           paddingRight: "1em",
-          color: "var(--color-text-muted)",
           opacity: 0.4,
         }}
       >

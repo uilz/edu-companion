@@ -120,7 +120,7 @@ export const NODE_TYPE_LABELS: Record<number, NodeTypeInfo> = {
 
 export const NODE_STATUS_COLUMNS = [
   { value: "pending", label: "草稿", color: "border-l-zinc-400" },
-  { value: "active", label: "进行中", color: "border-l-[var(--color-accent)]" },
+  { value: "active", label: "进行中", color: "border-l-accent" },
   { value: "completed", label: "已完成", color: "border-l-emerald-500" },
   { value: "archived", label: "已归档", color: "border-l-amber-500" },
 ] as const;

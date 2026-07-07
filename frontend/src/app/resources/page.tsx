@@ -80,23 +80,23 @@ function formatDate(d: string): string {
 }
 
 function getFileIcon(ext: string) {
-  if (["jpg", "jpeg", "png", "gif", "webp", "bmp"].includes(ext)) return <Image size={14} className="text-blue-500" />;
-  if (ext === "pdf") return <FileText size={14} className="text-red-500" />;
-  if (["docx", "pptx", "xlsx", "csv"].includes(ext)) return <FileText size={14} className="text-[var(--color-accent)]" />;
-  if (["mp3", "wav", "m4a", "ogg"].includes(ext)) return <File size={14} className="text-purple-500" />;
-  return <File size={14} className="text-[var(--color-text-muted)]" />;
+  if (["jpg", "jpeg", "png", "gif", "webp", "bmp"].includes(ext)) return <Image size={14} className="text-info" />;
+  if (ext === "pdf") return <FileText size={14} className="text-danger" />;
+  if (["docx", "pptx", "xlsx", "csv"].includes(ext)) return <FileText size={14} className="text-accent" />;
+  if (["mp3", "wav", "m4a", "ogg"].includes(ext)) return <File size={14} className="text-accent" />;
+  return <File size={14} className="text-muted" />;
 }
 
 function getTagColor(tag: string): string {
   const colors = [
-    "bg-blue-500/10 text-blue-500",
-    "bg-green-500/10 text-green-500",
-    "bg-purple-500/10 text-purple-500",
-    "bg-amber-500/10 text-amber-500",
-    "bg-pink-500/10 text-pink-500",
-    "bg-cyan-500/10 text-cyan-500",
-    "bg-orange-500/10 text-orange-500",
-    "bg-indigo-500/10 text-indigo-500",
+    "bg-info/10 text-info",
+    "bg-success/10 text-success",
+    "bg-accent/10 text-accent",
+    "bg-warning/10 text-warning",
+    "bg-danger/10 text-danger",
+    "bg-info/10 text-info",
+    "bg-warning/10 text-warning",
+    "bg-accent/10 text-accent",
   ];
   let hash = 0;
   for (let i = 0; i < tag.length; i++) hash = tag.charCodeAt(i) + ((hash << 5) - hash);
@@ -141,6 +141,7 @@ export default function ResourcesPage() {
   const [zoom, setZoom] = useState(1);
   const [actionMenu, setActionMenu] = useState<string | null>(null);
   const [stats, setStats] = useState<FileStats | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // 切换预览文件时重置缩放
   useEffect(() => { setZoom(1); }, [previewFile]);
@@ -189,6 +190,7 @@ export default function ResourcesPage() {
       setTotal(data.total || 0);
     } catch (e) {
       console.error("Failed to load files:", e);
+      setError(e instanceof Error ? e.message : "加载文件失败");
     } finally {
       setLoading(false);
     }
@@ -203,6 +205,7 @@ export default function ResourcesPage() {
       setFolders(data.folders || []);
     } catch (e) {
       console.error("Failed to load folders:", e);
+      setError(e instanceof Error ? e.message : "加载文件夹失败");
     }
   }, [currentFolder]);
 
@@ -213,6 +216,7 @@ export default function ResourcesPage() {
       setAllTags(data.tags || []);
     } catch (e) {
       console.error("Failed to load tags:", e);
+      setError(e instanceof Error ? e.message : "加载标签失败");
     }
   }, []);
 
@@ -223,6 +227,7 @@ export default function ResourcesPage() {
       setStats(data);
     } catch (e) {
       console.error("Failed to load stats:", e);
+      setError(e instanceof Error ? e.message : "加载统计失败");
     }
   }, []);
 
@@ -234,6 +239,7 @@ export default function ResourcesPage() {
       setBanks(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error("Failed to load banks:", e);
+      setError(e instanceof Error ? e.message : "加载题库失败");
     } finally {
       setLoading(false);
     }
@@ -247,6 +253,7 @@ export default function ResourcesPage() {
       setTrashFiles(data.files || []);
     } catch (e) {
       console.error("Failed to load trash:", e);
+      setError(e instanceof Error ? e.message : "加载回收站失败");
     } finally {
       setLoading(false);
     }
@@ -261,19 +268,19 @@ export default function ResourcesPage() {
 
   const handleRestore = async (id: string) => {
     try { await authedFetch(`/api/files/${id}/restore`, { method: "POST" }); fetchTrash(); }
-    catch (e) { console.error("Restore failed:", e); }
+    catch (e) { console.error("Restore failed:", e); setError(e instanceof Error ? e.message : "恢复文件失败"); }
   };
 
   const handlePermanentDelete = async (id: string) => {
     if (!confirm("确定永久删除？此操作不可恢复！")) return;
     try { await authedFetch(`/api/files/${id}/permanent`, { method: "DELETE" }); fetchTrash(); }
-    catch (e) { console.error("Permanent delete failed:", e); }
+    catch (e) { console.error("Permanent delete failed:", e); setError(e instanceof Error ? e.message : "永久删除失败"); }
   };
 
   const handleEmptyTrash = async () => {
     if (!confirm("确定清空回收站？所有文件将永久删除！")) return;
     try { await authedFetch(`/api/files/trash/empty`, { method: "POST" }); fetchTrash(); }
-    catch (e) { console.error("Empty trash failed:", e); }
+    catch (e) { console.error("Empty trash failed:", e); setError(e instanceof Error ? e.message : "清空回收站失败"); }
   };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -302,14 +309,15 @@ export default function ResourcesPage() {
         setUploading(false);
         setUploadProgress(0);
         if (xhr.status >= 200 && xhr.status < 300) { fetchFiles(); fetchFolders(); }
-        else console.error("Upload failed:", xhr.statusText);
+        else { console.error("Upload failed:", xhr.statusText); setError("上传失败: " + xhr.statusText); }
       };
-      xhr.onerror = () => { setUploading(false); setUploadProgress(0); console.error("Upload error"); };
+      xhr.onerror = () => { setUploading(false); setUploadProgress(0); console.error("Upload error"); setError("上传失败: 网络错误"); };
       xhr.send(formData);
     } catch (e) {
       setUploading(false);
       setUploadProgress(0);
       console.error("Upload failed:", e);
+      setError(e instanceof Error ? e.message : "上传文件失败");
     }
   };
 
@@ -321,7 +329,7 @@ export default function ResourcesPage() {
     if (!confirm("确定删除该文件？文件将移入回收站")) return;
     setDeleting(id);
     try { await authedFetch(`/api/files/${id}/trash`, { method: "POST" }); fetchFiles(); fetchFolders(); }
-    catch (e) { console.error("Delete failed:", e); }
+    catch (e) { console.error("Delete failed:", e); setError(e instanceof Error ? e.message : "删除文件失败"); }
     finally { setDeleting(null); }
   };
 
@@ -358,7 +366,7 @@ export default function ResourcesPage() {
       setEditFile(null);
       fetchFiles();
       fetchTags();
-    } catch (e) { console.error("Save failed:", e); }
+    } catch (e) { console.error("Save failed:", e); setError(e instanceof Error ? e.message : "保存文件失败"); }
     finally { setSaving(false); }
   };
 
@@ -376,6 +384,7 @@ export default function ResourcesPage() {
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (e) {
       console.error("Download failed:", e);
+      setError(e instanceof Error ? e.message : "下载文件失败");
     }
   };
 
@@ -387,7 +396,7 @@ export default function ResourcesPage() {
     if (!confirm("确定删除该题库？")) return;
     setDeletingBank(id);
     try { await authedFetch(`/api/practice/banks/${id}`, { method: "DELETE" }); fetchBanks(); }
-    catch (e) { console.error("Delete bank failed:", e); }
+    catch (e) { console.error("Delete bank failed:", e); setError(e instanceof Error ? e.message : "删除题库失败"); }
     finally { setDeletingBank(null); }
   };
 
@@ -412,7 +421,7 @@ export default function ResourcesPage() {
       });
       setSelectedFiles(new Set());
       fetchFiles();
-    } catch (e) { console.error("Batch action failed:", e); }
+    } catch (e) { console.error("Batch action failed:", e); setError(e instanceof Error ? e.message : "批量操作失败"); }
   };
 
   const handleCreateFolder = async () => {
@@ -426,7 +435,7 @@ export default function ResourcesPage() {
       setNewFolderName("");
       setShowCreateFolder(false);
       fetchFolders();
-    } catch (e) { console.error("Create folder failed:", e); }
+    } catch (e) { console.error("Create folder failed:", e); setError(e instanceof Error ? e.message : "创建文件夹失败"); }
   };
 
   const navigateToFolder = (folderId: string, folderName: string) => {
@@ -455,23 +464,29 @@ export default function ResourcesPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)]">
+    <div className="min-h-screen bg-page">
+      {error && (
+        <div className="sticky top-0 z-40 p-3 border border-danger/20 bg-danger/10 text-danger text-sm flex items-center justify-between shadow-sm">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-danger hover:text-danger font-bold text-lg leading-none">&times;</button>
+        </div>
+      )}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
         {/* ── 页面标题 ── */}
         <div className="mb-6">
           <div className="flex items-center gap-3 mb-1">
-            <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center">
-              <Library size={20} className="text-violet-500" />
+            <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
+              <Library size={20} className="text-accent" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-[var(--color-text)]">我的资源</h1>
-              <p className="text-[12px] text-[var(--color-text-muted)] mt-0.5">管理学习文件、题库与知识资料</p>
+              <h1 className="text-xl font-bold text">我的资源</h1>
+              <p className="text-[12px] text-muted mt-0.5">管理学习文件、题库与知识资料</p>
             </div>
           </div>
         </div>
 
         {/* ── Tab 栏 ── */}
-        <div className="flex items-center gap-1 mb-6 border-b border-[var(--color-border)]/50 overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-1 mb-6 border-b border/50 overflow-x-auto scrollbar-none">
           {[
             { id: "files" as Tab, label: "文件资料", icon: <FolderOpen size={16} /> },
             { id: "banks" as Tab, label: "题库", icon: <Library size={16} /> },
@@ -481,14 +496,14 @@ export default function ResourcesPage() {
             <button key={t.id} onClick={() => { setTab(t.id); setPage(1); }}
               className={`relative flex items-center gap-1.5 px-4 py-2.5 text-[13px] font-medium transition-colors whitespace-nowrap shrink-0 ${
                 tab === t.id
-                  ? "text-[var(--color-accent)]"
-                  : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                  ? "text-accent"
+                  : "text-muted hover:text"
               }`}>
               {t.icon}
               {t.label}
-              {tab === t.id && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--color-accent)] rounded-full" />}
+              {tab === t.id && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent rounded-full" />}
               {t.id === "trash" && stats?.trash_count ? (
-                <span className="ml-1 text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-500">{stats.trash_count}</span>
+                <span className="ml-1 text-[9px] px-1.5 py-0.5 rounded-full bg-danger/10 text-danger">{stats.trash_count}</span>
               ) : null}
             </button>
           ))}
@@ -503,10 +518,10 @@ export default function ResourcesPage() {
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4">
               {/* 移动端：搜索框占满 */}
               <div className="relative w-full sm:w-auto sm:order-2 sm:ml-auto">
-                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
                 <input value={searchInput} onChange={(e) => { setSearchInput(e.target.value); setPage(1); }}
                   placeholder="搜索文件..."
-                  className="w-full sm:w-44 pl-8 pr-3 py-2 text-[12px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] focus:outline-none focus:border-[var(--color-accent)] transition-colors" />
+                  className="w-full sm:w-44 pl-8 pr-3 py-2 text-[12px] rounded-lg border border bg-page focus:outline-none focus:border-accent transition-colors" />
               </div>
               {/* 类型过滤：横向滚动 pills ／ 桌面行内 */}
               <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none w-full sm:w-auto order-1">
@@ -520,18 +535,18 @@ export default function ResourcesPage() {
                   <button key={f.value} onClick={() => { setTypeFilter(f.value); setPage(1); }}
                     className={`shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
                       typeFilter === f.value
-                        ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                        : "border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-accent)]/30 hover:text-[var(--color-text)]"
+                        ? "border-accent bg-accent/10 text-accent"
+                        : "border text-muted hover:border-accent/30 hover:text"
                     }`}>
                     {f.label}
                   </button>
                 ))}
                 {/* 标签选择 */}
                 {allTags.length > 0 && (
-                  <div className="flex items-center gap-1 shrink-0 pl-1.5 border-l border-[var(--color-border)]/50 ml-1.5">
-                    <Tag size={12} className="text-[var(--color-text-muted)]" />
+                  <div className="flex items-center gap-1 shrink-0 pl-1.5 border-l border/50 ml-1.5">
+                    <Tag size={12} className="text-muted" />
                     <select value={selectedTag} onChange={(e) => { setSelectedTag(e.target.value); setPage(1); }}
-                      className="text-[11px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1.5 focus:outline-none focus:border-[var(--color-accent)]">
+                      className="text-[11px] rounded-lg border border bg-page px-2 py-1.5 focus:outline-none focus:border-accent">
                       <option value="">全部标签</option>
                       {allTags.map(tag => <option key={tag} value={tag}>{tag}</option>)}
                     </select>
@@ -541,19 +556,19 @@ export default function ResourcesPage() {
               {/* 操作按钮组 */}
               <div className="flex items-center gap-2 w-full sm:w-auto order-3">
                 {/* 视图切换 */}
-                <div className="flex items-center gap-0.5 border border-[var(--color-border)] rounded-lg p-0.5">
+                <div className="flex items-center gap-0.5 border border rounded-lg p-0.5">
                   <button onClick={() => setViewMode("list")}
-                    className={`p-1.5 rounded-md transition-colors ${viewMode === "list" ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]" : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"}`}
+                    className={`p-1.5 rounded-md transition-colors ${viewMode === "list" ? "bg-accent/10 text-accent" : "text-muted hover:text"}`}
                     title="列表视图"><List size={14} /></button>
                   <button onClick={() => setViewMode("grid")}
-                    className={`p-1.5 rounded-md transition-colors ${viewMode === "grid" ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]" : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"}`}
+                    className={`p-1.5 rounded-md transition-colors ${viewMode === "grid" ? "bg-accent/10 text-accent" : "text-muted hover:text"}`}
                     title="网格视图"><Grid size={14} /></button>
                 </div>
                 <button onClick={() => setShowCreateFolder(!showCreateFolder)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium border border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-all">
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium border border text-muted hover:border-accent hover:text-accent transition-all">
                   <FolderPlus size={13} /> 新建文件夹
                 </button>
-                <label className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[12px] font-medium bg-[var(--color-accent)] text-white hover:opacity-90 cursor-pointer transition-all ${
+                <label className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[12px] font-medium bg-accent text-white hover:opacity-90 cursor-pointer transition-all ${
                   uploading ? "opacity-50 pointer-events-none" : ""
                 }`}>
                   {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
@@ -566,27 +581,27 @@ export default function ResourcesPage() {
 
             {/* ── 上传进度 ── */}
             {uploading && (
-              <div className="mb-4 p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-sm">
+              <div className="mb-4 p-3 rounded-xl bg-surface border border shadow-sm">
                 <div className="flex items-center gap-2 mb-1.5">
-                  <Loader2 size={13} className="animate-spin text-[var(--color-accent)]" />
-                  <span className="text-[12px] text-[var(--color-text-muted)]">上传中...</span>
-                  <span className="text-[12px] font-medium text-[var(--color-accent)] ml-auto">{uploadProgress}%</span>
+                  <Loader2 size={13} className="animate-spin text-accent" />
+                  <span className="text-[12px] text-muted">上传中...</span>
+                  <span className="text-[12px] font-medium text-accent ml-auto">{uploadProgress}%</span>
                 </div>
-                <div className="w-full h-2 bg-[var(--color-border)] rounded-full overflow-hidden">
-                  <div className="h-full bg-[var(--color-accent)] rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+                <div className="w-full h-2 bg-divider rounded-full overflow-hidden">
+                  <div className="h-full bg-accent rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
                 </div>
               </div>
             )}
 
             {/* ── 新建文件夹输入 ── */}
             {showCreateFolder && (
-              <div className="mb-4 p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] flex items-center gap-2 shadow-sm">
-                <Folder size={16} className="text-amber-500 shrink-0" />
+              <div className="mb-4 p-3 rounded-xl bg-surface border border flex items-center gap-2 shadow-sm">
+                <Folder size={16} className="text-warning shrink-0" />
                 <input value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder="文件夹名称"
-                  className="flex-1 text-[13px] px-2.5 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] focus:outline-none focus:border-[var(--color-accent)]"
+                  className="flex-1 text-[13px] px-2.5 py-1.5 rounded-lg border border bg-page focus:outline-none focus:border-accent"
                   onKeyDown={(e) => e.key === "Enter" && handleCreateFolder()} autoFocus />
-                <button onClick={handleCreateFolder} className="px-3 py-1.5 text-[12px] rounded-lg bg-[var(--color-accent)] text-white font-medium hover:opacity-90">创建</button>
-                <button onClick={() => setShowCreateFolder(false)} className="px-3 py-1.5 text-[12px] rounded-lg border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]">取消</button>
+                <button onClick={handleCreateFolder} className="px-3 py-1.5 text-[12px] rounded-lg bg-accent text-white font-medium hover:opacity-90">创建</button>
+                <button onClick={() => setShowCreateFolder(false)} className="px-3 py-1.5 text-[12px] rounded-lg border border text-muted hover:text">取消</button>
               </div>
             )}
 
@@ -594,17 +609,17 @@ export default function ResourcesPage() {
             {folderBreadcrumbs.length > 0 && (
               <div className="mb-4 flex items-center gap-1 text-[12px] overflow-x-auto scrollbar-none">
                 <button onClick={() => navigateToBreadcrumb(-1)}
-                  className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] whitespace-nowrap transition-colors">
+                  className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-surface text-muted hover:text whitespace-nowrap transition-colors">
                   <Home size={13} /> 根目录
                 </button>
                 {folderBreadcrumbs.map((bc, i) => (
                   <React.Fragment key={bc.id}>
-                    <ChevronRight size={11} className="text-[var(--color-text-muted)] shrink-0" />
+                    <ChevronRight size={11} className="text-muted shrink-0" />
                     <button onClick={() => navigateToBreadcrumb(i)}
                       className={`flex items-center gap-1 px-2 py-1.5 rounded-lg whitespace-nowrap transition-colors ${
                         i === folderBreadcrumbs.length - 1
-                          ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)] font-medium"
-                          : "hover:bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                          ? "bg-accent/10 text-accent font-medium"
+                          : "hover:bg-surface text-muted hover:text"
                       }`}>
                       <FolderOpen size={12} /> {bc.name}
                     </button>
@@ -617,10 +632,10 @@ export default function ResourcesPage() {
             <FileDropZone
               onFiles={handleDroppedFiles}
               className="mb-4 rounded-xl border-2 border-dashed"
-              activeClassName="border-[var(--color-accent)] bg-[var(--color-accent)]/5"
+              activeClassName="border-accent bg-accent/5"
             >
               <div className="py-4 text-center">
-                <p className="text-[12px] text-[var(--color-text-muted)]">拖拽文件到此处上传，或点击上传按钮</p>
+                <p className="text-[12px] text-muted">拖拽文件到此处上传，或点击上传按钮</p>
               </div>
             </FileDropZone>
 
@@ -629,12 +644,12 @@ export default function ResourcesPage() {
               <div className="space-y-1 mb-3">
                 {folders.map((folder) => (
                   <div key={folder.material_id} onClick={() => navigateToFolder(folder.material_id, folder.file_name)}
-                    className="group flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[var(--color-surface)] border border-transparent hover:border-[var(--color-border)]/50 cursor-pointer transition-all">
-                    <FolderOpen size={18} className="text-amber-500 shrink-0" />
-                    <span className="text-[13px] font-medium text-[var(--color-text)] flex-1 truncate">{folder.file_name}</span>
-                    <span className="text-[11px] text-[var(--color-text-muted)] hidden sm:inline">{folder.child_count} 个项目</span>
-                    <span className="text-[11px] text-[var(--color-text-muted)]">{formatDate(folder.created_at)}</span>
-                    <ChevronRight size={14} className="text-[var(--color-text-muted)] opacity-0 group-hover:opacity-100 transition-opacity" />
+                    className="group flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface border border-transparent hover:border/50 cursor-pointer transition-all">
+                    <FolderOpen size={18} className="text-warning shrink-0" />
+                    <span className="text-[13px] font-medium text flex-1 truncate">{folder.file_name}</span>
+                    <span className="text-[11px] text-muted hidden sm:inline">{folder.child_count} 个项目</span>
+                    <span className="text-[11px] text-muted">{formatDate(folder.created_at)}</span>
+                    <ChevronRight size={14} className="text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
                 ))}
               </div>
@@ -643,17 +658,17 @@ export default function ResourcesPage() {
             {/* ── 加载中 ── */}
             {loading ? (
               <div className="flex items-center justify-center py-20">
-                <Loader2 size={22} className="animate-spin text-[var(--color-text-muted)]" />
+                <Loader2 size={22} className="animate-spin text-muted" />
               </div>
             ) : files.length === 0 && folders.length === 0 ? (
               /* ── 空状态 ── */
               <div className="text-center py-16">
-                <div className="w-16 h-16 rounded-2xl bg-[var(--color-surface)] flex items-center justify-center mx-auto mb-4 border border-[var(--color-border)]/50">
-                  <Upload size={28} className="text-[var(--color-text-muted)]" />
+                <div className="w-16 h-16 rounded-2xl bg-surface flex items-center justify-center mx-auto mb-4 border border/50">
+                  <Upload size={28} className="text-muted" />
                 </div>
-                <p className="text-[15px] font-medium text-[var(--color-text)]">还没有文件</p>
-                <p className="text-[12px] text-[var(--color-text-muted)] mt-1.5 mb-5">上传学习资料后自动解析索引，供 AI 和练习系统参考</p>
-                <label className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--color-accent)] text-white text-[13px] font-medium hover:opacity-90 cursor-pointer transition-opacity">
+                <p className="text-[15px] font-medium text">还没有文件</p>
+                <p className="text-[12px] text-muted mt-1.5 mb-5">上传学习资料后自动解析索引，供 AI 和练习系统参考</p>
+                <label className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent text-white text-[13px] font-medium hover:opacity-90 cursor-pointer transition-opacity">
                   <Upload size={15} /> 上传第一个文件
                   <input type="file" className="hidden" onChange={handleUpload} accept=".pdf,.docx,.pptx,.xlsx,.md,.txt,.jpg,.jpeg,.png,.gif,.webp,.mp3,.wav" />
                 </label>
@@ -664,8 +679,8 @@ export default function ResourcesPage() {
                 <div className="hidden sm:block">
                   <div className="space-y-1">
                     {/* 表头：复选框 / 文件名(弹性) / 标签 / 大小 / 状态 / 日期 / 操作 */}
-                    <div className="grid grid-cols-[28px_minmax(220px,1fr)_minmax(0,120px)_64px_minmax(0,90px)_minmax(0,110px)_72px] gap-2 px-3 py-2.5 text-[11px] font-medium text-[var(--color-text-muted)] border-b border-[var(--color-border)]/50">
-                      <div><input type="checkbox" checked={selectedFiles.size === files.length && files.length > 0} onChange={selectAll} className="rounded accent-[var(--color-accent)]" /></div>
+                    <div className="grid grid-cols-[28px_minmax(220px,1fr)_minmax(0,120px)_64px_minmax(0,90px)_minmax(0,110px)_72px] gap-2 px-3 py-2.5 text-[11px] font-medium text-muted border-b border/50">
+                      <div><input type="checkbox" checked={selectedFiles.size === files.length && files.length > 0} onChange={selectAll} className="rounded accent-accent" /></div>
                       <span>文件名</span>
                       <span>标签</span>
                       <span>大小</span>
@@ -683,65 +698,65 @@ export default function ResourcesPage() {
                         <div key={f.material_id}
                           className={`group grid grid-cols-[28px_minmax(220px,1fr)_minmax(0,120px)_64px_minmax(0,90px)_minmax(0,110px)_72px] gap-2 items-center px-3 py-2.5 rounded-xl border transition-all ${
                             isSelected
-                              ? "border-[var(--color-accent)]/30 bg-[var(--color-accent)]/5"
-                              : "border-transparent hover:bg-[var(--color-surface)] hover:border-[var(--color-border)]/50"
+                              ? "border-accent/30 bg-accent/5"
+                              : "border-transparent hover:bg-surface hover:border/50"
                           }`}>
-                          <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(f.material_id)} className="rounded accent-[var(--color-accent)]" />
+                          <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(f.material_id)} className="rounded accent-accent" />
                           {f.is_folder ? (
                             <div onClick={() => navigateToFolder(f.material_id, f.file_name)}
-                              className="flex items-center gap-2 min-w-0 text-[var(--color-text)] hover:text-[var(--color-accent)] cursor-pointer transition-colors">
-                              <FolderOpen size={15} className="text-amber-500 shrink-0" />
+                              className="flex items-center gap-2 min-w-0 text hover:text-accent cursor-pointer transition-colors">
+                              <FolderOpen size={15} className="text-warning shrink-0" />
                               <span className="text-[13px] truncate font-medium">{f.file_name || "未命名文件夹"}</span>
                             </div>
                           ) : (
                             <Link href={`/files/${f.material_id}`}
-                              className="flex items-center gap-2 min-w-0 hover:text-[var(--color-accent)] transition-colors group/link">
+                              className="flex items-center gap-2 min-w-0 hover:text-accent transition-colors group/link">
                               {getFileIcon(ext)}
-                              <span className="text-[13px] truncate flex-1 !text-[var(--color-text)]" title={f.file_name || ""}>
+                              <span className="text-[13px] truncate flex-1 !text" title={f.file_name || ""}>
                                 {f.file_name || `未命名·${ext || "文件"}`}
                               </span>
-                              <ExternalLink size={10} className="text-[var(--color-text-muted)] opacity-0 group-hover/link:opacity-100 shrink-0 transition-opacity" />
+                              <ExternalLink size={10} className="text-muted opacity-0 group-hover/link:opacity-100 shrink-0 transition-opacity" />
                             </Link>
                           )}
                           <div className="flex items-center gap-1 flex-wrap min-w-0">
                             {(f.tags || []).slice(0, 2).map(tag => (
                               <span key={tag} className={`text-[9px] px-1.5 py-0.5 rounded leading-none ${getTagColor(tag)}`}>{tag}</span>
                             ))}
-                            {(f.tags || []).length > 2 && <span className="text-[9px] text-[var(--color-text-muted)] shrink-0">+{f.tags.length - 2}</span>}
+                            {(f.tags || []).length > 2 && <span className="text-[9px] text-muted shrink-0">+{f.tags.length - 2}</span>}
                           </div>
-                          <span className="text-[12px] text-[var(--color-text-muted)] truncate">{f.is_folder ? `${f.toc_count}项` : formatSize(f.file_size)}</span>
+                          <span className="text-[12px] text-muted truncate">{f.is_folder ? `${f.toc_count}项` : formatSize(f.file_size)}</span>
                           <span>
                             {isIndexing ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] text-blue-500"><Loader2 size={11} className="animate-spin" /> 索引中</span>
+                              <span className="inline-flex items-center gap-1 text-[11px] text-info"><Loader2 size={11} className="animate-spin" /> 索引中</span>
                             ) : isFailed ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] text-red-500"><AlertCircle size={11} /> 失败</span>
+                              <span className="inline-flex items-center gap-1 text-[11px] text-danger"><AlertCircle size={11} /> 失败</span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-[11px] text-green-500"><CheckCircle size={11} /> {f.chunk_count}块</span>
+                              <span className="inline-flex items-center gap-1 text-[11px] text-success"><CheckCircle size={11} /> {f.chunk_count}块</span>
                             )}
                           </span>
-                          <span className="text-[12px] text-[var(--color-text-muted)] truncate">{formatDate(f.created_at)}</span>
+                          <span className="text-[12px] text-muted truncate">{formatDate(f.created_at)}</span>
                           <div className="flex items-center gap-0.5 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                             {!f.is_folder && (
-                              <button onClick={() => handlePreview(f)} className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-blue-500 hover:bg-blue-500/10 transition-colors" title="预览"><Eye size={13} /></button>
+                              <button onClick={() => handlePreview(f)} className="p-1.5 rounded-lg text-muted hover:text-info hover:bg-info/10 transition-colors" title="预览"><Eye size={13} /></button>
                             )}
-                            <button onClick={() => openEdit(f)} className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors" title="编辑"><Pencil size={13} /></button>
+                            <button onClick={() => openEdit(f)} className="p-1.5 rounded-lg text-muted hover:text-accent hover:bg-accent/10 transition-colors" title="编辑"><Pencil size={13} /></button>
                             {/* 更多操作下拉 */}
                             <div className="relative">
                               <button onClick={(e) => { e.stopPropagation(); e.preventDefault(); setActionMenu(actionMenu === f.material_id ? null : f.material_id); }}
-                                className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-border)]/30 transition-colors" title="更多">
+                                className="p-1.5 rounded-lg text-muted hover:text hover:bg-divider/30 transition-colors" title="更多">
                                 <MoreVertical size={13} />
                               </button>
                               {actionMenu === f.material_id && (
                                 <>
                                   <div className="fixed inset-0 z-10" onClick={() => setActionMenu(null)} />
-                                  <div className="absolute right-0 top-full mt-1 z-20 min-w-[120px] bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)]/50 py-1 overflow-hidden">
+                                  <div className="absolute right-0 top-full mt-1 z-20 min-w-[120px] bg-surface rounded-xl shadow-lg border border/50 py-1 overflow-hidden">
                                     <button onClick={(e) => { e.stopPropagation(); handleDownload(f); setActionMenu(null); }}
-                                      className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-green-600 hover:bg-green-500/10 transition-colors">
+                                      className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-success hover:bg-success/10 transition-colors">
                                       <Download size={12} /> 下载
                                     </button>
-                                    <div className="border-t border-[var(--color-border)]/30 mx-2" />
+                                    <div className="border-t border/30 mx-2" />
                                     <button onClick={(e) => { e.stopPropagation(); handleDelete(f.material_id); setActionMenu(null); }}
-                                      className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-red-500 hover:bg-red-500/10 transition-colors">
+                                      className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-danger hover:bg-danger/10 transition-colors">
                                       <Trash2 size={12} /> 删除
                                     </button>
                                   </div>
@@ -762,18 +777,18 @@ export default function ResourcesPage() {
                     const isIndexing = f.status === "uploading" || f.status === "pending";
                     const isFailed = f.status === "index_failed";
                     return (
-                      <div key={f.material_id} className="p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50 shadow-sm">
+                      <div key={f.material_id} className="p-3 rounded-xl bg-surface border border/50 shadow-sm">
                         <div className="flex items-start gap-2.5">
                           <input type="checkbox" checked={selectedFiles.has(f.material_id)} onChange={() => toggleSelect(f.material_id)}
-                            className="mt-0.5 rounded accent-[var(--color-accent)] shrink-0" />
+                            className="mt-0.5 rounded accent-accent shrink-0" />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               {f.is_folder ? (
-                                <FolderOpen size={15} className="text-amber-500 shrink-0" />
+                                <FolderOpen size={15} className="text-warning shrink-0" />
                               ) : (
                                 getFileIcon(ext)
                               )}
-                              <span className="text-[13px] font-medium text-[var(--color-text)] break-all leading-snug">{f.file_name}</span>
+                              <span className="text-[13px] font-medium text break-all leading-snug">{f.file_name}</span>
                             </div>
                             {/* tags */}
                             {(f.tags || []).length > 0 && (
@@ -784,7 +799,7 @@ export default function ResourcesPage() {
                               </div>
                             )}
                             {/* meta */}
-                            <div className="flex items-center gap-2 mt-1.5 text-[11px] text-[var(--color-text-muted)]">
+                            <div className="flex items-center gap-2 mt-1.5 text-[11px] text-muted">
                               <span>{f.is_folder ? `${f.toc_count}项` : formatSize(f.file_size)}</span>
                               <span>·</span>
                               <span>{formatDate(f.created_at)}</span>
@@ -792,44 +807,44 @@ export default function ResourcesPage() {
                             {/* status */}
                             <div className="mt-1">
                               {isIndexing ? (
-                                <span className="inline-flex items-center gap-1 text-[11px] text-blue-500"><Loader2 size={11} className="animate-spin" /> 索引中</span>
+                                <span className="inline-flex items-center gap-1 text-[11px] text-info"><Loader2 size={11} className="animate-spin" /> 索引中</span>
                               ) : isFailed ? (
-                                <span className="inline-flex items-center gap-1 text-[11px] text-red-500"><AlertCircle size={11} /> 失败</span>
+                                <span className="inline-flex items-center gap-1 text-[11px] text-danger"><AlertCircle size={11} /> 失败</span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 text-[11px] text-green-500"><CheckCircle size={11} /> 就绪</span>
+                                <span className="inline-flex items-center gap-1 text-[11px] text-success"><CheckCircle size={11} /> 就绪</span>
                               )}
                             </div>
                           </div>
                         </div>
                         {/* 操作按钮，始终可见 */}
-                        <div className="flex items-center gap-1 mt-3 pt-2.5 border-t border-[var(--color-border)]/30">
+                        <div className="flex items-center gap-1 mt-3 pt-2.5 border-t border/30">
                           {!f.is_folder && (
                             <button onClick={() => handlePreview(f)}
-                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-blue-500 bg-blue-500/10 hover:bg-blue-500/20 transition-colors min-h-[32px]">
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-info bg-info/10 hover:bg-info/20 transition-colors min-h-[32px]">
                               <Eye size={12} /> 预览
                             </button>
                           )}
                           <button onClick={() => openEdit(f)}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-[var(--color-accent)] bg-[var(--color-accent)]/10 hover:bg-[var(--color-accent)]/20 transition-colors min-h-[32px]">
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-accent bg-accent/10 hover:bg-accent/20 transition-colors min-h-[32px]">
                             <Pencil size={12} /> 编辑
                           </button>
                           {/* 更多操作 */}
                           <div className="relative ml-auto">
                             <button onClick={(e) => { e.stopPropagation(); e.preventDefault(); setActionMenu(actionMenu === f.material_id ? null : f.material_id); }}
-                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-[var(--color-text-muted)] hover:bg-[var(--color-border)]/30 transition-colors min-h-[32px]">
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-muted hover:bg-divider/30 transition-colors min-h-[32px]">
                               <MoreVertical size={12} />
                             </button>
                             {actionMenu === f.material_id && (
                               <>
                                 <div className="fixed inset-0 z-10" onClick={() => setActionMenu(null)} />
-                                <div className="absolute right-0 top-full mt-1 z-20 min-w-[110px] bg-[var(--color-surface)] rounded-lg shadow-lg border border-[var(--color-border)]/50 py-1 overflow-hidden">
+                                <div className="absolute right-0 top-full mt-1 z-20 min-w-[110px] bg-surface rounded-lg shadow-lg border border/50 py-1 overflow-hidden">
                                   <button onClick={(e) => { e.stopPropagation(); handleDownload(f); setActionMenu(null); }}
-                                    className="flex items-center gap-1.5 w-full px-3 py-2 text-[12px] text-green-600 hover:bg-green-500/10 transition-colors">
+                                    className="flex items-center gap-1.5 w-full px-3 py-2 text-[12px] text-success hover:bg-success/10 transition-colors">
                                     <Download size={12} /> 下载
                                   </button>
-                                  <div className="border-t border-[var(--color-border)]/30 mx-2" />
+                                  <div className="border-t border/30 mx-2" />
                                   <button onClick={(e) => { e.stopPropagation(); handleDelete(f.material_id); setActionMenu(null); }} disabled={deleting === f.material_id}
-                                    className="flex items-center gap-1.5 w-full px-3 py-2 text-[12px] text-red-500 hover:bg-red-500/10 transition-colors">
+                                    className="flex items-center gap-1.5 w-full px-3 py-2 text-[12px] text-danger hover:bg-danger/10 transition-colors">
                                     {deleting === f.material_id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} 删除
                                   </button>
                                 </div>
@@ -850,19 +865,19 @@ export default function ResourcesPage() {
                   const isIndexing = f.status === "uploading" || f.status === "pending";
                   const isFailed = f.status === "index_failed";
                   return (
-                    <div key={f.material_id} className="group relative p-4 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50 hover:border-[var(--color-accent)]/30 hover:shadow-md transition-all">
+                    <div key={f.material_id} className="group relative p-4 rounded-xl bg-surface border border/50 hover:border-accent/30 hover:shadow-md transition-all">
                       <div className="flex flex-col items-center text-center">
                         <input type="checkbox" checked={selectedFiles.has(f.material_id)} onChange={() => toggleSelect(f.material_id)}
-                          className="absolute top-2 left-2 rounded accent-[var(--color-accent)]" />
+                          className="absolute top-2 left-2 rounded accent-accent" />
                         {f.is_folder ? (
-                          <FolderOpen size={36} className="text-amber-500 mb-2.5" />
+                          <FolderOpen size={36} className="text-warning mb-2.5" />
                         ) : (
-                          <div className="w-14 h-14 rounded-xl bg-[var(--color-bg)] flex items-center justify-center mb-2.5 border border-[var(--color-border)]/30">
+                          <div className="w-14 h-14 rounded-xl bg-page flex items-center justify-center mb-2.5 border border/30">
                             {getFileIcon(ext)}
                           </div>
                         )}
-                        <p className="text-[12px] font-medium text-[var(--color-text)] truncate w-full">{f.file_name}</p>
-                        <p className="text-[10px] text-[var(--color-text-muted)] mt-1">{f.is_folder ? `${f.toc_count}项` : formatSize(f.file_size)}</p>
+                        <p className="text-[12px] font-medium text truncate w-full">{f.file_name}</p>
+                        <p className="text-[10px] text-muted mt-1">{f.is_folder ? `${f.toc_count}项` : formatSize(f.file_size)}</p>
                         {(f.tags || []).length > 0 && (
                           <div className="flex items-center gap-0.5 mt-1.5 flex-wrap justify-center">
                             {(f.tags || []).slice(0, 2).map(tag => (
@@ -872,37 +887,37 @@ export default function ResourcesPage() {
                         )}
                         <div className="mt-1.5">
                           {isIndexing ? (
-                            <span className="text-[10px] text-blue-500 flex items-center gap-0.5"><Loader2 size={9} className="animate-spin" /> 索引中</span>
+                            <span className="text-[10px] text-info flex items-center gap-0.5"><Loader2 size={9} className="animate-spin" /> 索引中</span>
                           ) : isFailed ? (
-                            <span className="text-[10px] text-red-500 flex items-center gap-0.5"><AlertCircle size={9} /> 失败</span>
+                            <span className="text-[10px] text-danger flex items-center gap-0.5"><AlertCircle size={9} /> 失败</span>
                           ) : (
-                            <span className="text-[10px] text-green-500 flex items-center gap-0.5"><CheckCircle size={9} /> 就绪</span>
+                            <span className="text-[10px] text-success flex items-center gap-0.5"><CheckCircle size={9} /> 就绪</span>
                           )}
                         </div>
                       </div>
                       {/* hover 操作 */}
-                      <div className="absolute top-2 right-2 hidden group-hover:flex items-center gap-0.5 bg-[var(--color-surface)] rounded-lg p-0.5 shadow-sm border border-[var(--color-border)]/30">
+                      <div className="absolute top-2 right-2 hidden group-hover:flex items-center gap-0.5 bg-surface rounded-lg p-0.5 shadow-sm border border/30">
                         {!f.is_folder && (
-                          <button onClick={() => handlePreview(f)} className="p-1 rounded-md hover:bg-blue-500/10 text-[var(--color-text-muted)] hover:text-blue-500 transition-colors" title="预览"><Eye size={12} /></button>
+                          <button onClick={() => handlePreview(f)} className="p-1 rounded-md hover:bg-info/10 text-muted hover:text-info transition-colors" title="预览"><Eye size={12} /></button>
                         )}
-                        <button onClick={() => openEdit(f)} className="p-1 rounded-md hover:bg-[var(--color-accent)]/10 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors" title="编辑"><Pencil size={12} /></button>
+                        <button onClick={() => openEdit(f)} className="p-1 rounded-md hover:bg-accent/10 text-muted hover:text-accent transition-colors" title="编辑"><Pencil size={12} /></button>
                         {/* 更多操作下拉 */}
                         <div className="relative">
                           <button onClick={(e) => { e.stopPropagation(); e.preventDefault(); setActionMenu(actionMenu === f.material_id ? null : f.material_id); }}
-                            className="p-1 rounded-md hover:bg-[var(--color-border)]/30 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors" title="更多">
+                            className="p-1 rounded-md hover:bg-divider/30 text-muted hover:text transition-colors" title="更多">
                             <MoreVertical size={12} />
                           </button>
                           {actionMenu === f.material_id && (
                             <>
                               <div className="fixed inset-0 z-10" onClick={() => setActionMenu(null)} />
-                              <div className="absolute right-0 top-full mt-1 z-20 min-w-[100px] bg-[var(--color-surface)] rounded-lg shadow-lg border border-[var(--color-border)]/50 py-1 overflow-hidden">
+                              <div className="absolute right-0 top-full mt-1 z-20 min-w-[100px] bg-surface rounded-lg shadow-lg border border/50 py-1 overflow-hidden">
                                 <button onClick={(e) => { e.stopPropagation(); handleDownload(f); setActionMenu(null); }}
-                                  className="flex items-center gap-1.5 w-full px-2.5 py-1.5 text-[11px] text-green-600 hover:bg-green-500/10 transition-colors">
+                                  className="flex items-center gap-1.5 w-full px-2.5 py-1.5 text-[11px] text-success hover:bg-success/10 transition-colors">
                                   <Download size={11} /> 下载
                                 </button>
-                                <div className="border-t border-[var(--color-border)]/30 mx-2" />
+                                <div className="border-t border/30 mx-2" />
                                 <button onClick={(e) => { e.stopPropagation(); handleDelete(f.material_id); setActionMenu(null); }}
-                                  className="flex items-center gap-1.5 w-full px-2.5 py-1.5 text-[11px] text-red-500 hover:bg-red-500/10 transition-colors">
+                                  className="flex items-center gap-1.5 w-full px-2.5 py-1.5 text-[11px] text-danger hover:bg-danger/10 transition-colors">
                                   <Trash2 size={11} /> 删除
                                 </button>
                               </div>
@@ -920,12 +935,12 @@ export default function ResourcesPage() {
             {totalPages > 1 && (
               <div className="flex items-center justify-center gap-3 mt-8">
                 <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}
-                  className="px-4 py-2 text-[12px] rounded-lg border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)]/30 disabled:opacity-30 disabled:pointer-events-none transition-all">
+                  className="px-4 py-2 text-[12px] rounded-lg border border text-muted hover:text hover:border-accent/30 disabled:opacity-30 disabled:pointer-events-none transition-all">
                   上一页
                 </button>
-                <span className="text-[12px] text-[var(--color-text-muted)]">{page} / {totalPages}</span>
+                <span className="text-[12px] text-muted">{page} / {totalPages}</span>
                 <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
-                  className="px-4 py-2 text-[12px] rounded-lg border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)]/30 disabled:opacity-30 disabled:pointer-events-none transition-all">
+                  className="px-4 py-2 text-[12px] rounded-lg border border text-muted hover:text hover:border-accent/30 disabled:opacity-30 disabled:pointer-events-none transition-all">
                   下一页
                 </button>
               </div>
@@ -935,30 +950,30 @@ export default function ResourcesPage() {
             {selectedFiles.size > 0 && (
               <>
                 {/* 移动端：底部固定栏 */}
-                <div className="fixed bottom-0 left-0 right-0 z-40 p-3 bg-[var(--color-surface)] border-t border-[var(--color-border)] shadow-[0_-4px_12px_rgba(0,0,0,0.08)] sm:hidden">
+                <div className="fixed bottom-0 left-0 right-0 z-40 p-3 bg-surface border-t border shadow-[0_-4px_12px_rgba(0,0,0,0.08)] sm:hidden">
                   <div className="flex items-center gap-2">
-                    <span className="text-[12px] text-[var(--color-text)] font-medium">已选 {selectedFiles.size} 项</span>
+                    <span className="text-[12px] text font-medium">已选 {selectedFiles.size} 项</span>
                     <div className="flex-1" />
                     <button onClick={() => handleBatchAction("delete")}
-                      className="px-4 py-2 text-[12px] rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 font-medium transition-colors min-h-[36px]">
+                      className="px-4 py-2 text-[12px] rounded-lg bg-danger/10 text-danger hover:bg-danger/20 font-medium transition-colors min-h-[36px]">
                       删除
                     </button>
                     <button onClick={() => setSelectedFiles(new Set())}
-                      className="px-4 py-2 text-[12px] rounded-lg border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors min-h-[36px]">
+                      className="px-4 py-2 text-[12px] rounded-lg border border text-muted hover:text transition-colors min-h-[36px]">
                       取消
                     </button>
                   </div>
                 </div>
                 {/* 桌面端：随内容显示 */}
-                <div className="hidden sm:block mt-4 p-3 rounded-xl bg-[var(--color-accent)]/5 border border-[var(--color-accent)]/20">
+                <div className="hidden sm:block mt-4 p-3 rounded-xl bg-accent/5 border border-accent/20">
                   <div className="flex items-center gap-3">
-                    <span className="text-[13px] text-[var(--color-accent)] font-medium">已选择 {selectedFiles.size} 个文件</span>
+                    <span className="text-[13px] text-accent font-medium">已选择 {selectedFiles.size} 个文件</span>
                     <button onClick={() => handleBatchAction("delete")}
-                      className="px-3 py-1.5 text-[11px] rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 font-medium transition-colors">
+                      className="px-3 py-1.5 text-[11px] rounded-lg bg-danger/10 text-danger hover:bg-danger/20 font-medium transition-colors">
                       <Trash2 size={12} className="inline mr-1" />删除
                     </button>
                     <button onClick={() => setSelectedFiles(new Set())}
-                      className="ml-auto text-[12px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors">
+                      className="ml-auto text-[12px] text-muted hover:text transition-colors">
                       取消选择
                     </button>
                   </div>
@@ -972,22 +987,22 @@ export default function ResourcesPage() {
                 {/* 移动端：底部滑出面板 */}
                 <div className="sm:hidden fixed inset-0 z-50" onClick={() => setEditFile(null)}>
                   <div className="absolute inset-0 bg-black/50" />
-                  <div className="absolute bottom-0 left-0 right-0 bg-[var(--color-surface)] rounded-t-2xl shadow-xl max-h-[85vh] overflow-auto"
+                  <div className="absolute bottom-0 left-0 right-0 bg-surface rounded-t-2xl shadow-xl max-h-[85vh] overflow-auto"
                     onClick={(e) => e.stopPropagation()}>
-                    <div className="sticky top-0 bg-[var(--color-surface)] border-b border-[var(--color-border)]/50 px-5 py-3.5 flex items-center justify-between rounded-t-2xl">
-                      <h3 className="text-[15px] font-semibold text-[var(--color-text)]">编辑文件</h3>
-                      <button onClick={() => setEditFile(null)} className="p-1.5 rounded-lg hover:bg-[var(--color-border)]/30 text-[var(--color-text-muted)] transition-colors">
+                    <div className="sticky top-0 bg-surface border-b border/50 px-5 py-3.5 flex items-center justify-between rounded-t-2xl">
+                      <h3 className="text-[15px] font-semibold text">编辑文件</h3>
+                      <button onClick={() => setEditFile(null)} className="p-1.5 rounded-lg hover:bg-divider/30 text-muted transition-colors">
                         <X size={18} />
                       </button>
                     </div>
                     <div className="p-5 space-y-4">
                       <div>
-                        <label className="text-[11px] text-[var(--color-text-muted)] block mb-1.5 font-medium">文件名</label>
+                        <label className="text-[11px] text-muted block mb-1.5 font-medium">文件名</label>
                         <input value={editName} onChange={(e) => setEditName(e.target.value)}
-                          className="w-full px-3.5 py-2.5 text-[13px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] focus:outline-none focus:border-[var(--color-accent)] transition-colors" />
+                          className="w-full px-3.5 py-2.5 text-[13px] rounded-lg border border bg-page focus:outline-none focus:border-accent transition-colors" />
                       </div>
                       <div>
-                        <label className="text-[11px] text-[var(--color-text-muted)] block mb-1.5 font-medium">标签</label>
+                        <label className="text-[11px] text-muted block mb-1.5 font-medium">标签</label>
                         <div className="flex items-center gap-1.5 flex-wrap mb-2">
                           {editTags.map(tag => (
                             <span key={tag} className={`inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg ${getTagColor(tag)}`}>
@@ -1000,34 +1015,34 @@ export default function ResourcesPage() {
                           <input value={editTagInput} onChange={(e) => setEditTagInput(e.target.value)}
                             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addTag())}
                             placeholder="输入标签后回车"
-                            className="flex-1 px-3 py-2 text-[12px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] focus:outline-none focus:border-[var(--color-accent)] transition-colors" />
+                            className="flex-1 px-3 py-2 text-[12px] rounded-lg border border bg-page focus:outline-none focus:border-accent transition-colors" />
                           <button onClick={addTag}
-                            className="p-2 rounded-lg bg-[var(--color-accent)]/10 text-[var(--color-accent)] hover:bg-[var(--color-accent)]/20 transition-colors">
+                            className="p-2 rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition-colors">
                             <Tag size={14} />
                           </button>
                         </div>
                       </div>
                       <div>
-                        <label className="text-[11px] text-[var(--color-text-muted)] block mb-1.5 font-medium">所属层级</label>
+                        <label className="text-[11px] text-muted block mb-1.5 font-medium">所属层级</label>
                         <select value={editLevel} onChange={(e) => setEditLevel(e.target.value)}
-                          className="w-full px-3.5 py-2.5 text-[13px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] focus:outline-none focus:border-[var(--color-accent)] transition-colors">
+                          className="w-full px-3.5 py-2.5 text-[13px] rounded-lg border border bg-page focus:outline-none focus:border-accent transition-colors">
                           <option value="dir">目录</option>
                           <option value="node">节点</option>
                         </select>
                       </div>
                       <div>
-                        <label className="text-[11px] text-[var(--color-text-muted)] block mb-1.5 font-medium">归属 ID</label>
+                        <label className="text-[11px] text-muted block mb-1.5 font-medium">归属 ID</label>
                         <input value={editParentId} onChange={(e) => setEditParentId(e.target.value)} placeholder="留空表示未分类"
-                          className="w-full px-3.5 py-2.5 text-[13px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] focus:outline-none focus:border-[var(--color-accent)] transition-colors" />
+                          className="w-full px-3.5 py-2.5 text-[13px] rounded-lg border border bg-page focus:outline-none focus:border-accent transition-colors" />
                       </div>
                     </div>
-                    <div className="sticky bottom-0 bg-[var(--color-surface)] border-t border-[var(--color-border)]/50 px-5 py-3.5 flex items-center justify-end gap-3">
+                    <div className="sticky bottom-0 bg-surface border-t border/50 px-5 py-3.5 flex items-center justify-end gap-3">
                       <button onClick={() => setEditFile(null)}
-                        className="px-4 py-2.5 text-[13px] rounded-lg border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors min-h-[36px]">
+                        className="px-4 py-2.5 text-[13px] rounded-lg border border text-muted hover:text transition-colors min-h-[36px]">
                         取消
                       </button>
                       <button onClick={handleSaveEdit} disabled={saving}
-                        className="px-4 py-2.5 text-[13px] rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50 transition-all flex items-center gap-1.5 min-h-[36px] font-medium">
+                        className="px-4 py-2.5 text-[13px] rounded-lg bg-accent text-white hover:opacity-90 disabled:opacity-50 transition-all flex items-center gap-1.5 min-h-[36px] font-medium">
                         {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
                         {saving ? "保存中..." : "保存"}
                       </button>
@@ -1036,16 +1051,16 @@ export default function ResourcesPage() {
                 </div>
                 {/* 桌面端：居中弹窗 */}
                 <div className="hidden sm:flex fixed inset-0 z-50 items-center justify-center bg-black/40" onClick={() => setEditFile(null)}>
-                  <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] w-full max-w-md mx-4 p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-                    <h3 className="text-[15px] font-semibold text-[var(--color-text)] mb-5">编辑文件</h3>
+                  <div className="bg-surface rounded-xl border border w-full max-w-md mx-4 p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+                    <h3 className="text-[15px] font-semibold text mb-5">编辑文件</h3>
                     <div className="space-y-4">
                       <div>
-                        <label className="text-[11px] text-[var(--color-text-muted)] block mb-1.5 font-medium">文件名</label>
+                        <label className="text-[11px] text-muted block mb-1.5 font-medium">文件名</label>
                         <input value={editName} onChange={(e) => setEditName(e.target.value)}
-                          className="w-full px-3.5 py-2.5 text-[13px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] focus:outline-none focus:border-[var(--color-accent)] transition-colors" />
+                          className="w-full px-3.5 py-2.5 text-[13px] rounded-lg border border bg-page focus:outline-none focus:border-accent transition-colors" />
                       </div>
                       <div>
-                        <label className="text-[11px] text-[var(--color-text-muted)] block mb-1.5 font-medium">标签</label>
+                        <label className="text-[11px] text-muted block mb-1.5 font-medium">标签</label>
                         <div className="flex items-center gap-1.5 flex-wrap mb-2">
                           {editTags.map(tag => (
                             <span key={tag} className={`inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg ${getTagColor(tag)}`}>
@@ -1058,34 +1073,34 @@ export default function ResourcesPage() {
                           <input value={editTagInput} onChange={(e) => setEditTagInput(e.target.value)}
                             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addTag())}
                             placeholder="输入标签后回车"
-                            className="flex-1 px-3 py-2 text-[12px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] focus:outline-none focus:border-[var(--color-accent)] transition-colors" />
+                            className="flex-1 px-3 py-2 text-[12px] rounded-lg border border bg-page focus:outline-none focus:border-accent transition-colors" />
                           <button onClick={addTag}
-                            className="p-2 rounded-lg bg-[var(--color-accent)]/10 text-[var(--color-accent)] hover:bg-[var(--color-accent)]/20 transition-colors">
+                            className="p-2 rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition-colors">
                             <Tag size={14} />
                           </button>
                         </div>
                       </div>
                       <div>
-                        <label className="text-[11px] text-[var(--color-text-muted)] block mb-1.5 font-medium">所属层级</label>
+                        <label className="text-[11px] text-muted block mb-1.5 font-medium">所属层级</label>
                         <select value={editLevel} onChange={(e) => setEditLevel(e.target.value)}
-                          className="w-full px-3.5 py-2.5 text-[13px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] focus:outline-none focus:border-[var(--color-accent)] transition-colors">
+                          className="w-full px-3.5 py-2.5 text-[13px] rounded-lg border border bg-page focus:outline-none focus:border-accent transition-colors">
                           <option value="dir">目录</option>
                           <option value="node">节点</option>
                         </select>
                       </div>
                       <div>
-                        <label className="text-[11px] text-[var(--color-text-muted)] block mb-1.5 font-medium">归属 ID</label>
+                        <label className="text-[11px] text-muted block mb-1.5 font-medium">归属 ID</label>
                         <input value={editParentId} onChange={(e) => setEditParentId(e.target.value)} placeholder="留空表示未分类"
-                          className="w-full px-3.5 py-2.5 text-[13px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] focus:outline-none focus:border-[var(--color-accent)] transition-colors" />
+                          className="w-full px-3.5 py-2.5 text-[13px] rounded-lg border border bg-page focus:outline-none focus:border-accent transition-colors" />
                       </div>
                     </div>
                     <div className="flex items-center justify-end gap-3 mt-6">
                       <button onClick={() => setEditFile(null)}
-                        className="px-4 py-2 text-[12px] rounded-lg border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors">
+                        className="px-4 py-2 text-[12px] rounded-lg border border text-muted hover:text transition-colors">
                         取消
                       </button>
                       <button onClick={handleSaveEdit} disabled={saving}
-                        className="px-4 py-2 text-[12px] rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50 transition-all flex items-center gap-1.5 font-medium">
+                        className="px-4 py-2 text-[12px] rounded-lg bg-accent text-white hover:opacity-90 disabled:opacity-50 transition-all flex items-center gap-1.5 font-medium">
                         {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
                         {saving ? "保存中..." : "保存"}
                       </button>
@@ -1104,57 +1119,57 @@ export default function ResourcesPage() {
               <>
                 {/* 移动端：全屏 */}
                 <div className="sm:hidden fixed inset-0 z-50 bg-black/70 flex flex-col" style={{ animation: "previewFadeIn 0.15s ease-out" }} onClick={() => setPreviewFile(null)}>
-                  <div className="bg-[var(--color-surface)] flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]/50" onClick={(e) => e.stopPropagation()}>
-                    <h3 className="text-[14px] font-medium text-[var(--color-text)] truncate flex-1 mr-3">{previewFile.file_name}</h3>
-                    <button onClick={() => setPreviewFile(null)} className="p-1.5 rounded-lg hover:bg-[var(--color-border)]/30 text-[var(--color-text-muted)] transition-colors">
+                  <div className="bg-surface flex items-center justify-between px-4 py-3 border-b border/50" onClick={(e) => e.stopPropagation()}>
+                    <h3 className="text-[14px] font-medium text truncate flex-1 mr-3">{previewFile.file_name}</h3>
+                    <button onClick={() => setPreviewFile(null)} className="p-1.5 rounded-lg hover:bg-divider/30 text-muted transition-colors">
                       <X size={20} />
                     </button>
                   </div>
-                  <div className="flex-1 flex items-center justify-center p-4 bg-[var(--color-bg)] overflow-auto" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex-1 flex items-center justify-center p-4 bg-page overflow-auto" onClick={(e) => e.stopPropagation()}>
                     <FilePreview file={previewFile} />
                   </div>
-                  <div className="bg-[var(--color-surface)] border-t border-[var(--color-border)]/50 px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                  <div className="bg-surface border-t border/50 px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     <button onClick={() => handleDownload(previewFile)}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-accent)] text-white text-[13px] font-medium hover:opacity-90 transition-opacity">
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-accent text-white text-[13px] font-medium hover:opacity-90 transition-opacity">
                       <Download size={15} /> 下载文件
                     </button>
                   </div>
                 </div>
                 {/* 桌面端：居中弹窗 + 缩放 + 缩略图 */}
                 <div className="hidden sm:flex fixed inset-0 z-50 items-center justify-center bg-black/60" style={{ animation: "previewFadeIn 0.15s ease-out" }} onClick={() => setPreviewFile(null)}>
-                  <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] w-full max-w-6xl mx-4 shadow-xl max-h-[90vh] flex flex-col" style={{ animation: "previewScaleIn 0.15s ease-out" }} onClick={(e) => e.stopPropagation()}>
+                  <div className="bg-surface rounded-xl border border w-full max-w-6xl mx-4 shadow-xl max-h-[90vh] flex flex-col" style={{ animation: "previewScaleIn 0.15s ease-out" }} onClick={(e) => e.stopPropagation()}>
                     {/* 标题栏 */}
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)]/50">
-                      <h3 className="text-[15px] font-semibold text-[var(--color-text)] truncate flex-1 mr-3">{previewFile.file_name}</h3>
+                    <div className="flex items-center justify-between px-5 py-4 border-b border/50">
+                      <h3 className="text-[15px] font-semibold text truncate flex-1 mr-3">{previewFile.file_name}</h3>
                       <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-[var(--color-text-muted)]">{formatSize(previewFile.file_size)}</span>
-                        <button onClick={() => setPreviewFile(null)} className="p-1.5 rounded-lg hover:bg-[var(--color-border)]/30 text-[var(--color-text-muted)] transition-colors"><X size={18} /></button>
+                        <span className="text-[11px] text-muted">{formatSize(previewFile.file_size)}</span>
+                        <button onClick={() => setPreviewFile(null)} className="p-1.5 rounded-lg hover:bg-divider/30 text-muted transition-colors"><X size={18} /></button>
                       </div>
                     </div>
                     {/* 缩放工具栏 */}
-                    <div className="flex items-center justify-between px-5 py-2 border-b border-[var(--color-border)]/30 bg-[var(--color-bg)]/50">
+                    <div className="flex items-center justify-between px-5 py-2 border-b border/30 bg-page/50">
                       <div className="flex items-center gap-1">
                         <button onClick={() => setZoom(z => Math.max(0.25, +(z - 0.25).toFixed(2)))}
-                          className="p-1.5 rounded-lg hover:bg-[var(--color-border)]/30 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors" title="缩小">
+                          className="p-1.5 rounded-lg hover:bg-divider/30 text-muted hover:text transition-colors" title="缩小">
                           <ZoomOut size={14} />
                         </button>
-                        <span className="text-[11px] text-[var(--color-text-muted)] w-12 text-center font-medium tabular-nums">{Math.round(zoom * 100)}%</span>
+                        <span className="text-[11px] text-muted w-12 text-center font-medium tabular-nums">{Math.round(zoom * 100)}%</span>
                         <button onClick={() => setZoom(z => Math.min(4, +(z + 0.25).toFixed(2)))}
-                          className="p-1.5 rounded-lg hover:bg-[var(--color-border)]/30 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors" title="放大">
+                          className="p-1.5 rounded-lg hover:bg-divider/30 text-muted hover:text transition-colors" title="放大">
                           <ZoomIn size={14} />
                         </button>
                         <button onClick={() => setZoom(1)}
-                          className="px-2.5 py-1 text-[10px] rounded-lg hover:bg-[var(--color-border)]/30 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors ml-1 font-medium">
+                          className="px-2.5 py-1 text-[10px] rounded-lg hover:bg-divider/30 text-muted hover:text transition-colors ml-1 font-medium">
                           重置
                         </button>
                       </div>
                       <button onClick={() => handleDownload(previewFile)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 font-medium transition-opacity">
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg bg-accent text-white hover:opacity-90 font-medium transition-opacity">
                         <Download size={12} /> 下载
                       </button>
                     </div>
                     {/* 预览内容区（可滚动/平移 + 滚轮缩放） */}
-                    <div className="flex-1 overflow-auto bg-[var(--color-bg)] min-h-[300px]"
+                    <div className="flex-1 overflow-auto bg-page min-h-[300px]"
                       onWheel={(e) => {
                         if (e.ctrlKey || e.metaKey) { e.preventDefault(); const d = e.deltaY > 0 ? -0.1 : 0.1; setZoom(z => Math.max(0.25, Math.min(4, +(z + d).toFixed(2)))); }
                       }}>
@@ -1164,7 +1179,7 @@ export default function ResourcesPage() {
                     </div>
                     {/* 缩略图导航条 */}
                     {previewableFiles.length > 1 && (
-                      <div className="border-t border-[var(--color-border)]/50 px-5 py-3">
+                      <div className="border-t border/50 px-5 py-3">
                         <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
                           {previewableFiles.map((f) => {
                             const ext = f.file_type?.toLowerCase() || "";
@@ -1173,15 +1188,15 @@ export default function ResourcesPage() {
                               <button key={f.material_id} onClick={() => { setPreviewFile(f); setZoom(1); }}
                                 className={`flex-shrink-0 w-14 h-14 rounded-lg border-2 transition-all flex items-center justify-center overflow-hidden ${
                                   isActive
-                                    ? 'border-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/30 opacity-100'
-                                    : 'border-[var(--color-border)]/30 hover:border-[var(--color-accent)]/50 opacity-60 hover:opacity-100'
+                                    ? 'border-accent ring-1 ring-accent/30 opacity-100'
+                                    : 'border/30 hover:border-accent/50 opacity-60 hover:opacity-100'
                                 }`}
                                 title={f.file_name}>
                                 {["jpg","jpeg","png","gif","bmp","webp","svg","ico","avif"].includes(ext) ? (
                                   <img src={`/api/files/${f.material_id}/preview?token=${encodeURIComponent(getAccessToken() || "")}`}
                                     alt={f.file_name} className="w-full h-full object-cover" loading="lazy" />
                                 ) : (
-                                  <div className="flex items-center justify-center w-full h-full bg-[var(--color-bg)] text-[var(--color-text-muted)]">
+                                  <div className="flex items-center justify-center w-full h-full bg-page text-muted">
                                     {getFileIcon(ext)}
                                   </div>
                                 )}
@@ -1207,74 +1222,74 @@ export default function ResourcesPage() {
               <>
                 {/* 统计卡片 */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-                  <div className="p-4 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50 hover:shadow-md transition-shadow">
+                  <div className="p-4 rounded-xl bg-surface border border/50 hover:shadow-md transition-shadow">
                     <div className="flex items-center gap-2 mb-2">
-                      <div className="w-8 h-8 rounded-lg bg-[var(--color-accent)]/10 flex items-center justify-center">
-                        <FileText size={15} className="text-[var(--color-accent)]" />
+                      <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
+                        <FileText size={15} className="text-accent" />
                       </div>
                     </div>
-                    <p className="text-[22px] font-bold text-[var(--color-text)]">{stats.total_files}</p>
-                    <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">文件总数</p>
+                    <p className="text-[22px] font-bold text">{stats.total_files}</p>
+                    <p className="text-[11px] text-muted mt-0.5">文件总数</p>
                   </div>
-                  <div className="p-4 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50 hover:shadow-md transition-shadow">
+                  <div className="p-4 rounded-xl bg-surface border border/50 hover:shadow-md transition-shadow">
                     <div className="flex items-center gap-2 mb-2">
-                      <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
-                        <HardDrive size={15} className="text-green-500" />
+                      <div className="w-8 h-8 rounded-lg bg-success/10 flex items-center justify-center">
+                        <HardDrive size={15} className="text-success" />
                       </div>
                     </div>
-                    <p className="text-[22px] font-bold text-[var(--color-text)]">{stats.total_size_formatted}</p>
-                    <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">总大小</p>
+                    <p className="text-[22px] font-bold text">{stats.total_size_formatted}</p>
+                    <p className="text-[11px] text-muted mt-0.5">总大小</p>
                   </div>
-                  <div className="p-4 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50 hover:shadow-md transition-shadow">
+                  <div className="p-4 rounded-xl bg-surface border border/50 hover:shadow-md transition-shadow">
                     <div className="flex items-center gap-2 mb-2">
-                      <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                        <Folder size={15} className="text-amber-500" />
+                      <div className="w-8 h-8 rounded-lg bg-warning/10 flex items-center justify-center">
+                        <Folder size={15} className="text-warning" />
                       </div>
                     </div>
-                    <p className="text-[22px] font-bold text-[var(--color-text)]">{stats.folder_count}</p>
-                    <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">文件夹</p>
+                    <p className="text-[22px] font-bold text">{stats.folder_count}</p>
+                    <p className="text-[11px] text-muted mt-0.5">文件夹</p>
                   </div>
-                  <div className="p-4 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50 hover:shadow-md transition-shadow">
+                  <div className="p-4 rounded-xl bg-surface border border/50 hover:shadow-md transition-shadow">
                     <div className="flex items-center gap-2 mb-2">
-                      <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center">
-                        <Trash2 size={15} className="text-red-500" />
+                      <div className="w-8 h-8 rounded-lg bg-danger/10 flex items-center justify-center">
+                        <Trash2 size={15} className="text-danger" />
                       </div>
                     </div>
-                    <p className="text-[22px] font-bold text-[var(--color-text)]">{stats.trash_count}</p>
-                    <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">回收站</p>
+                    <p className="text-[22px] font-bold text">{stats.trash_count}</p>
+                    <p className="text-[11px] text-muted mt-0.5">回收站</p>
                   </div>
                 </div>
                 {/* 类型分布 */}
-                <div className="p-5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50">
-                  <h3 className="text-[14px] font-semibold text-[var(--color-text)] mb-4 flex items-center gap-2">
-                    <BarChart3 size={16} className="text-[var(--color-accent)]" />
+                <div className="p-5 rounded-xl bg-surface border border/50">
+                  <h3 className="text-[14px] font-semibold text mb-4 flex items-center gap-2">
+                    <BarChart3 size={16} className="text-accent" />
                     文件类型分布
                   </h3>
                   <div className="space-y-3">
                     {stats.by_type.map((t) => (
                       <div key={t.file_type} className="flex items-center gap-3">
-                        <span className="text-[12px] text-[var(--color-text)] w-16 font-medium uppercase">{t.file_type || "其他"}</span>
-                        <div className="flex-1 h-2.5 bg-[var(--color-border)] rounded-full overflow-hidden">
-                          <div className="h-full bg-[var(--color-accent)] rounded-full transition-all" style={{ width: `${stats.total_files > 0 ? (t.count / stats.total_files) * 100 : 0}%` }} />
+                        <span className="text-[12px] text w-16 font-medium uppercase">{t.file_type || "其他"}</span>
+                        <div className="flex-1 h-2.5 bg-divider rounded-full overflow-hidden">
+                          <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${stats.total_files > 0 ? (t.count / stats.total_files) * 100 : 0}%` }} />
                         </div>
-                        <span className="text-[11px] text-[var(--color-text-muted)] w-24 text-right">{t.count} 个 ({formatSize(t.total_size)})</span>
+                        <span className="text-[11px] text-muted w-24 text-right">{t.count} 个 ({formatSize(t.total_size)})</span>
                       </div>
                     ))}
                   </div>
                 </div>
                 {/* 最近上传 */}
-                <div className="p-5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50">
-                  <h3 className="text-[14px] font-semibold text-[var(--color-text)] mb-4 flex items-center gap-2">
-                    <Clock size={16} className="text-[var(--color-accent)]" />
+                <div className="p-5 rounded-xl bg-surface border border/50">
+                  <h3 className="text-[14px] font-semibold text mb-4 flex items-center gap-2">
+                    <Clock size={16} className="text-accent" />
                     最近上传
                   </h3>
                   <div className="space-y-2">
                     {stats.recent_files.map((f) => (
-                      <div key={f.material_id} className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-[var(--color-bg)] transition-colors">
+                      <div key={f.material_id} className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-page transition-colors">
                         {getFileIcon(f.file_type?.toLowerCase() || "")}
-                        <span className="text-[13px] text-[var(--color-text)] flex-1 truncate">{f.file_name}</span>
-                        <span className="text-[11px] text-[var(--color-text-muted)]">{formatSize(f.file_size)}</span>
-                        <span className="text-[11px] text-[var(--color-text-muted)]">{formatDate(f.created_at)}</span>
+                        <span className="text-[13px] text flex-1 truncate">{f.file_name}</span>
+                        <span className="text-[11px] text-muted">{formatSize(f.file_size)}</span>
+                        <span className="text-[11px] text-muted">{formatDate(f.created_at)}</span>
                       </div>
                     ))}
                   </div>
@@ -1282,7 +1297,7 @@ export default function ResourcesPage() {
               </>
             ) : (
               <div className="flex items-center justify-center py-20">
-                <Loader2 size={22} className="animate-spin text-[var(--color-text-muted)]" />
+                <Loader2 size={22} className="animate-spin text-muted" />
               </div>
             )}
           </div>
@@ -1294,31 +1309,31 @@ export default function ResourcesPage() {
         {tab === "trash" && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <p className="text-[12px] text-[var(--color-text-muted)]">回收站中的文件将保留 30 天</p>
+              <p className="text-[12px] text-muted">回收站中的文件将保留 30 天</p>
               {trashFiles.length > 0 && (
                 <button onClick={handleEmptyTrash}
-                  className="flex items-center gap-1.5 px-4 py-2 text-[12px] rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 font-medium transition-colors">
+                  className="flex items-center gap-1.5 px-4 py-2 text-[12px] rounded-lg bg-danger/10 text-danger hover:bg-danger/20 font-medium transition-colors">
                   <Trash2 size={14} /> 清空回收站
                 </button>
               )}
             </div>
             {loading ? (
               <div className="flex items-center justify-center py-20">
-                <Loader2 size={22} className="animate-spin text-[var(--color-text-muted)]" />
+                <Loader2 size={22} className="animate-spin text-muted" />
               </div>
             ) : trashFiles.length === 0 ? (
               <div className="text-center py-16">
-                <div className="w-16 h-16 rounded-2xl bg-[var(--color-surface)] flex items-center justify-center mx-auto mb-4 border border-[var(--color-border)]/50">
-                  <Trash2 size={28} className="text-[var(--color-text-muted)]" />
+                <div className="w-16 h-16 rounded-2xl bg-surface flex items-center justify-center mx-auto mb-4 border border/50">
+                  <Trash2 size={28} className="text-muted" />
                 </div>
-                <p className="text-[15px] font-medium text-[var(--color-text)]">回收站为空</p>
-                <p className="text-[12px] text-[var(--color-text-muted)] mt-1.5">删除的文件会出现在这里</p>
+                <p className="text-[15px] font-medium text">回收站为空</p>
+                <p className="text-[12px] text-muted mt-1.5">删除的文件会出现在这里</p>
               </div>
             ) : (
               <>
                 {/* 桌面端表格 */}
                 <div className="hidden sm:block space-y-1">
-                  <div className="grid grid-cols-[1fr_100px_120px_140px] gap-3 px-4 py-2.5 text-[11px] font-medium text-[var(--color-text-muted)] border-b border-[var(--color-border)]/50">
+                  <div className="grid grid-cols-[1fr_100px_120px_140px] gap-3 px-4 py-2.5 text-[11px] font-medium text-muted border-b border/50">
                     <span>文件名</span>
                     <span>大小</span>
                     <span>删除时间</span>
@@ -1326,22 +1341,22 @@ export default function ResourcesPage() {
                   </div>
                   {trashFiles.map((f) => (
                     <div key={f.material_id}
-                      className="group grid grid-cols-[1fr_100px_120px_140px] gap-3 items-center px-4 py-2.5 rounded-xl hover:bg-[var(--color-surface)] border border-transparent hover:border-[var(--color-border)]/50 transition-all">
+                      className="group grid grid-cols-[1fr_100px_120px_140px] gap-3 items-center px-4 py-2.5 rounded-xl hover:bg-surface border border-transparent hover:border/50 transition-all">
                       <div className="flex items-center gap-2.5 min-w-0">
                         {getFileIcon(f.file_type?.toLowerCase() || "")}
-                        <span className="text-[13px] text-[var(--color-text)] truncate">{f.file_name}</span>
+                        <span className="text-[13px] text truncate">{f.file_name}</span>
                       </div>
-                      <span className="text-[12px] text-[var(--color-text-muted)]">{formatSize(f.file_size)}</span>
-                      <span className="text-[12px] text-red-400 flex items-center gap-1">
+                      <span className="text-[12px] text-muted">{formatSize(f.file_size)}</span>
+                      <span className="text-[12px] text-danger flex items-center gap-1">
                         <Clock size={11} /> {f.deleted_at ? formatDate(f.deleted_at) : ""}
                       </span>
                       <div className="flex items-center gap-2">
                         <button onClick={() => handleRestore(f.material_id)}
-                          className="px-3 py-1.5 text-[11px] rounded-lg bg-green-500/10 text-green-500 hover:bg-green-500/20 font-medium transition-colors flex items-center gap-1">
+                          className="px-3 py-1.5 text-[11px] rounded-lg bg-success/10 text-success hover:bg-success/20 font-medium transition-colors flex items-center gap-1">
                           <RefreshCw size={11} /> 恢复
                         </button>
                         <button onClick={() => handlePermanentDelete(f.material_id)}
-                          className="px-3 py-1.5 text-[11px] rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 font-medium transition-colors flex items-center gap-1">
+                          className="px-3 py-1.5 text-[11px] rounded-lg bg-danger/10 text-danger hover:bg-danger/20 font-medium transition-colors flex items-center gap-1">
                           <Trash2 size={11} /> 永久删除
                         </button>
                       </div>
@@ -1351,23 +1366,23 @@ export default function ResourcesPage() {
                 {/* 移动端卡片 */}
                 <div className="block sm:hidden space-y-2">
                   {trashFiles.map((f) => (
-                    <div key={f.material_id} className="p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50 shadow-sm">
+                    <div key={f.material_id} className="p-3 rounded-xl bg-surface border border/50 shadow-sm">
                       <div className="flex items-center gap-2.5">
                         {getFileIcon(f.file_type?.toLowerCase() || "")}
-                        <span className="text-[13px] font-medium text-[var(--color-text)] break-all flex-1">{f.file_name}</span>
+                        <span className="text-[13px] font-medium text break-all flex-1">{f.file_name}</span>
                       </div>
-                      <div className="flex items-center gap-3 mt-2 text-[11px] text-[var(--color-text-muted)]">
+                      <div className="flex items-center gap-3 mt-2 text-[11px] text-muted">
                         <span>{formatSize(f.file_size)}</span>
                         <span>·</span>
-                        <span className="text-red-400 flex items-center gap-1"><Clock size={11} /> {f.deleted_at ? formatDate(f.deleted_at) : ""}</span>
+                        <span className="text-danger flex items-center gap-1"><Clock size={11} /> {f.deleted_at ? formatDate(f.deleted_at) : ""}</span>
                       </div>
-                      <div className="flex items-center gap-2 mt-3 pt-2.5 border-t border-[var(--color-border)]/30">
+                      <div className="flex items-center gap-2 mt-3 pt-2.5 border-t border/30">
                         <button onClick={() => handleRestore(f.material_id)}
-                          className="flex items-center gap-1 px-3 py-1.5 text-[12px] rounded-lg bg-green-500/10 text-green-500 hover:bg-green-500/20 font-medium transition-colors min-h-[36px]">
+                          className="flex items-center gap-1 px-3 py-1.5 text-[12px] rounded-lg bg-success/10 text-success hover:bg-success/20 font-medium transition-colors min-h-[36px]">
                           <RefreshCw size={13} /> 恢复
                         </button>
                         <button onClick={() => handlePermanentDelete(f.material_id)}
-                          className="flex items-center gap-1 px-3 py-1.5 text-[12px] rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 font-medium transition-colors min-h-[36px]">
+                          className="flex items-center gap-1 px-3 py-1.5 text-[12px] rounded-lg bg-danger/10 text-danger hover:bg-danger/20 font-medium transition-colors min-h-[36px]">
                           <Trash2 size={13} /> 永久删除
                         </button>
                       </div>
@@ -1385,25 +1400,25 @@ export default function ResourcesPage() {
         {tab === "banks" && (
           <>
             <div className="flex items-center justify-between mb-4">
-              <p className="text-[12px] text-[var(--color-text-muted)]">共 {banks.length} 个题库</p>
+              <p className="text-[12px] text-muted">共 {banks.length} 个题库</p>
               <Link href="/import"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-[12px] font-medium hover:opacity-90 transition-opacity">
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-[12px] font-medium hover:opacity-90 transition-opacity">
                 <Upload size={14} /> 导入题库
               </Link>
             </div>
             {loading ? (
               <div className="flex items-center justify-center py-20">
-                <Loader2 size={22} className="animate-spin text-[var(--color-text-muted)]" />
+                <Loader2 size={22} className="animate-spin text-muted" />
               </div>
             ) : banks.length === 0 ? (
               <div className="text-center py-16">
-                <div className="w-16 h-16 rounded-2xl bg-[var(--color-surface)] flex items-center justify-center mx-auto mb-4 border border-[var(--color-border)]/50">
-                  <Library size={28} className="text-[var(--color-text-muted)]" />
+                <div className="w-16 h-16 rounded-2xl bg-surface flex items-center justify-center mx-auto mb-4 border border/50">
+                  <Library size={28} className="text-muted" />
                 </div>
-                <p className="text-[15px] font-medium text-[var(--color-text)]">还没有题库</p>
-                <p className="text-[12px] text-[var(--color-text-muted)] mt-1.5 mb-5">导入或创建题库，开始练习</p>
+                <p className="text-[15px] font-medium text">还没有题库</p>
+                <p className="text-[12px] text-muted mt-1.5 mb-5">导入或创建题库，开始练习</p>
                 <Link href="/import"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--color-accent)] text-white text-[13px] font-medium hover:opacity-90 transition-opacity">
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent text-white text-[13px] font-medium hover:opacity-90 transition-opacity">
                   <Upload size={15} /> 导入题库
                 </Link>
               </div>
@@ -1411,34 +1426,34 @@ export default function ResourcesPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {banks.map((bank) => (
                   <div key={bank.id}
-                    className="p-4 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]/50 hover:border-[var(--color-accent)]/30 hover:shadow-md transition-all group">
+                    className="p-4 rounded-xl bg-surface border border/50 hover:border-accent/30 hover:shadow-md transition-all group">
                     <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
-                        <Library size={18} className="text-violet-500" />
+                      <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+                        <Library size={18} className="text-accent" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <h3 className="text-[14px] font-medium text-[var(--color-text)] truncate">{bank.name}</h3>
-                          {bank.auto_created && <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 shrink-0">自动</span>}
+                          <h3 className="text-[14px] font-medium text truncate">{bank.name}</h3>
+                          {bank.auto_created && <span className="text-[9px] px-1.5 py-0.5 rounded bg-info/10 text-info shrink-0">自动</span>}
                         </div>
-                        {bank.description && <p className="text-[11px] text-[var(--color-text-muted)] mt-1 line-clamp-1">{bank.description}</p>}
+                        {bank.description && <p className="text-[11px] text-muted mt-1 line-clamp-1">{bank.description}</p>}
                         <div className="flex items-center gap-3 mt-2">
-                          <span className="text-[11px] text-[var(--color-text-muted)]">{bank.question_count} 题</span>
-                          {bank.ref_node_label && <span className="text-[11px] text-violet-500/70">关联: {bank.ref_node_label}</span>}
+                          <span className="text-[11px] text-muted">{bank.question_count} 题</span>
+                          {bank.ref_node_label && <span className="text-[11px] text-accent/70">关联: {bank.ref_node_label}</span>}
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-[var(--color-border)]/30">
+                    <div className="flex items-center gap-2 mt-3 pt-3 border-t border/30">
                       <Link href={`/practice/banks/${bank.id}`}
-                        className="flex-1 text-center px-3 py-2 rounded-lg bg-[var(--color-accent)]/10 text-[var(--color-accent)] hover:bg-[var(--color-accent)]/20 text-[11px] font-medium transition-colors min-h-[36px] leading-[36px]">
+                        className="flex-1 text-center px-3 py-2 rounded-lg bg-accent/10 text-accent hover:bg-accent/20 text-[11px] font-medium transition-colors min-h-[36px] leading-[36px]">
                         管理
                       </Link>
                       <Link href={`/practice?tab=practice&bank=${bank.id}`}
-                        className="flex-1 text-center px-3 py-2 rounded-lg bg-green-500/10 text-green-600 hover:bg-green-500/20 text-[11px] font-medium transition-colors min-h-[36px] leading-[36px] flex items-center justify-center gap-1">
+                        className="flex-1 text-center px-3 py-2 rounded-lg bg-success/10 text-success hover:bg-success/20 text-[11px] font-medium transition-colors min-h-[36px] leading-[36px] flex items-center justify-center gap-1">
                         <Play size={12} /> 练习
                       </Link>
                       <button onClick={() => handleDeleteBank(bank.id)} disabled={deletingBank === bank.id}
-                        className="flex-1 text-center px-3 py-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 text-[11px] font-medium transition-colors min-h-[36px] leading-[36px] flex items-center justify-center gap-1">
+                        className="flex-1 text-center px-3 py-2 rounded-lg bg-danger/10 text-danger hover:bg-danger/20 text-[11px] font-medium transition-colors min-h-[36px] leading-[36px] flex items-center justify-center gap-1">
                         {deletingBank === bank.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} 删除
                       </button>
                     </div>

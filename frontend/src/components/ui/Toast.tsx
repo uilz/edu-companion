@@ -83,27 +83,27 @@ function ToastItem({ t }: { t: Toast }) {
 
   const colors: Record<ToastType, { bg: string; border: string; text: string; icon: React.ReactNode }> = {
     success: {
-      bg: "bg-[var(--color-success)]/10",
-      border: "border-[var(--color-success)]/30",
-      text: "text-[var(--color-success)]",
+      bg: "bg-success/10",
+      border: "border-success/30",
+      text: "text-success",
       icon: <CheckCircle2 size={16} />,
     },
     info: {
-      bg: "bg-[var(--color-accent)]/10",
-      border: "border-[var(--color-accent)]/30",
-      text: "text-[var(--color-accent)]",
+      bg: "bg-accent/10",
+      border: "border-accent/30",
+      text: "text-accent",
       icon: <Info size={16} />,
     },
     warning: {
-      bg: "bg-[var(--color-warning)]/10",
-      border: "border-[var(--color-warning)]/30",
-      text: "text-[var(--color-warning)]",
+      bg: "bg-warning/10",
+      border: "border-warning/30",
+      text: "text-warning",
       icon: <AlertTriangle size={16} />,
     },
     error: {
-      bg: "bg-[var(--color-danger)]/10",
-      border: "border-[var(--color-danger)]/30",
-      text: "text-[var(--color-danger)]",
+      bg: "bg-danger/10",
+      border: "border-danger/30",
+      text: "text-danger",
       icon: <XCircle size={16} />,
     },
   };
@@ -123,9 +123,9 @@ function ToastItem({ t }: { t: Toast }) {
     >
       <span className={`flex-shrink-0 ${c.text} mt-0.5`}>{c.icon}</span>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-[var(--color-text)] leading-snug">{t.title}</div>
+        <div className="text-sm font-medium text leading-snug">{t.title}</div>
         {t.description && (
-          <div className="mt-0.5 text-xs text-[var(--color-text-secondary)] leading-relaxed">
+          <div className="mt-0.5 text-xs text-secondary leading-relaxed">
             {t.description}
           </div>
         )}
@@ -133,7 +133,7 @@ function ToastItem({ t }: { t: Toast }) {
       <button
         type="button"
         onClick={() => remove(t.id)}
-        className="flex-shrink-0 p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-text)] rounded"
+        className="flex-shrink-0 p-0.5 text-muted hover:text rounded"
         aria-label="关闭"
         style={{ minWidth: 28, minHeight: 28 }}
       >

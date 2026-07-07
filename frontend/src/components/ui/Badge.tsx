@@ -19,13 +19,13 @@ const VARIANT_CLS: Record<BadgeVariant, string> = {
   info: 'swiss-badge',
 };
 
-const VARIANT_STYLE: Record<BadgeVariant, React.CSSProperties> = {
-  default: {},
-  accent: {},
-  success: { color: 'var(--color-success)', borderColor: 'var(--color-success)' },
-  warning: { color: 'var(--color-warning)', borderColor: 'var(--color-warning)' },
-  danger: { color: 'var(--color-danger)', borderColor: 'var(--color-danger)' },
-  info: { color: 'var(--color-info)', borderColor: 'var(--color-info)' },
+const VARIANT_STYLE: Record<BadgeVariant, string> = {
+  default: '',
+  accent: '',
+  success: 'text-success border-success',
+  warning: 'text-warning border-warning',
+  danger: 'text-danger border-danger',
+  info: 'text-info border-info',
 };
 
 /**
@@ -35,7 +35,7 @@ const VARIANT_STYLE: Record<BadgeVariant, React.CSSProperties> = {
  */
 export function Badge({ variant = 'default', className = '', children }: BadgeProps) {
   return (
-    <span className={`${VARIANT_CLS[variant]} ${className}`} style={VARIANT_STYLE[variant]}>
+    <span className={`${VARIANT_CLS[variant]} ${VARIANT_STYLE[variant]} ${className}`}>
       {children}
     </span>
   );

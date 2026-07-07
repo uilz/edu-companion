@@ -21,9 +21,9 @@ const LEVEL_LABELS: Record<TagLevel, string> = {
 };
 
 const LEVEL_COLORS: Record<TagLevel, string> = {
-  0: "bg-blue-100 text-blue-700 border-blue-200",
-  1: "bg-purple-100 text-purple-700 border-purple-200",
-  2: "bg-green-100 text-green-700 border-green-200",
+  0: "bg-info/20 text-info border-info/20",
+  1: "bg-accent/20 text-accent border-accent/20",
+  2: "bg-success/20 text-success border-success/20",
 };
 
 export default function TagsPage() {
@@ -52,8 +52,8 @@ export default function TagsPage() {
     try {
       const r = await interestService.listTags();
       setTags(r.items);
-    } catch (e: any) {
-      setError(e.message || "加载失败");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "加载失败");
     } finally {
       setLoading(false);
     }
@@ -72,8 +72,8 @@ export default function TagsPage() {
       setNewForm({ name: "", level: 0, parent_id: null, weight: 1, color: "" });
       setShowCreate(false);
       await load();
-    } catch (e: any) {
-      setError(e.message || "创建失败");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "创建失败");
     } finally {
       setBusy(false);
     }
@@ -85,8 +85,8 @@ export default function TagsPage() {
     try {
       await interestService.deleteTag(id);
       await load();
-    } catch (e: any) {
-      setError(e.message || "删除失败");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "删除失败");
     } finally {
       setBusy(false);
     }
@@ -108,8 +108,8 @@ export default function TagsPage() {
       await interestService.updateTag(editingId, editForm);
       setEditingId(null);
       await load();
-    } catch (e: any) {
-      setError(e.message || "更新失败");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "操作失败");
     } finally {
       setBusy(false);
     }
@@ -130,23 +130,23 @@ export default function TagsPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <TagIcon className="w-6 h-6 text-blue-500" />
+            <TagIcon className="w-6 h-6 text-info" />
             兴趣标签
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-muted mt-1">
             3 层结构 · 主/次权重 · 独立于知识图谱存储
           </p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => router.push("/interest")}
-            className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50"
+            className="px-3 py-1.5 text-sm border rounded-lg hover:bg-surface"
           >
             返回
           </button>
           <button
             onClick={() => setShowCreate(!showCreate)}
-            className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-1"
+            className="px-3 py-1.5 text-sm bg-info text-white rounded-lg hover:bg-info flex items-center gap-1"
           >
             <Plus className="w-4 h-4" />
             新建标签
@@ -155,18 +155,18 @@ export default function TagsPage() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-sm text-red-700">
+        <div className="mb-4 p-3 bg-danger/10 border border-danger/20 rounded-lg flex items-start gap-2 text-sm text-danger">
           <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       {showCreate && (
-        <div className="mb-4 p-4 border-2 border-blue-200 rounded-lg bg-blue-50/50">
+        <div className="mb-4 p-4 border-2 border-info/20 rounded-lg bg-info/10">
           <h3 className="font-medium mb-3 text-sm">新建兴趣标签</h3>
           <div className="space-y-3">
             <div>
-              <label className="text-xs text-gray-600 block mb-1">名称</label>
+              <label className="text-xs text-muted block mb-1">名称</label>
               <input
                 value={newForm.name}
                 onChange={(e) => setNewForm({ ...newForm, name: e.target.value })}
@@ -176,7 +176,7 @@ export default function TagsPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-gray-600 block mb-1">层级</label>
+                <label className="text-xs text-muted block mb-1">层级</label>
                 <select
                   value={newForm.level}
                   onChange={(e) => setNewForm({
@@ -191,7 +191,7 @@ export default function TagsPage() {
                 </select>
               </div>
               <div>
-                <label className="text-xs text-gray-600 block mb-1">权重</label>
+                <label className="text-xs text-muted block mb-1">权重</label>
                 <select
                   value={newForm.weight}
                   onChange={(e) => setNewForm({
@@ -207,7 +207,7 @@ export default function TagsPage() {
             </div>
             {newForm.level > 0 && (
               <div>
-                <label className="text-xs text-gray-600 block mb-1">父标签</label>
+                <label className="text-xs text-muted block mb-1">父标签</label>
                 <select
                   value={newForm.parent_id || ""}
                   onChange={(e) => setNewForm({
@@ -228,7 +228,7 @@ export default function TagsPage() {
               </div>
             )}
             <div>
-              <label className="text-xs text-gray-600 block mb-1">颜色 (可选)</label>
+              <label className="text-xs text-muted block mb-1">颜色 (可选)</label>
               <input
                 type="color"
                 value={newForm.color || "#3b82f6"}
@@ -240,14 +240,14 @@ export default function TagsPage() {
               <button
                 onClick={onCreate}
                 disabled={busy}
-                className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-1"
+                className="px-3 py-1.5 text-sm bg-info text-white rounded hover:bg-info flex items-center gap-1"
               >
                 {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                 保存
               </button>
               <button
                 onClick={() => setShowCreate(false)}
-                className="px-3 py-1.5 text-sm border rounded hover:bg-gray-50"
+                className="px-3 py-1.5 text-sm border rounded hover:bg-surface"
               >
                 取消
               </button>
@@ -257,11 +257,11 @@ export default function TagsPage() {
       )}
 
       {loading ? (
-        <div className="text-center py-12 text-gray-400">
+        <div className="text-center py-12 text-muted">
           <Loader2 className="w-8 h-8 mx-auto animate-spin" />
         </div>
       ) : tags.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
+        <div className="text-center py-12 text-muted">
           <TagIcon className="w-12 h-12 mx-auto mb-3 opacity-30" />
           <p>暂无兴趣标签</p>
           <p className="text-xs mt-1">点击"新建标签"开始</p>
@@ -317,7 +317,7 @@ function TagNode({
   expanded: boolean;
   editing: boolean;
   editForm: { name: string; weight: TagWeight; color: string };
-  setEditForm: (f: any) => void;
+  setEditForm: (f: { name: string; weight: TagWeight; color: string }) => void;
   onToggle: () => void;
   onEdit: () => void;
   onSave: () => void;
@@ -327,8 +327,8 @@ function TagNode({
 }) {
   const hasChildren = (tag.children || []).length > 0;
   return (
-    <div className={`border-l-2 ${tag.level === 0 ? "border-blue-300" : tag.level === 1 ? "border-purple-300" : "border-green-300"} pl-3`}>
-      <div className="flex items-center gap-2 py-2 px-2 hover:bg-gray-50 rounded">
+    <div className={`border-l-2 ${tag.level === 0 ? "border-info/30" : tag.level === 1 ? "border-accent/30" : "border-success/30"} pl-3`}>
+      <div className="flex items-center gap-2 py-2 px-2 hover:bg-surface rounded">
         {hasChildren ? (
           <button onClick={onToggle} className="p-0.5">
             {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
@@ -349,12 +349,12 @@ function TagNode({
           <span className="font-medium text-sm flex-1">{tag.name}</span>
         )}
         {tag.weight === 1 ? (
-          <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded">主要</span>
+          <span className="text-xs px-1.5 py-0.5 bg-info/10 text-info rounded">主要</span>
         ) : (
-          <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">次要</span>
+          <span className="text-xs px-1.5 py-0.5 bg-surface text-muted rounded">次要</span>
         )}
         {tag.dislike_score > 0 && (
-          <span className="text-xs px-1.5 py-0.5 bg-red-50 text-red-700 rounded" title="本地 dislike 权重">
+          <span className="text-xs px-1.5 py-0.5 bg-danger/10 text-danger rounded" title="本地 dislike 权重">
             衰减 {(tag.dislike_score * 100).toFixed(0)}%
           </span>
         )}
@@ -368,20 +368,20 @@ function TagNode({
               <option value={1}>主要</option>
               <option value={2}>次要</option>
             </select>
-            <button onClick={onSave} disabled={busy} className="p-1 hover:bg-blue-50 rounded">
-              <Save className="w-3.5 h-3.5 text-blue-600" />
+            <button onClick={onSave} disabled={busy} className="p-1 hover:bg-info/10 rounded">
+              <Save className="w-3.5 h-3.5 text-info" />
             </button>
-            <button onClick={onCancel} className="p-1 hover:bg-gray-100 rounded">
+            <button onClick={onCancel} className="p-1 hover:bg-surface rounded">
               <X className="w-3.5 h-3.5" />
             </button>
           </>
         ) : (
           <>
-            <button onClick={onEdit} className="p-1 hover:bg-gray-100 rounded" title="编辑">
-              <Edit3 className="w-3.5 h-3.5 text-gray-500" />
+            <button onClick={onEdit} className="p-1 hover:bg-surface rounded" title="编辑">
+              <Edit3 className="w-3.5 h-3.5 text-muted" />
             </button>
-            <button onClick={onDelete} className="p-1 hover:bg-red-50 rounded" title="删除">
-              <Trash2 className="w-3.5 h-3.5 text-red-500" />
+            <button onClick={onDelete} className="p-1 hover:bg-danger/10 rounded" title="删除">
+              <Trash2 className="w-3.5 h-3.5 text-danger" />
             </button>
           </>
         )}

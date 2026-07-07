@@ -64,45 +64,45 @@ export function DailySummaryCard() {
   ];
 
   return (
-    <div className="mb-8 p-5 border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/5 active:scale-[0.97] transition-transform">
+    <div className="mb-8 p-5 border border-accent/30 bg-accent/5 active:scale-[0.97] transition-transform">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-[var(--color-text)]">
+        <h3 className="text-sm font-semibold text">
           📊 昨日回顾 · {yesterday.date}
         </h3>
       </div>
       <div className="grid grid-cols-3 gap-3 mb-3">
         <div>
-          <div className="text-lg font-semibold text-[var(--color-text)]">
-            {yesterday.count}<span className="text-xs text-[var(--color-text-muted)]">题</span>
+          <div className="text-lg font-semibold text">
+            {yesterday.count}<span className="text-xs text-muted">题</span>
           </div>
-          <div className="text-[10px] text-[var(--color-text-muted)]">
+          <div className="text-[10px] text-muted">
             较前日 {deltaStr}
           </div>
         </div>
         <div>
-          <div className="text-lg font-semibold text-[var(--color-text)]">
-            {(accuracy * 100).toFixed(0)}<span className="text-xs text-[var(--color-text-muted)]">%</span>
+          <div className="text-lg font-semibold text">
+            {(accuracy * 100).toFixed(0)}<span className="text-xs text-muted">%</span>
           </div>
-          <div className="text-[10px] text-[var(--color-text-muted)]">正确率</div>
+          <div className="text-[10px] text-muted">正确率</div>
         </div>
         <div>
-          <div className="text-lg font-semibold text-[var(--color-text)]">
+          <div className="text-lg font-semibold text">
             {yesterday.correct}/{yesterday.count}
           </div>
-          <div className="text-[10px] text-[var(--color-text-muted)]">正确/总题</div>
+          <div className="text-[10px] text-muted">正确/总题</div>
         </div>
       </div>
       {recommendations.length > 0 && (
-        <div className="flex items-center gap-2 text-[10px] text-[var(--color-text-muted)]">
+        <div className="flex items-center gap-2 text-[10px] text-muted">
           <span>🎯 今日推荐：</span>
           {recommendations.map((r) => (
-            <span key={r.skill_id} className="px-1.5 py-0.5 bg-[var(--color-surface)] text-[var(--color-text-secondary)]">
+            <span key={r.skill_id} className="px-1.5 py-0.5 bg-surface text-secondary">
               {r.label} ({Math.round(r.mastery * 100)}%)
             </span>
           ))}
         </div>
       )}
-      <p className="text-[10px] text-[var(--color-text-muted)] mt-2">
+      <p className="text-[10px] text-muted mt-2">
         {encourages[Math.floor(Math.random() * encourages.length)]}
       </p>
     </div>

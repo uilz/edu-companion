@@ -46,11 +46,11 @@ export function OverviewCards({ overview }: { overview: Overview }) {
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
       {cards.map((c, i) => (
         <Card key={i} className="!p-4">
-          <div className="text-[var(--color-accent)] mb-1.5">{c.icon}</div>
-          <div className="text-xl md:text-2xl font-semibold text-[var(--color-text)]">
+          <div className="text-accent mb-1.5">{c.icon}</div>
+          <div className="text-xl md:text-2xl font-semibold text">
             {c.fmt(c.val)}
           </div>
-          <div className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+          <div className="text-[11px] text-muted mt-0.5">
             {c.label}
           </div>
           <div

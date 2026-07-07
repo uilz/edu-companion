@@ -8,6 +8,7 @@
  */
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Wind, Brain, Palette, Sparkles, Loader2 } from "lucide-react";
 import { authedFetch } from "@/lib/api/api";
 
@@ -31,10 +32,10 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
 };
 
 const BREATH_STEPS = [
-  { phase: "吸气", duration: 4, color: "from-cyan-300 to-blue-400" },
-  { phase: "屏息", duration: 4, color: "from-indigo-300 to-purple-400" },
-  { phase: "呼气", duration: 6, color: "from-emerald-300 to-teal-400" },
-  { phase: "屏息", duration: 2, color: "from-indigo-300 to-purple-400" },
+  { phase: "吸气", duration: 4, color: "from-info/30 to-info/40" },
+  { phase: "屏息", duration: 4, color: "from-accent/30 to-accent/40" },
+  { phase: "呼气", duration: 6, color: "from-success/30 to-success/40" },
+  { phase: "屏息", duration: 2, color: "from-accent/30 to-accent/40" },
 ];
 
 const COG_REAPPRAISAL_PROMPTS = [
@@ -45,14 +46,15 @@ const COG_REAPPRAISAL_PROMPTS = [
 ];
 
 const ENV_THEMES: Array<{ value: string; label: string; gradient: string }> = [
-  { value: "default", label: "默认", gradient: "from-slate-200 to-slate-300" },
-  { value: "warm", label: "暖阳", gradient: "from-amber-200 to-orange-300" },
-  { value: "cool", label: "冷月", gradient: "from-blue-200 to-indigo-300" },
-  { value: "forest", label: "森林", gradient: "from-green-200 to-emerald-300" },
-  { value: "sunset", label: "日落", gradient: "from-pink-200 to-rose-300" },
+  { value: "default", label: "默认", gradient: "from-surface to-divider" },
+  { value: "warm", label: "暖阳", gradient: "from-warning/20 to-warning/30" },
+  { value: "cool", label: "冷月", gradient: "from-info/20 to-accent/30" },
+  { value: "forest", label: "森林", gradient: "from-success/20 to-success/30" },
+  { value: "sunset", label: "日落", gradient: "from-danger/20 to-danger/30" },
 ];
 
 export function InterventionPanel({ types, onUsed }: Props) {
+  const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [breathing, setBreathing] = useState(false);
   const [breathStep, setBreathStep] = useState(0);
@@ -103,9 +105,7 @@ export function InterventionPanel({ types, onUsed }: Props) {
   const startKnowledgeBreathing = () => {
     log("knowledge_breathing", 30);
     // 跳转 FlashCard 复习（复用入口）
-    if (typeof window !== "undefined") {
-      window.location.href = "/practice/review?source=mood_stress";
-    }
+    router.push("/practice/review?source=mood_stress");
   };
 
   // 认知重评
@@ -146,12 +146,12 @@ export function InterventionPanel({ types, onUsed }: Props) {
                 else if (t.value === "environment") setEnvOpen(true);
               }}
               disabled={disabled}
-              className="p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 hover:border-indigo-300 hover:shadow-sm transition text-left disabled:opacity-50"
+              className="p-3 rounded-xl border border dark:border bg-white dark:bg-surface/60 hover:border-accent/30 hover:shadow-sm transition text-left disabled:opacity-50"
             >
               <div className="text-2xl mb-1">{t.emoji}</div>
-              <div className="text-sm font-medium text-gray-800 dark:text-gray-100">{t.label}</div>
+              <div className="text-sm font-medium text dark:text">{t.label}</div>
               {busy === t.value && (
-                <Loader2 className="w-3 h-3 animate-spin inline mt-1 text-indigo-400" />
+                <Loader2 className="w-3 h-3 animate-spin inline mt-1 text-accent" />
               )}
             </button>
           );
@@ -187,14 +187,14 @@ export function InterventionPanel({ types, onUsed }: Props) {
       {cogReappraisal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setCogReappraisal(false)}>
           <div
-            className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-800 p-5 space-y-3"
+            className="w-full max-w-md rounded-2xl bg-white dark:bg-surface p-5 space-y-3"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="font-semibold flex items-center gap-2"><Brain className="w-4 h-4" /> 认知重评引导</h3>
-            <p className="text-xs text-gray-500">仅提供框架，请填写你自己的想法</p>
+            <p className="text-xs text-muted">仅提供框架，请填写你自己的想法</p>
             {COG_REAPPRAISAL_PROMPTS.map((p, i) => (
               <div key={i}>
-                <label className="text-xs text-gray-600 dark:text-gray-300">{i + 1}. {p}</label>
+                <label className="text-xs text-muted dark:text-muted">{i + 1}. {p}</label>
                 <textarea
                   value={cogAnswers[i]}
                   onChange={(e) => {
@@ -203,13 +203,13 @@ export function InterventionPanel({ types, onUsed }: Props) {
                     setCogAnswers(next);
                   }}
                   rows={2}
-                  className="w-full mt-1 px-3 py-2 rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm resize-none"
+                  className="w-full mt-1 px-3 py-2 rounded border border dark:border  bg-white dark:bg-surface text-sm resize-none"
                 />
               </div>
             ))}
             <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setCogReappraisal(false)} className="px-3 py-1.5 text-sm rounded text-gray-500">取消</button>
-              <button onClick={submitCogReappraisal} className="px-3 py-1.5 text-sm rounded bg-indigo-500 text-white">完成</button>
+              <button onClick={() => setCogReappraisal(false)} className="px-3 py-1.5 text-sm rounded text-muted">取消</button>
+              <button onClick={submitCogReappraisal} className="px-3 py-1.5 text-sm rounded bg-accent text-white">完成</button>
             </div>
           </div>
         </div>
@@ -218,7 +218,7 @@ export function InterventionPanel({ types, onUsed }: Props) {
       {/* 环境切换 */}
       {envOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setEnvOpen(false)}>
-          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-800 p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-surface p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-semibold flex items-center gap-2"><Palette className="w-4 h-4" /> 选择主题色调</h3>
             <div className="grid grid-cols-3 gap-2">
               {ENV_THEMES.map((t) => (
@@ -226,7 +226,7 @@ export function InterventionPanel({ types, onUsed }: Props) {
                   key={t.value}
                   onClick={() => applyEnvTheme(t.value)}
                   className={`p-3 rounded-xl border ${
-                    currentTheme === t.value ? "border-indigo-500" : "border-gray-200"
+                    currentTheme === t.value ? "border-accent" : "border "
                   }`}
                 >
                   <div className={`h-12 rounded bg-gradient-to-br ${t.gradient}`} />
@@ -234,7 +234,7 @@ export function InterventionPanel({ types, onUsed }: Props) {
                 </button>
               ))}
             </div>
-            <p className="text-xs text-gray-500">仅前端 UI 变化，不修改学习数据</p>
+            <p className="text-xs text-muted">仅前端 UI 变化，不修改学习数据</p>
           </div>
         </div>
       )}

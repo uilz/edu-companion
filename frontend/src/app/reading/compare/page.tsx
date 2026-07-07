@@ -44,13 +44,13 @@ export default function ComparePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)]">
+    <div className="min-h-screen bg-page">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         {/* 头部 */}
         <div className="flex items-center gap-3 mb-6">
           <button
             onClick={() => router.push("/reading")}
-            className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            className="text-muted hover:text"
           >
             ←
           </button>
@@ -60,39 +60,39 @@ export default function ComparePage() {
         </div>
 
         {/* 输入栏 */}
-        <div className="border border-[var(--color-border)] bg-[var(--color-card)] rounded-lg p-4 mb-6">
+        <div className="border border bg-surface rounded-lg p-4 mb-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
             <div className="lg:col-span-2">
-              <label className="text-xs text-[var(--color-text-muted)] block mb-1">左侧材料 ID</label>
+              <label className="text-xs text-muted block mb-1">左侧材料 ID</label>
               <input
                 value={leftId}
                 onChange={(e) => setLeftId(e.target.value)}
                 placeholder="material_id_left"
-                className="w-full px-3 py-1.5 text-sm border border-[var(--color-border)] rounded bg-[var(--color-surface)]"
+                className="w-full px-3 py-1.5 text-sm border border rounded bg-surface"
               />
             </div>
             <div className="hidden lg:flex justify-center pb-1.5">
-              <ArrowLeftRight size={20} className="text-[var(--color-text-muted)]" />
+              <ArrowLeftRight size={20} className="text-muted" />
             </div>
             <div className="lg:col-span-2">
-              <label className="text-xs text-[var(--color-text-muted)] block mb-1">右侧材料 ID</label>
+              <label className="text-xs text-muted block mb-1">右侧材料 ID</label>
               <input
                 value={rightId}
                 onChange={(e) => setRightId(e.target.value)}
                 placeholder="material_id_right"
-                className="w-full px-3 py-1.5 text-sm border border-[var(--color-border)] rounded bg-[var(--color-surface)]"
+                className="w-full px-3 py-1.5 text-sm border border rounded bg-surface"
               />
             </div>
             <button
               onClick={handleLoad}
               disabled={loading}
-              className="px-4 py-1.5 text-sm bg-[var(--color-accent)] text-white rounded disabled:opacity-50"
+              className="px-4 py-1.5 text-sm bg-accent text-white rounded disabled:opacity-50"
             >
               {loading ? <Loader2 size={14} className="inline animate-spin" /> : "加载对比"}
             </button>
           </div>
           <div className="mt-3 flex items-center gap-2 text-xs">
-            <label className="flex items-center gap-1.5 text-[var(--color-text-muted)]">
+            <label className="flex items-center gap-1.5 text-muted">
               <input
                 type="checkbox"
                 checked={syncScroll}
@@ -104,7 +104,7 @@ export default function ComparePage() {
         </div>
 
         {error && (
-          <div className="mb-4 px-4 py-3 border border-red-300 bg-red-50 text-sm text-red-700 rounded flex items-center gap-2">
+          <div className="mb-4 px-4 py-3 border border-danger/30 bg-danger/10 text-sm text-danger rounded flex items-center gap-2">
             <AlertCircle size={14} /> {error}
           </div>
         )}
@@ -128,7 +128,7 @@ export default function ComparePage() {
         )}
 
         {!payload && !loading && (
-          <div className="border border-dashed border-[var(--color-border)] rounded-lg p-12 text-center text-sm text-[var(--color-text-muted)]">
+          <div className="border border-dashed border rounded-lg p-12 text-center text-sm text-muted">
             <GitCompare size={36} className="mx-auto mb-3 opacity-30" />
             输入两个材料 ID 进行左右分屏对比
             <div className="mt-2 text-xs">
@@ -148,13 +148,13 @@ function CompareColumn({ title, materialId, annotations, byColor }: {
   byColor: Record<string, number>;
 }) {
   return (
-    <div className="border border-[var(--color-border)] bg-[var(--color-card)] rounded-lg overflow-hidden">
-      <div className="px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-surface-2)] flex items-center justify-between">
+    <div className="border border bg-surface rounded-lg overflow-hidden">
+      <div className="px-4 py-3 border-b border bg-surface-hover flex items-center justify-between">
         <div>
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <BookOpen size={14} /> {title}
           </h3>
-          <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+          <p className="text-xs text-muted mt-0.5">
             {materialId.slice(0, 20)} · 共 {annotations.length} 条标注
           </p>
         </div>
@@ -174,17 +174,17 @@ function CompareColumn({ title, materialId, annotations, byColor }: {
       </div>
       <div className="p-4 max-h-[600px] overflow-y-auto">
         {/* 占位文本 — 实际由 file-management 提供 */}
-        <p className="text-xs text-[var(--color-text-muted)] mb-3 italic">
+        <p className="text-xs text-muted mb-3 italic">
           实际内容由 file-management 提供（MaterialChunk）。此处仅展示标注汇总。
         </p>
         {annotations.length === 0 ? (
-          <p className="text-xs text-[var(--color-text-muted)]">该材料暂无标注</p>
+          <p className="text-xs text-muted">该材料暂无标注</p>
         ) : (
           <div className="space-y-2">
             {annotations.map((a) => (
               <div
                 key={a.id}
-                className="border border-[var(--color-border)] rounded p-2"
+                className="border border rounded p-2"
                 style={{ borderLeftWidth: 3, borderLeftColor: COLOR_HEX[a.color] }}
               >
                 <div className="flex items-center gap-1.5 mb-1">
@@ -194,7 +194,7 @@ function CompareColumn({ title, materialId, annotations, byColor }: {
                   </span>
                 </div>
                 {a.text && <p className="text-xs line-clamp-3">{a.text}</p>}
-                {a.note && <p className="text-[10px] text-[var(--color-text-muted)] mt-1">{a.note}</p>}
+                {a.note && <p className="text-[10px] text-muted mt-1">{a.note}</p>}
               </div>
             ))}
           </div>

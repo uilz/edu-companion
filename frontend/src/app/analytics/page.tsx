@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  BarChart3, CalendarDays, Trophy, Target, Loader2,
+  BarChart3, CalendarDays, Trophy, Target,
 } from "lucide-react";
+import { PageSkeleton } from "@/components/ui/Skeleton";
 
 // ── 子标签组件导入 ──
 import AnalyticsContent from "@/app/analytics/_content";
@@ -69,21 +70,19 @@ export default function AnalyticsRootPage() {
 
   if (!ready) {
     return (
-      <main className="min-h-screen bg-[var(--color-bg)]">
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="animate-spin text-[var(--color-accent)]" size={24} />
-        </div>
+      <main className="min-h-screen bg-page">
+        <PageSkeleton />
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-[var(--color-bg)]">
+    <main className="min-h-screen bg-page">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         {/* ── 顶栏：标题 + Tab 导航 ── */}
-        <div className="sticky top-0 z-30 bg-[var(--color-bg)] border-b border-[var(--color-border)] -mx-4 sm:-mx-6 px-4 sm:px-6">
+        <div className="sticky top-0 z-30 bg-page border-b border -mx-4 sm:-mx-6 px-4 sm:px-6">
           <div className="flex items-center gap-4 py-3">
-            <h1 className="text-lg font-semibold tracking-tight text-[var(--color-text)] shrink-0">
+            <h1 className="text-lg font-semibold tracking-tight text shrink-0">
               学习统计
             </h1>
             <div className="flex items-center gap-0.5 overflow-x-auto scrollbar-hide">
@@ -97,8 +96,8 @@ export default function AnalyticsRootPage() {
                       flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium whitespace-nowrap
                       transition-all rounded-md
                       ${isActive
-                        ? "bg-[var(--color-accent)] text-white shadow-sm"
-                        : "text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+                        ? "bg-accent text-white shadow-sm"
+                        : "text-muted hover:text hover:bg-surface"
                       }
                     `}
                   >

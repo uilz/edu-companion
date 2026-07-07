@@ -6,6 +6,7 @@ import {
   ArrowLeft, Save, GripVertical, Plus, Copy, Trash2,
   Search, Check, X, Loader2, BookOpen, FileText, Upload,
 } from "lucide-react";
+import { PageSkeleton } from "@/components/ui/Skeleton";
 import {
   getBank, getBankQuestions,
   createQuestion, deleteQuestion,
@@ -62,10 +63,10 @@ function QuestionPicker({ bankId, onPick, onClose }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
-      <div className="w-full max-w-3xl max-h-[85vh] flex flex-col rounded-2xl bg-[var(--color-bg)] border border-[var(--color-border)] shadow-xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)]">
+      <div className="w-full max-w-3xl max-h-[85vh] flex flex-col rounded-2xl bg-page border border shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border">
           <h3 className="text-sm font-semibold">从已有题库选题</h3>
-          <button onClick={onClose} className="p-1 rounded hover:bg-[var(--color-surface)] text-[var(--color-text-muted)]">
+          <button onClick={onClose} className="p-1 rounded hover:bg-surface text-muted">
             <X size={16} />
           </button>
         </div>
@@ -73,13 +74,13 @@ function QuestionPicker({ bankId, onPick, onClose }: {
           {/* 题库选择+搜索 */}
           <div className="flex gap-2">
             <select value={selectedBank} onChange={e => { setSelectedBank(e.target.value); setChecked(new Set()); }}
-              className="flex-1 px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-sm">
+              className="flex-1 px-3 py-2 rounded-lg border border bg-page text-sm">
               {banks.map(b => <option key={b.id} value={b.id}>{b.name} ({b.question_count || "?"}题)</option>)}
             </select>
             <div className="relative flex-1">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
               <input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="搜索题目..." className="w-full pl-9 pr-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-sm" />
+                placeholder="搜索题目..." className="w-full pl-9 pr-3 py-2 rounded-lg border border bg-page text-sm" />
             </div>
           </div>
           {/* 题目列表 */}
@@ -87,29 +88,29 @@ function QuestionPicker({ bankId, onPick, onClose }: {
             {filtered.map((q, i) => (
               <div key={q.id} onClick={() => toggle(q.id)}
                 className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all text-sm ${
-                  checked.has(q.id) ? "border-red-500 bg-red-500/10" : "border-transparent hover:border-[var(--color-border)]"
+                  checked.has(q.id) ? "border-danger bg-danger/10" : "border-transparent hover:border"
                 }`}>
                 <div className={`w-5 h-5 flex-shrink-0 flex items-center justify-center rounded border text-xs ${
-                  checked.has(q.id) ? "bg-red-500 text-white border-red-500" : "border-[var(--color-border)]"
+                  checked.has(q.id) ? "bg-danger text-white border-danger" : "border"
                 }`}>{checked.has(q.id) ? <Check size={12} /> : i + 1}</div>
                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium bg-opacity-20 ${
-                  q.question_type === "multiple" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
+                  q.question_type === "multiple" ? "bg-accent/20 text-accent" : "bg-info/20 text-info"
                 }`}>{TYPE_LABELS[q.question_type] || q.question_type}</span>
-                <span className="flex-1 truncate text-[var(--color-text)]">{q.stem.replace(/<[^>]+>/g, "")}</span>
-                <div className="flex-shrink-0 text-[10px] text-[var(--color-text-muted)]">{"★".repeat(q.difficulty)}</div>
+                <span className="flex-1 truncate text">{q.stem.replace(/<[^>]+>/g, "")}</span>
+                <div className="flex-shrink-0 text-[10px] text-muted">{"★".repeat(q.difficulty)}</div>
               </div>
             ))}
             {filtered.length === 0 && (
-              <div className="text-center py-8 text-sm text-[var(--color-text-muted)]">该题库暂无题目</div>
+              <div className="text-center py-8 text-sm text-muted">该题库暂无题目</div>
             )}
           </div>
         </div>
-        <div className="flex items-center justify-between p-4 border-t border-[var(--color-border)]">
-          <span className="text-xs text-[var(--color-text-muted)]">已选 {checked.size} 题</span>
+        <div className="flex items-center justify-between p-4 border-t border">
+          <span className="text-xs text-muted">已选 {checked.size} 题</span>
           <div className="flex gap-2">
-            <button onClick={onClose} className="px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm text-[var(--color-text-muted)]">取消</button>
+            <button onClick={onClose} className="px-4 py-2 rounded-lg border border text-sm text-muted">取消</button>
             <button onClick={() => onPick(Array.from(checked))} disabled={checked.size === 0}
-              className="px-4 py-2 rounded-lg bg-red-500 text-white text-sm hover:opacity-90 disabled:opacity-30 flex items-center gap-1.5">
+              className="px-4 py-2 rounded-lg bg-danger text-white text-sm hover:opacity-90 disabled:opacity-30 flex items-center gap-1.5">
               <Copy size={14} />复制选中题目
             </button>
           </div>
@@ -143,6 +144,7 @@ export default function ComposePage() {
   const [isNew, setIsNew] = useState(false);
   const [bankName, setBankName] = useState("");
   const [bankDesc, setBankDesc] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout>>();
   const reorderTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -160,6 +162,7 @@ export default function ComposePage() {
       setQuestions(qs.items || []);
     } catch (e) {
       console.error("加载失败", e);
+      setError(e instanceof Error ? e.message : "加载题库失败");
     }
     setLoading(false);
   }, [bankId]);
@@ -174,6 +177,7 @@ export default function ComposePage() {
       setDirty(false);
     } catch (e) {
       console.error("保存失败", e);
+      setError(e instanceof Error ? e.message : "保存题库失败");
     }
     setSaving(false);
   }, [bankId]);
@@ -204,6 +208,7 @@ export default function ComposePage() {
         await reorderQuestionsInBank(bankId, reordered.map(q => q.id));
       } catch (e) {
         console.error("排序保存失败", e);
+        setError(e instanceof Error ? e.message : "排序保存失败");
       }
     }, 1000);
   };
@@ -215,6 +220,7 @@ export default function ComposePage() {
       setQuestions(p => p.filter(q => q.id !== qid));
     } catch (e) {
       console.error("删除失败", e);
+      setError(e instanceof Error ? e.message : "删除题目失败");
     }
   };
 
@@ -228,6 +234,7 @@ export default function ComposePage() {
       await loadData();
     } catch (e) {
       console.error("复制失败", e);
+      setError(e instanceof Error ? e.message : "复制题目失败");
     }
   };
 
@@ -260,54 +267,67 @@ export default function ComposePage() {
       await loadData();
     } catch (e) {
       console.error("保存题目失败", e);
+      setError(e instanceof Error ? e.message : "保存题目失败");
     }
   };
 
-  if (loading) return (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <Loader2 size={24} className="animate-spin text-[var(--color-accent)]" />
-    </div>
-  );
+  if (loading) return <PageSkeleton />;
+
+  if (error) {
+    return (
+      <div className="max-w-5xl mx-auto px-4 py-5 text-center">
+        <div className="p-4 border border-danger/20 bg-danger/10 rounded-lg text-danger mb-4">
+          {error}
+        </div>
+        <button
+          onClick={() => { setError(null); loadData(); }}
+          className="px-4 py-2 rounded-lg bg-danger text-white hover:bg-danger text-sm"
+        >
+          重试
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-5 space-y-5">
       {/* 头部 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <button onClick={() => router.push(`/practice/banks/${bankId}`)} className="p-1.5 rounded-lg hover:bg-[var(--color-surface)] text-[var(--color-text-muted)]">
+          <button onClick={() => router.push(`/practice/banks/${bankId}`)} className="p-1.5 rounded-lg hover:bg-surface text-muted">
             <ArrowLeft size={18} />
           </button>
-          <BookOpen size={18} className="text-red-500" />
+          <BookOpen size={18} className="text-danger" />
           <h1 className="text-base font-semibold">组卷编辑</h1>
         </div>
-        <div className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
-          {dirty && <span className="text-amber-500">● 未保存</span>}
+        <div className="flex items-center gap-2 text-xs text-muted">
+          {dirty && <span className="text-warning">● 未保存</span>}
           {saving && <span className="flex items-center gap-1"><Loader2 size={12} className="animate-spin" />保存中...</span>}
           <span>{questions.length} 题</span>
         </div>
       </div>
 
       {/* 题库名称/描述 */}
-      <div className="space-y-2 p-4 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]">
+      <div className="space-y-2 p-4 rounded-xl bg-surface border border">
         <input value={bankName} onChange={e => onNameChange(e.target.value)}
-          placeholder="题库名称" className="w-full bg-transparent text-lg font-semibold outline-none placeholder:text-[var(--color-text-muted)]" />
+          placeholder="题库名称" className="w-full bg-transparent text-lg font-semibold outline-none placeholder:text-muted" />
         <textarea value={bankDesc} onChange={e => onDescChange(e.target.value)}
           placeholder="题库描述（可选）..." rows={2}
-          className="w-full bg-transparent text-xs text-[var(--color-text-muted)] outline-none resize-none placeholder:text-[var(--color-text-muted)]/50" />
+          className="w-full bg-transparent text-xs text-muted outline-none resize-none placeholder:text-muted/50" />
       </div>
 
       {/* 操作按钮 */}
       <div className="flex items-center gap-2 flex-wrap">
         <button onClick={() => setShowPicker(true)}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-sm hover:bg-[var(--color-border)]/50">
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-surface border border text-sm hover:bg-divider/50">
           <Copy size={14} />从题库选题
         </button>
         <button onClick={openNew}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-sm hover:bg-[var(--color-border)]/50">
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-surface border border text-sm hover:bg-divider/50">
           <Plus size={14} />新建题目
         </button>
         <button onClick={() => router.push(`/practice/banks/${bankId}/import`)}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-sm hover:bg-[var(--color-border)]/50">
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-surface border border text-sm hover:bg-divider/50">
           <Upload size={14} />批量导入
         </button>
       </div>
@@ -315,44 +335,44 @@ export default function ComposePage() {
       {/* 题目列表 */}
       <div className="space-y-1">
         {questions.length === 0 && (
-          <div className="text-center py-16 text-sm text-[var(--color-text-muted)]">
+          <div className="text-center py-16 text-sm text-muted">
             <FileText size={32} className="mx-auto mb-2 opacity-30" />
             题库为空，点击上方按钮添加题目
           </div>
         )}
         {questions.map((q, i) => (
           <div key={q.id}
-            className="flex items-center gap-2 p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] group hover:border-red-500/30 transition-all">
+            className="flex items-center gap-2 p-3 rounded-xl border border bg-page group hover:border-danger/30 transition-all">
             {/* 排序手柄 */}
             <div className="flex flex-col gap-0.5 opacity-30 group-hover:opacity-60">
               <button onClick={() => moveQuestion(i, "up")} disabled={i === 0}
-                className="p-0.5 hover:text-red-500 disabled:opacity-20 disabled:cursor-not-allowed">
+                className="p-0.5 hover:text-danger disabled:opacity-20 disabled:cursor-not-allowed">
                 <svg width="10" height="6" viewBox="0 0 10 6" fill="currentColor"><path d="M5 0L10 6H0z"/></svg>
               </button>
-              <span className="text-[10px] text-center text-[var(--color-text-muted)] font-mono">{i + 1}</span>
+              <span className="text-[10px] text-center text-muted font-mono">{i + 1}</span>
               <button onClick={() => moveQuestion(i, "down")} disabled={i === questions.length - 1}
-                className="p-0.5 hover:text-red-500 disabled:opacity-20 disabled:cursor-not-allowed">
+                className="p-0.5 hover:text-danger disabled:opacity-20 disabled:cursor-not-allowed">
                 <svg width="10" height="6" viewBox="0 0 10 6" fill="currentColor"><path d="M5 6L10 0H0z"/></svg>
               </button>
             </div>
             {/* 题型标签 */}
             <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 ${
-              q.question_type === "multiple" ? "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300" :
-              q.question_type === "judge" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" :
-              q.question_type === "fill" ? "bg-amber-100 text-amber-700" :
-              (q.question_type === "free_form") ? "bg-rose-100 text-rose-700" :
-              "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+              q.question_type === "multiple" ? "bg-accent/20 text-accent dark:bg-accent/10 dark:text-accent" :
+              q.question_type === "judge" ? "bg-success/20 text-success dark:bg-success/10 dark:text-success" :
+              q.question_type === "fill" ? "bg-warning/20 text-warning" :
+              (q.question_type === "free_form") ? "bg-danger/20 text-danger" :
+              "bg-info/20 text-info dark:bg-info/10 dark:text-info"
             }`}>{TYPE_LABELS[q.question_type] || q.question_type}</span>
             {/* 题干预览 */}
-            <span className="flex-1 truncate text-sm text-[var(--color-text)] pl-1">
+            <span className="flex-1 truncate text-sm text pl-1">
               {q.stem.replace(/<[^>]+>/g, "").replace(/\[.*?\]/g, "").slice(0, 100)}
             </span>
             {/* 难度 */}
-            <span className="text-[10px] text-[var(--color-text-muted)] shrink-0">{"★".repeat(q.difficulty).padEnd(5, "☆")}</span>
+            <span className="text-[10px] text-muted shrink-0">{"★".repeat(q.difficulty).padEnd(5, "☆")}</span>
             {/* 操作 */}
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
               <button onClick={() => handleDelete(q.id)}
-                className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-[var(--color-text-muted)] hover:text-red-500">
+                className="p-1 rounded hover:bg-danger/10 dark:hover:bg-danger/10 text-muted hover:text-danger">
                 <X size={13} />
               </button>
             </div>
@@ -361,7 +381,7 @@ export default function ComposePage() {
       </div>
 
       {/* 底部统计 */}
-      <div className="text-xs text-[var(--color-text-muted)] text-center pb-8">
+      <div className="text-xs text-muted text-center pb-8">
         共 {questions.length} 题 · 操作自动保存
       </div>
 

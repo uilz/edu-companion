@@ -45,24 +45,24 @@ export default function ActionFeedbackToast() {
       {feedbacks.map((f) => (
         <div
           key={f.id}
-          className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] shadow-lg p-3 animate-in slide-in-from-right"
+          className="rounded-lg border border bg-page-secondary shadow-lg p-3 animate-in slide-in-from-right"
         >
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 text-sm font-medium text-[var(--color-text-primary)]">
+              <div className="flex items-center gap-1.5 text-sm font-medium text">
                 <span>✅</span>
                 <span>{f.title}</span>
                 {f.actionType && (
-                  <span className="text-[10px] px-1 rounded bg-[var(--color-bg-tertiary)] text-[var(--color-text-tertiary)]">
+                  <span className="text-[10px] px-1 rounded bg-surface-hover text-muted">
                     {ACTION_TYPE_LABELS[f.actionType] || f.actionType}
                   </span>
                 )}
               </div>
               {f.result && (
-                <div className="mt-1 text-xs text-[var(--color-text-secondary)] space-y-0.5">
+                <div className="mt-1 text-xs text-secondary space-y-0.5">
                   {f.result.message && <p>{f.result.message}</p>}
                   {f.result.success === false && (
-                    <p className="text-[var(--color-error)]">
+                    <p className="text-error">
                       执行失败{f.result.details ? `: ${f.result.details}` : ""}
                     </p>
                   )}
@@ -72,7 +72,7 @@ export default function ActionFeedbackToast() {
                 </div>
               )}
               {f.planAdjustment && (
-                <div className="mt-1 text-xs text-[var(--color-text-tertiary)]">
+                <div className="mt-1 text-xs text-muted">
                   学习计划已调整
                 </div>
               )}
@@ -80,7 +80,7 @@ export default function ActionFeedbackToast() {
             <button
               type="button"
               onClick={() => handleDismiss(f.id)}
-              className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] shrink-0"
+              className="text-muted hover:text shrink-0"
               aria-label="关闭"
             >
               ✕

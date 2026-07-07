@@ -112,28 +112,28 @@ export default function ReflectionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-      <div className="w-full max-w-xl mx-4 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-xl overflow-hidden">
+      <div className="w-full max-w-xl mx-4 bg-surface border border rounded-xl shadow-xl overflow-hidden">
         {/* ----- Step: Guidance intro ----- */}
         {step === "guide" && (
           <>
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-[var(--color-accent)]/10 flex items-center justify-center text-[var(--color-accent)]">
+                <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center text-accent">
                   {config.icon}
                 </div>
                 <div>
-                  <span className="text-sm font-semibold text-[var(--color-text)]">
+                  <span className="text-sm font-semibold text">
                     {config.title}
                   </span>
-                  <span className="text-[10px] text-[var(--color-text-muted)] block">
+                  <span className="text-[10px] text-muted block">
                     结构化反思练习
                   </span>
                 </div>
               </div>
               <button
                 onClick={onClose}
-                className="p-1.5 rounded-lg hover:bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] transition-colors"
+                className="p-1.5 rounded-lg hover:bg-surface-hover text-muted transition-colors"
               >
                 <X size={14} />
               </button>
@@ -141,14 +141,14 @@ export default function ReflectionModal({
 
             {/* Guidance */}
             <div className="px-5 py-5">
-              <div className="flex items-start gap-3 p-4 rounded-xl bg-[var(--color-accent)]/5 border border-[var(--color-accent)]/10">
-                <Brain size={20} className="text-[var(--color-accent)] flex-shrink-0 mt-0.5" />
+              <div className="flex items-start gap-3 p-4 rounded-xl bg-accent/5 border border-accent/10">
+                <Brain size={20} className="text-accent flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm text-[var(--color-text)] font-medium leading-relaxed">
+                  <p className="text-sm text font-medium leading-relaxed">
                     {config.prompt}
                   </p>
                   {context && (
-                    <p className="text-xs text-[var(--color-text-muted)] mt-2 italic">
+                    <p className="text-xs text-muted mt-2 italic">
                       {context}
                     </p>
                   )}
@@ -156,7 +156,7 @@ export default function ReflectionModal({
               </div>
 
               {/* Hints */}
-              <div className="mt-4 flex items-start gap-2 text-[11px] text-[var(--color-text-muted)]">
+              <div className="mt-4 flex items-start gap-2 text-[11px] text-muted">
                 <Lightbulb size={12} className="flex-shrink-0 mt-0.5" />
                 <span>{config.hint}</span>
               </div>
@@ -167,7 +167,7 @@ export default function ReflectionModal({
                   {relatedNodes.map((n, i) => (
                     <span
                       key={i}
-                      className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] border border-[var(--color-border)]/50"
+                      className="text-[10px] px-2 py-0.5 rounded-full bg-surface-hover text-muted border border/50"
                     >
                       {n}
                     </span>
@@ -177,16 +177,16 @@ export default function ReflectionModal({
             </div>
 
             {/* Actions */}
-            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--color-border)]">
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border">
               <button
                 onClick={onClose}
-                className="px-3 py-1.5 rounded-lg text-xs text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors"
+                className="px-3 py-1.5 rounded-lg text-xs text-muted hover:bg-surface-hover transition-colors"
               >
                 跳过
               </button>
               <button
                 onClick={() => setStep("input")}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity"
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-accent text-white hover:opacity-90 transition-opacity"
               >
                 开始反思
                 <Send size={12} />
@@ -198,21 +198,21 @@ export default function ReflectionModal({
         {/* ----- Step: Writing input ----- */}
         {step === "input" && (
           <>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border">
               <div className="flex items-center gap-2">
                 {config.icon}
                 <span className="text-sm font-semibold">{config.title}</span>
               </div>
               <button
                 onClick={onClose}
-                className="p-1.5 rounded-lg hover:bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] transition-colors"
+                className="p-1.5 rounded-lg hover:bg-surface-hover text-muted transition-colors"
               >
                 <X size={14} />
               </button>
             </div>
 
             <div className="px-5 py-4">
-              <p className="text-xs text-[var(--color-accent)] mb-3 font-medium leading-relaxed">
+              <p className="text-xs text-accent mb-3 font-medium leading-relaxed">
                 {config.prompt}
               </p>
 
@@ -220,21 +220,21 @@ export default function ReflectionModal({
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="在这里写下你的反思..."
-                className="w-full h-40 px-4 py-3 text-sm rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] resize-none focus:outline-none focus:border-[var(--color-accent)] focus:ring-1 focus:ring-[var(--color-accent)]/20 transition-colors leading-relaxed"
+                className="w-full h-40 px-4 py-3 text-sm rounded-xl border border bg-page resize-none focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20 transition-colors leading-relaxed"
                 autoFocus
               />
 
               {/* Sentiment indicator */}
               {content.length > 5 && (
-                <div className="mt-2 flex items-center gap-1.5 text-[10px] text-[var(--color-text-muted)]">
+                <div className="mt-2 flex items-center gap-1.5 text-[10px] text-muted">
                   <span>情绪倾向：</span>
                   <span
                     className={`px-1.5 py-0.5 rounded ${
                       getSentiment() === "positive"
-                        ? "bg-[var(--color-success)]/10 text-[var(--color-success)]"
+                        ? "bg-success/10 text-success"
                         : getSentiment() === "negative"
-                          ? "bg-[var(--color-error)]/10 text-[var(--color-error)]"
-                          : "bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]"
+                          ? "bg-error/10 text-error"
+                          : "bg-surface-hover text-muted"
                     }`}
                   >
                     {getSentiment() === "positive"
@@ -247,24 +247,24 @@ export default function ReflectionModal({
               )}
             </div>
 
-            <div className="flex items-center justify-between px-5 py-4 border-t border-[var(--color-border)]">
+            <div className="flex items-center justify-between px-5 py-4 border-t border">
               <button
                 onClick={() => setStep("guide")}
-                className="text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+                className="text-[11px] text-muted hover:text transition-colors"
               >
                 ← 返回引导
               </button>
               <div className="flex items-center gap-2">
                 <button
                   onClick={onClose}
-                  className="px-3 py-1.5 rounded-lg text-xs text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors"
+                  className="px-3 py-1.5 rounded-lg text-xs text-muted hover:bg-surface-hover transition-colors"
                 >
                   稍后再说
                 </button>
                 <button
                   onClick={handleSave}
                   disabled={!content.trim()}
-                  className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
+                  className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-accent text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
                 >
                   <Brain size={12} />
                   保存反思
@@ -277,18 +277,18 @@ export default function ReflectionModal({
         {/* ----- Step: Done ----- */}
         {step === "done" && (
           <div className="flex flex-col items-center py-10 px-5">
-            <div className="w-14 h-14 rounded-full bg-[var(--color-success)]/10 flex items-center justify-center mb-4">
-              <Brain size={28} className="text-[var(--color-success)]" />
+            <div className="w-14 h-14 rounded-full bg-success/10 flex items-center justify-center mb-4">
+              <Brain size={28} className="text-success" />
             </div>
-            <p className="text-base font-semibold text-[var(--color-text)]">
+            <p className="text-base font-semibold text">
               反思已记录
             </p>
-            <p className="text-xs text-[var(--color-text-muted)] mt-1 text-center max-w-xs">
+            <p className="text-xs text-muted mt-1 text-center max-w-xs">
               你的反思已关联到知识点。系统会在适当的时候提醒你回顾。
             </p>
             <button
               onClick={onClose}
-              className="mt-6 px-5 py-2 rounded-lg text-xs font-medium bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity"
+              className="mt-6 px-5 py-2 rounded-lg text-xs font-medium bg-accent text-white hover:opacity-90 transition-opacity"
             >
               完成
             </button>

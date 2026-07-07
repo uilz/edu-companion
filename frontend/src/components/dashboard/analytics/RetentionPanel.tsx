@@ -63,8 +63,8 @@ export function RetentionPanel() {
       </svg>
       {/* 高风险知识点提醒 */}
       {data.at_risk.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-[var(--color-surface)]">
-          <div className="text-xs text-[var(--color-text-muted)] mb-1">
+        <div className="mt-3 pt-3 border-t border-surface">
+          <div className="text-xs text-muted mb-1">
             ⚠️ 7天后保持率 &lt; 50% 的高风险知识点：
           </div>
           <div className="flex flex-wrap gap-1.5">

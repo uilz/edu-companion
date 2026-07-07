@@ -51,19 +51,19 @@ const ExamTimerBar = memo(function ExamTimerBar({ timeLeft, totalQuestions, answ
   const urgent = timeLeft < 120;
   const warn = timeLeft < 300;
   return (
-    <div className="sticky top-0 z-10 bg-[var(--color-bg)]/95 backdrop-blur-sm border-b border-[var(--color-border)]/50 px-3 sm:px-4 py-2">
+    <div className="sticky top-0 z-10 bg-page/95 backdrop-blur-sm border-b border/50 px-3 sm:px-4 py-2">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <span className="text-[11px] text-[var(--color-text-muted)] tabular">
+          <span className="text-[11px] text-muted tabular">
             {answeredCount} / {totalQuestions}
           </span>
           <div
             data-testid="exam-timer-display"
             data-urgent={urgent ? "true" : "false"}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium tabular ${
-              urgent ? "bg-red-500/10 text-red-500 animate-pulse" :
-              warn ? "bg-amber-500/10 text-amber-500" :
-              "bg-[var(--color-surface)] text-[var(--color-text)]"
+              urgent ? "bg-danger/10 text-danger animate-pulse" :
+              warn ? "bg-warning/10 text-warning" :
+              "bg-surface text"
             }`}
           >
             <Clock size={12} />
@@ -77,8 +77,8 @@ const ExamTimerBar = memo(function ExamTimerBar({ timeLeft, totalQuestions, answ
             aria-label="答题卡"
             className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] border transition-all ${
               showAnswerSheet
-                ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                : "border-[var(--color-border)]/50 text-[var(--color-text-muted)] hover:border-[var(--color-accent)]/30"
+                ? "border-accent bg-accent/10 text-accent"
+                : "border/50 text-muted hover:border-accent/30"
             }`}
           >
             <Grid3X3 size={12} />
@@ -88,7 +88,7 @@ const ExamTimerBar = memo(function ExamTimerBar({ timeLeft, totalQuestions, answ
           <button
             onClick={onSubmit}
             data-testid="submit-exam-btn"
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-medium bg-red-500 text-white hover:opacity-90 transition-opacity"
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-medium bg-danger text-white hover:opacity-90 transition-opacity"
           >
             <Send size={10} />
             <span>交卷</span>
@@ -96,9 +96,9 @@ const ExamTimerBar = memo(function ExamTimerBar({ timeLeft, totalQuestions, answ
         </div>
       </div>
       {/* 进度条 */}
-      <div className="w-full h-1 bg-[var(--color-border)]/30 rounded-full overflow-hidden mt-2">
+      <div className="w-full h-1 bg-divider/30 rounded-full overflow-hidden mt-2">
         <div
-          className="h-full bg-[var(--color-accent)] rounded-full transition-all duration-300"
+          className="h-full bg-accent rounded-full transition-all duration-300"
           style={{ width: `${(answeredCount / Math.max(totalQuestions, 1)) * 100}%` }}
         />
       </div>
@@ -131,20 +131,20 @@ const AnswerSheet = memo(function AnswerSheet({
       data-testid="answer-sheet"
       className={
         isMobile
-          ? "fixed inset-x-0 bottom-0 z-40 max-h-[70vh] overflow-y-auto p-3 bg-[var(--color-bg)] border-t border-[var(--color-border)] rounded-t-2xl shadow-2xl"
-          : "w-48 flex-shrink-0 border-r border-[var(--color-border)]/30 bg-[var(--color-surface)]/50 overflow-y-auto p-2"
+          ? "fixed inset-x-0 bottom-0 z-40 max-h-[70vh] overflow-y-auto p-3 bg-page border-t border rounded-t-2xl shadow-2xl"
+          : "w-48 flex-shrink-0 border-r border/30 bg-surface/50 overflow-y-auto p-2"
       }
     >
       {isMobile && (
         <div className="flex items-center justify-between mb-2">
-          <p className="text-xs font-medium text-[var(--color-text)]">答题卡</p>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-[var(--color-surface)]" aria-label="关闭">
+          <p className="text-xs font-medium text">答题卡</p>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-surface" aria-label="关闭">
             <XIcon size={14} />
           </button>
         </div>
       )}
       {!isMobile && (
-        <p className="text-[9px] text-[var(--color-text-muted)] mb-2 px-1 font-medium uppercase tracking-wider">答题卡</p>
+        <p className="text-[9px] text-muted mb-2 px-1 font-medium uppercase tracking-wider">答题卡</p>
       )}
       <div className={`grid ${isMobile ? "grid-cols-6" : "grid-cols-4"} gap-1.5`}>
         {questions.map((q, i) => {
@@ -158,10 +158,10 @@ const AnswerSheet = memo(function AnswerSheet({
               onClick={() => onSelect(i)}
               className={`w-full aspect-square flex items-center justify-center rounded-md text-[10px] font-medium transition-all ${
                 isActive
-                  ? "ring-2 ring-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
+                  ? "ring-2 ring-accent bg-accent/10 text-accent"
                   : isAnswered
-                    ? "bg-green-500/10 text-green-600 border border-green-500/30"
-                    : "bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)]/50 hover:border-[var(--color-accent)]/30"
+                    ? "bg-success/10 text-success border border-success/30"
+                    : "bg-page text-muted border border/50 hover:border-accent/30"
               }`}
             >
               {i + 1}
@@ -169,13 +169,13 @@ const AnswerSheet = memo(function AnswerSheet({
           );
         })}
       </div>
-      <div className="mt-3 px-1 space-y-1 text-[9px] text-[var(--color-text-muted)]">
+      <div className="mt-3 px-1 space-y-1 text-[9px] text-muted">
         <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-sm bg-green-500/30 border border-green-500/50" />
+          <span className="w-2.5 h-2.5 rounded-sm bg-success/30 border border-success/50" />
           <span>已答 ({answeredCount})</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-sm bg-[var(--color-bg)] border border-[var(--color-border)]/50" />
+          <span className="w-2.5 h-2.5 rounded-sm bg-page border border/50" />
           <span>未答 ({questions.length - answeredCount})</span>
         </div>
       </div>
@@ -473,58 +473,58 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
   if (phase === "setup") {
     return (
       <div className="flex flex-col items-center justify-center h-full px-4 sm:px-6 py-6 sm:py-8">
-        <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
-          <FileText size={20} className="text-red-500" />
+        <div className="w-12 h-12 rounded-full bg-danger/10 flex items-center justify-center mb-4">
+          <FileText size={20} className="text-danger" />
         </div>
-        <h3 className="text-base font-semibold text-[var(--color-text)] mb-1">
+        <h3 className="text-base font-semibold text mb-1">
           {nodeLabel ? `「${nodeLabel}」考试` : bankName ? `${bankName} 考试` : "模拟考试"}
         </h3>
-        <p className="text-[11px] text-[var(--color-text-muted)] text-center mb-6 leading-relaxed">
+        <p className="text-[11px] text-muted text-center mb-6 leading-relaxed">
           计时答题 · 答题卡导航 · 自动交卷 · 成绩报告
         </p>
 
         {banks.length > 1 && (
           <div className="w-full mb-4">
-            <p className="text-[10px] text-[var(--color-text-muted)] mb-2 font-medium">选择题库</p>
+            <p className="text-[10px] text-muted mb-2 font-medium">选择题库</p>
             <select value={selectedBankId} onChange={e => setSelectedBankId(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-xs">
+              className="w-full px-3 py-2 rounded-lg border border bg-surface text-xs">
               {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
         )}
 
         <div className="w-full mb-4">
-          <p className="text-[10px] text-[var(--color-text-muted)] mb-2 font-medium">考试时长</p>
+          <p className="text-[10px] text-muted mb-2 font-medium">考试时长</p>
           <div className="flex gap-1.5 sm:gap-2 flex-wrap">
             {[15, 30, 45, 60, 90, 120].map((m) => (
               <button key={m} onClick={() => setDuration(m)}
                 className={`flex-1 min-w-[60px] py-2 rounded-lg border text-center text-sm font-medium transition-all ${
                   duration === m
-                    ? "border-red-500 bg-red-500/10 text-red-500"
-                    : "border-[var(--color-border)]/50 bg-[var(--color-surface)] text-[var(--color-text)] hover:border-red-500/30"
+                    ? "border-danger bg-danger/10 text-danger"
+                    : "border/50 bg-surface text hover:border-danger/30"
                 }`}>{m}min</button>
             ))}
           </div>
         </div>
 
         <div className="w-full mb-4">
-          <p className="text-[10px] text-[var(--color-text-muted)] mb-2 font-medium">题目数量</p>
+          <p className="text-[10px] text-muted mb-2 font-medium">题目数量</p>
           <div className="flex gap-1.5 sm:gap-2 flex-wrap">
             {[10, 20, 30, 50].map((n) => (
               <button key={n} onClick={() => setCount(n)}
                 className={`flex-1 min-w-[60px] py-2 rounded-lg border text-center text-sm font-medium transition-all ${
                   count === n
-                    ? "border-red-500 bg-red-500/10 text-red-500"
-                    : "border-[var(--color-border)]/50 bg-[var(--color-surface)] text-[var(--color-text)] hover:border-red-500/30"
+                    ? "border-danger bg-danger/10 text-danger"
+                    : "border/50 bg-surface text hover:border-danger/30"
                 }`}>{n}题</button>
             ))}
           </div>
         </div>
 
-        <div className="w-full mb-6 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+        <div className="w-full mb-6 p-3 rounded-lg bg-warning/10 border border-warning/20">
           <div className="flex items-start gap-2">
-            <AlertTriangle size={12} className="text-amber-500 mt-0.5" />
-            <p className="text-[10px] text-amber-600 leading-relaxed">
+            <AlertTriangle size={12} className="text-warning mt-0.5" />
+            <p className="text-[10px] text-warning leading-relaxed">
               考后不可重做，到时间自动交卷。未答题目记错。
             </p>
           </div>
@@ -532,14 +532,14 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
 
         <button onClick={handleStart} disabled={loading}
           data-testid="start-exam-btn"
-          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-red-500 text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-danger text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
           {loading ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
           {loading ? "出题中..." : "开始考试"}
         </button>
 
-        {error && <p className="mt-3 text-[10px] text-red-500">{error}</p>}
+        {error && <p className="mt-3 text-[10px] text-danger">{error}</p>}
 
-        <p className="mt-3 text-[9px] text-[var(--color-text-muted)] text-center">
+        <p className="mt-3 text-[9px] text-muted text-center">
           快捷键：1-4 选答案 · ← → 切题 · Enter 下一题
         </p>
       </div>
@@ -580,17 +580,17 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
             {currentQuestion ? (
               <>
                 <div className="mb-1 flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)]/50 text-[var(--color-text-muted)]">
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-surface border border/50 text-muted">
                     {currentQuestion.question_type === "single" || currentQuestion.question_type === "choice" ? "单选题" :
                      currentQuestion.question_type === "multiple" ? "多选题" :
                      currentQuestion.question_type === "judge" ? "判断题" :
                      currentQuestion.question_type === "fill" ? "填空题" :
                      currentQuestion.question_type === "free_form" || currentQuestion.question_type === "essay" ? "简答题" : "选择题"}
                   </span>
-                  <span className="text-[9px] text-[var(--color-text-muted)] tabular">
+                  <span className="text-[9px] text-muted tabular">
                     难度 {"★".repeat(currentQuestion.difficulty).padEnd(5, "☆")}
                   </span>
-                  <span className="text-[9px] text-[var(--color-text-muted)] ml-auto tabular">
+                  <span className="text-[9px] text-muted ml-auto tabular">
                     第 {currentIdx + 1} / {questions.length} 题
                   </span>
                 </div>
@@ -609,18 +609,18 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
                         onClick={() => toggleAnswer(opt.letter)}
                         className={`w-full flex items-start gap-3 p-2.5 sm:p-3 rounded-lg border text-left transition-all ${
                           isSelected
-                            ? "border-red-500 bg-red-500/10"
-                            : "border-[var(--color-border)]/60 bg-[var(--color-surface)] hover:border-red-500/30"
+                            ? "border-danger bg-danger/10"
+                            : "border/60 bg-surface hover:border-danger/30"
                         }`}
                       >
                         <span className={`flex-shrink-0 w-6 h-6 flex items-center justify-center text-[11px] font-medium ${
                           isMultiple ? "rounded-md" : "rounded-full"
                         } ${
                           isSelected
-                            ? "bg-red-500 text-white"
-                            : "bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)]"
+                            ? "bg-danger text-white"
+                            : "bg-page text-muted border border"
                         }`}>{opt.letter}</span>
-                        <span className="text-[13px] text-[var(--color-text)] leading-relaxed pt-0.5 [&_p]:m-0 [&_.katex]:text-sm">
+                        <span className="text-[13px] text leading-relaxed pt-0.5 [&_p]:m-0 [&_.katex]:text-sm">
                           <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} components={{ p: ({ children }) => <>{children}</> }}>
                             {opt.text}
                           </ReactMarkdown>
@@ -639,7 +639,7 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
                     onChange={(e) => saveFillAnswer(e.target.value)}
                     placeholder={currentQuestion.question_type === "fill" ? "输入你的答案..." : "输入你的回答..."}
                     rows={currentQuestion.question_type === "fill" ? 2 : 4}
-                    className="w-full px-4 py-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] text-sm resize-none focus:outline-none focus:border-red-500 transition-colors"
+                    className="w-full px-4 py-3 rounded-xl border border bg-page text-sm resize-none focus:outline-none focus:border-danger transition-colors"
                   />
                 </div>
                 )}
@@ -668,21 +668,21 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
         </div>
 
         {/* 底部导航 */}
-        <div className="border-t border-[var(--color-border)]/30 px-3 sm:px-4 py-2.5 flex items-center justify-between safe-area-bottom">
+        <div className="border-t border/30 px-3 sm:px-4 py-2.5 flex items-center justify-between safe-area-bottom">
           <button onClick={handlePrev} disabled={currentIdx === 0}
             data-testid="exam-prev-btn"
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] border border-[var(--color-border)]/50 text-[var(--color-text-muted)] hover:border-[var(--color-accent)]/30 disabled:opacity-30 transition-all">
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] border border/50 text-muted hover:border-accent/30 disabled:opacity-30 transition-all">
             <ChevronLeft size={12} />上一题
           </button>
-          <span className="text-[10px] text-[var(--color-text-muted)] tabular">
+          <span className="text-[10px] text-muted tabular">
             {currentIdx + 1} / {questions.length}
           </span>
           <button onClick={isLast ? handleSubmitAll : handleNext}
             data-testid="exam-next-btn"
             className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${
               isLast
-                ? "bg-red-500 text-white hover:opacity-90"
-                : "border border-[var(--color-border)]/50 text-[var(--color-text-muted)] hover:border-[var(--color-accent)]/30"
+                ? "bg-danger text-white hover:opacity-90"
+                : "border border/50 text-muted hover:border-accent/30"
             }`}>
             {isLast ? "交卷" : "下一题"}
             {!isLast && <ChevronRight size={12} />}
@@ -696,28 +696,28 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
   if (phase === "result" && examResult) {
     const { score, grade, grade_color, stats, type_stats, question_results } = examResult;
     const colorMap: Record<string, string> = {
-      green: "text-green-500 border-green-500/30 bg-green-500/10",
-      blue: "text-blue-500 border-blue-500/30 bg-blue-500/10",
-      yellow: "text-yellow-500 border-yellow-500/30 bg-yellow-500/10",
-      red: "text-red-500 border-red-500/30 bg-red-500/10",
+      green: "text-success border-success/30 bg-success/10",
+      blue: "text-info border-info/30 bg-info/10",
+      yellow: "text-warning border-warning/30 bg-warning/10",
+      red: "text-danger border-danger/30 bg-danger/10",
     };
-    const barColor = grade_color === "green" ? "bg-green-500" :
-                     grade_color === "blue" ? "bg-blue-500" :
-                     grade_color === "yellow" ? "bg-yellow-500" : "bg-red-500";
+    const barColor = grade_color === "green" ? "bg-success" :
+                     grade_color === "blue" ? "bg-info" :
+                     grade_color === "yellow" ? "bg-warning" : "bg-danger";
 
     return (
       <div className="overflow-y-auto h-full px-3 sm:px-4 py-6">
         {/* 分数大卡片 */}
         <div className={`text-center p-6 rounded-xl border-2 mb-6 ${colorMap[grade_color] || colorMap.blue}`}>
           <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
-            <Trophy size={24} className={grade_color === "green" ? "text-green-500" :
-              grade_color === "blue" ? "text-blue-500" :
-              grade_color === "yellow" ? "text-yellow-500" : "text-red-500"} />
+            <Trophy size={24} className={grade_color === "green" ? "text-success" :
+              grade_color === "blue" ? "text-info" :
+              grade_color === "yellow" ? "text-warning" : "text-danger"} />
           </div>
           <div className={`text-5xl font-bold mb-1 tabular ${
-            grade_color === "green" ? "text-green-500" :
-            grade_color === "blue" ? "text-blue-500" :
-            grade_color === "yellow" ? "text-yellow-500" : "text-red-500"
+            grade_color === "green" ? "text-success" :
+            grade_color === "blue" ? "text-info" :
+            grade_color === "yellow" ? "text-warning" : "text-danger"
           }`}>{score}</div>
           <div className="text-lg font-semibold mt-1">{grade}</div>
           <div className="flex items-center justify-center gap-4 mt-3 text-[11px] opacity-80">
@@ -732,19 +732,19 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
 
         {Object.keys(type_stats).length > 0 && (
           <div className="mb-6">
-            <p className="text-[10px] text-[var(--color-text-muted)] mb-2 font-medium">题型统计</p>
+            <p className="text-[10px] text-muted mb-2 font-medium">题型统计</p>
             <div className="grid grid-cols-2 gap-2">
               {Object.entries(type_stats).map(([type, ts]) => (
-                <div key={type} className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]/50">
-                  <p className="text-[11px] font-medium text-[var(--color-text)] mb-1">
+                <div key={type} className="p-3 rounded-lg bg-surface border border/50">
+                  <p className="text-[11px] font-medium text mb-1">
                     {type === "single" ? "单选题" : type === "multiple" ? "多选题" : type}
                   </p>
-                  <div className="flex items-center gap-2 text-[10px] text-[var(--color-text-muted)]">
-                    <span className="text-green-500">{ts.correct}✓</span>
-                    <span className="text-red-500">{ts.wrong}✗</span>
+                  <div className="flex items-center gap-2 text-[10px] text-muted">
+                    <span className="text-success">{ts.correct}✓</span>
+                    <span className="text-danger">{ts.wrong}✗</span>
                     <span className="ml-auto">{ts.total}题</span>
                   </div>
-                  <div className="w-full h-1 bg-[var(--color-border)]/30 rounded-full overflow-hidden mt-1.5">
+                  <div className="w-full h-1 bg-divider/30 rounded-full overflow-hidden mt-1.5">
                     <div className={`h-full rounded-full ${barColor}`}
                       style={{ width: `${(ts.correct / Math.max(ts.total, 1)) * 100}%` }} />
                   </div>
@@ -755,36 +755,36 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
         )}
 
         <div className="mb-6">
-          <p className="text-[10px] text-[var(--color-text-muted)] mb-2 font-medium">逐题回顾</p>
+          <p className="text-[10px] text-muted mb-2 font-medium">逐题回顾</p>
           <div className="space-y-2">
             {question_results.map((qr, i) => (
               <div key={qr.question_id}
                 className={`p-3 rounded-lg border ${
                   qr.is_correct
-                    ? "border-green-500/20 bg-green-500/5"
-                    : "border-red-500/20 bg-red-500/5"
+                    ? "border-success/20 bg-success/5"
+                    : "border-danger/20 bg-danger/5"
                 }`}>
                 <div className="flex items-start gap-2">
                   <span className={`flex-shrink-0 w-5 h-5 flex items-center justify-center rounded-full text-[9px] font-medium ${
-                    qr.is_correct ? "bg-green-500/20 text-green-600" : "bg-red-500/20 text-red-500"
+                    qr.is_correct ? "bg-success/20 text-success" : "bg-danger/20 text-danger"
                   }`}>
                     {qr.is_correct ? <Check size={10} /> : <X size={10} />}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[11px] text-[var(--color-text)] leading-relaxed">
-                      <span className="text-[9px] text-[var(--color-text-muted)] mr-1">#{i + 1}</span>
+                    <div className="text-[11px] text leading-relaxed">
+                      <span className="text-[9px] text-muted mr-1">#{i + 1}</span>
                       <QuestionStem stem={qr.stem} className="text-sm leading-relaxed" />
                     </div>
-                    <div className="flex items-center gap-2 mt-1 text-[9px] text-[var(--color-text-muted)] flex-wrap">
+                    <div className="flex items-center gap-2 mt-1 text-[9px] text-muted flex-wrap">
                       <span>你的答案: {Array.isArray(qr.user_answer) ? qr.user_answer.join(", ") || "未答" : "未答"}</span>
                       {!qr.is_correct && (
-                        <span className="text-green-600">
+                        <span className="text-success">
                           正确答案: {Array.isArray(qr.correct_answer) ? qr.correct_answer.join(", ") : ""}
                         </span>
                       )}
                     </div>
                     {qr.analysis && !qr.is_correct && (
-                      <p className="text-[9px] text-[var(--color-text-muted)] mt-1 leading-relaxed">
+                      <p className="text-[9px] text-muted mt-1 leading-relaxed">
                         {qr.analysis}
                       </p>
                     )}
@@ -798,13 +798,13 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
         <div className="flex gap-3 mb-8">
           <button onClick={handleRetry}
             data-testid="exam-retry-btn"
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-[var(--color-border)]/50 text-sm text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-all">
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border/50 text-sm text hover:bg-surface transition-all">
             <Brain size={14} />再来一次
           </button>
           {onClose && (
             <button onClick={onClose}
               data-testid="exam-back-btn"
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity">
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-accent text-white text-sm font-medium hover:opacity-90 transition-opacity">
               <BarChart3 size={14} />返回
             </button>
           )}
@@ -817,8 +817,8 @@ export default function ExamPanel({ bankId, bankName, nodeId, nodeLabel, onClose
   if (phase === "submitting") {
     return (
       <div className="flex flex-col items-center justify-center h-full">
-        <Loader2 size={24} className="animate-spin text-red-500 mb-3" />
-        <p className="text-xs text-[var(--color-text-muted)]">正在批卷...</p>
+        <Loader2 size={24} className="animate-spin text-danger mb-3" />
+        <p className="text-xs text-muted">正在批卷...</p>
       </div>
     );
   }

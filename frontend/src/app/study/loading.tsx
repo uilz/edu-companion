@@ -14,7 +14,7 @@ export default function Loading() {
     // 全屏居中容器，确保加载图标位于视口中央
     <div className="min-h-screen flex items-center justify-center">
       {/* 旋转加载图标 - 使用主题色 */}
-      <Loader2 size={24} className="animate-spin text-[var(--color-text-muted)]" />
+      <Loader2 size={24} className="animate-spin text-muted" />
     </div>
   );
 }

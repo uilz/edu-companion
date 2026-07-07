@@ -20,7 +20,7 @@ export function DroppableColumn({
   id,
   children,
   className = "",
-  activeClassName = "ring-2 ring-[var(--color-accent)] ring-offset-2 ring-offset-page",
+  activeClassName = "ring-2 ring-accent ring-offset-2 ring-offset-page",
 }: DroppableColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (

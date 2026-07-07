@@ -22,39 +22,39 @@ export default function ExplainModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-      <div className="w-full max-w-lg mx-4 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-xl">
+      <div className="w-full max-w-lg mx-4 bg-surface border border rounded-xl shadow-xl">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
+        <div className="flex items-center justify-between px-4 py-3 border-b border">
           <div className="flex items-center gap-2">
-            <Lightbulb size={16} className="text-[var(--color-accent)]" />
+            <Lightbulb size={16} className="text-accent" />
             <span className="text-sm font-medium">用自己的话解释</span>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded hover:bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]"
+            className="p-1 rounded hover:bg-surface-hover text-muted"
           >
             <X size={14} />
           </button>
         </div>
 
         {/* Selected text */}
-        <div className="px-4 py-3 bg-[var(--color-accent)]/5 border-b border-[var(--color-border)]/50">
-          <p className="text-xs text-[var(--color-text-muted)] mb-1">原文：</p>
-          <p className="text-sm text-[var(--color-text)] italic leading-relaxed">
+        <div className="px-4 py-3 bg-accent/5 border-b border/50">
+          <p className="text-xs text-muted mb-1">原文：</p>
+          <p className="text-sm text italic leading-relaxed">
             &ldquo;{originalText}&rdquo;
           </p>
         </div>
 
         {/* Input area */}
         <div className="px-4 py-3">
-          <p className="text-xs text-[var(--color-text-muted)] mb-2">
+          <p className="text-xs text-muted mb-2">
             试着用自己的话重新解释上面这段内容。这能帮助你检查是否真正理解了。
           </p>
           <textarea
             value={explanation}
             onChange={(e) => setExplanation(e.target.value)}
             placeholder="输入你的理解..."
-            className="w-full h-28 px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] resize-none focus:outline-none focus:border-[var(--color-accent)] focus:ring-1 focus:ring-[var(--color-accent)]/30 transition-colors"
+            className="w-full h-28 px-3 py-2 text-sm rounded-lg border border bg-page resize-none focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
             autoFocus
           />
           <div className="flex justify-end mt-2">
@@ -67,7 +67,7 @@ export default function ExplainModal({
                 }
               }}
               disabled={!explanation.trim()}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
             >
               <Send size={12} />
               保存

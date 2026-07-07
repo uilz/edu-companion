@@ -93,7 +93,7 @@ export default function PanelHeader({
         <button
           onClick={onClose}
           aria-label={`关闭 ${title}`}
-          className="shrink-0 p-1 rounded text-ink-muted hover:text-red-500 hover:bg-red-500/10 transition-colors"
+          className="shrink-0 p-1 rounded text-ink-muted hover:text-danger hover:bg-danger/10 transition-colors"
         >
           <X size={14} />
         </button>

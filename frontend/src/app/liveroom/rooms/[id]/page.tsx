@@ -22,6 +22,7 @@ import {
   liveroomService,
   LanguageRoom, RoomParticipant, RoomTranscript, RoomScenario,
   AIPersona, InvasivenessConfig, RoomMessage, HelperType, MessageType,
+  InvasivenessLevel, CorrectionTendency,
   HELPER_TYPE_LABELS, INVASIVENESS_LABELS, CORRECTION_TENDENCY_LABELS,
 } from "@/lib/api/liveroom-api";
 
@@ -33,7 +34,7 @@ export default function RoomDetailPage() {
   const [room, setRoom] = useState<LanguageRoom | null>(null);
   const [participants, setParticipants] = useState<RoomParticipant[]>([]);
   const [transcripts, setTranscripts] = useState<RoomTranscript[]>([]);
-  const [messages, setMessages] = useState<any[]>([]);
+  const [messages, setMessages] = useState<RoomMessage[]>([]);
   const [scenarios, setScenarios] = useState<RoomScenario[]>([]);
   const [personas, setPersonas] = useState<AIPersona[]>([]);
   const [helperConfig, setHelperConfig] = useState<InvasivenessConfig | null>(null);
@@ -53,8 +54,8 @@ export default function RoomDetailPage() {
     try {
       const r = await liveroomService.getRoom(roomId);
       setRoom(r);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "加载失败");
     }
   }, [roomId]);
 
@@ -130,11 +131,11 @@ export default function RoomDetailPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <AlertCircle size={28} className="mx-auto text-red-500 mb-2" />
-          <div className="text-sm text-red-600">{error || "房间不存在"}</div>
+          <AlertCircle size={28} className="mx-auto text-danger mb-2" />
+          <div className="text-sm text-danger">{error || "房间不存在"}</div>
           <button
             onClick={() => router.push("/liveroom")}
-            className="mt-3 text-xs text-emerald-600 hover:underline"
+            className="mt-3 text-xs text-success hover:underline"
           >
             返回房间列表
           </button>
@@ -146,7 +147,7 @@ export default function RoomDetailPage() {
   const isOwner = room.owner_id === (typeof window !== "undefined" ? localStorage.getItem("current_user_id") || "" : "");
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)]">
+    <div className="min-h-screen bg-page">
       <div className="max-w-7xl mx-auto px-4 py-4 sm:py-6">
         {/* 顶部 */}
         <RoomHeader
@@ -167,7 +168,7 @@ export default function RoomDetailPage() {
 
         {/* 错误提示 */}
         {error && (
-          <div className="mb-4 px-4 py-3 border border-red-300 bg-red-50 text-sm text-red-700 rounded flex items-center gap-2">
+          <div className="mb-4 px-4 py-3 border border-danger/30 bg-danger/10 text-sm text-danger rounded flex items-center gap-2">
             <AlertCircle size={15} /> {error}
           </div>
         )}
@@ -187,8 +188,8 @@ export default function RoomDetailPage() {
                     error_type: errorType,
                   });
                   await loadTranscripts();
-                } catch (e: any) {
-                  alert(e.message);
+                } catch (e: unknown) {
+                  alert(e instanceof Error ? e.message : "操作失败");
                 }
               }}
               onCaptureVocab={async (transcriptId, text) => {
@@ -198,8 +199,8 @@ export default function RoomDetailPage() {
                     transcript_id: transcriptId,
                   });
                   await loadTranscripts();
-                } catch (e: any) {
-                  alert(e.message);
+                } catch (e: unknown) {
+                  alert(e instanceof Error ? e.message : "操作失败");
                 }
               }}
             />
@@ -271,16 +272,16 @@ export default function RoomDetailPage() {
                   try {
                     await liveroomService.muteParticipant(roomId, userId, muted);
                     await loadParticipants();
-                  } catch (e: any) {
-                    alert(e.message);
+                  } catch (e: unknown) {
+                    alert(e instanceof Error ? e.message : "操作失败");
                   }
                 }}
                 onAddPersona={async (personaId) => {
                   try {
                     await liveroomService.addAIPersona(roomId, personaId);
                     await loadParticipants();
-                  } catch (e: any) {
-                    alert(e.message);
+                  } catch (e: unknown) {
+                    alert(e instanceof Error ? e.message : "操作失败");
                   }
                 }}
                 personas={personas}
@@ -345,39 +346,39 @@ function RoomHeader({
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
       <div>
-        <h1 className="text-xl font-semibold text-[var(--color-text)] flex items-center gap-2">
+        <h1 className="text-xl font-semibold text flex items-center gap-2">
           <Volume2 size={20} />
           {room.name}
         </h1>
-        <div className="text-xs text-[var(--color-text-muted)] mt-0.5 flex items-center gap-2 flex-wrap">
+        <div className="text-xs text-muted mt-0.5 flex items-center gap-2 flex-wrap">
           <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-            room.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"
+            room.status === "active" ? "bg-success/20 text-success" : "bg-surface text-muted"
           }`}>
             {room.status === "active" ? "进行中" : "已结束"}
           </span>
           <span>· {room.participant_count}/{room.max_participants} 人</span>
           {room.is_recording_enabled && <span>· 录音开启</span>}
-          {isOwner && <span className="text-emerald-600">· 你是房主</span>}
+          {isOwner && <span className="text-success">· 你是房主</span>}
         </div>
       </div>
       <div className="flex items-center gap-2">
         <button
           onClick={onReview}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[var(--color-border)] rounded-md hover:bg-[var(--color-card)]"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border border rounded-md hover:bg-surface"
         >
           <History size={13} /> 会话回顾
         </button>
         {isOwner && room.status === "active" && (
           <button
             onClick={onEnd}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border border-red-300 text-red-600 rounded-md hover:bg-red-50"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border border-danger/30 text-danger rounded-md hover:bg-danger/10"
           >
             结束房间
           </button>
         )}
         <button
           onClick={onLeave}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[var(--color-border)] rounded-md hover:bg-[var(--color-card)]"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border border rounded-md hover:bg-surface"
         >
           <X size={13} /> 退出
         </button>
@@ -396,19 +397,19 @@ function TranscriptPanel({
   onCaptureVocab: (transcriptId: string, text: string) => void;
 }) {
   return (
-    <div className="border border-[var(--color-border)] bg-[var(--color-card)] rounded-lg overflow-hidden">
-      <div className="px-4 py-2 border-b border-[var(--color-border)] flex items-center justify-between">
+    <div className="border border bg-surface rounded-lg overflow-hidden">
+      <div className="px-4 py-2 border-b border flex items-center justify-between">
         <div className="text-sm font-medium flex items-center gap-1.5">
           <Volume2 size={14} /> 实时转写
         </div>
-        <div className="text-xs text-[var(--color-text-muted)]">{transcripts.length} 段</div>
+        <div className="text-xs text-muted">{transcripts.length} 段</div>
       </div>
       <div
         ref={transcriptRef}
         className="h-96 overflow-y-auto p-3 space-y-2"
       >
         {transcripts.length === 0 && (
-          <div className="text-center text-xs text-[var(--color-text-muted)] py-10">
+          <div className="text-center text-xs text-muted py-10">
             暂无转写。LiveKit 推流后将自动显示。
           </div>
         )}
@@ -419,36 +420,36 @@ function TranscriptPanel({
               key={t.id}
               className={`text-sm px-3 py-2 rounded-md border ${
                 t.is_error
-                  ? "border-red-200 bg-red-50"
-                  : "border-[var(--color-border)] bg-[var(--color-bg)]"
+                  ? "border-danger/20 bg-danger/10"
+                  : "border bg-page"
               }`}
             >
               <div className="flex items-center justify-between gap-2 mb-1">
-                <div className="text-[10px] font-mono text-[var(--color-text-muted)]">
+                <div className="text-[10px] font-mono text-muted">
                   {p?.role_label || p?.user_id?.slice(0, 8) || "匿名"}
                   {t.language && <span className="ml-1.5">[{t.language}]</span>}
                 </div>
-                <div className="text-[10px] text-[var(--color-text-muted)]">
+                <div className="text-[10px] text-muted">
                   {t.started_at ? new Date(t.started_at).toLocaleTimeString("zh-CN", { hour12: false }) : ""}
                 </div>
               </div>
-              <div className="text-[var(--color-text)]">{t.text}</div>
+              <div className="text">{t.text}</div>
               <div className="mt-1.5 flex items-center gap-1 flex-wrap">
                 <button
                   onClick={() => onMarkError(t.id, "grammar")}
-                  className="text-[10px] px-1.5 py-0.5 border border-red-200 text-red-600 rounded hover:bg-red-50"
+                  className="text-[10px] px-1.5 py-0.5 border border-danger/20 text-danger rounded hover:bg-danger/10"
                 >
                   标为语法错误
                 </button>
                 <button
                   onClick={() => onMarkError(t.id, "vocabulary")}
-                  className="text-[10px] px-1.5 py-0.5 border border-orange-200 text-orange-600 rounded hover:bg-orange-50"
+                  className="text-[10px] px-1.5 py-0.5 border border-warning/20 text-warning rounded hover:bg-warning/10"
                 >
                   词汇
                 </button>
                 <button
                   onClick={() => onCaptureVocab(t.id, t.text.slice(0, 30))}
-                  className="text-[10px] px-1.5 py-0.5 border border-emerald-200 text-emerald-600 rounded hover:bg-emerald-50"
+                  className="text-[10px] px-1.5 py-0.5 border border-success/20 text-success rounded hover:bg-success/10"
                 >
                   <Plus size={9} className="inline" /> 词汇便签
                 </button>
@@ -479,8 +480,8 @@ function VoiceRoomPanel({
   }, [roomId]);
 
   return (
-    <div className="border border-[var(--color-border)] bg-[var(--color-card)] rounded-lg overflow-hidden">
-      <div className="px-4 py-2 border-b border-[var(--color-border)] flex items-center justify-between">
+    <div className="border border bg-surface rounded-lg overflow-hidden">
+      <div className="px-4 py-2 border-b border flex items-center justify-between">
         <div className="text-sm font-medium flex items-center gap-1.5">
           <Mic size={14} /> 语音房间
         </div>
@@ -488,8 +489,8 @@ function VoiceRoomPanel({
           onClick={onToggleRecording}
           className={`text-[10px] px-2 py-0.5 rounded ${
             isRecording
-              ? "bg-red-100 text-red-600"
-              : "border border-[var(--color-border)] text-[var(--color-text-muted)]"
+              ? "bg-danger/20 text-danger"
+              : "border border text-muted"
           }`}
         >
           {isRecording ? "● 录音中" : "开始录音"}
@@ -497,10 +498,10 @@ function VoiceRoomPanel({
       </div>
       <div className="p-4">
         {/* LiveKit 占位区 (实际集成 LiveKit React SDK) */}
-        <div className="aspect-video rounded-md border-2 border-dashed border-[var(--color-border)] flex items-center justify-center text-xs text-[var(--color-text-muted)] bg-[var(--color-bg)]">
+        <div className="aspect-video rounded-md border-2 border-dashed border flex items-center justify-center text-xs text-muted bg-page">
           {token ? (
             <div className="text-center">
-              <Mic size={28} className="mx-auto mb-2 text-emerald-500" />
+              <Mic size={28} className="mx-auto mb-2 text-success" />
               <div>LiveKit 已连接</div>
               <div className="text-[10px] mt-1 opacity-70">{tokenUrl}</div>
               <div className="text-[10px] opacity-50">({participants.length} 人在线)</div>
@@ -512,7 +513,7 @@ function VoiceRoomPanel({
             </div>
           )}
         </div>
-        <div className="mt-3 text-[10px] text-[var(--color-text-muted)] text-center">
+        <div className="mt-3 text-[10px] text-muted text-center">
           注: 完整 LiveKit SDK 集成需要前端安装 @livekit/components-react
         </div>
       </div>
@@ -530,8 +531,8 @@ function ScenarioPanel({
 }) {
   const current = scenarios.find((s) => s.id === room.scenario_id);
   return (
-    <div className="border border-[var(--color-border)] bg-[var(--color-card)] rounded-lg overflow-hidden">
-      <div className="px-4 py-2 border-b border-[var(--color-border)]">
+    <div className="border border bg-surface rounded-lg overflow-hidden">
+      <div className="px-4 py-2 border-b border">
         <div className="text-sm font-medium flex items-center gap-1.5">
           <ScrollText size={14} /> 场景提示
         </div>
@@ -541,12 +542,12 @@ function ScenarioPanel({
           <div>
             <div className="text-sm font-medium">{current.name}</div>
             {current.prompt_text && (
-              <div className="mt-1.5 text-xs px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded">
+              <div className="mt-1.5 text-xs px-2.5 py-1.5 bg-success/10 border border-success/20 text-success rounded">
                 {current.prompt_text}
               </div>
             )}
             {current.target_goals?.length > 0 && (
-              <ul className="mt-2 space-y-0.5 text-xs text-[var(--color-text-muted)]">
+              <ul className="mt-2 space-y-0.5 text-xs text-muted">
                 {current.target_goals.map((g, i) => (
                   <li key={i} className="flex items-start gap-1">
                     <span>• {g}</span>
@@ -556,15 +557,15 @@ function ScenarioPanel({
             )}
           </div>
         ) : (
-          <div className="text-xs text-[var(--color-text-muted)] text-center py-2">
+          <div className="text-xs text-muted text-center py-2">
             未选择场景
           </div>
         )}
         {isOwner && scenarios.length > 0 && (
-          <div className="mt-3 border-t border-[var(--color-border)] pt-2">
+          <div className="mt-3 border-t border pt-2">
             <select
               onChange={(e) => e.target.value && onChangeScenario(e.target.value)}
-              className="w-full text-xs border border-[var(--color-border)] rounded px-2 py-1.5 bg-[var(--color-bg)]"
+              className="w-full text-xs border border rounded px-2 py-1.5 bg-page"
               defaultValue=""
             >
               <option value="" disabled>切换场景...</option>
@@ -593,8 +594,8 @@ function ToggleButton({
       onClick={onClick}
       className={`w-full flex items-center justify-between px-3 py-2 border rounded-md text-sm ${
         active
-          ? "bg-emerald-50 border-emerald-300 text-emerald-700"
-          : "border-[var(--color-border)] bg-[var(--color-card)] hover:bg-[var(--color-surface-2)]"
+          ? "bg-success/10 border-success/30 text-success"
+          : "border bg-surface hover:bg-surface-hover"
       }`}
     >
       <div className="flex items-center gap-1.5">
@@ -602,7 +603,7 @@ function ToggleButton({
         {label}
       </div>
       {count !== undefined && (
-        <span className="text-[10px] px-1.5 py-0.5 bg-white border border-[var(--color-border)] rounded">
+        <span className="text-[10px] px-1.5 py-0.5 bg-white border border rounded">
           {count}
         </span>
       )}
@@ -620,26 +621,26 @@ function ParticipantPanel({
   personas: AIPersona[];
 }) {
   return (
-    <div className="border border-[var(--color-border)] bg-[var(--color-card)] rounded-lg p-3 space-y-2">
-      <div className="text-xs font-medium text-[var(--color-text-muted)]">参与者</div>
+    <div className="border border bg-surface rounded-lg p-3 space-y-2">
+      <div className="text-xs font-medium text-muted">参与者</div>
       {participants.filter((p) => !p.left_at).map((p) => (
-        <div key={p.id} className="flex items-center justify-between px-2 py-1.5 border border-[var(--color-border)] rounded text-xs">
+        <div key={p.id} className="flex items-center justify-between px-2 py-1.5 border border rounded text-xs">
           <div className="flex items-center gap-1.5 min-w-0">
             {p.participant_type === "ai_companion" ? (
-              <Sparkles size={11} className="text-purple-500 flex-shrink-0" />
+              <Sparkles size={11} className="text-accent flex-shrink-0" />
             ) : (
-              <Users size={11} className="text-emerald-500 flex-shrink-0" />
+              <Users size={11} className="text-success flex-shrink-0" />
             )}
             <div className="truncate">
               {p.role_label || p.user_id.slice(0, 8)}
-              {p.is_owner && <span className="ml-1 text-emerald-600 text-[9px]">房主</span>}
+              {p.is_owner && <span className="ml-1 text-success text-[9px]">房主</span>}
             </div>
-            {p.is_muted && <MicOff size={10} className="text-red-500" />}
+            {p.is_muted && <MicOff size={10} className="text-danger" />}
           </div>
           {isOwner && p.participant_type === "human" && !p.is_owner && (
             <button
               onClick={() => onMute(p.user_id, !p.is_muted)}
-              className="text-[10px] text-[var(--color-text-muted)] hover:text-red-500"
+              className="text-[10px] text-muted hover:text-danger"
             >
               {p.is_muted ? "解除" : "静音"}
             </button>
@@ -647,17 +648,17 @@ function ParticipantPanel({
         </div>
       ))}
       {isOwner && personas.length > 0 && (
-        <div className="pt-2 border-t border-[var(--color-border)]">
-          <div className="text-[10px] text-[var(--color-text-muted)] mb-1.5">邀请 AI 角色</div>
+        <div className="pt-2 border-t border">
+          <div className="text-[10px] text-muted mb-1.5">邀请 AI 角色</div>
           <div className="space-y-1 max-h-32 overflow-y-auto">
             {personas.slice(0, 5).map((p) => (
               <button
                 key={p.id}
                 onClick={() => onAddPersona(p.id)}
-                className="w-full text-left px-2 py-1 border border-purple-200 rounded text-[10px] hover:bg-purple-50"
+                className="w-full text-left px-2 py-1 border border-accent/20 rounded text-[10px] hover:bg-accent/10"
               >
-                <Sparkles size={9} className="inline text-purple-500" /> {p.name}
-                <span className="text-[var(--color-text-muted)] ml-1">({p.target_language})</span>
+                <Sparkles size={9} className="inline text-accent" /> {p.name}
+                <span className="text-muted ml-1">({p.target_language})</span>
               </button>
             ))}
           </div>
@@ -681,16 +682,16 @@ function HelperPanel({
 
   if (!config) {
     return (
-      <div className="border border-[var(--color-border)] bg-[var(--color-card)] rounded-lg p-3 text-xs text-center text-[var(--color-text-muted)]">
+      <div className="border border bg-surface rounded-lg p-3 text-xs text-center text-muted">
         加载配置中...
       </div>
     );
   }
 
   return (
-    <div className="border border-[var(--color-border)] bg-[var(--color-card)] rounded-lg p-3 space-y-2">
+    <div className="border border bg-surface rounded-lg p-3 space-y-2">
       <div className="text-xs font-medium">AI 辅助配置（用户主动）</div>
-      <div className="text-[10px] text-[var(--color-text-muted)]">
+      <div className="text-[10px] text-muted">
         关键设计: AI 纠错 = 用户主动选择, 非 AI 评判
       </div>
       <div className="space-y-1.5">
@@ -698,8 +699,8 @@ function HelperPanel({
           <span>侵入度</span>
           <select
             value={config.invasiveness_level}
-            onChange={(e) => onUpdate({ invasiveness_level: e.target.value as any })}
-            className="text-[10px] border border-[var(--color-border)] rounded px-1.5 py-0.5"
+            onChange={(e) => onUpdate({ invasiveness_level: e.target.value as InvasivenessLevel })}
+            className="text-[10px] border border rounded px-1.5 py-0.5"
           >
             {(["low", "medium", "high"] as const).map((l) => (
               <option key={l} value={l}>{INVASIVENESS_LABELS[l]}</option>
@@ -710,8 +711,8 @@ function HelperPanel({
           <span>纠错倾向</span>
           <select
             value={config.correction_tendency}
-            onChange={(e) => onUpdate({ correction_tendency: e.target.value as any })}
-            className="text-[10px] border border-[var(--color-border)] rounded px-1.5 py-0.5"
+            onChange={(e) => onUpdate({ correction_tendency: e.target.value as CorrectionTendency })}
+            className="text-[10px] border border rounded px-1.5 py-0.5"
           >
             {(["none", "occasional", "proactive"] as const).map((l) => (
               <option key={l} value={l}>{CORRECTION_TENDENCY_LABELS[l]}</option>
@@ -719,12 +720,12 @@ function HelperPanel({
           </select>
         </div>
       </div>
-      <div className="pt-2 border-t border-[var(--color-border)] space-y-1.5">
-        <div className="text-[10px] text-[var(--color-text-muted)]">召唤辅助者</div>
+      <div className="pt-2 border-t border space-y-1.5">
+        <div className="text-[10px] text-muted">召唤辅助者</div>
         <select
           value={helperType}
           onChange={(e) => setHelperType(e.target.value as HelperType)}
-          className="w-full text-[10px] border border-[var(--color-border)] rounded px-1.5 py-1"
+          className="w-full text-[10px] border border rounded px-1.5 py-1"
         >
           {(["grammar", "vocabulary", "sentence_pattern"] as const).map((t) => (
             <option key={t} value={t}>{HELPER_TYPE_LABELS[t]}</option>
@@ -734,7 +735,7 @@ function HelperPanel({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="提问..."
-          className="w-full text-[10px] border border-[var(--color-border)] rounded px-1.5 py-1 bg-[var(--color-bg)]"
+          className="w-full text-[10px] border border rounded px-1.5 py-1 bg-page"
         />
         <button
           onClick={async () => {
@@ -743,19 +744,19 @@ function HelperPanel({
             try {
               const r = await onInvoke(helperType, query);
               setResponse(r.response);
-            } catch (e: any) {
-              setResponse(`错误: ${e.message}`);
+            } catch (e: unknown) {
+              setResponse(`错误: ${e instanceof Error ? e.message : "未知错误"}`);
             } finally {
               setLoading(false);
             }
           }}
           disabled={loading || !query.trim()}
-          className="w-full text-[10px] py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50"
+          className="w-full text-[10px] py-1 bg-success text-white rounded hover:bg-success disabled:opacity-50"
         >
           {loading ? <Loader2 size={10} className="inline animate-spin" /> : "召唤"}
         </button>
         {response && (
-          <div className="text-[10px] px-2 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 rounded">
+          <div className="text-[10px] px-2 py-1.5 bg-info/10 border border-info/20 text-info rounded">
             {response}
           </div>
         )}
@@ -773,22 +774,22 @@ function VocabPanel({
   const [word, setWord] = useState("");
   const [translation, setTranslation] = useState("");
   return (
-    <div className="border border-[var(--color-border)] bg-[var(--color-card)] rounded-lg p-3 space-y-1.5">
+    <div className="border border bg-surface rounded-lg p-3 space-y-1.5">
       <div className="text-xs font-medium">词汇便签</div>
-      <div className="text-[10px] text-[var(--color-text-muted)]">
+      <div className="text-[10px] text-muted">
         复用 FlashCard 数据卡 (cross_module_source=language_room)
       </div>
       <input
         value={word}
         onChange={(e) => setWord(e.target.value)}
         placeholder="单词"
-        className="w-full text-xs border border-[var(--color-border)] rounded px-2 py-1 bg-[var(--color-bg)]"
+        className="w-full text-xs border border rounded px-2 py-1 bg-page"
       />
       <input
         value={translation}
         onChange={(e) => setTranslation(e.target.value)}
         placeholder="翻译"
-        className="w-full text-xs border border-[var(--color-border)] rounded px-2 py-1 bg-[var(--color-bg)]"
+        className="w-full text-xs border border rounded px-2 py-1 bg-page"
       />
       <button
         onClick={async () => {
@@ -796,7 +797,7 @@ function VocabPanel({
           await onCapture(word, translation, "");
           setWord(""); setTranslation("");
         }}
-        className="w-full text-xs py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700"
+        className="w-full text-xs py-1 bg-success text-white rounded hover:bg-success"
       >
         <Plus size={11} className="inline" /> 添加
       </button>
@@ -807,21 +808,21 @@ function VocabPanel({
 function MessagePanel({
   messages, onPost,
 }: {
-  messages: any[];
+  messages: RoomMessage[];
   onPost: (text: string, type: MessageType) => Promise<void>;
 }) {
   const [text, setText] = useState("");
   const [type, setType] = useState<MessageType>("text");
   return (
-    <div className="border border-[var(--color-border)] bg-[var(--color-card)] rounded-lg p-3 space-y-1.5">
+    <div className="border border bg-surface rounded-lg p-3 space-y-1.5">
       <div className="text-xs font-medium">文字辅助</div>
-      <div className="text-[10px] text-[var(--color-text-muted)]">
+      <div className="text-[10px] text-muted">
         复用 ExplainCard 浮卡
       </div>
       <select
         value={type}
         onChange={(e) => setType(e.target.value as MessageType)}
-        className="w-full text-[10px] border border-[var(--color-border)] rounded px-1.5 py-1"
+        className="w-full text-[10px] border border rounded px-1.5 py-1"
       >
         <option value="text">文本</option>
         <option value="link">链接</option>
@@ -832,7 +833,7 @@ function MessagePanel({
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder="补充说明..."
-        className="w-full text-xs border border-[var(--color-border)] rounded px-2 py-1 bg-[var(--color-bg)] h-16 resize-none"
+        className="w-full text-xs border border rounded px-2 py-1 bg-page h-16 resize-none"
       />
       <button
         onClick={async () => {
@@ -840,14 +841,14 @@ function MessagePanel({
           await onPost(text, type);
           setText("");
         }}
-        className="w-full text-xs py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700"
+        className="w-full text-xs py-1 bg-success text-white rounded hover:bg-success"
       >
         <Send size={11} className="inline" /> 发送
       </button>
       <div className="space-y-1 max-h-24 overflow-y-auto">
         {messages.slice(0, 5).map((m) => (
-          <div key={m.id} className="text-[10px] px-1.5 py-1 bg-blue-50 border border-blue-200 rounded">
-            <span className="text-[9px] text-blue-600">[{m.message_type || "text"}]</span> {m.content || m.text}
+          <div key={m.id} className="text-[10px] px-1.5 py-1 bg-info/10 border border-info/20 rounded">
+            <span className="text-[9px] text-info">[{m.message_type || "text"}]</span> {m.content || m.text}
           </div>
         ))}
       </div>

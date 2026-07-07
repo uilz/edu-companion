@@ -60,22 +60,22 @@ export default function FocusMode({
   return (
     <>
       {/* Backdrop dim + focus wrapper */}
-      <div className="fixed inset-0 z-40 flex flex-col bg-[var(--color-bg)]/95 backdrop-blur-sm">
+      <div className="fixed inset-0 z-40 flex flex-col bg-page/95 backdrop-blur-sm">
         {/* Top bar: minimal controls */}
-        <div className="flex items-center justify-between px-6 py-3 border-b border-[var(--color-border)]/20">
+        <div className="flex items-center justify-between px-6 py-3 border-b border/20">
           {/* Left: topic indicator */}
           <div className="flex items-center gap-3">
             {currentTopic && (
               <div className="flex items-center gap-2">
-                <Brain size={16} className="text-[var(--color-accent)]" />
-                <span className="text-sm font-medium text-[var(--color-text)]">
+                <Brain size={16} className="text-accent" />
+                <span className="text-sm font-medium text">
                   {currentTopic}
                 </span>
               </div>
             )}
 
             {/* Mini cognitive load indicator */}
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-[var(--color-surface-hover)]/50">
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-hover/50">
               <div className="flex gap-0.5">
                 {[1, 2, 3, 4].map((i) => (
                   <div
@@ -89,7 +89,7 @@ export default function FocusMode({
                   />
                 ))}
               </div>
-              <span className="text-[10px] text-[var(--color-text-muted)] ml-1">
+              <span className="text-[10px] text-muted ml-1">
                 负荷{loadLevel}
               </span>
             </div>
@@ -100,7 +100,7 @@ export default function FocusMode({
             {currentGoal && (
               <button
                 onClick={() => setShowGoal(!showGoal)}
-                className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)]/50 transition-colors"
+                className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-muted hover:text hover:bg-surface-hover/50 transition-colors"
               >
                 <span className="max-w-[160px] truncate">{currentGoal}</span>
                 <ChevronDown
@@ -112,7 +112,7 @@ export default function FocusMode({
 
             <button
               onClick={onExit}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)]/60 border border-[var(--color-border)]/30 hover:border-[var(--color-border)]/60 transition-all opacity-60 hover:opacity-100"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs text-muted hover:text hover:bg-surface-hover/60 border border/30 hover:border/60 transition-all opacity-60 hover:opacity-100"
             >
               <X size={12} />
               退出专注
@@ -122,11 +122,11 @@ export default function FocusMode({
 
         {/* Goal bar (expandable) */}
         {currentGoal && showGoal && (
-          <div className="flex items-center justify-center px-6 py-2 bg-[var(--color-accent)]/5 border-b border-[var(--color-border)]/10">
-            <div className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)] animate-pulse" />
+          <div className="flex items-center justify-center px-6 py-2 bg-accent/5 border-b border/10">
+            <div className="flex items-center gap-2 text-xs text-muted">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
               <span>当前目标：</span>
-              <span className="font-medium text-[var(--color-text)]">{currentGoal}</span>
+              <span className="font-medium text">{currentGoal}</span>
             </div>
           </div>
         )}
@@ -134,20 +134,20 @@ export default function FocusMode({
         {/* Main content: focused conversation */}
         <div className="flex-1 overflow-y-auto px-6 py-4 max-w-3xl mx-auto w-full">
           {/* Socratic emphasis indicator */}
-          <div className="flex items-center gap-2 mb-4 text-[11px] text-[var(--color-accent)]/70">
+          <div className="flex items-center gap-2 mb-4 text-[11px] text-accent/70">
             <Focus size={12} />
             <span>苏格拉底模式 · 试着先自己思考，再与AI对话</span>
           </div>
 
           {children || (
             <div className="flex flex-col items-center justify-center h-full text-center">
-              <div className="w-16 h-16 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center mb-4">
-                <Focus size={28} className="text-[var(--color-accent)]" />
+              <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mb-4">
+                <Focus size={28} className="text-accent" />
               </div>
-              <p className="text-sm text-[var(--color-text-muted)]">
+              <p className="text-sm text-muted">
                 选择一个知识点，开始专注学习
               </p>
-              <p className="text-xs text-[var(--color-text-muted)] mt-1 opacity-60">
+              <p className="text-xs text-muted mt-1 opacity-60">
                 在专注模式下，系统会引导你通过提问和思考来深入理解
               </p>
             </div>
@@ -155,12 +155,12 @@ export default function FocusMode({
         </div>
 
         {/* Bottom: minimal input area hint */}
-        <div className="px-6 py-3 border-t border-[var(--color-border)]/20">
+        <div className="px-6 py-3 border-t border/20">
           <div className="max-w-3xl mx-auto flex items-center gap-3">
-            <div className="flex-1 h-9 rounded-lg border border-[var(--color-border)]/40 bg-[var(--color-surface)]/50 flex items-center px-3 text-xs text-[var(--color-text-muted)] opacity-60">
+            <div className="flex-1 h-9 rounded-lg border border/40 bg-surface/50 flex items-center px-3 text-xs text-muted opacity-60">
               在此输入你的问题或思考...
             </div>
-            <button className="p-2 rounded-lg bg-[var(--color-accent)]/10 text-[var(--color-accent)] hover:bg-[var(--color-accent)]/20 transition-colors">
+            <button className="p-2 rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition-colors">
               <Volume2 size={14} />
             </button>
           </div>

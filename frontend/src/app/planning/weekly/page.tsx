@@ -35,33 +35,33 @@ export default function WeeklyPage() {
     : 1;
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)]">
+    <div className="min-h-screen bg-page">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-semibold text-[var(--color-text)] tracking-tight flex items-center gap-2">
+            <h1 className="text-2xl font-semibold text tracking-tight flex items-center gap-2">
               <BarChart3 size={20} /> 周视图
             </h1>
-            <p className="text-sm text-[var(--color-text-muted)] mt-1">
+            <p className="text-sm text-muted mt-1">
               {data ? `${data.week_start} 至 ${data.week_end}` : "加载中…"}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setWeekStart((w) => addDays(w, -7))}
-              className="inline-flex items-center gap-1 px-3 py-2 text-sm border border-[var(--color-border)] hover:bg-[var(--color-card)]"
+              className="inline-flex items-center gap-1 px-3 py-2 text-sm border border hover:bg-surface"
             >
               <ChevronLeft size={14} /> 上一周
             </button>
             <button
               onClick={() => setWeekStart(getWeekStart(new Date()))}
-              className="px-3 py-2 text-sm border border-[var(--color-border)] hover:bg-[var(--color-card)]"
+              className="px-3 py-2 text-sm border border hover:bg-surface"
             >
               本周
             </button>
             <button
               onClick={() => setWeekStart((w) => addDays(w, 7))}
-              className="inline-flex items-center gap-1 px-3 py-2 text-sm border border-[var(--color-border)] hover:bg-[var(--color-card)]"
+              className="inline-flex items-center gap-1 px-3 py-2 text-sm border border hover:bg-surface"
             >
               下一周 <ChevronRight size={14} />
             </button>
@@ -70,7 +70,7 @@ export default function WeeklyPage() {
 
         {loading && (
           <div className="flex items-center justify-center py-16">
-            <Loader2 size={24} className="animate-spin text-[var(--color-text-muted)]" />
+            <Loader2 size={24} className="animate-spin text-muted" />
           </div>
         )}
 
@@ -85,21 +85,21 @@ export default function WeeklyPage() {
                     : 0;
                   return (
                     <div key={d.date} className="flex flex-col items-center gap-1">
-                      <div className="text-xs text-[var(--color-text-muted)] h-6">
+                      <div className="text-xs text-muted h-6">
                         {d.item_count > 0 ? d.item_count : ""}
                       </div>
-                      <div className="w-full bg-[var(--color-card)] border border-[var(--color-border)] flex-1 relative" style={{ minHeight: 80 }}>
+                      <div className="w-full bg-surface border border flex-1 relative" style={{ minHeight: 80 }}>
                         <div
-                          className="absolute bottom-0 left-0 right-0 bg-[var(--color-accent)]"
+                          className="absolute bottom-0 left-0 right-0 bg-accent"
                           style={{ height: `${heightPct}%` }}
                         />
                         <div
-                          className="absolute bottom-0 left-0 right-0 bg-emerald-500/60"
+                          className="absolute bottom-0 left-0 right-0 bg-success/60"
                           style={{ height: `${heightPct * (completedPct / 100)}%` }}
                         />
                       </div>
                       <div className="text-xs font-medium">{WEEKDAY_LABELS[i]}</div>
-                      <div className="text-xs text-[var(--color-text-muted)]">{d.date.slice(5)}</div>
+                      <div className="text-xs text-muted">{d.date.slice(5)}</div>
                     </div>
                   );
                 })}
@@ -109,13 +109,13 @@ export default function WeeklyPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
               <Card title="本周总数">
                 <div className="text-2xl font-semibold">{data.totals.total_items || 0}</div>
-                <div className="text-sm text-[var(--color-text-muted)] mt-1">项计划</div>
+                <div className="text-sm text-muted mt-1">项计划</div>
               </Card>
               <Card title="已完成">
-                <div className="text-2xl font-semibold text-emerald-600">
+                <div className="text-2xl font-semibold text-success">
                   {data.totals.total_completed || 0}
                 </div>
-                <div className="text-sm text-[var(--color-text-muted)] mt-1">
+                <div className="text-sm text-muted mt-1">
                   完成率{" "}
                   {data.totals.total_items
                     ? Math.round((data.totals.total_completed / data.totals.total_items) * 100)
@@ -125,7 +125,7 @@ export default function WeeklyPage() {
               </Card>
               <Card title="总时长">
                 <div className="text-2xl font-semibold">{data.totals.total_minutes || 0}</div>
-                <div className="text-sm text-[var(--color-text-muted)] mt-1">分钟</div>
+                <div className="text-sm text-muted mt-1">分钟</div>
               </Card>
             </div>
 
@@ -133,7 +133,7 @@ export default function WeeklyPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-[var(--color-border)]">
+                    <tr className="border-b border">
                       <th className="text-left py-2 px-2">日期</th>
                       <th className="text-left py-2 px-2">星期</th>
                       <th className="text-right py-2 px-2">项数</th>
@@ -143,12 +143,12 @@ export default function WeeklyPage() {
                   </thead>
                   <tbody>
                     {data.days.map((d, i) => (
-                      <tr key={d.date} className="border-b border-[var(--color-border)] last:border-b-0">
+                      <tr key={d.date} className="border-b border last:border-b-0">
                         <td className="py-2 px-2">{d.date}</td>
                         <td className="py-2 px-2">{WEEKDAY_LABELS[i]}</td>
                         <td className="text-right py-2 px-2">{d.item_count}</td>
                         <td className="text-right py-2 px-2">{d.total_minutes} min</td>
-                        <td className="text-right py-2 px-2 text-emerald-600">{d.completed_count}</td>
+                        <td className="text-right py-2 px-2 text-success">{d.completed_count}</td>
                       </tr>
                     ))}
                   </tbody>

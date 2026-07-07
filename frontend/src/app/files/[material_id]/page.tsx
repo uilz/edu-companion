@@ -73,6 +73,7 @@ export default function FileDetailPage() {
   const [activeChunk, setActiveChunk] = useState<number | null>(null);
   const [tocCollapsed, setTocCollapsed] = useState(false);
   const [reindexing, setReindexing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const chunkRefs = useRef<ChunkRefs>({});
   const tocContainerRef = useRef<HTMLDivElement | null>(null);
   const tocNodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -93,7 +94,10 @@ export default function FileDetailPage() {
         setToc(tocData.toc || []);
         setChunks(chunksData.items || []);
       })
-      .catch(console.error)
+      .catch((e: unknown) => {
+        console.error(e);
+        setError(e instanceof Error ? e.message : "加载文件详情失败");
+      })
       .finally(() => setLoading(false));
   }, [materialId]);
 
@@ -201,6 +205,7 @@ export default function FileDetailPage() {
       setChunkFullText((prev) => ({ ...prev, [chunkIndex]: data.text }));
     } catch (e) {
       console.error("Failed to load full chunk:", e);
+      setError(e instanceof Error ? e.message : "加载完整分块失败");
     } finally {
       setLoadingFull(null);
     }
@@ -316,15 +321,31 @@ export default function FileDetailPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
-        <Loader2 size={20} className="animate-spin text-[var(--color-text-muted)]" />
+        <Loader2 size={20} className="animate-spin text-muted" />
       </div>
     );
   }
 
   if (!file) {
     return (
-      <div className="p-6 text-center text-sm text-[var(--color-text-muted)]">
+      <div className="p-6 text-center text-sm text-muted">
         文件不存在
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 max-w-5xl mx-auto text-center">
+        <div className="p-4 border border-danger/20 bg-danger/10 rounded-lg text-danger mb-4">
+          {error}
+        </div>
+        <button
+          onClick={() => { setError(null); window.location.reload(); }}
+          className="px-4 py-2 rounded-lg bg-accent text-white hover:opacity-90 text-sm"
+        >
+          重试
+        </button>
       </div>
     );
   }
@@ -340,7 +361,7 @@ export default function FileDetailPage() {
       {/* Breadcrumb */}
       <a
         href="/resources"
-        className="inline-flex items-center gap-1 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-accent)] mb-4"
+        className="inline-flex items-center gap-1 text-xs text-muted hover:text-accent mb-4"
       >
         <ArrowLeft size={12} />
         返回资源管理
@@ -349,12 +370,12 @@ export default function FileDetailPage() {
       {/* File header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[var(--color-surface-hover)] flex items-center justify-center text-[var(--color-text-muted)]">
+          <div className="w-10 h-10 rounded-xl bg-surface-hover flex items-center justify-center text-muted">
             <FileText size={20} />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-[var(--color-text)]">{file.file_name}</h1>
-            <div className="flex items-center gap-2 mt-1 text-[11px] text-[var(--color-text-muted)]">
+            <h1 className="text-lg font-bold text">{file.file_name}</h1>
+            <div className="flex items-center gap-2 mt-1 text-[11px] text-muted">
               <span>{file.file_type?.toUpperCase()}</span>
               <span>·</span>
               <span>{file.chunk_count} 个分块</span>
@@ -370,9 +391,9 @@ export default function FileDetailPage() {
             {/* Skills tags */}
             {file.skills && file.skills.length > 0 && (
               <div className="flex items-center gap-1 mt-2 flex-wrap">
-                <Sparkles size={11} className="text-amber-500 shrink-0" />
+                <Sparkles size={11} className="text-warning shrink-0" />
                 {file.skills.map((skill) => (
-                  <span key={skill} className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  <span key={skill} className="text-[9px] px-1.5 py-0.5 rounded bg-warning/10 text-warning dark:text-warning">
                     {skill}
                   </span>
                 ))}
@@ -384,12 +405,12 @@ export default function FileDetailPage() {
 
       {/* Summary */}
       {file.summary && (
-        <div className="mb-4 p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]">
+        <div className="mb-4 p-3 rounded-xl bg-surface border border">
           <div className="flex items-center gap-1.5 mb-1">
-            <BookOpen size={12} className="text-[var(--color-accent)]" />
-            <span className="text-[10px] font-medium text-[var(--color-text-muted)]">摘要</span>
+            <BookOpen size={12} className="text-accent" />
+            <span className="text-[10px] font-medium text-muted">摘要</span>
           </div>
-          <p className="text-xs text-[var(--color-text)] leading-relaxed">{file.summary}</p>
+          <p className="text-xs text leading-relaxed">{file.summary}</p>
         </div>
       )}
 
@@ -399,21 +420,21 @@ export default function FileDetailPage() {
           <div className={`transition-all duration-200 ease-in-out flex-shrink-0 ${
             tocCollapsed ? "w-0 overflow-hidden min-w-0" : "w-64"
           }`}>
-            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden sticky top-6 w-full">
-              <div className="px-3 py-2.5 border-b border-[var(--color-border)]/50 flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-[var(--color-text-muted)] tracking-wide">目录</span>
+            <div className="rounded-xl border border bg-surface overflow-hidden sticky top-6 w-full">
+              <div className="px-3 py-2.5 border-b border/50 flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-muted tracking-wide">目录</span>
                 <div className="flex items-center gap-1">
                   <button
                     onClick={handleReindex}
                     disabled={reindexing}
-                    className="p-1 rounded-md hover:bg-[var(--color-border)]/30 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+                    className="p-1 rounded-md hover:bg-divider/30 text-muted hover:text transition-colors"
                     title="重新索引"
                   >
                     <RefreshCw size={12} className={reindexing ? "animate-spin" : ""} />
                   </button>
                   <button
                     onClick={() => setTocCollapsed(true)}
-                    className="p-1 rounded-md hover:bg-[var(--color-border)]/30 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+                    className="p-1 rounded-md hover:bg-divider/30 text-muted hover:text transition-colors"
                     title="收起目录"
                   >
                     <ChevronLeft size={13} />
@@ -431,7 +452,7 @@ export default function FileDetailPage() {
         {toc.length > 0 && tocCollapsed && (
           <button
             onClick={() => setTocCollapsed(false)}
-            className="flex-shrink-0 w-6 h-14 mt-10 rounded-r-lg bg-[var(--color-surface)] border border-l-0 border-[var(--color-border)] flex items-center justify-center hover:bg-[var(--color-surface-hover)] transition-colors text-[var(--color-text-muted)]"
+            className="flex-shrink-0 w-6 h-14 mt-10 rounded-r-lg bg-surface border border-l-0 border flex items-center justify-center hover:bg-surface-hover transition-colors text-muted"
             title="展开目录"
           >
             <ChevronRight size={13} />
@@ -445,8 +466,8 @@ export default function FileDetailPage() {
 
           {/* PPTX note */}
           {file.file_name?.toLowerCase().endsWith(".pptx") && (
-            <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20">
-              <p className="text-xs text-amber-600 dark:text-amber-400">
+            <div className="p-3 rounded-xl bg-warning/5 border border-warning/20">
+              <p className="text-xs text-warning dark:text-warning">
                 PPTX 文件以文本分块形式展示。如需查看完整幻灯片，请下载文件后使用 PowerPoint 打开。
               </p>
             </div>
@@ -454,8 +475,8 @@ export default function FileDetailPage() {
 
           {/* .doc note */}
           {file.file_name?.toLowerCase().endsWith(".doc") && !file.file_name?.toLowerCase().endsWith(".docx") && (
-            <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20">
-              <p className="text-xs text-amber-600 dark:text-amber-400">
+            <div className="p-3 rounded-xl bg-warning/5 border border-warning/20">
+              <p className="text-xs text-warning dark:text-warning">
                 旧版 .doc 文件以文本分块形式展示。如需查看原始格式，请下载文件后使用 Word 打开。
               </p>
             </div>
@@ -464,7 +485,7 @@ export default function FileDetailPage() {
           {/* Chunks */}
           {chunks.length > 0 && (
             <div className="space-y-2">
-              <div className="text-[11px] font-medium text-[var(--color-text-muted)] mb-2">
+              <div className="text-[11px] font-medium text-muted mb-2">
                 内容分块（{chunks.length}）
               </div>
               {chunks.map((chunk) => {
@@ -480,21 +501,21 @@ export default function FileDetailPage() {
                     id={`chunk-${chunk.chunk_index}`}
                     className={`p-3 rounded-xl border transition-all scroll-mt-6 ${
                       isActive
-                        ? "bg-[var(--color-accent)]/5 border-[var(--color-accent)]/30 shadow-sm"
-                        : "bg-[var(--color-surface)] border-[var(--color-border)]"
+                        ? "bg-accent/5 border-accent/30 shadow-sm"
+                        : "bg-surface border"
                     }`}
                   >
-                    <div className="text-[10px] text-[var(--color-text-muted)] mb-1">
+                    <div className="text-[10px] text-muted mb-1">
                       #{chunk.chunk_index + 1}
                       {chunk.page_number && <span> · 第 {chunk.page_number} 页</span>}
                     </div>
-                    <div className={`text-xs text-[var(--color-text)] leading-relaxed ${!fullTextLoaded ? "line-clamp-4" : ""}`}>
+                    <div className={`text-xs text leading-relaxed ${!fullTextLoaded ? "line-clamp-4" : ""}`}>
                       <MarkdownRenderer>{displayText}</MarkdownRenderer>
                     </div>
                     {isLong && (
                       <button
                         onClick={() => toggleFullText(chunk.chunk_index)}
-                        className="mt-1.5 flex items-center gap-1 text-[10px] text-[var(--color-accent)] hover:opacity-80 transition-opacity"
+                        className="mt-1.5 flex items-center gap-1 text-[10px] text-accent hover:opacity-80 transition-opacity"
                       >
                         {loadingFull === chunk.chunk_index ? (
                           <Loader2 size={10} className="animate-spin" />
@@ -539,8 +560,8 @@ export default function FileDetailPage() {
         >
           {hasChildren ? (
             isExpanded
-              ? <ChevronDown size={9} className="text-[var(--color-text-muted)]" />
-              : <ChevronRight size={9} className="text-[var(--color-text-muted)]" />
+              ? <ChevronDown size={9} className="text-muted" />
+              : <ChevronRight size={9} className="text-muted" />
           ) : null}
         </span>
         {/* Text area: scroll + auto-expand */}
@@ -550,9 +571,9 @@ export default function FileDetailPage() {
             if (node.chunk_start >= 0) onScroll(node.chunk_start);
           }}
         >
-          <span className={`truncate ${isActive ? "text-[var(--color-accent)] font-medium" : "text-[var(--color-text)]"}`}>{node.heading}</span>
+          <span className={`truncate ${isActive ? "text-accent font-medium" : "text"}`}>{node.heading}</span>
           {chunkCount > 0 && (
-            <span className="flex-shrink-0 text-[9px] text-[var(--color-text-muted)] opacity-50 ml-auto tabular-nums">{chunkCount}个分块</span>
+            <span className="flex-shrink-0 text-[9px] text-muted opacity-50 ml-auto tabular-nums">{chunkCount}个分块</span>
           )}
         </span>
       </div>

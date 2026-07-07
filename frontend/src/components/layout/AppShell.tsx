@@ -80,7 +80,7 @@ export default function AppShell({ children }: AppShellProps) {
           <Link
             href="/dashboard"
             aria-label="返回驾驶舱"
-            className="fixed top-3 left-3 z-40 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--color-surface)]/80 backdrop-blur border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] text-xs transition-colors shadow-sm"
+            className="fixed top-3 left-3 z-40 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface/80 backdrop-blur border border text-muted hover:text hover:bg-surface text-xs transition-colors shadow-sm"
           >
             <ArrowLeft size={12} />
             <span>返回</span>

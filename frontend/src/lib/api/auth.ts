@@ -161,65 +161,8 @@ export async function fetchCurrentUser(): Promise<AuthUser | null> {
   }
 }
 
-// ── 认证请求封装（自动附加 token + 自动刷新） ──
-
-let isRefreshing = false;
-let refreshPromise: Promise<string | null> | null = null;
-
-export async function authedFetch<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
-  const token = getAccessToken();
-
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(options.headers as Record<string, string> || {}),
-  };
-
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-
-  let res = await fetch(path, {
-    ...options,
-    headers,
-  });
-
-  // 401 → 尝试刷新令牌
-  if (res.status === 401 && token) {
-    if (!isRefreshing) {
-      isRefreshing = true;
-      refreshPromise = refreshToken().finally(() => {
-        isRefreshing = false;
-      });
-    }
-
-    const newToken = await refreshPromise;
-    if (newToken) {
-      headers["Authorization"] = `Bearer ${newToken}`;
-      res = await fetch(path, {
-        ...options,
-        headers,
-      });
-    } else {
-      clearAuth();
-      if (typeof window !== "undefined") {
-        window.location.href = "/login";
-      }
-      // 不 throw — redirect 已触发，ErrorBoundary 不应收到错误
-      // 返回一个永远 pending 的 Promise，await 自动挂起（页面即将跳转）
-      return new Promise<T>(() => {});
-    }
-  }
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API ${res.status}: ${text.slice(0, 100)}`);
-  }
-
-  return res.json();
-}
+// 注：authedFetch 已迁移至 api.ts — 使用 authedFetch（返回 Response）或 authedFetchJson（返回解析后的 JSON）。
+// 迁移原因：统一两套实现，避免重复的令牌刷新逻辑。
 
 export async function uploadAvatar(file: File): Promise<string> {
   const token = getAccessToken();

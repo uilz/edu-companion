@@ -8,6 +8,7 @@ import {
   AlertTriangle, RefreshCw,
 } from "lucide-react";
 import { authedFetch, API_BASE } from "@/lib/api/api";
+import { StatCard } from "@/components/ui/StatCard";
 
 // ── 类型 ──
 interface OverviewData {
@@ -27,7 +28,10 @@ interface OverviewData {
 }
 
 interface PartitionItem {
-  partition: any;
+  partition: {
+    id: string;
+    name: string;
+  };
   domain_count: number;
   topic_count: number;
   conversation_count: number;
@@ -51,10 +55,33 @@ interface SessionItem {
   started_at: string;
 }
 
+interface CardItem {
+  id: string;
+  bank_id?: string;
+  front_text?: string;
+  selected_text?: string;
+  depth?: number;
+  collapsed?: boolean;
+  status?: string;
+  created_at?: string;
+}
+
+interface MaterialItem {
+  material_id?: string;
+  id?: string;
+  file_name?: string;
+  original_name?: string;
+  file_type?: string;
+  mime_type?: string;
+  status?: string;
+  processing_status?: string;
+  created_at?: string;
+}
+
 type Tab = "overview" | "partitions" | "graphs" | "sessions" | "cards" | "materials";
 
 // ── 格式化函数 ──
-function fmtDate(d: string) { return d?.slice(0, 16).replace("T", " ") || "-"; }
+function fmtDate(d?: string) { return d?.slice(0, 16).replace("T", " ") || "-"; }
 
 // ── 组件 ──
 export default function DataManagementPage() {
@@ -63,8 +90,8 @@ export default function DataManagementPage() {
   const [partitions, setPartitions] = useState<PartitionItem[]>([]);
   const [graphs, setGraphs] = useState<GraphItem[]>([]);
   const [sessions, setSessions] = useState<SessionItem[]>([]);
-  const [cards, setCards] = useState<any[]>([]);
-  const [materials, setMaterials] = useState<any[]>([]);
+  const [cards, setCards] = useState<CardItem[]>([]);
+  const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -79,8 +106,8 @@ export default function DataManagementPage() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setOverview(data.overview);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "加载失败");
     } finally {
       setLoading(false);
     }
@@ -210,8 +237,8 @@ export default function DataManagementPage() {
       onClick={() => setTab(key)}
       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
         tab === key
-          ? "bg-[var(--color-accent)] text-white"
-          : "text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+          ? "bg-accent text-white"
+          : "text-muted hover:text hover:bg-surface"
       }`}
     >
       {icon}{label}
@@ -219,15 +246,15 @@ export default function DataManagementPage() {
   );
 
   return (
-    <main className="min-h-screen bg-[var(--color-bg)]">
+    <main className="min-h-screen bg-page">
       <div className="max-w-5xl mx-auto px-6 py-10">
         {/* 头部 */}
         <div className="flex items-center gap-3 mb-8">
-          <Link href="/settings" className="p-1.5 rounded-md hover:bg-[var(--color-surface)] transition-colors">
-            <ChevronLeft size={18} className="text-[var(--color-text-muted)]" />
+          <Link href="/settings" className="p-1.5 rounded-md hover:bg-surface transition-colors">
+            <ChevronLeft size={18} className="text-muted" />
           </Link>
-          <h1 className="text-2xl font-semibold text-[var(--color-text)]">学习数据管理</h1>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 font-medium">
+          <h1 className="text-2xl font-semibold text">学习数据管理</h1>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-warning/20 dark:bg-warning/10 text-warning dark:text-warning font-medium">
             高阶功能
           </span>
         </div>
@@ -244,11 +271,11 @@ export default function DataManagementPage() {
           </div>
           <div className="flex items-center gap-2">
             <button onClick={fetchOverview}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors">
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs text-muted hover:text hover:bg-surface transition-colors">
               <RefreshCw size={12} />刷新
             </button>
             <button onClick={handleExport} disabled={exporting}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50 transition-all">
+              className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs bg-accent text-white hover:opacity-90 disabled:opacity-50 transition-all">
               {exporting ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
               {exporting ? "导出中..." : "导出全部数据"}
             </button>
@@ -258,10 +285,10 @@ export default function DataManagementPage() {
         {/* 内容区 */}
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <Loader2 size={20} className="animate-spin text-[var(--color-text-muted)]" />
+            <Loader2 size={20} className="animate-spin text-muted" />
           </div>
         ) : error ? (
-          <div className="flex items-center justify-center py-20 gap-2 text-sm text-[var(--color-error)]">
+          <div className="flex items-center justify-center py-20 gap-2 text-sm text-error">
             <AlertTriangle size={16} />{error}
           </div>
         ) : (
@@ -270,22 +297,22 @@ export default function DataManagementPage() {
             {tab === "overview" && overview && (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <StatCard label="分区" value={overview.partitions} icon={<BookOpen size={16} />} />
-                  <StatCard label="领域" value={overview.domains} icon={<GitGraph size={16} />} />
-                  <StatCard label="专题" value={overview.topics} icon={<FileText size={16} />} />
-                  <StatCard label="对话" value={overview.conversations} icon={<MessageSquare size={16} />} />
+                  <StatCard colorScheme="indigo" label="分区" value={overview.partitions} icon={<BookOpen size={16} />} />
+                  <StatCard colorScheme="indigo" label="领域" value={overview.domains} icon={<GitGraph size={16} />} />
+                  <StatCard colorScheme="indigo" label="专题" value={overview.topics} icon={<FileText size={16} />} />
+                  <StatCard colorScheme="indigo" label="对话" value={overview.conversations} icon={<MessageSquare size={16} />} />
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <StatCard label="知识图谱" value={overview.knowledge_graphs} color="purple" icon={<GitGraph size={16} />} />
-                  <StatCard label="图谱节点" value={overview.graph_nodes} color="purple" icon={<GitGraph size={16} />} />
-                  <StatCard label="图谱边" value={overview.graph_edges} color="purple" icon={<GitGraph size={16} />} />
-                  <StatCard label="练习会话" value={overview.practice_sessions ?? "-"} color="green" icon={<Brain size={16} />} />
+                  <StatCard label="知识图谱" value={overview.knowledge_graphs} colorScheme="purple" icon={<GitGraph size={16} />} />
+                  <StatCard label="图谱节点" value={overview.graph_nodes} colorScheme="purple" icon={<GitGraph size={16} />} />
+                  <StatCard label="图谱边" value={overview.graph_edges} colorScheme="purple" icon={<GitGraph size={16} />} />
+                  <StatCard label="练习会话" value={overview.practice_sessions ?? "-"} colorScheme="green" icon={<Brain size={16} />} />
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <StatCard label="题库" value={overview.question_banks ?? "-"} color="amber" icon={<FileText size={16} />} />
-                  <StatCard label="题目" value={overview.questions ?? "-"} color="amber" icon={<FileText size={16} />} />
-                  <StatCard label="解释卡片" value={overview.explain_cards ?? "-"} color="rose" icon={<MessageSquare size={16} />} />
-                  <StatCard label="消息" value={overview.messages ?? "-"} color="indigo" icon={<MessageSquare size={16} />} />
+                  <StatCard label="题库" value={overview.question_banks ?? "-"} colorScheme="amber" icon={<FileText size={16} />} />
+                  <StatCard label="题目" value={overview.questions ?? "-"} colorScheme="amber" icon={<FileText size={16} />} />
+                  <StatCard label="解释卡片" value={overview.explain_cards ?? "-"} colorScheme="rose" icon={<MessageSquare size={16} />} />
+                  <StatCard label="消息" value={overview.messages ?? "-"} colorScheme="indigo" icon={<MessageSquare size={16} />} />
                 </div>
               </div>
             )}
@@ -297,7 +324,7 @@ export default function DataManagementPage() {
                 empty="暂无分区数据"
               >
                 {partitions.map((p) => (
-                  <tr key={p.partition?.id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-surface)]/50 transition-colors">
+                  <tr key={p.partition?.id} className="border-b border hover:bg-surface/50 transition-colors">
                     <td className="px-4 py-3 text-sm font-medium">{p.partition?.name || "未知"}</td>
                     <td className="px-4 py-3 text-sm text-center">{p.domain_count}</td>
                     <td className="px-4 py-3 text-sm text-center">{p.topic_count}</td>
@@ -305,7 +332,7 @@ export default function DataManagementPage() {
                     <td className="px-4 py-3 text-center">
                       <button onClick={() => handleDeletePartition(p.partition?.id)}
                         disabled={deleting === p.partition?.id}
-                        className="p-1.5 rounded text-[var(--color-text-muted)] hover:text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors disabled:opacity-50"
+                        className="p-1.5 rounded text-muted hover:text-error hover:bg-error/10 transition-colors disabled:opacity-50"
                         title="删除分区">
                         {deleting === p.partition?.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                       </button>
@@ -322,7 +349,7 @@ export default function DataManagementPage() {
                 empty="暂无知识图谱"
               >
                 {graphs.map((g) => (
-                  <tr key={g.dir_id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-surface)]/50 transition-colors">
+                  <tr key={g.dir_id} className="border-b border hover:bg-surface/50 transition-colors">
                     <td className="px-4 py-3 text-sm font-medium">{g.partition_name}</td>
                     <td className="px-4 py-3 text-sm">{g.name}</td>
                     <td className="px-4 py-3 text-sm text-center">v{g.version}</td>
@@ -331,7 +358,7 @@ export default function DataManagementPage() {
                     <td className="px-4 py-3 text-center">
                       <button onClick={() => handleDeleteGraph(g.dir_id)}
                         disabled={deleting === g.dir_id}
-                        className="p-1.5 rounded text-[var(--color-text-muted)] hover:text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors disabled:opacity-50"
+                        className="p-1.5 rounded text-muted hover:text-error hover:bg-error/10 transition-colors disabled:opacity-50"
                         title="删除图谱">
                         {deleting === g.dir_id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                       </button>
@@ -348,20 +375,20 @@ export default function DataManagementPage() {
                 empty="暂无练习会话"
               >
                 {sessions.map((s) => (
-                  <tr key={s.id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-surface)]/50 transition-colors">
+                  <tr key={s.id} className="border-b border hover:bg-surface/50 transition-colors">
                     <td className="px-4 py-3 text-xs font-mono truncate max-w-[120px]">{s.id}</td>
                     <td className="px-4 py-3 text-sm text-center">
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full ${s.status === "completed" ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600" : "bg-amber-100 dark:bg-amber-900/30 text-amber-600"}`}>
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full ${s.status === "completed" ? "bg-success/20 dark:bg-success/10 text-success" : "bg-warning/20 dark:bg-warning/10 text-warning"}`}>
                         {s.status === "completed" ? "已完成" : s.status === "active" ? "进行中" : s.status}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-center">{s.total_count}</td>
                     <td className="px-4 py-3 text-sm text-center">{s.score != null ? `${s.score}%` : "-"}</td>
-                    <td className="px-4 py-3 text-xs text-[var(--color-text-muted)]">{fmtDate(s.created_at)}</td>
+                    <td className="px-4 py-3 text-xs text-muted">{fmtDate(s.created_at)}</td>
                     <td className="px-4 py-3 text-center">
                       <button onClick={() => handleDeleteSession(s.id)}
                         disabled={deleting === s.id}
-                        className="p-1.5 rounded text-[var(--color-text-muted)] hover:text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors disabled:opacity-50"
+                        className="p-1.5 rounded text-muted hover:text-error hover:bg-error/10 transition-colors disabled:opacity-50"
                         title="删除">
                         {deleting === s.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                       </button>
@@ -378,7 +405,7 @@ export default function DataManagementPage() {
                 empty="暂无解释卡片"
               >
                 {cards.map((c) => (
-                  <tr key={c.id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-surface)]/50 transition-colors">
+                  <tr key={c.id} className="border-b border hover:bg-surface/50 transition-colors">
                     <td className="px-4 py-3 text-xs font-mono truncate max-w-[100px]">{c.id}</td>
                     <td className="px-4 py-3 text-sm truncate max-w-[200px]">{c.selected_text || "-"}</td>
                     <td className="px-4 py-3 text-sm text-center">{c.depth}</td>
@@ -386,7 +413,7 @@ export default function DataManagementPage() {
                     <td className="px-4 py-3 text-center">
                       <button onClick={() => handleDeleteCard(c.id)}
                         disabled={deleting === c.id}
-                        className="p-1.5 rounded text-[var(--color-text-muted)] hover:text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors disabled:opacity-50"
+                        className="p-1.5 rounded text-muted hover:text-error hover:bg-error/10 transition-colors disabled:opacity-50"
                         title="删除">
                         {deleting === c.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                       </button>
@@ -403,12 +430,12 @@ export default function DataManagementPage() {
                 empty="暂无材料"
               >
                 {materials.map((m) => (
-                  <tr key={m.material_id || m.id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-surface)]/50 transition-colors">
+                  <tr key={m.material_id || m.id} className="border-b border hover:bg-surface/50 transition-colors">
                     <td className="px-4 py-3 text-xs font-mono truncate max-w-[100px]">{m.material_id || m.id}</td>
                     <td className="px-4 py-3 text-sm font-medium">{m.file_name || m.original_name || "-"}</td>
                     <td className="px-4 py-3 text-sm text-center">{m.file_type || m.mime_type || "-"}</td>
                     <td className="px-4 py-3 text-sm text-center">{m.status || m.processing_status || "-"}</td>
-                    <td className="px-4 py-3 text-xs text-[var(--color-text-muted)]">{fmtDate(m.created_at)}</td>
+                    <td className="px-4 py-3 text-xs text-muted">{fmtDate(m.created_at)}</td>
                   </tr>
                 ))}
               </DataTable>
@@ -420,44 +447,27 @@ export default function DataManagementPage() {
   );
 }
 
-// ── 统计卡片 ──
-function StatCard({ label, value, color = "indigo", icon }: { label: string; value: number | string; color?: string; icon?: React.ReactNode }) {
-  const colorMap: Record<string, string> = {
-    indigo: "border-l-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/20",
-    purple: "border-l-purple-400 bg-purple-50/50 dark:bg-purple-950/20",
-    green: "border-l-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20",
-    amber: "border-l-amber-400 bg-amber-50/50 dark:bg-amber-950/20",
-    rose: "border-l-rose-400 bg-rose-50/50 dark:bg-rose-950/20",
-  };
-  return (
-    <div className={`p-3 rounded-lg border-l-2 ${colorMap[color] || colorMap.indigo} border border-[var(--color-border)]`}>
-      <div className="flex items-center gap-1.5 text-xs text-[var(--color-text-muted)] mb-1">
-        {icon}{label}
-      </div>
-      <div className="text-xl font-bold text-[var(--color-text)]">{value}</div>
-    </div>
-  );
-}
+
 
 // ── 数据表格 ──
 function DataTable({ columns, empty, children }: { columns: string[]; empty: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-[var(--color-border)] overflow-hidden">
+    <div className="rounded-lg border border overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="bg-[var(--color-surface)] border-b border-[var(--color-border)]">
+            <tr className="bg-surface border-b border">
               {columns.map((col, i) => (
-                <th key={i} className="px-4 py-2.5 text-xs font-medium text-[var(--color-text-muted)] text-left">
+                <th key={i} className="px-4 py-2.5 text-xs font-medium text-muted text-left">
                   {col}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-[var(--color-border)]">
+          <tbody className="divide-y divide-divider">
             {React.Children.count(children) === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="px-4 py-10 text-center text-sm text-[var(--color-text-muted)]">
+                <td colSpan={columns.length} className="px-4 py-10 text-center text-sm text-muted">
                   {empty}
                 </td>
               </tr>

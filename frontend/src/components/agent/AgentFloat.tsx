@@ -800,8 +800,8 @@ export default function AgentFloat() {
             flex items-center justify-center
             shadow-lg overflow-hidden
             ${open
-              ? "bg-[var(--color-text-muted)] text-white"
-              : "bg-[var(--color-accent)] text-white"
+              ? "bg-text-muted text-white"
+              : "bg-accent text-white"
             }
           `}
           style={{
@@ -837,7 +837,7 @@ export default function AgentFloat() {
           ref={panelRef}
           className="fixed z-50
             w-[calc(100vw-2rem)] max-w-[380px] max-h-[480px]
-            bg-[var(--color-surface)] border border-[var(--color-border)]
+            bg-surface border border
             rounded-xl shadow-2xl flex flex-col overflow-hidden"
           style={(() => {
             // 用户拖拽后面板有精确位置 → 直接使用，不从球反算
@@ -877,14 +877,14 @@ export default function AgentFloat() {
           {/* ── 头部 — 可拖拽 + 对话切换 ── */}
           <div
             onMouseDown={handlePanelMouseDown}
-            className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)] cursor-grab active:cursor-grabbing select-none"
+            className="flex items-center justify-between px-4 py-3 border-b border cursor-grab active:cursor-grabbing select-none"
           >
             <div className="flex items-center gap-2 min-w-0">
               {/* 对话选择器 */}
               <div className="relative">
                 <button
                   onClick={(e) => { e.stopPropagation(); setShowConvList(!showConvList); }}
-                  className="flex items-center gap-1 text-sm font-semibold text-[var(--color-text)] hover:text-[var(--color-accent)] truncate max-w-[180px]"
+                  className="flex items-center gap-1 text-sm font-semibold text hover:text-accent truncate max-w-[180px]"
                 >
                   <span className="truncate">{currentConvName}</span>
                   <ChevronDown size={14} className="shrink-0" />
@@ -892,31 +892,31 @@ export default function AgentFloat() {
 
                 {showConvList && (
                   <div
-                    className="absolute top-full left-0 mt-1 w-56 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-xl z-[100] max-h-48 overflow-y-auto"
+                    className="absolute top-full left-0 mt-1 w-56 bg-surface border border rounded-lg shadow-xl z-[100] max-h-48 overflow-y-auto"
                     onClick={(e) => e.stopPropagation()}
                   >
                     {loadingSecretary ? (
-                      <div className="px-3 py-2 text-xs text-[var(--color-text-muted)]">加载中...</div>
+                      <div className="px-3 py-2 text-xs text-muted">加载中...</div>
                     ) : secretaryConvs.length === 0 ? (
-                      <div className="px-3 py-2 text-xs text-[var(--color-text-muted)]">暂无对话</div>
+                      <div className="px-3 py-2 text-xs text-muted">暂无对话</div>
                     ) : (
                       secretaryConvs.map((conv) => (
                         <button
                           key={conv.id}
                           onClick={() => handleSwitchConv(conv.id)}
-                          className={`w-full text-left px-3 py-2 text-sm hover:bg-[var(--color-hover)] truncate ${conv.id === activeConvId ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]" : "text-[var(--color-text)]"}`}
+                          className={`w-full text-left px-3 py-2 text-sm hover:bg-surface-hover truncate ${conv.id === activeConvId ? "bg-accent/10 text-accent" : "text"}`}
                         >
                           {conv.name}
                           {conv.messageCount > 0 && (
-                            <span className="ml-2 text-xs text-[var(--color-text-muted)]">{conv.messageCount} 条</span>
+                            <span className="ml-2 text-xs text-muted">{conv.messageCount} 条</span>
                           )}
                         </button>
                       ))
                     )}
-                    <div className="border-t border-[var(--color-border)]">
+                    <div className="border-t border">
                       <button
                         onClick={handleNewConv}
-                        className="w-full text-left px-3 py-2 text-sm text-[var(--color-accent)] hover:bg-[var(--color-hover)]"
+                        className="w-full text-left px-3 py-2 text-sm text-accent hover:bg-surface-hover"
                       >
                         + 新建对话
                       </button>
@@ -927,7 +927,7 @@ export default function AgentFloat() {
             </div>
             <button
               onClick={handleClosePanel}
-              className="p-1 rounded text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+              className="p-1 rounded text-muted hover:text"
               aria-label="关闭"
             >
               <X size={16} />
@@ -937,7 +937,7 @@ export default function AgentFloat() {
           {/* ── 消息区域 ── */}
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
             {loadingMessages ? (
-              <div className="flex items-center justify-center py-8 text-sm text-[var(--color-text-muted)]">
+              <div className="flex items-center justify-center py-8 text-sm text-muted">
                 加载历史消息...
               </div>
             ) : (
@@ -959,7 +959,7 @@ export default function AgentFloat() {
           </div>
 
           {/* ── 输入区域 ── */}
-          <div className="px-4 py-3 border-t border-[var(--color-border)]">
+          <div className="px-4 py-3 border-t border">
             <ChatInputBar
               input={input}
               onInputChange={setInput}

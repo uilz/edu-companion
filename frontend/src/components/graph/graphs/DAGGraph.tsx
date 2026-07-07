@@ -145,15 +145,15 @@ export default function DAGGraph({
       {/* Controls */}
       <div className="absolute top-3 right-3 z-10 flex gap-1">
         <button onClick={() => setZoom(z => Math.min(3, z * 1.2))}
-          className="w-7 h-7 flex items-center justify-center rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
+          className="w-7 h-7 flex items-center justify-center rounded bg-surface border border text-muted hover:text">
           <ZoomIn size={13} />
         </button>
         <button onClick={() => setZoom(z => Math.max(0.3, z / 1.2))}
-          className="w-7 h-7 flex items-center justify-center rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
+          className="w-7 h-7 flex items-center justify-center rounded bg-surface border border text-muted hover:text">
           <ZoomOut size={13} />
         </button>
         <button onClick={resetView}
-          className="w-7 h-7 flex items-center justify-center rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
+          className="w-7 h-7 flex items-center justify-center rounded bg-surface border border text-muted hover:text">
           <Maximize2 size={13} />
         </button>
       </div>

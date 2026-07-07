@@ -29,7 +29,7 @@ export function ViewSwitcher({ current, onChange }: ViewSwitcherProps) {
           onClick={() => onChange(t.value)}
           className={`px-4 py-2 text-sm flex items-center gap-1 whitespace-nowrap flex-shrink-0 ${
             current === t.value
-              ? "border-b-2 border-[var(--color-accent)] text-[var(--color-accent)]"
+              ? "border-b-2 border-accent text-accent"
               : "text-ink-secondary hover:text-ink-primary"
           }`}
         >

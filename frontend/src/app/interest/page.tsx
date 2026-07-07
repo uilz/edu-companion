@@ -45,8 +45,8 @@ export default function InterestExplorerPage() {
     try {
       const r = await interestService.getTodayPushes();
       setToday(r);
-    } catch (e: any) {
-      setError(e.message || "加载失败");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "加载失败");
     } finally {
       setLoading(false);
     }
@@ -61,8 +61,8 @@ export default function InterestExplorerPage() {
         limit: 50,
       });
       setHistory(r);
-    } catch (e: any) {
-      setError(e.message || "加载失败");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "加载失败");
     } finally {
       setLoading(false);
     }
@@ -88,8 +88,8 @@ export default function InterestExplorerPage() {
       } else {
         await loadHistory();
       }
-    } catch (e: any) {
-      setError(e.message || "操作失败");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "操作失败");
     } finally {
       setBusyId(null);
     }
@@ -104,8 +104,8 @@ export default function InterestExplorerPage() {
       } else {
         await loadHistory();
       }
-    } catch (e: any) {
-      setError(e.message || "导入失败");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "导入失败");
     } finally {
       setBusyId(null);
     }
@@ -117,8 +117,8 @@ export default function InterestExplorerPage() {
       const r = await interestService.triggerPush();
       setError(null);
       await loadToday();
-    } catch (e: any) {
-      setError(e.message || "触发推送失败");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "触发推送失败");
     } finally {
       setBusyId(null);
     }
@@ -139,41 +139,41 @@ export default function InterestExplorerPage() {
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Sparkles className="w-6 h-6 text-blue-500" />
+            <Sparkles className="w-6 h-6 text-info" />
             学术信息探索
           </h1>
           <div className="flex gap-2">
             <button
               onClick={() => router.push("/interest/tags")}
-              className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 flex items-center gap-1"
+              className="px-3 py-1.5 text-sm border rounded-lg hover:bg-surface flex items-center gap-1"
             >
               <TagIcon className="w-4 h-4" />
               标签
             </button>
             <button
               onClick={() => router.push("/interest/sources")}
-              className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 flex items-center gap-1"
+              className="px-3 py-1.5 text-sm border rounded-lg hover:bg-surface flex items-center gap-1"
             >
               <Rss className="w-4 h-4" />
               信息源
             </button>
             <button
               onClick={() => router.push("/interest/prefs")}
-              className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 flex items-center gap-1"
+              className="px-3 py-1.5 text-sm border rounded-lg hover:bg-surface flex items-center gap-1"
             >
               <SettingsIcon className="w-4 h-4" />
               偏好
             </button>
             <button
               onClick={() => router.push("/interest/weight")}
-              className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 flex items-center gap-1"
+              className="px-3 py-1.5 text-sm border rounded-lg hover:bg-surface flex items-center gap-1"
             >
               <Scale className="w-4 h-4" />
               本地权重
             </button>
           </div>
         </div>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-muted">
           严格遵循 ADR 0007: 不调用 LLM · 链接级别去重 · 本地权重
         </p>
       </div>
@@ -184,8 +184,8 @@ export default function InterestExplorerPage() {
           onClick={() => setActiveTab("today")}
           className={`px-4 py-2 text-sm font-medium border-b-2 ${
             activeTab === "today"
-              ? "border-blue-500 text-blue-600"
-              : "border-transparent text-gray-500 hover:text-gray-700"
+              ? "border-info text-info"
+              : "border-transparent text-muted hover:text"
           }`}
         >
           <Eye className="w-4 h-4 inline mr-1" />
@@ -196,8 +196,8 @@ export default function InterestExplorerPage() {
           onClick={() => setActiveTab("history")}
           className={`px-4 py-2 text-sm font-medium border-b-2 ${
             activeTab === "history"
-              ? "border-blue-500 text-blue-600"
-              : "border-transparent text-gray-500 hover:text-gray-700"
+              ? "border-info text-info"
+              : "border-transparent text-muted hover:text"
           }`}
         >
           <HistoryIcon className="w-4 h-4 inline mr-1" />
@@ -209,7 +209,7 @@ export default function InterestExplorerPage() {
       {/* Search + Actions */}
       <div className="flex items-center gap-2 mb-4">
         <div className="flex-1 relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
           <input
             type="text"
             placeholder="搜索标题或摘要..."
@@ -221,7 +221,7 @@ export default function InterestExplorerPage() {
         {activeTab === "history" && (
           <select
             value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value as any)}
+            onChange={(e) => setTypeFilter(e.target.value as "" | PushType)}
             className="px-3 py-2 border rounded-lg text-sm"
           >
             <option value="">全部类型</option>
@@ -233,7 +233,7 @@ export default function InterestExplorerPage() {
         <button
           onClick={activeTab === "today" ? loadToday : loadHistory}
           disabled={loading}
-          className="px-3 py-2 border rounded-lg text-sm hover:bg-gray-50 flex items-center gap-1"
+          className="px-3 py-2 border rounded-lg text-sm hover:bg-surface flex items-center gap-1"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
         </button>
@@ -241,7 +241,7 @@ export default function InterestExplorerPage() {
           <button
             onClick={onTriggerPush}
             disabled={busyId === "trigger"}
-            className="px-3 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 flex items-center gap-1"
+            className="px-3 py-2 bg-info text-white rounded-lg text-sm hover:bg-info flex items-center gap-1"
           >
             {busyId === "trigger" ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -254,19 +254,19 @@ export default function InterestExplorerPage() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-sm text-red-700">
+        <div className="mb-4 p-3 bg-danger/10 border border-danger/20 rounded-lg flex items-start gap-2 text-sm text-danger">
           <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       {loading ? (
-        <div className="text-center py-12 text-gray-400">
+        <div className="text-center py-12 text-muted">
           <Loader2 className="w-8 h-8 mx-auto animate-spin mb-2" />
           加载中...
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
+        <div className="text-center py-12 text-muted">
           <Sparkles className="w-12 h-12 mx-auto mb-3 opacity-30" />
           <p>暂无推送内容</p>
           <p className="text-xs mt-1">配置兴趣标签和信息源后会显示推送</p>
@@ -309,7 +309,7 @@ function PushItem({
     <div className="border rounded-lg overflow-hidden bg-white">
       <button
         onClick={onToggle}
-        className="w-full p-4 text-left hover:bg-gray-50"
+        className="w-full p-4 text-left hover:bg-surface"
       >
         <div className="flex items-start gap-3">
           <div className="flex-1 min-w-0">
@@ -327,18 +327,18 @@ function PushItem({
                 </span>
               )}
               {push.matched_tags.length > 0 && (
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-muted">
                   匹配 {push.matched_tags.length} 个标签
                 </span>
               )}
             </div>
             <h3 className="font-medium text-sm line-clamp-2">{push.title}</h3>
             {push.summary && !expanded && (
-              <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+              <p className="text-xs text-muted mt-1 line-clamp-2">
                 {push.summary}
               </p>
             )}
-            <div className="text-xs text-gray-400 mt-1 flex items-center gap-3 flex-wrap">
+            <div className="text-xs text-muted mt-1 flex items-center gap-3 flex-wrap">
               {push.author && <span>👤 {push.author}</span>}
               {push.published_at && (
                 <span>
@@ -352,7 +352,7 @@ function PushItem({
             </div>
           </div>
           <ChevronRight
-            className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${
+            className={`w-4 h-4 text-muted shrink-0 transition-transform ${
               expanded ? "rotate-90" : ""
             }`}
           />
@@ -360,11 +360,11 @@ function PushItem({
       </button>
 
       {expanded && (
-        <div className="border-t p-4 bg-gray-50 space-y-3">
+        <div className="border-t p-4 bg-surface space-y-3">
           {push.summary && (
             <div>
-              <p className="text-xs text-gray-500 mb-1">原文摘要</p>
-              <p className="text-sm text-gray-700 whitespace-pre-wrap">
+              <p className="text-xs text-muted mb-1">原文摘要</p>
+              <p className="text-sm text whitespace-pre-wrap">
                 {push.summary}
               </p>
             </div>
@@ -375,7 +375,7 @@ function PushItem({
               href={push.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
+              className="inline-flex items-center gap-1 text-sm text-info hover:underline"
             >
               <ExternalLink className="w-3.5 h-3.5" />
               打开原文
@@ -384,7 +384,7 @@ function PushItem({
 
           {/* 反馈按钮 */}
           <div>
-            <p className="text-xs text-gray-500 mb-1.5">反馈</p>
+            <p className="text-xs text-muted mb-1.5">反馈</p>
             <div className="flex gap-2 flex-wrap">
               <button
                 onClick={() => onFeedback("read")}
@@ -415,7 +415,7 @@ function PushItem({
 
           {/* 跨模块导入 */}
           <div>
-            <p className="text-xs text-gray-500 mb-1.5">
+            <p className="text-xs text-muted mb-1.5">
               导入到 5 个目标模块（CrossModuleTarget）
             </p>
             <div className="flex gap-2 flex-wrap">

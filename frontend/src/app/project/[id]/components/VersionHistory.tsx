@@ -50,7 +50,7 @@ export function VersionHistory({
                       <div className="text-sm font-medium text-ink-primary">
                         v{v.version_number}
                         {v.is_rollback && (
-                          <span className="ml-2 text-xs text-amber-500">
+                          <span className="ml-2 text-xs text-warning">
                             回滚自 v{v.rolled_back_from_version}
                           </span>
                         )}
@@ -74,7 +74,7 @@ export function VersionHistory({
                         }}
                         className={`px-2 py-1 text-xs rounded ${
                           a === v.version_number || b === v.version_number
-                            ? "bg-[var(--color-accent)] text-white"
+                            ? "bg-accent text-white"
                             : "bg-surface-hover text-ink-secondary hover:text-ink-primary"
                         }`}
                       >
@@ -97,7 +97,7 @@ export function VersionHistory({
           <div className="p-3 border-t border-divider flex justify-end">
             <button
               onClick={() => onDiff(a, b)}
-              className="px-3 py-1.5 rounded-lg bg-[var(--color-accent)] text-white text-sm hover:opacity-90"
+              className="px-3 py-1.5 rounded-lg bg-accent text-white text-sm hover:opacity-90"
             >
               对比 v{a} ↔ v{b}
             </button>

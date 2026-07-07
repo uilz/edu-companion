@@ -50,7 +50,7 @@ export function DocumentView(props: ProjectViewProps) {
           </h3>
           <button
             onClick={() => onAddNode(null, 1)}
-            className="text-sm text-[var(--color-accent)] hover:opacity-80 flex items-center gap-1 whitespace-nowrap flex-shrink-0"
+            className="text-sm text-accent hover:opacity-80 flex items-center gap-1 whitespace-nowrap flex-shrink-0"
           >
             <Plus size={14} /> 根节点
           </button>
@@ -74,7 +74,7 @@ export function DocumentView(props: ProjectViewProps) {
         </h3>
         <button
           onClick={() => onAddNode(null, 1)}
-          className="text-sm text-[var(--color-accent)] hover:opacity-80 flex items-center gap-1 whitespace-nowrap flex-shrink-0"
+          className="text-sm text-accent hover:opacity-80 flex items-center gap-1 whitespace-nowrap flex-shrink-0"
         >
           <Plus size={14} /> 根节点
         </button>
@@ -156,9 +156,9 @@ function BlockRow({
   return (
     <div
       ref={(el) => registerRef(node.id, el)}
-      className={`rounded-lg border bg-surface hover:border-[var(--color-accent)] transition group p-4 ${
+      className={`rounded-lg border bg-surface hover:border-accent transition group p-4 ${
         isHighlighted
-          ? "border-[var(--color-accent)] ring-2 ring-[var(--color-accent)]"
+          ? "border-accent ring-2 ring-accent"
           : "border-divider"
       }`}
       style={{ marginLeft: `${node.depth * 24}px` }}
@@ -178,7 +178,7 @@ function BlockRow({
           <div className="flex items-center gap-2">
             <button
               onClick={() => onEdit(node)}
-              className="text-ink-primary font-semibold hover:text-[var(--color-accent)] text-left flex-1 truncate"
+              className="text-ink-primary font-semibold hover:text-accent text-left flex-1 truncate"
               title="点击编辑节点"
             >
               {node.title || "(无标题)"}
@@ -188,7 +188,7 @@ function BlockRow({
             </span>
             {reverseCount > 0 && (
               <span
-                className="flex items-center gap-1 text-[10px] text-blue-500 whitespace-nowrap flex-shrink-0"
+                className="flex items-center gap-1 text-[10px] text-info whitespace-nowrap flex-shrink-0"
                 title={`被 ${reverseCount} 个其他节点引用`}
               >
                 <Link2 size={10} /> 被 {reverseCount} 引用
@@ -196,11 +196,11 @@ function BlockRow({
             )}
             <button
               onClick={() => onComplete(node)}
-              className="p-1 rounded text-ink-secondary hover:text-green-500 flex-shrink-0"
+              className="p-1 rounded text-ink-secondary hover:text-success flex-shrink-0"
               title={node.completed_at ? "已完成" : "标记完成"}
             >
               {node.completed_at ? (
-                <CheckCircle2 size={14} className="text-green-500" />
+                <CheckCircle2 size={14} className="text-success" />
               ) : (
                 <Circle size={14} />
               )}
@@ -213,7 +213,7 @@ function BlockRow({
                   <button
                     key={i}
                     onClick={() => onJumpRef(t.nodeId!)}
-                    className="text-[var(--color-accent)] hover:underline mx-0.5"
+                    className="text-accent hover:underline mx-0.5"
                     title="跳转到该节点"
                   >
                     {t.value}

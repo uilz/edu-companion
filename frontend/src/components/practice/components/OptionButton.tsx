@@ -20,41 +20,41 @@ interface Props {
 function OptionButtonImpl({
   label, text, selected, showResult, isCorrect, disabled, onSelect,
 }: Props) {
-  let border = "border-[var(--color-border)] hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-surface)]";
-  let bg = "bg-[var(--color-bg)]";
-  let textColor = "text-[var(--color-text)]";
+  let border = "border hover:border-accent/40 hover:bg-surface";
+  let bg = "bg-page";
+  let textColor = "text";
   let indicator = null;
 
   if (showResult) {
     if (isCorrect) {
-      border = "border-green-400 dark:border-green-600";
-      bg = "bg-green-50 dark:bg-green-900/15";
-      textColor = "text-green-700 dark:text-green-300";
+      border = "border-success/40 dark:border-success/60";
+      bg = "bg-success/10 dark:bg-success/10";
+      textColor = "text-success dark:text-success";
       indicator = (
-        <span className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+        <span className="w-5 h-5 rounded-full bg-success flex items-center justify-center flex-shrink-0">
           <svg viewBox="0 0 16 16" className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth="2.5">
             <polyline points="3,8 7,12 13,4" />
           </svg>
         </span>
       );
     } else if (selected) {
-      border = "border-red-400 dark:border-red-400";
-      bg = "bg-red-50 dark:bg-red-900/15";
-      textColor = "text-red-700 dark:text-red-300";
+      border = "border-danger/40 dark:border-danger/40";
+      bg = "bg-danger/10 dark:bg-danger/10";
+      textColor = "text-danger dark:text-danger";
       indicator = (
-        <span className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0">
+        <span className="w-5 h-5 rounded-full bg-danger flex items-center justify-center flex-shrink-0">
           <svg viewBox="0 0 16 16" className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth="2.5">
             <line x1="4" y1="4" x2="12" y2="12" /><line x1="12" y1="4" x2="4" y2="12" />
           </svg>
         </span>
       );
     } else {
-      border = "border-[var(--color-border)] opacity-40";
+      border = "border opacity-40";
     }
   } else if (selected) {
-    border = "border-[var(--color-accent)]";
-    bg = "bg-[var(--color-accent)]/5";
-    textColor = "text-[var(--color-accent)]";
+    border = "border-accent";
+    bg = "bg-accent/5";
+    textColor = "text-accent";
   }
 
   return (
@@ -66,13 +66,13 @@ function OptionButtonImpl({
       <span className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border ${
         showResult
           ? isCorrect
-            ? "border-green-400 bg-green-500 text-white"
+            ? "border-success/40 bg-success text-white"
             : selected
-              ? "border-red-400 bg-red-500 text-white"
-              : "border-[var(--color-border)] text-[var(--color-text-muted)]"
+              ? "border-danger/40 bg-danger text-white"
+              : "border text-muted"
           : selected
-            ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
-            : "border-[var(--color-border)] text-[var(--color-text-muted)]"
+            ? "border-accent bg-accent text-white"
+            : "border text-muted"
       }`}>
         {label}
       </span>

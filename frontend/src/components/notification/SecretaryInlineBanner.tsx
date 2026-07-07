@@ -88,13 +88,13 @@ export default function SecretaryInlineBanner({
       {notifications.map((n) => (
         <div
           key={n.id}
-          className="flex items-start gap-3 p-3 rounded-lg border border-[var(--color-accent)]/20 bg-[var(--color-accent)]/5 relative"
+          className="flex items-start gap-3 p-3 rounded-lg border border-accent/20 bg-accent/5 relative"
         >
           {/* X 关闭按钮 */}
           <button
             type="button"
             onClick={() => handleDismiss(n.id)}
-            className="absolute top-2 right-2 w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
+            className="absolute top-2 right-2 w-5 h-5 flex items-center justify-center rounded text-muted hover:text hover:bg-surface-hover transition-colors"
             aria-label="关闭通知"
           >
             ✕
@@ -102,14 +102,14 @@ export default function SecretaryInlineBanner({
           <span className="text-xl leading-none mt-0.5">{n.emoji}</span>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="text-xs font-medium text-[var(--color-text-secondary)]">
+              <span className="text-xs font-medium text-secondary">
                 {SOURCE_LABELS[n.source] || n.source}
               </span>
-              <span className="text-[11px] font-semibold text-[var(--color-text-primary)]">
+              <span className="text-[11px] font-semibold text">
                 {n.title}
               </span>
             </div>
-            <p className="text-sm text-[var(--color-text-secondary)] mt-1 leading-relaxed">
+            <p className="text-sm text-secondary mt-1 leading-relaxed">
               {n.description}
             </p>
             {/* 操作按钮组 */}
@@ -117,7 +117,7 @@ export default function SecretaryInlineBanner({
               <button
                 type="button"
                 onClick={() => handleAccept(n.id)}
-                className="text-xs px-3 py-1 rounded-md bg-[var(--color-primary)] text-white hover:opacity-80 transition-opacity"
+                className="text-xs px-3 py-1 rounded-md bg-accent text-white hover:opacity-80 transition-opacity"
                 aria-label="采纳"
               >
                 采纳
@@ -125,7 +125,7 @@ export default function SecretaryInlineBanner({
               <button
                 type="button"
                 onClick={() => handleDismiss(n.id)}
-                className="text-xs px-3 py-1 rounded-md bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:opacity-80 transition-opacity"
+                className="text-xs px-3 py-1 rounded-md bg-surface-hover text-secondary hover:opacity-80 transition-opacity"
                 aria-label="忽略"
               >
                 忽略
@@ -134,19 +134,19 @@ export default function SecretaryInlineBanner({
               <div className="relative group">
                 <button
                   type="button"
-                  className="text-xs px-2 py-1 rounded-md bg-[var(--color-bg-tertiary)] text-[var(--color-text-tertiary)] hover:opacity-80"
+                  className="text-xs px-2 py-1 rounded-md bg-surface-hover text-muted hover:opacity-80"
                   aria-label="延后"
                 >
                   延后
                 </button>
                 <div className="absolute left-0 top-full mt-1 z-10 hidden group-hover:block">
-                  <div className="flex gap-0.5 p-1 rounded bg-[var(--color-bg-secondary)] border border-[var(--color-border)] shadow-lg">
+                  <div className="flex gap-0.5 p-1 rounded bg-page-secondary border border shadow-lg">
                     {SNOOZE_PRESETS.map((preset) => (
                       <button
                         key={preset.label}
                         type="button"
                         onClick={() => handleSnooze(n.id, preset.ms)}
-                        className="text-xs px-2 py-1 rounded hover:bg-[var(--color-bg-tertiary)] whitespace-nowrap"
+                        className="text-xs px-2 py-1 rounded hover:bg-surface-hover whitespace-nowrap"
                       >
                         {preset.label}
                       </button>
@@ -157,7 +157,7 @@ export default function SecretaryInlineBanner({
               <button
                 type="button"
                 onClick={() => handleHide(n.id)}
-                className="text-xs px-2 py-1 rounded-md bg-transparent text-[var(--color-text-tertiary)] hover:opacity-80"
+                className="text-xs px-2 py-1 rounded-md bg-transparent text-muted hover:opacity-80"
                 aria-label="隐藏"
               >
                 隐藏

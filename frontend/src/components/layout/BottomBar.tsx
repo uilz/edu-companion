@@ -112,9 +112,9 @@ export default function BottomBar() {
     if (moodLoading) return <Activity size={14} className="animate-pulse text-ink-muted" />;
     if (!mood) return <Smile size={14} className="text-ink-muted" />;
     const p = mood.pressure_score ?? 0;
-    if (p >= 7) return <Activity size={14} className="text-red-500" />;
-    if (p >= 4) return <Heart size={14} className="text-amber-500" />;
-    return <Smile size={14} className="text-green-500" />;
+    if (p >= 7) return <Activity size={14} className="text-danger" />;
+    if (p >= 4) return <Heart size={14} className="text-warning" />;
+    return <Smile size={14} className="text-success" />;
   })();
 
   // 进度条
@@ -151,7 +151,7 @@ export default function BottomBar() {
         <Bell size={14} />
         <span>通知</span>
         {notifCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[9px] font-semibold leading-none">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-danger text-white text-[9px] font-semibold leading-none">
             {notifCount > 99 ? "99+" : notifCount}
           </span>
         )}

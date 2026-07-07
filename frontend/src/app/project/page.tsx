@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Plus,
   Folder,
@@ -55,14 +56,15 @@ function formatDate(iso: string | null | undefined): string {
 }
 
 function getCompletionColor(rate: number): string {
-  if (rate >= 0.8) return "text-green-500";
-  if (rate >= 0.4) return "text-amber-500";
+  if (rate >= 0.8) return "text-success";
+  if (rate >= 0.4) return "text-warning";
   return "text-ink-secondary";
 }
 
 // ── 主组件 ──
 
 export default function ProjectListPage() {
+  const router = useRouter();
   // 任务 #49：统一使用 useUserData 自动等待 AuthContext，
   // 避免「useCurrentUserId 隐藏 authLoading 导致 useEffect 死锁」问题。
   // 列表数据（项目 + 模板）并行加载，一次性提供 projects/templates。
@@ -103,6 +105,7 @@ export default function ProjectListPage() {
     template_id: "",
     name: "",
   });
+  const [error, setError] = useState<string | null>(null);
 
   const filtered = projectList.filter((p) => {
     if (filterStatus !== "all" && p.status !== filterStatus) return false;
@@ -157,7 +160,7 @@ export default function ProjectListPage() {
       setShowFromTemplate(false);
       setFromTemplate({ template_id: "", name: "" });
       if (json?.id) {
-        window.location.href = `/project/${json.id}`;
+        router.push(`/project/${json.id}`);
         return;
       }
       loadProjects();
@@ -176,6 +179,7 @@ export default function ProjectListPage() {
       loadProjects();
     } catch (e) {
       console.error(e);
+      setError(e instanceof Error ? e.message : "删除项目失败");
     }
   };
 
@@ -189,6 +193,7 @@ export default function ProjectListPage() {
       loadProjects();
     } catch (e) {
       console.error(e);
+      setError(e instanceof Error ? e.message : "归档项目失败");
     }
   };
 
@@ -198,7 +203,7 @@ export default function ProjectListPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-ink-primary tracking-tight flex items-center gap-2">
-            <Folder className="text-[var(--color-accent)]" size={26} />
+            <Folder className="text-accent" size={26} />
             项目工作台
           </h1>
           <p className="text-sm text-ink-secondary mt-1">
@@ -214,7 +219,7 @@ export default function ProjectListPage() {
           </button>
           <button
             onClick={() => setShowCreate(true)}
-            className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 transition flex items-center gap-2 whitespace-nowrap"
+            className="px-4 py-2 rounded-lg bg-accent text-white hover:opacity-90 transition flex items-center gap-2 whitespace-nowrap"
           >
             <Plus size={16} /> 新建项目
           </button>
@@ -229,7 +234,7 @@ export default function ProjectListPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="搜索项目..."
-            className="w-full pl-10 pr-3 py-2 rounded-lg bg-surface border border-divider text-ink-primary placeholder:text-ink-secondary focus:border-[var(--color-accent)] outline-none"
+            className="w-full pl-10 pr-3 py-2 rounded-lg bg-surface border border-divider text-ink-primary placeholder:text-ink-secondary focus:border-accent outline-none"
           />
         </div>
         <select
@@ -255,6 +260,18 @@ export default function ProjectListPage() {
         <div className="flex items-center justify-center py-20 text-ink-secondary">
           <Loader2 className="animate-spin" size={24} />
         </div>
+      ) : error ? (
+        <div className="text-center py-20">
+          <div className="p-4 border border-danger/20 bg-danger/10 rounded-lg text-danger mb-4 max-w-md mx-auto">
+            {error}
+          </div>
+          <button
+            onClick={() => { setError(null); loadProjects(); }}
+            className="px-4 py-2 rounded-lg bg-accent text-white hover:opacity-90 text-sm"
+          >
+            重试
+          </button>
+        </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-20 text-ink-secondary">
           <Folder size={48} className="mx-auto mb-3 opacity-50" />
@@ -268,12 +285,12 @@ export default function ProjectListPage() {
             return (
               <div
                 key={p.id}
-                className="rounded-xl border border-divider bg-surface p-4 hover:border-[var(--color-accent)] transition group"
+                className="rounded-xl border border-divider bg-surface p-4 hover:border-accent transition group"
               >
                 <div className="flex items-start justify-between mb-2">
                   <Link
                     href={`/project/${p.id}`}
-                    className="text-lg font-semibold text-ink-primary hover:text-[var(--color-accent)] transition flex-1 truncate"
+                    className="text-lg font-semibold text-ink-primary hover:text-accent transition flex-1 truncate"
                   >
                     {p.name}
                   </Link>
@@ -287,7 +304,7 @@ export default function ProjectListPage() {
                     </button>
                     <button
                       onClick={() => handleDelete(p.id)}
-                      className="p-1.5 rounded text-ink-secondary hover:text-red-500 hover:bg-surface-hover"
+                      className="p-1.5 rounded text-ink-secondary hover:text-danger hover:bg-surface-hover"
                       title="删除"
                     >
                       <Trash2 size={14} />
@@ -334,7 +351,7 @@ export default function ProjectListPage() {
                 {p.node_count > 0 && (
                   <div className="mt-2 h-1 bg-surface-hover rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-[var(--color-accent)] transition-all"
+                      className="h-full bg-accent transition-all"
                       style={{ width: `${completionRate * 100}%` }}
                     />
                   </div>
@@ -359,7 +376,7 @@ export default function ProjectListPage() {
             <div className="space-y-3">
               <div>
                 <label className="text-sm text-ink-secondary block mb-1">
-                  项目名称 <span className="text-red-500">*</span>
+                  项目名称 <span className="text-danger">*</span>
                 </label>
                 <input
                   value={newProject.name}
@@ -397,7 +414,7 @@ export default function ProjectListPage() {
               <button
                 onClick={handleCreate}
                 disabled={creating || !newProject.name.trim()}
-                className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+                className="px-4 py-2 rounded-lg bg-accent text-white hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
               >
                 {creating && <Loader2 className="animate-spin" size={14} />}
                 创建
@@ -432,7 +449,7 @@ export default function ProjectListPage() {
               </div>
               <div>
                 <label className="text-sm text-ink-secondary block mb-1">
-                  项目名称 <span className="text-red-500">*</span>
+                  项目名称 <span className="text-danger">*</span>
                 </label>
                 <input
                   value={fromTemplate.name}
@@ -452,7 +469,7 @@ export default function ProjectListPage() {
               <button
                 onClick={handleCreateFromTemplate}
                 disabled={creating || !fromTemplate.template_id || !fromTemplate.name.trim()}
-                className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+                className="px-4 py-2 rounded-lg bg-accent text-white hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
               >
                 {creating && <Loader2 className="animate-spin" size={14} />}
                 创建

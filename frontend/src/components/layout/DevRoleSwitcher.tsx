@@ -39,17 +39,17 @@ export default function DevRoleSwitcher() {
     <div className="fixed bottom-3 right-3 z-[100] font-mono text-xs">
       {open ? (
         <div
-          className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-lg shadow-2xl p-3 w-72 space-y-3"
+          className="bg-surface border border rounded-lg shadow-2xl p-3 w-72 space-y-3"
           data-testid="dev-role-switcher"
         >
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 font-semibold text-[var(--color-text)]">
-              <FlaskConical size={12} className="text-[var(--color-warning)]" />
+            <div className="flex items-center gap-1.5 font-semibold text">
+              <FlaskConical size={12} className="text-warning" />
               Dev Role Switcher
             </div>
             <button
               onClick={() => setOpen(false)}
-              className="p-1 rounded text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+              className="p-1 rounded text-muted hover:text hover:bg-surface"
               aria-label="关闭"
             >
               <X size={12} />
@@ -57,27 +57,27 @@ export default function DevRoleSwitcher() {
           </div>
 
           {/* 真实身份显示 */}
-          <div className="text-[10px] text-[var(--color-text-muted)] space-y-0.5">
+          <div className="text-[10px] text-muted space-y-0.5">
             <div>
               真实身份:{" "}
-              <span className="text-[var(--color-text)]">
+              <span className="text">
                 {user ? `${user.username} (${user.role})` : "未登录"}
               </span>
             </div>
             <div>
               当前生效:{" "}
-              <span className="text-[var(--color-accent)]">
+              <span className="text-accent">
                 {ROLE_LABELS[userRole]} · {TIER_LABELS[subscriptionTier]}
               </span>
               {hasDevOverride && (
-                <span className="ml-1 text-[var(--color-warning)]">[覆盖]</span>
+                <span className="ml-1 text-warning">[覆盖]</span>
               )}
             </div>
           </div>
 
           {/* 角色切换 */}
           <div>
-            <div className="text-[10px] text-[var(--color-text-muted)] mb-1">
+            <div className="text-[10px] text-muted mb-1">
               User Role
             </div>
             <div className="grid grid-cols-2 gap-1">
@@ -89,8 +89,8 @@ export default function DevRoleSwitcher() {
                     onClick={() => setDevOverride({ userRole: r, subscriptionTier })}
                     className={`px-2 py-1.5 rounded text-[10px] transition-colors ${
                       active
-                        ? "bg-[var(--color-accent)] text-white"
-                        : "bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)]"
+                        ? "bg-accent text-white"
+                        : "bg-surface text-secondary hover:bg-surface-hover"
                     }`}
                   >
                     {ROLE_LABELS[r]}
@@ -102,7 +102,7 @@ export default function DevRoleSwitcher() {
 
           {/* 档位切换 */}
           <div>
-            <div className="text-[10px] text-[var(--color-text-muted)] mb-1">
+            <div className="text-[10px] text-muted mb-1">
               Subscription Tier
             </div>
             <div className="grid grid-cols-3 gap-1">
@@ -114,8 +114,8 @@ export default function DevRoleSwitcher() {
                     onClick={() => setDevOverride({ userRole, subscriptionTier: t })}
                     className={`px-2 py-1.5 rounded text-[10px] transition-colors ${
                       active
-                        ? "bg-[var(--color-accent)] text-white"
-                        : "bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)]"
+                        ? "bg-accent text-white"
+                        : "bg-surface text-secondary hover:bg-surface-hover"
                     }`}
                   >
                     {TIER_LABELS[t]}
@@ -130,13 +130,13 @@ export default function DevRoleSwitcher() {
             <button
               onClick={() => clearDevOverride()}
               disabled={!hasDevOverride}
-              className="flex-1 px-2 py-1.5 rounded text-[10px] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex-1 px-2 py-1.5 rounded text-[10px] bg-surface text-secondary hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed"
             >
               重置为真实身份
             </button>
           </div>
 
-          <div className="text-[9px] text-[var(--color-text-muted)] leading-relaxed">
+          <div className="text-[9px] text-muted leading-relaxed">
             注：仅在 dev 模式可见。覆盖值仅存在 localStorage，
             刷新或清缓存后恢复真实角色。
           </div>
@@ -144,10 +144,10 @@ export default function DevRoleSwitcher() {
       ) : (
         <button
           onClick={() => setOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-[var(--color-card)] border border-[var(--color-border)] shadow-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)] transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-surface border border shadow-lg text-secondary hover:text hover:border-accent transition-colors"
           data-testid="dev-role-switcher-trigger"
         >
-          <FlaskConical size={12} className="text-[var(--color-warning)]" />
+          <FlaskConical size={12} className="text-warning" />
           <span>
             {ROLE_LABELS[userRole]} · {TIER_LABELS[subscriptionTier]}
           </span>

@@ -128,7 +128,7 @@ function KanbanColumn({
     <div
       ref={setNodeRef}
       className={`flex-shrink-0 w-72 border-l-4 ${meta.color} bg-surface border border-divider border-l-4 rounded-lg p-3 ${
-        isOver ? "ring-2 ring-[var(--color-accent)]" : ""
+        isOver ? "ring-2 ring-accent" : ""
       }`}
     >
       <div className="flex items-center justify-between mb-3">
@@ -137,7 +137,7 @@ function KanbanColumn({
         </div>
         <button
           onClick={() => onAddNode(null, 1)}
-          className="text-ink-secondary hover:text-[var(--color-accent)]"
+          className="text-ink-secondary hover:text-accent"
           title="添加节点到此列"
         >
           <Plus size={14} />
@@ -194,7 +194,7 @@ function KanbanCard({
   return (
     <div
       className={`rounded-lg bg-page border border-divider p-2.5 ${
-        isOverlay ? "shadow-xl rotate-1" : "hover:border-[var(--color-accent)]"
+        isOverlay ? "shadow-xl rotate-1" : "hover:border-accent"
       } transition`}
     >
       <div className="flex items-start gap-2">
@@ -218,7 +218,7 @@ function KanbanCard({
           </div>
           <button
             onClick={() => onOpen?.(node)}
-            className="text-sm text-ink-primary hover:text-[var(--color-accent)] text-left w-full line-clamp-2 font-medium"
+            className="text-sm text-ink-primary hover:text-accent text-left w-full line-clamp-2 font-medium"
           >
             {node.title || "(无标题)"}
           </button>

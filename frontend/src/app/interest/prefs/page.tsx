@@ -2,7 +2,7 @@
 
 /**
  * 推送偏好 — 频率/时间/比例/跨学科/保留期
- * 依据 docs/modules/interest-explorer/data-model.md §2 + ADR 0007 决策 4/8/11
+ * 依据 docs/modules/interest-explorer/data-model.md §2 + ADR 0007 决策 4/8
  */
 import { useEffect, useState, useCallback } from "react";
 import {
@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
-  interestService, InterestPushPrefs, FREQUENCY_LABELS,
+  interestService, InterestPushPrefs, PushFrequency, FREQUENCY_LABELS,
 } from "@/lib/api/interest-api";
 
 export default function PrefsPage() {
@@ -27,8 +27,8 @@ export default function PrefsPage() {
     try {
       const r = await interestService.getPrefs();
       setPrefs(r);
-    } catch (e: any) {
-      setError(e.message || "加载失败");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "加载失败");
     } finally {
       setLoading(false);
     }
@@ -46,8 +46,8 @@ export default function PrefsPage() {
       setPrefs(r);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 2000);
-    } catch (e: any) {
-      setError(e.message || "保存失败");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "保存失败");
     } finally {
       setBusy(false);
     }
@@ -55,7 +55,7 @@ export default function PrefsPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8 max-w-2xl text-center py-12 text-gray-400">
+      <div className="container mx-auto px-4 py-8 max-w-2xl text-center py-12 text-muted">
         <Loader2 className="w-8 h-8 mx-auto animate-spin" />
       </div>
     );
@@ -64,7 +64,7 @@ export default function PrefsPage() {
   if (!prefs) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-2xl">
-        <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+        <div className="p-3 bg-danger/10 border border-danger/20 rounded text-sm text-danger">
           加载失败: {error}
         </div>
       </div>
@@ -82,24 +82,24 @@ export default function PrefsPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <SettingsIcon className="w-6 h-6 text-blue-500" />
+            <SettingsIcon className="w-6 h-6 text-info" />
             推送偏好
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-muted mt-1">
             严格遵循 ADR 0007: 时区感知 · 推送比例可配置 · 跨学科默认关闭
           </p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => router.push("/interest")}
-            className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50"
+            className="px-3 py-1.5 text-sm border rounded-lg hover:bg-surface"
           >
             返回
           </button>
           <button
             onClick={onSave}
             disabled={busy || !sumValid}
-            className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-1 disabled:opacity-50"
+            className="px-3 py-1.5 text-sm bg-info text-white rounded-lg hover:bg-info flex items-center gap-1 disabled:opacity-50"
           >
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             保存
@@ -108,14 +108,14 @@ export default function PrefsPage() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-sm text-red-700">
+        <div className="mb-4 p-3 bg-danger/10 border border-danger/20 rounded-lg flex items-start gap-2 text-sm text-danger">
           <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       {success && (
-        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+        <div className="mb-4 p-3 bg-success/10 border border-success/20 rounded-lg text-sm text-success">
           保存成功
         </div>
       )}
@@ -126,10 +126,10 @@ export default function PrefsPage() {
           <h2 className="font-medium text-sm mb-3">推送频率</h2>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-gray-600 block mb-1">频率</label>
+              <label className="text-xs text-muted block mb-1">频率</label>
               <select
                 value={prefs.frequency}
-                onChange={(e) => setPrefs({ ...prefs, frequency: e.target.value as any })}
+                onChange={(e) => setPrefs({ ...prefs, frequency: e.target.value as PushFrequency })}
                 className="w-full px-3 py-2 border rounded text-sm"
               >
                 {Object.entries(FREQUENCY_LABELS).map(([k, v]) => (
@@ -138,7 +138,7 @@ export default function PrefsPage() {
               </select>
             </div>
             <div>
-              <label className="text-xs text-gray-600 block mb-1">推送时间</label>
+              <label className="text-xs text-muted block mb-1">推送时间</label>
               <input
                 type="time"
                 value={prefs.push_time?.slice(0, 5) || "08:00"}
@@ -148,7 +148,7 @@ export default function PrefsPage() {
             </div>
           </div>
           <div className="mt-3">
-            <label className="text-xs text-gray-600 block mb-1">时区</label>
+            <label className="text-xs text-muted block mb-1">时区</label>
             <input
               value={prefs.timezone}
               onChange={(e) => setPrefs({ ...prefs, timezone: e.target.value })}
@@ -169,14 +169,14 @@ export default function PrefsPage() {
             max={50}
             className="w-32 px-3 py-2 border rounded text-sm"
           />
-          <p className="text-xs text-gray-500 mt-1">1 - 50 条</p>
+          <p className="text-xs text-muted mt-1">1 - 50 条</p>
         </div>
 
         {/* 推送比例 */}
         <div className="border rounded-lg p-4 bg-white">
           <h2 className="font-medium text-sm mb-3">
             推送比例{" "}
-            <span className={`text-xs ${sumValid ? "text-green-600" : "text-red-600"}`}>
+            <span className={`text-xs ${sumValid ? "text-success" : "text-danger"}`}>
               (合计: {sum}%)
             </span>
           </h2>
@@ -184,7 +184,7 @@ export default function PrefsPage() {
             <div>
               <div className="flex items-center justify-between text-xs mb-1">
                 <label>研究对象 (research_object)</label>
-                <span className="text-gray-500">{prefs.research_object_pct}%</span>
+                <span className="text-muted">{prefs.research_object_pct}%</span>
               </div>
               <input
                 type="range"
@@ -201,7 +201,7 @@ export default function PrefsPage() {
             <div>
               <div className="flex items-center justify-between text-xs mb-1">
                 <label>研究方法 (research_method)</label>
-                <span className="text-gray-500">{prefs.research_method_pct}%</span>
+                <span className="text-muted">{prefs.research_method_pct}%</span>
               </div>
               <input
                 type="range"
@@ -218,7 +218,7 @@ export default function PrefsPage() {
             <div>
               <div className="flex items-center justify-between text-xs mb-1">
                 <label>热点日报 (hot_news)</label>
-                <span className="text-gray-500">{prefs.hot_news_pct}%</span>
+                <span className="text-muted">{prefs.hot_news_pct}%</span>
               </div>
               <input
                 type="range"
@@ -233,7 +233,7 @@ export default function PrefsPage() {
               />
             </div>
             {!sumValid && (
-              <p className="text-xs text-red-600">
+              <p className="text-xs text-danger">
                 推送比例之和必须 = 100%
               </p>
             )}
@@ -255,7 +255,7 @@ export default function PrefsPage() {
             />
             <span>启用跨学科推送（范围扩展到用户兴趣领域之外）</span>
           </label>
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-muted mt-1">
             默认关闭。开启后从所有标签的全局采样（决策 4）
           </p>
         </div>

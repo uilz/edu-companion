@@ -9,7 +9,7 @@ import {
   Shield, AlertTriangle, CheckCircle, XCircle, Loader2,
   ChevronDown, ChevronUp, Trash2, Zap, BarChart3,
 } from "lucide-react";
-import { authedFetch, API_BASE } from "@/lib/api/api";
+import { PageSkeleton } from "@/components/ui/Skeleton";
 
 /**
  * 质量分析摘要 —— 包含题目总数、各等级数量、平均分及最差题目列表
@@ -145,23 +145,19 @@ export default function QualityPage() {
 
   // 页面加载中 —— 显示加载动画
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 size={24} className="animate-spin text-[var(--color-text-muted)]" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)]">
+    <div className="min-h-screen bg-page">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
         {/* ── 页面标题栏 ── */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-semibold text-[var(--color-text)] tracking-tight">
+            <h1 className="text-2xl font-semibold text tracking-tight">
               题库质量
             </h1>
-            <p className="text-sm text-[var(--color-text-muted)] mt-1">
+            <p className="text-sm text-muted mt-1">
               基于 IRT 模型分析题目质量
             </p>
           </div>
@@ -178,7 +174,7 @@ export default function QualityPage() {
 
         {/* 操作结果消息提示 */}
         {applyResult && (
-          <div className="mb-6 px-4 py-2.5 border border-[var(--color-border)] text-sm text-[var(--color-text-muted)]">
+          <div className="mb-6 px-4 py-2.5 border border text-sm text-muted">
             {applyResult}
           </div>
         )}
@@ -190,10 +186,10 @@ export default function QualityPage() {
             {/* ── 质量分布条形图 ── */}
             <div className="mb-8">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-[var(--color-text-muted)] uppercase tracking-wider">
+                <span className="text-xs text-muted uppercase tracking-wider">
                   质量分布 · 综合评分 {(summary.avg_quality * 100).toFixed(0)}%
                 </span>
-                <span className="text-xs text-[var(--color-text-muted)]">
+                <span className="text-xs text-muted">
                   {summary.analyzed}/{summary.total_questions} 已分析
                 </span>
               </div>
@@ -229,7 +225,7 @@ export default function QualityPage() {
                 )}
               </div>
               {/* 图例 */}
-              <div className="flex gap-4 mt-2 text-[10px] text-[var(--color-text-muted)]">
+              <div className="flex gap-4 mt-2 text-[10px] text-muted">
                 <span>🟢 优秀 {summary.excellent}</span>
                 <span>🔵 良好 {summary.good}</span>
                 <span>🟡 一般 {summary.marginal}</span>
@@ -242,7 +238,7 @@ export default function QualityPage() {
             <div className="grid lg:grid-cols-5 gap-6">
               {/* 左栏：质量最差的题目列表 */}
               <div className="lg:col-span-2">
-                <h2 className="text-sm font-semibold text-[var(--color-text)] uppercase tracking-wider mb-4 flex items-center gap-2">
+                <h2 className="text-sm font-semibold text uppercase tracking-wider mb-4 flex items-center gap-2">
                   <AlertTriangle size={14} className="text-[#ef4444]" />
                   问题题目
                 </h2>
@@ -253,22 +249,22 @@ export default function QualityPage() {
                       onClick={() => loadDetail(q.question_id)}
                       className={`w-full text-left px-3 py-2.5 border transition-colors ${
                         detail?.question_id === q.question_id
-                          ? "border-[var(--color-accent)] bg-[var(--color-accent)]/5"
-                          : "border-[var(--color-border)] hover:border-[var(--color-border-hover)]"
+                          ? "border-accent bg-accent/5"
+                          : "border hover:border-hover"
                       }`}
                     >
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-[10px] font-mono text-[var(--color-text-muted)] truncate max-w-[70%]">
+                        <span className="text-[10px] font-mono text-muted truncate max-w-[70%]">
                           {q.question_id.slice(0, 16)}
                         </span>
                         <span className={`text-[10px] font-medium px-1.5 py-0.5 ${GRADE_COLORS[q.quality_grade] || ""}`}>
                           {q.quality_score.toFixed(2)}
                         </span>
                       </div>
-                      <p className="text-xs text-[var(--color-text)] line-clamp-2">
+                      <p className="text-xs text line-clamp-2">
                         {q.text || "(无文本)"}
                       </p>
-                      <div className="flex items-center gap-2 mt-1.5 text-[10px] text-[var(--color-text-muted)]">
+                      <div className="flex items-center gap-2 mt-1.5 text-[10px] text-muted">
                         <span>答题 {q.total_attempts}次</span>
                         <span>正确率 {(q.correct_rate * 100).toFixed(0)}%</span>
                         {q.flags.map((f) => (
@@ -278,7 +274,7 @@ export default function QualityPage() {
                     </button>
                   ))}
                   {summary.worst_questions.length === 0 && (
-                    <p className="text-xs text-[var(--color-text-muted)] py-4">
+                    <p className="text-xs text-muted py-4">
                       🎉 没有需要关注的问题题目
                     </p>
                   )}
@@ -289,14 +285,14 @@ export default function QualityPage() {
               <div className="lg:col-span-3">
                 {detailLoading ? (
                   <div className="flex items-center justify-center py-16">
-                    <Loader2 size={20} className="animate-spin text-[var(--color-text-muted)]" />
+                    <Loader2 size={20} className="animate-spin text-muted" />
                   </div>
                 ) : detail ? (
                   <QuestionDetailPanel detail={detail} />
                 ) : (
-                  <div className="flex flex-col items-center justify-center py-16 text-center border border-[var(--color-border)]">
-                    <BarChart3 size={32} className="text-[var(--color-text-muted)] mb-3" />
-                    <p className="text-sm text-[var(--color-text-muted)]">点击左侧题目查看详细分析</p>
+                  <div className="flex flex-col items-center justify-center py-16 text-center border border">
+                    <BarChart3 size={32} className="text-muted mb-3" />
+                    <p className="text-sm text-muted">点击左侧题目查看详细分析</p>
                   </div>
                 )}
               </div>
@@ -317,19 +313,19 @@ export default function QualityPage() {
  */
 function QuestionDetailPanel({ detail }: { detail: QuestionDetail }) {
   return (
-    <div className="border border-[var(--color-border)]">
+    <div className="border border">
       {/* 题目头部：ID、等级评分、题目文本、科目与技能 */}
-      <div className="px-4 py-3 border-b border-[var(--color-border)]">
+      <div className="px-4 py-3 border-b border">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] font-mono text-[var(--color-text-muted)]">
+          <span className="text-[10px] font-mono text-muted">
             {detail.question_id}
           </span>
           <span className={`text-[10px] font-semibold px-2 py-0.5 ${GRADE_COLORS[detail.quality_grade] || ""}`}>
             {detail.quality_grade.toUpperCase()} · {detail.quality_score.toFixed(2)}
           </span>
         </div>
-        <p className="text-sm text-[var(--color-text)] leading-relaxed">{detail.text}</p>
-        <div className="flex items-center gap-3 mt-2 text-[10px] text-[var(--color-text-muted)]">
+        <p className="text-sm text leading-relaxed">{detail.text}</p>
+        <div className="flex items-center gap-3 mt-2 text-[10px] text-muted">
           <span>{detail.subject}</span>
           <span>·</span>
           <span>{detail.skill_id}</span>
@@ -345,7 +341,7 @@ function QuestionDetailPanel({ detail }: { detail: QuestionDetail }) {
       </div>
 
       {/* 基本统计：答题次数、正确率、平均时长、当前状态 */}
-      <div className="px-4 py-2 border-t border-[var(--color-border)] grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] text-[var(--color-text-muted)]">
+      <div className="px-4 py-2 border-t border grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] text-muted">
         <span>答题 {detail.total_attempts}次</span>
         <span>正确率 {(detail.correct_rate * 100).toFixed(0)}%</span>
         <span>平均 {detail.avg_time_seconds.toFixed(0)}秒</span>
@@ -354,7 +350,7 @@ function QuestionDetailPanel({ detail }: { detail: QuestionDetail }) {
 
       {/* 问题标志列表 */}
       {detail.flags.length > 0 && (
-        <div className="px-4 py-2 border-t border-[var(--color-border)] flex flex-wrap gap-1.5">
+        <div className="px-4 py-2 border-t border flex flex-wrap gap-1.5">
           {detail.flags.map((f) => (
             <span key={f} className="text-[10px] px-1.5 py-0.5 bg-[#ef4444]/10 text-[#ef4444]">
               {FLAG_LABELS[f] || f}
@@ -365,8 +361,8 @@ function QuestionDetailPanel({ detail }: { detail: QuestionDetail }) {
 
       {/* 干扰项分析 */}
       {detail.distractors.length > 0 && (
-        <div className="border-t border-[var(--color-border)]">
-          <div className="px-4 py-2 text-[10px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
+        <div className="border-t border">
+          <div className="px-4 py-2 text-[10px] font-semibold text-muted uppercase tracking-wider">
             干扰项分析
           </div>
           <div className="px-4 pb-3 space-y-1.5">
@@ -379,14 +375,14 @@ function QuestionDetailPanel({ detail }: { detail: QuestionDetail }) {
                     : ""
                 }`}
               >
-                <span className={`font-semibold w-5 text-center ${d.is_correct ? "text-[#10b981]" : "text-[var(--color-text-muted)]"}`}>
+                <span className={`font-semibold w-5 text-center ${d.is_correct ? "text-[#10b981]" : "text-muted"}`}>
                   {d.letter}
                 </span>
-                <span className="flex-1 truncate text-[var(--color-text)]">{d.text}</span>
-                <span className="text-[var(--color-text-muted)]">{d.count}次</span>
-                <span className="text-[var(--color-text-muted)]">{(d.rate * 100).toFixed(0)}%</span>
+                <span className="flex-1 truncate text">{d.text}</span>
+                <span className="text-muted">{d.count}次</span>
+                <span className="text-muted">{(d.rate * 100).toFixed(0)}%</span>
                 <span className={`text-[10px] ${
-                  d.quality === "dead" ? "text-[#ef4444]" : "text-[var(--color-text-muted)]"
+                  d.quality === "dead" ? "text-[#ef4444]" : "text-muted"
                 }`}>
                   {d.quality === "excellent" ? "优秀" : d.quality === "good" ? "良好" : d.quality === "marginal" ? "一般" : "无效"}
                 </span>
@@ -398,7 +394,7 @@ function QuestionDetailPanel({ detail }: { detail: QuestionDetail }) {
 
       {/* 建议操作 */}
       {detail.status_action && (
-        <div className="px-4 py-2.5 border-t border-[var(--color-border)] text-[10px] text-[var(--color-text-muted)]">
+        <div className="px-4 py-2.5 border-t border text-[10px] text-muted">
           建议: {detail.status_action === "retire" ? "🔴 建议淘汰" : detail.status_action === "flag" ? "🟡 建议标记" : "🟢 保持"}
         </div>
       )}
@@ -413,9 +409,9 @@ function QuestionDetailPanel({ detail }: { detail: QuestionDetail }) {
 function Metric({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
     <div>
-      <div className="text-[10px] text-[var(--color-text-muted)] uppercase mb-0.5">{label}</div>
-      <div className="text-lg font-semibold text-[var(--color-text)]">{value}</div>
-      <div className="text-[10px] text-[var(--color-text-muted)]">{hint}</div>
+      <div className="text-[10px] text-muted uppercase mb-0.5">{label}</div>
+      <div className="text-lg font-semibold text">{value}</div>
+      <div className="text-[10px] text-muted">{hint}</div>
     </div>
   );
 }
@@ -424,13 +420,13 @@ function Metric({ label, value, hint }: { label: string; value: string; hint: st
 function EmptyState() {
   return (
     <div className="text-center py-16">
-      <div className="w-16 h-16 mx-auto mb-4 border border-[var(--color-border)] flex items-center justify-center">
-        <Shield size={28} className="text-[var(--color-text-muted)]" />
+      <div className="w-16 h-16 mx-auto mb-4 border border flex items-center justify-center">
+        <Shield size={28} className="text-muted" />
       </div>
-      <h2 className="text-lg font-semibold text-[var(--color-text)] mb-2">
+      <h2 className="text-lg font-semibold text mb-2">
         尚无质量数据
       </h2>
-      <p className="text-sm text-[var(--color-text-muted)] max-w-sm mx-auto">
+      <p className="text-sm text-muted max-w-sm mx-auto">
         每题需要至少 {5} 次答题记录才能进行分析。多做一些练习后回来查看。
       </p>
     </div>

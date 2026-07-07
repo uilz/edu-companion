@@ -1,14 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import dynamic from "next/dynamic";
 import {
   X, Volume2, VolumeX, Lightbulb, Network, Play,
-  ChevronLeft, ChevronRight, ChevronDown,
+  ChevronLeft, ChevronRight, ChevronDown, Loader2,
 } from "lucide-react";
 import { useConversationStore } from "@/store/conversation/conversation-store";
 import { useMessageStore } from "@/store/conversation/message-store";
-import { useChatStream } from "@/hooks/conversation/useChatStream";
-import { setChatStreamAPI } from "@/store/conversation/actions/send-message";
 
 import { apiFetch } from "@/store/conversation/tree-helpers";
 import MessageList from "@/components/conversation/core/MessageList";
@@ -16,8 +15,40 @@ import ConversationChatInput from "@/components/conversation/core/ChatInput";
 import { useGraphData } from "@/hooks/graph/useGraphData";
 import type { GraphData, GraphNode } from "@/lib/types/graph-types";
 import type { SelectedNode } from "@/components/conversation/tree/SidebarTreeNode";
-import FocusGraph from "@/components/graph/graphs/FocusGraph";
-import ForceGraph from "@/components/graph/graphs/ForceGraph";
+
+// 目录节点类型（domain / topic 共用）
+interface DirectoryNode {
+  id: string;
+  name: string;
+  emoji?: string;
+  topic_count?: number;
+  conversation_count?: number;
+  node_type?: string;
+  kind?: string;
+  parent_id?: string | null;
+}
+
+type Domain = DirectoryNode;
+type Topic = DirectoryNode;
+
+// 动态导入图形组件（D3 重量级库，按需加载）
+const FocusGraph = dynamic(() => import("@/components/graph/graphs/FocusGraph"), {
+  ssr: false,
+  loading: () => <GraphPlaceholder />,
+});
+const ForceGraph = dynamic(() => import("@/components/graph/graphs/ForceGraph"), {
+  ssr: false,
+  loading: () => <GraphPlaceholder />,
+});
+
+function GraphPlaceholder() {
+  return (
+    <div className="flex items-center justify-center h-full text-sm text-muted">
+      <Loader2 size={20} className="animate-spin mr-2" />
+      加载图形…
+    </div>
+  );
+}
 import PracticePanel from "@/components/practice/panels/PracticePanel";
 
 export default function FocusPage() {
@@ -30,20 +61,12 @@ export default function FocusPage() {
   const versionSwitch = useConversationStore((s) => s.versionSwitch);
   const dirList = useConversationStore((s) => s.dirList);
   const loadDirList = useConversationStore((s) => s.loadDirList);
-  const loadMessages = useConversationStore((s) => s.loadMessages);
   const wsConnected = useConversationStore((s) => s.wsConnected);
 
   // ── 所有导航状态统一由 selectedNode 推导 ──
   const storeSelectedNode = useConversationStore((s) => s.selectedNode);
   const activeConversationId = storeSelectedNode?.level === "conv" ? storeSelectedNode.id : null;
   const selectedDirId = storeSelectedNode?.level === "conv" ? (storeSelectedNode.parent ?? null) : (storeSelectedNode?.id ?? null);
-
-  // ── useChatStream（替代 StreamPipeline） ──
-  const chatStream = useChatStream();
-  useEffect(() => {
-    setChatStreamAPI(chatStream);
-    return () => setChatStreamAPI({ send: async () => {}, stop: async () => {}, submitToolResult: async () => {} });
-  }, [chatStream]);
 
   // ── Init: navigation + load dirs ──
   useEffect(() => {
@@ -54,9 +77,9 @@ export default function FocusPage() {
   // ── Load messages when conversation changes ──
   useEffect(() => {
     if (activeConversationId) {
-      loadMessages(activeConversationId);
+      useMessageStore.getState().loadConversation(activeConversationId);
     }
-  }, [activeConversationId, loadMessages]);
+  }, [activeConversationId]);
 
   // ── Split pane state ──
   const [splitPercent, setSplitPercent] = useState(50);
@@ -198,8 +221,8 @@ export default function FocusPage() {
   }, [graphData]);
 
   // ── Breadcrumb state — domain/topic data loading ──
-  const [domains, setDomains] = useState<any[]>([]);
-  const [topics, setTopics] = useState<any[]>([]);
+  const [domains, setDomains] = useState<Domain[]>([]);
+  const [topics, setTopics] = useState<Topic[]>([]);
   const [loadingDomains, setLoadingDomains] = useState(false);
   const [loadingTopics, setLoadingTopics] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<'partition' | 'domain' | 'topic' | null>(null);
@@ -275,18 +298,18 @@ export default function FocusPage() {
   // ── Collapsed views ──
   if (collapsedSide === "left") {
     return (
-      <div ref={containerRef} className="fixed inset-0 bg-[var(--color-bg)] z-30 flex" style={{ bottom: "var(--bottom-nav-height, 56px)" }}>
+      <div ref={containerRef} className="fixed inset-0 bg-page z-30 flex" style={{ bottom: "var(--bottom-nav-height, 56px)" }}>
         <div
           onMouseDown={onCollapsedDragLeft}
-          className="flex-shrink-0 w-8 flex flex-col items-center justify-center hover:bg-[var(--color-surface)] border-r border-[var(--color-border)] cursor-col-resize transition-colors group"
+          className="flex-shrink-0 w-8 flex flex-col items-center justify-center hover:bg-surface border-r border cursor-col-resize transition-colors group"
           title="拖动恢复分栏"
         >
           <ChevronRight size={16} className="group-hover:scale-110 transition-transform" />
-          <div className="absolute inset-y-1/4 w-[2px] rounded-full bg-[var(--color-border)] opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="absolute inset-y-1/4 w-[2px] rounded-full bg-divider opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
         <div ref={graphContainerRef as React.RefObject<HTMLDivElement>} className="flex-1 overflow-hidden p-2">
           {graphLoading ? (
-            <div className="flex items-center justify-center h-full text-sm text-[var(--color-text-muted)]">加载知识图谱…</div>
+            <div className="flex items-center justify-center h-full text-sm text-muted">加载知识图谱…</div>
           ) : graphData ? (
             graphMode === "tree" ? (
               <FocusGraph data={graphData} selectedNodeId={selectedNode?.id} onNodeSelect={setSelectedNode} activePath={activePath} width={graphSize.width} height={1000} />
@@ -294,7 +317,7 @@ export default function FocusPage() {
               <ForceGraph data={forceGraphData} selectedNodeId={selectedNode?.id} onNodeSelect={setSelectedNode} width={graphSize.width} height={1000} />
             )
           ) : (
-            <div className="flex items-center justify-center h-full text-sm text-[var(--color-text-muted)]">暂无图谱数据</div>
+            <div className="flex items-center justify-center h-full text-sm text-muted">暂无图谱数据</div>
           )}
         </div>
       </div>
@@ -303,17 +326,17 @@ export default function FocusPage() {
 
   if (collapsedSide === "right") {
     return (
-      <div ref={containerRef} className="fixed inset-0 bg-[var(--color-bg)] z-30 flex" style={{ bottom: "var(--bottom-nav-height, 56px)" }}>
+      <div ref={containerRef} className="fixed inset-0 bg-page z-30 flex" style={{ bottom: "var(--bottom-nav-height, 56px)" }}>
         <div className="flex-1 flex flex-col overflow-hidden">
           {renderConversationPanel()}
         </div>
         <div
           onMouseDown={onCollapsedDragRight}
-          className="flex-shrink-0 w-8 flex flex-col items-center justify-center hover:bg-[var(--color-surface)] border-l border-[var(--color-border)] cursor-col-resize transition-colors group"
+          className="flex-shrink-0 w-8 flex flex-col items-center justify-center hover:bg-surface border-l border cursor-col-resize transition-colors group"
           title="拖动恢复分栏"
         >
           <ChevronLeft size={16} className="group-hover:scale-110 transition-transform" />
-          <div className="absolute inset-y-1/4 w-[2px] rounded-full bg-[var(--color-border)] opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="absolute inset-y-1/4 w-[2px] rounded-full bg-divider opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
       </div>
     );
@@ -321,7 +344,7 @@ export default function FocusPage() {
 
   // ── Full split view ──
   return (
-    <div ref={containerRef} className="fixed inset-0 bg-[var(--color-bg)] z-30 flex" style={{ bottom: "var(--bottom-nav-height, 56px)" }}>
+    <div ref={containerRef} className="fixed inset-0 bg-page z-30 flex" style={{ bottom: "var(--bottom-nav-height, 56px)" }}>
       {/* Left: Conversation */}
       <div className="flex flex-col overflow-hidden" style={{ width: `${splitPercent}%` }}>
         {renderConversationPanel()}
@@ -331,39 +354,39 @@ export default function FocusPage() {
       <div className="flex-shrink-0 relative cursor-col-resize group flex items-center justify-center"
         style={{ width: 8 }} onMouseDown={onMouseDown}>
         {/* Thin vertical line */}
-        <div className="w-[2px] h-full bg-gradient-to-b from-transparent via-[var(--color-border)] to-transparent group-hover:via-[var(--color-accent)]/50 transition-all duration-200" />
+        <div className="w-[2px] h-full bg-gradient-to-b from-transparent via-divider to-transparent group-hover:via-accent/50 transition-all duration-200" />
         {/* Grip indicator dots */}
         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
           <div className="flex flex-col items-center gap-[3px]">
-            <div className="w-[3px] h-[3px] rounded-full bg-[var(--color-accent)]/40" />
-            <div className="w-[3px] h-[3px] rounded-full bg-[var(--color-accent)]/40" />
-            <div className="w-[3px] h-[3px] rounded-full bg-[var(--color-accent)]/40" />
+            <div className="w-[3px] h-[3px] rounded-full bg-accent/40" />
+            <div className="w-[3px] h-[3px] rounded-full bg-accent/40" />
+            <div className="w-[3px] h-[3px] rounded-full bg-accent/40" />
           </div>
         </div>
         {/* Collapse chevrons */}
         <button onClick={() => collapseTo("left")}
-          className="absolute top-1/2 -left-2.5 -translate-y-1/2 w-4 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[var(--color-surface)] rounded text-[var(--color-text-muted)] hover:text-[var(--color-accent)]"
+          className="absolute top-1/2 -left-2.5 -translate-y-1/2 w-4 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-surface rounded text-muted hover:text-accent"
           title="折叠左侧"><ChevronLeft size={10} /></button>
         <button onClick={() => collapseTo("right")}
-          className="absolute top-1/2 -right-2.5 -translate-y-1/2 w-4 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[var(--color-surface)] rounded text-[var(--color-text-muted)] hover:text-[var(--color-accent)]"
+          className="absolute top-1/2 -right-2.5 -translate-y-1/2 w-4 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-surface rounded text-muted hover:text-accent"
           title="折叠右侧"><ChevronRight size={10} /></button>
       </div>
 
       {/* Right: Knowledge graph */}
       <div ref={graphContainerRef as React.RefObject<HTMLDivElement>} className="flex flex-col overflow-hidden" style={{ width: `${100 - splitPercent}%` }}>
-        <div className="flex-shrink-0 border-b border-[var(--color-border)] px-4 py-3 flex items-center gap-2">
-          <Network size={16} className="text-[var(--color-accent)]" />
-          <span className="text-sm font-semibold text-[var(--color-text)]">知识图谱</span>
-          {graphLoading && <span className="text-xs text-[var(--color-text-muted)]">加载中…</span>}
+        <div className="flex-shrink-0 border-b border px-4 py-3 flex items-center gap-2">
+          <Network size={16} className="text-accent" />
+          <span className="text-sm font-semibold text">知识图谱</span>
+          {graphLoading && <span className="text-xs text-muted">加载中…</span>}
           <div className="flex-1" />
           {/* Mode toggle */}
-          <div className="flex items-center bg-[var(--color-surface)] rounded-lg p-0.5 gap-0.5">
+          <div className="flex items-center bg-surface rounded-lg p-0.5 gap-0.5">
             <button
               onClick={() => setGraphMode("tree")}
               className={`px-2 py-1 text-[11px] rounded-md transition-colors ${
                 graphMode === "tree"
-                  ? "bg-[var(--color-accent)] text-white font-medium"
-                  : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                  ? "bg-accent text-white font-medium"
+                  : "text-muted hover:text"
               }`}
             >
               思维导图
@@ -372,18 +395,18 @@ export default function FocusPage() {
               onClick={() => setGraphMode("force")}
               className={`px-2 py-1 text-[11px] rounded-md transition-colors ${
                 graphMode === "force"
-                  ? "bg-[var(--color-accent)] text-white font-medium"
-                  : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                  ? "bg-accent text-white font-medium"
+                  : "text-muted hover:text"
               }`}
             >
               力导向
             </button>
           </div>
-          {wsConnected && <span className="text-[8px] text-green-500">●</span>}
+          {wsConnected && <span className="text-[8px] text-success">●</span>}
         </div>
         <div className="flex-1 overflow-hidden p-2">
           {graphLoading ? (
-            <div className="flex items-center justify-center h-full text-sm text-[var(--color-text-muted)]">加载知识图谱…</div>
+            <div className="flex items-center justify-center h-full text-sm text-muted">加载知识图谱…</div>
           ) : graphData ? (
             graphMode === "tree" ? (
               <FocusGraph data={graphData} selectedNodeId={selectedNode?.id} onNodeSelect={setSelectedNode} activePath={activePath} width={graphSize.width} height={1000} />
@@ -391,7 +414,7 @@ export default function FocusPage() {
               <ForceGraph data={forceGraphData} selectedNodeId={selectedNode?.id} onNodeSelect={setSelectedNode} width={graphSize.width} height={1000} />
             )
           ) : (
-            <div className="flex items-center justify-center h-full text-sm text-[var(--color-text-muted)]">暂无图谱数据</div>
+            <div className="flex items-center justify-center h-full text-sm text-muted">暂无图谱数据</div>
           )}
         </div>
       </div>
@@ -400,7 +423,17 @@ export default function FocusPage() {
 
   // ── Breadcrumb bar renderer ──
   function renderBreadcrumb() {
-    // Helper: dropdown for any level
+    interface Domain {
+  id: string;
+  name: string;
+  node_type?: string;
+}
+
+interface Topic {
+  id: string;
+  name: string;
+  node_type?: string;
+}
     const dropdown = (opts: {
       level: 'partition' | 'domain' | 'topic';
       items: { id: string; name: string; emoji?: string; subtitle?: string }[];
@@ -417,8 +450,8 @@ export default function FocusPage() {
             onClick={(e) => { e.stopPropagation(); setOpenDropdown(isOpen ? null : opts.level); }}
             className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
               opts.currentId
-                ? 'text-[var(--color-text)] hover:bg-[var(--color-surface)]'
-                : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]'
+                ? 'text hover:bg-surface'
+                : 'text-muted hover:text hover:bg-surface'
             }`}
           >
             {opts.currentId && opts.items.find(i => i.id === opts.currentId)?.emoji && (
@@ -428,31 +461,31 @@ export default function FocusPage() {
               {opts.currentId ? opts.items.find(i => i.id === opts.currentId)?.name || opts.placeholder : opts.placeholder}
             </span>
             {opts.loading ? (
-              <span className="w-2 h-2 rounded-full bg-[var(--color-accent)] animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
             ) : (
-              <ChevronDown size={10} className={`transition-transform ${isOpen ? 'rotate-180' : ''} text-[var(--color-text-muted)]`} />
+              <ChevronDown size={10} className={`transition-transform ${isOpen ? 'rotate-180' : ''} text-muted`} />
             )}
           </button>
           {isOpen && (
-            <div className="absolute left-0 top-full mt-1 z-30 w-52 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg shadow-xl max-h-52 overflow-y-auto"
+            <div className="absolute left-0 top-full mt-1 z-30 w-52 bg-page border border rounded-lg shadow-xl max-h-52 overflow-y-auto"
               onClick={(e) => e.stopPropagation()}>
               {opts.items.length === 0 && !opts.loading && (
-                <div className="px-3 py-2 text-xs text-[var(--color-text-muted)]">{opts.loading ? '加载中...' : '暂无'}</div>
+                <div className="px-3 py-2 text-xs text-muted">{opts.loading ? '加载中...' : '暂无'}</div>
               )}
               {opts.items.map((item) => (
                 <button key={item.id}
                   onClick={() => opts.onSelect(item.id)}
-                  className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-[var(--color-surface)] transition-colors ${
-                    item.id === opts.currentId ? 'text-[var(--color-accent)] font-medium' : 'text-[var(--color-text)]'
+                  className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-surface transition-colors ${
+                    item.id === opts.currentId ? 'text-accent font-medium' : 'text'
                   }`}>
                   {item.emoji && <span>{item.emoji}</span>}
                   <span className="truncate flex-1">{item.name}</span>
-                  {item.subtitle && <span className="text-[10px] text-[var(--color-text-muted)]">{item.subtitle}</span>}
+                  {item.subtitle && <span className="text-[10px] text-muted">{item.subtitle}</span>}
                 </button>
               ))}
               {opts.onAddNew && (
                 <button onClick={opts.onAddNew}
-                  className="w-full text-left px-3 py-2 text-xs text-[var(--color-accent)] hover:bg-[var(--color-surface)] border-t border-[var(--color-border)] flex items-center gap-1.5">
+                  className="w-full text-left px-3 py-2 text-xs text-accent hover:bg-surface border-t border flex items-center gap-1.5">
                   + 新建
                 </button>
               )}
@@ -466,7 +499,7 @@ export default function FocusPage() {
       <>
         {/* Back button */}
         <button onClick={() => window.history.back()}
-          className="flex-shrink-0 p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] rounded transition-colors"
+          className="flex-shrink-0 p-1 text-muted hover:text hover:bg-surface rounded transition-colors"
           title="退出专注模式">
           <X size={14} />
         </button>
@@ -484,7 +517,7 @@ export default function FocusPage() {
           {/* Arrow + Domain level */}
           {selectedDirId && (
             <>
-              <ChevronRight size={10} className="flex-shrink-0 text-[var(--color-text-muted)]" />
+              <ChevronRight size={10} className="flex-shrink-0 text-muted" />
               {dropdown({
                 level: 'domain',
                 items: domains.map(d => ({ id: d.id, name: d.name, emoji: d.emoji, subtitle: d.topic_count ? `${d.topic_count} 专题` : undefined })),
@@ -500,7 +533,7 @@ export default function FocusPage() {
           {/* Arrow + Topic level */}
           {selectedDirId && (
             <>
-              <ChevronRight size={10} className="flex-shrink-0 text-[var(--color-text-muted)]" />
+              <ChevronRight size={10} className="flex-shrink-0 text-muted" />
               {dropdown({
                 level: 'topic',
                 items: topics.map(t => ({ id: t.id, name: t.name, emoji: t.emoji, subtitle: t.conversation_count ? `${t.conversation_count} 对话` : undefined })),
@@ -521,7 +554,7 @@ export default function FocusPage() {
     return (
       <>
       {/* Top bar with breadcrumb path */}
-      <div className="flex-shrink-0 border-b border-[var(--color-border)]">
+      <div className="flex-shrink-0 border-b border">
         <div className="flex items-center gap-1 px-3 py-2 min-h-[44px]">
           {renderBreadcrumb()}
         </div>
@@ -529,9 +562,9 @@ export default function FocusPage() {
 
         {/* Socratic prompt bar */}
         {showSocratic && (
-          <div className="flex-shrink-0 border-b border-[var(--color-accent)]/20 bg-[var(--color-accent)]/5 px-4 py-2">
+          <div className="flex-shrink-0 border-b border-accent/20 bg-accent/5 px-4 py-2">
             <div className="flex items-start gap-2">
-              <Lightbulb size={14} className="mt-1 text-amber-500 flex-shrink-0" />
+              <Lightbulb size={14} className="mt-1 text-warning flex-shrink-0" />
               <textarea
                 placeholder="输入你想深入探究的问题..."
                 className="flex-1 bg-transparent text-sm resize-none focus:outline-none leading-relaxed"
@@ -571,7 +604,7 @@ export default function FocusPage() {
         </div>
 
         {/* Input area */}
-        <div className="flex-shrink-0 border-t border-[var(--color-border)] bg-[var(--color-bg)]">
+        <div className="flex-shrink-0 border-t border bg-page">
           <div className="max-w-xl mx-auto px-4 py-3">
             <ConversationChatInput
               onSend={handleSend}
@@ -582,20 +615,20 @@ export default function FocusPage() {
               <div className="flex items-center gap-2">
                 <button onClick={() => setShowSocratic((p) => !p)}
                   className={`flex items-center gap-1 text-xs transition-colors ${
-                    showSocratic ? "text-amber-500" : "text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
+                    showSocratic ? "text-warning" : "text-muted hover:text-secondary"
                   }`}>
                   <Lightbulb size={12} />苏格拉底追问
                 </button>
-                <span className="text-[var(--color-border)]">|</span>
+                <span className="text-divider">|</span>
                 <button onClick={() => { setShowPractice((p) => !p); setShowSocratic(false); }}
                   className={`flex items-center gap-1 text-xs transition-colors ${
-                    showPractice ? "text-[var(--color-accent)]" : "text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
+                    showPractice ? "text-accent" : "text-muted hover:text-secondary"
                   }`}>
                   <Play size={12} />{showPractice ? "返回对话" : "智能练习"}
                 </button>
               </div>
               <button onClick={() => setVoiceEnabled((p) => !p)}
-                className="flex items-center gap-1 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors">
+                className="flex items-center gap-1 text-xs text-muted hover:text-secondary transition-colors">
                 {voiceEnabled ? <Volume2 size={12} /> : <VolumeX size={12} />}
                 {voiceEnabled ? "语音已开" : "语音已关"}
               </button>

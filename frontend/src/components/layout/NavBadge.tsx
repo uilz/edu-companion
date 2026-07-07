@@ -28,7 +28,7 @@ export default function NavBadge({ item, compact = false }: NavBadgeProps) {
         compact
           ? "text-[8px] px-1 py-px"
           : "text-[9px] px-1.5 py-0.5"
-      } rounded bg-gradient-to-r from-amber-500/15 to-orange-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30`}
+      } rounded bg-gradient-to-r from-warning/15 to-warning/15 text-warning dark:text-warning border border-warning/30`}
       title="Pro 订阅专属"
     >
       <Lock size={compact ? 8 : 9} strokeWidth={2.4} />

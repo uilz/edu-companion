@@ -37,37 +37,37 @@ export function FlashCardItem({
 
   return (
     <div
-      className={`group border border-[var(--color-border)] bg-[var(--color-surface)] rounded-lg p-4 transition-all hover:shadow-md cursor-pointer ${
+      className={`group border border bg-surface rounded-lg p-4 transition-all hover:shadow-md cursor-pointer ${
         isSuspended ? "opacity-60" : ""
       }`}
       onClick={onClick}
     >
       {/* 标签行 */}
       <div className="flex items-center gap-1.5 flex-wrap mb-3">
-        <span className="text-[10px] px-2 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text-muted)]">
+        <span className="text-[10px] px-2 py-0.5 rounded border border text-muted">
           {CARD_TYPE_LABELS[card.type] || `类型${card.type}`}
         </span>
-        <span className="text-[10px] px-2 py-0.5 rounded bg-[var(--color-surface-2)] text-[var(--color-text-muted)]">
+        <span className="text-[10px] px-2 py-0.5 rounded bg-surface-hover text-muted">
           {CARD_SOURCE_LABELS[card.source] || card.source}
         </span>
         <span
           className={`text-[10px] px-2 py-0.5 rounded ${
             isSuspended
-              ? "bg-red-500/10 text-red-500"
+              ? "bg-danger/10 text-danger"
               : isArchived
-              ? "bg-[var(--color-surface-2)] text-[var(--color-text-muted)]"
-              : "bg-emerald-500/10 text-emerald-500"
+              ? "bg-surface-hover text-muted"
+              : "bg-success/10 text-success"
           }`}
         >
           {STATUS_LABELS[card.status] || card.status}
         </span>
         {card.error_book_entry_id && (
-          <span className="text-[10px] px-2 py-0.5 rounded bg-orange-500/10 text-orange-500">
+          <span className="text-[10px] px-2 py-0.5 rounded bg-warning/10 text-warning">
             错题
           </span>
         )}
         {card.is_resolved && (
-          <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600">
+          <span className="text-[10px] px-2 py-0.5 rounded bg-success/10 text-success">
             已掌握
           </span>
         )}
@@ -80,13 +80,13 @@ export function FlashCardItem({
 
       {/* 反面 */}
       {showBack && card.back_text && (
-        <div className="mt-2 p-3 rounded bg-blue-500/5 text-sm whitespace-pre-wrap">
+        <div className="mt-2 p-3 rounded bg-info/5 text-sm whitespace-pre-wrap">
           {card.back_text}
         </div>
       )}
 
       {/* FSRS 参数（满足"FSRS 可观测"约束） */}
-      <div className="grid grid-cols-3 gap-2 text-[10px] text-[var(--color-text-muted)] pt-2 mt-2 border-t border-[var(--color-border)]">
+      <div className="grid grid-cols-3 gap-2 text-[10px] text-muted pt-2 mt-2 border-t border">
         <div title="稳定性 (Stability)">
           稳定性 S: <b>{card.stability?.toFixed(2) ?? "—"}</b>
         </div>
@@ -99,13 +99,13 @@ export function FlashCardItem({
       </div>
 
       {/* 时间 + 计数 */}
-      <div className="flex items-center justify-between text-[10px] text-[var(--color-text-muted)] mt-2">
+      <div className="flex items-center justify-between text-[10px] text-muted mt-2">
         <span>
           下次: {card.next_review_at ? new Date(card.next_review_at).toLocaleDateString() : "—"}
         </span>
         <span>
           复习 {card.review_count} 次
-          {card.lapse_count > 0 && <span className="text-red-500 ml-1">失败 {card.lapse_count}</span>}
+          {card.lapse_count > 0 && <span className="text-danger ml-1">失败 {card.lapse_count}</span>}
         </span>
       </div>
 
@@ -115,13 +115,13 @@ export function FlashCardItem({
           {card.tags.slice(0, 5).map((t) => (
             <span
               key={t}
-              className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text-muted)]"
+              className="text-[10px] px-1.5 py-0.5 rounded border border text-muted"
             >
               #{t}
             </span>
           ))}
           {card.tags.length > 5 && (
-            <span className="text-[10px] px-1.5 py-0.5 text-[var(--color-text-muted)]">
+            <span className="text-[10px] px-1.5 py-0.5 text-muted">
               +{card.tags.length - 5}
             </span>
           )}
@@ -130,27 +130,27 @@ export function FlashCardItem({
 
       {/* 关联知识点 */}
       {card.linked_node_ids && card.linked_node_ids.length > 0 && (
-        <div className="text-[10px] text-[var(--color-text-muted)] mt-1">
+        <div className="text-[10px] text-muted mt-1">
           关联知识点: {card.linked_node_ids.length} 个
         </div>
       )}
 
       {/* 操作 */}
       {showActions && (
-        <div className="flex items-center gap-1 pt-2 mt-2 border-t border-[var(--color-border)]">
+        <div className="flex items-center gap-1 pt-2 mt-2 border-t border">
           <button
             onClick={(e) => {
               e.stopPropagation();
               setShowBack((v) => !v);
             }}
-            className="text-[10px] px-2 py-1 rounded hover:bg-[var(--color-surface-2)] text-[var(--color-text-muted)]"
+            className="text-[10px] px-2 py-1 rounded hover:bg-surface-hover text-muted"
           >
             {showBack ? "隐藏" : "显示"}答案
           </button>
           {onEdit && (
             <button
               onClick={(e) => { e.stopPropagation(); onEdit(); }}
-              className="text-[10px] px-2 py-1 rounded hover:bg-[var(--color-surface-2)] text-[var(--color-text-muted)]"
+              className="text-[10px] px-2 py-1 rounded hover:bg-surface-hover text-muted"
             >
               编辑
             </button>
@@ -158,7 +158,7 @@ export function FlashCardItem({
           {onReset && !isSuspended && (
             <button
               onClick={(e) => { e.stopPropagation(); onReset(); }}
-              className="text-[10px] px-2 py-1 rounded hover:bg-[var(--color-surface-2)] text-[var(--color-text-muted)]"
+              className="text-[10px] px-2 py-1 rounded hover:bg-surface-hover text-muted"
             >
               重置
             </button>
@@ -166,7 +166,7 @@ export function FlashCardItem({
           {onSuspend && !isSuspended && (
             <button
               onClick={(e) => { e.stopPropagation(); onSuspend(); }}
-              className="text-[10px] px-2 py-1 rounded hover:bg-[var(--color-surface-2)] text-[var(--color-text-muted)]"
+              className="text-[10px] px-2 py-1 rounded hover:bg-surface-hover text-muted"
             >
               暂停
             </button>
@@ -174,7 +174,7 @@ export function FlashCardItem({
           {onResume && isSuspended && (
             <button
               onClick={(e) => { e.stopPropagation(); onResume(); }}
-              className="text-[10px] px-2 py-1 rounded hover:bg-[var(--color-surface-2)] text-[var(--color-text-muted)]"
+              className="text-[10px] px-2 py-1 rounded hover:bg-surface-hover text-muted"
             >
               恢复
             </button>
@@ -182,7 +182,7 @@ export function FlashCardItem({
           {onArchive && !isArchived && (
             <button
               onClick={(e) => { e.stopPropagation(); onArchive(); }}
-              className="text-[10px] px-2 py-1 rounded hover:bg-[var(--color-surface-2)] text-[var(--color-text-muted)]"
+              className="text-[10px] px-2 py-1 rounded hover:bg-surface-hover text-muted"
             >
               归档
             </button>
@@ -190,7 +190,7 @@ export function FlashCardItem({
           {onDelete && (
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(); }}
-              className="text-[10px] px-2 py-1 rounded hover:bg-red-500/10 text-red-500 ml-auto"
+              className="text-[10px] px-2 py-1 rounded hover:bg-danger/10 text-danger ml-auto"
             >
               删除
             </button>

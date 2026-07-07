@@ -7,9 +7,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import {
-  BookOpen, Highlighter, MessageSquare, Save, Trash2, Loader2, AlertCircle,
+  BookOpen, Highlighter, MessageSquare, Save, Trash2, AlertCircle,
   ChevronLeft, Eye, EyeOff, Bell, Clock, CheckCircle2, X, Plus
 } from "lucide-react";
+import { PageSkeleton } from "@/components/ui/Skeleton";
 import {
   readingService,
   ReadingAnnotation, AnnotationColor, ReadingMode, MODE_LABELS,
@@ -211,27 +212,23 @@ export default function ReadingMaterialPage() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 size={28} className="animate-spin text-[var(--color-text-muted)]" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)]">
+    <div className="min-h-screen bg-page">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         {/* 顶部 */}
         <div className="flex items-center gap-3 mb-6">
           <button
             onClick={() => router.push("/reading")}
-            className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            className="text-muted hover:text"
           >
             <ChevronLeft size={20} />
           </button>
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-semibold truncate">材料 {materialId.slice(0, 16)}</h1>
-            <p className="text-xs text-[var(--color-text-muted)]">
+            <p className="text-xs text-muted">
               会话 {session?.id?.slice(0, 12) || "—"} ·{" "}
               {session?.ended_at ? "已结束" : "进行中"} · 标注 {annotations.length} ·{" "}
               笔记 {session?.notes_created || 0}
@@ -239,7 +236,7 @@ export default function ReadingMaterialPage() {
           </div>
 
           {/* 模式切换 */}
-          <div className="flex items-center border border-[var(--color-border)] rounded-md overflow-hidden">
+          <div className="flex items-center border border rounded-md overflow-hidden">
             {(["intensive", "skim", "review"] as ReadingMode[]).map((m) => (
               <button
                 key={m}
@@ -247,8 +244,8 @@ export default function ReadingMaterialPage() {
                 disabled={!session || session.ended_at}
                 className={`px-3 py-1.5 text-xs ${
                   session?.mode === m
-                    ? "bg-[var(--color-accent)] text-white"
-                    : "hover:bg-[var(--color-surface-2)]"
+                    ? "bg-accent text-white"
+                    : "hover:bg-surface-hover"
                 }`}
               >
                 {MODE_LABELS[m]}
@@ -259,7 +256,7 @@ export default function ReadingMaterialPage() {
           {!session?.ended_at && (
             <button
               onClick={handleEndSession}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-[var(--color-border)] rounded-md hover:bg-[var(--color-card)]"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border rounded-md hover:bg-surface"
             >
               <CheckCircle2 size={14} /> 结束
             </button>
@@ -267,7 +264,7 @@ export default function ReadingMaterialPage() {
         </div>
 
         {error && (
-          <div className="mb-4 px-4 py-3 border border-red-300 bg-red-50 text-sm text-red-700 rounded">
+          <div className="mb-4 px-4 py-3 border border-danger/30 bg-danger/10 text-sm text-danger rounded">
             <AlertCircle size={14} className="inline mr-1" /> {error}
           </div>
         )}
@@ -276,45 +273,45 @@ export default function ReadingMaterialPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* 左：阅读区 */}
           <div className="lg:col-span-2 space-y-4">
-            <div className="border border-[var(--color-border)] bg-[var(--color-card)] rounded-lg p-5 min-h-[400px]">
+            <div className="border border bg-surface rounded-lg p-5 min-h-[400px]">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold text-[var(--color-text-muted)] flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-muted flex items-center gap-2">
                   <BookOpen size={14} /> 阅读区
-                  <span className="text-xs font-normal text-[var(--color-text-muted)]">
+                  <span className="text-xs font-normal text-muted">
                     ({MODE_LABELS[session?.mode as ReadingMode] || "—"})
                   </span>
                 </h2>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setShowCreateAnn(true)}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs border border-[var(--color-border)] rounded hover:bg-[var(--color-surface-2)]"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs border border rounded hover:bg-surface-hover"
                   >
                     <Highlighter size={12} /> 标注
                   </button>
                   <button
                     onClick={() => setShowCreateNote(true)}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs border border-[var(--color-border)] rounded hover:bg-[var(--color-surface-2)]"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs border border rounded hover:bg-surface-hover"
                   >
                     <MessageSquare size={12} /> 写笔记
                   </button>
                 </div>
               </div>
-              <div className="text-sm text-[var(--color-text-muted)] leading-relaxed">
+              <div className="text-sm text-muted leading-relaxed">
                 <p className="mb-2">
                   这里是占位文本。实际生产中，file-management 提供的
-                  <code className="px-1 mx-1 bg-[var(--color-surface-2)] rounded">MaterialChunk</code>
+                  <code className="px-1 mx-1 bg-surface-hover rounded">MaterialChunk</code>
                   内容会通过 RAG 检索或全量加载展示。
                 </p>
                 <p>
-                  段落锚点用 <code className="px-1 bg-[var(--color-surface-2)] rounded">chunk_id</code>，
-                  不重建独立 ID。已掌握 / 薄弱知识点高亮由 <code className="px-1 bg-[var(--color-surface-2)] rounded">reading_prefs</code> 控制。
+                  段落锚点用 <code className="px-1 bg-surface-hover rounded">chunk_id</code>，
+                  不重建独立 ID。已掌握 / 薄弱知识点高亮由 <code className="px-1 bg-surface-hover rounded">reading_prefs</code> 控制。
                 </p>
               </div>
             </div>
 
             {/* 元数据：模式偏好提示 */}
-            <div className="border border-[var(--color-border)] bg-[var(--color-card)] rounded-lg p-4 text-sm">
-              <h3 className="text-sm font-semibold text-[var(--color-text-muted)] mb-2">会话统计</h3>
+            <div className="border border bg-surface rounded-lg p-4 text-sm">
+              <h3 className="text-sm font-semibold text-muted mb-2">会话统计</h3>
               <div className="grid grid-cols-3 gap-3">
                 <MiniStat label="访问章节" value={String(session?.chapters_visited?.length || 0)} />
                 <MiniStat label="关联节点" value={String(session?.linked_node_ids?.length || 0)} />
@@ -325,21 +322,21 @@ export default function ReadingMaterialPage() {
 
           {/* 右：标注侧栏 + 回顾 */}
           <div className="space-y-4">
-            <div className="border border-[var(--color-border)] bg-[var(--color-card)] rounded-lg p-4">
+            <div className="border border bg-surface rounded-lg p-4">
               <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
                 <Highlighter size={14} /> 标注列表
-                <span className="text-xs font-normal text-[var(--color-text-muted)]">
+                <span className="text-xs font-normal text-muted">
                   ({annotations.length})
                 </span>
               </h3>
               {annotations.length === 0 ? (
-                <p className="text-xs text-[var(--color-text-muted)]">还没有标注。点击 "标注" 创建第一条。</p>
+                <p className="text-xs text-muted">还没有标注。点击 "标注" 创建第一条。</p>
               ) : (
                 <div className="space-y-2 max-h-[400px] overflow-y-auto">
                   {annotations.map((a) => (
                     <div
                       key={a.id}
-                      className="border border-[var(--color-border)] rounded p-2"
+                      className="border border rounded p-2"
                       style={{ borderLeftWidth: 3, borderLeftColor: COLOR_HEX[a.color] }}
                     >
                       <div className="flex items-center justify-between mb-1">
@@ -353,23 +350,23 @@ export default function ReadingMaterialPage() {
                           {!a.is_processed && (
                             <button
                               onClick={() => handleExtractToCard(a.id)}
-                              className="text-xs text-[var(--color-accent)] hover:underline"
+                              className="text-xs text-accent hover:underline"
                             >
                               提取
                             </button>
                           )}
                           <button
                             onClick={() => handleDeleteAnnotation(a.id)}
-                            className="text-[var(--color-text-muted)] hover:text-red-500"
+                            className="text-muted hover:text-danger"
                           >
                             <Trash2 size={11} />
                           </button>
                         </div>
                       </div>
-                      {a.text && <p className="text-xs text-[var(--color-text)] line-clamp-2">{a.text}</p>}
-                      {a.note && <p className="text-[10px] text-[var(--color-text-muted)] mt-1">{a.note}</p>}
+                      {a.text && <p className="text-xs text line-clamp-2">{a.text}</p>}
+                      {a.note && <p className="text-[10px] text-muted mt-1">{a.note}</p>}
                       {a.followup?.suggestion && (
-                        <p className="text-[10px] text-[var(--color-text-muted)] mt-1 italic">
+                        <p className="text-[10px] text-muted mt-1 italic">
                           💡 {a.followup.suggestion}
                         </p>
                       )}
@@ -380,7 +377,7 @@ export default function ReadingMaterialPage() {
             </div>
 
             {/* 回顾提醒 */}
-            <div className="border border-[var(--color-border)] bg-[var(--color-card)] rounded-lg p-4">
+            <div className="border border bg-surface rounded-lg p-4">
               <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
                 <Bell size={14} /> 回顾提醒
               </h3>
@@ -391,7 +388,7 @@ export default function ReadingMaterialPage() {
                 </div>
               ) : (
                 <>
-                  <p className="text-xs text-[var(--color-text-muted)] mb-2">
+                  <p className="text-xs text-muted mb-2">
                     设置后将通过 Planning 调度到日程
                   </p>
                   <div className="flex gap-1.5">
@@ -399,7 +396,7 @@ export default function ReadingMaterialPage() {
                       <button
                         key={d}
                         onClick={() => handleSetReminder(d)}
-                        className="px-2.5 py-1 text-xs border border-[var(--color-border)] rounded hover:bg-[var(--color-surface-2)]"
+                        className="px-2.5 py-1 text-xs border border rounded hover:bg-surface-hover"
                       >
                         {d} 天
                       </button>
@@ -411,7 +408,7 @@ export default function ReadingMaterialPage() {
 
             {/* 5 色映射元数据 */}
             {colorMeta?.color_followup && (
-              <details className="border border-[var(--color-border)] bg-[var(--color-card)] rounded-lg p-3 text-xs">
+              <details className="border border bg-surface rounded-lg p-3 text-xs">
                 <summary className="cursor-pointer font-medium">5 色 → 后续动作</summary>
                 <div className="mt-2 space-y-1.5">
                   {Object.entries(colorMeta.color_followup).map(([k, v]: [string, any]) => (
@@ -422,7 +419,7 @@ export default function ReadingMaterialPage() {
                       />
                       <div>
                         <div className="font-medium">{v.label}</div>
-                        <div className="text-[var(--color-text-muted)]">{v.suggestion}</div>
+                        <div className="text-muted">{v.suggestion}</div>
                       </div>
                     </div>
                   ))}
@@ -445,7 +442,7 @@ export default function ReadingMaterialPage() {
                     key={c}
                     onClick={() => setNewAnn((p) => ({ ...p, color: c }))}
                     className={`w-8 h-8 rounded ${
-                      newAnn.color === c ? "ring-2 ring-offset-1 ring-[var(--color-accent)]" : ""
+                      newAnn.color === c ? "ring-2 ring-offset-1 ring-accent" : ""
                     }`}
                     style={{ backgroundColor: COLOR_HEX[c] }}
                     title={COLOR_LABELS[c]}
@@ -453,7 +450,7 @@ export default function ReadingMaterialPage() {
                 ))}
               </div>
               {colorMeta?.color_followup?.[newAnn.color] && (
-                <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                <p className="text-xs text-muted mt-1">
                   💡 {colorMeta.color_followup[newAnn.color].suggestion}
                 </p>
               )}
@@ -464,7 +461,7 @@ export default function ReadingMaterialPage() {
                 value={newAnn.text}
                 onChange={(e) => setNewAnn((p) => ({ ...p, text: e.target.value }))}
                 rows={3}
-                className="w-full px-3 py-2 text-sm border border-[var(--color-border)] rounded bg-[var(--color-surface)]"
+                className="w-full px-3 py-2 text-sm border border rounded bg-surface"
                 placeholder="选中的文字..."
               />
             </div>
@@ -474,7 +471,7 @@ export default function ReadingMaterialPage() {
                 value={newAnn.note}
                 onChange={(e) => setNewAnn((p) => ({ ...p, note: e.target.value }))}
                 rows={2}
-                className="w-full px-3 py-2 text-sm border border-[var(--color-border)] rounded bg-[var(--color-surface)]"
+                className="w-full px-3 py-2 text-sm border border rounded bg-surface"
               />
             </div>
             <div>
@@ -482,20 +479,20 @@ export default function ReadingMaterialPage() {
               <input
                 value={newAnn.linked_node_id}
                 onChange={(e) => setNewAnn((p) => ({ ...p, linked_node_id: e.target.value }))}
-                className="w-full px-3 py-1.5 text-sm border border-[var(--color-border)] rounded bg-[var(--color-surface)]"
+                className="w-full px-3 py-1.5 text-sm border border rounded bg-surface"
                 placeholder="knowledge_node.id"
               />
             </div>
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setShowCreateAnn(false)}
-                className="px-3 py-1.5 text-sm border border-[var(--color-border)] rounded"
+                className="px-3 py-1.5 text-sm border border rounded"
               >
                 取消
               </button>
               <button
                 onClick={handleCreateAnnotation}
-                className="px-3 py-1.5 text-sm bg-[var(--color-accent)] text-white rounded"
+                className="px-3 py-1.5 text-sm bg-accent text-white rounded"
               >
                 创建
               </button>
@@ -508,7 +505,7 @@ export default function ReadingMaterialPage() {
       {showCreateNote && (
         <Modal title="写笔记 (FlashCard 反思型)" onClose={() => setShowCreateNote(false)}>
           <div className="space-y-3">
-            <p className="text-xs text-[var(--color-text-muted)]">
+            <p className="text-xs text-muted">
               笔记三段式 → FlashCard 反思型 (card_type=7, source=reading_note)，自动进入 FSRS 调度。
             </p>
             <div>
@@ -517,7 +514,7 @@ export default function ReadingMaterialPage() {
                 value={newNote.front_text}
                 onChange={(e) => setNewNote((p) => ({ ...p, front_text: e.target.value }))}
                 rows={2}
-                className="w-full px-3 py-2 text-sm border border-[var(--color-border)] rounded bg-[var(--color-surface)]"
+                className="w-full px-3 py-2 text-sm border border rounded bg-surface"
               />
             </div>
             <div>
@@ -526,7 +523,7 @@ export default function ReadingMaterialPage() {
                 value={newNote.back_context}
                 onChange={(e) => setNewNote((p) => ({ ...p, back_context: e.target.value }))}
                 rows={3}
-                className="w-full px-3 py-2 text-sm border border-[var(--color-border)] rounded bg-[var(--color-surface)]"
+                className="w-full px-3 py-2 text-sm border border rounded bg-surface"
                 placeholder="作者的核心观点/论据..."
               />
             </div>
@@ -536,7 +533,7 @@ export default function ReadingMaterialPage() {
                 value={newNote.back_text}
                 onChange={(e) => setNewNote((p) => ({ ...p, back_text: e.target.value }))}
                 rows={3}
-                className="w-full px-3 py-2 text-sm border border-[var(--color-border)] rounded bg-[var(--color-surface)]"
+                className="w-full px-3 py-2 text-sm border border rounded bg-surface"
                 placeholder="同意/反对/补充/关联自己的经验..."
               />
             </div>
@@ -545,7 +542,7 @@ export default function ReadingMaterialPage() {
               <input
                 value={newNote.linked_node_ids}
                 onChange={(e) => setNewNote((p) => ({ ...p, linked_node_ids: e.target.value }))}
-                className="w-full px-3 py-1.5 text-sm border border-[var(--color-border)] rounded bg-[var(--color-surface)]"
+                className="w-full px-3 py-1.5 text-sm border border rounded bg-surface"
                 placeholder="node_abc, node_def"
               />
             </div>
@@ -554,19 +551,19 @@ export default function ReadingMaterialPage() {
               <input
                 value={newNote.tags}
                 onChange={(e) => setNewNote((p) => ({ ...p, tags: e.target.value }))}
-                className="w-full px-3 py-1.5 text-sm border border-[var(--color-border)] rounded bg-[var(--color-surface)]"
+                className="w-full px-3 py-1.5 text-sm border border rounded bg-surface"
               />
             </div>
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setShowCreateNote(false)}
-                className="px-3 py-1.5 text-sm border border-[var(--color-border)] rounded"
+                className="px-3 py-1.5 text-sm border border rounded"
               >
                 取消
               </button>
               <button
                 onClick={handleCreateNote}
-                className="px-3 py-1.5 text-sm bg-[var(--color-accent)] text-white rounded inline-flex items-center gap-1"
+                className="px-3 py-1.5 text-sm bg-accent text-white rounded inline-flex items-center gap-1"
               >
                 <Save size={12} /> 保存
               </button>
@@ -580,8 +577,8 @@ export default function ReadingMaterialPage() {
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="text-center p-2 border border-[var(--color-border)] rounded">
-      <div className="text-[10px] text-[var(--color-text-muted)]">{label}</div>
+    <div className="text-center p-2 border border rounded">
+      <div className="text-[10px] text-muted">{label}</div>
       <div className="text-sm font-semibold mt-0.5">{value}</div>
     </div>
   );
@@ -598,12 +595,12 @@ function Modal({ title, children, onClose }: {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl max-h-[90vh] overflow-auto bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-6"
+        className="w-full max-w-2xl max-h-[90vh] overflow-auto bg-surface border border rounded-lg p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">{title}</h2>
-          <button onClick={onClose} className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
+          <button onClick={onClose} className="text-muted hover:text">
             <X size={18} />
           </button>
         </div>

@@ -137,6 +137,7 @@ export interface RoomMessage {
   id: string;
   user_id: string;
   text: string;
+  content?: string;
   message_type: MessageType;
   explain_card_id: string;
   posted_at: string | null;

@@ -126,7 +126,7 @@ export const primaryNavItems: NavItem[] = [
       emoji: "💬",
       title: "智能对话",
       desc: "随时提问，启发式学习",
-      color: "from-blue-500/20 to-cyan-500/10",
+      color: "from-info/20 to-info/10",
     },
   },
   {
@@ -140,7 +140,7 @@ export const primaryNavItems: NavItem[] = [
       emoji: "✏️",
       title: "开始练习",
       desc: "定制化刷题检测",
-      color: "from-emerald-500/20 to-teal-500/10",
+      color: "from-success/20 to-success/10",
     },
   },
   {
@@ -165,7 +165,7 @@ export const primaryNavItems: NavItem[] = [
       emoji: "🧠",
       title: "知识图谱",
       desc: "查漏补缺",
-      color: "from-amber-500/20 to-orange-500/10",
+      color: "from-warning/20 to-warning/10",
     },
   },
   {
@@ -201,7 +201,7 @@ export const primaryNavItems: NavItem[] = [
       emoji: "📊",
       title: "学情分析",
       desc: "全方位进度追踪",
-      color: "from-violet-500/20 to-purple-500/10",
+      color: "from-accent/20 to-accent/50/10",
     },
   },
   {
@@ -217,7 +217,7 @@ export const primaryNavItems: NavItem[] = [
       emoji: "⚙️",
       title: "设置",
       desc: "个性化与系统配置",
-      color: "from-slate-500/20 to-zinc-500/10",
+      color: "from-surface-hover/20 to-muted/10",
     },
   },
   // ── 任务 #31：补齐 6 个新模块入口 ─────────────────────
@@ -236,7 +236,7 @@ export const primaryNavItems: NavItem[] = [
       emoji: "🎴",
       title: "卡片复习",
       desc: "间隔重复记忆",
-      color: "from-amber-400/20 to-yellow-500/10",
+      color: "from-warning/20 to-warning/10",
     },
   },
   {
@@ -252,7 +252,7 @@ export const primaryNavItems: NavItem[] = [
       emoji: "📖",
       title: "阅读",
       desc: "材料·笔记·对比",
-      color: "from-sky-500/20 to-blue-500/10",
+      color: "from-info/20 to-info/10",
     },
   },
   // 任务 #75：撤销 Task #34 过度设计的 Pro 档位限制
@@ -290,7 +290,7 @@ export const primaryNavItems: NavItem[] = [
       emoji: "📅",
       title: "规划",
       desc: "日/周目标与复盘",
-      color: "from-indigo-500/20 to-blue-500/10",
+      color: "from-accent/20 to-info/10",
     },
   },
   {
@@ -306,7 +306,7 @@ export const primaryNavItems: NavItem[] = [
       emoji: "🧭",
       title: "兴趣探索",
       desc: "发现未知领域",
-      color: "from-teal-500/20 to-emerald-500/10",
+      color: "from-success/20 to-success/10",
     },
   },
   // 任务 #45：admin 后台入口已删除 — admin 是独立 Next.js 项目（端口 3001），

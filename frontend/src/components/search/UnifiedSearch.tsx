@@ -25,10 +25,10 @@ interface SearchResponse {
 
 // 分类配置：标签、图标、颜色
 const CATEGORY_CONFIG = {
-  conversation: { label: "对话", icon: MessageSquare, color: "text-[var(--color-info)]" },
-  material: { label: "资料", icon: FileText, color: "text-[var(--color-success)]" },
-  knowledge: { label: "知识点", icon: Brain, color: "text-[var(--color-accent)]" },
-  error: { label: "错题", icon: AlertTriangle, color: "text-[var(--color-error)]" },
+  conversation: { label: "对话", icon: MessageSquare, color: "text-info" },
+  material: { label: "资料", icon: FileText, color: "text-success" },
+  knowledge: { label: "知识点", icon: Brain, color: "text-accent" },
+  error: { label: "错题", icon: AlertTriangle, color: "text-error" },
 };
 
 // 统一搜索组件：搜索对话、资料、知识点、错题
@@ -113,7 +113,7 @@ export default function UnifiedSearch() {
 
     return (
       <div key={type} className="py-1">
-        <div className="flex items-center gap-1.5 px-3 py-1 text-[11px] font-medium text-[var(--color-text-muted)]">
+        <div className="flex items-center gap-1.5 px-3 py-1 text-[11px] font-medium text-muted">
           <Icon size={12} className={cfg.color} />
           <span>{cfg.label}</span>
           <span className="text-[10px] opacity-60">({items.length})</span>
@@ -126,13 +126,13 @@ export default function UnifiedSearch() {
               setFocused(false);
               setQuery("");
             }}
-            className="w-full text-left px-5 py-1.5 text-xs hover:bg-[var(--color-surface)] transition-colors group"
+            className="w-full text-left px-5 py-1.5 text-xs hover:bg-surface transition-colors group"
           >
-            <div className="truncate text-[var(--color-text-secondary)] group-hover:text-[var(--color-text)]">
+            <div className="truncate text-secondary group-hover:text">
               {item.title}
             </div>
             {item.subtitle && (
-              <div className="text-[10px] text-[var(--color-text-muted)] truncate">
+              <div className="text-[10px] text-muted truncate">
                 {item.subtitle}
               </div>
             )}
@@ -146,14 +146,14 @@ export default function UnifiedSearch() {
     <div ref={containerRef} className="relative w-full max-w-[560px] mx-auto">
       {/* 搜索框 */}
       <div
-        className={`flex items-center gap-2 px-4 py-2.5 bg-[var(--color-bg)] border transition-all ${
+        className={`flex items-center gap-2 px-4 py-2.5 bg-page border transition-all ${
           focused
-            ? "border-[var(--color-accent)] shadow-[0_0_0_1px_var(--color-accent)]"
-            : "border-[var(--color-border)]"
+            ? "border-accent ring-1 ring-accent"
+            : "border"
         }`}
         style={{ borderRadius: "2px" }}
       >
-        <Search size={16} className="text-[var(--color-text-muted)] flex-shrink-0" />
+        <Search size={16} className="text-muted flex-shrink-0" />
         <input
           ref={inputRef}
           type="text"
@@ -161,9 +161,9 @@ export default function UnifiedSearch() {
           onChange={(e) => handleInput(e.target.value)}
           onFocus={() => setFocused(true)}
           placeholder="搜索对话、资料、知识点..."
-          className="flex-1 bg-transparent border-none outline-none text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]"
+          className="flex-1 bg-transparent border-none outline-none text-sm text placeholder:text-muted"
         />
-        {loading && <Loader2 size={14} className="animate-spin text-[var(--color-text-muted)]" />}
+        {loading && <Loader2 size={14} className="animate-spin text-muted" />}
         {query && !loading && (
           <button
             onClick={() => {
@@ -172,21 +172,21 @@ export default function UnifiedSearch() {
               inputRef.current?.focus();
             }}
           >
-            <X size={14} className="text-[var(--color-text-muted)]" />
+            <X size={14} className="text-muted" />
           </button>
         )}
-        <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-text-muted)] bg-[var(--color-surface)] border border-[var(--color-border)]">
+        <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-mono text-muted bg-surface border border">
           ⌘K
         </kbd>
       </div>
 
       {/* 下拉结果面板 */}
       {showDropdown && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--color-bg)] border border-[var(--color-border)] max-h-[420px] overflow-y-auto z-50">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-page border border max-h-[420px] overflow-y-auto z-50">
           {/* 无结果提示 */}
           {results && results.total === 0 ? (
             <div className="px-4 py-6 text-center">
-              <div className="text-xs text-[var(--color-text-muted)]">
+              <div className="text-xs text-muted">
                 未找到相关内容
               </div>
             </div>
@@ -200,7 +200,7 @@ export default function UnifiedSearch() {
           ) : loading ? (
             <div className="px-4 py-6 text-center">
               {/* 加载中状态 */}
-              <Loader2 size={14} className="animate-spin mx-auto text-[var(--color-text-muted)]" />
+              <Loader2 size={14} className="animate-spin mx-auto text-muted" />
             </div>
           ) : null}
         </div>

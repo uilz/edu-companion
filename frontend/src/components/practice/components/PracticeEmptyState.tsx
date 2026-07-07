@@ -21,14 +21,14 @@ interface EmptyStateProps {
 }
 
 const PRESET_ICONS: Record<string, ReactNode> = {
-  banks: <Library size={28} className="text-[var(--color-text-muted)]" />,
-  questions: <BookOpen size={28} className="text-[var(--color-text-muted)]" />,
-  history: <History size={28} className="text-[var(--color-text-muted)]" />,
-  errors: <FileText size={28} className="text-[var(--color-text-muted)]" />,
-  ai: <Wand2 size={28} className="text-[var(--color-text-muted)]" />,
-  search: <Search size={28} className="text-[var(--color-text-muted)]" />,
-  review: <RotateCcw size={28} className="text-[var(--color-text-muted)]" />,
-  generic: <Inbox size={28} className="text-[var(--color-text-muted)]" />,
+  banks: <Library size={28} className="text-muted" />,
+  questions: <BookOpen size={28} className="text-muted" />,
+  history: <History size={28} className="text-muted" />,
+  errors: <FileText size={28} className="text-muted" />,
+  ai: <Wand2 size={28} className="text-muted" />,
+  search: <Search size={28} className="text-muted" />,
+  review: <RotateCcw size={28} className="text-muted" />,
+  generic: <Inbox size={28} className="text-muted" />,
 };
 
 /**
@@ -37,7 +37,7 @@ const PRESET_ICONS: Record<string, ReactNode> = {
  * 与 @/components/ui/EmptyState 的差异：
  *  - 内置 practice 场景变体（题库/题目/历史/错题/AI 出题/搜索/复习）
  *  - 紧凑模式（卡片内/折叠内）
- *  - 适配 practice 颜色系统（text-[var(--color-text-muted)]）
+ *  - 适配 practice 颜色系统（text-muted）
  */
 export default function PracticeEmptyState({
   variant = "generic",
@@ -52,11 +52,11 @@ export default function PracticeEmptyState({
   return (
     <div className={`flex flex-col items-center justify-center ${padding} px-4 text-center`}>
       <div className={`${iconBox} opacity-60`}>{icon ?? PRESET_ICONS[variant]}</div>
-      <h3 className={`text-sm font-medium text-[var(--color-text)] ${description ? "mb-1" : ""}`}>
+      <h3 className={`text-sm font-medium text ${description ? "mb-1" : ""}`}>
         {title}
       </h3>
       {description && (
-        <p className="text-xs text-[var(--color-text-muted)] mt-1 max-w-xs">
+        <p className="text-xs text-muted mt-1 max-w-xs">
           {description}
         </p>
       )}

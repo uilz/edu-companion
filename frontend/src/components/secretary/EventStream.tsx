@@ -9,6 +9,7 @@ import {
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authedFetch } from "@/lib/api/api";
+import { StatCard } from "@/components/ui/StatCard";
 
 // ══════════════════════════════════════════════════════════════
 //  Types
@@ -47,27 +48,27 @@ interface EventSummary {
 // ══════════════════════════════════════════════════════════════
 
 const STREAM_TYPE_CONFIG: Record<string, { label: string; icon: typeof Activity; color: string }> = {
-  conversation: { label: "对话", icon: MessageSquare, color: "text-blue-500 bg-blue-500/10" },
-  practice:    { label: "练习", icon: Target,          color: "text-emerald-500 bg-emerald-500/10" },
-  knowledge:   { label: "知识树", icon: Brain,          color: "text-purple-500 bg-purple-500/10" },
-  secretary:   { label: "秘书", icon: Bell,            color: "text-amber-500 bg-amber-500/10" },
-  system:      { label: "系统", icon: Settings,        color: "text-slate-500 bg-slate-500/10" },
-  aggregate:   { label: "聚合", icon: Layers,          color: "text-rose-500 bg-rose-500/10" },
+  conversation: { label: "对话", icon: MessageSquare, color: "text-info bg-info/10" },
+  practice:    { label: "练习", icon: Target,          color: "text-success bg-success/10" },
+  knowledge:   { label: "知识树", icon: Brain,          color: "text-accent bg-accent/10" },
+  secretary:   { label: "秘书", icon: Bell,            color: "text-warning bg-warning/10" },
+  system:      { label: "系统", icon: Settings,        color: "text-muted bg-surface-hover" },
+  aggregate:   { label: "聚合", icon: Layers,          color: "text-danger bg-danger/10" },
 };
 
 const EVENT_TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; ring: string }> = {
-  AssistantReplied:        { label: "AI 回复",   color: "text-blue-500",     bg: "bg-blue-500/10",     ring: "ring-blue-500/30" },
-  AnswerSubmitted:         { label: "答题",       color: "text-emerald-500",  bg: "bg-emerald-500/10",  ring: "ring-emerald-500/30" },
-  SessionCompleted:        { label: "会话完成",   color: "text-purple-500",   bg: "bg-purple-500/10",   ring: "ring-purple-500/30" },
-  CognitiveNodeUpdated:    { label: "知识更新",   color: "text-orange-500",   bg: "bg-orange-500/10",   ring: "ring-orange-500/30" },
-  NodeCreated:             { label: "节点创建",   color: "text-teal-500",     bg: "bg-teal-500/10",     ring: "ring-teal-500/30" },
-  EpisodeDigest:           { label: "学习片段",   color: "text-indigo-500",   bg: "bg-indigo-500/10",   ring: "ring-indigo-500/30" },
-  TopicDigest:             { label: "主题摘要",   color: "text-violet-500",   bg: "bg-violet-500/10",   ring: "ring-violet-500/30" },
-  TypeDigest:              { label: "类型摘要",   color: "text-sky-500",      bg: "bg-sky-500/10",      ring: "ring-sky-500/30" },
-  PracticeSessionSummary:  { label: "练习总结",   color: "text-pink-500",     bg: "bg-pink-500/10",     ring: "ring-pink-500/30" },
-  DailyDigest:             { label: "日报",       color: "text-amber-500",    bg: "bg-amber-500/10",    ring: "ring-amber-500/30" },
-  ErrorRecorded:           { label: "错题记录",   color: "text-red-500",      bg: "bg-red-500/10",      ring: "ring-red-500/30" },
-  MessageClassified:       { label: "消息分类",   color: "text-cyan-500",     bg: "bg-cyan-500/10",     ring: "ring-cyan-500/30" },
+  AssistantReplied:        { label: "AI 回复",   color: "text-info",     bg: "bg-info/10",     ring: "ring-info/30" },
+  AnswerSubmitted:         { label: "答题",       color: "text-success",  bg: "bg-success/10",  ring: "ring-success/30" },
+  SessionCompleted:        { label: "会话完成",   color: "text-accent",   bg: "bg-accent/10",   ring: "ring-accent/30" },
+  CognitiveNodeUpdated:    { label: "知识更新",   color: "text-warning",   bg: "bg-warning/10",   ring: "ring-warning/30" },
+  NodeCreated:             { label: "节点创建",   color: "text-success",     bg: "bg-success/10",     ring: "ring-success/30" },
+  EpisodeDigest:           { label: "学习片段",   color: "text-accent",   bg: "bg-accent/10",   ring: "ring-accent/30" },
+  TopicDigest:             { label: "主题摘要",   color: "text-accent",   bg: "bg-accent/10",   ring: "ring-accent/30" },
+  TypeDigest:              { label: "类型摘要",   color: "text-info",      bg: "bg-info/10",      ring: "ring-info/30" },
+  PracticeSessionSummary:  { label: "练习总结",   color: "text-danger",     bg: "bg-danger/10",     ring: "ring-danger/30" },
+  DailyDigest:             { label: "日报",       color: "text-warning",    bg: "bg-warning/10",    ring: "ring-warning/30" },
+  ErrorRecorded:           { label: "错题记录",   color: "text-danger",      bg: "bg-danger/10",      ring: "ring-danger/30" },
+  MessageClassified:       { label: "消息分类",   color: "text-info",     bg: "bg-info/10",     ring: "ring-info/30" },
   ProposalAccepted:        { label: "提案采纳",   color: "text-lime-500",     bg: "bg-lime-500/10",     ring: "ring-lime-500/30" },
 };
 
@@ -173,18 +174,18 @@ function getEventBrief(event: EventItem): string {
 
 function Skeleton({ count = 5 }: { count?: number }) {
   return (
-    <div className="relative pl-6 border-l-2 border-[var(--color-border)] ml-2 space-y-4">
+    <div className="relative pl-6 border-l-2 border ml-2 space-y-4">
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="relative pb-1 animate-pulse">
-          <div className="absolute -left-[25px] top-1.5 w-3 h-3 rounded-full bg-[var(--color-border)]" />
-          <div className="p-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] space-y-2">
+          <div className="absolute -left-[25px] top-1.5 w-3 h-3 rounded-full bg-divider" />
+          <div className="p-3 rounded-lg border border bg-surface space-y-2">
             <div className="flex items-center gap-2">
-              <div className="w-5 h-5 rounded bg-[var(--color-bg-tertiary)]" />
-              <div className="h-3 w-16 rounded bg-[var(--color-bg-tertiary)]" />
-              <div className="h-3 w-12 rounded bg-[var(--color-bg-tertiary)]" />
+              <div className="w-5 h-5 rounded bg-surface-hover" />
+              <div className="h-3 w-16 rounded bg-surface-hover" />
+              <div className="h-3 w-12 rounded bg-surface-hover" />
             </div>
-            <div className="h-4 w-3/4 rounded bg-[var(--color-bg-tertiary)]" />
-            <div className="h-3 w-24 rounded bg-[var(--color-bg-tertiary)]" />
+            <div className="h-4 w-3/4 rounded bg-surface-hover" />
+            <div className="h-3 w-24 rounded bg-surface-hover" />
           </div>
         </div>
       ))}
@@ -192,23 +193,7 @@ function Skeleton({ count = 5 }: { count?: number }) {
   );
 }
 
-// ══════════════════════════════════════════════════════════════
-//  StatCard
-// ══════════════════════════════════════════════════════════════
 
-function StatCard({ icon: Icon, value, label, color }: {
-  icon: typeof Activity; value: string | number; label: string; color: string;
-}) {
-  return (
-    <div className="p-3 rounded-lg bg-[var(--color-bg-tertiary)]">
-      <Icon size={14} className={color} />
-      <div className="text-lg font-semibold text-[var(--color-text)] mt-1">{value}</div>
-      <div className="text-[10px] text-[var(--color-text-muted)]">{label}</div>
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════
 //  EventTimelineItem
 // ══════════════════════════════════════════════════════════════
 
@@ -238,13 +223,13 @@ function EventTimelineItem({
     <div className="relative pb-1 group">
       {/* 时间线圆点 */}
       <div
-        className={`absolute -left-[25px] top-1.5 w-3 h-3 rounded-full border-2 border-[var(--color-bg)] ${
-          eventCfg?.bg || "bg-slate-500/10"
-        } ring-2 ${eventCfg?.ring || "ring-slate-500/30"}`}
+        className={`absolute -left-[25px] top-1.5 w-3 h-3 rounded-full border-2 border-page ${
+          eventCfg?.bg || "bg-surface-hover"
+        } ring-2 ${eventCfg?.ring || "ring-divider/30"}`}
       />
 
       {/* 事件卡片 */}
-      <div className="p-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-border-hover)] transition-colors mb-1">
+      <div className="p-3 rounded-lg border border bg-surface hover:border-hover transition-colors mb-1">
         <div className="flex items-start gap-2">
           {/* 图标 */}
           <div className={`p-1 rounded ${streamCfg.color} flex-shrink-0`}>
@@ -259,23 +244,23 @@ function EventTimelineItem({
                   {eventCfg.label}
                 </span>
               ) : (
-                <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-slate-500/10 text-slate-500">
+                <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-surface-hover text-muted">
                   {event.event_type}
                 </span>
               )}
 
-              <span className="text-[10px] text-[var(--color-text-tertiary)]">
+              <span className="text-[10px] text-muted">
                 {streamCfg.label}
               </span>
 
               {viewMode === "aggregated" && hasChildren && (
-                <span className="text-[10px] px-1 rounded bg-[var(--color-bg-tertiary)] text-[var(--color-text-muted)]">
+                <span className="text-[10px] px-1 rounded bg-surface-hover text-muted">
                   {childCount}条
                 </span>
               )}
 
               {event.importance > 0.5 && (
-                <span className="text-[10px] px-1 rounded bg-amber-500/10 text-amber-500">
+                <span className="text-[10px] px-1 rounded bg-warning/10 text-warning">
                   {"\u2605"} {Math.round(event.importance * 100)}%
                 </span>
               )}
@@ -284,13 +269,13 @@ function EventTimelineItem({
             {/* 摘要内容 */}
             <button
               onClick={onToggleExpand}
-              className="text-xs text-[var(--color-text-secondary)] text-left hover:text-[var(--color-text)] transition-colors line-clamp-2 w-full"
+              className="text-xs text-secondary text-left hover:text transition-colors line-clamp-2 w-full"
             >
               {brief}
             </button>
 
             {/* 时间 */}
-            <div className="flex items-center gap-1 mt-1.5 text-[10px] text-[var(--color-text-tertiary)]">
+            <div className="flex items-center gap-1 mt-1.5 text-[10px] text-muted">
               <Clock size={10} />
               {formatTime(event.created_at)}
             </div>
@@ -300,7 +285,7 @@ function EventTimelineItem({
           {(hasChildren || viewMode === "raw") && (
             <button
               onClick={onToggleExpand}
-              className="flex-shrink-0 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-muted)] transition-colors mt-0.5"
+              className="flex-shrink-0 text-muted hover:text-muted transition-colors mt-0.5"
             >
               {isLoadingChildren ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -317,23 +302,23 @@ function EventTimelineItem({
         {isExpanded && (
           <>
             {viewMode === "aggregated" && childEvents.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-[var(--color-border)] space-y-1.5 ml-2">
+              <div className="mt-3 pt-3 border-t border space-y-1.5 ml-2">
                 {childEvents.map((child) => (
                   <div
                     key={child.id}
-                    className="flex items-start gap-2 p-2 rounded bg-[var(--color-bg-tertiary)] text-xs"
+                    className="flex items-start gap-2 p-2 rounded bg-surface-hover text-xs"
                   >
                     <span
                       className={`text-[10px] px-1 py-0.5 rounded font-medium flex-shrink-0 ${
-                        (EVENT_TYPE_CONFIG[child.event_type]?.bg || "bg-slate-500/10")
-                      } ${EVENT_TYPE_CONFIG[child.event_type]?.color || "text-slate-500"}`}
+                        (EVENT_TYPE_CONFIG[child.event_type]?.bg || "bg-surface-hover")
+                      } ${EVENT_TYPE_CONFIG[child.event_type]?.color || "text-muted"}`}
                     >
                       {EVENT_TYPE_CONFIG[child.event_type]?.label || child.event_type}
                     </span>
-                    <span className="text-[var(--color-text-secondary)] line-clamp-2">
+                    <span className="text-secondary line-clamp-2">
                       {getEventBrief(child)}
                     </span>
-                    <span className="text-[10px] text-[var(--color-text-tertiary)] flex-shrink-0 ml-auto">
+                    <span className="text-[10px] text-muted flex-shrink-0 ml-auto">
                       {formatTime(child.created_at)}
                     </span>
                   </div>
@@ -342,40 +327,40 @@ function EventTimelineItem({
             )}
 
             {viewMode === "aggregated" && isLoadingChildren && (
-              <div className="mt-3 pt-3 border-t border-[var(--color-border)] flex items-center justify-center py-2">
-                <Loader2 size={14} className="animate-spin text-[var(--color-text-tertiary)]" />
+              <div className="mt-3 pt-3 border-t border flex items-center justify-center py-2">
+                <Loader2 size={14} className="animate-spin text-muted" />
               </div>
             )}
 
             {viewMode === "raw" && (
-              <div className="mt-3 pt-3 border-t border-[var(--color-border)] space-y-2 text-xs">
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[var(--color-text-tertiary)]">
+              <div className="mt-3 pt-3 border-t border space-y-2 text-xs">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted">
                   <div>
-                    <span className="text-[var(--color-text-muted)]">事件ID:</span>{" "}
+                    <span className="text-muted">事件ID:</span>{" "}
                     <code className="text-[10px]">{event.id}</code>
                   </div>
                   <div>
-                    <span className="text-[var(--color-text-muted)]">流ID:</span>{" "}
+                    <span className="text-muted">流ID:</span>{" "}
                     <code className="text-[10px]">{event.stream_id}</code>
                   </div>
                   {event.parent_event_id && (
                     <div className="col-span-2">
-                      <span className="text-[var(--color-text-muted)]">父事件:</span>{" "}
+                      <span className="text-muted">父事件:</span>{" "}
                       <code className="text-[10px]">{event.parent_event_id}</code>
                     </div>
                   )}
                   {event.correlation_id && (
                     <div className="col-span-2">
-                      <span className="text-[var(--color-text-muted)]">关联ID:</span>{" "}
+                      <span className="text-muted">关联ID:</span>{" "}
                       <code className="text-[10px]">{event.correlation_id}</code>
                     </div>
                   )}
                 </div>
                 <details className="group">
-                  <summary className="text-[var(--color-text-muted)] cursor-pointer hover:text-[var(--color-text)]">
+                  <summary className="text-muted cursor-pointer hover:text">
                     Payload ({Object.keys(event.payload).length} 字段)
                   </summary>
-                  <pre className="mt-1 p-2 rounded bg-[var(--color-bg-tertiary)] text-[10px] text-[var(--color-text-secondary)] overflow-x-auto max-h-40 overflow-y-auto">
+                  <pre className="mt-1 p-2 rounded bg-surface-hover text-[10px] text-secondary overflow-x-auto max-h-40 overflow-y-auto">
                     {JSON.stringify(event.payload, null, 2)}
                   </pre>
                 </details>
@@ -571,12 +556,12 @@ export default function EventStream() {
     <div className="space-y-4">
       {/* ── 错误提示 ── */}
       {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg border border-red-500/20 bg-red-500/5 text-xs text-red-500">
+        <div className="flex items-center gap-2 p-3 rounded-lg border border-danger/20 bg-danger/5 text-xs text-danger">
           <AlertCircle size={14} />
           <span className="flex-1">{error}</span>
           <button
             onClick={handleRefresh}
-            className="px-2 py-0.5 rounded border border-red-500/30 hover:bg-red-500/10 transition-colors"
+            className="px-2 py-0.5 rounded border border-danger/30 hover:bg-danger/10 transition-colors"
           >
             重试
           </button>
@@ -586,19 +571,21 @@ export default function EventStream() {
       {/* ── 摘要统计栏 ── */}
       {summary && !loading && (
         <div className="grid grid-cols-4 gap-3">
-          <StatCard icon={Activity} value={summary.total_events} label="总事件数" color="text-blue-500" />
-          <StatCard icon={BarChart3} value={summary.recent_24h} label="24h 事件" color="text-emerald-500" />
+          <StatCard variant="minimal" icon={<Activity size={14} />} value={summary.total_events} label="总事件数" color="text-info" />
+          <StatCard variant="minimal" icon={<BarChart3 size={14} />} value={summary.recent_24h} label="24h 事件" color="text-success" />
           <StatCard
-            icon={MessageSquare}
+            variant="minimal"
+            icon={<MessageSquare size={14} />}
             value={(summary.counts?.AssistantReplied || 0) + (summary.counts?.EpisodeDigest || 0)}
             label="对话事件"
-            color="text-purple-500"
+            color="text-accent"
           />
           <StatCard
-            icon={Target}
+            variant="minimal"
+            icon={<Target size={14} />}
             value={(summary.counts?.AnswerSubmitted || 0) + (summary.counts?.SessionCompleted || 0)}
             label="练习事件"
-            color="text-amber-500"
+            color="text-warning"
           />
         </div>
       )}
@@ -606,13 +593,13 @@ export default function EventStream() {
       {/* ── 工具栏 ── */}
       <div className="flex items-center gap-2 flex-wrap">
         {/* 视图模式切换 */}
-        <div className="flex items-center rounded border border-[var(--color-border)] overflow-hidden">
+        <div className="flex items-center rounded border border overflow-hidden">
           <button
             onClick={() => setViewMode("raw")}
             className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${
               viewMode === "raw"
-                ? "bg-[var(--color-accent)] text-white"
-                : "bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                ? "bg-accent text-white"
+                : "bg-surface text-muted hover:text"
             }`}
           >
             <List size={12} />
@@ -622,8 +609,8 @@ export default function EventStream() {
             onClick={() => setViewMode("aggregated")}
             className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${
               viewMode === "aggregated"
-                ? "bg-[var(--color-accent)] text-white"
-                : "bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                ? "bg-accent text-white"
+                : "bg-surface text-muted hover:text"
             }`}
           >
             <Layers size={12} />
@@ -636,7 +623,7 @@ export default function EventStream() {
           <select
             value={dimension}
             onChange={(e) => setDimension(e.target.value)}
-            className="text-xs px-2 py-1.5 rounded border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)]"
+            className="text-xs px-2 py-1.5 rounded border border bg-surface text"
           >
             {DIMENSION_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -650,8 +637,8 @@ export default function EventStream() {
             onClick={() => setShowFilters(!showFilters)}
             className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded border transition-colors ${
               showFilters || hasFilters
-                ? "border-[var(--color-accent)] text-[var(--color-accent)] bg-[var(--color-accent)]/5"
-                : "border-[var(--color-border)] text-[var(--color-text-muted)] bg-[var(--color-surface)]"
+                ? "border-accent text-accent bg-accent/5"
+                : "border text-muted bg-surface"
             }`}
           >
             <Filter size={12} />
@@ -661,12 +648,12 @@ export default function EventStream() {
 
         {/* 搜索 */}
         <div className="relative flex-1 min-w-[140px] max-w-[240px]">
-          <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
+          <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted" />
           <input
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
             placeholder="搜索事件…"
-            className="w-full text-xs pl-7 pr-2 py-1.5 rounded border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] outline-none focus:border-[var(--color-accent)]"
+            className="w-full text-xs pl-7 pr-2 py-1.5 rounded border border bg-surface text placeholder:text-muted outline-none focus:border-accent"
           />
         </div>
 
@@ -674,7 +661,7 @@ export default function EventStream() {
         <button
           onClick={handleRefresh}
           disabled={refreshing}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-[var(--color-text-muted)] bg-[var(--color-surface)] rounded border border-[var(--color-border)] hover:text-[var(--color-text)] transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-muted bg-surface rounded border border hover:text transition-colors disabled:opacity-50"
         >
           <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
           刷新
@@ -689,7 +676,7 @@ export default function EventStream() {
               setDimension("");
               setSearchText("");
             }}
-            className="inline-flex items-center gap-1 px-2 py-1.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-error)] transition-colors"
+            className="inline-flex items-center gap-1 px-2 py-1.5 text-xs text-muted hover:text-error transition-colors"
           >
             <X size={12} />
             清除
@@ -699,11 +686,11 @@ export default function EventStream() {
 
       {/* ── 筛选面板 (仅原始流) ── */}
       {showFilters && viewMode === "raw" && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] flex-wrap">
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-surface-hover border border flex-wrap">
           <select
             value={filterStreamType}
             onChange={(e) => setFilterStreamType(e.target.value)}
-            className="text-xs px-2 py-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)]"
+            className="text-xs px-2 py-1 rounded border border bg-surface text"
           >
             {STREAM_TYPE_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -713,7 +700,7 @@ export default function EventStream() {
           <select
             value={filterEventType}
             onChange={(e) => setFilterEventType(e.target.value)}
-            className="text-xs px-2 py-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)]"
+            className="text-xs px-2 py-1 rounded border border bg-surface text"
           >
             {EVENT_TYPE_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -723,7 +710,7 @@ export default function EventStream() {
           <select
             value={filterTimeRange}
             onChange={(e) => setFilterTimeRange(Number(e.target.value))}
-            className="text-xs px-2 py-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)]"
+            className="text-xs px-2 py-1 rounded border border bg-surface text"
           >
             {TIME_RANGE_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -756,22 +743,22 @@ export default function EventStream() {
       {loading ? (
         <Skeleton count={5} />
       ) : !hasResults ? (
-        <div className="p-8 rounded-lg border border-dashed border-[var(--color-border)] text-center">
-          <div className="text-sm text-[var(--color-text-muted)] mb-1">
+        <div className="p-8 rounded-lg border border-dashed border text-center">
+          <div className="text-sm text-muted mb-1">
             {hasFilters
               ? "没有匹配的事件，请调整筛选条件"
               : viewMode === "aggregated"
                 ? "暂未生成聚合事件"
                 : "暂未记录事件"}
           </div>
-          <div className="text-xs text-[var(--color-text-tertiary)]">
+          <div className="text-xs text-muted">
             {hasFilters
               ? ""
               : "开始学习后，系统会自动记录和聚合事件"}
           </div>
         </div>
       ) : (
-        <div className="relative pl-6 border-l-2 border-[var(--color-border)] space-y-0 ml-2">
+        <div className="relative pl-6 border-l-2 border space-y-0 ml-2">
           {filteredEvents.map((event) => (
             <EventTimelineItem
               key={event.id}

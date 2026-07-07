@@ -141,7 +141,7 @@ export default function TemplatesPage() {
             <ChevronLeft size={14} /> 返回项目列表
           </Link>
           <h1 className="text-2xl font-bold text-ink-primary tracking-tight flex items-center gap-2">
-            <Layers className="text-[var(--color-accent)]" size={26} />
+            <Layers className="text-accent" size={26} />
             模板管理
           </h1>
           <p className="text-sm text-ink-secondary mt-1">
@@ -150,7 +150,7 @@ export default function TemplatesPage() {
         </div>
         <button
           onClick={() => setShowCreate(true)}
-          className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 flex items-center gap-2 whitespace-nowrap flex-shrink-0"
+          className="px-4 py-2 rounded-lg bg-accent text-white hover:opacity-90 flex items-center gap-2 whitespace-nowrap flex-shrink-0"
         >
           <Plus size={16} /> 新建模板
         </button>
@@ -162,7 +162,7 @@ export default function TemplatesPage() {
           onClick={() => setFilterCategory("all")}
           className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
             filterCategory === "all"
-              ? "bg-[var(--color-accent)] text-white"
+              ? "bg-accent text-white"
               : "bg-surface text-ink-secondary hover:text-ink-primary"
           }`}
         >
@@ -174,7 +174,7 @@ export default function TemplatesPage() {
             onClick={() => setFilterCategory(c.value)}
             className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
               filterCategory === c.value
-                ? "bg-[var(--color-accent)] text-white"
+                ? "bg-accent text-white"
                 : "bg-surface text-ink-secondary hover:text-ink-primary"
             }`}
           >
@@ -200,14 +200,14 @@ export default function TemplatesPage() {
             return (
               <div
                 key={t.id}
-                className="rounded-xl border border-divider bg-surface p-4 hover:border-[var(--color-accent)] transition"
+                className="rounded-xl border border-divider bg-surface p-4 hover:border-accent transition"
               >
                 <div className="flex items-start justify-between mb-2">
                   <h3 className="text-lg font-semibold text-ink-primary flex-1 truncate">
                     {t.name}
                   </h3>
                   {t.is_system && (
-                    <span className="text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-500">
+                    <span className="text-xs px-2 py-0.5 rounded bg-info/10 text-info">
                       系统
                     </span>
                   )}
@@ -222,12 +222,12 @@ export default function TemplatesPage() {
                     <FileText size={12} /> {nodeCount} 节点
                   </span>
                   <span>v{t.version}</span>
-                  {t.category && <span className="text-[var(--color-accent)]">{t.category}</span>}
+                  {t.category && <span className="text-accent">{t.category}</span>}
                 </div>
                 <div className="mt-3 flex items-center gap-2">
                   <Link
                     href={`/project?template=${t.id}`}
-                    className="text-xs text-[var(--color-accent)] hover:opacity-80"
+                    className="text-xs text-accent hover:opacity-80"
                   >
                     从此模板创建项目 →
                   </Link>
@@ -248,7 +248,7 @@ export default function TemplatesPage() {
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               <div>
                 <label className="text-sm text-ink-secondary block mb-1">
-                  名称 <span className="text-red-500">*</span>
+                  名称 <span className="text-danger">*</span>
                 </label>
                 <input
                   value={newTemplate.name}
@@ -309,7 +309,7 @@ export default function TemplatesPage() {
               <button
                 onClick={handleCreate}
                 disabled={creating || !newTemplate.name.trim()}
-                className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+                className="px-4 py-2 rounded-lg bg-accent text-white hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
               >
                 {creating && <Loader2 className="animate-spin" size={14} />} 创建
               </button>

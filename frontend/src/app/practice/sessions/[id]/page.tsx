@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  Play, Pause, BookOpen, Loader2,
+  Play, Pause, BookOpen,
 } from "lucide-react";
+import { PageSkeleton } from "@/components/ui/Skeleton";
 import {
   getSession, submitAnswer, completeSession,
   startSession, pauseSession, resumeSession, cancelSession,
@@ -120,24 +121,20 @@ export default function PracticeSessionPage() {
   const handleResume = async () => { await resumeSession(sessionId); loadSession(); };
 
   // ── Loading ──
-  if (loading) return (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <Loader2 size={24} className="animate-spin text-[var(--color-accent)]" />
-    </div>
-  );
+  if (loading) return <PageSkeleton />;
   if (!session) return null;
 
   // ── 空会话 ──
   if (!session.questions || session.questions.length === 0) {
     return (
       <div className="max-w-lg mx-auto px-4 py-20 text-center space-y-4">
-        <BookOpen size={36} className="mx-auto text-[var(--color-text-muted)]" />
-        <h2 className="text-base font-semibold text-[var(--color-text)]">此会话暂无题目</h2>
-        <p className="text-xs text-[var(--color-text-muted)]">
+        <BookOpen size={36} className="mx-auto text-muted" />
+        <h2 className="text-base font-semibold text">此会话暂无题目</h2>
+        <p className="text-xs text-muted">
           该题库没有可用题目，请先在对话中学习或创建题目。
         </p>
         <button onClick={() => router.push("/practice")}
-          className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-xs font-medium">
+          className="px-4 py-2 rounded-lg bg-accent text-white text-xs font-medium">
           返回练习
         </button>
       </div>
@@ -165,13 +162,13 @@ export default function PracticeSessionPage() {
   if (session.status === "created") {
     return (
       <div className="max-w-lg mx-auto px-4 py-20 text-center space-y-5">
-        <div className="w-16 h-16 rounded-2xl bg-[var(--color-accent)]/10 flex items-center justify-center mx-auto">
-          <BookOpen size={28} className="text-[var(--color-accent)]" />
+        <div className="w-16 h-16 rounded-2xl bg-accent/10 flex items-center justify-center mx-auto">
+          <BookOpen size={28} className="text-accent" />
         </div>
-        <h1 className="text-lg font-semibold text-[var(--color-text)]">
+        <h1 className="text-lg font-semibold text">
           {isExam ? "考试准备就绪" : "练习准备就绪"}
         </h1>
-        <p className="text-sm text-[var(--color-text-muted)]">
+        <p className="text-sm text-muted">
           {session.total_count} 道题
           {isExam && session.config?.duration_minutes
             ? ` · 限时 ${session.config.duration_minutes} 分钟`
@@ -179,11 +176,11 @@ export default function PracticeSessionPage() {
         </p>
         <div className="flex justify-center gap-3">
           <button onClick={handleStart}
-            className="px-6 py-2.5 rounded-xl bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 flex items-center gap-2">
+            className="px-6 py-2.5 rounded-xl bg-accent text-white text-sm font-medium hover:opacity-90 flex items-center gap-2">
             <Play size={16} />{isExam ? "开始考试" : "开始练习"}
           </button>
           <button onClick={handleCancel}
-            className="px-6 py-2.5 rounded-xl border border-[var(--color-border)] text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
+            className="px-6 py-2.5 rounded-xl border border text-sm text-muted hover:text">
             取消
           </button>
         </div>
@@ -195,18 +192,18 @@ export default function PracticeSessionPage() {
   if (session.status === "paused") {
     return (
       <div className="max-w-lg mx-auto px-4 py-20 text-center space-y-5">
-        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto">
-          <Pause size={28} className="text-amber-500" />
+        <div className="w-16 h-16 rounded-2xl bg-warning/10 flex items-center justify-center mx-auto">
+          <Pause size={28} className="text-warning" />
         </div>
-        <h1 className="text-lg font-semibold text-[var(--color-text)]">练习已暂停</h1>
-        <p className="text-sm text-[var(--color-text-muted)]">已完成 {answeredCount}/{session.total_count} 题</p>
+        <h1 className="text-lg font-semibold text">练习已暂停</h1>
+        <p className="text-sm text-muted">已完成 {answeredCount}/{session.total_count} 题</p>
         <div className="flex justify-center gap-3">
           <button onClick={handleResume}
-            className="px-6 py-2.5 rounded-xl bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 flex items-center gap-2">
+            className="px-6 py-2.5 rounded-xl bg-accent text-white text-sm font-medium hover:opacity-90 flex items-center gap-2">
             <Play size={16} />继续练习
           </button>
           <button onClick={handleCancel}
-            className="px-6 py-2.5 rounded-xl border border-[var(--color-border)] text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
+            className="px-6 py-2.5 rounded-xl border border text-sm text-muted hover:text">
             取消
           </button>
         </div>
@@ -220,12 +217,12 @@ export default function PracticeSessionPage() {
       {/* 顶部栏 */}
       <div className="flex items-center gap-3">
         {!isExam && (
-          <button onClick={handlePause} className="p-1.5 rounded-lg hover:bg-[var(--color-surface)] text-[var(--color-text-muted)]">
+          <button onClick={handlePause} className="p-1.5 rounded-lg hover:bg-surface text-muted">
             <Pause size={15} />
           </button>
         )}
         {isExam && (
-          <span className="shrink-0 px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">考试</span>
+          <span className="shrink-0 px-2 py-0.5 rounded text-[10px] font-bold bg-danger/20 dark:bg-danger/10 text-danger dark:text-danger">考试</span>
         )}
         <ProgressBar answered={answeredCount} total={session.total_count} correct={correctCount} wrong={wrongCount} />
 
@@ -238,7 +235,7 @@ export default function PracticeSessionPage() {
 
       {/* 错误提示 */}
       {submitError && (
-        <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-[11px] text-red-600">
+        <div className="p-2 rounded-lg bg-danger/10 border border-danger/20 text-[11px] text-danger">
           {submitError}
         </div>
       )}

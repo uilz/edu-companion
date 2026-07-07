@@ -117,17 +117,17 @@ export default function NotificationHistoryPanel({
   );
 
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)]">
+    <div className="rounded-lg border border bg-page">
       {/* ── 头部 ── */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
-        <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
+      <div className="flex items-center justify-between px-4 py-3 border-b border">
+        <h3 className="text-sm font-semibold text">
           通知历史
         </h3>
         {onClose && (
           <button
             type="button"
             onClick={onClose}
-            className="text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]"
+            className="text-xs text-muted hover:text"
             aria-label="关闭"
           >
             关闭
@@ -136,14 +136,14 @@ export default function NotificationHistoryPanel({
       </div>
 
       {/* ── 筛选栏 ── */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-[var(--color-border)]">
+      <div className="flex items-center gap-2 px-4 py-2 border-b border">
         <select
           value={filterStatus}
           onChange={(e) => {
             setFilterStatus(e.target.value);
             setPage(1);
           }}
-          className="text-xs px-2 py-1 rounded border border-[var(--color-border)] bg-transparent"
+          className="text-xs px-2 py-1 rounded border border bg-transparent"
         >
           <option value="">全部状态</option>
           <option value="accepted">已采纳</option>
@@ -162,8 +162,8 @@ export default function NotificationHistoryPanel({
               }}
               className={`text-xs px-2 py-0.5 rounded transition-colors ${
                 filterActionType === opt.value
-                  ? "bg-[var(--color-primary)] text-white"
-                  : "bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)]"
+                  ? "bg-accent text-white"
+                  : "bg-surface-hover text-secondary"
               }`}
             >
               {opt.label}
@@ -175,11 +175,11 @@ export default function NotificationHistoryPanel({
       {/* ── 内容 ── */}
       <div className="max-h-96 overflow-y-auto">
         {loading ? (
-          <div className="p-4 text-center text-sm text-[var(--color-text-tertiary)]">
+          <div className="p-4 text-center text-sm text-muted">
             加载中…
           </div>
         ) : pagedItems.length === 0 && localHistory.length === 0 ? (
-          <div className="p-4 text-center text-sm text-[var(--color-text-tertiary)]">
+          <div className="p-4 text-center text-sm text-muted">
             暂无历史记录
           </div>
         ) : (
@@ -188,33 +188,33 @@ export default function NotificationHistoryPanel({
             {localHistory.map((n) => (
               <div
                 key={n.id}
-                className="px-4 py-2.5 border-b border-[var(--color-border)] last:border-b-0 hover:bg-[var(--color-bg-tertiary)] transition-colors"
+                className="px-4 py-2.5 border-b border last:border-b-0 hover:bg-surface-hover transition-colors"
               >
                 <div className="flex items-center gap-2">
                   <span className="text-base">{n.emoji}</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-sm text-[var(--color-text-primary)] truncate">
+                      <span className="text-sm text truncate">
                         {n.title}
                       </span>
                       <span
                         className={`text-[10px] px-1 rounded ${
                           n.status === "accepted"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-[var(--color-bg-tertiary)] text-[var(--color-text-tertiary)]"
+                            ? "bg-success/20 text-success"
+                            : "bg-surface-hover text-muted"
                         }`}
                       >
                         {STATUS_LABELS[n.status] || n.status}
                       </span>
                     </div>
-                    <p className="text-xs text-[var(--color-text-tertiary)] mt-0.5 truncate">
+                    <p className="text-xs text-muted mt-0.5 truncate">
                       {n.description}
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={() => restoreLocal(n.id)}
-                    className="text-xs px-2 py-0.5 rounded bg-transparent text-[var(--color-primary)] hover:underline shrink-0"
+                    className="text-xs px-2 py-0.5 rounded bg-transparent text-accent hover:underline shrink-0"
                     aria-label="恢复"
                   >
                     恢复
@@ -227,25 +227,25 @@ export default function NotificationHistoryPanel({
             {pagedItems.map((item) => (
               <div
                 key={item.id}
-                className="px-4 py-2.5 border-b border-[var(--color-border)] last:border-b-0 hover:bg-[var(--color-bg-tertiary)] transition-colors"
+                className="px-4 py-2.5 border-b border last:border-b-0 hover:bg-surface-hover transition-colors"
               >
                 <div className="flex items-center gap-2">
                   <span className="text-base">{item.proposal.emoji}</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-sm text-[var(--color-text-primary)] truncate">
+                      <span className="text-sm text truncate">
                         {item.proposal.title}
                       </span>
-                      <span className="text-[10px] px-1 rounded bg-[var(--color-bg-tertiary)] text-[var(--color-text-tertiary)]">
+                      <span className="text-[10px] px-1 rounded bg-surface-hover text-muted">
                         {STATUS_LABELS[item.status] || item.status}
                       </span>
                       {item.proposal.action_type && (
-                        <span className="text-[10px] text-[var(--color-text-tertiary)]">
+                        <span className="text-[10px] text-muted">
                           {item.proposal.action_type}
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-[var(--color-text-tertiary)] mt-0.5 truncate">
+                    <p className="text-xs text-muted mt-0.5 truncate">
                       {item.proposal.description}
                     </p>
                     {/* 执行结果展示 */}
@@ -255,20 +255,20 @@ export default function NotificationHistoryPanel({
                       return (
                         <div className={`mt-1 flex items-center gap-1 text-[10px] ${
                           execResult.success
-                            ? "text-green-600"
-                            : "text-amber-600"
+                            ? "text-success"
+                            : "text-warning"
                         }`}>
                           <span>{execResult.success ? "✓" : "⚠"}</span>
                           <span className="truncate">{execResult.message}</span>
                           {execResult.details && (
-                            <span className="text-[var(--color-text-tertiary)] truncate">
+                            <span className="text-muted truncate">
                               · {execResult.details}
                             </span>
                           )}
                         </div>
                       );
                     })()}
-                    <p className="text-[10px] text-[var(--color-text-tertiary)] mt-0.5">
+                    <p className="text-[10px] text-muted mt-0.5">
                       {new Date(item.created_at).toLocaleString("zh-CN")}
                     </p>
                   </div>
@@ -276,7 +276,7 @@ export default function NotificationHistoryPanel({
                     <button
                       type="button"
                       onClick={() => handleRestoreBackend(item.id)}
-                      className="text-xs px-2 py-0.5 rounded bg-transparent text-[var(--color-primary)] hover:underline shrink-0"
+                      className="text-xs px-2 py-0.5 rounded bg-transparent text-accent hover:underline shrink-0"
                       aria-label="恢复"
                     >
                       恢复
@@ -291,23 +291,23 @@ export default function NotificationHistoryPanel({
 
       {/* ── 分页 ── */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 px-4 py-2 border-t border-[var(--color-border)]">
+        <div className="flex items-center justify-center gap-2 px-4 py-2 border-t border">
           <button
             type="button"
             disabled={page <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className="text-xs px-2 py-0.5 rounded bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] disabled:opacity-40"
+            className="text-xs px-2 py-0.5 rounded bg-surface-hover text-secondary disabled:opacity-40"
           >
             上一页
           </button>
-          <span className="text-xs text-[var(--color-text-tertiary)]">
+          <span className="text-xs text-muted">
             {page} / {totalPages}
           </span>
           <button
             type="button"
             disabled={page >= totalPages}
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            className="text-xs px-2 py-0.5 rounded bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] disabled:opacity-40"
+            className="text-xs px-2 py-0.5 rounded bg-surface-hover text-secondary disabled:opacity-40"
           >
             下一页
           </button>

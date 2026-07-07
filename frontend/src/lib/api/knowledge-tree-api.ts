@@ -368,3 +368,14 @@ export const messagesApi = {
       { method: "POST" }
     ),
 };
+
+// ═══════════════════════════════════════════
+//  KnowledgeTree Service (unified)
+// ═══════════════════════════════════════════
+
+export const knowledgeTreeService = {
+  ...knowledgeNodesApi,
+  ...conversationsApi,
+  ...navigationApi,
+  ...messagesApi,
+};

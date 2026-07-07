@@ -223,25 +223,13 @@ export default function Workbench({ children }: WorkbenchProps) {
             {/* ── 右栏展开/收起按钮（放在右栏 div 内，relative 定位） ── */}
             {pref.rightPanel.collapsed && (
               <button onClick={() => toggleCollapsed("rightPanel")}
-                style={{
-                  position: "absolute", left: -24, bottom: 12,
-                  width: 24, height: 56, zIndex: 51,
-                  background: "var(--color-card)", border: "1px solid var(--color-divider)", borderRight: "none",
-                  borderRadius: "6px 0 0 6px", cursor: "pointer", color: "var(--color-ink-muted)",
-                  display: "grid", placeItems: "center",
-                }}>
+                className="absolute -left-6 bottom-3 w-6 h-14 z-[51] bg-surface border border-r-0 rounded-l-md cursor-pointer text-muted grid place-items-center">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
               </button>
             )}
             {!pref.rightPanel.collapsed && (
               <button onClick={() => toggleCollapsed("rightPanel")}
-                style={{
-                  position: "absolute", left: -24, bottom: 12,
-                  width: 24, height: 56, zIndex: 51,
-                  background: "var(--color-card)", border: "1px solid var(--color-divider)", borderRight: "none",
-                  borderRadius: "6px 0 0 6px", cursor: "pointer", color: "var(--color-ink-muted)",
-                  display: "grid", placeItems: "center",
-                }}>
+                className="absolute -left-6 bottom-3 w-6 h-14 z-[51] bg-surface border border-r-0 rounded-l-md cursor-pointer text-muted grid place-items-center">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
               </button>
             )}

@@ -329,7 +329,7 @@ export default function TopBar() {
 
           {/* Pro 徽章 */}
           {navContext.subscriptionTier === "pro" || navContext.subscriptionTier === "enterprise" ? (
-            <div className="px-2 h-8 flex items-center gap-1 rounded bg-amber-500/10 text-amber-500 text-[11px] font-semibold border border-amber-500/20">
+            <div className="px-2 h-8 flex items-center gap-1 rounded bg-warning/10 text-warning text-[11px] font-semibold border border-warning/20">
               <Sparkles size={12} />
               {navContext.subscriptionTier === "pro" ? "Pro" : "Enterprise"}
             </div>
@@ -406,7 +406,7 @@ export default function TopBar() {
                     </Link>
                     <button
                       onClick={() => { setUserMenuOpen(false); logout(); }}
-                      className="w-full flex items-center gap-2 px-3 py-1.5 text-ink-secondary hover:bg-surface-hover hover:text-red-500 border-t border-divider"
+                      className="w-full flex items-center gap-2 px-3 py-1.5 text-ink-secondary hover:bg-surface-hover hover:text-danger border-t border-divider"
                     >
                       <LogOut size={14} /> 退出登录
                     </button>
