@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useConversationStore } from "@/store/conversation/conversation-store";
-import { getChatStreamAPI } from "@/store/conversation/actions/send-message";
+import { useMessageStore } from "@/store/conversation/message-store";
 
 /**
  * StreamingControls — 流式回复控制按钮（简化版）
@@ -29,7 +29,7 @@ export default function StreamingControls() {
     <div className="flex items-center gap-2 px-3 py-1.5">
       <button
         type="button"
-        onClick={() => getChatStreamAPI()?.stop()}
+        onClick={() => useMessageStore.getState().stopGeneration()}
         className="
           inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium
           transition-all select-none

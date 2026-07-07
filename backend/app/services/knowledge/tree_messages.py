@@ -60,15 +60,46 @@ class TreeMessagesMixin:
                     text_content = b.get("text", "")
                     break
 
+        # ★ 2026-07-06 链路不变量防御：链上每个 user 消息的 parent 必须是 assistant
+        #   原因：之前 InitStage 崩溃导致 assistant shell 缺失，前端把 user 消息当 parent
+        #   发送给后端，后端无校验直接接受，破坏线性链（前端按 parent_id::role 分组
+        #   → 多条 user 显示为"分支版本"3/3）。此处强制把 parent 回退到最近的 assistant。
+        def _resolve_parent(pid: str | None) -> str | None:
+            if pid == "head":
+                return None
+            if not pid or pid not in conv_node.conv_message_ids:
+                # 兜底：父为最后一条消息（保持历史行为）
+                return conv_node.conv_message_ids[-1] if conv_node.conv_message_ids else None
+            # pid 在链上：检查其角色
+            parent_node = data.nodes.get(pid)
+            if parent_node and parent_node.role == role:
+                # 同角色并列（user→user / assistant→assistant）违反不变量，
+                # 在链上从 pid 往前找最近的"另一角色"消息
+                idx = conv_node.conv_message_ids.index(pid)
+                for i in range(idx - 1, -1, -1):
+                    cand = data.nodes.get(conv_node.conv_message_ids[i])
+                    if cand and cand.role != role:
+                        return cand.id
+                # 链上没找到反向角色 → 退化到根
+                return None
+            return pid
+
         # 确定 parent_id 及插入位置
         if parent_id == "head":
             # 插入到对话开头
             resolved_parent = None
             insert_pos = 0
         elif parent_id and parent_id in conv_node.conv_message_ids:
-            # 插入到指定消息之后
-            resolved_parent = parent_id
-            insert_pos = conv_node.conv_message_ids.index(parent_id) + 1
+            # ★ 走链路不变量防御：若 parent 角色与新消息相同，回退到最近的另一角色
+            resolved_parent = _resolve_parent(parent_id)
+            if resolved_parent and resolved_parent in conv_node.conv_message_ids:
+                insert_pos = conv_node.conv_message_ids.index(resolved_parent) + 1
+            elif resolved_parent is None:
+                # 回退到根：插到第一条 assistant 之后或开头
+                insert_pos = 0
+            else:
+                # 防御：理论不应到这里
+                insert_pos = conv_node.conv_message_ids.index(parent_id) + 1
         else:
             # 默认：父为最后一条消息
             resolved_parent = conv_node.conv_message_ids[-1] if conv_node.conv_message_ids else None

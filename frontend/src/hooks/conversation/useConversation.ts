@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { useShallow } from "zustand/shallow";
 import { useConversationStore, getSelectedNodeId, getActiveConvId, type ConversationState } from "@/store/conversation/conversation-store";
 import { useMessageStore } from "@/store/conversation/message-store";
 import type { MessageNode } from "@/types";
-import { useChatStream } from "@/hooks/conversation/useChatStream";
-import { setChatStreamAPI, isSending } from "@/store/conversation/actions/send-message";
 import { apiFetch } from "@/store/conversation/tree-helpers";
 
 
@@ -17,7 +15,7 @@ export type { UseConversationReturn } from "@/store/conversation/conversation-st
 
 // ── Message-store selectors ──
 const selMsgMessages = (s: { messages: MessageNode[] }) => s.messages;
-const selMsgLoadingMessages = (s: { loadingMessages: boolean }) => s.loadingMessages;
+const selMsgLoading = (s: { isLoading: boolean }) => s.isLoading;
 const selMsgConvError = (s: { convError: string | null }) => s.convError;
 
 // ── Individual selectors (each creates its own subscription) ──
@@ -48,7 +46,6 @@ const selActions = (s: ConversationState) => ({
   setShowNewDir: s.setShowNewDir,
   setSidebarCollapsed: s.setSidebarCollapsed,
   loadDirList: s.loadDirList,
-  loadMessages: s.loadMessages,
 });
 
 /**
@@ -60,7 +57,7 @@ export function useConversation() {
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const router = useRouter();
 
-  // ── Individual state subscriptions (each triggers re-render only when its value changes) ──
+  // ── Individual state subscriptions ──
   const dirList = useConversationStore(selDirList);
   const messages = useMessageStore(selMsgMessages);
   const isLoading = useConversationStore(selIsLoading);
@@ -71,7 +68,7 @@ export function useConversation() {
   const sidebarCollapsed = useConversationStore(selSidebarCollapsed);
   const showNewDir = useConversationStore(selShowNewDir);
   const loadingDirList = useConversationStore(selLoadingDirList);
-  const loadingMessages = useMessageStore(selMsgLoadingMessages);
+  const loadingMessages = useMessageStore(selMsgLoading);
   const convError = useMessageStore(selMsgConvError);
   const wsConnected = useConversationStore(selWsConnected);
   const selectedNode = useConversationStore(s => s.selectedNode);
@@ -80,9 +77,8 @@ export function useConversation() {
   const activeConversationId = selectedNode?.level === "conv" ? selectedNode.id : null;
   const actions = useConversationStore(useShallow(selActions));
 
-  // ── One-time: URL restore + stream cache recovery + body scroll lock ──
+  // ── One-time: URL restore ──
   useEffect(() => {
-    // Restore selection from URL or localStorage
     const params = new URLSearchParams(window.location.search);
     async function restoreFromNodeId(nodeId: string) {
       try {
@@ -93,7 +89,6 @@ export function useConversation() {
           urlInitialized: true,
         });
       } catch {
-        // 节点不存在 — 清除 URL 中的 node_id，回到默认状态
         try {
           window.history.replaceState(null, "", window.location.pathname);
           localStorage.removeItem("conversation-page-state");
@@ -120,7 +115,6 @@ export function useConversation() {
       useConversationStore.setState({ urlInitialized: true });
     }
 
-    // Body scroll lock
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = "";
@@ -163,84 +157,11 @@ export function useConversation() {
     return unsub;
   }, []);
 
-  // ── useChatStream 初始化（替代 StreamPipeline / bindPipelineToStore） ──
-  const chatStream = useChatStream();
-  useEffect(() => {
-    setChatStreamAPI(chatStream);
-    return () => setChatStreamAPI({ send: async () => {}, stop: async () => {}, submitToolResult: async () => {} });
-  }, [chatStream]);
-
-  // ── 流式重连（刷新页面后恢复流式输出） ──
-  const mountedRef = useRef(false);
-  useEffect(() => {
-    if (!mountedRef.current) {
-      mountedRef.current = true;
-      return; // 跳过首次 mount，等 activeConversationId 就绪
-    }
-    if (!activeConversationId) return;
-    void (async () => {
-      try {
-        const token = typeof window !== "undefined" ? localStorage.getItem("access_token") || "" : "";
-        const res = await fetch(`/api/conversations/tree/stream/active/${activeConversationId}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        const { active } = await res.json().catch(() => ({ active: false }));
-        // 防止与 sendMessage 竞态：若正在发送中（新会话刚创建）跳过 replay
-        if (active && !isSending()) {
-          // 设置 streamingId + 乐观写入占位，让 _handleToken 有写入目标
-          const tempAsstId = "r_" + Date.now().toString(36) + "_" + Math.random().toString(36).substr(2, 9);
-          useMessageStore.setState((s) => ({
-            streamingId: tempAsstId,
-            // 把重连占位写入 nodeMap，buildMessages 时能渲染
-            nodeMap: { ...s.nodeMap, [tempAsstId]: {
-              id: tempAsstId,
-              directory_id: activeConversationId,
-              content: "",
-              version: 1,
-              parent_id: "",
-              children_ids: [],
-              dir_id: "",
-              conv_id: activeConversationId,
-              content_blocks: [],
-              text_summary: "",
-              role: "assistant" as const,
-              timestamp: Date.now(),
-              token_count: 0,
-              is_deleted: false,
-              is_archived: false,
-            }},
-            messages: [...s.messages, {
-              id: tempAsstId,
-              directory_id: activeConversationId,
-              content: "",
-              version: 1,
-              parent_id: "",
-              children_ids: [],
-              dir_id: "",
-              conv_id: activeConversationId,
-              content_blocks: [],
-              text_summary: "",
-              role: "assistant" as const,
-              timestamp: Date.now(),
-              token_count: 0,
-              is_deleted: false,
-              is_archived: false,
-            }],
-          }));
-          useConversationStore.setState({ isLoading: true, statusMessage: "恢复连接..." });
-          chatStream.replay(activeConversationId);
-        }
-      } catch { /* ignore */ }
-    })();
-  }, [activeConversationId, chatStream]);
-
   // ── Load messages when activeConversationId changes ──
   useEffect(() => {
-    if (activeConversationId && !isSending()) {
-      actions.loadMessages(activeConversationId);
+    if (activeConversationId) {
+      useMessageStore.getState().loadConversation(activeConversationId);
     }
-    // 不再在 else 分支清空 messages —— 清空由 selectConversation(null) 显式完成
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConversationId]);
 
   // ── Initial load ──
@@ -255,7 +176,6 @@ export function useConversation() {
     [dirList, selectedNode?.id],
   );
 
-  // ── Return mapped state (UseConversationReturn interface) ──
   return {
     // State
     dirList,
@@ -283,7 +203,7 @@ export function useConversation() {
     // Mapped handlers
     handleSelectConversation: actions.selectConversation,
     handleNewConversation: actions.handleNewConversation,
-    handleSend: actions.sendMessage,
+    handleSendMessage: actions.sendMessage,
     handleDeleteMessage: actions.deleteMessage,
     handleEditMessage: actions.editMessage,
     handleVersionSwitch: actions.versionSwitch,
@@ -291,11 +211,8 @@ export function useConversation() {
     handleRenameDirectory: actions.renameDirectory,
     handleSwitchConfirm: actions.switchConfirm,
     handleSwitchDismiss: actions.switchDismiss,
-
-    // Direct pass-through
     setShowDirSidebar: actions.setShowDirSidebar,
     setShowNewDir: actions.setShowNewDir,
     setSidebarCollapsed: actions.setSidebarCollapsed,
-    loadDirList: actions.loadDirList,
   };
 }

@@ -20,7 +20,6 @@ import { useTreeStore } from "./tree-store";
 import { useMessageStore } from "./message-store";
 
 // ── Action implementation imports ──
-import { sendMessageImpl, setSending } from "./actions/send-message";
 import { loadDirListImpl, createDirectoryImpl, renameDirectoryImpl } from "./actions/dir-ops";
 import { selectConversationImpl, switchConfirmImpl, switchDismissImpl } from "./actions/nav-ops";
 import { handleNewConversationImpl } from "./actions/tree-ops";
@@ -275,9 +274,9 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
     } catch { /* ignore */ }
     useTreeStore.setState({ expandedSet: expanded });
 
-    // Phase 4：如果是 conv，异步加载消息（无需再设 activeConversationId，Phase 1 已设 selectedNode）
+    // Phase 4：如果是 conv，异步加载消息
     if (nodeType === "conv") {
-      useMessageStore.getState().loadMessages(id);
+      useMessageStore.getState().loadConversation(id);
     }
   },
 
@@ -307,25 +306,16 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
 
   // ── Messages (delegate to message-store) ──
   loadMessages: async (convId) => {
-    await useMessageStore.getState().loadMessages(convId);
+    await useMessageStore.getState().loadConversation(convId);
   },
   sendMessage: async (text, files) => {
-    // Phase 2 only: 假设当前已有活跃会话（由 ChatInput 负责创建）
     const convId = getActiveConvId(get());
     if (!convId) return;
-    setSending(true);
-    try {
-      await sendMessageImpl(set, get, text, files, getSelectedDirId(get()) || "", convId);
-    } finally {
-      setSending(false);
-    }
+    const dirId = getSelectedDirId(get()) || "";
+    await useMessageStore.getState().sendMessage(text, convId, dirId, files);
   },
   deleteMessage: async (msgId) => {
     await useMessageStore.getState().deleteMessage(msgId);
-    // Refresh messages in the active conversation
-    const node = get().selectedNode;
-    const convId = node?.level === "conv" ? node.id : null;
-    if (convId) await useMessageStore.getState().loadMessages(convId);
   },
   editMessage: (msgId, newText) => useMessageStore.getState().editMessage(msgId, newText),
   versionSwitch: async (msgId, dir) => {

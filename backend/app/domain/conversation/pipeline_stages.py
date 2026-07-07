@@ -458,7 +458,10 @@ class ToolLoopStage:
             except Exception as e:
                 logger.error("LLM tool loop failed at round %d: %s", _round, e)
                 ctx.full_reply = f"抱歉，生成回复时遇到了问题：{str(e)[:200]}"
-                yield ReplyEvent(type="token", content=ctx.full_reply)
+                # ★ 2026-07-06 修复：yield error 事件而不是 token 事件
+                #   前端 _handleError 会创建错误消息（带 "❌" 前缀），不再当作普通 token 处理
+                #   ctx.full_reply 仍设置，PostProcessStage 会用它更新 DB shell 节点
+                yield ReplyEvent(type="error", data={"error": ctx.full_reply})
                 break
 
             if not tool_calls:
@@ -608,7 +611,18 @@ class PostProcessStage:
 
     async def invoke(self, ctx: PipelineCtx) -> AsyncGenerator[ReplyEvent, None]:
         from app.services.conversation.stream_buffer import stream_buffer
-        from app.services.knowledge.tree_messages import tree_ops
+        from app.services.knowledge.tree_service import tree_ops
+
+        # ★ 2026-07-06 防御：ctx.msg_id 为空表示 InitStage 没成功创建 shell
+        #   这种情况直接 yield error 事件，不调 update_shell_to_done（避免抛 "消息  不存在"）
+        if not ctx.msg_id:
+            logger.error(
+                "PostProcessStage: ctx.msg_id 为空（InitStage 可能未成功），"
+                "conv=%s, user_id=%s",
+                ctx.conv_id, ctx.user_id,
+            )
+            yield ReplyEvent(type="error", data={"error": "msg_id missing (InitStage failed)"})
+            return
 
         # 1. 从 Buffer raw_events 重建 content_blocks
         raw_events = await stream_buffer.get_raw_events(ctx.conv_id, ctx.msg_id)

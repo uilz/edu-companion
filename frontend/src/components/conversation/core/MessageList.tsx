@@ -11,8 +11,6 @@ import { useExplainStore, getCardsForMessage } from "@/store/explain/explain-sto
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import EmptyState from "@/components/ui/EmptyState";
 import { useConversationStore, useMessageStore } from "@/store/conversation/conversation-store";
-import { getLoadStatus } from "@/store/conversation/message-store";
-import { isTempMessage } from "@/store/conversation/actions/message-factory";
 import type { MessageNode } from "@/types";
 import type { FeynmanEval } from "./MessageItem";
 
@@ -166,27 +164,8 @@ export default function MessageList({
   const PREFETCH_AFTER = 5;
   const lastPrefetchRangeRef = useRef<{ start: number; end: number }>({ start: -1, end: -1 });
 
-  const handleRangeChanged = useCallback((range: { startIndex: number; endIndex: number }) => {
-    const { startIndex, endIndex } = range;
-    // 去重：避免重复触发同一范围
-    const last = lastPrefetchRangeRef.current;
-    if (last.start === startIndex && last.end === endIndex) return;
-    lastPrefetchRangeRef.current = { start: startIndex, end: endIndex };
-
-    const messages = getMessageList();
-    if (messages.length === 0) return;
-
-    // 预加载窗口：[startIndex - PREFETCH_BEFORE, endIndex + PREFETCH_AFTER]
-    const lo = Math.max(0, startIndex - PREFETCH_BEFORE);
-    const hi = Math.min(messages.length - 1, endIndex + PREFETCH_AFTER);
-    const prefetchIds: string[] = [];
-    for (let i = lo; i <= hi; i++) {
-      const m = messages[i];
-      if (m) prefetchIds.push(m.id);
-    }
-    if (prefetchIds.length > 0) {
-      void useMessageStore.getState().loadVisibleContent(prefetchIds);
-    }
+  const handleRangeChanged = useCallback((_range: { startIndex: number; endIndex: number }) => {
+    // 全量加载后无需预加载
   }, []);
 
   // 暴露 getMessageList 给上面用（避免循环依赖）
@@ -312,38 +291,10 @@ export default function MessageList({
     return "";
   }, []);
 
-  // ── 渲染单条消息的回调（useCallback 避免 Virtuoso 重新构造）──
+  // ── 渲染单条消息的回调 ──
   const itemContent = useCallback((index: number, message: MessageNode) => {
-    const isUser = message.role === "user";
     const isEditing = editingId === message.id;
-    // ★ 共享 selector：从 store 取最新 state，统一判断 load_state
-    const storeState = useMessageStore.getState();
-
-    // ── 触发懒加载：根据 load_state 显式判断 ──
-    //   placeholder → 调 loadFullContent（首次加载）
-    //   loading     → 已在飞，不重复触发
-    //   loaded      → 不触发
-    //   broken      → 不触发（已失败，UI 显示错误）
-    //   streaming   → SSE 自己会写，不触发
-    //   临时消息（t_/a_/err-）→ 不触发
-    if (!isTempMessage(message.id)) {
-      const status = getLoadStatus(storeState, message.id);
-      if (status.isPlaceholder) {
-        // 骨架阶段：调 loadFullContent 加载完整正文
-        void storeState.loadFullContent(message.id);
-      }
-    }
-
-    // ★ 用 getLoadStatus 替代 isContentLoaded（显式状态机）
-    const status = getLoadStatus(storeState, message.id);
-    // 推导 loadState 字符串给 MessageItem
-    const loadState: "placeholder" | "loading" | "loaded" | "streaming" | "broken" =
-      status.isStreaming ? "streaming" :
-      status.isBroken ? "broken" :
-      status.isLoading ? "loading" :
-      status.isLoaded ? "loaded" :
-      "placeholder";
-    const displayText = (loadState === "loaded" || loadState === "streaming" || loadState === "broken") ? getDisplayText(message) : "";
+    const displayText = getDisplayText(message);
     const groupKey = versionGroupByMessage[message.id];
     const group = groupKey ? versionGroups[groupKey] : undefined;
     const hasVersions = !!group && group.total > 1;
@@ -361,7 +312,6 @@ export default function MessageList({
           editingText={editingText}
           vInfo={vInfo}
           hasVersions={hasVersions}
-          loadState={loadState}
           displayText={displayText}
           cardsForMsg={cardsForMsg}
           replyingToId={replyingToId ?? null}
@@ -386,7 +336,7 @@ export default function MessageList({
       </div>
     );
   }, [
-    editingId, editingText, getLoadStatus, getDisplayText,
+    editingId, editingText, getDisplayText,
     versionGroupByMessage, versionGroups, explainCards,
     replyingToId, isLoading, isFeynmanMode,
     handleStartEdit, handleSaveEdit, handleCancelEdit,

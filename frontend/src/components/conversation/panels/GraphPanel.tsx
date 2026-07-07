@@ -1,11 +1,29 @@
 "use client";
 
 import React, { useRef, useEffect, useState, useMemo, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Network } from "lucide-react";
+import dynamic from "next/dynamic";
+import { ChevronLeft, ChevronRight, Network, Loader2 } from "lucide-react";
 import type { GraphData, GraphNode } from "@/lib/types/graph-types";
-import FocusGraph from "@/components/graph/graphs/FocusGraph";
-import ForceGraph from "@/components/graph/graphs/ForceGraph";
 import { fetchGraphData } from "@/lib/api/graph-api";
+
+// 动态导入图形组件（D3 重量级库，按需加载）
+const FocusGraph = dynamic(() => import("@/components/graph/graphs/FocusGraph"), {
+  ssr: false,
+  loading: () => <GraphPlaceholder />,
+});
+const ForceGraph = dynamic(() => import("@/components/graph/graphs/ForceGraph"), {
+  ssr: false,
+  loading: () => <GraphPlaceholder />,
+});
+
+function GraphPlaceholder() {
+  return (
+    <div className="flex items-center justify-center h-full text-sm text-[var(--color-text-muted)]">
+      <Loader2 size={20} className="animate-spin mr-2" />
+      加载图形…
+    </div>
+  );
+}
 
 /**
  * GraphPanel — 专注模式右侧知识图谱面板

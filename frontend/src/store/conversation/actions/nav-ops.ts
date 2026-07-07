@@ -37,17 +37,16 @@ export async function selectConversationImpl(set: any, get: any, dirId: string |
     convError: null,
     switchBanner: null,
   });
-  // 切换对话时重置 message-store 的路径状态 + 发送锁
+  // 切换对话时重置 message-store 的路径状态
   useMessageStore.setState({
     nodeMap: {},
     currentPath: [],
-    pathPos: 0,
-    pathReady: false,
+    pathPosMap: new Map(),
     streamingId: null,
-    sending: false,
+    messages: [],
   });
   if (conversationId) {
-    await useMessageStore.getState().loadMessages(conversationId);
+    await useMessageStore.getState().loadConversation(conversationId);
   } else {
     useMessageStore.setState({ messages: [] });
   }

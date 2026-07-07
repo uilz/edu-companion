@@ -313,17 +313,50 @@ def _merge_cognitive_ids(messages: list[dict], msg_ids: list[str]) -> None:
 
 
 # ══════════════════ 消息操作（归一化到 /tree/conversation/{conv_id}/message 和 /tree/message/{id}）══
+def _build_message_dict(node: Any, skeleton: bool = False) -> dict:
+    """构建消息字典。skeleton=False 时返回完整正文。"""
+    if skeleton:
+        return {
+            "id": node.id,
+            "directory_id": getattr(node, "directory_id", ""),
+            "parent_id": node.parent_id,
+            "children_ids": node.children_ids,
+            "role": node.role,
+            "version": node.version,
+            "timestamp": getattr(node, "timestamp", 0),
+            "token_count": getattr(node, "token_count", 0),
+            "has_sub_branches": getattr(node, "has_sub_branches", False),
+            "sub_branch_ids": getattr(node, "sub_branch_ids", []),
+            "content": "",
+            "content_blocks": [],
+            "text_summary": getattr(node, "text_summary", "") or "",
+            "is_deleted": getattr(node, "is_deleted", False),
+            "status": getattr(node, "status", "done"),
+        }
+    # 完整模式：返回序列化后的全部字段
+    d = node.model_dump(mode="json") if hasattr(node, "model_dump") else {}
+    d["load_state"] = "loaded"
+    d.setdefault("content", "")
+    d.setdefault("content_blocks", [])
+    d.setdefault("text_summary", "")
+    d.setdefault("is_deleted", False)
+    d.setdefault("status", getattr(node, "status", "done"))
+    return d
+
+
 @router.get("/tree/conversation/{conv_id}/messages")
 async def list_messages(
     conv_id: str, request: Request, user_id: str = Depends(current_user_id),
     limit: int = 50, offset: int = 0,
     head: int | None = None, tail: int | None = None,
+    all: bool = False,
 ):
-    """获取会话消息骨架列表（仅 id/parent_id/role/version 等结构字段，无正文）。
+    """获取会话消息列表。
 
-    支持三种模式（向后兼容）：
-      - limit/offset：传统分页
-      - head=N&tail=M：分段加载，开头 N 条 + 末尾 M 条（用于大型对话）
+    支持四种模式：
+      - all=true：全量加载（含完整正文），用于前端一次性加载
+      - head=N&tail=M：分段骨架，开头 N 条 + 末尾 M 条
+      - limit/offset：传统分页骨架
       - 仅 limit/offset：默认全量上限 50
     """
     etag = _check_etag(request, user_id)
@@ -333,13 +366,13 @@ async def list_messages(
         raise HTTPException(404, "Conversation not found")
     total_ids = len(conv_node.conv_message_ids)
 
-    # 分段模式：head + tail（去重）
-    if head is not None or tail is not None:
+    if all:
+        msg_ids = conv_node.conv_message_ids
+    elif head is not None or tail is not None:
         head_n = head if head is not None else 0
         tail_n = tail if tail is not None else 0
         head_ids = conv_node.conv_message_ids[:head_n]
         tail_ids = conv_node.conv_message_ids[-tail_n:] if tail_n > 0 else []
-        # 去重保持顺序
         seen = set()
         msg_ids = []
         for mid in head_ids + tail_ids:
@@ -362,25 +395,7 @@ async def list_messages(
     for mid in msg_ids:
         node = _get_msg(mid)
         if node and not getattr(node, "is_deleted", False):
-            # 保留根占位消息（前端需要它的 ID 作为 currentPath 起点）
-            d = {
-                "id": node.id,
-                "directory_id": getattr(node, "directory_id", ""),
-                "parent_id": node.parent_id,
-                "children_ids": node.children_ids,
-                "role": node.role,
-                "version": node.version,
-                "timestamp": getattr(node, "timestamp", 0),
-                "token_count": getattr(node, "token_count", 0),
-                "has_sub_branches": getattr(node, "has_sub_branches", False),
-                "sub_branch_ids": getattr(node, "sub_branch_ids", []),
-                # ★ 保留 text_summary（失败消息 content/content_blocks 为空但 text_summary 有错误信息）
-                "content": "",
-                "content_blocks": [],
-                "text_summary": getattr(node, "text_summary", "") or "",
-                "is_deleted": getattr(node, "is_deleted", False),
-                "status": getattr(node, "status", "done"),
-            }
+            d = _build_message_dict(node, skeleton=not all)
             messages.append(d)
     return Response(
         content=json.dumps({"messages": messages, "total": total_ids}),

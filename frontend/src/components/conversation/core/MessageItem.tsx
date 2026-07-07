@@ -176,8 +176,6 @@ export interface MessageItemProps {
   editingText: string;
   vInfo: { index: number; total: number };
   hasVersions: boolean;
-  // ★ 显式加载状态（区分 placeholder/loading/loaded/streaming/broken）
-  loadState: "placeholder" | "loading" | "loaded" | "streaming" | "broken";
   displayText: string;
   cardsForMsg: ExplainCardData[];
   replyingToId: string | null;
@@ -286,7 +284,6 @@ function MessageItemInner({
   editingText,
   vInfo,
   hasVersions,
-  loadState,
   displayText,
   cardsForMsg,
   replyingToId,
@@ -310,55 +307,6 @@ function MessageItemInner({
   const userInitial = isUser ? getUserInitial(user?.display_name, user?.username, user?.email) : "";
 
   const grouped = useMemo(() => groupBlocks(message.content_blocks as ContentBlock[] | undefined), [message.content_blocks]);
-
-  // ── 显式状态渲染：placeholder / loading / streaming / broken / loaded ──
-  // ★ 关键：placeholder（未触发过加载）和 loading（正在加载）状态 UI 一致（skeleton）
-  //   broken 状态显示错误信息 + 重试按钮
-  //   streaming/loaded 状态显示实际内容
-
-  // 1) placeholder / loading 状态 → skeleton 占位
-  if ((loadState === "placeholder" || loadState === "loading") && !isEditing) {
-    return (
-      <div className={`${isUser ? "flex justify-end" : ""}`}>
-        <div className={`${isUser ? "w-full max-w-[85%]" : "w-full"}`}>
-          <div className={`${isUser ? "ai-msg-paper" : "ai-msg-paper"} animate-pulse space-y-2`}>
-            {isUser ? (
-              <div className="h-4 bg-[var(--color-page)] rounded-lg w-3/4" />
-            ) : (
-              <>
-                <div className="h-4 bg-[var(--color-page-secondary)] rounded-lg w-full" />
-                <div className="h-4 bg-[var(--color-page-secondary)] rounded-lg w-5/6" />
-                <div className="h-4 bg-[var(--color-page-secondary)] rounded-lg w-2/3" />
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // 2) broken 状态 → 显示错误 + 重试
-  if (loadState === "broken" && !isEditing) {
-    return (
-      <div className={`${isUser ? "flex justify-end" : ""}`}>
-        <div className={`${isUser ? "w-full max-w-[85%]" : "w-full"}`}>
-          <div className="ai-msg-paper border border-[var(--color-error)]/30 bg-[var(--color-error)]/5 px-3 py-2 space-y-1">
-            <div className="text-xs text-[var(--color-error)]">⚠️ 加载失败</div>
-            <div className="text-xs text-[var(--color-text-muted)]">{message.load_error || "无法加载此消息"}</div>
-            <button
-              onClick={() => {
-                // ★ 重试：调用 store action 清除 _loadAttempted 标记 + 重新加载
-                useMessageStore.getState().retryLoadContent(message.id);
-              }}
-              className="text-xs text-[var(--color-primary)] hover:underline"
-            >
-              重试
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="group">
@@ -531,7 +479,6 @@ const areMessageItemPropsEqual = (prev: MessageItemProps, next: MessageItemProps
     prev.vInfo.index === next.vInfo.index &&
     prev.vInfo.total === next.vInfo.total &&
     prev.hasVersions === next.hasVersions &&
-    prev.loadState === next.loadState &&
     prev.displayText === next.displayText &&
     prev.cardsForMsg === next.cardsForMsg &&
     prev.replyingToId === next.replyingToId &&

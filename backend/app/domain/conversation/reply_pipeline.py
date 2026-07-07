@@ -324,9 +324,11 @@ class ReplyPipeline:
                         exc_info=True,
                     )
                     yield ReplyEvent(type="error", data={"error": str(stage_err)})
-                    # tool_loop 失败不继续执行后续阶段
-                    if stage.name in ("tool_loop",):
-                        break
+                    # ★ 任何 stage 失败都应终止 pipeline（防止 ctx.msg_id 缺失时
+                    #   PostProcessStage 拿空 message_id 调 update_shell_to_done 抛 "消息  不存在"）
+                    # ★ 2026-07-06 修复：原逻辑只对 tool_loop break，导致 InitStage 失败
+                    #   后 ClassifyStage/ToolLoopStage/PostProcessStage 全部继续崩溃
+                    break
 
                 # 挂起检测：tool_loop 阶段挂起后不再执行后续阶段
                 if stage.name == "tool_loop" and ctx._suspended:

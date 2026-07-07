@@ -68,6 +68,7 @@ export interface V7Bank {
 export interface V7SessionListItem {
   session_id: string;
   bank_id: string;
+  bank_name?: string;
   mode: string;
   status: string;
   total_count: number;
@@ -1219,3 +1220,84 @@ export async function submitSelfExplain(req: SelfExplainRequest): Promise<SelfEx
     body: JSON.stringify(req),
   });
 }
+
+// ══════════════════════════════════════════════════════════════
+//  Practice Service (aggregate object for convenience)
+// ══════════════════════════════════════════════════════════════
+
+export const practiceService = {
+  acceptProposal,
+  adaptiveSelect,
+  batchImport,
+  bulkGenerateQuestions,
+  cancelSession,
+  checkAchievements,
+  clearMasteredErrors,
+  completeSession,
+  confirmImport,
+  copyQuestionsToBank,
+  createBank,
+  createExam,
+  createPracticeSession,
+  createQuestion,
+  deleteBank,
+  deleteQuestion,
+  dismissProposal,
+  fetchConfidenceReport,
+  generateFromConversation,
+  generateFromMaterials,
+  generateQuestions,
+  generateSimilarQuestions,
+  getAchievements,
+  getAchievementStats,
+  getAnswerHistory,
+  getBank,
+  getBankQuestions,
+  getDailyTrend,
+  getDueQuestions,
+  getErrorBook,
+  getErrorBookStats,
+  getErrorDistribution,
+  getErrorMaterials,
+  getExamAnswerSheet,
+  getExamResult,
+  getExamTime,
+  getImportHistory,
+  getOverview,
+  getQuestion,
+  getQuestionExplanation,
+  getQuestionHint,
+  getQuestionPreview,
+  getRecentAchievements,
+  getRecommendations,
+  getReviewStats,
+  getSecretaryProposals,
+  getSession,
+  getSessionHistory,
+  getSessionResult,
+  getUnfinishedSessions,
+  getWeakSkills,
+  listBanks,
+  listMaterials,
+  listSessions,
+  pauseSession,
+  previewImport,
+  reorderQuestionsInBank,
+  resolveBankForConversation,
+  resolveBankForNode,
+  resumeSession,
+  reviewErrorQuestion,
+  searchReferences,
+  searchReferencesForNode,
+  searchReferencesForQuestion,
+  startSession,
+  submitAllExam,
+  submitAnswer,
+  submitExamAnswer,
+  submitSelfExplain,
+  toggleFavorite,
+  toggleSlash,
+  updateBank,
+  updateQuestion,
+  uploadImport,
+};

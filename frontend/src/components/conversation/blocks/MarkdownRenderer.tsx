@@ -1,15 +1,49 @@
 "use client";
 
 import React from "react";
+import dynamic from "next/dynamic";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import rehypeSlug from "rehype-slug";
 import rehypeSentenceSegment from "@/lib/rehype-sentence-segment";
-import CodeBlock from "@/components/CodeBlock";
-import MermaidBlock from "@/components/MermaidBlock";
 import "katex/dist/katex.min.css";
+
+// 动态导入重量级组件（react-syntax-highlighter / mermaid），按需加载
+const CodeBlock = dynamic(() => import("@/components/CodeBlock"), {
+  ssr: false,
+  loading: () => <CodeBlockPlaceholder />,
+});
+const MermaidBlock = dynamic(() => import("@/components/MermaidBlock"), {
+  ssr: false,
+  loading: () => <MermaidBlockPlaceholder />,
+});
+
+function CodeBlockPlaceholder({ language, value }: { language?: string; value?: string }) {
+  return (
+    <div className="relative group my-2 rounded-lg overflow-hidden border border-[var(--color-border)]">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-[var(--color-surface-hover)] border-b border-[var(--color-border)]">
+        <span className="text-[10px] text-[var(--color-text-muted)] font-mono uppercase tracking-wider">
+          {language || "text"}
+        </span>
+      </div>
+      <pre className="m-0 p-3 text-xs leading-relaxed overflow-x-auto bg-[var(--color-surface)] text-[var(--color-text)]">
+        <code>{value || ""}</code>
+      </pre>
+    </div>
+  );
+}
+
+function MermaidBlockPlaceholder({ chart }: { chart?: string }) {
+  return (
+    <div className="my-2 flex justify-center overflow-x-auto py-2">
+      <div className="mermaid max-w-full" style={{ minWidth: "200px" }}>
+        {chart || ""}
+      </div>
+    </div>
+  );
+}
 
 interface Props {
   content: string;

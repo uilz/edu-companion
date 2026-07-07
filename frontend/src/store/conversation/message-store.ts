@@ -1,233 +1,59 @@
-// ══════════════════════════════════════════════════════════════
-//  message-store — 消息/响应块数据状态
-//
-//  职责：管理会话消息列表和响应块数据。
-//  不包含：树/图谱数据、UI 标志（isLoading/statusMessage 等在 ui-store）。
-//
-//  ── 2026-07-06 分支对话重构（完全按设计文档 message-tree-path-algorithm.md）──
-//
-//  数据结构：
-//  - nodeMap: 邻接表 + 深度表（常驻 O(1) 查询）
-//  - loadedContent: 按需懒加载的完整消息正文
-//  - currentPath: 当前活跃路径的消息 ID 列表（根→尾）
-//  - pathPosMap: id → 在 currentPath 中的索引（O(1) 位置查询）
-//  - pathReady: 路径是否已完全加载（防止发送竞态）
-//  - sending: 发送锁
-//
-//  核心算法（按设计文档 §核心算法）：
-//  - calcPath(targetId): async，回溯祖先 + 按需补齐缺失子节点
-//  - fillAncestorPath(tipId): 单次 chain API 同时加载 ancestors + descendants
-//  - getDefaultChild(nodeId): 按 version 取最新子节点
-//  - switchBranch(fromId, toId): LCA + calcPath(toId)
-//  - handleDelete(nodeId): 从前驱重建 currentPath
-//
-//  加载策略（设计文档 §加载策略）：
-//  - 首尾加载 head[:30] + tail[-20:]
-//  - fillAncestorPath 单次 API 补齐完整路径
-//  - pathReady 守卫 send()
-//
-//  SSE 错误恢复（设计文档 §边界）：
-//  - streamingId 卡死时自动释放 sending 锁
-//  - stale streaming 检测（status="streaming" + 无活跃流）
-//
-//  URL 持久化（设计文档 §场景 6）：
-//  - URL ?m={msgId} 最高优先级
-//  - localStorage conv_last_tip:{convId} 次优先级
-//  - 默认: tail[last].id
-// ══════════════════════════════════════════════════════════════
-
-import { create } from "zustand";
-import type { MessageNode } from "@/types";
-import { apiFetch } from "./tree-helpers";
-import { isTempMessage } from "./actions/message-factory";
-
-// ══════════════════════════════════════════════════════════════
-//  显式 load_state 状态机 — 共享 selector
-// ══════════════════════════════════════════════════════════════
-
-/** 显式 load_state 推导结果（每条消息的渲染状态） */
-export interface LoadStatus {
-  /** 仅骨架（head/tail 列表的预览），需要调 /tree/message/{id} 取完整正文 */
-  isPlaceholder: boolean;
-  /** 正在请求 /tree/message/{id} */
-  isLoading: boolean;
-  /** 完整正文已在内存（无论是乐观写入还是 SSE 返回） */
-  isLoaded: boolean;
-  /** 请求失败 */
-  isBroken: boolean;
-  /** SSE 正在写入（status=streaming，正交于 load_state） */
-  isStreaming: boolean;
-}
-
-/** getLoadStatus 所需最小 state 形状（避免循环依赖） */
-export type LoadStatusState = Pick<MessageState, "nodeMap" | "streamingId">;
-
 /**
- * 显式 load_state 状态机的统一判断。
+ * message-store — 消息数据状态（简化版）
  *
- * 设计原则：所有判断"消息是否在加载"的逻辑都走此函数，
- *   任何组件不得自行派生 isPlaceholder/isLoaded。
+ * 原则：服务端为唯一真相源。前端不做懒加载、不做乐观写入、不做状态机。
+ * 全量加载后，本地计算路径和分支导航。
  *
- * 状态机（与 streamingId 正交）：
- *   placeholder → 骨架（仅 text_summary 预览）
- *   loading     → 正在 fetch /tree/message/{id}
- *   loaded      → 完整正文已加载
- *   broken      → 加载失败
- *
- * 特殊处理：
- *   - 临时消息（t_/a_/err-）→ 直接 isLoaded=true
- *   - 根占位消息（parent_id=None, role=assistant, content=空）→ 视为 loaded=true 但不渲染
- *   - streamingId === msgId → isStreaming=true（与 isLoaded 不冲突）
- *   - 缺失 load_state 字段（旧数据）→ 默认 placeholder
+ * 数据结构：
+ *  - nodeMap: 全部消息索引（O(1) 查询）
+ *  - currentPath: 当前活跃路径的消息 ID 列表（根→尾）
+ *  - pathPosMap: id → 在 currentPath 中的索引
+ *  - messages: 当前路径的渲染列表（从 currentPath + nodeMap 推导）
  */
-export function getLoadStatus(
-  state: LoadStatusState,
-  msgId: string,
-): LoadStatus {
-  // 临时消息（乐观写入、流式占位）→ loaded
-  if (isTempMessage(msgId)) {
-    return {
-      isPlaceholder: false,
-      isLoading: false,
-      isLoaded: true,
-      isBroken: false,
-      isStreaming: state.streamingId === msgId,
-    };
-  }
-  const n = state.nodeMap[msgId];
-  if (!n) {
-    return {
-      isPlaceholder: true,
-      isLoading: false,
-      isLoaded: false,
-      isBroken: false,
-      isStreaming: false,
-    };
-  }
-  // 根占位（parent_id=None, role=assistant, content=空）→ 不显示
-  if (!n.parent_id && n.role === "assistant" && !n.content && !(n.content_blocks && n.content_blocks.length > 0)) {
-    return {
-      isPlaceholder: false,
-      isLoading: false,
-      isLoaded: true,
-      isBroken: false,
-      isStreaming: false,
-    };
-  }
-  // 流式消息 → loaded + streaming
-  if (state.streamingId === msgId) {
-    return {
-      isPlaceholder: false,
-      isLoading: false,
-      isLoaded: true,
-      isBroken: false,
-      isStreaming: true,
-    };
-  }
-  // 根据 load_state 字段显式判断
-  const ls = n.load_state ?? "placeholder";
-  return {
-    isPlaceholder: ls === "placeholder",
-    isLoading: ls === "loading",
-    isLoaded: ls === "loaded",
-    isBroken: ls === "broken",
-    isStreaming: false,
-  };
-}
+import type { MessageNode } from "@/types";
+import { create } from "zustand";
 
 // ══════════════════════════════════════════════════════════════
-//  模块级并发控制（防重复请求 + 跨会话写入）
+//  类型
 // ══════════════════════════════════════════════════════════════
-
-/** 正在飞行的 loadFullContent 请求，避免重复触发 */
-const _loadingInFlight = new Set<string>();
-/** 加载 Promise 缓存：相同 msgId 并发请求共享同一 Promise */
-const _loadingPromises = new Map<string, Promise<void>>();
-/** 已尝试过加载（成功或失败）的 msgId — 防止空 content 死循环 */
-const _loadAttempted = new Set<string>();
 
 export interface MessageState {
-  // ── 树数据层 ──
-  nodeMap: Record<string, MessageNode>;      // msgId → 完整消息（替代 outlines + loadedContent）
-  /** @deprecated 由 nodeMap 替代 */
-  loadedContent: Record<string, MessageNode>;
-  /** @deprecated 由 pathPosMap 替代（设计文档 §数据结构） */
-  pathPos: number;
-
-  // ── 路径层 ──
-  currentPath: string[];                    // 当前活跃路径（根→尾）
-  pathPosMap: Map<string, number>;          // id → 在 currentPath 中的索引（O(1) 位置查询）
-  pathReady: boolean;                       // 路径是否已完全加载（send 守卫）
-  streamingId: string | null;               // 当前正在流式写入的 assistant 消息 ID
-  activeConvId: string | null;              // 当前活跃 conv ID（用于 localStorage key）
-
-  // ── 并发控制 ──
-  sending: boolean;                         // 发送锁
-
-  // ── 向后兼容：渲染源 ──
-  messages: MessageNode[];                  // 推导结果，保持对外接口一致
-
-  loadingMessages: boolean;
+  nodeMap: Record<string, MessageNode>;
+  currentPath: string[];
+  pathPosMap: Map<string, number>;
+  messages: MessageNode[];
+  streamingId: string | null;
+  activeConvId: string | null;
+  isLoading: boolean;
   convError: string | null;
+  statusMessage: string;
 
-  // ── Actions ──
-  /** 加载对话链：head/tail 分段加载 → fillAncestorPath → setCurrentPath */
-  loadMessages: (conversationId: string, tipId?: string) => Promise<void>;
-  /** 单次链式加载：从 tipId 同时回溯 + 沿长子链补齐 */
-  fillAncestorPath: (msgId: string) => Promise<{ ancestors: MessageNode[]; descendants: MessageNode[] }>;
-  /** 异步计算从根到 msgId 的完整路径（祖先 + 按需补齐子节点） */
-  calcPath: (msgId: string) => Promise<string[]>;
-  /** 按 version 取最新子节点（设计文档 §核心算法） */
-  getDefaultChild: (msgId: string) => string | null;
-  /** 切换到指定分支：LCA + calcPath */
-  switchBranch: (msgId: string) => Promise<void>;
-  /** 版本切换：基于兄弟查找 + switchBranch */
-  navigateVersion: (msgId: string, direction: "prev" | "next") => void;
-  /** 兄弟切换的 helper（设计文档 §核心算法） */
-  switchVersion: (fromId: string, toId: string) => string[];
-
-  /** 删除消息：从前驱重建 currentPath */
-  deleteMessage: (messageId: string) => Promise<void>;
-  /** 编辑消息 */
-  editMessage: (messageId: string, newText: string) => Promise<number>;
-
-  /** 更新节点（SSE handler 写入消息时同步更新 nodeMap） */
-  upsertNode: (node: MessageNode) => void;
-  /** 从 messages 数组重建 nodeMap */
-  syncFromMessages: () => void;
-  /** 根据 currentPath + nodeMap 重建 messages（过滤 is_deleted/orphaned） */
-  _rebuildMessages: () => void;
-  /** 检查消息是否已加载完整正文（content_blocks 不为空） */
-  hasFullContent: (msgId: string) => boolean;
-  /** 懒加载完整消息正文（从 /tree/message/{id}） */
-  loadFullContent: (msgId: string) => Promise<void>;
-  /** 重试 broken 状态的消息（清除 _loadAttempted 标记 + 重新加载） */
-  retryLoadContent: (msgId: string) => Promise<void>;
-  /** 批量懒加载可视区消息 */
-  loadVisibleContent: (msgIds: string[]) => Promise<void>;
-
-  /** 切换当前路径（同时更新 pathPosMap、localStorage、URL） */
-  setCurrentPath: (newPath: string[], persist?: boolean) => void;
+  // Actions
+  loadConversation(convId: string, tipId?: string): Promise<void>;
+  sendMessage(text: string, convId: string, dirId: string, files?: any[]): Promise<void>;
+  stopGeneration(): Promise<void>;
+  submitToolResult(toolCallId: string, answers: string, convId: string): Promise<unknown>;
+  switchBranch(msgId: string): void;
+  navigateVersion(msgId: string, direction: "prev" | "next"): void;
+  deleteMessage(msgId: string): Promise<void>;
+  editMessage(msgId: string, newText: string): Promise<number>;
+  setCurrentPath(newPath: string[], persist?: boolean): void;
+  upsertNode(node: MessageNode): void;
+  _rebuildMessages(): void;
 }
 
 // ══════════════════════════════════════════════════════════════
-//  局部 helper（保持无副作用）
+//  Helpers
 // ══════════════════════════════════════════════════════════════
-
-const HEAD_SIZE = 30;
-const TAIL_SIZE = 20;
 
 function _isRenderable(n: MessageNode | undefined): boolean {
   if (!n) return false;
   if (n.is_deleted) return false;
-  // 跳过根占位消息（parent_id 为空的空内容 assistant 消息）
   if (!n.parent_id && n.role === "assistant" && !n.content) return false;
-  // 跳过 orphaned 节点
   if ((n as any).status === "orphaned") return false;
   return true;
 }
 
-/** 路径过滤：仅过滤 deleted/orphaned（保留根占位） */
 function _isPathNode(n: MessageNode | undefined): boolean {
   if (!n) return false;
   if (n.is_deleted) return false;
@@ -235,13 +61,11 @@ function _isPathNode(n: MessageNode | undefined): boolean {
   return true;
 }
 
-/** 是否为根占位消息（parent_id=None, role=assistant, content=空） */
 function _isRootShell(n: MessageNode | undefined): boolean {
   if (!n) return false;
   return !n.parent_id && n.role === "assistant" && !n.content;
 }
 
-/** 按 version + timestamp 取最新子节点 */
 function _getDefaultChildByVersion(siblings: MessageNode[]): MessageNode | null {
   if (siblings.length === 0) return null;
   const sorted = [...siblings].sort((a, b) => {
@@ -251,40 +75,314 @@ function _getDefaultChildByVersion(siblings: MessageNode[]): MessageNode | null 
   return sorted[0] || null;
 }
 
+function _getDefaultChild(fromId: string, nodeMap: Record<string, MessageNode>): string | null {
+  const node = nodeMap[fromId];
+  if (!node) return null;
+  const childrenIds = (node as any).children_ids || [];
+  const siblings: MessageNode[] = [];
+  for (const cid of childrenIds) {
+    const child = nodeMap[cid];
+    if (child && _isPathNode(child)) siblings.push(child);
+  }
+  return _getDefaultChildByVersion(siblings)?.id || null;
+}
+
+function _computePath(tipId: string, nodeMap: Record<string, MessageNode>): string[] {
+  if (!nodeMap[tipId]) return [];
+
+  const ancestors: string[] = [];
+  let cur = tipId;
+  const visited = new Set<string>();
+  while (cur && !visited.has(cur)) {
+    visited.add(cur);
+    ancestors.unshift(cur);
+    const node = nodeMap[cur];
+    if (!node || !node.parent_id) break;
+    cur = node.parent_id;
+  }
+
+  const descendants: string[] = [];
+  cur = tipId;
+  let depth = 0;
+  while (depth < 1000) {
+    const child = _getDefaultChild(cur, nodeMap);
+    if (!child || visited.has(child)) break;
+    visited.add(child);
+    descendants.push(child);
+    cur = child;
+    depth += 1;
+  }
+
+  return [...ancestors, ...descendants];
+}
+
+// ══════════════════════════════════════════════════════════════
+//  API helper
+// ══════════════════════════════════════════════════════════════
+
+function _apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") || "" : "";
+  return fetch(`/api/conversations${path}`, {
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    ...init,
+  }).then(r => {
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  });
+}
+
+function _authHeaders(): Record<string, string> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") || "" : "";
+  return { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+}
+
+// ══════════════════════════════════════════════════════════════
+//  SSE 事件处理
+// ══════════════════════════════════════════════════════════════
+
+type ToolBlock = {
+  type: "tool";
+  tool_call_id: string;
+  tool_name: string;
+  display_name?: string;
+  status: "pending" | "running" | "done" | "error";
+  arguments?: Record<string, unknown>;
+  result_content?: unknown;
+  error?: string | null;
+};
+
+let _abortController: AbortController | null = null;
+
+function _handleSSEEvent(event: Record<string, unknown>) {
+  const t = event.type as string;
+  switch (t) {
+    case "pending_msg": {
+      const msgId = (event.data as any)?.msg_id || "";
+      if (msgId) {
+        useMessageStore.setState({
+          streamingId: msgId,
+          statusMessage: "正在生成...",
+        });
+      }
+      break;
+    }
+    case "token": {
+      const content = (event.content as string) || "";
+      useMessageStore.setState((state) => {
+        const sid = state.streamingId;
+        if (!sid) return {};
+        return {
+          messages: state.messages.map((m) => {
+            if (m.id !== sid) return m;
+            const blocks = [...(m.content_blocks || [])];
+            const last = blocks.length > 0 ? blocks[blocks.length - 1] : null;
+            if (last && last.type === "text") {
+              blocks[blocks.length - 1] = { ...last, text: (last.text || "") + content };
+            } else {
+              blocks.push({ type: "text", text: content });
+            }
+            return {
+              ...m,
+              content_blocks: blocks,
+              text_summary: (m.text_summary || "") + content,
+            };
+          }),
+        };
+      });
+      break;
+    }
+    case "reasoning": {
+      const content = (event.content as string) || "";
+      useMessageStore.setState((state) => {
+        const sid = state.streamingId;
+        if (!sid) return {};
+        return {
+          messages: state.messages.map((m) => {
+            if (m.id !== sid) return m;
+            const blocks = [...(m.content_blocks || [])];
+            const last = blocks.length > 0 ? blocks[blocks.length - 1] : null;
+            if (last && last.type === "reasoning") {
+              blocks[blocks.length - 1] = { ...last, text: (last.text || "") + content };
+            } else {
+              blocks.push({ type: "reasoning", text: content, status: "streaming" });
+            }
+            return { ...m, content_blocks: blocks };
+          }),
+        };
+      });
+      break;
+    }
+    case "tool_calls": {
+      const toolCalls = ((event.data as any)?.tool_calls || []) as any[];
+      useMessageStore.setState((state) => {
+        const sid = state.streamingId;
+        if (!sid) return {};
+        const toolBlocks: ToolBlock[] = toolCalls.map((tc: any) => ({
+          type: "tool" as const,
+          tool_call_id: tc.tool_call_id,
+          tool_name: tc.tool_name,
+          display_name: tc.zh || tc.tool_name,
+          status: "pending" as const,
+          arguments: tc.args || {},
+          result_content: null,
+          error: null,
+        }));
+        return {
+          messages: state.messages.map((m) => {
+            if (m.id !== sid) return m;
+            return { ...m, content_blocks: [...(m.content_blocks || []), ...toolBlocks] };
+          }),
+        };
+      });
+      break;
+    }
+    case "tool_block": {
+      const block = (event.block || event.data || {}) as Record<string, unknown>;
+      useMessageStore.setState((state) => {
+        const sid = state.streamingId;
+        if (!sid) return {};
+        return {
+          messages: state.messages.map((m) => {
+            if (m.id !== sid) return m;
+            const blocks = (m.content_blocks || []).map((b: any) =>
+              b.type === "tool" && b.tool_call_id === block.tool_call_id
+                ? { ...b, ...block }
+                : b,
+            );
+            return { ...m, content_blocks: blocks };
+          }),
+        };
+      });
+      break;
+    }
+    case "tool_call_update": {
+      const data = (event.data || {}) as Record<string, unknown>;
+      useMessageStore.setState((state) => {
+        const sid = state.streamingId;
+        if (!sid) return {};
+        return {
+          messages: state.messages.map((m) => {
+            if (m.id !== sid) return m;
+            const blocks = (m.content_blocks || []).map((b: any) =>
+              b.type === "tool" && b.tool_call_id === data.tool_call_id
+                ? { ...b, ...data }
+                : b,
+            );
+            return { ...m, content_blocks: blocks };
+          }),
+        };
+      });
+      break;
+    }
+    case "tool_result": {
+      const data = (event.data || {}) as Record<string, unknown>;
+      useMessageStore.setState((state) => {
+        const sid = state.streamingId;
+        if (!sid) return {};
+        return {
+          messages: state.messages.map((m) => {
+            if (m.id !== sid) return m;
+            const blocks = (m.content_blocks || []).map((b: any) =>
+              b.type === "tool" && b.tool_call_id === data.tool_call_id
+                ? {
+                    ...b,
+                    status: (data.error ? "error" : "done") as any,
+                    result_content: data.result || data,
+                    error: data.error || null,
+                  }
+                : b,
+            );
+            return { ...m, content_blocks: blocks };
+          }),
+        };
+      });
+      break;
+    }
+    case "user_message": {
+      const msg = event.message as MessageNode | undefined;
+      if (msg) {
+        useMessageStore.setState((state) => {
+          const newMap = { ...state.nodeMap, [msg.id]: { ...msg, load_state: "loaded" } };
+          const newPath = [...state.currentPath];
+          if (!newPath.includes(msg.id)) {
+            const parentId = (msg as any).parent_id as string | undefined;
+            const insertIdx = parentId ? newPath.indexOf(parentId) + 1 : newPath.length;
+            newPath.splice(Math.min(insertIdx, newPath.length), 0, msg.id);
+          }
+          return { nodeMap: newMap, currentPath: newPath };
+        });
+        useMessageStore.getState()._rebuildMessages();
+      }
+      break;
+    }
+    case "done": {
+      useMessageStore.setState({ isLoading: false, streamingId: null, statusMessage: "" });
+      const data = (event.data || event) as Record<string, unknown>;
+      const assistantMsg = data.assistant_message as MessageNode | undefined;
+      if (assistantMsg) {
+        useMessageStore.setState((state) => {
+          const newMap = { ...state.nodeMap, [assistantMsg.id]: { ...assistantMsg, load_state: "loaded" } };
+          const newPath = [...state.currentPath];
+          if (!newPath.includes(assistantMsg.id)) {
+            newPath.push(assistantMsg.id);
+          }
+          return { nodeMap: newMap, currentPath: newPath };
+        });
+        useMessageStore.getState()._rebuildMessages();
+      }
+      break;
+    }
+    case "error": {
+      _handleSSEError((event.data as any)?.error || (event as any).message || "未知错误");
+      break;
+    }
+    case "stage":
+    case "stream_start":
+    case "stream_ended":
+    case "pending_user":
+      break;
+    // 其他事件：忽略
+    default:
+      break;
+  }
+}
+
+function _handleSSEError(msg: string) {
+  useMessageStore.setState((state) => ({
+    isLoading: false,
+    streamingId: null,
+    statusMessage: "",
+    messages: state.messages.filter((m) => m.id !== state.streamingId),
+    convError: msg,
+  }));
+}
+
 // ══════════════════════════════════════════════════════════════
 //  Store
 // ══════════════════════════════════════════════════════════════
 
 export const useMessageStore = create<MessageState>()((set, get) => ({
-  // ── State ──
   nodeMap: {},
-  loadedContent: {},
-  pathPos: 0,
-
   currentPath: [],
   pathPosMap: new Map(),
-  pathReady: false,
+  messages: [],
   streamingId: null,
   activeConvId: null,
-
-  sending: false,
-
-  messages: [],
-  loadingMessages: false,
+  isLoading: false,
   convError: null,
+  statusMessage: "",
 
-  // ── setCurrentPath：核心 setter ──
-  setCurrentPath: (newPath: string[], persist: boolean = true) => {
+  // ── setCurrentPath ──
+  setCurrentPath: (newPath, persist = true) => {
     const pathPosMap = new Map<string, number>();
     newPath.forEach((id, i) => pathPosMap.set(id, i));
-    set({ currentPath: newPath, pathPosMap, pathPos: newPath.length - 1 });
+    set({ currentPath: newPath, pathPosMap });
     if (persist) {
       const { activeConvId } = get();
       if (activeConvId && typeof window !== "undefined") {
         try {
           const tipId = newPath[newPath.length - 1];
           localStorage.setItem(`conv_last_tip:${activeConvId}`, tipId);
-          // URL ?m={msgId}（设计文档 §场景 6）
           const url = new URL(window.location.href);
           url.searchParams.set("m", tipId);
           window.history.replaceState(null, "", url.toString());
@@ -294,228 +392,51 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     get()._rebuildMessages();
   },
 
-  // ── 重建 messages（过滤 + 推导）──
+  // ── _rebuildMessages ──
   _rebuildMessages: () => {
     const { currentPath, nodeMap, messages } = get();
     const pathSet = new Set(currentPath);
-    // 设计文档 §渲染推导：currentPath 过滤后 map
     const pathMsgs: MessageNode[] = [];
     for (const id of currentPath) {
       const node = nodeMap[id];
-      if (_isRenderable(node)) {
-        pathMsgs.push(node);
-      }
+      if (_isRenderable(node)) pathMsgs.push(node);
     }
-    // 保留 pipeline 直接写入的消息（在 nodeMap 之外，如流式消息、乐观写入）
-    const pipelineMsgs = messages.filter(m => !pathSet.has(m.id));
+    const pipelineMsgs = messages.filter((m) => !pathSet.has(m.id));
     set({ messages: [...pathMsgs, ...pipelineMsgs] });
   },
 
-  // ── 同步：messages → nodeMap ──
-  syncFromMessages: () => {
-    const { messages, nodeMap } = get();
-    const newMap = { ...nodeMap };
-    let changed = false;
-    for (const m of messages) {
-      if (!newMap[m.id] || newMap[m.id] !== m) {
-        newMap[m.id] = m;
-        changed = true;
-      }
-    }
-    if (changed) {
-      set({ nodeMap: newMap });
-    }
-  },
-
-  // ── 更新单个节点 ──
-  upsertNode: (node: MessageNode) => {
-    set(state => ({
-      nodeMap: { ...state.nodeMap, [node.id]: node },
-    }));
+  // ── upsertNode ──
+  upsertNode: (node) => {
+    set((state) => ({ nodeMap: { ...state.nodeMap, [node.id]: node } }));
     get()._rebuildMessages();
   },
 
-  // ── 检查消息是否已加载完整正文 ──
-  //   ★ 关键判断：是否需要再调 /tree/message/{id} 加载完整正文
-  //   ★ 2026-07-06 重构：统一为 load_state === "loaded" 单一来源
-  //   - 临时消息（t_/a_/err-）→ 已有完整内容
-  //   - load_state === "loaded" → 已有
-  //   - load_state 缺失（旧数据）→ 退回 content/content_blocks 检查（兼容）
-  //   - placeholder / loading / broken → 未有（但 loading/broken 仍可由 loadFullContent 处理）
-  hasFullContent: (msgId: string): boolean => {
-    const n = get().nodeMap[msgId];
-    if (!n) return false;
-    if (isTempMessage(msgId)) return true;
-    if (n.load_state === "loaded") return true;
-    if (n.load_state === undefined) {
-      // 兼容旧数据（无 load_state 字段）
-      if (n.content && n.content.length > 0) return true;
-      if (n.content_blocks && n.content_blocks.length > 0) return true;
-    }
-    return false;
-  },
-
-  // ── 懒加载完整消息正文（POST/GET /tree/message/{id}）──
-  //   ★ 五大防护 + 显式状态机：
-  //     1. in-flight Set：相同 msgId 并发请求只发 1 次
-  //     2. Promise 缓存：未完成的请求共享同一 Promise
-  //     3. activeConvId 校验：API 返回时若已切换会话则丢弃结果
-  //     4. _loadAttempted 标记：API 返回后标记已尝试，防止空 content 死循环
-  //     5. loadState 显式状态：placeholder → loading → loaded/broken
-  //        ★ 解耦"是否在加载"和"是否有内容"两个判断（之前用 isLoading 临时推断）
-  loadFullContent: async (msgId: string) => {
-    const existing = get().nodeMap[msgId];
-    // 已有正文 → 跳过（loaded 状态）
-    if (get().hasFullContent(msgId)) {
-      if (existing && existing.load_state !== "loaded") {
-        get().upsertNode({ ...existing, load_state: "loaded" });
-      }
-      return;
-    }
-    // 流式消息 → 跳过（SSE 自己会写）
-    if (get().streamingId === msgId) return;
-    // 临时消息 → 跳过
-    if (isTempMessage(msgId)) return;
-    // ★ 已尝试过（成功或失败）→ 跳过，避免空 content 死循环
-    if (_loadAttempted.has(msgId)) return;
-    // ★ 已在飞行中 → 共享同一 Promise，不发重复请求
-    if (_loadingInFlight.has(msgId)) {
-      return _loadingPromises.get(msgId);
-    }
-
-    // 记录请求发起时的 active conv（用于跨会话校验）
-    const requestConvId = get().activeConvId;
-
-    // ★ 标记状态为 loading（不依赖 isLoading 外部 prop）
-    if (existing && existing.load_state !== "loading") {
-      get().upsertNode({ ...existing, load_state: "loading" });
-    }
-
-    const promise = (async () => {
-      try {
-        const data = await apiFetch<{ message: MessageNode }>(`/tree/message/${msgId}`);
-        const fullMsg = data.message;
-        if (!fullMsg) return;
-
-        // ★ 跨会话防护：API 返回时若已切换会话，丢弃结果
-        if (get().activeConvId !== requestConvId) {
-          return;
-        }
-
-        // 合并：保留原有元数据，更新 content 字段 + 标记 loaded
-        const prev = get().nodeMap[msgId];
-        const merged: MessageNode = {
-          ...prev,
-          ...fullMsg,
-          is_deleted: prev?.is_deleted ?? fullMsg.is_deleted ?? false,
-          load_state: "loaded",  // ★ 显式标记 loaded
-        } as MessageNode;
-        get().upsertNode(merged);
-      } catch (e) {
-        console.warn(`[loadFullContent] ${msgId} 失败:`, e);
-        // ★ 标记 broken 状态
-        const prev = get().nodeMap[msgId];
-        if (prev && get().activeConvId === requestConvId) {
-          get().upsertNode({
-            ...prev,
-            load_state: "broken",
-            load_error: e instanceof Error ? e.message : String(e),
-          });
-        }
-      } finally {
-        _loadingInFlight.delete(msgId);
-        _loadingPromises.delete(msgId);
-        // ★ 无论成功失败都标记为"已尝试"——API 返回空 content 也算已尝试
-        _loadAttempted.add(msgId);
-      }
-    })();
-
-    _loadingInFlight.add(msgId);
-    _loadingPromises.set(msgId, promise);
-    return promise;
-  },
-
-  // ── 重试 broken 状态的消息：清除 _loadAttempted + reset load_state + 重新加载 ──
-  retryLoadContent: async (msgId: string) => {
-    // 清除已尝试标记（允许再次请求）
-    _loadAttempted.delete(msgId);
-    _loadingInFlight.delete(msgId);
-    _loadingPromises.delete(msgId);
-    // 重置 load_state 为 placeholder
-    const existing = get().nodeMap[msgId];
-    if (existing) {
-      get().upsertNode({ ...existing, load_state: "placeholder", load_error: undefined });
-    }
-    // 重新加载
-    return get().loadFullContent(msgId);
-  },
-
-  // ── 批量懒加载可视区消息（设计文档 §场景 1: 首屏预加载）──
-  //   ★ 同一批次内去重 + 并发限流 5 个
-  loadVisibleContent: async (msgIds: string[]) => {
-    // 去重 + 过滤
-    const unique = Array.from(new Set(msgIds));
-    const needLoad = unique.filter(id => {
-      if (get().hasFullContent(id)) return false;
-      if (get().streamingId === id) return false;
-      if (isTempMessage(id)) return false;
-      if (_loadingInFlight.has(id)) return false;  // ★ 跳过正在飞行的
-      return true;
-    });
-    if (needLoad.length === 0) return;
-
-    // 并发加载（限制 5 个）
-    const queue = [...needLoad];
-    const workers = Array.from({ length: Math.min(5, queue.length) }, async () => {
-      while (queue.length > 0) {
-        const id = queue.shift();
-        if (id) await get().loadFullContent(id);
-      }
-    });
-    await Promise.all(workers);
-  },
-
-  // ── 加载对话消息（设计文档 §场景 1）──
-  loadMessages: async (conversationId: string, tipId?: string) => {
-    // ★ 切换会话时清空 in-flight + 尝试记录（防止旧 conv 缓存污染新 conv）
-    _loadingInFlight.clear();
-    _loadingPromises.clear();
-    _loadAttempted.clear();
-
+  // ── loadConversation: 一次性全量加载 ──
+  loadConversation: async (convId, tipId) => {
     set({
-      loadingMessages: true,
+      isLoading: true,
       convError: null,
-      activeConvId: conversationId,
-      pathReady: false,
-      // 清空 nodeMap 防止旧 conv 残留
+      activeConvId: convId,
       nodeMap: {},
       currentPath: [],
       pathPosMap: new Map(),
       messages: [],
     });
-    try {
-      // ── Step 1: 首尾加载（head + tail 分段）──
-      const data = await apiFetch<{ messages: MessageNode[]; total: number }>(
-        `/tree/conversation/${conversationId}/messages?head=${HEAD_SIZE}&tail=${TAIL_SIZE}`,
-      );
-      const skeletons: MessageNode[] = (data.messages || []).map(m => {
-        if ((m as any).metadata?.follow_up_questions && !(m as any).follow_up_questions) {
-          (m as any).follow_up_questions = (m as any).metadata.follow_up_questions;
-        }
-        // ★ 标记 skeleton 的 load_state = "placeholder"
-        //   后端 skeleton 没有 content/content_blocks，但可能有 text_summary
-        //   → 视为"未加载完整正文"占位
-        return { ...m, load_state: "placeholder" as const };
-      });
 
-      // ── Step 2: 构建 nodeMap（首尾去重合并）──
-      const newNodeMap: Record<string, MessageNode> = { ...get().nodeMap };
-      for (const m of skeletons) {
+    try {
+      const data = await _apiFetch<{ messages: MessageNode[]; total: number }>(
+        `/tree/conversation/${convId}/messages?all=true`,
+      );
+      const allMessages = (data.messages || []).map((m) => ({
+        ...m,
+        load_state: "loaded" as const,
+      }));
+
+      const newNodeMap: Record<string, MessageNode> = {};
+      for (const m of allMessages) {
         newNodeMap[m.id] = m;
       }
-      set({ nodeMap: newNodeMap });
 
-      // ── Step 3: 确定 tipId（优先级：参数 > URL ?m= > localStorage > 默认最后一条）──
       let resolvedTipId = tipId || "";
       if (!resolvedTipId && typeof window !== "undefined") {
         const url = new URL(window.location.href);
@@ -524,257 +445,186 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
       }
       if (!resolvedTipId && typeof window !== "undefined") {
         try {
-          const saved = localStorage.getItem(`conv_last_tip:${conversationId}`);
+          const saved = localStorage.getItem(`conv_last_tip:${convId}`);
           if (saved && newNodeMap[saved]) resolvedTipId = saved;
         } catch { /* ignore */ }
       }
-      if (!resolvedTipId && skeletons.length > 0) {
-        resolvedTipId = skeletons[skeletons.length - 1].id;
+      if (!resolvedTipId && allMessages.length > 0) {
+        resolvedTipId = allMessages[allMessages.length - 1].id;
       }
 
-      // ── Step 4: fillAncestorPath 单次 API（设计文档 §加载策略）──
-      let fullPath: string[] = [];
-      if (resolvedTipId) {
-        const { ancestors, descendants } = await get().fillAncestorPath(resolvedTipId);
-        // 合并：ancestors（已含 tipId）+ descendants
-        fullPath = [...ancestors.map(a => a.id), ...descendants.map(d => d.id)];
-      }
-
-      // ── Step 5: 标记 stale streaming（设计文档 §边界 8）──
-      //   加载到的节点若 status="streaming" 但无活跃流，标记为 done
-      set(state => {
-        const updated = { ...state.nodeMap };
-        for (const id of fullPath) {
-          const n = updated[id];
-          if (n && (n as any).status === "streaming" && id !== state.streamingId) {
-            (updated[id] as any) = { ...n, status: "done" };
-          }
-        }
-        return { nodeMap: updated };
-      });
-
-      // ── Step 6: 设置 currentPath + pathReady ──
+      const fullPath = _computePath(resolvedTipId, newNodeMap);
+      set({ nodeMap: newNodeMap });
       get().setCurrentPath(fullPath, true);
-      set({ loadingMessages: false, pathReady: true });
-
-      // ── Step 7: 首屏预加载正文（设计文档 §场景 1: 末尾 4 条 + 根占位）──
-      const preloadIds = fullPath.slice(-4);
-      if (fullPath[0] && _isRootShell(get().nodeMap[fullPath[0]])) {
-        preloadIds.unshift(fullPath[0]);
-      }
-      void get().loadVisibleContent(preloadIds);
+      set({ isLoading: false });
     } catch (e: unknown) {
-      if (e instanceof Error && e.message.includes("404")) {
-        set({ convError: "该对话已被删除", loadingMessages: false, pathReady: true });
-      } else {
-        set({ convError: "加载失败", loadingMessages: false, pathReady: true });
-      }
-      set({ nodeMap: {}, currentPath: [], pathPosMap: new Map(), messages: [] });
+      const msg = e instanceof Error ? e.message : "";
+      set({
+        convError: msg.includes("404") ? "该对话已被删除" : "加载失败",
+        isLoading: false,
+      });
     }
   },
 
-  // ── 单次链式加载（设计文档 §加载策略）──
-  fillAncestorPath: async (msgId: string) => {
-    const { activeConvId, messages } = get();
-    // 优先从 nodeMap/messages 本地构建（避免不必要的 API 调用）
-    const localNode: MessageNode | undefined = get().nodeMap[msgId] || messages.find(m => m.id === msgId);
-    if (localNode && _isPathNode(localNode)) {
-      // 本地已有：直接构造 ancestors + descendants
-      const ancestors: MessageNode[] = [];
-      let cur: MessageNode | undefined = localNode;
-      const visited = new Set<string>();
-      while (cur && !visited.has(cur.id)) {
-        visited.add(cur.id);
-        ancestors.unshift(cur);
-        const parentId: string | null = cur.parent_id;
-        if (!parentId) break;
-        const parent: MessageNode | undefined = get().nodeMap[parentId] || messages.find(m => m.id === parentId);
-        cur = parent;
-      }
-      // 本地 descendants：从 msgId 沿 getDefaultChild
-      const descendants: MessageNode[] = [];
-      cur = localNode;
-      while (cur) {
-        const child = get().getDefaultChild(cur.id);
-        if (!child || visited.has(child)) break;
-        visited.add(child);
-        const childNode = get().nodeMap[child];
-        if (!childNode) break;
-        descendants.push(childNode);
-        cur = childNode;
-      }
-      return { ancestors, descendants };
+  // ── sendMessage: POST + SSE 流 ──
+  sendMessage: async (text, convId, dirId, _files) => {
+    if (!text.trim()) return;
+
+    const { streamingId } = get();
+    if (streamingId) {
+      await get().stopGeneration();
     }
 
-    // 本地没有 → API 单次调用
-    if (!activeConvId) return { ancestors: [], descendants: [] };
+    _abortController?.abort();
+    const controller = new AbortController();
+    _abortController = controller;
+
+    const headers = _authHeaders();
+
     try {
-      const data = await apiFetch<{ ancestors: MessageNode[]; descendants: MessageNode[] }>(
-        `/tree/conversation/${activeConvId}/chain/skeleton`,
-        { method: "POST", body: JSON.stringify({ node_id: msgId }) },
+      set({ isLoading: true, statusMessage: "正在连接..." });
+
+      const res = await fetch(
+        `/api/conversations/tree/conversation/${convId}/message`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ action: "send", text, dir_id: dirId }),
+          signal: controller.signal,
+        },
       );
 
-      const ancestors = data.ancestors || [];
-      const descendants = data.descendants || [];
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        throw new Error(`HTTP ${res.status}: ${errText.slice(0, 200)}`);
+      }
 
-      // 更新 nodeMap
-      const newMap = { ...get().nodeMap };
-      for (const m of ancestors) newMap[m.id] = m;
-      for (const m of descendants) newMap[m.id] = m;
-      set({ nodeMap: newMap });
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
 
-      return { ancestors, descendants };
-    } catch {
-      return { ancestors: [], descendants: [] };
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const event = JSON.parse(line.slice(6));
+              _handleSSEEvent(event);
+            } catch {
+              // skip malformed
+            }
+          }
+        }
+      }
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      const errMsg = err instanceof Error ? err.message : "未知错误";
+      _handleSSEError(`连接失败：${errMsg}`);
     }
   },
 
-  // ── 异步 calcPath（设计文档 §核心算法 + §边界 6）──
-  calcPath: async (msgId: string): Promise<string[]> => {
-    // Phase 1: 回溯祖先（设计文档 §核心算法）
-    const ancestors: string[] = [];
-    let cur = msgId;
-    const visited = new Set<string>();
-    while (cur && !visited.has(cur)) {
-      visited.add(cur);
-      ancestors.unshift(cur);
-      const node = get().nodeMap[cur];
-      if (!node) {
-        // 本地找不到 → 补齐祖先
-        await get().fillAncestorPath(cur);
-      }
-      const curNode = get().nodeMap[cur];
-      if (!curNode || !curNode.parent_id) break;
-      cur = curNode.parent_id;
+  // ── stopGeneration ──
+  stopGeneration: async () => {
+    _abortController?.abort();
+    _abortController = null;
+    const { activeConvId } = get();
+    if (activeConvId) {
+      try {
+        await fetch(`/api/conversations/tree/conversation/${activeConvId}/message`, {
+          method: "POST",
+          headers: _authHeaders(),
+          body: JSON.stringify({ action: "stop" }),
+        });
+      } catch { /* best effort */ }
     }
-
-    // Phase 2: 按需补齐子节点（设计文档 §边界 6）
-    const descendants: string[] = [];
-    cur = msgId;
-    let depth = 0;
-    while (depth < 1000) {
-      let child = get().getDefaultChild(cur);
-      if (!child) break;
-      if (visited.has(child)) break;
-      // 子节点不在 nodeMap → 补齐
-      if (!get().nodeMap[child]) {
-        await get().fillAncestorPath(child);
-        child = get().getDefaultChild(cur);
-        if (!child || visited.has(child)) break;
-      }
-      visited.add(child);
-      descendants.push(child);
-      cur = child;
-      depth += 1;
-    }
-
-    return [...ancestors, ...descendants];
+    set({ isLoading: false, streamingId: null, statusMessage: "" });
   },
 
-  // ── 按 version 取最新子节点（设计文档 §核心算法）──
-  getDefaultChild: (msgId: string): string | null => {
-    const node = get().nodeMap[msgId];
-    if (!node) return null;
-    const childrenIds = (node as any).children_ids || [];
-    if (childrenIds.length === 0) return null;
-    const siblings: MessageNode[] = [];
-    for (const cid of childrenIds) {
-      const child = get().nodeMap[cid];
-      // 接受根占位（路径构建需要）+ 正常消息
-      if (child && _isPathNode(child)) {
-        siblings.push(child);
-      }
+  // ── submitToolResult ──
+  submitToolResult: async (toolCallId, answers, convId) => {
+    const res = await fetch(
+      `/api/conversations/tree/conversation/${convId}/tool-result`,
+      {
+        method: "POST",
+        headers: _authHeaders(),
+        body: JSON.stringify({ tool_call_id: toolCallId, answers }),
+      },
+    );
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status}: ${errText.slice(0, 200)}`);
     }
-    const def = _getDefaultChildByVersion(siblings);
-    return def?.id || null;
+    return res.json();
   },
 
-  // ── 切换分支：使用 calcPath 重建（设计文档 §场景 4）──
-  switchBranch: async (msgId: string) => {
-    const fullPath = await get().calcPath(msgId);
+  // ── switchBranch: 本地计算（全量 nodeMap 后无需 API）──
+  switchBranch: (msgId) => {
+    const { nodeMap } = get();
+    const fullPath = _computePath(msgId, nodeMap);
     if (fullPath.length === 0) return;
     get().setCurrentPath(fullPath, true);
   },
 
-  // ── 兄弟版本切换（设计文档 §核心算法 switchVersion）──
-  switchVersion: (fromId: string, toId: string): string[] => {
-    const toMsg = get().nodeMap[toId];
-    if (!toMsg) return [];
-    const parentId = toMsg.parent_id || "__root__";
-    const { currentPath } = get();
-    const LCA_depth = parentId === "__root__"
-      ? -1
-      : get().pathPosMap.get(parentId) ?? -1;
-    const prefix = currentPath.slice(0, LCA_depth + 1);
-    // 后半部分留空，等调用方调 switchBranch(toId) 异步补齐
-    return [...prefix, toId];
-  },
-
-  // ── 版本切换（MessageList UI 使用）──
-  navigateVersion: (msgId: string, direction: "prev" | "next") => {
-    const msg = get().nodeMap[msgId];
+  // ── navigateVersion ──
+  navigateVersion: (msgId, direction) => {
+    const { nodeMap } = get();
+    const msg = nodeMap[msgId];
     if (!msg) return;
     const parentId = msg.parent_id || "__root__";
-    const role = msg.role;
-    // 同一 parent + 同 role 的兄弟消息（不含根占位）
-    const siblings = Object.values(get().nodeMap)
-      .filter(m => (m.parent_id || "__root__") === parentId && m.role === role && !_isRootShell(m) && _isPathNode(m))
+    const siblings = Object.values(nodeMap)
+      .filter(
+        (m) =>
+          (m.parent_id || "__root__") === parentId &&
+          m.role === msg.role &&
+          !_isRootShell(m) &&
+          _isPathNode(m),
+      )
       .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
     if (siblings.length <= 1) return;
-    const idx = siblings.findIndex(m => m.id === msgId);
+    const idx = siblings.findIndex((m) => m.id === msgId);
     if (idx < 0) return;
-    const newIdx = direction === "prev"
-      ? (idx - 1 + siblings.length) % siblings.length
-      : (idx + 1) % siblings.length;
-    const target = siblings[newIdx];
-    if (target) {
-      void get().switchBranch(target.id);
-    }
+    const newIdx =
+      direction === "prev"
+        ? (idx - 1 + siblings.length) % siblings.length
+        : (idx + 1) % siblings.length;
+    get().switchBranch(siblings[newIdx].id);
   },
 
-  // ── 删除消息：从前驱重建 currentPath（设计文档 §边界 9）──
-  deleteMessage: async (messageId: string) => {
+  // ── deleteMessage ──
+  deleteMessage: async (msgId) => {
     try {
-      await apiFetch(`/tree/message/${messageId}`, { method: "DELETE" });
+      await _apiFetch(`/tree/message/${msgId}`, { method: "DELETE" });
     } catch (e) {
       console.error("删除消息失败:", e);
       return;
     }
-    // 标记 nodeMap 中 is_deleted = true（设计文档 §核心算法 渲染过滤）
     const newMap = { ...get().nodeMap };
-    if (newMap[messageId]) {
-      newMap[messageId] = { ...newMap[messageId], is_deleted: true };
-    }
-    set({ nodeMap: newMap });
-
-    // 如果被删节点在 currentPath 中，从前驱重建
+    if (newMap[msgId]) newMap[msgId] = { ...newMap[msgId], is_deleted: true };
     const { currentPath, pathPosMap } = get();
-    const idx = pathPosMap.get(messageId);
+    const idx = pathPosMap.get(msgId);
+    set({ nodeMap: newMap });
     if (idx === undefined) return;
-    if (idx === 0) {
-      // 根被删：清空
-      get().setCurrentPath([]);
-      return;
-    }
-    const predecessor = currentPath[idx - 1];
-    // 从前驱重新计算路径（会跳过 deleted 子节点）
-    void get().switchBranch(predecessor);
+    if (idx === 0) return get().setCurrentPath([]);
+    get().switchBranch(currentPath[idx - 1]);
   },
 
-  // ── 编辑消息 ──
-  editMessage: async (messageId: string, newText: string): Promise<number> => {
+  // ── editMessage ──
+  editMessage: async (msgId, newText) => {
     try {
-      const data = await apiFetch<{ node: MessageNode; version_count: number }>(`/tree/message/${messageId}`, {
-        method: "PUT",
-        body: JSON.stringify({
-          content_blocks: [{ type: "text", text: newText }],
-          text_summary: newText,
-        }),
-      });
-      const newVersionId = data.node?.id || messageId;
-      try {
-        await apiFetch(`/tree/message/${newVersionId}/reply`, { method: "POST" });
-      } catch { /* ignore */ }
+      const data = await _apiFetch<{ node: MessageNode; version_count: number }>(
+        `/tree/message/${msgId}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            content_blocks: [{ type: "text", text: newText }],
+            text_summary: newText,
+          }),
+        },
+      );
       return data.version_count || 0;
     } catch (e) {
       console.error("编辑消息失败:", e);

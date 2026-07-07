@@ -10,7 +10,6 @@ import QuotePreview from "./../input/QuotePreview";
 import ResourcePicker from "./../input/ResourcePicker";
 import { useConversationStore, getActiveConvId } from "@/store/conversation/conversation-store";
 import { useMessageStore } from "@/store/conversation/message-store";
-import { setSending } from "@/store/conversation/actions/send-message";
 import { useDraftPersistence } from "@/hooks/conversation/useDraftPersistence";
 import { toast } from "@/components/ui/Toast";
 
@@ -118,32 +117,31 @@ export default function ConversationChatInput({
   // ── Send ──
   // 两阶段分离：ChatInput 负责创建会话，store.sendMessage 只负责发送
 
-  /** 确保有活跃会话，没有则创建并等待 loadMessages 完成 */
+  /** 确保有活跃会话，没有则创建并等待加载完成 */
   const ensureConv = useCallback(async (): Promise<boolean> => {
     const store = useConversationStore.getState();
     if (getActiveConvId(store)) return true;
 
     await store.handleNewConversation("default", "", "");
 
-    // 等待 loadMessages 完成：handleNewConversation → selectConversation → loadMessages
-    // 和手动从侧边栏创建会话后发消息的行为完全一致
+    // 等待 loadConversation 完成
     for (let i = 0; i < 50; i++) {
-      if (!useMessageStore.getState().loadingMessages) return true;
+      if (!useMessageStore.getState().isLoading) return true;
       await new Promise(r => setTimeout(r, 50));
     }
     return !!getActiveConvId(useConversationStore.getState());
   }, []);
 
+  const sendingRef = useRef(false);
+
   const handleSend = async () => {
     const trimmed = text.trim();
-    if (!trimmed || disabled) return;
-
-    setSending(true);
+    if (!trimmed || disabled || sendingRef.current) return;
+    sendingRef.current = true;
     try {
       const ok = await ensureConv();
       if (!ok) return;
 
-      // 等 React 完成渲染（会话 UI 就绪）
       await new Promise(r => setTimeout(r, 100));
 
       onSend(trimmed, uploadedFiles.length > 0 ? uploadedFiles : undefined);
@@ -151,7 +149,7 @@ export default function ConversationChatInput({
       setUploadedFiles([]);
       useConversationStore.getState().clearPendingQuote();
     } finally {
-      setSending(false);
+      sendingRef.current = false;
     }
   };
 
@@ -247,7 +245,7 @@ export default function ConversationChatInput({
             onTranscription={async (t) => {
               const newText = t.trim();
               if (voiceAutoSend && newText) {
-                setSending(true);
+                sendingRef.current = true;
                 try {
                   const ok = await ensureConv();
                   if (!ok) return;
@@ -256,7 +254,7 @@ export default function ConversationChatInput({
                   setText("");
                   setUploadedFiles([]);
                 } finally {
-                  setSending(false);
+                  sendingRef.current = false;
                 }
               } else {
                 setText((prev) => prev + t);

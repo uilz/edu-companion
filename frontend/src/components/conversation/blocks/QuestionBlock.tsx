@@ -6,7 +6,6 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { Send, ChevronLeft, ChevronRight, Check } from "lucide-react";
-import { getChatStreamAPI } from "@/store/conversation/actions/send-message";
 import { useMessageStore } from "@/store/conversation/message-store";
 import MarkdownRenderer from "./MarkdownRenderer";
 
@@ -41,12 +40,7 @@ async function submitToolResult(
   answers: string,
   convId: string,
 ) {
-  const chatStream = getChatStreamAPI();
-  if (!chatStream?.submitToolResult) return;
-
-  // 方案A：不创建新的 assistant 占位消息。
-  // 原 send() 的 streamingId 仍活跃，恢复后事件继续流入同一流式消息。
-  await chatStream.submitToolResult(toolCallId, answers, convId);
+  await useMessageStore.getState().submitToolResult(toolCallId, answers, convId);
 }
 
 /** 提交答案时立即把 user_answer 写入本地 store 中对应 tool 块的 result_content，
