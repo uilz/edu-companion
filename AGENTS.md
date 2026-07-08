@@ -1,0 +1,25 @@
+# Agent 协作规则
+
+> 本文件约束所有在此仓库工作的 AI Agent 行为，确保多 Agent 协作时不踩旧坑、不被过时文档误导。
+
+## 1. 文档使用原则
+
+- **docs/ 目录仅供参考**：当不确定方向时可以先查 `docs/architecture/overview.md`、`docs/modules/<module>/overview.md` 和 `docs/adr/`。
+- **代码即真相**：当文档与源码冲突、过时、自相矛盾时，**以源码和现有模式为准**，不要基于过时文档做破坏性改动。
+- **不确定就询问**：若文档和代码都无法给出明确结论，使用 `AskUserQuestion` 向用户确认，禁止猜测式实现。
+
+## 2. 禁止行为
+
+- 不要单纯因为文档里写了就照搬实现；必须对照当前代码确认是否仍有效。
+- 不要用文档中的旧接口/旧字段名替换当前代码中的正确用法。
+- 不要根据过时的 ADR 删除或重构正在运行的代码。
+
+## 3. 文档维护约定
+
+- 新增模块时，仍需在 `docs/modules/<module-name>/overview.md` 补充说明。
+- 重大架构变更时，仍需在 `docs/adr/` 创建新的 ADR。
+- 发现 docs/ 内容明显过时时，顺手标记 TODO 或更新，但不要把文档整理当成主要任务。
+
+## 4. 当前特别注意
+
+- `conversation` 模块正由另一个 Agent 重构，**不要修改** `frontend/src/store/conversation/`、`frontend/src/components/conversation/`、`frontend/src/hooks/conversation/`、`frontend/src/app/conversation/` 及其相关类型文件。
