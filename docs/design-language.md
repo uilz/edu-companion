@@ -1,9 +1,6 @@
 # 设计语言规范
 
-> **苹果果** 多风格设计语言 — 同一套交互骨架，五种视觉表达。
->
-> 完整内容详见 [design/design-language.md](design/design-language.md)（迁移中）。
-> 设计子分支方案详见 [archive/2025-early-designs/](archive/2025-early-designs/)。
+> 苹果果多风格设计语言 — 同一套交互骨架，五种视觉表达。
 
 ---
 
@@ -33,8 +30,27 @@
 | 柔和数据风 | `soft-data` | Apple Health, Apple Books | 学习数据分析、进度追踪 |
 | 游戏化激励风 | `gamified` | 游戏化学习平台 | 成就驱动、进度激励 |
 
-## 通用 Design Token
+每套风格支持浅色/深色双主题，通过 CSS 变量动态切换。
 
-每套风格通过 Token 映射定义独立的色彩、排版、圆角、阴影、动效，每套风格支持浅色/深色双主题。
+## 实现位置
 
-> 详细 Token 定义见 [design/design-language.md](design/design-language.md)。
+- **Tailwind 令牌配置**: `frontend/tailwind.config.js` — 语义化颜色、字号、间距、圆角、阴影、动画
+- **CSS 变量定义**: `frontend/src/app/globals.css` — 五套风格主题变量 + 组件层样式
+- **主题切换**: `frontend/src/contexts/ThemeContext.tsx` — 风格/暗亮/衬线字体偏好管理
+- **UI 原语组件**: `frontend/src/components/ui/` — Button, Badge, Card, Toast, Skeleton, EmptyState 等
+
+## 语义令牌
+
+设计令牌使用语义化命名，避免直接引用颜色值：
+
+| 令牌类别 | 示例 | 说明 |
+|----------|------|------|
+| 页面背景 | `bg-page` | 页面底色 |
+| 容器表面 | `bg-surface`, `bg-surface-elevated` | 卡片/面板底色 |
+| 文字颜色 | `text-ink-primary`, `text-ink-muted` | 主/次文字 |
+| 强调色 | `bg-accent`, `text-accent` | 品牌色 |
+| 状态色 | `bg-success`, `text-danger`, `text-warning` | 成功/错误/警告 |
+| 分割线 | `border-divider` | 边框/分割线 |
+| 字号 | `text-hero`, `text-heading`, `text-body`, `text-caption` | 9 级语义字号 |
+| 间距 | `p-space-2`, `m-space-4` | 8 级语义间距 |
+| 圆角 | `rounded-card`, `rounded-bubble` | 语义化圆角 |

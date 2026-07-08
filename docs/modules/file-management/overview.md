@@ -38,4 +38,14 @@
 | RAG 检索 | ✅ 已实现 |
 | 练习生成 | ✅ 已实现 |
 
+## 前端代码路径
+
+- 前端页面: `frontend/src/app/files/`
+- 前端组件: `frontend/src/components/ui/FilePreview.tsx`
+
+## 后端 API
+
+- 路由模块: `backend/app/api/system/files_routes/`（browse / upload / manage）
+- 端点前缀: `/api/files/*`
+
 > 完整设计文档见 [subsystems/file-management/README.md](../../subsystems/file-management/README.md)。
