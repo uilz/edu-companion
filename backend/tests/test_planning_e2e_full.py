@@ -98,15 +98,6 @@ def db():
             project_service.ensure_tables()
         except Exception:
             pass
-        # knowledge_nodes 也可能需要（知识视图）
-        try:
-            from app.domain.cognitive.writer import CognitiveNodeWriter
-            # 触发 cognitive_storage 表创建
-            from app.infrastructure.db.cognitive_storage import upsert_node
-            from app.domain.cognitive.models import CognitiveNode, Belief, PracticeSummary
-            # 仅触发模块加载, 不实际写
-        except Exception:
-            pass
         return d
     except Exception as exc:  # noqa: BLE001
         pytest.skip(f"数据库不可用: {exc}")

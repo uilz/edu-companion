@@ -216,7 +216,7 @@ class InitStage:
     name = "init"
 
     async def invoke(self, ctx: PipelineCtx) -> AsyncGenerator[ReplyEvent, None]:
-        from app.services.knowledge.tree_messages import tree_ops
+        from app.services.knowledge.tree_service import tree_ops
 
         # 生成 msg_id (通过 add_shell_message 自动分配)
         # shell 以用户消息为父节点，确保对话树结构：user → assistant

@@ -118,6 +118,11 @@ class TreeMessagesMixin:
         )
         # 同时也存入 data.nodes 以兼容旧代码
         data.nodes[node.id] = node
+        # ★ 更新父节点的 children_ids，维护树结构完整性
+        if resolved_parent:
+            parent_node = data.nodes.get(resolved_parent)
+            if parent_node and node.id not in parent_node.children_ids:
+                parent_node.children_ids.append(node.id)
         conv_node.conv_message_ids.insert(insert_pos, node.id)
         conv_node.updated_at = time.time()
 
@@ -143,7 +148,7 @@ class TreeMessagesMixin:
         self, user_id, message_id, new_content_blocks, new_text_summary="",
     ) -> TreeNode:
         """编辑消息 — 创建新版本。"""
-        from app.schemas.conversation import TreeNode as OldTreeNode
+        from app.schemas.directory_node import MessageNode as NewMessageNode
 
         data = self._get_data_repo().load(user_id)
         old_node = data.nodes.get(message_id)
@@ -153,11 +158,21 @@ class TreeMessagesMixin:
         old_dir_id = getattr(old_node, "directory_id", getattr(old_node, "conv_id", ""))
         old_parent_id = getattr(old_node, "parent_id", "")
 
-        new_node = OldTreeNode(
+        # content_blocks 可能是 TextBlock 对象或 dict，统一转为 dict
+        blocks = []
+        for b in new_content_blocks:
+            if hasattr(b, "model_dump"):
+                blocks.append(b.model_dump())
+            elif hasattr(b, "dict"):
+                blocks.append(b.dict())
+            else:
+                blocks.append(b)
+
+        new_node = NewMessageNode(
             parent_id=old_parent_id,
             directory_id=old_dir_id,
             role=old_node.role,
-            content_blocks=new_content_blocks,
+            content_blocks=blocks,
             text_summary=new_text_summary,
         )
         parent = data.nodes.get(old_parent_id)
@@ -165,11 +180,33 @@ class TreeMessagesMixin:
             parent.children_ids.append(new_node.id)
         data.nodes[new_node.id] = new_node
 
-        # 追加到 conv 的 message_ids
+        # ★ 维护 conv_message_ids：新版本替换旧版本的位置，移除旧版本的后代
         conv = data.directory_nodes.get(old_dir_id)
         if conv and conv.node_type == "conv":
-            if new_node.id not in conv.conv_message_ids:
-                conv.conv_message_ids.append(new_node.id)
+            # 收集旧版本的所有后代（DFS）
+            old_descendants: set[str] = set()
+            def _collect_descendants(nid: str):
+                n = data.nodes.get(nid)
+                if not n or n.id in old_descendants:
+                    return
+                old_descendants.add(n.id)
+                for cid in getattr(n, "children_ids", []) or []:
+                    _collect_descendants(cid)
+            _collect_descendants(message_id)
+
+            # 重建 conv_message_ids：移除旧版本及其后代，插入新版本
+            new_ids = []
+            replaced = False
+            for mid in conv.conv_message_ids:
+                if mid in old_descendants:
+                    if not replaced:
+                        new_ids.append(new_node.id)
+                        replaced = True
+                    continue
+                new_ids.append(mid)
+            if not replaced:
+                new_ids.append(new_node.id)
+            conv.conv_message_ids = new_ids
 
         self._get_data_repo().save(user_id, data)
         return new_node

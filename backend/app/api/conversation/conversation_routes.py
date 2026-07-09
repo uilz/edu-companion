@@ -669,12 +669,7 @@ async def switch_version(message_id: str, req: dict | None = None, user_id: str 
 @router.put("/tree/message/{message_id}")
 async def modify_message(message_id: str, req: ModifyMessageRequest, user_id: str = Depends(current_user_id)):
     try:
-        blocks = [
-            TextBlock(text=block.get("text", ""))
-            for block in req.content_blocks
-            if block.get("type") == "text"
-        ]
-        node = tree_ops.modify_message(user_id, message_id, blocks, req.text_summary)
+        node = tree_ops.modify_message(user_id, message_id, req.content_blocks, req.text_summary)
         data = get_data_repo().load(user_id)
         parent = data.nodes.get(node.parent_id) if node.parent_id else None
         all_siblings = parent.children_ids if parent else []

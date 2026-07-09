@@ -542,8 +542,7 @@ class EventService:
                 )
                 repo.append_event(ce)
                 # 立即 mark 为 processed（无需 handler）
-                from app.infrastructure.db.cognitive_storage import mark_event_processed
-                mark_event_processed(ce.event_id)
+                repo.mark_event_processed(ce.event_id)
                 logger.info(
                     "✅ 提案已记录: %sAccepted(user=%s, kp=%s, mastery=%.0f%%)",
                     action_type, user_id, kp_id, (payload.get("mastery", 0.0) or 0.0) * 100,

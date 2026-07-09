@@ -70,8 +70,7 @@ def mocked_tree_ops():
     mock_repo = DummyDataRepo(data)
     with patch("app.services.common.get_data_repo", return_value=mock_repo), \
          patch("app.services.knowledge.tree_sync.upsert_node") as mock_upsert, \
-         patch("app.services.knowledge.tree_sync.cog_delete_node") as mock_del, \
-         patch("app.infrastructure.db.cognitive_storage.get_node", return_value=None):
+         patch("app.services.knowledge.tree_sync.cog_delete_node") as mock_del:
         from app.services.knowledge.tree_service import TreeOpsService
         svc = TreeOpsService()
         yield svc, data, mock_repo

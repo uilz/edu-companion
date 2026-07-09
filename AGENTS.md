@@ -19,7 +19,3 @@
 - 新增模块时，仍需在 `docs/modules/<module-name>/overview.md` 补充说明。
 - 重大架构变更时，仍需在 `docs/adr/` 创建新的 ADR。
 - 发现 docs/ 内容明显过时时，顺手标记 TODO 或更新，但不要把文档整理当成主要任务。
-
-## 4. 当前特别注意
-
-- `conversation` 模块正由另一个 Agent 重构，**不要修改** `frontend/src/store/conversation/`、`frontend/src/components/conversation/`、`frontend/src/hooks/conversation/`、`frontend/src/app/conversation/` 及其相关类型文件。

@@ -75,10 +75,17 @@ function _getDefaultChildByVersion(siblings: MessageNode[]): MessageNode | null 
   return sorted[0] || null;
 }
 
-function _getDefaultChild(fromId: string, nodeMap: Record<string, MessageNode>): string | null {
-  const node = nodeMap[fromId];
-  if (!node) return null;
-  const childrenIds = (node as any).children_ids || [];
+function _getChildren(nid: string, nodeMap: Record<string, MessageNode>, childrenByParent: Record<string, string[]>): string[] {
+  const node = nodeMap[nid];
+  if (!node) return [];
+  const cids = (node as any).children_ids || [];
+  if (cids.length > 0) return cids;
+  return childrenByParent[nid] || [];
+}
+
+function _getDefaultChild(fromId: string, nodeMap: Record<string, MessageNode>, childrenByParent: Record<string, string[]>): string | null {
+  const childrenIds = _getChildren(fromId, nodeMap, childrenByParent);
+  if (childrenIds.length === 0) return null;
   const siblings: MessageNode[] = [];
   for (const cid of childrenIds) {
     const child = nodeMap[cid];
@@ -89,6 +96,15 @@ function _getDefaultChild(fromId: string, nodeMap: Record<string, MessageNode>):
 
 function _computePath(tipId: string, nodeMap: Record<string, MessageNode>): string[] {
   if (!nodeMap[tipId]) return [];
+
+  // ★ 从 parent_id 反推 children 映射，避免依赖可能为空的 children_ids
+  const childrenByParent: Record<string, string[]> = {};
+  for (const [id, node] of Object.entries(nodeMap)) {
+    if (node.parent_id && !node.is_deleted) {
+      if (!childrenByParent[node.parent_id]) childrenByParent[node.parent_id] = [];
+      childrenByParent[node.parent_id].push(id);
+    }
+  }
 
   const ancestors: string[] = [];
   let cur = tipId;
@@ -105,7 +121,7 @@ function _computePath(tipId: string, nodeMap: Record<string, MessageNode>): stri
   cur = tipId;
   let depth = 0;
   while (depth < 1000) {
-    const child = _getDefaultChild(cur, nodeMap);
+    const child = _getDefaultChild(cur, nodeMap, childrenByParent);
     if (!child || visited.has(child)) break;
     visited.add(child);
     descendants.push(child);
@@ -159,9 +175,23 @@ function _handleSSEEvent(event: Record<string, unknown>) {
     case "pending_msg": {
       const msgId = (event.data as any)?.msg_id || "";
       if (msgId) {
-        useMessageStore.setState({
-          streamingId: msgId,
-          statusMessage: "正在生成...",
+        useMessageStore.setState((state) => {
+          // ★ 将 streaming 消息占位加入 messages，使 token 事件能更新它
+          const placeholder: MessageNode = {
+            id: msgId,
+            directory_id: "",
+            role: "assistant",
+            content: "",
+            content_blocks: [],
+            text_summary: "",
+            status: "streaming",
+            timestamp: Date.now() / 1000,
+          } as MessageNode;
+          return {
+            streamingId: msgId,
+            statusMessage: "正在生成...",
+            messages: [...state.messages, placeholder],
+          };
         });
       }
       break;
@@ -302,7 +332,7 @@ function _handleSSEEvent(event: Record<string, unknown>) {
       const msg = event.message as MessageNode | undefined;
       if (msg) {
         useMessageStore.setState((state) => {
-          const newMap = { ...state.nodeMap, [msg.id]: { ...msg, load_state: "loaded" } };
+          const newMap = { ...state.nodeMap, [msg.id]: { ...msg, load_state: "loaded" as const } };
           const newPath = [...state.currentPath];
           if (!newPath.includes(msg.id)) {
             const parentId = (msg as any).parent_id as string | undefined;
@@ -321,10 +351,16 @@ function _handleSSEEvent(event: Record<string, unknown>) {
       const assistantMsg = data.assistant_message as MessageNode | undefined;
       if (assistantMsg) {
         useMessageStore.setState((state) => {
-          const newMap = { ...state.nodeMap, [assistantMsg.id]: { ...assistantMsg, load_state: "loaded" } };
+          const newMap = { ...state.nodeMap, [assistantMsg.id]: { ...assistantMsg, load_state: "loaded" as const } };
           const newPath = [...state.currentPath];
+          // 仅当 assistant 的 parent 是当前路径末端时才追加到路径
+          // 防止用户切换分支后 done 事件把消息加到错误分支
+          const currentTip = newPath.length > 0 ? newPath[newPath.length - 1] : null;
           if (!newPath.includes(assistantMsg.id)) {
-            newPath.push(assistantMsg.id);
+            const parentId = (assistantMsg as any).parent_id as string | undefined;
+            if (!currentTip || parentId === currentTip || !parentId) {
+              newPath.push(assistantMsg.id);
+            }
           }
           return { nodeMap: newMap, currentPath: newPath };
         });
@@ -394,14 +430,15 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
 
   // ── _rebuildMessages ──
   _rebuildMessages: () => {
-    const { currentPath, nodeMap, messages } = get();
+    const { currentPath, nodeMap, messages, streamingId } = get();
     const pathSet = new Set(currentPath);
     const pathMsgs: MessageNode[] = [];
     for (const id of currentPath) {
       const node = nodeMap[id];
       if (_isRenderable(node)) pathMsgs.push(node);
     }
-    const pipelineMsgs = messages.filter((m) => !pathSet.has(m.id));
+    // ★ 只保留当前 streaming 消息作为 pipeline，不保留旧分支的残留消息
+    const pipelineMsgs = messages.filter((m) => m.id === streamingId && !pathSet.has(m.id));
     set({ messages: [...pathMsgs, ...pipelineMsgs] });
   },
 
@@ -437,6 +474,7 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
         newNodeMap[m.id] = m;
       }
 
+      // 确定目标 tipId：优先 URL 参数 → localStorage → 最后一条消息
       let resolvedTipId = tipId || "";
       if (!resolvedTipId && typeof window !== "undefined") {
         const url = new URL(window.location.href);
@@ -453,9 +491,21 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
         resolvedTipId = allMessages[allMessages.length - 1].id;
       }
 
-      const fullPath = _computePath(resolvedTipId, newNodeMap);
+      // ★ 从 tipId 沿 parent_id 向上回溯得到根→tip 的路径
+      //   不做下行遍历（conv_message_ids 可能包含多分支混合数据）
+      const ancestors: string[] = [];
+      let cur = resolvedTipId;
+      const visited = new Set<string>();
+      while (cur && !visited.has(cur) && newNodeMap[cur]) {
+        visited.add(cur);
+        ancestors.unshift(cur);
+        const node = newNodeMap[cur];
+        if (!node || !node.parent_id) break;
+        cur = node.parent_id;
+      }
+
       set({ nodeMap: newNodeMap });
-      get().setCurrentPath(fullPath, true);
+      get().setCurrentPath(ancestors, true);
       set({ isLoading: false });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "";
@@ -470,7 +520,7 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   sendMessage: async (text, convId, dirId, _files) => {
     if (!text.trim()) return;
 
-    const { streamingId } = get();
+    const { streamingId, currentPath } = get();
     if (streamingId) {
       await get().stopGeneration();
     }
@@ -481,6 +531,9 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
 
     const headers = _authHeaders();
 
+    // ★ 当前分支末端作为新消息的父节点，确保消息挂载到正确分支
+    const parentId = currentPath.length > 0 ? currentPath[currentPath.length - 1] : "";
+
     try {
       set({ isLoading: true, statusMessage: "正在连接..." });
 
@@ -489,7 +542,7 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
         {
           method: "POST",
           headers,
-          body: JSON.stringify({ action: "send", text, dir_id: dirId }),
+          body: JSON.stringify({ action: "send", text, dir_id: dirId, parent_id: parentId }),
           signal: controller.signal,
         },
       );
@@ -542,6 +595,7 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
       } catch { /* best effort */ }
     }
     set({ isLoading: false, streamingId: null, statusMessage: "" });
+    get()._rebuildMessages();
   },
 
   // ── submitToolResult ──
@@ -562,8 +616,30 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   },
 
   // ── switchBranch: 本地计算（全量 nodeMap 后无需 API）──
+  // ★ 两种语义：
+  //   1. msgId 已在 currentPath 中 → 截断到该消息（移除后代）
+  //   2. msgId 不在 currentPath 中 → 切换到新分支（计算完整路径）
   switchBranch: (msgId) => {
-    const { nodeMap } = get();
+    const { nodeMap, streamingId, currentPath } = get();
+
+    // msgId 已在当前路径中 → 截断
+    const existingIdx = currentPath.indexOf(msgId);
+    if (existingIdx >= 0) {
+      if (streamingId && !currentPath.slice(0, existingIdx + 1).includes(streamingId)) {
+        _abortController?.abort();
+        _abortController = null;
+        set({ streamingId: null, isLoading: false, statusMessage: "" });
+      }
+      get().setCurrentPath(currentPath.slice(0, existingIdx + 1), true);
+      return;
+    }
+
+    // msgId 不在当前路径中 → 切换分支
+    if (streamingId) {
+      _abortController?.abort();
+      _abortController = null;
+      set({ streamingId: null, isLoading: false, statusMessage: "" });
+    }
     const fullPath = _computePath(msgId, nodeMap);
     if (fullPath.length === 0) return;
     get().setCurrentPath(fullPath, true);
@@ -625,6 +701,15 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
           }),
         },
       );
+      const newNode = data.node;
+      if (newNode && newNode.id !== msgId) {
+        set((state) => {
+          const newMap = { ...state.nodeMap, [newNode.id]: { ...newNode, load_state: "loaded" as const } };
+          const newPath = state.currentPath.map((id) => (id === msgId ? newNode.id : id));
+          return { nodeMap: newMap, currentPath: newPath };
+        });
+        get()._rebuildMessages();
+      }
       return data.version_count || 0;
     } catch (e) {
       console.error("编辑消息失败:", e);

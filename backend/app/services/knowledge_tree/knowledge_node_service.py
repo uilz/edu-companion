@@ -62,12 +62,12 @@ class KnowledgeNodeService:
         except Exception:
             logger.debug("NodeCreated 事件发布失败", exc_info=True)
 
-        return self._to_schema(node)
+        return self._to_schema(node, user_id)
 
     def get_node(self, user_id: str, node_id: str) -> Optional[KnowledgeNodeSchema]:
         """获取知识点"""
         node = get_repo().get_node(node_id, user_id)
-        return self._to_schema(node) if node else None
+        return self._to_schema(node, user_id) if node else None
 
     def update_node(self, user_id: str, node_id: str, **fields) -> Optional[KnowledgeNodeSchema]:
         """更新知识点字段"""
@@ -79,7 +79,7 @@ class KnowledgeNodeService:
                 setattr(node, key, value)
         node.bump_version()
         get_repo().upsert_node(node, user_id)
-        return self._to_schema(node)
+        return self._to_schema(node, user_id)
 
     def delete_node(self, user_id: str, node_id: str) -> bool:
         """删除知识点 (级联删除子节点)"""
@@ -103,17 +103,17 @@ class KnowledgeNodeService:
             nodes = get_repo().get_nodes_by_level(level, user_id)
         else:
             nodes = get_repo().list_all_nodes(user_id)
-        return [self._to_schema(n) for n in nodes]
+        return [self._to_schema(n, user_id) for n in nodes]
 
     def get_subtree(self, user_id: str, root_id: str) -> dict[str, KnowledgeNodeSchema]:
         """获取子树"""
         nodes = get_repo().get_subtree(root_id, user_id)
-        return {nid: self._to_schema(n) for nid, n in nodes.items()}
+        return {nid: self._to_schema(n, user_id) for nid, n in nodes.items()}
 
     def search(self, user_id: str, query: str, limit: int = 20) -> list[KnowledgeNodeSchema]:
         """搜索知识点"""
         nodes = get_repo().search_by_text(query, user_id, limit)
-        return [self._to_schema(n) for n in nodes]
+        return [self._to_schema(n, user_id) for n in nodes]
 
     def add_prerequisite(self, user_id: str, node_id: str, prereq_id: str, prereq_type: str = "strict") -> bool:
         """添加前置知识点"""
@@ -169,11 +169,11 @@ class KnowledgeNodeService:
 
     # ── 转换 ──
 
-    def _to_schema(self, node: CognitiveNode) -> KnowledgeNodeSchema:
+    def _to_schema(self, node: CognitiveNode, user_id: str) -> KnowledgeNodeSchema:
         """CognitiveNode → KnowledgeNodeSchema"""
         return KnowledgeNodeSchema(
             id=node.id,
-            user_id=node.id,  # 保留 user_id 占位
+            user_id=user_id,
             parent_id=node.parent,
             label=node.label,
             level=node.level,

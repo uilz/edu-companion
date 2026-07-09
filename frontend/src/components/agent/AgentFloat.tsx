@@ -279,9 +279,6 @@ export default function AgentFloat() {
     try { localStorage.setItem(POS_KEY, JSON.stringify(posRef.current)); } catch {}
   }, []);
 
-  // 登录页不显示悬浮球
-  if (pathname === "/login") return null;
-
   // 加载用户偏好
   useEffect(() => {
     import("@/lib/api/api").then(({ api }) => {
@@ -748,6 +745,9 @@ export default function AgentFloat() {
 
   // 当前对话名
   const currentConvName = secretaryConvs.find((c) => c.id === activeConvId)?.name || "秘书对话";
+
+  // 登录页不显示悬浮球
+  if (pathname === "/login") return null;
 
   return (
     <>

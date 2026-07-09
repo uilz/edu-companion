@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 def backfill(force: bool = False):
-    from app.infrastructure.db.cognitive_storage import get_db
+    from app.infrastructure.db.database import get_db
     from shared.constants import DEFAULT_USER_ID
 
     user_id = DEFAULT_USER_ID

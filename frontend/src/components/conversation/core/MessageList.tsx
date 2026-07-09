@@ -253,8 +253,9 @@ export default function MessageList({
     };
   }, []);
 
-  // ── 版本感知显示（基于 nodeMap） ──
+  // ── 版本感知显示（基于 nodeMap + currentPath） ──
   const nodeMap = useMessageStore((s) => s.nodeMap);
+  const currentPath = useMessageStore((s) => s.currentPath);
   const { versionGroups, versionGroupByMessage } = useMemo(() => {
     type GroupKey = string;
     const messages = Object.values(nodeMap);
@@ -270,16 +271,24 @@ export default function MessageList({
       if (!groupIds.has(gk)) groupIds.set(gk, []);
       groupIds.get(gk)!.push(m.id);
     }
+    const pathSet = new Set(currentPath);
     const vg: Record<GroupKey, { ids: string[]; activeIndex: number; total: number }> = {};
     groupIds.forEach((ids, gk) => {
       if (ids.length > 1) {
-        vg[gk] = { ids, activeIndex: ids.length - 1, total: ids.length };
+        // ★ 按时间戳排序后，根据 currentPath 确定当前激活的版本
+        const sorted = [...ids].sort((a, b) => {
+          const na = nodeMap[a]; const nb = nodeMap[b];
+          return (na?.timestamp || 0) - (nb?.timestamp || 0);
+        });
+        const activeId = sorted.find((id) => pathSet.has(id));
+        const activeIndex = activeId ? sorted.indexOf(activeId) : sorted.length - 1;
+        vg[gk] = { ids: sorted, activeIndex, total: sorted.length };
       }
     });
     const vgbm: Record<string, string> = {};
     messageGroupKey.forEach((gk, mid) => { vgbm[mid] = gk; });
     return { versionGroups: vg, versionGroupByMessage: vgbm };
-  }, [nodeMap]);
+  }, [nodeMap, currentPath]);
 
   // Get display text
   const getDisplayText = useCallback((msg: MessageNode) => {

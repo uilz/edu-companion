@@ -58,12 +58,12 @@ class Base(DeclarativeBase):
 class KnowledgeNodeORM(Base):
     __tablename__ = "knowledge_nodes"
 
-    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=lambda: _new_id("kn"))
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: _new_id("kn"))
     user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     label: Mapped[str] = mapped_column(Text, nullable=False)
     level: Mapped[str] = mapped_column(String(16), nullable=False, default="topic")
     parent_id: Mapped[str | None] = mapped_column(
-        ForeignKey("knowledge_nodes.id", ondelete="SET NULL"), nullable=True, index=True
+        String(64), ForeignKey("knowledge_nodes.id", ondelete="SET NULL"), nullable=True, index=True
     )
     path_id: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
@@ -121,7 +121,7 @@ class KnowledgeEdgeORM(Base):
     __tablename__ = "knowledge_edges"
 
     id: Mapped[str] = mapped_column(
-        String(32), primary_key=True, default=lambda: _new_id("ke")
+        String(64), primary_key=True, default=lambda: _new_id("ke")
     )
     user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     source_id: Mapped[str] = mapped_column(
@@ -163,11 +163,11 @@ class PracticeEventORM(Base):
     __tablename__ = "practice_events"
 
     id: Mapped[str] = mapped_column(
-        String(32), primary_key=True, default=lambda: _new_id("pe")
+        String(64), primary_key=True, default=lambda: _new_id("pe")
     )
     user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     node_id: Mapped[str] = mapped_column(
-        ForeignKey("knowledge_nodes.id", ondelete="CASCADE"), nullable=False, index=True
+        String(64), ForeignKey("knowledge_nodes.id", ondelete="CASCADE"), nullable=False, index=True
     )
     session_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     question_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
@@ -212,7 +212,7 @@ class CognitiveEventORM(Base):
     source_type: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     source_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     node_id: Mapped[str | None] = mapped_column(
-        ForeignKey("knowledge_nodes.id", ondelete="CASCADE"), nullable=True, index=True
+        String(64), ForeignKey("knowledge_nodes.id", ondelete="CASCADE"), nullable=True, index=True
     )
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
@@ -238,7 +238,7 @@ class CognitiveNodeProjectionORM(Base):
     __tablename__ = "cognitive_node_projections"
 
     node_id: Mapped[str] = mapped_column(
-        ForeignKey("knowledge_nodes.id", ondelete="CASCADE"), primary_key=True
+        String(64), ForeignKey("knowledge_nodes.id", ondelete="CASCADE"), primary_key=True
     )
     user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
 
@@ -325,11 +325,11 @@ class CognitiveNodeErrorClusterORM(Base):
     __tablename__ = "cognitive_node_error_clusters"
 
     id: Mapped[str] = mapped_column(
-        String(32), primary_key=True, default=lambda: _new_id("ec")
+        String(64), primary_key=True, default=lambda: _new_id("ec")
     )
     user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     node_id: Mapped[str] = mapped_column(
-        ForeignKey("knowledge_nodes.id", ondelete="CASCADE"), nullable=False, index=True
+        String(64), ForeignKey("knowledge_nodes.id", ondelete="CASCADE"), nullable=False, index=True
     )
     error_type: Mapped[str] = mapped_column(String(64), nullable=False)
     frequency: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
@@ -347,11 +347,11 @@ class CognitiveNodeDeepProcessingORM(Base):
     __tablename__ = "cognitive_node_deep_processing"
 
     id: Mapped[str] = mapped_column(
-        String(32), primary_key=True, default=lambda: _new_id("dp")
+        String(64), primary_key=True, default=lambda: _new_id("dp")
     )
     user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     node_id: Mapped[str] = mapped_column(
-        ForeignKey("knowledge_nodes.id", ondelete="CASCADE"), nullable=False, index=True
+        String(64), ForeignKey("knowledge_nodes.id", ondelete="CASCADE"), nullable=False, index=True
     )
     task_type: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
@@ -367,12 +367,12 @@ class CognitiveNodeCompositionMemberORM(Base):
     __tablename__ = "cognitive_node_composition_members"
 
     id: Mapped[str] = mapped_column(
-        String(32), primary_key=True, default=lambda: _new_id("cm")
+        String(64), primary_key=True, default=lambda: _new_id("cm")
     )
-    chunk_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    chunk_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     node_id: Mapped[str] = mapped_column(
-        ForeignKey("knowledge_nodes.id", ondelete="CASCADE"), nullable=False, index=True
+        String(64), ForeignKey("knowledge_nodes.id", ondelete="CASCADE"), nullable=False, index=True
     )
     co_occurrence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(
