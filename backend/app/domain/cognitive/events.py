@@ -1,12 +1,12 @@
-"""事件处理器 — 认知事件全生命周期
+"""认知事件处理器 — 基于事件溯源 + 物化投影的新架构
 
-保留 practice_response / dialogue_context_update / conversation_assessment 处理器,
-改用 CognitiveOperationRegistry + CognitiveEventsAdapter 统一持久化路径.
+核心变更：
+- practice_response 等事件先写入 practice_events / cognitive_events（真相源）；
+- ProjectionBuilder 将事件增量应用到 cognitive_node_projections；
+- 不再直接读写旧 CognitiveNode 大 JSONB 对象。
 
-修复 (2026-07-04)：
-- `_get_repo()` 之前回退到 `container.event_bus` (PersistentEventBus)，
-  但 EventBus 没有 `insert` / `mark_status` 方法 → submit_practice 静默失败
-- 现统一走 `CognitiveEventsAdapter`（单例，包装 EventsRepository）
+对外保持 submit_practice / submit_dialogue_context / submit_conversation_assessment
+等便捷入口，但内部改为使用 SQLAlchemy Session 与新 repository。
 """
 
 from __future__ import annotations
@@ -15,35 +15,37 @@ import logging
 import time
 from typing import Any
 
-from app.domain.cognitive.events_repository import get_cognitive_events_adapter
-from app.domain.cognitive.models import (
-    Activation,
-    Belief,
-    CognitiveLoad,
-    CognitiveNode,
-    DialogueContext,
-    Metacognition,
-    PracticeEvent,
-    PracticeSummary,
-    Trend,
-    UserCognitiveState,
-)
+from sqlalchemy.orm import Session
+
+from app.domain.cognitive import operations  # noqa: F401 触发 @register 注册
 from app.domain.cognitive.operation_registry import get_registry
-from app.domain.cognitive import get_repo
-from . import constants as C
+from app.infrastructure.db import (
+    CognitiveEdgeRepository,
+    CognitiveEntityRepository,
+    CognitiveEventRepository,
+    CognitiveProjectionRepository,
+    ProjectionBuilder,
+    get_db_session,
+)
+from app.infrastructure.db.models.cognitive import PracticeEventORM
 
 logger = logging.getLogger(__name__)
-
 _registry = get_registry()
-
-# ── 领域层事件记录类型（取代 infrastructure Event） ──
 
 
 class CognitiveEventRecord:
-    """领域层事件记录，仅包含事件处理所需字段"""
-    def __init__(self, id: str = "", event_type: str = "", user_id: str = "",
-                 source_type: str = "", source_id: str = "", status: str = "done",
-                 payload: dict | None = None):
+    """领域层事件记录，仅包含事件处理所需字段。"""
+
+    def __init__(
+        self,
+        id: str = "",
+        event_type: str = "",
+        user_id: str = "",
+        source_type: str = "",
+        source_id: str = "",
+        status: str = "pending",
+        payload: dict | None = None,
+    ):
         self.id = id
         self.event_type = event_type
         self.user_id = user_id
@@ -53,490 +55,374 @@ class CognitiveEventRecord:
         self.payload = payload or {}
 
 
-# 可注入的事件仓储协议 — 默认使用 CognitiveEventsAdapter 单例
-_events_repo = None
+# ═══════════════════════════════════════════════════════════════
+# CognitiveEventHandler
+# ═══════════════════════════════════════════════════════════════
 
 
-def set_events_repo(repo: Any) -> None:
-    """注入事件仓储实现（由 DI 容器或测试覆写）"""
-    global _events_repo
-    _events_repo = repo
+class CognitiveEventHandler:
+    """新架构认知事件 handler：append-only 事件 + 增量投影更新。"""
+
+    def __init__(self, session: Session):
+        self._session = session
+        self._event_repo = CognitiveEventRepository(session)
+        self._projection_repo = CognitiveProjectionRepository(session)
+        self._entity_repo = CognitiveEntityRepository(session)
+        self._edge_repo = CognitiveEdgeRepository(session)
+        self._builder = ProjectionBuilder(
+            session,
+            event_repo=self._event_repo,
+            projection_repo=self._projection_repo,
+            entity_repo=self._entity_repo,
+            edge_repo=self._edge_repo,
+        )
+
+    # ── 事件处理入口 ──
+
+    def process_event(self, event: CognitiveEventRecord) -> dict[str, Any]:
+        handler = _HANDLERS.get(event.event_type)
+        if handler is None:
+            logger.warning("No handler for event type: %s", event.event_type)
+            return {"status": "ignored", "event_type": event.event_type}
+        try:
+            return handler(self, event)
+        except Exception as e:
+            logger.error("Error processing %s: %s", event.event_type, e, exc_info=True)
+            return {"status": "error", "event_type": event.event_type, "error": str(e)}
+
+    # ── practice_response ──
+
+    def handle_practice_response(
+        self, event: CognitiveEventRecord
+    ) -> dict[str, Any]:
+        """处理练习事件：写入事件表并增量更新投影。"""
+        now = time.time()
+        payload = event.payload or {}
+        user_id = event.user_id
+        node_id = payload.get("node_id", "")
+        success = payload.get("success", True)
+
+        # 确保节点存在（自动创建原子节点）
+        node = self._entity_repo.get(user_id, node_id)
+        if node is None:
+            node = self._entity_repo.upsert(
+                self._make_atom_node(user_id, node_id)
+            )
+
+        # 幂等写入 practice_events
+        practice_event = PracticeEventORM(
+            user_id=user_id,
+            node_id=node_id,
+            session_id=payload.get("session_id", ""),
+            question_id=payload.get("question_id", ""),
+            timestamp=payload.get("timestamp", now),
+            success=success,
+            latency_ms=payload.get("latency_ms", 5000.0),
+            weight=payload.get("weight", 1.0),
+            difficulty=payload.get("difficulty"),
+            guess=payload.get("guess"),
+            slip=payload.get("slip"),
+            confidence_before=payload.get("confidence_before"),
+            confidence_after=payload.get("confidence_after"),
+            hints_used=payload.get("hints_used", 0),
+            time_spent=payload.get("time_spent", 0.0),
+            error_embedding=payload.get("error_embedding"),
+        )
+        persisted = self._event_repo.append_practice_event(practice_event)
+
+        # 增量更新投影
+        self._builder.apply_practice_event(persisted)
+
+        projection = self._projection_repo.get(node_id)
+        proficiency = projection.bkt_proficiency if projection else 0.3
+
+        # 记录认知领域事件（用于审计与回放）
+        self._event_repo.append_cognitive_event(
+            user_id=user_id,
+            event_type="cognitive_update",
+            source_type="practice",
+            source_id=persisted.id,
+            node_id=node_id,
+            payload={
+                "reason": f"practice_response on node {node_id}",
+                "success": success,
+                "proficiency_after": proficiency,
+            },
+        )
+
+        return {
+            "status": "ok",
+            "event_type": "practice_response",
+            "node_id": node_id,
+            "proficiency_after": proficiency,
+            "success": success,
+        }
+
+    # ── conversation_assessment ──
+
+    def handle_conversation_assessment(
+        self, event: CognitiveEventRecord
+    ) -> dict[str, Any]:
+        """对话评估：低权重更新 BKT 与趋势。"""
+        now = time.time()
+        payload = event.payload or {}
+        user_id = event.user_id
+        node_id = payload.get("node_id", "")
+        assessment = payload.get("assessment", 0.5)
+        success = assessment > 0.5
+
+        node = self._entity_repo.get(user_id, node_id)
+        if node is None:
+            node = self._entity_repo.upsert(
+                self._make_atom_node(user_id, node_id)
+            )
+
+        # 写入 practice_event（weight=0.3）
+        practice_event = PracticeEventORM(
+            user_id=user_id,
+            node_id=node_id,
+            session_id=payload.get("session_id", ""),
+            timestamp=payload.get("timestamp", now),
+            success=success,
+            weight=0.3,
+        )
+        persisted = self._event_repo.append_practice_event(practice_event)
+        self._builder.apply_practice_event(persisted)
+
+        projection = self._projection_repo.get(node_id)
+        proficiency = projection.bkt_proficiency if projection else 0.3
+
+        return {
+            "status": "ok",
+            "event_type": "conversation_assessment",
+            "node_id": node_id,
+            "proficiency_after": proficiency,
+            "assessment": assessment,
+        }
+
+    # ── node_created ──
+
+    def handle_node_created(self, event: CognitiveEventRecord) -> dict[str, Any]:
+        """节点创建：初始化投影。"""
+        payload = event.payload or {}
+        user_id = event.user_id
+        node_id = payload.get("node_id", "")
+
+        self._projection_repo.get_or_create(user_id, node_id)
+
+        return {
+            "status": "ok",
+            "event_type": "node_created",
+            "node_id": node_id,
+        }
+
+    # ── edge_created ──
+
+    def handle_edge_created(self, event: CognitiveEventRecord) -> dict[str, Any]:
+        """边创建：初始化边并触发目标对齐重算。"""
+        payload = event.payload or {}
+        user_id = event.user_id
+        source_id = payload.get("source_id", "")
+        target_id = payload.get("target_id", "")
+        edge_type = payload.get("edge_type", "related_to")
+        strength = payload.get("strength", 0.5)
+        metadata = payload.get("edge_metadata", {})
+
+        self._edge_repo.create_or_update(
+            user_id=user_id,
+            source_id=source_id,
+            target_id=target_id,
+            edge_type=edge_type,
+            strength=strength,
+            edge_metadata=metadata,
+        )
+
+        # 触发目标对齐重算：source 通过此边可达 target，双方均需重算
+        self._recompute_goal_alignment(user_id, source_id)
+        if target_id != source_id:
+            self._recompute_goal_alignment(user_id, target_id)
+
+        return {
+            "status": "ok",
+            "event_type": "edge_created",
+            "source_id": source_id,
+            "target_id": target_id,
+            "edge_type": edge_type,
+        }
+
+    # ── goal_changed ──
+
+    def handle_goal_changed(self, event: CognitiveEventRecord) -> dict[str, Any]:
+        """目标变更：重算受影响节点的目标对齐。"""
+        payload = event.payload or {}
+        user_id = event.user_id
+        goal_node_ids = payload.get("goal_node_ids", [])
+
+        # 简化：重算所有节点的目标对齐
+        projections = self._projection_repo.list_by_user(user_id)
+        for projection in projections:
+            self._recompute_goal_alignment(user_id, projection.node_id, goal_node_ids)
+
+        return {
+            "status": "ok",
+            "event_type": "goal_changed",
+            "goals": goal_node_ids,
+        }
+
+    # ── daily_tick ──
+
+    def handle_daily_tick(self, event: CognitiveEventRecord) -> dict[str, Any]:
+        """每日心跳：BKT 遗忘衰减、streak 检查、urgency 重算。"""
+        now = time.time()
+        user_id = event.user_id
+
+        projections = self._projection_repo.list_by_user(user_id)
+        for projection in projections:
+            proj_dict = self._builder._projection_to_dict(projection)
+
+            # BKT 衰减
+            bkt_result = _registry.execute(
+                "bkt_decay", bkt_state=proj_dict, now=now
+            )
+            self._builder._apply_result(projection, bkt_result["bkt_after"])
+
+            # Activation 衰减
+            act_result = _registry.execute(
+                "activation_decay", activation_state=proj_dict, now=now
+            )
+            self._builder._apply_result(projection, act_result["activation_after"])
+
+            # 重算 scheduling
+            sched_result = _registry.execute(
+                "update_scheduling",
+                scheduling_state=proj_dict,
+                proficiency=projection.bkt_proficiency,
+                stability=projection.trend_stability,
+                stagnation_days=projection.trend_stagnation_days,
+                goal_distance=projection.goal_distance,
+                last_practiced=projection.bkt_last_updated,
+                now=now,
+            )
+            self._builder._apply_result(
+                projection, sched_result["scheduling_after"]
+            )
+
+        self._session.commit()
+
+        return {
+            "status": "ok",
+            "event_type": "daily_tick",
+            "processed_nodes": len(projections),
+        }
+
+    # ── 内部辅助 ──
+
+    def _make_atom_node(self, user_id: str, node_id: str):
+        from app.infrastructure.db.models.cognitive import KnowledgeNodeORM
+
+        return KnowledgeNodeORM(
+            id=node_id,
+            user_id=user_id,
+            label=node_id.split(".")[-1] if "." in node_id else node_id,
+            level="atom",
+            node_type="auto_generated",
+            is_visible=False,
+        )
+
+    def _recompute_goal_alignment(
+        self,
+        user_id: str,
+        node_id: str,
+        goal_node_ids: list[str] | None = None,
+    ) -> None:
+        """基于边 BFS 重算某节点到目标的对齐。"""
+        if goal_node_ids is None:
+            # 默认所有 level=topic 且 is_core 的节点为目标
+            goals = [
+                n.id
+                for n in self._entity_repo.list_by_level(user_id, "topic")
+                if n.is_core
+            ]
+        else:
+            goals = goal_node_ids
+
+        if not goals:
+            return
+
+        edges = self._edge_repo.list_all(user_id)
+        edge_pairs = [(e.source_id, e.target_id) for e in edges]
+
+        path_result = _registry.execute(
+            "shortest_path_to_goals",
+            start_node=node_id,
+            goal_nodes=goals,
+            edges=edge_pairs,
+        )
+        distances = path_result.get("distances", {})
+        if not distances:
+            return
+
+        alignment_result = _registry.execute(
+            "update_goal_alignment",
+            goal_alignment_state=self._builder._projection_to_dict(
+                self._projection_repo.get_or_create(user_id, node_id)
+            ),
+            goal_distances=distances,
+        )
+        self._builder._apply_result(
+            self._projection_repo.get_or_create(user_id, node_id),
+            alignment_result["goal_alignment_after"],
+        )
 
 
-def _get_repo():
-    """获取事件仓储 — 优先使用注入的，否则用单例 adapter
-
-    修复 (2026-07-04)：
-    之前 fallback 是 `container.event_bus`，但 EventBus 没有
-    `insert` / `mark_status` 方法。
-    """
-    global _events_repo
-    if _events_repo is None:
-        _events_repo = get_cognitive_events_adapter()
-    return _events_repo
-
-# ── 认知事件（统一走 _get_repo()，不再回退到 EventBus） ──
-
-def append_event(event: CognitiveEventRecord):
-    """追加事件记录（委托到注入的仓储）"""
-    _get_repo().insert(event)
-
-
-def get_unprocessed_events(limit: int = 100) -> list:
-    return _get_repo().get_unprocessed_events(limit)
-
-
-def mark_event_processed(event_id: str) -> None:
-    _get_repo().mark_event_processed(event_id)
-
-
-def query_events(node_id: str | None = None, event_type: str | None = None, limit: int = 50) -> list:
-    return _get_repo().query_events(node_id, event_type, limit)
-
-# Currently active student state (per-session, ephemeral)
-_global_states: dict[str, UserCognitiveState] = {}
-
-
-def get_state(user_id: str) -> UserCognitiveState:
-    """Get or create per-session cognitive state."""
-    if user_id not in _global_states:
-        _global_states[user_id] = UserCognitiveState(user_id=user_id)
-    return _global_states[user_id]
-
-
-# ════════════════════════════════════════════
-# Dispatcher
-# ════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════
+# Handler 注册
+# ═══════════════════════════════════════════════════════════════
 
 _HANDLERS: dict[str, callable] = {}
 
 
-def register_handler(event_type: str):
-    """Decorator to register an event handler."""
+def _register(event_type: str):
     def wrapper(fn):
         _HANDLERS[event_type] = fn
         return fn
     return wrapper
 
 
-def get_handler(event_type: str):
-    """Get handler for event type, or None."""
-    return _HANDLERS.get(event_type)
+@_register("practice_response")
+def _handle_practice_response(handler: CognitiveEventHandler, event: CognitiveEventRecord):
+    return handler.handle_practice_response(event)
 
 
-def process_event(event: CognitiveEventRecord) -> dict[str, Any]:
-    """Process a single cognitive event via registry operations.
-
-    Returns a dict of effects for logging/debugging.
-    """
-    handler = get_handler(event.event_type)
-    if handler is None:
-        logger.warning(f"No handler for event type: {event.event_type}")
-        _get_repo().mark_status(event.id, "done", "no_handler")
-        return {"status": "ignored", "event_type": event.event_type}
-    try:
-        result = handler(event)
-        _get_repo().mark_status(event.id, "done")
-        return result
-    except Exception as e:
-        logger.error(f"Error processing {event.event_type}: {e}", exc_info=True)
-        _get_repo().mark_status(event.id, "failed", str(e))
-        return {"status": "error", "error": str(e)}
+@_register("conversation_assessment")
+def _handle_conversation_assessment(handler: CognitiveEventHandler, event: CognitiveEventRecord):
+    return handler.handle_conversation_assessment(event)
 
 
-# ════════════════════════════════════════════
-# 5.1 practice_response — 18 步全链路
-# ════════════════════════════════════════════
-
-@register_handler("practice_response")
-def handle_practice_response(event: CognitiveEventRecord) -> dict[str, Any]:
-    """Complete 18-step pipeline for practice response.
-
-    Uses CognitiveOperationRegistry for belief/trend updates.
-    """
-    now = time.time()
-    node_id = event.payload.get("node_id", "")
-    user_id = event.user_id
-    payload = event.payload or {}
-    success = payload.get("success", True)
-    latency_ms = payload.get("latency_ms", 5000.0)
-    consecutive = payload.get("consecutive", False)
-
-    # Load node or create stub
-    node = get_repo().get_node(node_id, user_id) or CognitiveNode(id=node_id, label=node_id, level="atom")
-
-    # ─── 1–3. 遗忘衰减 → 快速重学 → 证据融合 (via Registry) ───
-    belief_result = _registry.execute(
-        "update_belief_from_evidence",
-        node_id=node_id,
-        user_id=user_id,
-        belief=node.belief.model_dump() if node.belief else Belief().model_dump(),
-        success=success,
-        weight=1.0,
-        now=now,
-    )
-    new_belief = Belief(**belief_result["belief_after"])
-
-    # ─── 5. 压缩递推 ───
-    decayed = _registry.execute(
-        "decay_belief",
-        belief=node.belief.model_dump() if node.belief else Belief().model_dump(),
-        now=now,
-    )
-    # 只取 decayed_event_count — 旧逻辑从 practice_summary 读
-    # (已废弃旧 decayed_event_count 计算, 由 Beta 分布精度自动反映)
-
-    # ─── 6. 练习摘要 ───
-    total = node.practice_summary.total_attempts + 1
-    correct_in_history = sum(1 for e in node.practice_events if e.success) + (1 if success else 0)
-    success_rate = correct_in_history / max(total, 1)
-    mean_lat = node.practice_summary.mean_latency_7d
-    if total > 1:
-        mean_lat = (mean_lat * (total - 1) + latency_ms) / total
-    else:
-        mean_lat = latency_ms
-
-    correct_attempts = node.practice_summary.correct_attempts + (1 if success else 0)
-    total_time_spent = node.practice_summary.total_time_spent + latency_ms / 1000.0
-
-    new_summary = PracticeSummary(
-        total_attempts=total,
-        correct_attempts=correct_attempts,
-        total_time_spent=total_time_spent,
-        recent_success_rate_7d=success_rate,
-        mean_latency_7d=mean_lat,
-        decayed_event_count=node.practice_summary.decayed_event_count,
-        rapid_relearn_cooldown_until=node.practice_summary.rapid_relearn_cooldown_until,
-        last_practiced=now,
-    )
-
-    # ─── 7. 趋势 (via Registry) ───
-    last_updated = node.belief.last_updated if node.belief else now
-    trend_result = _registry.execute(
-        "update_trend",
-        trend=node.trend.model_dump() if node.trend else Trend().model_dump(),
-        new_mean=new_belief.proficiency_mean,
-        now=now,
-        last_updated=last_updated,
-    )
-    new_trend = Trend(**trend_result["trend_after"])
-
-    # ─── 8. 激活 ───
-    events = list(node.practice_events)
-    events.append(PracticeEvent(timestamp=now, success=success, latency_ms=latency_ms))
-    if len(events) > C.PRACTICE_EVENT_MAX:
-        events = events[-C.PRACTICE_EVENT_MAX:]
-
-    # 简易激活计算 (原地, 非 Registry)
-    base_level = _calc_base_level(events, now)
-    retrieval_prob = _calc_retrieval_prob(base_level, C.DEFAULT_PARAMS.get("student.retrieval_sigma", 0.25))
-    latency = _calc_latency_ms(base_level)
-    new_activation = Activation(
-        base_level=base_level,
-        retrieval_prob=retrieval_prob,
-        latency_ms=latency,
-        spread_from_network=node.activation.spread_from_network if node.activation else 0.0,
-    )
-
-    # ─── 9. 认知负荷 ───
-    intrinsic = node.cognitive_load.intrinsic if node.cognitive_load else 1.0
-    new_load = CognitiveLoad(
-        intrinsic=intrinsic,
-        dynamic=intrinsic * (1.0 - new_belief.proficiency_mean),
-    )
-
-    # ─── 10. 疲劳 ───
-    state = get_state(user_id)
-    state.practice_count_this_session += 1
-    state.fatigue_level = min(1.0, state.fatigue_level + 0.05)
-    state.last_activity_time = now
-
-    # ─── 11. 元认知校准 ───
-    confidence_before = payload.get("confidence_before")
-    # 兼容两种格式:
-    #   int 1-4  (旧 API: 1=very unsure, 4=very sure)
-    #   float 0-1 (新 API: 0.0-1.0)
-    cb_norm: int | None = None
-    if confidence_before is not None:
-        if isinstance(confidence_before, int) and not isinstance(confidence_before, bool):
-            cb_norm = max(1, min(4, confidence_before))
-        elif isinstance(confidence_before, float) and 0.0 <= confidence_before <= 1.0:
-            cb_norm = max(1, min(4, round(confidence_before * 4) or 1))
-    if cb_norm is not None:
-        metacog = node.metacognition or Metacognition()
-        # 计算偏差：confidence_before (1-4) vs correctness_score (4 if correct, 0 if not)
-        correctness_score = 4 if success else 0
-        gap = cb_norm - correctness_score
-        # 更新方向
-        if abs(gap) <= 1:
-            direction = "accurate"
-        elif gap > 0:
-            direction = "overconfident"
-        else:
-            direction = "underconfident"
-        # 更新历史（保留最近20条）
-        history = list(metacog.recent_history or []) + [gap]
-        if len(history) > 20:
-            history = history[-20:]
-        # 计算校准误差（历史均值绝对值）
-        calibration_error = sum(abs(h) for h in history) / len(history) if history else 0.0
-        node.metacognition = Metacognition(
-            self_assessment=cb_norm / 4.0,
-            calibration_error=round(calibration_error, 3),
-            direction=direction,
-            recent_history=history,
-        )
-
-    # ─── 13. 激励 (简易, 非 Registry) ───
-    new_engagement = node.engagement
-    if new_engagement:
-        new_engagement.xp += 10 if success else 2
-        new_engagement.streak_current = (new_engagement.streak_current + 1) if success else 0
-        new_engagement.streak_longest = max(new_engagement.streak_longest, new_engagement.streak_current)
-
-    # ─── 14. 写回节点 ───
-    proficiency_before = node.belief.proficiency_mean if node.belief else 0.0
-    node.belief = new_belief
-    node.practice_events = events
-    node.practice_summary = new_summary
-    node.trend = new_trend
-    node.activation = new_activation
-    node.cognitive_load = new_load
-    node.engagement = new_engagement or node.engagement
-    get_repo().upsert_node(node, user_id)
-
-    # ─── 16. 快速下降检测 ───
-    decline_signal = _check_decline(node, new_belief)
-
-    # ─── 17. 深度思考触发 ───
-    deep_trigger = _check_deep_trigger(node, new_belief)
-
-    # ─── 18. 父节点聚合 ───
-    _aggregate_to_parent(node, user_id)
-
-    # 记录 CognitiveUpdateEvent
-    operations_result = [belief_result, trend_result]
-    _get_repo().insert(CognitiveEventRecord(
-        event_type="cognitive_update",
-        user_id=user_id,
-        source_type="practice",
-        source_id=event.id,
-        payload={
-            "reason": f"practice_response on node {node_id}",
-            "target_ids": [node_id],
-            "operations": [
-                {"subsystem": o["subsystem"], "method": o["method"],
-                 "params": o["params"], "result_summary": o["result_summary"]}
-                for o in operations_result
-            ],
-        },
-    ))
-
-    return {
-        "status": "ok",
-        "event_type": "practice_response",
-        "node_id": node_id,
-        "proficiency_before": proficiency_before,
-        "proficiency_after": new_belief.proficiency_mean,
-        "success": success,
-        "activation": round(base_level, 3),
-        "fatigue": round(state.fatigue_level, 3),
-        "xp": new_engagement.xp if new_engagement else 0,
-        "streak": new_engagement.streak_current if new_engagement else 0,
-        "decline_signal": decline_signal,
-        "deep_trigger": deep_trigger,
-        "metacognition": node.metacognition.model_dump() if node.metacognition else None,
-    }
+@_register("node_created")
+def _handle_node_created(handler: CognitiveEventHandler, event: CognitiveEventRecord):
+    return handler.handle_node_created(event)
 
 
-def _calc_base_level(events: list[PracticeEvent], now: float) -> float:
-    """简易 base_level 计算: 加权正确率"""
-    if not events:
-        return 0.0
-    recent = [e for e in events if now - e.timestamp < 86400 * 7]
-    if not recent:
-        recent = events[-10:]
-    successes = sum(1 for e in recent if e.success)
-    return successes / max(len(recent), 1)
+@_register("edge_created")
+def _handle_edge_created(handler: CognitiveEventHandler, event: CognitiveEventRecord):
+    return handler.handle_edge_created(event)
 
 
-def _calc_retrieval_prob(base_level: float, sigma: float) -> float:
-    """提取概率: 简化为 base_level 经 sigmoid"""
-    import math
-    return 1.0 / (1.0 + math.exp(-sigma * (base_level - 0.5) * 10))
+@_register("goal_changed")
+def _handle_goal_changed(handler: CognitiveEventHandler, event: CognitiveEventRecord):
+    return handler.handle_goal_changed(event)
 
 
-def _calc_latency_ms(base_level: float) -> float:
-    """反应时: 随掌握度指数下降"""
-    return 5000.0 * (1.0 - base_level * 0.6)
+@_register("daily_tick")
+def _handle_daily_tick(handler: CognitiveEventHandler, event: CognitiveEventRecord):
+    return handler.handle_daily_tick(event)
 
 
-def _check_decline(node: CognitiveNode, new_belief: Belief) -> bool:
-    """检测快速下降 → 推荐复习"""
-    if not node.belief:
-        return False
-    decline = (
-        node.belief.proficiency_mean - new_belief.proficiency_mean > C.DECLINE_THRESHOLD
-        and new_belief.proficiency_mean < C.DECLINE_DANGER_THRESHOLD
-    )
-    return decline
+# ═══════════════════════════════════════════════════════════════
+# 便捷 API：对外保持旧入口
+# ═══════════════════════════════════════════════════════════════
 
-
-def _check_deep_trigger(node: CognitiveNode, new_belief: Belief) -> bool:
-    """检查深度思考触发条件"""
-    if not node.dialogue_contexts:
-        return False
-    has_recent = any(
-        ctx.last_discussed > time.time() - 86400
-        for ctx in node.dialogue_contexts
-    )
-    in_range = 0.7 <= new_belief.proficiency_mean <= 0.95
-    return has_recent and in_range
-
-
-def _aggregate_to_parent(node: CognitiveNode, user_id: str) -> None:
-    """聚合到父节点（仅更新调度）"""
-    if not node.parent:
-        return
-    parent = get_repo().get_node(node.parent, user_id)
-    if not parent:
-        return
-    if parent.scheduling and node.scheduling:
-        parent.scheduling.urgency = max(parent.scheduling.urgency, node.scheduling.urgency)
-        get_repo().upsert_node(parent, user_id)
-
-
-# ════════════════════════════════════════════
-# 5.n dialogue_context_update
-# ════════════════════════════════════════════
-
-@register_handler("dialogue_context_update")
-def handle_dialogue_context_update(event: Event) -> dict[str, Any]:
-    """更新 CognitiveNode 的对话上下文。"""
-    now = time.time()
-    node_id = event.payload.get("node_id", "")
-    user_id = event.user_id
-    payload = event.payload or {}
-
-    node = get_repo().get_node(node_id, user_id) or CognitiveNode(id=node_id, label=node_id, level="atom")
-
-    ctx = DialogueContext(
-        session_id=payload.get("session_id", ""),
-        branch_id=payload.get("branch_id", ""),
-        version=str(payload.get("version", "")),
-        context_type=payload.get("context_type", "lower"),
-        relevance_score=payload.get("relevance_score", 0.5),
-        summary_text=payload.get("summary_text", ""),
-        last_discussed=now,
-    )
-
-    contexts = list(node.dialogue_contexts)
-    contexts.append(ctx)
-    if len(contexts) > C.CONTEXT_HISTORY_MAX:
-        contexts = contexts[-C.CONTEXT_HISTORY_MAX:]
-    node.dialogue_contexts = contexts
-
-    get_repo().upsert_node(node, user_id)
-
-    # 记录事件
-    _get_repo().insert(CognitiveEventRecord(
-        event_type="cognitive_update",
-        user_id=user_id,
-        source_type="conversation",
-        source_id=payload.get("source_id", event.id),
-        payload={
-            "reason": f"dialogue_context_update on node {node_id}",
-            "target_ids": [node_id],
-            "operations": [
-                {"subsystem": "dialogue", "method": "append_context",
-                 "params": {"context_type": ctx.context_type},
-                 "result_summary": f"context appended, total {len(contexts)}"}
-            ],
-        },
-    ))
-
-    return {
-        "status": "ok",
-        "event_type": "dialogue_context_update",
-        "node_id": node_id,
-        "context_type": ctx.context_type,
-        "relevance_score": ctx.relevance_score,
-    }
-
-
-# ════════════════════════════════════════════
-# 5.n conversation_assessment
-# ════════════════════════════════════════════
-
-@register_handler("conversation_assessment")
-def handle_conversation_assessment(event: CognitiveEventRecord) -> dict[str, Any]:
-    """轻量信念更新：基于对话评估。"""
-    now = time.time()
-    node_id = event.payload.get("node_id", "")
-    user_id = event.user_id
-    payload = event.payload or {}
-    success = payload.get("assessment", 0.5) > 0.5
-
-    node = get_repo().get_node(node_id, user_id) or CognitiveNode(id=node_id, label=node_id, level="atom")
-
-    # 使用 Registry: 遗忘衰减 + 低权重证据
-    belief_input = node.belief.model_dump() if node.belief else Belief().model_dump()
-    belief_result = _registry.execute(
-        "update_belief_from_evidence",
-        node_id=node_id,
-        user_id=user_id,
-        belief=belief_input,
-        success=success,
-        weight=0.3,
-        now=now,
-    )
-    new_belief = Belief(**belief_result["belief_after"])
-
-    last_updated = node.belief.last_updated if node.belief else now
-    trend_input = node.trend.model_dump() if node.trend else Trend().model_dump()
-    trend_result = _registry.execute(
-        "update_trend",
-        trend=trend_input,
-        new_mean=new_belief.proficiency_mean,
-        now=now,
-        last_updated=last_updated,
-    )
-    new_trend = Trend(**trend_result["trend_after"])
-
-    node.belief = new_belief
-    node.trend = new_trend
-    get_repo().upsert_node(node, user_id)
-
-    # 记录事件
-    _get_repo().insert(CognitiveEventRecord(
-        event_type="cognitive_update",
-        user_id=user_id,
-        source_type="conversation",
-        source_id=payload.get("source_id", event.id),
-        payload={
-            "reason": f"conversation_assessment on node {node_id}",
-            "target_ids": [node_id],
-            "operations": [
-                {"subsystem": b["subsystem"], "method": b["method"],
-                 "params": b["params"], "result_summary": b["result_summary"]}
-                for b in [belief_result, trend_result]
-            ],
-        },
-    ))
-
-    return {
-        "status": "ok",
-        "event_type": "conversation_assessment",
-        "node_id": node_id,
-        "proficiency_before": node.belief.proficiency_mean,
-        "proficiency_after": new_belief.proficiency_mean,
-        "assessment": payload.get("assessment", 0.5),
-    }
-
-
-# ════════════════════════════════════════════
-# 便捷 API：外部调用入口
-# ════════════════════════════════════════════
 
 def submit_practice(
     user_id: str,
@@ -546,8 +432,12 @@ def submit_practice(
     consecutive: bool = False,
     confidence: float = 0.5,
     confidence_before: int | None = None,
+    session_id: str = "",
+    question_id: str = "",
+    difficulty: float | None = None,
+    time_spent: float = 0.0,
 ) -> dict[str, Any]:
-    """便捷方法：创建一个 practice_response 事件并处理。"""
+    """便捷方法：创建并处理 practice_response 事件。"""
     evt = CognitiveEventRecord(
         event_type="practice_response",
         user_id=user_id,
@@ -560,12 +450,99 @@ def submit_practice(
             "consecutive": consecutive,
             "confidence": confidence,
             "confidence_before": confidence_before,
+            "session_id": session_id,
+            "question_id": question_id,
+            "difficulty": difficulty,
+            "time_spent": time_spent,
         },
     )
-    _get_repo().insert(evt)
-    return process_event(evt)
+    with get_db_session() as session:
+        handler = CognitiveEventHandler(session)
+        return handler.process_event(evt)
 
 
+def submit_conversation_assessment(
+    user_id: str,
+    node_id: str,
+    assessment: float = 0.5,
+    session_id: str = "",
+) -> dict[str, Any]:
+    """便捷方法：创建并处理 conversation_assessment 事件。"""
+    evt = CognitiveEventRecord(
+        event_type="conversation_assessment",
+        user_id=user_id,
+        source_type="conversation",
+        source_id="",
+        payload={
+            "node_id": node_id,
+            "assessment": assessment,
+            "session_id": session_id,
+        },
+    )
+    with get_db_session() as session:
+        handler = CognitiveEventHandler(session)
+        return handler.process_event(evt)
+
+
+def submit_node_created(
+    user_id: str,
+    node_id: str,
+    label: str = "",
+    level: str = "atom",
+) -> dict[str, Any]:
+    """便捷方法：创建节点并初始化投影。"""
+    evt = CognitiveEventRecord(
+        event_type="node_created",
+        user_id=user_id,
+        source_type="system",
+        source_id="",
+        payload={"node_id": node_id, "label": label, "level": level},
+    )
+    with get_db_session() as session:
+        handler = CognitiveEventHandler(session)
+        return handler.process_event(evt)
+
+
+def submit_edge_created(
+    user_id: str,
+    source_id: str,
+    target_id: str,
+    edge_type: str = "related_to",
+    strength: float = 0.5,
+) -> dict[str, Any]:
+    """便捷方法：创建边。"""
+    evt = CognitiveEventRecord(
+        event_type="edge_created",
+        user_id=user_id,
+        source_type="system",
+        source_id="",
+        payload={
+            "source_id": source_id,
+            "target_id": target_id,
+            "edge_type": edge_type,
+            "strength": strength,
+        },
+    )
+    with get_db_session() as session:
+        handler = CognitiveEventHandler(session)
+        return handler.process_event(evt)
+
+
+def submit_daily_tick(user_id: str) -> dict[str, Any]:
+    """便捷方法：触发每日心跳。"""
+    evt = CognitiveEventRecord(
+        event_type="daily_tick",
+        user_id=user_id,
+        source_type="system",
+        source_id="",
+        payload={},
+    )
+    with get_db_session() as session:
+        handler = CognitiveEventHandler(session)
+        return handler.process_event(evt)
+
+
+# 兼容旧对话上下文入口（当前版本暂不做更新，因为对话上下文 link 表逻辑保留）
 def submit_dialogue_context(
     user_id: str,
     node_id: str,
@@ -576,41 +553,12 @@ def submit_dialogue_context(
     relevance_score: float = 0.5,
     summary_text: str = "",
 ) -> dict[str, Any]:
-    """便捷方法：创建对话上下文更新事件并处理。"""
-    evt = CognitiveEventRecord(
-        event_type="dialogue_context_update",
-        user_id=user_id,
-        source_type="conversation",
-        source_id=session_id,
-        payload={
-            "node_id": node_id,
-            "session_id": session_id,
-            "branch_id": branch_id,
-            "version": version,
-            "context_type": context_type,
-            "relevance_score": relevance_score,
-            "summary_text": summary_text,
-        },
-    )
-    _get_repo().insert(evt)
-    return process_event(evt)
-
-
-def submit_conversation_assessment(
-    user_id: str,
-    node_id: str,
-    assessment: float = 0.5,
-) -> dict[str, Any]:
-    """便捷方法：创建对话评估事件并处理。"""
-    evt = CognitiveEventRecord(
-        event_type="conversation_assessment",
-        user_id=user_id,
-        source_type="conversation",
-        source_id="",
-        payload={
-            "node_id": node_id,
-            "assessment": assessment,
-        },
-    )
-    _get_repo().insert(evt)
-    return process_event(evt)
+    """对话上下文更新暂不经过 cognitive_events，直接返回成功（由 conversation_node_links 维护）。"""
+    return {
+        "status": "ok",
+        "event_type": "dialogue_context_update",
+        "node_id": node_id,
+        "context_type": context_type,
+        "relevance_score": relevance_score,
+        "note": "dialogue_context is maintained by conversation_node_links",
+    }

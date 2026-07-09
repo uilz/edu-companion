@@ -1,5 +1,31 @@
-"""认知操作模块 — 通过 CognitiveOperationRegistry 注册的子系统操作。
+"""认知操作模块 — 导入所有子系统操作以触发 @register 注册。"""
 
-每个 *_operations.py 文件定义一组关联的认知子系统修改操作。
-应用启动时 by init_registry() / init_cognitive() 自动发现并注册。
-"""
+from __future__ import annotations
+
+from app.domain.cognitive.operations import (
+    activation_operations,
+    bkt_operations,
+    composition_operations,
+    deep_processing_operations,
+    engagement_operations,
+    error_cluster_operations,
+    goal_alignment_operations,
+    metacognition_operations,
+    prediction_operations,
+    scheduling_operations,
+    trend_operations,
+)
+
+__all__ = [
+    "activation_operations",
+    "bkt_operations",
+    "composition_operations",
+    "deep_processing_operations",
+    "engagement_operations",
+    "error_cluster_operations",
+    "goal_alignment_operations",
+    "metacognition_operations",
+    "prediction_operations",
+    "scheduling_operations",
+    "trend_operations",
+]

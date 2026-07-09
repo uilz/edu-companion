@@ -1,9 +1,4 @@
-"""
-Trend 子系统操作 — 掌握度趋势与波动分析。
-
-注册操作:
-- update_trend: 基于新掌握度更新趋势向量 (velocity/direction/volatility)
-"""
+"""Trend 子系统操作 — 掌握度趋势与波动分析"""
 
 from __future__ import annotations
 
@@ -16,78 +11,92 @@ from app.domain.cognitive.operation_registry import get_registry
 logger = logging.getLogger(__name__)
 _registry = get_registry()
 
+_VELOCITY_ALPHA = 0.3
+_RECENT_WINDOW = 20
+_DIRECTION_THRESHOLD = 0.02
+_VOLATILITY_THRESHOLD = 0.15
+
+
+def _clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
+    return max(low, min(high, value))
+
 
 @_registry.register(
     "update_trend",
-    "更新趋势: 基于新 proficiency_mean 更新 velocity/stagnation/volatility/direction",
+    "更新趋势：基于新 proficiency 更新 velocity/stability/volatility/direction",
     params_schema={
-        "trend": {"type": "object", "required": True},
-        "new_mean": {"type": "number", "required": True},
+        "trend_state": {"type": "object", "required": True},
+        "new_proficiency": {"type": "number", "required": True},
         "now": {"type": "number", "required": False},
-        "last_updated": {"type": "number", "required": False},
+        "last_practiced": {"type": "number", "required": False},
     },
 )
 def update_trend(
-    trend: dict,
-    new_mean: float,
+    trend_state: dict,
+    new_proficiency: float,
     now: float | None = None,
-    last_updated: float | None = None,
+    last_practiced: float | None = None,
 ) -> dict:
     """EWMA 速度 + 停滞检测 + 波动率 + 方向判定。"""
     now = now or time.time()
-    last_updated = last_updated or now
 
-    recent = list(trend.get("recent_proficiencies", []))
-    recent.append(new_mean)
-    # 保留最近 20 个采样点
-    if len(recent) > 20:
-        recent = recent[-20:]
+    velocity = float(trend_state.get("trend_velocity", 0.0))
+    stagnation_days = float(trend_state.get("trend_stagnation_days", 0.0))
+    direction = trend_state.get("trend_direction", "plateau")
+
+    recent = list(trend_state.get("_recent_proficiencies", []))
+    recent.append(_clamp(new_proficiency))
+    if len(recent) > _RECENT_WINDOW:
+        recent = recent[-_RECENT_WINDOW:]
 
     # velocity: EWMA of differences
-    diffs = []
-    for i in range(1, len(recent)):
-        diffs.append(recent[i] - recent[i - 1])
-    ewma = trend.get("velocity_ewma", 0.0)
-    alpha = 0.3
-    for d in diffs:
-        ewma = alpha * d + (1 - alpha) * ewma
-
-    # stagnation: hours since last meaningful change
-    stagnation_days = trend.get("stagnation_days", 0.0)
-    elapsed_days = (now - last_updated) / 86400.0
-    if abs(ewma) < 0.01:
-        stagnation_days += elapsed_days
-    else:
-        stagnation_days = 0.0
+    if len(recent) >= 2:
+        delta = recent[-1] - recent[-2]
+        velocity = _VELOCITY_ALPHA * delta + (1 - _VELOCITY_ALPHA) * velocity
 
     # volatility: std of recent
     volatility = statistics.stdev(recent) if len(recent) >= 2 else 0.0
+    stability = 1.0 - _clamp(volatility / 0.3)
+
+    # stagnation: days since last meaningful increase
+    if last_practiced:
+        elapsed_days = max(0.0, (now - last_practiced) / 86400.0)
+        if new_proficiency <= max(recent[:-1] + [0.0]):
+            stagnation_days += elapsed_days
+        else:
+            stagnation_days = 0.0
+    else:
+        if abs(velocity) < _DIRECTION_THRESHOLD:
+            stagnation_days += 1.0 / 24.0  # 默认按小时累积
+        else:
+            stagnation_days = 0.0
 
     # direction
-    if volatility > 0.15:
+    if volatility > _VOLATILITY_THRESHOLD:
         direction = "volatile"
-    elif ewma > 0.02:
+    elif velocity > _DIRECTION_THRESHOLD:
         direction = "ascending"
-    elif ewma < -0.02:
+    elif velocity < -_DIRECTION_THRESHOLD:
         direction = "descending"
     else:
         direction = "plateau"
 
     trend_after = {
-        "recent_proficiencies": recent,
-        "velocity_ewma": round(ewma, 4),
-        "stagnation_days": round(stagnation_days, 2),
-        "volatility_std": round(volatility, 4),
-        "direction": direction,
+        "trend_velocity": round(velocity, 4),
+        "trend_stability": round(stability, 4),
+        "trend_volatility": round(volatility, 4),
+        "trend_direction": direction,
+        "trend_stagnation_days": round(stagnation_days, 2),
+        "_recent_proficiencies": recent,
     }
 
     return {
         "subsystem": "trend",
         "method": "update_trend",
-        "params": {"new_mean": new_mean, "samples": len(recent)},
+        "params": {"new_proficiency": new_proficiency, "samples": len(recent)},
         "result_summary": (
-            f"velocity={ewma:.3f} direction={direction} "
-            f"volatility={volatility:.3f}"
+            f"velocity={velocity:.3f} direction={direction} "
+            f"volatility={volatility:.3f} stagnation={stagnation_days:.1f}d"
         ),
         "trend_after": trend_after,
     }
