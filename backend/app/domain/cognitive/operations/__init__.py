@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from app.domain.cognitive.operations import (
     activation_operations,
-    bkt_operations,
+    belief_operations,
     composition_operations,
     deep_processing_operations,
     engagement_operations,
     error_cluster_operations,
     goal_alignment_operations,
+    graph_propagation_operations,
     metacognition_operations,
     prediction_operations,
     scheduling_operations,
@@ -18,12 +19,13 @@ from app.domain.cognitive.operations import (
 
 __all__ = [
     "activation_operations",
-    "bkt_operations",
+    "belief_operations",
     "composition_operations",
     "deep_processing_operations",
     "engagement_operations",
     "error_cluster_operations",
     "goal_alignment_operations",
+    "graph_propagation_operations",
     "metacognition_operations",
     "prediction_operations",
     "scheduling_operations",

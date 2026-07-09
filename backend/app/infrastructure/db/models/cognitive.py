@@ -132,6 +132,9 @@ class KnowledgeEdgeORM(Base):
     )
     edge_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     strength: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
+    edge_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
+    edge_distance_decay: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
+    max_propagation_hops: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     edge_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
 
     created_at: Mapped[datetime] = mapped_column(
@@ -172,6 +175,10 @@ class PracticeEventORM(Base):
     session_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     question_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
 
+    actor_type: Mapped[str] = mapped_column(String(16), nullable=False, default="user")
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    source_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+
     timestamp: Mapped[float] = mapped_column(Float, nullable=False)
     success: Mapped[bool] = mapped_column(Boolean, nullable=False)
     latency_ms: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
@@ -209,6 +216,7 @@ class CognitiveEventORM(Base):
     )
     user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    actor_type: Mapped[str] = mapped_column(String(16), nullable=False, default="user")
     source_type: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     source_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     node_id: Mapped[str | None] = mapped_column(
@@ -233,7 +241,10 @@ class CognitiveEventORM(Base):
 
 
 class CognitiveNodeProjectionORM(Base):
-    """CognitiveNode 各子系统的物化投影（可完全从事件重建）"""
+    """CognitiveNode 各子系统的物化投影（可完全从事件重建）。
+
+    核心信念采用 Beta(α, β) 概率分布，统一表达掌握度、不确定性和复习需求。
+    """
 
     __tablename__ = "cognitive_node_projections"
 
@@ -242,15 +253,29 @@ class CognitiveNodeProjectionORM(Base):
     )
     user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
 
-    # BKT
-    bkt_known: Mapped[float] = mapped_column(Float, nullable=False, default=0.3)
-    bkt_learn: Mapped[float] = mapped_column(Float, nullable=False, default=0.3)
-    bkt_forget: Mapped[float] = mapped_column(Float, nullable=False, default=0.05)
-    bkt_guess: Mapped[float] = mapped_column(Float, nullable=False, default=0.2)
-    bkt_slip: Mapped[float] = mapped_column(Float, nullable=False, default=0.1)
-    bkt_proficiency: Mapped[float] = mapped_column(Float, nullable=False, default=0.3)
-    bkt_peak: Mapped[float] = mapped_column(Float, nullable=False, default=0.3)
-    bkt_last_updated: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    # Belief: Beta(α, β) 后验分布
+    belief_alpha: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    belief_beta: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    belief_evidence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    belief_last_updated: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    # 时间衰减与稳定性
+    stability_factor: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
+    forgetting_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0.1)
+
+    # 信息增益
+    total_information_gain: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    last_information_gain: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    # 调度（由 Beta 不确定性 + 秘书修正统一决定）
+    sched_urgency: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    sched_next_review: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    sched_interval_days: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    sched_interleaving_group: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    sched_next_action_type: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+
+    # 图传播：独立证据权重，防止过度平滑
+    independent_evidence_weight: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
 
     # Activation
     act_base_level: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
@@ -265,12 +290,6 @@ class CognitiveNodeProjectionORM(Base):
     trend_volatility: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     trend_direction: Mapped[str] = mapped_column(String(16), nullable=False, default="plateau")
     trend_stagnation_days: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-
-    # Scheduling
-    sched_urgency: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    sched_next_review: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    sched_interleaving_group: Mapped[str] = mapped_column(String(32), nullable=False, default="")
-    sched_next_action_type: Mapped[str] = mapped_column(String(32), nullable=False, default="")
 
     # Metacognition
     meta_self_assessment: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)

@@ -33,6 +33,10 @@ logger = logging.getLogger(__name__)
 _registry = get_registry()
 
 
+def _clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
+    return max(low, min(high, value))
+
+
 class CognitiveEventRecord:
     """领域层事件记录，仅包含事件处理所需字段。"""
 
@@ -43,6 +47,7 @@ class CognitiveEventRecord:
         user_id: str = "",
         source_type: str = "",
         source_id: str = "",
+        actor_type: str = "user",
         status: str = "pending",
         payload: dict | None = None,
     ):
@@ -51,6 +56,7 @@ class CognitiveEventRecord:
         self.user_id = user_id
         self.source_type = source_type
         self.source_id = source_id
+        self.actor_type = actor_type
         self.status = status
         self.payload = payload or {}
 
@@ -115,6 +121,9 @@ class CognitiveEventHandler:
             node_id=node_id,
             session_id=payload.get("session_id", ""),
             question_id=payload.get("question_id", ""),
+            actor_type=payload.get("actor_type", event.actor_type or "user"),
+            source_type=event.source_type or payload.get("source_type", ""),
+            source_id=event.source_id or payload.get("source_id", ""),
             timestamp=payload.get("timestamp", now),
             success=success,
             latency_ms=payload.get("latency_ms", 5000.0),
@@ -134,7 +143,7 @@ class CognitiveEventHandler:
         self._builder.apply_practice_event(persisted)
 
         projection = self._projection_repo.get(node_id)
-        proficiency = projection.bkt_proficiency if projection else 0.3
+        proficiency = self._builder._belief_proficiency(projection)
 
         # 记录认知领域事件（用于审计与回放）
         self._event_repo.append_cognitive_event(
@@ -143,6 +152,7 @@ class CognitiveEventHandler:
             source_type="practice",
             source_id=persisted.id,
             node_id=node_id,
+            actor_type=practice_event.actor_type,
             payload={
                 "reason": f"practice_response on node {node_id}",
                 "success": success,
@@ -163,7 +173,7 @@ class CognitiveEventHandler:
     def handle_conversation_assessment(
         self, event: CognitiveEventRecord
     ) -> dict[str, Any]:
-        """对话评估：低权重更新 BKT 与趋势。"""
+        """对话评估：低权重更新 Beta 信念与趋势。"""
         now = time.time()
         payload = event.payload or {}
         user_id = event.user_id
@@ -182,6 +192,9 @@ class CognitiveEventHandler:
             user_id=user_id,
             node_id=node_id,
             session_id=payload.get("session_id", ""),
+            actor_type=payload.get("actor_type", event.actor_type or "user"),
+            source_type=event.source_type or payload.get("source_type", "conversation"),
+            source_id=event.source_id or payload.get("source_id", ""),
             timestamp=payload.get("timestamp", now),
             success=success,
             weight=0.3,
@@ -190,7 +203,7 @@ class CognitiveEventHandler:
         self._builder.apply_practice_event(persisted)
 
         projection = self._projection_repo.get(node_id)
-        proficiency = projection.bkt_proficiency if projection else 0.3
+        proficiency = self._builder._belief_proficiency(projection)
 
         return {
             "status": "ok",
@@ -272,7 +285,7 @@ class CognitiveEventHandler:
     # ── daily_tick ──
 
     def handle_daily_tick(self, event: CognitiveEventRecord) -> dict[str, Any]:
-        """每日心跳：BKT 遗忘衰减、streak 检查、urgency 重算。"""
+        """每日心跳：Beta 信念时间衰减、Activation 衰减、scheduling 重算。"""
         now = time.time()
         user_id = event.user_id
 
@@ -280,11 +293,11 @@ class CognitiveEventHandler:
         for projection in projections:
             proj_dict = self._builder._projection_to_dict(projection)
 
-            # BKT 衰减
-            bkt_result = _registry.execute(
-                "bkt_decay", bkt_state=proj_dict, now=now
+            # Beta 信念时间衰减
+            belief_result = _registry.execute(
+                "belief_decay", belief_state=proj_dict, now=now
             )
-            self._builder._apply_result(projection, bkt_result["bkt_after"])
+            self._builder._apply_result(projection, belief_result["belief_after"])
 
             # Activation 衰减
             act_result = _registry.execute(
@@ -292,15 +305,22 @@ class CognitiveEventHandler:
             )
             self._builder._apply_result(projection, act_result["activation_after"])
 
-            # 重算 scheduling
+            # 重算 scheduling（基于衰减后的信念）
+            effective_belief = {
+                "belief_alpha": projection.belief_alpha,
+                "belief_beta": projection.belief_beta,
+                "proficiency": self._builder._belief_proficiency(projection),
+            }
             sched_result = _registry.execute(
                 "update_scheduling",
                 scheduling_state=proj_dict,
-                proficiency=projection.bkt_proficiency,
-                stability=projection.trend_stability,
+                belief_state=effective_belief,
+                last_practiced=projection.belief_last_updated,
                 stagnation_days=projection.trend_stagnation_days,
                 goal_distance=projection.goal_distance,
-                last_practiced=projection.bkt_last_updated,
+                is_core=getattr(
+                    self._entity_repo.get(user_id, projection.node_id), "is_core", False
+                ),
                 now=now,
             )
             self._builder._apply_result(
@@ -313,6 +333,116 @@ class CognitiveEventHandler:
             "status": "ok",
             "event_type": "daily_tick",
             "processed_nodes": len(projections),
+        }
+
+    # ── information_gain_event ──
+
+    def handle_information_gain_event(
+        self, event: CognitiveEventRecord
+    ) -> dict[str, Any]:
+        """处理秘书系统评估的非练习信息增益事件。
+
+        payload 需包含：
+        - node_id: str
+        - estimated_ig: float  （信息增益预估值，单位 nats）
+        - confidence: float    （秘书对估计的置信度，默认 0.5）
+        """
+        payload = event.payload or {}
+        user_id = event.user_id
+        node_id = payload.get("node_id", "")
+        estimated_ig = float(payload.get("estimated_ig", 0.0))
+        confidence = _clamp(float(payload.get("confidence", 0.5)))
+
+        if estimated_ig <= 0 or node_id == "":
+            return {"status": "ignored", "event_type": "information_gain_event"}
+
+        projection = self._projection_repo.get_or_create(user_id, node_id)
+        proj_dict = self._builder._projection_to_dict(projection)
+
+        alpha = max(0.1, float(proj_dict.get("belief_alpha", 1.0)))
+        beta = max(0.1, float(proj_dict.get("belief_beta", 1.0)))
+        total = alpha + beta
+
+        # 将 estimated_ig 映射为等效精度增量，上限防止弱信号过度影响
+        max_relative_increase = 0.1 * confidence
+        relative_increase = min(max_relative_increase, max(0.0, estimated_ig) / 10.0)
+
+        # 保持均值不变，提高精度（减少熵）
+        p = alpha / total
+        new_total = total * (1.0 + relative_increase)
+        alpha_new = max(0.1, new_total * p)
+        beta_new = max(0.1, new_total * (1.0 - p))
+
+        total_ig = float(proj_dict.get("total_information_gain", 0.0))
+        ig_contribution = estimated_ig * confidence
+
+        self._builder._apply_result(
+            projection,
+            {
+                "belief_alpha": round(alpha_new, 4),
+                "belief_beta": round(beta_new, 4),
+                "last_information_gain": round(ig_contribution, 6),
+                "total_information_gain": round(total_ig + ig_contribution, 6),
+            },
+        )
+        self._projection_repo.upsert(projection)
+
+        return {
+            "status": "ok",
+            "event_type": "information_gain_event",
+            "node_id": node_id,
+            "alpha": round(alpha_new, 4),
+            "beta": round(beta_new, 4),
+            "information_gain": round(ig_contribution, 6),
+        }
+
+    # ── scheduling_adjustment ──
+
+    def handle_scheduling_adjustment(
+        self, event: CognitiveEventRecord
+    ) -> dict[str, Any]:
+        """处理秘书系统对复习调度的修正事件。
+
+        payload 需包含：
+        - node_id: str
+        - adjustment_factor: float  （>1 延长间隔，<1 缩短间隔）
+        """
+        payload = event.payload or {}
+        user_id = event.user_id
+        node_id = payload.get("node_id", "")
+        adjustment_factor = float(payload.get("adjustment_factor", 1.0))
+
+        if node_id == "":
+            return {"status": "ignored", "event_type": "scheduling_adjustment"}
+
+        projection = self._projection_repo.get_or_create(user_id, node_id)
+        proj_dict = self._builder._projection_to_dict(projection)
+
+        sched_result = _registry.execute(
+            "update_scheduling",
+            scheduling_state=proj_dict,
+            belief_state={
+                "belief_alpha": projection.belief_alpha,
+                "belief_beta": projection.belief_beta,
+            },
+            last_practiced=projection.belief_last_updated,
+            stagnation_days=projection.trend_stagnation_days,
+            goal_distance=projection.goal_distance,
+            is_core=getattr(
+                self._entity_repo.get(user_id, projection.node_id), "is_core", False
+            ),
+            adjustment_factor=adjustment_factor,
+            now=time.time(),
+        )
+        self._builder._apply_result(projection, sched_result["scheduling_after"])
+        self._projection_repo.upsert(projection)
+
+        return {
+            "status": "ok",
+            "event_type": "scheduling_adjustment",
+            "node_id": node_id,
+            "adjustment_factor": adjustment_factor,
+            "scheduling_after": sched_result["scheduling_after"],
         }
 
     # ── 内部辅助 ──
@@ -417,6 +547,16 @@ def _handle_goal_changed(handler: CognitiveEventHandler, event: CognitiveEventRe
 @_register("daily_tick")
 def _handle_daily_tick(handler: CognitiveEventHandler, event: CognitiveEventRecord):
     return handler.handle_daily_tick(event)
+
+
+@_register("information_gain_event")
+def _handle_information_gain_event(handler: CognitiveEventHandler, event: CognitiveEventRecord):
+    return handler.handle_information_gain_event(event)
+
+
+@_register("scheduling_adjustment")
+def _handle_scheduling_adjustment(handler: CognitiveEventHandler, event: CognitiveEventRecord):
+    return handler.handle_scheduling_adjustment(event)
 
 
 # ═══════════════════════════════════════════════════════════════

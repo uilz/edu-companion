@@ -141,6 +141,9 @@ class CognitiveEventRepository:
                 hints_used=event.hints_used,
                 time_spent=event.time_spent,
                 error_embedding=event.error_embedding,
+                actor_type=event.actor_type,
+                source_type=event.source_type,
+                source_id=event.source_id,
                 idempotency_key=event.idempotency_key,
             )
             .on_conflict_do_nothing(index_elements=["idempotency_key"])
@@ -212,12 +215,14 @@ class CognitiveEventRepository:
         source_type: str = "",
         source_id: str = "",
         node_id: Optional[str] = None,
+        actor_type: str = "user",
     ) -> CognitiveEventORM:
         event = CognitiveEventORM(
             user_id=user_id,
             event_type=event_type,
             source_type=source_type,
             source_id=source_id,
+            actor_type=actor_type,
             node_id=node_id,
             payload=payload,
             status="pending",

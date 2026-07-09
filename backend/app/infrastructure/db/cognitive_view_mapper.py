@@ -160,22 +160,18 @@ def _build_activation(proj: CognitiveNodeProjectionORM) -> Activation:
 
 
 def _build_belief(proj: CognitiveNodeProjectionORM) -> Belief:
-    """用 BKT 投影构造兼容旧接口的 Belief。
-
-    alpha/beta 仅用于兼容旧读法，不再作为计算依据。我们用 proficiency_mean 反推一对
-    合理的伪 Beta 参数，使 proficiency_precision 保持非 0。
-    """
-    mean = proj.bkt_proficiency
-    precision = max(4.0, 2.0 + mean * 10.0)
-    alpha = mean * precision
-    beta_val = (1.0 - mean) * precision
+    """用 Beta 投影构造兼容旧接口的 Belief。"""
+    alpha = max(0.1, proj.belief_alpha)
+    beta_val = max(0.1, proj.belief_beta)
+    mean = alpha / (alpha + beta_val)
+    precision = alpha + beta_val
     return Belief(
         alpha=round(alpha, 3),
         beta=round(beta_val, 3),
         proficiency_mean=round(mean, 4),
         proficiency_precision=round(precision, 3),
-        peak_proficiency=proj.bkt_peak,
-        last_updated=proj.bkt_last_updated or time.time(),
+        peak_proficiency=round(mean, 4),
+        last_updated=proj.belief_last_updated or time.time(),
     )
 
 
@@ -233,11 +229,7 @@ def _build_practice_summary(events: list[PracticeEventORM]) -> PracticeSummary:
 def _build_trend(
     proj: CognitiveNodeProjectionORM, events: list[PracticeEventORM]
 ) -> Trend:
-    """构建 Trend 视图；recent_proficiencies 取最近 20 次事件的 bkt_proficiency 占位。
-
-    由于事件表当前不保存每次事件后的 proficiency，这里用 success 值（1.0/0.0）
-    作为近期熟练度序列的近似，仅供旧接口兼容。
-    """
+    """构建 Trend 视图；recent_proficiencies 取最近 20 次事件的 success 近似。"""
     recent = [1.0 if e.success else 0.0 for e in events[-20:]]
     return Trend(
         recent_proficiencies=recent,

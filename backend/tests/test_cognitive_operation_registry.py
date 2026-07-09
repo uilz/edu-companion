@@ -99,160 +99,237 @@ class TestRegistryCore:
 
 
 # ══════════════════════════════════════════════════════════════
-#  BKT operations 测试
+#  Belief operations 测试
 # ══════════════════════════════════════════════════════════════
 
-class TestBKTOperations:
-    """bkt_update / bkt_decay / aggregate_proficiency_to_parent"""
+class TestBeliefOperations:
+    """belief_update / belief_information_gain / shrinkage_prior_apply / belief_decay"""
 
     @pytest.fixture
-    def reg_with_bkt_ops(self, reg):
-        from app.domain.cognitive.operations.bkt_operations import (
-            bkt_update,
-            bkt_decay,
-            aggregate_proficiency_to_parent,
+    def reg_with_belief_ops(self, reg):
+        from app.domain.cognitive.operations.belief_operations import (
+            belief_update,
+            belief_information_gain,
+            shrinkage_prior_apply,
+            belief_decay,
         )
 
-        reg.register("bkt_update", "BKT 更新", params_schema={})(bkt_update)
-        reg.register("bkt_decay", "BKT 衰减", params_schema={})(bkt_decay)
-        reg.register("aggregate_proficiency_to_parent", "聚合掌握度", params_schema={})(
-            aggregate_proficiency_to_parent
-        )
+        reg.register("belief_update", "Beta 更新", params_schema={})(belief_update)
+        reg.register("belief_information_gain", "信息增益", params_schema={})(belief_information_gain)
+        reg.register("shrinkage_prior_apply", "收缩先验", params_schema={})(shrinkage_prior_apply)
+        reg.register("belief_decay", "Beta 衰减", params_schema={})(belief_decay)
         return reg
 
-    def test_bkt_update_success(self, reg_with_bkt_ops):
-        result = reg_with_bkt_ops.execute(
-            "bkt_update",
-            bkt_state={},
+    def test_belief_update_success_increases_alpha(self, reg_with_belief_ops):
+        result = reg_with_belief_ops.execute(
+            "belief_update",
+            belief_state={"belief_alpha": 2.0, "belief_beta": 2.0},
             success=True,
             difficulty=0.0,
             weight=1.0,
             now=1000.0,
         )
-        assert result["subsystem"] == "bkt"
-        assert result["bkt_after"]["bkt_proficiency"] > 0.3
+        after = result["belief_after"]
+        assert after["belief_alpha"] > 2.0
+        assert after["belief_beta"] >= 2.0
+        assert after["belief_evidence_count"] == 1
+        assert after["last_information_gain"] > 0
 
-    def test_bkt_update_failure_rises_less_than_success(self, reg_with_bkt_ops):
-        failure = reg_with_bkt_ops.execute(
-            "bkt_update",
-            bkt_state={},
+    def test_belief_update_failure_increases_beta(self, reg_with_belief_ops):
+        result = reg_with_belief_ops.execute(
+            "belief_update",
+            belief_state={"belief_alpha": 2.0, "belief_beta": 2.0},
             success=False,
             difficulty=0.0,
             weight=1.0,
             now=1000.0,
         )
-        success = reg_with_bkt_ops.execute(
-            "bkt_update",
-            bkt_state={},
+        after = result["belief_after"]
+        assert after["belief_beta"] > 2.0
+        assert after["belief_alpha"] >= 2.0
+
+    def test_belief_update_harder_question_updates_less(self, reg_with_belief_ops):
+        easy = reg_with_belief_ops.execute(
+            "belief_update",
+            belief_state={"belief_alpha": 2.0, "belief_beta": 2.0},
             success=True,
-            difficulty=0.0,
+            difficulty=-1.0,
             weight=1.0,
             now=1000.0,
         )
-        assert (
-            failure["bkt_after"]["bkt_proficiency"]
-            < success["bkt_after"]["bkt_proficiency"]
-        )
-
-    def test_bkt_decay_uninitialized(self, reg_with_bkt_ops):
-        result = reg_with_bkt_ops.execute(
-            "bkt_decay",
-            bkt_state={"bkt_last_updated": 0.0},
+        hard = reg_with_belief_ops.execute(
+            "belief_update",
+            belief_state={"belief_alpha": 2.0, "belief_beta": 2.0},
+            success=True,
+            difficulty=1.0,
+            weight=1.0,
             now=1000.0,
         )
-        assert result["result_summary"] == "no decay (uninitialized)"
+        # 根据设计文档简化版：难题 success 时 beta 增量更大（更谨慎）
+        assert hard["belief_after"]["belief_beta"] > easy["belief_after"]["belief_beta"]
 
-    def test_aggregate_proficiency(self, reg_with_bkt_ops):
-        result = reg_with_bkt_ops.execute(
-            "aggregate_proficiency_to_parent",
-            child_proficiencies=[0.8, 0.6],
-            child_weights=[1.0, 1.0],
+    def test_belief_information_gain_positive(self, reg_with_belief_ops):
+        ig = reg_with_belief_ops.execute(
+            "belief_information_gain",
+            belief_state_before={"belief_alpha": 2.0, "belief_beta": 2.0},
+            belief_state_after={"belief_alpha": 3.0, "belief_beta": 2.0},
         )
-        assert result["mastery"] == pytest.approx(0.7, rel=1e-4)
+        assert ig["information_gain"] > 0
+
+    def test_shrinkage_prior_sparse_data(self, reg_with_belief_ops):
+        result = reg_with_belief_ops.execute(
+            "shrinkage_prior_apply",
+            child_belief_state={"belief_alpha": 1.0, "belief_beta": 1.0, "belief_evidence_count": 0},
+            parent_belief_state={"belief_alpha": 8.0, "belief_beta": 2.0, "belief_evidence_count": 10},
+            shrinkage_strength=5.0,
+        )
+        eff = result["effective_belief"]
+        # 无证据时子节点完全向父节点 0.8 收缩
+        assert eff["proficiency"] > 0.5
+        assert abs(eff["proficiency"] - 0.8) < 0.01
+
+    def test_shrinkage_prior_rich_data(self, reg_with_belief_ops):
+        result = reg_with_belief_ops.execute(
+            "shrinkage_prior_apply",
+            child_belief_state={"belief_alpha": 8.0, "belief_beta": 2.0, "belief_evidence_count": 20},
+            parent_belief_state={"belief_alpha": 2.0, "belief_beta": 8.0, "belief_evidence_count": 10},
+            shrinkage_strength=5.0,
+        )
+        eff = result["effective_belief"]
+        # 证据多时有效信念显著偏向子节点自身（子节点均值为 0.8）
+        assert eff["proficiency"] > 0.6
+
+    def test_belief_decay_over_time(self, reg_with_belief_ops):
+        now = 86400.0 * 20
+        result = reg_with_belief_ops.execute(
+            "belief_decay",
+            belief_state={
+                "belief_alpha": 10.0,
+                "belief_beta": 10.0,
+                "belief_last_updated": 86400.0 * 10,
+                "stability_factor": 0.5,
+                "forgetting_rate": 0.1,
+            },
+            now=now,
+        )
+        after = result["belief_after"]
+        # 精度应下降，但均值保持约 0.5
+        assert after["belief_alpha"] < 10.0
+        assert after["belief_beta"] < 10.0
+        assert abs(after["belief_alpha"] - after["belief_beta"]) < 0.5
 
 
 # ══════════════════════════════════════════════════════════════
-#  Activation operations 测试
+#  Graph propagation 测试
 # ══════════════════════════════════════════════════════════════
 
-class TestActivationOperations:
-    """activation_update / activation_decay"""
+class TestGraphPropagationOperations:
+    """graph_propagate"""
 
     @pytest.fixture
-    def reg_with_activation_ops(self, reg):
-        from app.domain.cognitive.operations.activation_operations import (
-            activation_update,
-            activation_decay,
-        )
+    def reg_with_graph_ops(self, reg):
+        from app.domain.cognitive.operations.graph_propagation_operations import graph_propagate
 
-        reg.register("activation_update", "激活更新", params_schema={})(activation_update)
-        reg.register("activation_decay", "激活衰减", params_schema={})(activation_decay)
+        reg.register("graph_propagate", "图传播", params_schema={})(graph_propagate)
         return reg
 
-    def test_activation_update(self, reg_with_activation_ops):
-        result = reg_with_activation_ops.execute(
-            "activation_update",
-            activation_state={},
-            event_timestamp=1000.0,
-            now=1000.0,
+    def test_graph_propagate_to_direct_neighbor(self, reg_with_graph_ops):
+        result = reg_with_graph_ops.execute(
+            "graph_propagate",
+            source_node_id="a",
+            delta_alpha=1.0,
+            delta_beta=0.0,
+            edges=[
+                {
+                    "source_id": "a",
+                    "target_id": "b",
+                    "edge_type": "co_occurrence",
+                    "edge_weight": 0.5,
+                    "edge_distance_decay": 0.5,
+                    "max_propagation_hops": 2,
+                }
+            ],
+            neighbor_belief_states={"b": {"independent_evidence_weight": 1.0}},
         )
-        assert result["subsystem"] == "activation"
-        assert result["activation_after"]["act_base_level"] > 0.0
+        updates = result["propagation_after"]["updates"]
+        assert len(updates) == 1
+        assert updates[0]["node_id"] == "b"
+        assert updates[0]["distance"] == 1
+        assert updates[0]["delta_alpha"] > 0
 
-    def test_activation_decay(self, reg_with_activation_ops):
-        result = reg_with_activation_ops.execute(
-            "activation_decay",
-            activation_state={"act_base_level": 1.0, "act_last_updated": 0.0},
-            now=86400.0,
+    def test_graph_propagate_prerequisite_direction(self, reg_with_graph_ops):
+        # 前置 a -> b：从 a 传播到 b 应生效，反向不生效
+        result = reg_with_graph_ops.execute(
+            "graph_propagate",
+            source_node_id="a",
+            delta_alpha=1.0,
+            delta_beta=0.0,
+            edges=[
+                {
+                    "source_id": "a",
+                    "target_id": "b",
+                    "edge_type": "prerequisite",
+                    "edge_weight": 0.6,
+                    "edge_distance_decay": 0.5,
+                    "max_propagation_hops": 2,
+                }
+            ],
+            neighbor_belief_states={"b": {"independent_evidence_weight": 1.0}},
         )
-        assert result["activation_after"]["act_base_level"] < 1.0
+        updates = {u["node_id"]: u for u in result["propagation_after"]["updates"]}
+        assert "b" in updates
 
-
-# ══════════════════════════════════════════════════════════════
-#  Trend operations 测试
-# ══════════════════════════════════════════════════════════════
-
-class TestTrendOperations:
-    """update_trend"""
-
-    @pytest.fixture
-    def reg_with_trend_ops(self, reg):
-        from app.domain.cognitive.operations.trend_operations import update_trend
-
-        reg.register("update_trend", "更新趋势", params_schema={})(update_trend)
-        return reg
-
-    def test_update_trend_new_trend_plateau(self, reg_with_trend_ops):
-        now = 1000.0
-        result = reg_with_trend_ops.execute(
-            "update_trend",
-            trend_state={},
-            new_proficiency=0.5,
-            now=now,
-            last_practiced=now,
+        reverse = reg_with_graph_ops.execute(
+            "graph_propagate",
+            source_node_id="b",
+            delta_alpha=1.0,
+            delta_beta=0.0,
+            edges=[
+                {
+                    "source_id": "a",
+                    "target_id": "b",
+                    "edge_type": "prerequisite",
+                    "edge_weight": 0.6,
+                    "edge_distance_decay": 0.5,
+                    "max_propagation_hops": 2,
+                }
+            ],
+            neighbor_belief_states={"a": {"independent_evidence_weight": 1.0}},
         )
-        assert result["subsystem"] == "trend"
-        ta = result["trend_after"]
-        assert ta["trend_direction"] == "plateau"
-        assert ta["_recent_proficiencies"] == [0.5]
+        assert len(reverse["propagation_after"]["updates"]) == 0
 
-    def test_update_trend_ascending(self, reg_with_trend_ops):
-        now = 2000.0
-        trend_state = {
-            "_recent_proficiencies": [0.3, 0.35, 0.4],
-            "trend_velocity": 0.0,
-            "trend_stagnation_days": 0.0,
-        }
-        result = reg_with_trend_ops.execute(
-            "update_trend",
-            trend_state=trend_state,
-            new_proficiency=0.5,
-            now=now,
-            last_practiced=now,
+    def test_graph_propagate_distance_decay(self, reg_with_graph_ops):
+        # a - b - c，d=2 的 c 应该比 d=1 的 b 更新量小
+        result = reg_with_graph_ops.execute(
+            "graph_propagate",
+            source_node_id="a",
+            delta_alpha=1.0,
+            delta_beta=0.0,
+            edges=[
+                {
+                    "source_id": "a",
+                    "target_id": "b",
+                    "edge_type": "co_occurrence",
+                    "edge_weight": 0.8,
+                    "edge_distance_decay": 0.5,
+                    "max_propagation_hops": 2,
+                },
+                {
+                    "source_id": "b",
+                    "target_id": "c",
+                    "edge_type": "co_occurrence",
+                    "edge_weight": 0.8,
+                    "edge_distance_decay": 0.5,
+                    "max_propagation_hops": 2,
+                },
+            ],
+            neighbor_belief_states={
+                "b": {"independent_evidence_weight": 1.0},
+                "c": {"independent_evidence_weight": 1.0},
+            },
         )
-        ta = result["trend_after"]
-        assert ta["trend_direction"] == "ascending"
-        assert ta["_recent_proficiencies"][-1] == 0.5
+        updates = {u["node_id"]: u for u in result["propagation_after"]["updates"]}
+        assert updates["b"]["delta_alpha"] > updates["c"]["delta_alpha"]
 
 
 # ══════════════════════════════════════════════════════════════
@@ -269,59 +346,42 @@ class TestSchedulingOperations:
         reg.register("update_scheduling", "更新调度", params_schema={})(update_scheduling)
         return reg
 
-    def test_update_scheduling_low_proficiency(self, reg_with_scheduling_ops):
+    def test_update_scheduling_high_uncertainty_short_interval(self, reg_with_scheduling_ops):
         now = 1000.0
         result = reg_with_scheduling_ops.execute(
             "update_scheduling",
             scheduling_state={},
-            proficiency=0.2,
-            stability=0.5,
-            stagnation_days=0.0,
-            is_core=True,
-            goal_distance=-1,
+            belief_state={"belief_alpha": 1.0, "belief_beta": 1.0},
             last_practiced=now,
-            successful_reviews=0,
+            stagnation_days=0.0,
+            is_core=False,
+            goal_distance=-1,
             now=now,
         )
-        assert result["subsystem"] == "scheduling"
-        assert result["scheduling_after"]["sched_urgency"] > 0.0
+        sched = result["scheduling_after"]
+        # Beta(1,1) 不确定性高，间隔应较短
+        assert sched["sched_interval_days"] < 2.0
+        assert sched["sched_urgency"] > 0.0
 
-
-# ══════════════════════════════════════════════════════════════
-#  GoalAlignment operations 测试
-# ══════════════════════════════════════════════════════════════
-
-class TestGoalAlignmentOperations:
-    """update_goal_alignment / shortest_path_to_goals"""
-
-    @pytest.fixture
-    def reg_with_goal_ops(self, reg):
-        from app.domain.cognitive.operations.goal_alignment_operations import (
-            update_goal_alignment,
-            shortest_path_to_goals,
+    def test_update_scheduling_secretary_adjustment(self, reg_with_scheduling_ops):
+        now = 1000.0
+        base = reg_with_scheduling_ops.execute(
+            "update_scheduling",
+            scheduling_state={},
+            belief_state={"belief_alpha": 5.0, "belief_beta": 5.0},
+            last_practiced=now,
+            adjustment_factor=1.0,
+            now=now,
         )
-
-        reg.register("update_goal_alignment", "目标对齐", params_schema={})(update_goal_alignment)
-        reg.register("shortest_path_to_goals", "最短路径", params_schema={})(shortest_path_to_goals)
-        return reg
-
-    def test_shortest_path(self, reg_with_goal_ops):
-        edges = [("a", "b"), ("b", "c")]
-        result = reg_with_goal_ops.execute(
-            "shortest_path_to_goals",
-            start_node="a",
-            goal_nodes=["c"],
-            edges=edges,
+        adjusted = reg_with_scheduling_ops.execute(
+            "update_scheduling",
+            scheduling_state={},
+            belief_state={"belief_alpha": 5.0, "belief_beta": 5.0},
+            last_practiced=now,
+            adjustment_factor=2.0,
+            now=now,
         )
-        assert result["min_distance"] == 2
-
-    def test_update_goal_alignment(self, reg_with_goal_ops):
-        result = reg_with_goal_ops.execute(
-            "update_goal_alignment",
-            goal_alignment_state={},
-            goal_distances={"goal1": 1, "goal2": 3},
-        )
-        assert result["goal_alignment_after"]["goal_distance"] == 1
+        assert adjusted["scheduling_after"]["sched_interval_days"] > base["scheduling_after"]["sched_interval_days"]
 
 
 # ══════════════════════════════════════════════════════════════
@@ -339,18 +399,20 @@ class TestDiscover:
         reg = CognitiveOperationRegistry()
         count = reg.discover([ops_dir])
 
-        # discover 返回成功加载的 *_operations.py 文件数（当前包含 12 个文件）
+        # discover 返回成功加载的 *_operations.py 文件数
         assert count >= 10
 
         # 操作注册在全局单例上
         global_reg = reg_mod.get_registry()
         operation_names = {op.name for op in global_reg._operations.values()}
         for name in (
-            "bkt_update",
-            "bkt_decay",
+            "belief_update",
+            "belief_decay",
+            "shrinkage_prior_apply",
+            "graph_propagate",
+            "update_scheduling",
             "activation_update",
             "update_trend",
-            "update_scheduling",
             "update_goal_alignment",
             "shortest_path_to_goals",
         ):

@@ -80,20 +80,56 @@ class ProjectionBuilder:
 
         proj_dict = self._projection_to_dict(projection)
 
-        # 1. BKT
-        bkt_result = self._registry.execute(
-            "bkt_update",
-            bkt_state=proj_dict,
+        # 1. Beta 信念更新（观测参数）
+        belief_before = {
+            k: proj_dict.get(k, 0.0)
+            for k in (
+                "belief_alpha",
+                "belief_beta",
+                "belief_evidence_count",
+                "belief_last_updated",
+                "total_information_gain",
+                "stability_factor",
+                "forgetting_rate",
+                "independent_evidence_weight",
+            )
+        }
+        belief_result = self._registry.execute(
+            "belief_update",
+            belief_state=belief_before,
             success=event.success,
             difficulty=event.difficulty,
             weight=event.weight,
             now=event.timestamp,
         )
-        self._apply_result(projection, bkt_result["bkt_after"])
-        proficiency = bkt_result["bkt_after"]["bkt_proficiency"]
+        self._apply_result(projection, belief_result["belief_after"])
+        observed_belief = belief_result["belief_after"]
 
-        # 2. Activation
-        # 收集邻居激活（简化： prerequisite / associate 边）
+        # 2. 收缩先验：若有父节点，计算 effective belief 用于下游
+        effective_belief = dict(observed_belief)
+        node_meta = self._entity_repo.get(event.user_id, event.node_id)
+        parent_projection = None
+        if node_meta and node_meta.parent_id:
+            parent_projection = self._projection_repo.get(node_meta.parent_id)
+            if parent_projection:
+                parent_dict = self._projection_to_dict(parent_projection)
+                shrinkage_result = self._registry.execute(
+                    "shrinkage_prior_apply",
+                    child_belief_state=observed_belief,
+                    parent_belief_state={
+                        k: parent_dict.get(k, 0.0)
+                        for k in ("belief_alpha", "belief_beta", "belief_evidence_count")
+                    },
+                )
+                effective_belief = shrinkage_result["effective_belief"]
+        proficiency = effective_belief["proficiency"]
+
+        # 3. 图传播：把本次更新量沿边传播给邻居
+        delta_alpha = observed_belief["belief_alpha"] - belief_before["belief_alpha"]
+        delta_beta = observed_belief["belief_beta"] - belief_before["belief_beta"]
+        self._propagate_to_neighbors(event, delta_alpha, delta_beta)
+
+        # 4. Activation
         neighbor_edges = self._edge_repo.list_for_node(
             event.user_id, event.node_id
         )
@@ -112,9 +148,7 @@ class ProjectionBuilder:
             "activation_update",
             activation_state=proj_dict,
             event_timestamp=event.timestamp,
-            neighbor_activations=[
-                p.act_base_level for p in neighbor_projs
-            ],
+            neighbor_activations=[p.act_base_level for p in neighbor_projs],
             neighbor_strengths=[
                 e.strength for e in neighbor_edges
                 if e.source_id in neighbor_ids or e.target_id in neighbor_ids
@@ -123,7 +157,7 @@ class ProjectionBuilder:
         )
         self._apply_result(projection, act_result["activation_after"])
 
-        # 3. Trend
+        # 5. Trend
         trend_result = self._registry.execute(
             "update_trend",
             trend_state=proj_dict,
@@ -133,7 +167,7 @@ class ProjectionBuilder:
         )
         self._apply_result(projection, trend_result["trend_after"])
 
-        # 4. Metacognition
+        # 6. Metacognition
         if event.confidence_before is not None:
             meta_result = self._registry.execute(
                 "update_metacognition",
@@ -144,7 +178,7 @@ class ProjectionBuilder:
             )
             self._apply_result(projection, meta_result["metacognition_after"])
 
-        # 5. Engagement
+        # 7. Engagement
         eng_result = self._registry.execute(
             "update_engagement",
             engagement_state=proj_dict,
@@ -155,7 +189,7 @@ class ProjectionBuilder:
         )
         self._apply_result(projection, eng_result["engagement_after"])
 
-        # 6. Prediction（基于 prerequisite 前序节点）
+        # 8. Prediction（基于 prerequisite 前序节点）
         prereq_edges = self._edge_repo.list_incoming(
             event.user_id, event.node_id, edge_type="prerequisite"
         )
@@ -168,12 +202,14 @@ class ProjectionBuilder:
             "update_prediction",
             prediction_state=proj_dict,
             observed_proficiency=proficiency,
-            predecessor_proficiencies=[p.bkt_proficiency for p in prereq_projs],
+            predecessor_proficiencies=[
+                self._belief_proficiency(p) for p in prereq_projs
+            ],
             predecessor_strengths=[e.strength for e in prereq_edges],
         )
         self._apply_result(projection, pred_result["prediction_after"])
 
-        # 7. ErrorCluster（答错时）
+        # 9. ErrorCluster（答错时）
         if not event.success:
             error_type = "practice_error"
             if event.error_embedding:
@@ -186,26 +222,24 @@ class ProjectionBuilder:
                 metadata={"last_event_id": event.id},
             )
 
-        # 8. Scheduling
-        node_meta = self._entity_repo.get(event.user_id, event.node_id)
+        # 10. Scheduling（基于 effective belief 的不确定性）
         _, successful_reviews = self._event_repo.count_practice_events_for_node(
             event.user_id, event.node_id
         )
         sched_result = self._registry.execute(
             "update_scheduling",
             scheduling_state=proj_dict,
-            proficiency=proficiency,
-            stability=trend_result["trend_after"].get("trend_stability", 0.5),
-            stagnation_days=trend_result["trend_after"].get("trend_stagnation_days", 0.0),
-            is_core=node_meta.is_core if node_meta else False,
-            goal_distance=proj_dict.get("goal_distance", -1),
+            belief_state=effective_belief,
             last_practiced=event.timestamp,
             successful_reviews=successful_reviews,
+            is_core=node_meta.is_core if node_meta else False,
+            goal_distance=proj_dict.get("goal_distance", -1),
+            stagnation_days=trend_result["trend_after"].get("trend_stagnation_days", 0.0),
             now=event.timestamp,
         )
         self._apply_result(projection, sched_result["scheduling_after"])
 
-        # 9. DeepProcessing 检查
+        # 11. DeepProcessing 检查
         dp_check = self._registry.execute(
             "check_deep_processing_trigger",
             proficiency=proficiency,
@@ -231,10 +265,78 @@ class ProjectionBuilder:
                 prompt=task["task"]["prompt"],
             )
 
-        # 10. Composition：同 session 内共现且熟练的原子节点尝试形成组块
+        # 12. Composition：同 session 内共现且熟练的原子节点尝试形成组块
         self._update_composition(event, projection)
 
         self._projection_repo.upsert(projection)
+
+    def _propagate_to_neighbors(
+        self,
+        event,
+        delta_alpha: float,
+        delta_beta: float,
+    ) -> None:
+        """将信念更新量沿认知边传播到邻居节点。"""
+        edges = self._edge_repo.list_for_node(event.user_id, event.node_id)
+        if not edges:
+            return
+
+        edge_dicts = [
+            {
+                "source_id": e.source_id,
+                "target_id": e.target_id,
+                "edge_type": e.edge_type,
+                "edge_weight": e.edge_weight,
+                "edge_distance_decay": e.edge_distance_decay,
+                "max_propagation_hops": e.max_propagation_hops,
+                "strength": e.strength,
+            }
+            for e in edges
+        ]
+
+        neighbor_ids = set()
+        for e in edges:
+            neighbor_ids.add(e.source_id if e.source_id != event.node_id else e.target_id)
+
+        neighbor_belief_states = {}
+        for nid in neighbor_ids:
+            np = self._projection_repo.get(nid)
+            if np is None:
+                continue
+            nd = self._projection_to_dict(np)
+            neighbor_belief_states[nid] = {
+                "belief_alpha": nd.get("belief_alpha", 1.0),
+                "belief_beta": nd.get("belief_beta", 1.0),
+                "independent_evidence_weight": nd.get("independent_evidence_weight", 1.0),
+            }
+
+        propagation_result = self._registry.execute(
+            "graph_propagate",
+            source_node_id=event.node_id,
+            delta_alpha=delta_alpha,
+            delta_beta=delta_beta,
+            edges=edge_dicts,
+            neighbor_belief_states=neighbor_belief_states,
+        )
+
+        for update in propagation_result["propagation_after"]["updates"]:
+            neighbor_proj = self._projection_repo.get(update["node_id"])
+            if neighbor_proj is None:
+                # 自动为邻居初始化投影
+                neighbor_proj = self._projection_repo.get_or_create(
+                    event.user_id, update["node_id"]
+                )
+            nd = self._projection_to_dict(neighbor_proj)
+            new_alpha = max(0.1, nd.get("belief_alpha", 1.0) + update["delta_alpha"])
+            new_beta = max(0.1, nd.get("belief_beta", 1.0) + update["delta_beta"])
+            self._apply_result(
+                neighbor_proj,
+                {
+                    "belief_alpha": round(new_alpha, 4),
+                    "belief_beta": round(new_beta, 4),
+                },
+            )
+            self._projection_repo.upsert(neighbor_proj)
 
     def _update_composition(self, event, projection) -> None:
         """检查当前事件是否与同 session 其他原子节点形成组块。"""
@@ -286,7 +388,7 @@ class ProjectionBuilder:
             formation = self._registry.execute(
                 "check_chunk_formation",
                 co_occurrence_count=co_occurrence_count,
-                member_proficiencies=[p.bkt_proficiency for p in member_projs],
+                member_proficiencies=[self._belief_proficiency(p) for p in member_projs],
                 member_stabilities=[p.trend_stability for p in member_projs],
             )
             status = formation["chunking_status"]
@@ -316,8 +418,10 @@ class ProjectionBuilder:
         now = time.time()
         proj_dict = self._projection_to_dict(projection)
 
-        bkt_result = self._registry.execute("bkt_decay", bkt_state=proj_dict, now=now)
-        self._apply_result(projection, bkt_result["bkt_after"])
+        belief_result = self._registry.execute(
+            "belief_decay", belief_state=proj_dict, now=now
+        )
+        self._apply_result(projection, belief_result["belief_after"])
 
         act_result = self._registry.execute(
             "activation_decay", activation_state=proj_dict, now=now
@@ -340,3 +444,13 @@ class ProjectionBuilder:
                 continue
             if hasattr(projection, key):
                 setattr(projection, key, value)
+
+    @staticmethod
+    def _belief_proficiency(projection) -> float:
+        """从投影的 Beta 参数计算掌握度点估计。"""
+        if projection is None:
+            return 0.5
+        alpha = getattr(projection, "belief_alpha", 1.0)
+        beta = getattr(projection, "belief_beta", 1.0)
+        total = alpha + beta
+        return alpha / total if total > 0 else 0.5
