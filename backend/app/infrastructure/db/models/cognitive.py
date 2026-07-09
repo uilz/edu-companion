@@ -205,7 +205,7 @@ class CognitiveEventORM(Base):
     __tablename__ = "cognitive_events"
 
     id: Mapped[str] = mapped_column(
-        String(32), primary_key=True, default=lambda: _new_id("ce")
+        String(64), primary_key=True, default=lambda: _new_id("ce")
     )
     user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
@@ -290,7 +290,7 @@ class CognitiveNodeProjectionORM(Base):
     goal_on_critical_path: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # Composition
-    comp_chunk_id: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    comp_chunk_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     comp_chunking_status: Mapped[str] = mapped_column(String(16), nullable=False, default="none")
 
     # Prediction
