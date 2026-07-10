@@ -308,47 +308,6 @@ class AppContainer:
                 logger.debug("MessageClassified handler failed", exc_info=True)
         bus.subscribe("MessageClassified", _on_message_classified)
 
-        # PracticeSubmitted → 认知节点信念更新 (贝叶斯)
-        async def _on_practice_submitted(event: DomainEvent) -> None:
-            from shared.events import PracticeSubmitted
-            if not isinstance(event, PracticeSubmitted):
-                return
-            import time
-            try:
-                from app.domain.cognitive import get_repo
-                from app.domain.cognitive.models import CognitiveNode
-                repo = get_repo()
-                is_correct = event.correctness >= 0.5
-                now = time.time()
-                updated = 0
-                for nid in event.atom_node_ids:
-                    if not nid:
-                        continue
-                    node = repo.get_node(nid, event.user_id)
-                    if node is None:
-                        node = CognitiveNode(id=nid, label=nid, level="atom")
-                    belief = node.belief
-                    if is_correct:
-                        belief.alpha = float(belief.alpha) + 1.0
-                    else:
-                        belief.beta = float(belief.beta) + 1.0
-                    alpha, beta = float(belief.alpha), float(belief.beta)
-                    belief.proficiency_mean = max(0.0, min(1.0, alpha / (alpha + beta)))
-                    belief.peak_proficiency = max(float(belief.peak_proficiency), belief.proficiency_mean)
-                    belief.last_updated = now
-                    ps = node.practice_summary
-                    ps.total_attempts = int(ps.total_attempts) + 1
-                    if is_correct:
-                        ps.correct_attempts = int(ps.correct_attempts) + 1
-                    ps.total_time_spent = float(ps.total_time_spent) + (event.latency_ms / 1000.0)
-                    ps.last_practiced = now
-                    repo.upsert_node(node, event.user_id)
-                    updated += 1
-                logger.debug("PracticeSubmitted 信念更新: user=%s nodes=%d correct=%s", event.user_id, updated, is_correct)
-            except Exception:
-                logger.debug("PracticeSubmitted handler failed", exc_info=True)
-        bus.subscribe("PracticeSubmitted", _on_practice_submitted)
-
         # NodeCreated → 波纹边检测 + 提案生成
         async def _on_node_created(event: DomainEvent) -> None:
             from shared.events import NodeCreated
