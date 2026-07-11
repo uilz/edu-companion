@@ -10,35 +10,30 @@ interface BadgeProps {
   children?: ReactNode;
 }
 
-const VARIANT_CLS: Record<BadgeVariant, string> = {
-  default: 'swiss-badge',
-  accent: 'swiss-badge swiss-badge-accent',
-  success: 'swiss-badge',
-  warning: 'swiss-badge',
-  danger: 'swiss-badge',
-  info: 'swiss-badge',
-};
-
-const VARIANT_STYLE: Record<BadgeVariant, string> = {
-  default: '',
-  accent: '',
-  success: 'text-success border-success',
-  warning: 'text-warning border-warning',
-  danger: 'text-danger border-danger',
-  info: 'text-info border-info',
-};
-
 /**
- * Badge — 标签徽章
+ * Badge — 标签徽章（Design System 1.0）
  *
- * 使用 Design Token 语义色。命名导出。
+ * 使用语义色 + swiss-badge 基础样式。
+ * variant:
+ * - default: 灰底边框，中性信息
+ * - accent: 主强调色软背景
+ * - success / warning / danger / info: 对应状态色
  */
 export function Badge({ variant = 'default', className = '', children }: BadgeProps) {
-  return (
-    <span className={`${VARIANT_CLS[variant]} ${VARIANT_STYLE[variant]} ${className}`}>
-      {children}
-    </span>
-  );
+  const variantCls =
+    variant === 'accent'
+      ? 'swiss-badge swiss-badge-accent'
+      : variant === 'success'
+        ? 'swiss-badge border-success/40 text-success'
+        : variant === 'warning'
+          ? 'swiss-badge border-warning/40 text-warning'
+          : variant === 'danger'
+            ? 'swiss-badge border-danger/40 text-danger'
+            : variant === 'info'
+              ? 'swiss-badge border-info/40 text-info'
+              : 'swiss-badge';
+
+  return <span className={`${variantCls} ${className}`}>{children}</span>;
 }
 
 export default Badge;

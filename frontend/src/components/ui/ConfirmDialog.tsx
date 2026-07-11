@@ -1,12 +1,22 @@
 'use client';
 
-import { useEffect, useRef, ReactNode } from 'react';
+import { type ReactNode } from 'react';
+import {
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogContent,
+  DialogFooter,
+  DialogCloseButton,
+} from './Dialog';
+import { Button } from './Button';
 
 interface ConfirmDialogProps {
   open?: boolean;
   title?: string;
   message?: string;
-  children?: ReactNode;       // 支持 children 作为消息内容
+  children?: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   variant?: 'danger' | 'default';
@@ -15,9 +25,9 @@ interface ConfirmDialogProps {
 }
 
 /**
- * ConfirmDialog — 确认弹窗组件
- * 使用 Design Token 语义色
- * 支持 title + message（按props）或 children（作为消息内容）
+ * ConfirmDialog — 确认弹窗组件（Design System 1.0）
+ *
+ * 基于通用 Dialog 组件，用于二次确认场景。
  */
 export function ConfirmDialog({
   open = true,
@@ -30,41 +40,23 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [open, onCancel]);
-
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onCancel} />
-      <div
-        ref={dialogRef}
-        className="relative z-10 bg-surface-elevated rounded-xl shadow-md p-6 max-w-md w-full mx-4"
-      >
-        <h3 className="text-lg font-semibold text-ink-primary mb-2">{title}</h3>
-        <p className="text-sm text-ink-secondary mb-6">{message || children}</p>
-        <div className="flex justify-end gap-3">
-          <button onClick={onCancel} className="swiss-btn swiss-btn-ghost">
-            {cancelLabel}
-          </button>
-          <button
-            onClick={onConfirm}
-            className={`swiss-btn ${variant === 'danger' ? 'bg-danger text-white hover:opacity-90' : 'swiss-btn-primary'}`}
-          >
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
+    <Dialog open={open} onClose={onCancel} className="max-w-md">
+      <DialogCloseButton />
+      <DialogHeader>
+        <DialogTitle>{title}</DialogTitle>
+        <DialogDescription>{message || children}</DialogDescription>
+      </DialogHeader>
+      <DialogContent />
+      <DialogFooter>
+        <Button variant="ghost" onClick={onCancel}>
+          {cancelLabel}
+        </Button>
+        <Button variant={variant === 'danger' ? 'danger' : 'primary'} onClick={onConfirm}>
+          {confirmLabel}
+        </Button>
+      </DialogFooter>
+    </Dialog>
   );
 }
 

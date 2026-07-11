@@ -11,17 +11,18 @@ interface CardProps {
 }
 
 /**
- * Card — 通用卡片组件
+ * Card — 通用卡片组件（Design System 1.0）
  *
  * 提供两种 API：
- * 1. 简单默认：<Card title="标题">内容</Card>（向后兼容 20+ 旧页面）
- * 2. 复合组件：<Card><CardHeader><CardTitle>...</CardTitle></CardHeader><CardContent>...</CardContent></Card>
- *    （用于新页面如 flashcard/stats）
+ * 1. 简单默认：<Card title="标题">内容</Card>（向后兼容旧页面）
+ * 2. 复合组件：<Card><CardHeader><CardTitle>...</CardTitle><CardDescription>...</CardDescription></CardHeader><CardContent>...</CardContent></Card>
+ *
+ * 默认圆角 12px（rounded-lg），背景 surface，边框 divider。
  */
 export default function Card({ title, children, className = '', accent = false }: CardProps) {
   return (
     <div
-      className={`border bg-surface p-5 sm:p-6 rounded-md transition-all duration-200
+      className={`border bg-surface p-5 sm:p-6 rounded-lg transition-all duration-normal
         ${accent
           ? 'border-divider hover:border-accent'
           : 'border-divider'}
@@ -54,7 +55,7 @@ export function CardHeader({ className = '', children, ...rest }: DivProps) {
 export function CardTitle({ className = '', children, ...rest }: DivProps) {
   return (
     <h3
-      className={`text-base font-semibold leading-none tracking-tight text flex items-center gap-2 ${className}`}
+      className={`text-base font-semibold leading-none tracking-tight text-ink-primary flex items-center gap-2 ${className}`}
       {...rest}
     >
       {children}
@@ -64,7 +65,7 @@ export function CardTitle({ className = '', children, ...rest }: DivProps) {
 
 export function CardDescription({ className = '', children, ...rest }: DivProps) {
   return (
-    <p className={`text-sm text-muted ${className}`} {...rest}>
+    <p className={`text-sm text-ink-secondary ${className}`} {...rest}>
       {children}
     </p>
   );

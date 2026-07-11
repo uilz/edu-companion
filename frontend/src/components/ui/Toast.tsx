@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Toast — 通用轻量操作反馈提示
+ * Toast — 通用轻量操作反馈提示（Design System 1.0）
  *
  * 用于：复制成功、删除成功、重命名成功、保存成功等用户级操作反馈。
  * 区别于 ActionFeedbackToast（那是 Secretary 提案执行结果专用）。
@@ -11,6 +11,7 @@
  * - 自动消失（默认 2.5s）
  * - 4 种类型：success / info / warning / error
  * - 多条堆叠显示，最多 5 条
+ * - 固定位置：桌面端右下角，移动端底部居中
  */
 
 import { create } from "zustand";
@@ -45,7 +46,6 @@ export const useToastStore = create<ToastState>((set, get) => ({
     const t: Toast = { duration: DEFAULT_DURATION, ...toast, id };
     set((s) => {
       const next = [...s.toasts, t];
-      // 限制最多 MAX_TOASTS 条
       return { toasts: next.length > MAX_TOASTS ? next.slice(-MAX_TOASTS) : next };
     });
     return id;
@@ -123,9 +123,9 @@ function ToastItem({ t }: { t: Toast }) {
     >
       <span className={`flex-shrink-0 ${c.text} mt-0.5`}>{c.icon}</span>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text leading-snug">{t.title}</div>
+        <div className="text-sm font-medium text-ink-primary leading-snug">{t.title}</div>
         {t.description && (
-          <div className="mt-0.5 text-xs text-secondary leading-relaxed">
+          <div className="mt-0.5 text-xs text-ink-secondary leading-relaxed">
             {t.description}
           </div>
         )}
@@ -133,7 +133,7 @@ function ToastItem({ t }: { t: Toast }) {
       <button
         type="button"
         onClick={() => remove(t.id)}
-        className="flex-shrink-0 p-0.5 text-muted hover:text rounded"
+        className="flex-shrink-0 p-0.5 text-ink-muted hover:text-ink-primary rounded"
         aria-label="关闭"
         style={{ minWidth: 28, minHeight: 28 }}
       >
@@ -150,10 +150,10 @@ export function ToastHost() {
   return (
     <div
       data-testid="toast-host"
-      className="fixed bottom-4 right-4 z-[60] flex flex-col gap-2 pointer-events-none"
+      className="fixed bottom-4 right-4 left-4 sm:left-auto z-[60] flex flex-col gap-2 pointer-events-none items-center sm:items-end"
     >
       {toasts.map((t) => (
-        <div key={t.id} className="pointer-events-auto">
+        <div key={t.id} className="pointer-events-auto w-full sm:w-auto">
           <ToastItem t={t} />
         </div>
       ))}
