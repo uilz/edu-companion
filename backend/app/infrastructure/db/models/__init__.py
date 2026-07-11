@@ -11,6 +11,12 @@ from app.infrastructure.db.models.cognitive import (
     KnowledgeNodeORM,
     PracticeEventORM,
 )
+from app.infrastructure.db.models.knowledge_tree import (
+    KnowledgeTreeORM,
+    TreeNodeORM,
+    TreeEdgeORM,
+    TreeNodeCognitiveLinkORM,
+)
 
 __all__ = [
     "Base",
@@ -22,4 +28,8 @@ __all__ = [
     "CognitiveNodeErrorClusterORM",
     "CognitiveNodeDeepProcessingORM",
     "CognitiveNodeCompositionMemberORM",
+    "KnowledgeTreeORM",
+    "TreeNodeORM",
+    "TreeEdgeORM",
+    "TreeNodeCognitiveLinkORM",
 ]

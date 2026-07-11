@@ -50,6 +50,7 @@ from app.infrastructure.scheduler.events_api import router as events_router, _to
 from app.api.knowledge_tree import router as knowledge_tree_router
 from app.api.knowledge_tree_sse import router as knowledge_tree_sse_router
 from app.api.knowledge_tree_ai import router as knowledge_tree_ai_router
+from app.api.trees import router as trees_router
 
 # 项目工作台
 from app.api.project import router as project_router
@@ -522,6 +523,7 @@ app.include_router(_tools_router)
 app.include_router(knowledge_tree_router)
 app.include_router(knowledge_tree_sse_router)
 app.include_router(knowledge_tree_ai_router)
+app.include_router(trees_router)
 
 # 知识图谱 (硬编码 / 动态加载)
 from app.api.knowledge.knowledge import router as knowledge_graph_router
