@@ -17,6 +17,7 @@ from app.infrastructure.db.models.knowledge_tree import (
     TreeEdgeORM,
     TreeNodeCognitiveLinkORM,
 )
+from app.infrastructure.db.models.learning_activity import LearningActivityORM
 
 __all__ = [
     "Base",
@@ -32,4 +33,5 @@ __all__ = [
     "TreeNodeORM",
     "TreeEdgeORM",
     "TreeNodeCognitiveLinkORM",
+    "LearningActivityORM",
 ]

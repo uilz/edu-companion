@@ -492,6 +492,15 @@ class AppContainer:
                 logger.debug("DiagnosticSignal builder failed", exc_info=True)
         bus.subscribe("PracticeAnswerBehaviorRecorded", _on_practice_behavior_recorded)
 
+        # ═══ Phase 2: 跨壳学习活动流 ═══
+        try:
+            from app.application.handlers.learning_activity_handler import (
+                learning_activity_event_handler,
+            )
+            learning_activity_event_handler.subscribe(bus)
+        except Exception:
+            logger.debug("LearningActivityEventHandler 订阅失败", exc_info=True)
+
         # ── EventSystem: 工作记忆生命周期 ──
         async def _on_session_completed(event: DomainEvent) -> None:
             from shared.events import SessionCompleted

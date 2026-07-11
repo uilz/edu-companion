@@ -58,6 +58,9 @@ from app.api.project import router as project_router
 # 规划模块（ADR 0006）
 from app.api.planning import router as planning_router
 
+# 学习活动流（Phase 2 统一设计系统）
+from app.api.learning_activity import router as learning_activity_router
+
 # 阅读模块（ADR 0003）
 from app.api.reading import router as reading_router
 
@@ -531,6 +534,9 @@ app.include_router(knowledge_graph_router)
 
 # 规划（ADR 0006）
 app.include_router(planning_router)
+
+# 学习活动流（Phase 2 统一设计系统）
+app.include_router(learning_activity_router)
 
 # 阅读（ADR 0003）
 app.include_router(reading_router)
