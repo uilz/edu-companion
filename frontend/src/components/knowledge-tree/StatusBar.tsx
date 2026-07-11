@@ -1,7 +1,14 @@
 "use client";
 
-import type { StatsInfo } from "@/hooks/graph/useGraphCanvas";
 import { getMasteryColor } from "@/lib/types/graph-types";
+
+export interface StatsInfo {
+  total: number;
+  mastered: number;
+  learning: number;
+  untouched: number;
+  avgMastery: number;
+}
 
 export default function StatusBar({
   stats, onStatClick, activeFilter,

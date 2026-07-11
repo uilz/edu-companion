@@ -1,27 +1,25 @@
 "use client";
 
-import React, { useState, useMemo, useCallback, useRef } from "react";
-import { Plus, X, Check, AlertCircle, Sparkles, Loader2, ZoomIn, ZoomOut, Maximize, RefreshCw } from "lucide-react";
-import type { GraphData, GraphNode } from "@/lib/types/graph-types";
-import { filterByLevel, subtreeFilter, findNodeById, getNodeAncestors } from "@/lib/types/graph-types";
-import FocusGraph from "@/components/graph/graphs/FocusGraph";
-import ForceGraph from "@/components/graph/graphs/ForceGraph";
-import DAGGraph from "@/components/graph/graphs/DAGGraph";
-import NodeDetailPanel from "@/components/graph/panels/NodeDetailPanel";
-import NodeDetailPopup from "@/components/graph/panels/NodeDetailPopup";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Plus, X, Check, AlertCircle, Sparkles, Loader2, ZoomIn, ZoomOut,
+  RefreshCw, Brain, Trash2,
+} from "lucide-react";
+import { useKnowledgeTree } from "@/hooks/knowledge-tree/useKnowledgeTree";
+import KnowledgeTreeGraph from "./KnowledgeTreeGraph";
 import LayerPanel from "./LayerPanel";
-import DialogContainer from "./DialogContainer";
 import ContextMenu, { getDefaultContextMenuItems } from "./ContextMenu";
-import { TopBar, StatusBar, FloatDialogWrapper } from "./index";
+import StatusBar from "./StatusBar";
+import TreeNodeDetailPanel from "./TreeNodeDetailPanel";
 import ResizeHandle from "@/components/ui/ResizeHandle";
-import { useTreeLayout } from "@/hooks/graph/useTreeLayout";
-import { useGraphCanvas } from "@/hooks/graph/useGraphCanvas";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import EmojiPicker from "@/components/ui/EmojiPicker";
-import { authedFetch } from "@/lib/api/api";
-import { useIsMobile, useIsTablet } from "@/hooks/useMediaQuery";
+import type { TreeNode, TreeEdge } from "@/lib/api/knowledge-trees-api";
+import type { GraphData, GraphNode, GraphEdge } from "@/lib/types/graph-types";
+import { cognitiveSearchApi } from "@/lib/api/knowledge-trees-api";
 
-// ── 导出类型（供外部引用） ──
-export type GraphMode = "mindmap" | "force" | "dag";
+export type GraphMode = "tree" | "graph" | "mindmap" | "force" | "dag";
+
 export interface DialogState {
   type: "normal" | "tree_exploration" | "temporary";
   conversationId: string;
@@ -30,9 +28,80 @@ export interface DialogState {
   boundNode?: GraphNode | null;
 }
 
-// ══════════════════════════════════════════════════════════════
-//  子组件 — Loading / Empty / Error / NoPartition
-// ══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// 适配：新 TreeNode/TreeEdge → 旧 GraphData（用于层级面板等）
+// ═══════════════════════════════════════════════════════════════
+
+function treeNodeToGraphNode(node: TreeNode): GraphNode {
+  const cv = node.cognitive_view;
+  return {
+    id: node.id,
+    label: node.label,
+    description: node.brief || "",
+    level: node.node_type === "topic" ? "domain" : node.node_type === "concept" ? "concept" : "atom",
+    mastery: cv?.proficiency ?? 0,
+    trend: "stable",
+    priority: Math.round((cv?.urgency ?? 0) * 10),
+    tags: node.tags || [],
+    created_by: "user",
+    children: node.children_order || node.children_ids || [],
+    parent: node.parent_id || undefined,
+    is_visible: node.status !== "deleted",
+    node_type: node.node_type,
+    path_id: node.tree_id,
+    emoji: node.emoji,
+    color: cv?.display_color || node.color,
+    brief: node.brief,
+    conv_ids: [],
+  };
+}
+
+function treeEdgeToGraphEdge(edge: TreeEdge): GraphEdge {
+  return {
+    id: edge.id,
+    source: edge.source_node_id,
+    target: edge.target_node_id,
+    label: edge.edge_type,
+    relation: edge.edge_type,
+    strength: edge.strength,
+  };
+}
+
+function buildGraphData(nodes: TreeNode[], edges: TreeEdge[]): GraphData {
+  return {
+    nodes: nodes.map(treeNodeToGraphNode),
+    edges: edges.map(treeEdgeToGraphEdge),
+  };
+}
+
+function buildStats(nodes: TreeNode[]) {
+  const total = nodes.length;
+  if (total === 0) {
+    return { total: 0, mastered: 0, learning: 0, untouched: 0, avgMastery: 0 };
+  }
+  let mastered = 0;
+  let learning = 0;
+  let untouched = 0;
+  let sum = 0;
+  nodes.forEach((n) => {
+    const p = n.cognitive_view?.proficiency ?? 0;
+    sum += p;
+    if (p >= 0.8) mastered++;
+    else if (p >= 0.05) learning++;
+    else untouched++;
+  });
+  return {
+    total,
+    mastered,
+    learning,
+    untouched,
+    avgMastery: sum / total,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 子组件
+// ═══════════════════════════════════════════════════════════════
 
 function LoadingSkeleton() {
   return (
@@ -53,21 +122,7 @@ function LoadingSkeleton() {
   );
 }
 
-function EmptyState({ onGenerate, onLoad }: { onGenerate: () => Promise<boolean>; onLoad: () => void }) {
-  const [generating, setGenerating] = useState(false);
-  const [genError, setGenError] = useState<string | null>(null);
-  const handleGenerate = async () => {
-    setGenerating(true);
-    setGenError(null);
-    try {
-      const ok = await onGenerate();
-      if (!ok) throw new Error("生成失败");
-      onLoad();
-    } catch (e: unknown) {
-      setGenError(e instanceof Error ? e.message : "生成失败，请重试");
-    }
-    setGenerating(false);
-  };
+function EmptyState({ onCreateTree }: { onCreateTree: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[500px] gap-6 px-4">
       <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-accent/10 to-accent/5 flex items-center justify-center shadow-sm border border">
@@ -76,135 +131,13 @@ function EmptyState({ onGenerate, onLoad }: { onGenerate: () => Promise<boolean>
         </svg>
       </div>
       <div className="text-center max-w-sm space-y-2">
-        <h3 className="text-lg font-semibold text">该分区暂无知识树</h3>
-        <p className="text-sm text-muted leading-relaxed">学习分区创建后，知识树需要手动或通过 AI 生成。</p>
+        <h3 className="text-lg font-semibold text">暂无知识树</h3>
+        <p className="text-sm text-muted leading-relaxed">创建一个知识树，开始结构化你的学习。</p>
       </div>
-      {genError && <div className="px-4 py-2.5 rounded-lg bg-danger/5 border border-danger/20 text-xs text-danger max-w-sm">{genError}</div>}
-      <div className="flex items-center gap-3">
-        <button onClick={handleGenerate} disabled={generating}
-          className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium bg-accent text-white rounded-xl hover:opacity-90 disabled:opacity-50 transition-all shadow-sm">
-          {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-          AI 预生成知识树
-        </button>
-        <button onClick={onLoad}
-          className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium border border rounded-xl text-secondary hover:bg-surface transition-colors">
-          <RefreshCw size={14} /> 刷新
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function NoPartitionState({ onPartitionCreated, onStartTemporary }: {
-  onPartitionCreated: (id: string) => void;
-  onStartTemporary?: () => void;
-}) {
-  const [showCreate, setShowCreate] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newEmoji, setNewEmoji] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-
-  const handleCreate = async () => {
-    if (!newName.trim()) return;
-    setCreating(true); setCreateError(null);
-    try {
-      const res = await authedFetch(`/api/conversations/tree/partition`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName.trim(), emoji: newEmoji }),
-      });
-      if (!res.ok) throw new Error(`创建失败（${res.status}）`);
-      const data = await res.json();
-      const id = data.partition?.id;
-      if (!id) throw new Error("创建分区成功但未返回分区 ID");
-      onPartitionCreated(id);
-    } catch (e: unknown) {
-      setCreateError(e instanceof Error ? e.message : "创建分区失败，请重试");
-    }
-    setCreating(false);
-  };
-
-  const quickPresets = [
-    { name: "机器学习", emoji: "📐" }, { name: "Python 编程", emoji: "🐍" },
-    { name: "系统设计", emoji: "🔢" }, { name: "数据结构", emoji: "🗃️" },
-    { name: "数据科学", emoji: "⚛️" }, { name: "英语单词", emoji: "📖" },
-  ];
-
-  return (
-    <div className="flex flex-col items-center justify-center h-full min-h-[500px] gap-8 px-6">
-      <div className="relative">
-        <div className="w-32 h-32 rounded-3xl bg-gradient-to-br from-accent/15 to-accent/5 flex items-center justify-center shadow-sm border border">
-          <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" className="text-accent">
-            <circle cx="12" cy="5" r="2.5" strokeWidth="1.5"/><circle cx="5" cy="12" r="2.5" strokeWidth="1.5"/>
-            <circle cx="19" cy="12" r="2.5" strokeWidth="1.5"/><circle cx="8" cy="19" r="2.5" strokeWidth="1.5"/>
-            <circle cx="16" cy="19" r="2.5" strokeWidth="1.5"/>
-            <line x1="10" y1="7" x2="7" y2="10" strokeWidth="1.2"/><line x1="14" y1="7" x2="17" y2="10" strokeWidth="1.2"/>
-            <line x1="7" y1="14" x2="9" y2="17" strokeWidth="1.2"/><line x1="17" y1="14" x2="15" y2="17" strokeWidth="1.2"/>
-          </svg>
-        </div>
-        <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-success/30 animate-pulse" />
-        <div className="absolute -bottom-1 -left-1 w-3 h-3 rounded-full bg-accent/20" />
-      </div>
-      <div className="text-center max-w-md space-y-2">
-        <h3 className="text-xl font-semibold text tracking-tight">开始构建你的知识树</h3>
-        <p className="text-sm text-muted leading-relaxed">知识树是学习的大脑地图 — 将学科知识结构化，让 AI 帮你梳理脉络。</p>
-      </div>
-      {showCreate ? (
-        <div className="w-full max-w-sm bg-surface-elevated border border rounded-2xl shadow-md p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <div className="w-1 h-5 rounded-full bg-accent" />
-            <span className="text-sm font-semibold text">新建学习分区</span>
-          </div>
-          <div className="space-y-3">
-            <div>
-              <label className="text-[10px] font-medium text-muted uppercase tracking-wide">名称</label>
-              <input value={newName} onChange={e => setNewName(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleCreate()}
-                className="mt-1 w-full px-3 py-2 text-sm border border rounded-lg bg-page-secondary text placeholder:text-muted focus:outline-none focus:border-accent"
-                placeholder="例如：机器学习" autoFocus />
-            </div>
-            <EmojiPicker value={newEmoji} onChange={setNewEmoji} label="选择图标" />
-          </div>
-          {createError && <div className="px-3 py-2 rounded-lg bg-danger/5 border border-danger/20 text-[10px] text-danger">{createError}</div>}
-          <div className="flex items-center gap-2 pt-1">
-            <button onClick={handleCreate} disabled={creating || !newName.trim()}
-              className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium bg-accent text-white rounded-xl hover:opacity-90 disabled:opacity-40 transition-all shadow-sm">
-              {creating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} 创建并生成知识树
-            </button>
-            <button onClick={() => setShowCreate(false)}
-              className="px-4 py-2.5 text-sm font-medium border border rounded-xl text-muted hover:bg-surface-hover transition-colors">取消</button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex items-center gap-3">
-          <button onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium bg-accent text-white rounded-xl hover:opacity-90 transition-all shadow-sm">
-            <Plus size={16} /> 创建学习分区
-          </button>
-          {onStartTemporary && (
-            <button onClick={onStartTemporary}
-              className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium border border text-secondary rounded-xl hover:bg-surface transition-all">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> 临时对话
-            </button>
-          )}
-        </div>
-      )}
-      <div className="w-full max-w-lg">
-        <div className="flex items-center gap-2 mb-3">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-muted">
-            <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-          <span className="text-[11px] font-medium text-muted">快速开始模板</span>
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          {quickPresets.map(p => (
-            <button key={p.name} onClick={() => { setNewEmoji(p.emoji); setNewName(p.name); setShowCreate(true); }}
-              className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border bg-surface-elevated hover:border-accent hover:bg-accent/5 transition-all text-left">
-              <span className="text-base">{p.emoji}</span>
-              <span className="text-xs font-medium text">{p.name}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+      <button onClick={onCreateTree}
+        className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium bg-accent text-white rounded-xl hover:opacity-90 transition-all shadow-sm">
+        <Plus size={14} /> 创建知识树
+      </button>
     </div>
   );
 }
@@ -213,8 +146,7 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4 px-4">
       <div className="w-20 h-20 rounded-2xl bg-danger/5 border border-danger/10 flex items-center justify-center">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-danger">
-          <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+        <AlertCircle className="text-danger" size={32} />
       </div>
       <div className="text-center max-w-sm space-y-1">
         <h3 className="text-sm font-semibold text">加载失败</h3>
@@ -228,13 +160,8 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
   );
 }
 
-// ══════════════════════════════════════════════════════════════
-//  子组件 — ZoomControls / AddNodeDialog
-// ══════════════════════════════════════════════════════════════
-
-function ZoomControls({ zoomLevel, graphFullscreen, onZoomIn, onZoomOut, onReset, onToggleFullscreen }: {
-  zoomLevel: number; graphFullscreen: boolean;
-  onZoomIn: () => void; onZoomOut: () => void; onReset: () => void; onToggleFullscreen: () => void;
+function ZoomControls({ zoom, onZoomIn, onZoomOut, onReset }: {
+  zoom: number; onZoomIn: () => void; onZoomOut: () => void; onReset: () => void;
 }) {
   return (
     <div className="absolute bottom-4 right-4 flex items-center gap-0.5 p-1 rounded-xl z-20"
@@ -245,74 +172,53 @@ function ZoomControls({ zoomLevel, graphFullscreen, onZoomIn, onZoomOut, onReset
         border: "1px solid rgba(255,255,255,0.06)",
         boxShadow: "0 4px 24px rgba(0,0,0,0.3)",
       }}>
-      <button onClick={onZoomOut} disabled={zoomLevel <= 0.3}
-        className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/5 disabled:opacity-20 transition-all" title="缩小 (Ctrl+-)">
+      <button onClick={onZoomOut} disabled={zoom <= 0.3}
+        className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/5 disabled:opacity-20 transition-all">
         <ZoomOut size={14} />
       </button>
       <button onClick={onReset}
-        className="px-2 py-1 text-[10px] font-medium text-white/50 hover:text-white hover:bg-white/5 rounded-lg transition-all font-mono" title="重置缩放 (Ctrl+0)">
-        {Math.round(zoomLevel * 100)}%
+        className="px-2 py-1 text-[10px] font-medium text-white/50 hover:text-white hover:bg-white/5 rounded-lg transition-all font-mono">
+        {Math.round(zoom * 100)}%
       </button>
-      <button onClick={onZoomIn} disabled={zoomLevel >= 3}
-        className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/5 disabled:opacity-20 transition-all" title="放大 (Ctrl++)">
+      <button onClick={onZoomIn} disabled={zoom >= 3}
+        className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/5 disabled:opacity-20 transition-all">
         <ZoomIn size={14} />
-      </button>
-      <div className="w-px h-4 bg-white/[0.06] mx-0.5" />
-      <button onClick={onToggleFullscreen}
-        className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/5 transition-all" title={graphFullscreen ? "退出全屏" : "全屏"}>
-        <Maximize size={14} />
       </button>
     </div>
   );
 }
 
-function AddNodeDialog({ onClose, onAdd, graphData, label, setLabel, parentId, setParentId }: {
-  onClose: () => void; onAdd: () => void; graphData: GraphData | null;
-  label: string; setLabel: (v: string) => void; parentId: string; setParentId: (v: string) => void;
+function AddNodeDialog({
+  open, onClose, onAdd, nodes, parentId, setParentId,
+}: {
+  open: boolean; onClose: () => void; onAdd: (label: string) => void;
+  nodes: TreeNode[]; parentId: string | null; setParentId: (id: string | null) => void;
 }) {
-  const [loading, setLoading] = useState(false);
-
-  const handleAdd = async () => {
-    if (!label.trim() || loading) return;
-    setLoading(true);
-    // The actual add logic is in canvas.handleAddNode which reads from state
-    // This dialog is for UI only — the orchestrator uses inline state
-    onAdd();
-    setLoading(false);
-  };
-
+  const [label, setLabel] = useState("");
+  if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="bg-surface border border rounded-xl p-5 w-80 space-y-4 shadow-xl animate-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+      <div className="bg-surface border border rounded-xl p-5 w-80 space-y-4 shadow-xl">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center"><Plus size={14} className="text-accent" /></div>
-            <h3 className="text-sm font-semibold text">{parentId ? "添加子节点" : "添加根节点"}</h3>
-          </div>
-          <button onClick={onClose} className="p-1 rounded-md hover:bg-surface-hover transition-colors"><X size={14} className="text-muted" /></button>
+          <h3 className="text-sm font-semibold text">{parentId ? "添加子节点" : "添加根节点"}</h3>
+          <button onClick={onClose} className="p-1 rounded-md hover:bg-surface-hover"><X size={14} className="text-muted" /></button>
         </div>
         <div className="space-y-3">
-          <div>
-            <label className="block text-[10px] font-medium text-muted mb-1 uppercase tracking-wider">节点名称</label>
-            <input value={label} onChange={e => setLabel(e.target.value)}
-              placeholder="输入知识节点名称" autoFocus
-              className="w-full px-3 py-2 text-sm bg-page border border text rounded-lg focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30"
-              onKeyDown={e => { if (e.key === "Enter" && label.trim()) handleAdd(); if (e.key === "Escape") onClose(); }} />
-          </div>
-          <div>
-            <label className="block text-[10px] font-medium text-muted mb-1 uppercase tracking-wider">父节点</label>
-            <select value={parentId} onChange={e => setParentId(e.target.value)}
-              className="w-full px-3 py-2 text-xs bg-page border border text rounded-lg focus:outline-none focus:border-accent">
-              <option value="">无父节点（根节点）</option>
-              {graphData?.nodes?.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
-            </select>
-          </div>
+          <input value={label} onChange={e => setLabel(e.target.value)}
+            placeholder="输入节点名称" autoFocus
+            className="w-full px-3 py-2 text-sm bg-page border border text rounded-lg focus:outline-none focus:border-accent"
+            onKeyDown={e => { if (e.key === "Enter" && label.trim()) { onAdd(label.trim()); setLabel(""); } if (e.key === "Escape") onClose(); }} />
+          <select value={parentId ?? ""} onChange={e => setParentId(e.target.value || null)}
+            className="w-full px-3 py-2 text-xs bg-page border border text rounded-lg focus:outline-none focus:border-accent">
+            <option value="">无父节点（根节点）</option>
+            {nodes.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
+          </select>
         </div>
-        <div className="flex gap-2 justify-end pt-1">
-          <button onClick={onClose} className="px-3 py-1.5 text-xs border border rounded-lg text-muted hover:bg-surface-hover transition-colors">取消</button>
-          <button onClick={handleAdd} disabled={loading || !label.trim()}
-            className="px-3 py-1.5 text-xs bg-accent text-white rounded-lg hover:opacity-90 disabled:opacity-50 transition-colors flex items-center gap-1.5">
-            {loading ? <><Loader2 size={10} className="animate-spin" /> 添加中</> : <><Check size={12} /> 确认添加</>}
+        <div className="flex gap-2 justify-end">
+          <button onClick={onClose} className="px-3 py-1.5 text-xs border border rounded-lg text-muted hover:bg-surface-hover">取消</button>
+          <button onClick={() => { onAdd(label.trim()); setLabel(""); }} disabled={!label.trim()}
+            className="px-3 py-1.5 text-xs bg-accent text-white rounded-lg hover:opacity-90 disabled:opacity-50 flex items-center gap-1">
+            <Check size={12} /> 确认
           </button>
         </div>
       </div>
@@ -320,321 +226,348 @@ function AddNodeDialog({ onClose, onAdd, graphData, label, setLabel, parentId, s
   );
 }
 
-// ══════════════════════════════════════════════════════════════
-//  主组件 — 编排器
-// ══════════════════════════════════════════════════════════════
+function CognitiveLinkDialog({
+  open, onClose, onLink,
+}: {
+  open: boolean; onClose: () => void; onLink: (cognitiveNodeId: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<{ cognitive_node_id: string; label: string; level: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setQ("");
+    setResults([]);
+  }, [open]);
+
+  const search = useCallback(async () => {
+    if (!q.trim()) return;
+    setLoading(true);
+    try {
+      const res = await cognitiveSearchApi.search(q.trim(), 20);
+      setResults(res.nodes || []);
+    } catch {
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [q]);
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+      <div className="bg-surface border border rounded-xl p-5 w-96 space-y-4 shadow-xl">
+        <h3 className="text-sm font-semibold text">关联认知节点</h3>
+        <div className="flex gap-2">
+          <input value={q} onChange={e => setQ(e.target.value)}
+            placeholder="搜索认知节点…"
+            className="flex-1 px-3 py-2 text-sm bg-page border border text rounded-lg focus:outline-none focus:border-accent"
+            onKeyDown={e => e.key === "Enter" && search()} />
+          <button onClick={search} disabled={loading}
+            className="px-3 py-2 text-xs bg-accent text-white rounded-lg hover:opacity-90 disabled:opacity-50">
+            {loading ? <Loader2 size={12} className="animate-spin" /> : "搜索"}
+          </button>
+        </div>
+        <div className="max-h-[200px] overflow-y-auto space-y-1">
+          {results.map(r => (
+            <button key={r.cognitive_node_id} onClick={() => onLink(r.cognitive_node_id)}
+              className="w-full text-left px-3 py-2 text-xs rounded-lg hover:bg-accent/10 text border border-transparent hover:border-accent/30">
+              {r.label} <span className="text-muted ml-1">({r.level})</span>
+            </button>
+          ))}
+          {results.length === 0 && !loading && <div className="text-xs text-muted text-center py-4">输入关键词搜索</div>}
+        </div>
+        <button onClick={onClose} className="w-full px-3 py-2 text-xs border border rounded-lg text-muted hover:bg-surface-hover">取消</button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 主组件
+// ═══════════════════════════════════════════════════════════════
 
 export default function KnowledgeTreePage() {
-  const { layoutPref, setLayoutPref } = useTreeLayout();
-  const canvas = useGraphCanvas(layoutPref, setLayoutPref);
-
+  const kt = useKnowledgeTree();
   const isMobile = useIsMobile();
-  const isTablet = useIsTablet();
 
-  // 计算经过层级/聚焦过滤的显示数据，与图组件保持一致（必须在所有 early return 之前）
-  const displayData = useMemo(
-    () => canvas.graphData ? filterByLevel(subtreeFilter(canvas.graphData, canvas.focusRootId), canvas.maxDisplayLevel) : null,
-    [canvas.graphData, canvas.focusRootId, canvas.maxDisplayLevel],
-  );
+  const [showCreateTree, setShowCreateTree] = useState(false);
+  const [newTreeName, setNewTreeName] = useState("");
+  const [newTreeEmoji, setNewTreeEmoji] = useState("");
 
-  // ── 面包屑（统一从 graphData 派生） ──
-  const focusBreadcrumbs = useMemo(() => {
-    if (!canvas.focusRootId || !canvas.graphData) return [];
-    return getNodeAncestors(canvas.graphData, canvas.focusRootId);
-  }, [canvas.focusRootId, canvas.graphData]);
-  const focusRootLabel = useMemo(() => {
-    if (!canvas.focusRootId || !canvas.graphData) return undefined;
-    const node = findNodeById(canvas.graphData, canvas.focusRootId);
-    return node?.label;
-  }, [canvas.focusRootId, canvas.graphData]);
+  const [addNodeOpen, setAddNodeOpen] = useState(false);
+  const [newNodeParent, setNewNodeParent] = useState<string | null>(null);
 
-  // ── 稳定的 ResizeHandle 回调（总位移，避免 rAF 节流下累积误差） ──
-  const dialogStartWidthRef = useRef(400);
-  const detailStartWidthRef = useRef(400);
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; node: TreeNode } | null>(null);
 
-  const onDialogResizeStart = useCallback(() => {
-    dialogStartWidthRef.current = layoutPref.dialogWidth;
-  }, [layoutPref.dialogWidth]);
+  const [showDetailPanel, setShowDetailPanel] = useState(true);
+  const [detailWidth, setDetailWidth] = useState(320);
+  const [layerOpen, setLayerOpen] = useState(false);
+  const [graphSearch, setGraphSearch] = useState("");
 
-  const onDialogResize = useCallback((totalDelta: number) => {
-    setLayoutPref(p => ({ ...p, dialogWidth: Math.max(200, Math.min(600, dialogStartWidthRef.current + totalDelta)) }));
-  }, []);
-  const onDialogAutoCollapse = useCallback(() => {
-    setLayoutPref(p => ({ ...p, showDialogPanel: false }));
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
+
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    const el = canvasRef.current;
+    const obs = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setCanvasSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+      }
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
   }, []);
 
-  const onDetailResizeStart = useCallback(() => {
-    detailStartWidthRef.current = layoutPref.detailWidth;
-  }, [layoutPref.detailWidth]);
+  const graphData = useMemo(() => buildGraphData(kt.nodes, kt.edges), [kt.nodes, kt.edges]);
 
-  const onDetailResize = useCallback((totalDelta: number) => {
-    setLayoutPref(p => ({ ...p, detailWidth: Math.max(200, Math.min(600, detailStartWidthRef.current - totalDelta)) }));
+  const stats = useMemo(() => buildStats(kt.nodes), [kt.nodes]);
+
+  const matchedNodeIds = useMemo(() => {
+    if (!graphSearch.trim()) return [];
+    const q = graphSearch.trim().toLowerCase();
+    return kt.nodes.filter(n => n.label.toLowerCase().includes(q)).map(n => n.id);
+  }, [graphSearch, kt.nodes]);
+
+  const handleCreateTree = useCallback(async () => {
+    if (!newTreeName.trim()) return;
+    await kt.createTree(newTreeName.trim(), "project");
+    setNewTreeName("");
+    setNewTreeEmoji("");
+    setShowCreateTree(false);
+  }, [kt, newTreeName]);
+
+  const handleAddNode = useCallback(async (label: string) => {
+    await kt.createNode(label, newNodeParent || null);
+    setAddNodeOpen(false);
+    setNewNodeParent(null);
+  }, [kt, newNodeParent]);
+
+  const handleNodeClick = useCallback((node: TreeNode) => {
+    kt.selectNode(node.id);
+    setShowDetailPanel(true);
+  }, [kt]);
+
+  const handleNodeDoubleClick = useCallback((node: TreeNode) => {
+    // 双击可聚焦或展开，暂时占位
   }, []);
-  const onDetailAutoCollapse = useCallback(() => {
-    setLayoutPref(p => ({ ...p, showDetailPanel: false }));
+
+  const handleNodeContextMenu = useCallback((node: TreeNode, e: MouseEvent) => {
+    setContextMenu({ x: e.clientX, y: e.clientY, node });
   }, []);
 
-  if (canvas.loading) return <LoadingSkeleton />;
-  if (canvas.error) return <ErrorState message={canvas.error} onRetry={canvas.loadGraph} />;
-
-  // 排除虚拟分区根节点后判断是否有真实节点
-  const realNodes = canvas.graphData?.nodes?.filter(n => !(n.level === "partition" && n.created_by === "system")) ?? [];
-  if (!canvas.graphData || realNodes.length === 0) {
-    if (!canvas.partitionId) {
-      return <NoPartitionState onPartitionCreated={canvas.setPartitionId} onStartTemporary={canvas.handleStartTemporary} />;
+  const handleContextMenuAction = useCallback((action: string) => {
+    const node = contextMenu?.node;
+    if (!node) return;
+    if (action === "add-child") {
+      setNewNodeParent(node.id);
+      setAddNodeOpen(true);
+    } else if (action === "edit") {
+      const label = window.prompt("编辑节点名称", node.label);
+      if (label?.trim()) kt.updateNode(node.id, { label: label.trim() });
+    } else if (action === "delete") {
+      if (window.confirm(`确定删除节点 "${node.label}" 吗？`)) kt.deleteNode(node.id);
+    } else if (action === "link-cognitive") {
+      kt.selectNode(node.id);
+      setLinkDialogOpen(true);
     }
-    return <EmptyState onGenerate={canvas.generateGraph} onLoad={canvas.loadGraph} />;
-  }
+    setContextMenu(null);
+  }, [contextMenu, kt]);
 
-  // Early returns 之后 displayData 保证非 null
-  const displayDataNonNull = displayData!;
+  const handleLinkCognitive = useCallback(async (cognitiveNodeId: string) => {
+    if (!kt.selectedNode) return;
+    await kt.linkCognitive(kt.selectedNode.id, cognitiveNodeId);
+    setLinkDialogOpen(false);
+  }, [kt]);
 
-  // ── 响应式面板覆盖 ──
-  if (isMobile) {
-    layoutPref.showDialogPanel = false;
-    layoutPref.showDetailPanel = false;
-  }
+  if (kt.loading && kt.nodes.length === 0) return <LoadingSkeleton />;
+  if (kt.error && kt.nodes.length === 0) return <ErrorState message={kt.error} onRetry={kt.loadTreeData} />;
+  if (kt.trees.length === 0) return <EmptyState onCreateTree={() => setShowCreateTree(true)} />;
+
+  const filteredNodes = graphSearch.trim()
+    ? kt.nodes.filter(n => matchedNodeIds.includes(n.id))
+    : kt.nodes;
 
   return (
     <div className="flex flex-col h-full">
-      <TopBar
-        partitionId={canvas.partitionId}
-        partitionList={canvas.partitionList}
-        onPartitionChange={canvas.setPartitionId}
-        graphMode={canvas.graphMode}
-        onGraphModeChange={(m) => setLayoutPref(p => ({ ...p, graphMode: m }))}
-        showDialogPanel={layoutPref.showDialogPanel}
-        onToggleDialogPanel={() => setLayoutPref(p => ({ ...p, showDialogPanel: !p.showDialogPanel }))}
-        showDetailPanel={layoutPref.showDetailPanel}
-        onToggleDetailPanel={() => setLayoutPref(p => ({ ...p, showDetailPanel: !p.showDetailPanel }))}
-        graphSearch={canvas.graphSearch}
-        onGraphSearchChange={canvas.setGraphSearch}
-        matchCount={canvas.matchedNodeIds.length}
-        onAddNode={() => canvas.setAddNodeOpen(true)}
-        onToggleFullscreen={() => canvas.setGraphFullscreen(!canvas.graphFullscreen)}
-        graphFullscreen={canvas.graphFullscreen}
-        layerOpen={layoutPref.layerOpen}
-        onToggleLayer={() => setLayoutPref(p => ({ ...p, layerOpen: !p.layerOpen }))}
-        breadcrumbs={focusBreadcrumbs}
-        focusRootId={canvas.focusRootId}
-        onClearFocus={canvas.handleClearFocus}
-        onSetFocus={canvas.handleSetFocus}
-        rootLabel={focusRootLabel}
-      />
+      {/* Top Bar */}
+      <div className="flex items-center gap-3 h-[48px] px-4 border-b border bg-surface flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">{kt.selectedTree?.title ? "🌳" : "📚"}</span>
+          <select value={kt.selectedTreeId ?? ""} onChange={e => kt.selectTree(e.target.value)}
+            className="text-sm font-medium bg-transparent border-none focus:outline-none text max-w-[160px]">
+            {kt.trees.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+          </select>
+        </div>
+        <div className="w-px h-5 bg-divider" />
+        <button onClick={() => setAddNodeOpen(true)}
+          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-accent text-white hover:opacity-90">
+          <Plus size={12} /> 节点
+        </button>
+        <button onClick={() => kt.setViewMode(kt.viewMode === "tree" ? "graph" : "tree")}
+          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-page-secondary border border text hover:border-accent">
+          {kt.viewMode === "tree" ? "🌲 树视图" : "🕸️ 图视图"}
+        </button>
+        <button onClick={() => setLayerOpen(v => !v)}
+          className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-all ${layerOpen ? "bg-accent/10 text-accent" : "text-muted hover:text"}`}>
+          层级
+        </button>
+        <div className="relative flex-1 max-w-[200px]">
+          <input value={graphSearch} onChange={e => setGraphSearch(e.target.value)}
+            placeholder="搜索节点…"
+            className="w-full pl-7 pr-2 py-1.5 text-[11px] rounded-md border border bg-page-secondary text placeholder:text-muted focus:outline-none focus:border-accent" />
+          {matchedNodeIds.length > 0 && (
+            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-accent font-medium bg-accent/10 px-1.5 py-0.5 rounded-full">
+              {matchedNodeIds.length}
+            </span>
+          )}
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <button onClick={() => setShowDetailPanel(v => !v)}
+            className={`text-[11px] px-2 py-1 rounded transition-all ${showDetailPanel ? "bg-accent/10 text-accent" : "text-muted hover:text"}`}>
+            详情
+          </button>
+          <button onClick={() => setShowCreateTree(true)}
+            className="text-[11px] px-2 py-1 rounded text-muted hover:text">
+            新建树
+          </button>
+        </div>
+      </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {!isMobile && layoutPref.showDialogPanel && (
-          <>
-            <div style={{ width: `${layoutPref.dialogWidth}px` }} className="flex-shrink-0 overflow-hidden">
-              <DialogContainer
-                dialogState={canvas.dialogState}
-                onDialogStateChange={canvas.setDialogState}
-                partitionId={canvas.partitionId}
-                selectedNode={canvas.selectedNode}
-                onNodeUpdated={canvas.loadGraph}
-                width={layoutPref.dialogWidth}
-                onWidthChange={(w) => setLayoutPref(p => ({ ...p, dialogWidth: w }))}
-              />
-            </div>
-            <ResizeHandle orientation="horizontal" onResizeStart={onDialogResizeStart} onResize={onDialogResize} onDoubleClick={onDialogAutoCollapse} />
-          </>
-        )}
-        {/* 移动端 Dialog 覆盖层 */}
-        {isMobile && layoutPref.showDialogPanel && (
-          <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setLayoutPref(p => ({...p, showDialogPanel: false}))}>
-            <div className="absolute bottom-0 left-0 right-0 max-h-[70vh] bg-page rounded-t-xl overflow-y-auto animate-[slideUp_0.2s_ease-out]"
-              onClick={e => e.stopPropagation()}>
-              <DialogContainer
-                dialogState={canvas.dialogState}
-                onDialogStateChange={canvas.setDialogState}
-                partitionId={canvas.partitionId}
-                selectedNode={canvas.selectedNode}
-                onNodeUpdated={canvas.loadGraph}
-                width={layoutPref.dialogWidth}
-                onWidthChange={(w) => setLayoutPref(p => ({ ...p, dialogWidth: w }))}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* ── 中间列（画布 + StatusBar） ── */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          <div ref={canvas.canvasRef as React.RefObject<HTMLDivElement>}
-            className="flex-1 relative overflow-hidden"
-            style={{
-              background: "linear-gradient(180deg, rgba(10,10,15,1) 0%, rgba(15,15,22,1) 100%)",
-              backgroundImage: `
-                radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 0.5px, transparent 0),
-                radial-gradient(ellipse at 50% 0%, rgba(99,102,241,0.04) 0%, transparent 70%)
-              `,
-              backgroundSize: "24px 24px, 100% 100%",
-            }}>
-            {layoutPref.layerOpen && canvas.graphData && (
-              <LayerPanel
-                graphData={canvas.graphData}
-                searchQuery={canvas.graphSearch}
-                onSearchChange={canvas.setGraphSearch}
-                matchedNodeIds={canvas.matchedNodeIds}
-                selectedNodeId={canvas.selectedNode?.id}
-                onNodeSelect={canvas.handleNodeSelect}
-                maxDisplayLevel={canvas.maxDisplayLevel}
-                onMaxLevelChange={(l) => setLayoutPref(p => ({ ...p, maxDisplayLevel: l }))}
-                onClose={() => setLayoutPref(p => ({ ...p, layerOpen: false }))}
-                masteryFilter={canvas.masteryFilter}
-                onMasteryFilterChange={canvas.setMasteryFilter}
-              />
-            )}
-            <div ref={canvas.graphContainerRef as React.RefObject<HTMLDivElement>} className="absolute inset-0">
-              <div className="w-full h-full transition-transform duration-200 ease-out origin-top-left"
-                style={{ transform: `scale(${canvas.zoomLevel})`, transformOrigin: "top left" }}>
-                {canvas.graphMode === "mindmap" && (
-                  <FocusGraph
-                    key={canvas.focusRootId || "__root__"}
-                    data={displayDataNonNull}
-                    selectedNodeId={canvas.selectedNode?.id} onNodeSelect={canvas.handleNodeSelect}
-                    onFocusNode={canvas.handleSetFocus} onNodeContextMenu={canvas.handleNodeContextMenu}
-                    activePath={[]} width={canvas.graphSize.width} height={canvas.graphSize.height}
-                    searchQuery={canvas.graphSearch} matchedNodeIds={canvas.matchedNodeIds}
-                    renderNodePopup={canvas.selectedNode ? (pos) => (
-                      <NodeDetailPopup
-                        node={canvas.selectedNode!}
-                        nodePosition={pos}
-                        onClose={() => canvas.setSelectedNode(null)}
-                      />
-                    ) : undefined}
-                  />
-                )}
-                {canvas.graphMode === "force" && (
-                  <ForceGraph
-                    key={canvas.focusRootId || "__root__"}
-                    data={displayDataNonNull}
-                    selectedNodeId={canvas.selectedNode?.id} onNodeSelect={canvas.handleNodeSelect}
-                    onNodeContextMenu={canvas.handleNodeContextMenu}
-                    width={canvas.graphSize.width} height={canvas.graphSize.height}
-                  />
-                )}
-                {canvas.graphMode === "dag" && (
-                  <DAGGraph
-                    key={canvas.focusRootId || "__root__"}
-                    data={displayDataNonNull}
-                    selectedNodeId={canvas.selectedNode?.id} onNodeSelect={canvas.handleNodeSelect}
-                    onNodeContextMenu={canvas.handleNodeContextMenu} activePath={[]}
-                    width={canvas.graphSize.width} height={canvas.graphSize.height}
-                    searchQuery={canvas.graphSearch} matchedNodeIds={canvas.matchedNodeIds}
-                  />
-                )}
-              </div>
-              <ZoomControls zoomLevel={canvas.zoomLevel} graphFullscreen={canvas.graphFullscreen}
-                onZoomIn={() => canvas.setZoomLevel(z => Math.min(3, z + 0.15))}
-                onZoomOut={() => canvas.setZoomLevel(z => Math.max(0.3, z - 0.15))}
-                onReset={() => canvas.setZoomLevel(1)}
-                onToggleFullscreen={() => canvas.setGraphFullscreen(!canvas.graphFullscreen)}
-              />
-            </div>
-          </div>
-
-          <StatusBar stats={canvas.stats}
-            activeFilter={canvas.masteryFilter.size === 3 ? "all" : canvas.masteryFilter.size === 1 ? Array.from(canvas.masteryFilter)[0] : "custom"}
-            onStatClick={(filter) => {
-              if (filter === "all") canvas.setMasteryFilter(new Set(["mastered", "learning", "untouched"]));
-              else canvas.setMasteryFilter(new Set([filter]));
-            }}
+        {/* Canvas */}
+        <div ref={canvasRef} className="flex-1 relative overflow-hidden"
+          style={{
+            background: "linear-gradient(180deg, rgba(10,10,15,1) 0%, rgba(15,15,22,1) 100%)",
+            backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 0.5px, transparent 0)",
+            backgroundSize: "24px 24px",
+          }}>
+          {layerOpen && (
+            <LayerPanel
+              graphData={graphData}
+              searchQuery={graphSearch}
+              onSearchChange={setGraphSearch}
+              matchedNodeIds={matchedNodeIds}
+              selectedNodeId={kt.selectedNodeId ?? undefined}
+              onNodeSelect={(n) => handleNodeClick(kt.nodeMap.get(n.id)!)}
+              onMaxLevelChange={() => {}}
+              onClose={() => setLayerOpen(false)}
+            />
+          )}
+          <KnowledgeTreeGraph
+            data={{ nodes: filteredNodes, edges: kt.edges }}
+            viewMode={kt.viewMode === "split" ? "tree" : kt.viewMode}
+            selectedNodeId={kt.selectedNodeId}
+            width={canvasSize.width}
+            height={canvasSize.height}
+            onNodeClick={handleNodeClick}
+            onNodeDoubleClick={handleNodeDoubleClick}
+            onNodeContextMenu={handleNodeContextMenu}
+            onCanvasClick={() => kt.selectNode(null)}
+          />
+          <ZoomControls
+            zoom={kt.zoom}
+            onZoomIn={() => kt.setZoom(Math.min(3, kt.zoom + 0.15))}
+            onZoomOut={() => kt.setZoom(Math.max(0.3, kt.zoom - 0.15))}
+            onReset={() => kt.setZoom(1)}
           />
         </div>
 
-        {!isMobile && layoutPref.showDetailPanel && canvas.selectedNode && (
+        {/* Detail Panel */}
+        {!isMobile && showDetailPanel && kt.selectedNode && (
           <>
-            <ResizeHandle orientation="horizontal" onResizeStart={onDetailResizeStart} onResize={onDetailResize} onDoubleClick={onDetailAutoCollapse} />
-            <div className="border-l border bg-surface overflow-y-auto h-full" style={{ width: `${layoutPref.detailWidth}px` }}>
-              <NodeDetailPanel
-                node={canvas.selectedNode} partitionId={canvas.partitionId}
-                onClose={() => canvas.setSelectedNode(null)} onNodeUpdated={canvas.loadGraph}
-                onStartPractice={() => {}} onRequestExplain={() => {}}
-                parentNode={canvas.selectedNode?.parent ? canvas.graphData?.nodes.find(n => n.id === canvas.selectedNode!.parent) ?? null : null}
-                onNavigateToParent={(parent) => canvas.setSelectedNode(parent)}
+            <ResizeHandle orientation="horizontal"
+              onResizeStart={() => {}}
+              onResize={(delta) => setDetailWidth(w => Math.max(240, Math.min(480, w - delta)))}
+              onDoubleClick={() => setShowDetailPanel(false)} />
+            <div style={{ width: detailWidth }} className="flex-shrink-0">
+              <TreeNodeDetailPanel
+                node={kt.selectedNode}
+                onClose={() => kt.selectNode(null)}
+                onDelete={() => kt.deleteNode(kt.selectedNode!.id)}
+                onLinkCognitive={() => setLinkDialogOpen(true)}
               />
             </div>
           </>
         )}
-        {/* 移动端 Detail 覆盖层 */}
-        {isMobile && layoutPref.showDetailPanel && canvas.selectedNode && (
-          <div className="fixed inset-0 z-40 bg-black/30" onClick={() => {
-            setLayoutPref(p => ({...p, showDetailPanel: false}));
-            canvas.setSelectedNode(null);
-          }}>
-            <div className="absolute bottom-0 left-0 right-0 max-h-[70vh] bg-page rounded-t-xl overflow-y-auto animate-[slideUp_0.2s_ease-out]"
+        {isMobile && showDetailPanel && kt.selectedNode && (
+          <div className="fixed inset-0 z-40 bg-black/30" onClick={() => kt.selectNode(null)}>
+            <div className="absolute bottom-0 left-0 right-0 max-h-[70vh] bg-page rounded-t-xl overflow-y-auto"
               onClick={e => e.stopPropagation()}>
-              <NodeDetailPanel
-                node={canvas.selectedNode} partitionId={canvas.partitionId}
-                onClose={() => {
-                  setLayoutPref(p => ({...p, showDetailPanel: false}));
-                  canvas.setSelectedNode(null);
-                }}
-                onNodeUpdated={canvas.loadGraph}
-                onStartPractice={() => {}} onRequestExplain={() => {}}
-                parentNode={canvas.selectedNode?.parent ? canvas.graphData?.nodes.find(n => n.id === canvas.selectedNode!.parent) ?? null : null}
-                onNavigateToParent={(parent) => canvas.setSelectedNode(parent)}
+              <TreeNodeDetailPanel
+                node={kt.selectedNode}
+                onClose={() => kt.selectNode(null)}
+                onDelete={() => kt.deleteNode(kt.selectedNode!.id)}
+                onLinkCognitive={() => setLinkDialogOpen(true)}
               />
             </div>
           </div>
         )}
       </div>
 
-      {!layoutPref.showDialogPanel && (
-        <FloatDialogWrapper dialogState={canvas.dialogState} onDialogStateChange={canvas.setDialogState}
-          partitionId={canvas.partitionId} selectedNode={canvas.selectedNode} onNodeUpdated={canvas.loadGraph} />
-      )}
+      <StatusBar stats={stats} activeFilter="all" onStatClick={() => {}} />
 
-      {isMobile && (
-        <div className="fixed bottom-20 right-4 z-40 flex flex-col gap-2">
-          {!layoutPref.showDialogPanel && (
-            <button onClick={() => setLayoutPref(p => ({...p, showDialogPanel: true}))}
-              className="w-12 h-12 rounded-full bg-accent text-white shadow-lg flex items-center justify-center active:scale-95 transition-transform"
-              style={{minWidth:44, minHeight:44}}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            </button>
-          )}
-        </div>
-      )}
-
-      {canvas.addNodeOpen && <AddNodeDialog
-        onClose={() => canvas.setAddNodeOpen(false)}
-        onAdd={canvas.handleAddNode}
-        graphData={canvas.graphData}
-        label={canvas.newNodeLabel}
-        setLabel={canvas.setNewNodeLabel}
-        parentId={canvas.newNodeParent}
-        setParentId={canvas.setNewNodeParent}
-      />}
-
-      {canvas.toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-2 duration-200">
-          <div className={`flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg text-xs font-medium
-            ${canvas.toast.type === "success" ? "bg-success/90 text-white" : ""}
-            ${canvas.toast.type === "error" ? "bg-danger/90 text-white" : ""}
-            ${canvas.toast.type === "info" ? "bg-surface border border text" : ""}`}>
-            {canvas.toast.type === "success" && <Check size={13} />}
-            {canvas.toast.type === "error" && <AlertCircle size={13} />}
-            {canvas.toast.type === "info" && <Sparkles size={13} />}
-            {canvas.toast.message}
+      {/* Create Tree Dialog */}
+      {showCreateTree && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+          <div className="bg-surface border border rounded-xl p-5 w-80 space-y-4 shadow-xl">
+            <h3 className="text-sm font-semibold text">创建知识树</h3>
+            <input value={newTreeName} onChange={e => setNewTreeName(e.target.value)}
+              placeholder="知识树名称" autoFocus
+              className="w-full px-3 py-2 text-sm bg-page border border text rounded-lg focus:outline-none focus:border-accent"
+              onKeyDown={e => e.key === "Enter" && handleCreateTree()} />
+            <EmojiPicker value={newTreeEmoji} onChange={setNewTreeEmoji} label="选择图标" />
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowCreateTree(false)} className="px-3 py-1.5 text-xs border border rounded-lg text-muted hover:bg-surface-hover">取消</button>
+              <button onClick={handleCreateTree} disabled={!newTreeName.trim()}
+                className="px-3 py-1.5 text-xs bg-accent text-white rounded-lg hover:opacity-90 disabled:opacity-50 flex items-center gap-1">
+                {kt.loading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} 创建
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {canvas.contextMenu && (
-        <ContextMenu x={canvas.contextMenu.x} y={canvas.contextMenu.y}
-          items={getDefaultContextMenuItems(canvas.contextMenu.node.label, canvas.contextMenu.node.id, {
-            onEdit: () => canvas.handleContextMenuAction("edit"),
-            onAddChild: () => canvas.handleContextMenuAction("add-child"),
-            onAiExpand: () => canvas.handleContextMenuAction("ai-expand"),
-            onAiEdit: () => canvas.handleContextMenuAction("ai-edit"),
-            onLinkConversation: () => canvas.handleContextMenuAction("link"),
-            onExplain: () => canvas.handleContextMenuAction("explain"),
-            onFocus: () => canvas.handleContextMenuAction("focus"),
-            onDelete: () => canvas.handleContextMenuAction("delete"),
+      <AddNodeDialog
+        open={addNodeOpen}
+        onClose={() => { setAddNodeOpen(false); setNewNodeParent(null); }}
+        onAdd={handleAddNode}
+        nodes={kt.nodes}
+        parentId={newNodeParent}
+        setParentId={setNewNodeParent}
+      />
+
+      <CognitiveLinkDialog
+        open={linkDialogOpen}
+        onClose={() => setLinkDialogOpen(false)}
+        onLink={handleLinkCognitive}
+      />
+
+      {contextMenu && (
+        <ContextMenu x={contextMenu.x} y={contextMenu.y}
+          items={getDefaultContextMenuItems(contextMenu.node.label, contextMenu.node.id, {
+            onEdit: () => handleContextMenuAction("edit"),
+            onAddChild: () => handleContextMenuAction("add-child"),
+            onAiExpand: () => { /* TODO */ setContextMenu(null); },
+            onAiEdit: () => { /* TODO */ setContextMenu(null); },
+            onLinkConversation: () => handleContextMenuAction("link-cognitive"),
+            onExplain: () => { /* TODO */ setContextMenu(null); },
+            onFocus: () => { /* TODO */ setContextMenu(null); },
+            onDelete: () => handleContextMenuAction("delete"),
           })}
-          onClose={() => canvas.setContextMenu(null)}
+          onClose={() => setContextMenu(null)}
         />
+      )}
+
+      {kt.error && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg text-xs font-medium bg-danger/90 text-white">
+            <AlertCircle size={13} /> {kt.error}
+          </div>
+        </div>
       )}
     </div>
   );
