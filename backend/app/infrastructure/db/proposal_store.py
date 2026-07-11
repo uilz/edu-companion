@@ -68,6 +68,12 @@ class ProposalStore(SecretaryRepository):
             "analysis_type": proposal.action_type,
             "generated_at": now.isoformat(),
         }
+        if proposal.insight_evidence:
+            decision_log["insight_evidence"] = proposal.insight_evidence
+        if proposal.correlation_id:
+            decision_log["correlation_id"] = proposal.correlation_id
+        if proposal.caused_by_event_id:
+            decision_log["caused_by_event_id"] = proposal.caused_by_event_id
         # 如果有指纹标记，也存入 metadata
         fingerprint = None
         if proposal.payload and "_fingerprint" in proposal.payload:
@@ -174,6 +180,28 @@ class ProposalStore(SecretaryRepository):
             cur.close()
             db.put_conn(cur.connection)
 
+    def mark_presented(self, proposal_id: str, user_id: str) -> bool:
+        """将提案标记为已展示（pending → presented），并记录 presented_at"""
+        db = self._get_db()
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+
+        cur = db.get_conn().cursor()
+        try:
+            cur.execute(
+                "UPDATE secretary_proposals SET status = 'presented', "
+                "metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb, "
+                "updated_at = %s "
+                "WHERE id = %s AND user_id = %s AND status = 'pending'",
+                (json.dumps({"presented_at": now.isoformat()}),
+                 now, proposal_id, user_id),
+            )
+            return cur.rowcount > 0
+        finally:
+            cur.connection.commit()
+            cur.close()
+            db.put_conn(cur.connection)
+
     def get_pending_proposals(
         self, user_id: str, limit: int = 20,
         source_module: str | None = None,
@@ -185,7 +213,7 @@ class ProposalStore(SecretaryRepository):
         """获取待处理的提案（支持筛选参数）"""
         db = self._get_db()
 
-        conditions = ["user_id = %s", "status = 'pending'"]
+        conditions = ["user_id = %s", "status IN ('pending', 'presented')"]
         params: list[Any] = [user_id]
 
         if source_module:
@@ -227,6 +255,22 @@ class ProposalStore(SecretaryRepository):
                     if q not in title and q not in desc:
                         continue
 
+                metadata = r.get("metadata") or {}
+                if isinstance(metadata, str):
+                    try:
+                        metadata = json.loads(metadata)
+                    except Exception:
+                        metadata = {}
+                insight_evidence = metadata.get("insight_evidence", []) if isinstance(metadata, dict) else []
+                presented_at_raw = metadata.get("presented_at") if isinstance(metadata, dict) else None
+                presented_at = None
+                if presented_at_raw:
+                    try:
+                        from datetime import datetime as _dt
+                        presented_at = _dt.fromisoformat(presented_at_raw).timestamp()
+                    except Exception:
+                        presented_at = None
+
                 result.append(Proposal(
                     id=r["id"],
                     emoji=r.get("emoji", "💡") or "💡",
@@ -237,6 +281,9 @@ class ProposalStore(SecretaryRepository):
                     priority=r.get("priority", 3) or 3,
                     generated_by=r.get("generated_by", "") or "",
                     overrideable=True if r.get("overrideable") in (True, None) else False,
+                    insight_source=payload.get("_insight_source") or metadata.get("insight_source", ""),
+                    insight_evidence=insight_evidence,
+                    presented_at=presented_at,
                 ))
             except Exception as e:
                 logger.debug("解析提案行失败: %s", e)

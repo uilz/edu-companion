@@ -6,10 +6,12 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from ..models import Proposal
 from .context_engine import SessionContext
 from .module_registry import SecretaryModule, ModuleMeta
+from .silent_task_manager import silent_task_manager
 
 logger = logging.getLogger(__name__)
 
@@ -77,9 +79,20 @@ class SilentTaskModule(SecretaryModule):
     ) -> list[Proposal]:
         now = time.time()
         self._check_count += 1
+
+        # 每 10 次检查记一次账
         if self._check_count % 10 == 0:
             elapsed_since_activation = now - self._activated_at
             logger.debug("静默任务记账 [user=%s]: 已激活 %.1f 秒, 检查 %d 次",
                          user_id, elapsed_since_activation, self._check_count)
             self._last_bookkeeping = now
+
+        # 实际执行：认领并执行最多 3 个 pending 任务
+        try:
+            completed = await silent_task_manager.run_pending(user_id, max_tasks=3)
+            if completed:
+                logger.info("静默任务执行 [user=%s]: %d 个任务完成", user_id, len(completed))
+        except Exception as e:
+            logger.debug("静默任务执行失败 [user=%s]: %s", user_id, e)
+
         return []

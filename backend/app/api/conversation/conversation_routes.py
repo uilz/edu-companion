@@ -499,6 +499,20 @@ async def handle_message(
                 raise HTTPException(404, "Conversation not found")
             pid = conv_node.parent_id or conv_id
 
+        # 在启动 pipeline 前注入秘书上下文：
+        # 调用 SecretaryService 会发布 ConversationContextInjected 事件，
+        # 对话壳的事件处理器缓存该上下文，供 ContextPipeline 读取。
+        try:
+            from app.domain.secretary.secretary_service import SecretaryService
+            from app.application.di import get_event_bus
+            await SecretaryService().get_conversation_context(
+                user_id=user_id,
+                conv_id=conv_id,
+                event_bus=get_event_bus(),
+            )
+        except Exception as e:
+            logger.debug("获取秘书对话上下文失败: %s", e)
+
         await start_background_pipeline(
             user_id, req.text, pid,
             conv_id=conv_id,

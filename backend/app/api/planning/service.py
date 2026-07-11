@@ -39,6 +39,12 @@ def _row_to_plan_item(r: dict) -> dict:
             linked = json.loads(linked)
         except (json.JSONDecodeError, TypeError):
             linked = []
+    metadata = r.get("metadata")
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except (json.JSONDecodeError, TypeError):
+            metadata = {}
     return {
         "id": r["id"],
         "user_id": r["user_id"],
@@ -58,6 +64,7 @@ def _row_to_plan_item(r: dict) -> dict:
         "completed_at": r.get("completed_at"),
         "skipped_at": r.get("skipped_at"),
         "plan_date": r.get("plan_date"),
+        "metadata": metadata or {},
         "created_at": r.get("created_at"),
         "updated_at": r.get("updated_at"),
     }
@@ -352,11 +359,12 @@ def create_plan_item(user_id: str, body: dict) -> dict:
             plan_date = date.fromisoformat(plan_date)
         except ValueError:
             plan_date = None
+    metadata = body.get("metadata", {})
     db.execute(
         """INSERT INTO plan_items
            (id, user_id, source_module, target_type, target_ref_id, title, description,
-            estimated_minutes, linked_node_ids, priority, status, scheduled_for, plan_date)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, 'pending', %s, %s)""",
+            estimated_minutes, linked_node_ids, priority, status, scheduled_for, plan_date, metadata)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, 'pending', %s, %s, %s::jsonb)""",
         (
             pid, user_id,
             body["source_module"], body["target_type"], body["target_ref_id"],
@@ -366,6 +374,7 @@ def create_plan_item(user_id: str, body: dict) -> dict:
             body.get("priority", 0),
             body.get("scheduled_for"),
             plan_date,
+            json.dumps(metadata, ensure_ascii=False),
         ),
     )
     # 发布 PlanItemCreated 事件
@@ -379,6 +388,24 @@ def create_plan_item(user_id: str, body: dict) -> dict:
     ))
 
     return get_plan_item(user_id, pid)  # type: ignore[return-value]
+
+
+def find_plan_item_by_request_id(user_id: str, request_id: str) -> dict | None:
+    """按秘书请求 ID 查询已创建的计划项（幂等去重用）"""
+    if not request_id:
+        return None
+    _ensure_tables()
+    from app.infrastructure.db.database import get_db
+    db = get_db()
+    try:
+        row = db.fetchone(
+            "SELECT * FROM plan_items WHERE user_id = %s AND metadata->>'request_id' = %s LIMIT 1",
+            (user_id, request_id),
+        )
+    except Exception as e:
+        logger.debug("按 request_id 查询 plan_item 失败: %s", e)
+        return None
+    return _row_to_plan_item(row) if row else None
 
 
 def update_plan_item(user_id: str, plan_item_id: str, body: dict) -> Optional[dict]:

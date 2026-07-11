@@ -195,6 +195,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         active_checker._store = _store
         from app.domain.secretary.engines.policy_engine import policy_engine
         policy_engine.set_store(_store)
+        from app.domain.secretary.engines.silent_task_manager import silent_task_manager
+        silent_task_manager.set_event_bus(container.event_bus)
+        from app.infrastructure.db.user_profile_store import user_profile_store
         logger.info("📝 秘书 Infra 注入完成")
     except Exception as e:
         logger.warning("秘书 Infra 注入失败: %s", e)
@@ -203,7 +206,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         from app.infrastructure.db.proposal_store import ProposalStore
         from app.domain.secretary.engines.secretary_event_handler import secretary_event_handler
+        from app.domain.secretary.engines.silent_task_manager import silent_task_manager
         secretary_event_handler._store = ProposalStore()
+        secretary_event_handler._silent_task_manager = silent_task_manager
         secretary_event_handler.subscribe(container.event_bus)
         logger.info("📡 秘书事件处理器已订阅")
     except Exception as e:
@@ -216,6 +221,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("📡 PlanningCompletionWriter 已订阅事件总线")
     except Exception as e:
         logger.warning("PlanningCompletionWriter 订阅失败: %s", e)
+
+    # Task #56: 订阅 Secretary → Conversation 上下文注入
+    try:
+        from app.domain.conversation.context_hooks import conversation_context_hook
+        conversation_context_hook.subscribe(container.event_bus)
+        logger.info("📡 ConversationContextHook 已订阅事件总线")
+    except Exception as e:
+        logger.warning("ConversationContextHook 订阅失败: %s", e)
+
+    # Task #56: 订阅 Secretary → Planning 计划项请求
+    try:
+        from app.api.planning.event_handler import planning_event_handler
+        planning_event_handler.subscribe(container.event_bus)
+        logger.info("📡 PlanningEventHandler 已订阅事件总线")
+    except Exception as e:
+        logger.warning("PlanningEventHandler 订阅失败: %s", e)
 
     # 初始化 Planning 数据表
     try:

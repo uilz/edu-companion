@@ -2,12 +2,14 @@
 -- 本文件由 app.infrastructure.db.secretary_schema._ensure_tables() 幂等执行，所有表用 IF NOT EXISTS
 --
 -- 核心表：
---   secretary_proposals  — 提案主表 (含 status/priority/metadata/decision_log)
---   mood_stress_prefs    — 心情压力偏好 (D16 决策保留为独立表)
---   emotion_records      — 情绪/压力/能量记录 (manual + auto)
+--   secretary_proposals       — 提案主表 (含 status/priority/metadata/decision_log)
+--   secretary_silent_tasks    — 静默后台任务
+--   secretary_user_profiles   — 用户编排画像
+--   mood_stress_prefs         — 心情压力偏好 (D16 决策保留为独立表)
+--   emotion_records           — 情绪/压力/能量记录 (manual + auto)
 --   mood_stress_intervention_logs — 干预工具日志
---   mood_stress_rules    — 用户自定义规则
---   behavior_signals     — 行为信号 (7 种类型)
+--   mood_stress_rules         — 用户自定义规则
+--   behavior_signals          — 行为信号 (7 种类型)
 
 -- 7.1.1 secretary_proposals 提案主表
 CREATE TABLE IF NOT EXISTS secretary_proposals (
@@ -37,7 +39,44 @@ CREATE INDEX IF NOT EXISTS idx_secretary_proposals_user_created
 CREATE INDEX IF NOT EXISTS idx_secretary_proposals_priority
     ON secretary_proposals (user_id, priority DESC, created_at DESC) WHERE status = 'pending';
 
--- 7.1.2 mood_stress_prefs 心情压力偏好
+-- 7.1.2 secretary_silent_tasks 静默后台任务
+CREATE TABLE IF NOT EXISTS secretary_silent_tasks (
+    id              TEXT PRIMARY KEY,
+    user_id         TEXT NOT NULL,
+    task_type       TEXT NOT NULL,
+    payload         JSONB DEFAULT '{}'::jsonb,
+    status          TEXT DEFAULT 'pending',
+    result_ref      TEXT DEFAULT '',
+    priority        INTEGER DEFAULT 3,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    ready_at        TIMESTAMPTZ,
+    consumed_at     TIMESTAMPTZ,
+    updated_at      TIMESTAMPTZ DEFAULT NOW(),
+    metadata        JSONB DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX IF NOT EXISTS idx_secretary_silent_tasks_user_status
+    ON secretary_silent_tasks (user_id, status, priority DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_secretary_silent_tasks_user_type
+    ON secretary_silent_tasks (user_id, task_type, status);
+
+-- 7.1.3 secretary_user_profiles 用户编排画像
+CREATE TABLE IF NOT EXISTS secretary_user_profiles (
+    user_id                 TEXT PRIMARY KEY,
+    trust_score             FLOAT DEFAULT 0.5,
+    fatigue_score           FLOAT DEFAULT 0.0,
+    proactive_quota_today   INTEGER DEFAULT 5,
+    last_proactive_at       TIMESTAMPTZ,
+    enabled_modules         JSONB DEFAULT '["review_reminder", "fatigue_manager", "daily_brief", "behavior_trigger"]'::jsonb,
+    quiet_hours_start       TEXT DEFAULT '22:00',
+    quiet_hours_end         TEXT DEFAULT '08:00',
+    relation_memory         JSONB DEFAULT '{}'::jsonb,
+    version                 INTEGER DEFAULT 0,
+    created_at              TIMESTAMPTZ DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 7.1.4 mood_stress_prefs 心情压力偏好
 CREATE TABLE IF NOT EXISTS mood_stress_prefs (
     user_id         TEXT PRIMARY KEY,
     reminder_enabled            BOOLEAN DEFAULT FALSE,

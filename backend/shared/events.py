@@ -429,6 +429,74 @@ class ProposalDismissed(DomainEvent):
 
 
 @dataclass(frozen=True)
+class SilentTaskCreated(DomainEvent):
+    """静默后台任务创建事件 — 秘书编排器发布
+
+    由秘书在感知到需要预计算的场景时创建，
+    消费者为 SilentTaskManager/调度器。
+    """
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "secretary"
+    task_id: str = ""
+    task_type: str = ""      # prepare_review_list / pre_generate_quiz / compute_diagnosis / generate_daily_brief / expand_knowledge_graph
+    payload: dict = field(default_factory=dict)
+    priority: int = 3
+    scheduled_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "SilentTaskCreated"
+
+
+@dataclass(frozen=True)
+class SilentTaskCompleted(DomainEvent):
+    """静默后台任务完成事件 — 任务执行器发布"""
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "secretary"
+    task_id: str = ""
+    task_type: str = ""
+    status: str = ""         # ready / failed / cancelled
+    result_ref: str = ""     # 结果引用 ID
+    result_payload: dict = field(default_factory=dict)
+    completed_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "SilentTaskCompleted"
+
+
+@dataclass(frozen=True)
+class ConversationContextInjected(DomainEvent):
+    """秘书向对话壳注入上下文"""
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "secretary"
+    conv_id: str | None = None
+    injection_type: str = ""  # topic_suggestion / learning_state / proposal / reminder
+    payload: dict = field(default_factory=dict)
+    expires_at: datetime | None = None
+
+    @property
+    def event_type(self) -> str:
+        return "ConversationContextInjected"
+
+
+@dataclass(frozen=True)
+class DiagnosisReportGenerated(DomainEvent):
+    """诊断报告生成事件 — 秘书系统发布"""
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "secretary"
+    snapshot_id: str = ""
+    weak_count: int = 0
+    cognitive_load: float = 0.0
+    summary: str = ""
+    visibility: str = "both"  # user / system / both
+
+    @property
+    def event_type(self) -> str:
+        return "DiagnosisReportGenerated"
+
+
+@dataclass(frozen=True)
 class PendingCrossTopic(DomainEvent):
     """跨主题探索建议事件 — 深度沉浸中被抑制的候选
 
@@ -1375,6 +1443,7 @@ class PlanItemRequested(DomainEvent):
     priority: int = 0
     linked_node_ids: list[str] = field(default_factory=list)
     requires_user_confirmation: bool = True
+    estimated_minutes: int = 10
     proposed_scheduled_for: datetime | None = None
     requested_at: datetime = field(default_factory=_now)
 
@@ -2383,6 +2452,10 @@ EVENT_TYPES: dict[str, type[DomainEvent]] = {
         ProposalGenerated,
         ProposalAccepted,
         ProposalDismissed,
+        SilentTaskCreated,
+        SilentTaskCompleted,
+        ConversationContextInjected,
+        DiagnosisReportGenerated,
         PendingCrossTopic,
         MoodStressRecorded,
         MoodStressInterventionTriggered,

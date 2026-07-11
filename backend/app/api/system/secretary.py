@@ -16,8 +16,10 @@ from fastapi.responses import StreamingResponse
 
 from app.domain.auth.dependencies import current_user_id
 from app.domain.secretary.secretary_service import SecretaryService
-from app.domain.secretary.models import Proposal, ScopeSpec, SecretaryPrefs
+from app.domain.secretary.models import Proposal, ScopeSpec, SecretaryPrefs, UserOrchestrationProfile
 from app.infrastructure.db.proposal_store import ProposalStore
+from app.infrastructure.db.silent_task_store import SilentTaskStore
+from app.infrastructure.db.user_profile_store import UserOrchestrationProfileStore
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +136,14 @@ def _get_store() -> ProposalStore:
     return ProposalStore()
 
 
+def _get_silent_task_store() -> SilentTaskStore:
+    return SilentTaskStore()
+
+
+def _get_profile_store() -> UserOrchestrationProfileStore:
+    return UserOrchestrationProfileStore()
+
+
 # ═══════════════════════════════════════════
 # 偏好
 # ═══════════════════════════════════════════
@@ -152,6 +162,40 @@ async def get_preferences(
         "max_proactive_per_day": prefs.get("max_proactive_per_day", 5),
         "check_interval": prefs.get("check_interval", None),  # Task #83 B-3
     }
+
+
+# ═══════════════════════════════════════════
+# 用户编排画像
+# ═══════════════════════════════════════════
+
+
+@router.get("/profile")
+async def get_profile(
+    user_id: str = Depends(current_user_id),
+    store: UserOrchestrationProfileStore = Depends(_get_profile_store),
+) -> dict:
+    """获取用户编排画像"""
+    profile = store.get_profile(user_id)
+    return profile.model_dump()
+
+
+@router.put("/profile")
+async def update_profile(
+    body: dict,
+    user_id: str = Depends(current_user_id),
+    store: UserOrchestrationProfileStore = Depends(_get_profile_store),
+) -> dict:
+    """更新用户编排画像（仅允许更新白名单字段）"""
+    allowed = {
+        "trust_score", "fatigue_score", "proactive_quota_today",
+        "enabled_modules", "quiet_hours_start", "quiet_hours_end",
+    }
+    profile = store.get_profile(user_id)
+    for key, val in body.items():
+        if key in allowed and hasattr(profile, key):
+            setattr(profile, key, val)
+    store.save_profile(profile)
+    return profile.model_dump()
 
 
 # ═══════════════════════════════════════════
@@ -184,6 +228,21 @@ async def get_snapshot(
     }
     _snapshot_cache[user_id] = (now, result)
     return result
+
+
+@router.get("/context")
+async def get_conversation_context(
+    conv_id: str | None = None,
+    user_id: str = Depends(current_user_id),
+    service: SecretaryService = Depends(_get_service),
+) -> dict:
+    """获取注入对话壳的上下文包（同时发布 ConversationContextInjected 事件）"""
+    from app.application.di import get_event_bus
+    try:
+        event_bus = get_event_bus()
+    except Exception:
+        event_bus = None
+    return await service.get_conversation_context(user_id=user_id, conv_id=conv_id, event_bus=event_bus)
 
 
 # ═══════════════════════════════════════════
@@ -267,6 +326,14 @@ async def accept_proposal(
             # 记录策略交互
             policy_engine.record_interaction(user_id, proposal, "accepted")
 
+            # 同时写入 UserOrchestrationProfile 关系记忆
+            try:
+                from app.infrastructure.db.user_profile_store import user_profile_store
+                kp_id = (proposal.payload or {}).get("kp_id", "")
+                user_profile_store.update_relation_memory(user_id, proposal.action_type, kp_id, "accept")
+            except Exception as e:
+                logger.debug("UserOrchestrationProfile 关系记忆更新失败: %s", e)
+
             # 触发学习路径调整 (Task #83 B-9/B-20: 单独 try/except)
             if action_result.get("success"):
                 try:
@@ -302,6 +369,19 @@ async def accept_proposal(
     }
 
 
+@router.post("/proposals/{proposal_id}/present")
+async def present_proposal(
+    proposal_id: str,
+    user_id: str = Depends(current_user_id),
+    store: ProposalStore = Depends(_get_store),
+) -> dict:
+    """将提案标记为已展示（pending → presented）"""
+    ok = store.mark_presented(proposal_id, user_id)
+    if not ok:
+        raise HTTPException(404, "提案不存在或状态不可展示")
+    return {"status": "presented"}
+
+
 @router.post("/proposals/{proposal_id}/dismiss")
 async def dismiss_proposal(
     proposal_id: str,
@@ -316,12 +396,16 @@ async def dismiss_proposal(
 
     # WS 已移除，跳过广播（由 TokenBuffer 等机制取代）
 
-    # 记录策略关系记忆
+    # 记录策略关系记忆（同时写入 UserOrchestrationProfile）
     try:
         proposal = _get_proposal_by_id(store, proposal_id, user_id)
         if proposal:
             from app.domain.secretary.engines.policy_engine import policy_engine
             result = policy_engine.record_interaction(user_id, proposal, "dismissed")
+
+            from app.infrastructure.db.user_profile_store import user_profile_store
+            kp_id = (proposal.payload or {}).get("kp_id", "")
+            user_profile_store.update_relation_memory(user_id, proposal.action_type, kp_id, "dismiss")
             return {"status": "dismissed", "policy": result}
     except Exception as e:
         logger.warning("Policy record_interaction failed on dismiss: %s", e)
@@ -399,6 +483,82 @@ async def batch_dismiss_proposals(
     count = store.batch_update_status(ids, "dismissed", user_id)
     # WS 已移除，跳过广播（由 TokenBuffer 等机制取代）
     return {"status": "ok", "count": count}
+
+
+# ═══════════════════════════════════════════
+# 静默后台任务
+# ═══════════════════════════════════════════
+
+
+@router.get("/silent-tasks")
+async def get_silent_tasks(
+    user_id: str = Depends(current_user_id),
+    status: str | None = None,
+    task_type: str | None = None,
+    limit: int = 50,
+    store: SilentTaskStore = Depends(_get_silent_task_store),
+) -> list[dict]:
+    """获取静默任务列表"""
+    tasks = store.list_tasks(
+        user_id=user_id,
+        status=status,
+        task_type=task_type,
+        limit=limit,
+    )
+    return [t.model_dump() for t in tasks]
+
+
+@router.get("/silent-tasks/{task_id}")
+async def get_silent_task(
+    task_id: str,
+    user_id: str = Depends(current_user_id),
+    store: SilentTaskStore = Depends(_get_silent_task_store),
+) -> dict:
+    """获取单个静默任务"""
+    task = store.get_task(task_id, user_id=user_id)
+    if not task:
+        raise HTTPException(404, "任务不存在")
+    return task.model_dump()
+
+
+@router.post("/silent-tasks/{task_id}/run")
+async def run_silent_task(
+    task_id: str,
+    user_id: str = Depends(current_user_id),
+    store: SilentTaskStore = Depends(_get_silent_task_store),
+) -> dict:
+    """手动触发执行单个静默任务"""
+    task = store.get_task(task_id, user_id=user_id)
+    if not task:
+        raise HTTPException(404, "任务不存在")
+
+    from app.domain.secretary.engines.silent_task_manager import silent_task_manager
+    try:
+        completed = await silent_task_manager.execute(task)
+        return completed.model_dump()
+    except Exception as e:
+        logger.warning("手动执行静默任务失败: %s", e)
+        raise HTTPException(500, f"任务执行失败: {e}")
+
+
+@router.post("/silent-tasks/run-pending")
+async def run_pending_silent_tasks(
+    user_id: str = Depends(current_user_id),
+    task_type: str | None = None,
+    max_tasks: int = 5,
+) -> dict:
+    """手动触发执行所有 pending 静默任务"""
+    from app.domain.secretary.engines.silent_task_manager import silent_task_manager
+    try:
+        completed = await silent_task_manager.run_pending(
+            user_id=user_id,
+            task_type=task_type,
+            max_tasks=min(max_tasks, 10),
+        )
+        return {"status": "ok", "count": len(completed), "tasks": [t.model_dump() for t in completed]}
+    except Exception as e:
+        logger.warning("批量执行静默任务失败: %s", e)
+        raise HTTPException(500, f"批量执行失败: {e}")
 
 
 # ═══════════════════════════════════════════

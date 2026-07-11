@@ -20,6 +20,7 @@ from .models import (
 )
 from .engines.diagnosis import DiagnosisEngine
 from .engines.proposal_service import ProposalGenerator
+from shared.events import ConversationContextInjected
 
 logger = logging.getLogger(__name__)
 
@@ -133,3 +134,91 @@ class SecretaryService:
     ) -> dict[str, Any]:
         """快速学习状态评估（轻量，无 LLM）"""
         return await self.diagnosis.quick_assess(user_id=user_id)
+
+    # ── 对话上下文注入 ──
+
+    async def get_conversation_context(
+        self,
+        user_id: str,
+        conv_id: str | None = None,
+        event_bus: Any | None = None,
+    ) -> dict[str, Any]:
+        """组装对话上下文包并发布 ConversationContextInjected 事件"""
+        from app.infrastructure.db.proposal_store import ProposalStore
+        from app.infrastructure.db.user_profile_store import user_profile_store
+
+        # 1. 待处理提案
+        proposals = ProposalStore().get_pending_proposals(user_id, limit=5)
+
+        # 2. 活跃计划项
+        due_plan_items: list[dict] = []
+        active_goals: list[dict] = []
+        try:
+            from app.api.planning.service import list_plan_items, list_goals
+            from datetime import date
+            due_plan_items = list_plan_items(
+                user_id=user_id,
+                plan_date=date.today(),
+                status="pending",
+                limit=10,
+            )
+            active_goals = list_goals(user_id=user_id, status="active")
+        except Exception as e:
+            logger.debug("获取计划项失败: %s", e)
+
+        # 3. 学习状态摘要
+        summary = ""
+        try:
+            quick = await self.quick_assess(user_id=user_id)
+            summary = quick.get("summary", "")
+        except Exception as e:
+            logger.debug("快速评估失败: %s", e)
+
+        # 4. 建议话题
+        suggested_topics: list[str] = []
+        for p in proposals:
+            if p.action_type in ("review", "practice"):
+                label = (p.payload or {}).get("kp_id", "") or p.title
+                if label:
+                    suggested_topics.append(label)
+        suggested_topics = suggested_topics[:5]
+
+        # 5. 用户编排画像（用于响应风格提示）
+        profile = user_profile_store.get_profile(user_id)
+        response_style_hint = ""
+        if profile.fatigue_score > 0.6:
+            response_style_hint = "用户当前疲劳度较高，回复应简短、鼓励为主"
+        elif profile.trust_score < 0.3:
+            response_style_hint = "用户对秘书信任度较低，避免过度主动推销建议"
+
+        payload = {
+            "user_id": user_id,
+            "conv_id": conv_id,
+            "active_goals": active_goals[:3],
+            "due_plan_items": due_plan_items[:5],
+            "recent_learning_summary": summary,
+            "suggested_topics": suggested_topics,
+            "pending_proposals": [p.model_dump() for p in proposals],
+            "available_tools": [
+                {"tool_name": "start_practice", "when_to_use": "用户想练习薄弱点", "params": {"kp_id": "string"}},
+                {"tool_name": "create_flashcard", "when_to_use": "用户想记录笔记", "params": {"front_text": "string", "back_text": "string"}},
+                {"tool_name": "view_diagnosis", "when_to_use": "用户询问学习状态", "params": {}},
+            ],
+            "response_style_hint": response_style_hint,
+            "should_avoid_proactive_suggestions": profile.fatigue_score > 0.7,
+        }
+
+        # 6. 发布事件
+        if event_bus:
+            try:
+                await event_bus.publish(ConversationContextInjected(
+                    user_id=user_id,
+                    source_module="secretary",
+                    conv_id=conv_id,
+                    injection_type="learning_state",
+                    payload=payload,
+                ))
+            except Exception as e:
+                logger.debug("ConversationContextInjected 发布失败: %s", e)
+
+        return payload

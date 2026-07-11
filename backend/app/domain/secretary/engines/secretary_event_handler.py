@@ -20,7 +20,9 @@ from shared.events import (
     CognitiveNodeMetadataChanged,
     ConversationNoteCreatedAsFlashcard,
     DomainEvent,
+    PlanItemRequested,
     PracticeAnswerBehaviorRecorded,
+    ProposalGenerated,
     SessionCompleted,
 )
 
@@ -34,6 +36,7 @@ class SecretaryEventHandler:
         self._bus = None
         self._subscribed = False
         self._store = store
+        self._silent_task_manager = None
 
     def subscribe(self, bus: Any) -> None:
         """订阅 EventBus 上的相关事件"""
@@ -69,6 +72,102 @@ class SecretaryEventHandler:
         self._subscribed = False
         logger.info("📡 秘书已取消事件订阅")
 
+    # ── 内部工具 ──
+
+    async def _schedule_silent_task(
+        self,
+        user_id: str,
+        task_type: str,
+        payload: dict | None = None,
+        caused_by_event_id: str | None = None,
+    ) -> None:
+        """调度静默后台任务（不阻塞事件处理）"""
+        if not self._silent_task_manager:
+            return
+        try:
+            await self._silent_task_manager.schedule(
+                user_id=user_id,
+                task_type=task_type,
+                payload=payload or {},
+                caused_by_event_id=caused_by_event_id,
+            )
+        except Exception as e:
+            logger.debug("调度静默任务失败: %s", e)
+
+    async def _save_and_publish_proposal(
+        self,
+        proposal: Any,
+        user_id: str,
+        session_id: str | None = None,
+        caused_by_event_id: str | None = None,
+    ) -> str | None:
+        """保存提案并发布 ProposalGenerated 事件"""
+        if not self._store:
+            return None
+
+        # 补充因果链
+        if caused_by_event_id and not proposal.caused_by_event_id:
+            proposal.caused_by_event_id = caused_by_event_id
+
+        proposal_id = self._store.save_proposal(proposal, user_id=user_id, session_id=session_id)
+
+        # 发布 ProposalGenerated 事件
+        if self._bus:
+            try:
+                await self._bus.publish(ProposalGenerated(
+                    user_id=user_id,
+                    source_module="secretary",
+                    source_id=proposal_id,
+                    proposal_id=proposal_id,
+                    action_type=proposal.action_type,
+                    target_module=proposal.payload.get("target_module", "") if proposal.payload else "",
+                    target_ref_id=proposal.payload.get("target_ref_id", "") if proposal.payload else "",
+                    title=proposal.title,
+                    description=proposal.description,
+                    priority=proposal.priority,
+                    insight_source=proposal.insight_source or "",
+                    linked_node_ids=proposal.payload.get("linked_node_ids", []) if proposal.payload else [],
+                    payload=proposal.payload or {},
+                    caused_by_event_id=proposal.caused_by_event_id,
+                ))
+            except Exception as e:
+                logger.debug("ProposalGenerated 发布失败: %s", e)
+
+        return proposal_id
+
+    async def _request_plan_item(
+        self,
+        user_id: str,
+        title: str,
+        description: str,
+        target_type: str,
+        target_ref_id: str,
+        linked_node_ids: list[str],
+        triggered_by_proposal_id: str | None = None,
+        requires_user_confirmation: bool = True,
+        estimated_minutes: int = 10,
+    ) -> None:
+        """向规划壳发布 PlanItemRequested 事件"""
+        if not self._bus:
+            return
+        try:
+            from uuid import uuid4
+            await self._bus.publish(PlanItemRequested(
+                user_id=user_id,
+                source_module="secretary",
+                request_id=str(uuid4())[:12],
+                target_type=target_type,
+                target_ref_id=target_ref_id,
+                title=title,
+                description=description,
+                priority=2,
+                linked_node_ids=linked_node_ids,
+                requires_user_confirmation=requires_user_confirmation,
+                estimated_minutes=estimated_minutes,
+            ))
+        except Exception as e:
+            logger.debug("PlanItemRequested 发布失败: %s", e)
+
     # ── 事件处理器 ──
 
     async def _on_session_completed(self, event: DomainEvent) -> None:
@@ -90,10 +189,13 @@ class SecretaryEventHandler:
                 proposals = await fm.run_check(event.user_id, ctx)
 
                 if proposals:
-                    if self._store:
-                        for p in proposals:
-                            self._store.save_proposal(p, user_id=event.user_id,
-                                                      session_id=f"session:{event.event_id}")
+                    for p in proposals:
+                        await self._save_and_publish_proposal(
+                            p,
+                            user_id=event.user_id,
+                            session_id=f"session:{event.event_id}",
+                            caused_by_event_id=getattr(event, "event_id", None),
+                        )
                     logger.info("会话完成触发疲劳建议: user=%s %d条", event.user_id, len(proposals))
         except Exception as e:
             logger.debug("会话完成处理失败: %s", e)
@@ -108,12 +210,30 @@ class SecretaryEventHandler:
                 session_id=getattr(event, "event_id", ""),
             )
             if proposal:
-                if self._store:
-                    self._store.save_proposal(proposal, user_id=event.user_id,
-                                              session_id=f"session:{getattr(event, 'event_id', '')}")
+                await self._save_and_publish_proposal(
+                    proposal,
+                    user_id=event.user_id,
+                    session_id=f"session:{getattr(event, 'event_id', '')}",
+                    caused_by_event_id=getattr(event, "event_id", None),
+                )
                 logger.info("会话完成行为触发: user=%s proposal=%s", event.user_id, proposal.title)
         except Exception as e:
             logger.debug("会话完成行为触发失败: %s", e)
+
+        # 静默预计算：会话结束后生成每日简报与诊断
+        try:
+            await self._schedule_silent_task(
+                user_id=event.user_id,
+                task_type="generate_daily_brief",
+                caused_by_event_id=getattr(event, "event_id", None),
+            )
+            await self._schedule_silent_task(
+                user_id=event.user_id,
+                task_type="compute_diagnosis",
+                caused_by_event_id=getattr(event, "event_id", None),
+            )
+        except Exception as e:
+            logger.debug("会话完成后调度静默任务失败: %s", e)
 
     async def _on_answer_submitted(self, event: DomainEvent) -> None:
         """答题提交事件 → 低正确率时生成复习提案"""
@@ -133,12 +253,33 @@ class SecretaryEventHandler:
                 correctness=correctness,
             )
             if proposal:
-                if self._store:
-                    self._store.save_proposal(proposal, user_id=event.user_id,
-                                              session_id=f"practice:{getattr(event, 'event_id', '')}")
+                await self._save_and_publish_proposal(
+                    proposal,
+                    user_id=event.user_id,
+                    session_id=f"practice:{getattr(event, 'event_id', '')}",
+                    caused_by_event_id=getattr(event, "event_id", None),
+                )
                 logger.info("练习行为触发: user=%s proposal=%s", event.user_id, proposal.title)
         except Exception as e:
             logger.debug("练习行为触发失败: %s", e)
+
+        # 静默预计算：答题后准备复习列表
+        try:
+            await self._schedule_silent_task(
+                user_id=event.user_id,
+                task_type="prepare_review_list",
+                payload={"source": "answer_submitted", "node_ids": atom_node_ids},
+                caused_by_event_id=getattr(event, "event_id", None),
+            )
+            if not event.is_correct and atom_node_ids:
+                await self._schedule_silent_task(
+                    user_id=event.user_id,
+                    task_type="pre_generate_quiz",
+                    payload={"source": "answer_submitted", "kp_id": atom_node_ids[0]},
+                    caused_by_event_id=getattr(event, "event_id", None),
+                )
+        except Exception as e:
+            logger.debug("答题后调度静默任务失败: %s", e)
 
     async def _on_cognitive_metadata_changed(self, event: DomainEvent) -> None:
         """CognitiveNode 元数据变化事件 → 触发学习路径调整"""
@@ -156,6 +297,17 @@ class SecretaryEventHandler:
             )
         except Exception as e:
             logger.debug("计划调整失败: %s", e)
+
+        # 静默预计算：认知状态变化后重新计算诊断
+        try:
+            await self._schedule_silent_task(
+                user_id=event.user_id,
+                task_type="compute_diagnosis",
+                payload={"source": "cognitive_metadata_changed", "node_id": event.node_id},
+                caused_by_event_id=getattr(event, "event_id", None),
+            )
+        except Exception as e:
+            logger.debug("认知元数据变化后调度静默任务失败: %s", e)
 
     async def _on_conversation_note_created_as_flashcard(self, event: DomainEvent) -> None:
         """对话笔记转闪卡 → 生成复习计划提案"""
@@ -181,15 +333,38 @@ class SecretaryEventHandler:
                 insight_source="conversation_note_created_as_flashcard",
                 generated_by="secretary_event_handler",
             )
-            if self._store:
-                self._store.save_proposal(
-                    proposal,
-                    user_id=event.user_id,
-                    session_id=f"note:{event.note_id}",
-                )
-                logger.info("对话笔记转闪卡触发计划提案: user=%s note=%s", event.user_id, event.note_id)
+            proposal_id = await self._save_and_publish_proposal(
+                proposal,
+                user_id=event.user_id,
+                session_id=f"note:{event.note_id}",
+                caused_by_event_id=getattr(event, "event_id", None),
+            )
+            logger.info("对话笔记转闪卡触发计划提案: user=%s note=%s", event.user_id, event.note_id)
+
+            # 同时向规划壳请求创建复习计划项
+            await self._request_plan_item(
+                user_id=event.user_id,
+                title=f"复习闪卡：{front_preview}...",
+                description=f"从对话创建的闪卡「{front_preview}...」，建议安排复习。",
+                target_type="flashcard",
+                target_ref_id=event.flashcard_id or event.note_id,
+                linked_node_ids=list(event.linked_node_ids or []),
+                triggered_by_proposal_id=proposal_id or "",
+                requires_user_confirmation=False,
+            )
         except Exception as e:
             logger.debug("对话笔记转闪卡提案生成失败: %s", e)
+
+        # 静默预计算：新闪卡加入复习列表
+        try:
+            await self._schedule_silent_task(
+                user_id=event.user_id,
+                task_type="prepare_review_list",
+                payload={"source": "conversation_note_flashcard", "note_id": event.note_id},
+                caused_by_event_id=getattr(event, "event_id", None),
+            )
+        except Exception as e:
+            logger.debug("对话笔记转闪卡后调度静默任务失败: %s", e)
 
     async def _on_practice_behavior_recorded(self, event: DomainEvent) -> None:
         """答题微行为 → 检测到高犹豫/多次改选时生成讲解/复习提案"""
@@ -222,13 +397,13 @@ class SecretaryEventHandler:
                     insight_source="practice_answer_behavior:hesitation",
                     generated_by="secretary_event_handler",
                 )
-                if self._store:
-                    self._store.save_proposal(
-                        proposal,
-                        user_id=event.user_id,
-                        session_id=f"behavior:{event.attempt_id}",
-                    )
-                    logger.info("答题犹豫触发复习提案: user=%s attempt=%s", event.user_id, event.attempt_id)
+                await self._save_and_publish_proposal(
+                    proposal,
+                    user_id=event.user_id,
+                    session_id=f"behavior:{event.attempt_id}",
+                    caused_by_event_id=getattr(event, "event_id", None),
+                )
+                logger.info("答题犹豫触发复习提案: user=%s attempt=%s", event.user_id, event.attempt_id)
 
             if event.answer_change_count >= 2:
                 proposal = Proposal(
@@ -246,13 +421,22 @@ class SecretaryEventHandler:
                     insight_source="practice_answer_behavior:indecision",
                     generated_by="secretary_event_handler",
                 )
-                if self._store:
-                    self._store.save_proposal(
-                        proposal,
-                        user_id=event.user_id,
-                        session_id=f"behavior:{event.attempt_id}",
-                    )
-                    logger.info("多次改选触发练习提案: user=%s attempt=%s", event.user_id, event.attempt_id)
+                await self._save_and_publish_proposal(
+                    proposal,
+                    user_id=event.user_id,
+                    session_id=f"behavior:{event.attempt_id}",
+                    caused_by_event_id=getattr(event, "event_id", None),
+                )
+                logger.info("多次改选触发练习提案: user=%s attempt=%s", event.user_id, event.attempt_id)
+
+            # 静默预计算：微行为异常时预生成针对测验
+            if event.question_id:
+                await self._schedule_silent_task(
+                    user_id=event.user_id,
+                    task_type="pre_generate_quiz",
+                    payload={"source": "practice_behavior", "question_id": event.question_id},
+                    caused_by_event_id=getattr(event, "event_id", None),
+                )
         except Exception as e:
             logger.debug("答题微行为提案生成失败: %s", e)
 

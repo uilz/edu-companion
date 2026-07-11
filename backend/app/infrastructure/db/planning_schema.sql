@@ -35,6 +35,11 @@ CREATE INDEX IF NOT EXISTS idx_plan_items_source
 CREATE INDEX IF NOT EXISTS idx_plan_items_user_scheduled
     ON plan_items(user_id, scheduled_for);
 
+ALTER TABLE plan_items ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+
+CREATE INDEX IF NOT EXISTS idx_plan_items_metadata_request_id
+    ON plan_items((metadata->>'request_id'));
+
 
 -- 2. 自定义视图方案
 CREATE TABLE IF NOT EXISTS plan_view_layouts (

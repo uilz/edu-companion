@@ -170,15 +170,19 @@ class Proposal(BaseModel):
     emoji: str = ""
     title: str
     description: str = ""
-    action_type: str = ""                # review / practice / rest / explore / exam_prep
+    action_type: str = ""                # review / practice / rest / explore / exam_prep / plan / deep_process / daily_brief / conversation
     payload: dict = Field(default_factory=dict)
     priority: int = 3                    # 1-5
     generated_by: str = ""               # 来源模块名
     overrideable: bool = True
     meta_reflection_prompt: str | None = None
     insight_source: str | None = None    # 关联的分析函数名
+    insight_evidence: list[str] = Field(default_factory=list)  # 可解释证据摘要
+    correlation_id: str = ""             # 关联事件/会话 ID
+    caused_by_event_id: str | None = None
     created_at: float = Field(default_factory=time.time)
     expires_at: float | None = None
+    presented_at: float | None = None    # 首次展示给用户的时间
 
 
 class UserContext(BaseModel):
@@ -192,12 +196,44 @@ class UserContext(BaseModel):
     interaction_preferences: dict = Field(default_factory=dict)
 
 
+class RelationMemoryEntry(BaseModel):
+    """用户对某类提案的关系记忆"""
+    action_type: str
+    target_id: str = ""
+    accept_count: int = 0
+    ignore_count: int = 0
+    last_interaction_at: float | None = None
+    effective_priority_bias: int = 0
+
+
+class UserOrchestrationProfile(BaseModel):
+    """用户编排画像 — 秘书对用户的长期记忆与策略状态"""
+    user_id: str
+    trust_score: float = 0.5             # 0-1，越高用户越信任秘书提案
+    fatigue_score: float = 0.0           # 0-1，越高越应减少打扰
+    proactive_quota_today: int = 5       # 今日剩余可推送提案数
+    last_proactive_at: float | None = None
+    enabled_modules: list[str] = Field(default_factory=lambda: [
+        "review_reminder", "fatigue_manager", "daily_brief", "behavior_trigger"
+    ])
+    quiet_hours_start: str = "22:00"
+    quiet_hours_end: str = "08:00"
+    relation_memory: dict[str, RelationMemoryEntry] = Field(default_factory=dict)
+    version: int = 0
+
+
 class SilentTask(BaseModel):
-    """静默后台任务"""
+    """静默后台任务 — 秘书编排器在后台执行的预计算任务"""
     id: str = Field(default_factory=lambda: str(uuid4())[:12])
-    task_type: str                        # prepare_review_list / pre_generate_quiz / ...
+    user_id: str = ""
+    task_type: str                        # prepare_review_list / pre_generate_quiz / compute_diagnosis / generate_daily_brief / expand_knowledge_graph
     payload: dict = Field(default_factory=dict)
-    ready_at: float = 0.0
+    status: str = "pending"               # pending / running / ready / failed / consumed
+    result_ref: str = ""                  # 结果引用 ID
+    priority: int = 3                     # 1-5，越小越优先
+    created_at: float = Field(default_factory=time.time)
+    ready_at: float | None = None         # 预计/实际可消费时间
+    consumed_at: float | None = None
 
 
 class SecretaryPrefs(BaseModel):

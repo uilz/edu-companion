@@ -271,7 +271,65 @@ class ConversationLocation:
 
 
 # ═══════════════════════════════════════════════
-# Provider 3: LearnerEmotion — 情绪感知
+# Provider 3: SecretaryContext — 秘书注入的学习上下文
+# ═══════════════════════════════════════════════
+
+
+class SecretaryContext:
+    """注入秘书系统推送的学习状态、计划与提案上下文。"""
+
+    async def build(self, input: ContextInput) -> ContextOutput | None:
+        from app.domain.conversation.context_hooks import get_injected_context
+
+        ctx = get_injected_context(input.user_id, input.conv_id)
+        if not ctx:
+            return None
+
+        parts: list[str] = []
+
+        active_goals = ctx.get("active_goals", [])
+        if active_goals:
+            lines = [f"- {g.get('title', '')}" for g in active_goals if g.get("title")]
+            if lines:
+                parts.append("🎯 活跃目标:\n" + "\n".join(lines))
+
+        due_items = ctx.get("due_plan_items", [])
+        if due_items:
+            lines = [f"- {i.get('title', '')}" for i in due_items if i.get("title")]
+            if lines:
+                parts.append("📋 今日待办:\n" + "\n".join(lines))
+
+        pending_proposals = ctx.get("pending_proposals", [])
+        if pending_proposals:
+            lines = [f"- {p.get('title', '')}" for p in pending_proposals if p.get("title")]
+            if lines:
+                parts.append("💡 秘书建议:\n" + "\n".join(lines))
+
+        suggested_topics = ctx.get("suggested_topics", [])
+        if suggested_topics:
+            parts.append("🔍 建议话题: " + ", ".join(suggested_topics))
+
+        summary = ctx.get("recent_learning_summary", "")
+        if summary:
+            parts.append(f"📊 学习状态摘要: {summary}")
+
+        style_hint = ctx.get("response_style_hint", "")
+        if style_hint:
+            parts.append(f"🎨 回复风格: {style_hint}")
+
+        if ctx.get("should_avoid_proactive_suggestions"):
+            parts.append("⚠️ 当前避免主动推销建议，先回应用户问题。")
+
+        if not parts:
+            return None
+
+        return SystemChunk(
+            text="## 秘书注入上下文\n\n" + "\n\n".join(parts),
+        )
+
+
+# ═══════════════════════════════════════════════
+# Provider 4: LearnerEmotion — 情绪感知
 # ═══════════════════════════════════════════════
 
 
@@ -719,6 +777,7 @@ def get_context_pipeline() -> ContextPipeline:
         _context_pipeline = ContextPipeline([
             ConversationModeProvider(),
             ConversationLocation(),
+            SecretaryContext(),
             LearnerEmotion(),
             LearnerCognition(),
             LearningActivity(),
