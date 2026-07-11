@@ -346,15 +346,16 @@ class PlanItemRequested(DomainEvent):
     user_id: str
     source_module: str = "secretary"
     request_id: str
+    target_type: str
+    target_ref_id: str
     title: str
     description: str
-    target_module: CrossModuleTarget
-    target_ref_id: str
-    linked_node_ids: list[str]
-    estimated_minutes: int
-    scheduled_for: datetime | None
-    priority: int
-    triggered_by_proposal_id: str | None = None
+    priority: int = 0
+    linked_node_ids: list[str] = field(default_factory=list)
+    requires_user_confirmation: bool = True
+    estimated_minutes: int = 10
+    proposed_scheduled_for: datetime | None = None
+    requested_at: datetime = field(default_factory=datetime.now)
 ```
 
 #### 4.3.3 ConversationContextInjected
