@@ -21,6 +21,7 @@ from shared.events import (
     ConversationNoteCreatedAsFlashcard,
     DomainEvent,
     PlanItemRequested,
+    PlanItemSuggested,
     PracticeAnswerBehaviorRecorded,
     ProposalGenerated,
     SessionCompleted,
@@ -57,8 +58,9 @@ class SecretaryEventHandler:
         bus.subscribe("AnswerSubmitted", self._on_answer_submitted)
         bus.subscribe("ConversationNoteCreatedAsFlashcard", self._on_conversation_note_created_as_flashcard)
         bus.subscribe("PracticeAnswerBehaviorRecorded", self._on_practice_behavior_recorded)
+        bus.subscribe("PlanItemSuggested", self._on_plan_item_suggested)
         self._subscribed = True
-        logger.info("📡 秘书已订阅领域事件: SessionCompleted / CognitiveNodeMetadataChanged / AnswerSubmitted / ConversationNoteCreatedAsFlashcard / PracticeAnswerBehaviorRecorded")
+        logger.info("📡 秘书已订阅领域事件: SessionCompleted / CognitiveNodeMetadataChanged / AnswerSubmitted / ConversationNoteCreatedAsFlashcard / PracticeAnswerBehaviorRecorded / PlanItemSuggested")
 
     def unsubscribe(self) -> None:
         """取消订阅"""
@@ -69,6 +71,7 @@ class SecretaryEventHandler:
         self._bus.unsubscribe("AnswerSubmitted", self._on_answer_submitted)
         self._bus.unsubscribe("ConversationNoteCreatedAsFlashcard", self._on_conversation_note_created_as_flashcard)
         self._bus.unsubscribe("PracticeAnswerBehaviorRecorded", self._on_practice_behavior_recorded)
+        self._bus.unsubscribe("PlanItemSuggested", self._on_plan_item_suggested)
         self._subscribed = False
         logger.info("📡 秘书已取消事件订阅")
 
@@ -146,24 +149,36 @@ class SecretaryEventHandler:
         triggered_by_proposal_id: str | None = None,
         requires_user_confirmation: bool = True,
         estimated_minutes: int = 10,
+        priority: int = 2,
+        proposed_scheduled_for: Any | None = None,
+        request_id: str | None = None,
+        suggestion_id: str | None = None,
     ) -> None:
         """向规划壳发布 PlanItemRequested 事件"""
         if not self._bus:
             return
         try:
             from uuid import uuid4
+            metadata: dict[str, Any] = {"requested_by": "secretary"}
+            if triggered_by_proposal_id:
+                metadata["triggered_by_proposal_id"] = triggered_by_proposal_id
+            if suggestion_id:
+                metadata["suggestion_id"] = suggestion_id
+
             await self._bus.publish(PlanItemRequested(
                 user_id=user_id,
                 source_module="secretary",
-                request_id=str(uuid4())[:12],
+                request_id=request_id or str(uuid4())[:12],
                 target_type=target_type,
                 target_ref_id=target_ref_id,
                 title=title,
                 description=description,
-                priority=2,
+                priority=priority,
                 linked_node_ids=linked_node_ids,
                 requires_user_confirmation=requires_user_confirmation,
                 estimated_minutes=estimated_minutes,
+                proposed_scheduled_for=proposed_scheduled_for,
+                metadata=metadata,
             ))
         except Exception as e:
             logger.debug("PlanItemRequested 发布失败: %s", e)
@@ -439,6 +454,83 @@ class SecretaryEventHandler:
                 )
         except Exception as e:
             logger.debug("答题微行为提案生成失败: %s", e)
+
+    async def _on_plan_item_suggested(self, event: DomainEvent) -> None:
+        """规划壳主动建议 → 秘书编排器决策后发布 PlanItemRequested
+
+        策略：
+        - 疲劳度高时跳过非紧急建议（priority >= 3）
+        - pending confirmation 超过上限时暂停新建议
+        - 同一 suggestion_id 幂等去重
+        - 所有请求默认需要用户确认
+        """
+        if not isinstance(event, PlanItemSuggested):
+            return
+
+        user_id = event.user_id
+        suggestion_id = event.suggestion_id
+
+        logger.debug(
+            "收到 PlanItemSuggested: user=%s suggestion_id=%s target=%s reason=%s",
+            user_id, suggestion_id, event.target_type, event.reason,
+        )
+
+        try:
+            from app.api.planning import service as svc
+
+            # 幂等去重：同一 suggestion_id 不重复发起请求
+            existing = svc.find_confirmation_by_suggestion_id(user_id, suggestion_id)
+            if existing:
+                logger.debug("PlanItem suggestion_id=%s 已存在 confirmation，跳过", suggestion_id)
+                return
+
+            # 策略 1：疲劳过滤
+            priority = event.priority
+            try:
+                from app.domain.secretary.analysis import predict_fatigue_risk
+                fatigue = predict_fatigue_risk(user_id)
+                if fatigue.get("risk_level") == "high" and priority >= 3:
+                    logger.debug(
+                        "用户疲劳度高，跳过非紧急建议: user=%s suggestion_id=%s",
+                        user_id, suggestion_id,
+                    )
+                    return
+            except Exception as e:
+                logger.debug("疲劳评估失败，继续处理: %s", e)
+
+            # 策略 2：pending confirmation 上限
+            try:
+                pending_count = svc.count_pending_confirmations(user_id)
+                if pending_count >= 20:
+                    logger.debug(
+                        "pending confirmation 已达上限 %d，跳过建议: user=%s",
+                        pending_count, user_id,
+                    )
+                    return
+            except Exception as e:
+                logger.debug("pending confirmation 计数失败，继续处理: %s", e)
+
+            # 发布 PlanItemRequested，request_id 与 suggestion_id 绑定保证幂等
+            await self._request_plan_item(
+                user_id=user_id,
+                title=event.title,
+                description=event.description,
+                target_type=event.target_type,
+                target_ref_id=event.target_ref_id,
+                linked_node_ids=list(event.linked_node_ids or []),
+                requires_user_confirmation=True,
+                estimated_minutes=event.estimated_minutes or 10,
+                priority=priority,
+                proposed_scheduled_for=event.proposed_scheduled_for,
+                request_id=f"req_{suggestion_id}",
+                suggestion_id=suggestion_id,
+            )
+            logger.info(
+                "已将 PlanItemSuggested 转为 PlanItemRequested: user=%s suggestion_id=%s",
+                user_id, suggestion_id,
+            )
+        except Exception as e:
+            logger.debug("处理 PlanItemSuggested 失败: %s", e)
 
 
 # ── 全局实例 ──

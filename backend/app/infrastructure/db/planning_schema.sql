@@ -41,7 +41,39 @@ CREATE INDEX IF NOT EXISTS idx_plan_items_metadata_request_id
     ON plan_items((metadata->>'request_id'));
 
 
--- 2. 自定义视图方案
+-- 2. 计划项确认请求（pending confirmation）
+CREATE TABLE IF NOT EXISTS plan_item_confirmations (
+    id              TEXT PRIMARY KEY,
+    user_id         TEXT NOT NULL,
+    request_id      TEXT NOT NULL,
+    suggestion_id   TEXT,
+    source_module   VARCHAR(30) NOT NULL DEFAULT 'secretary',
+    target_type     VARCHAR(30) NOT NULL,
+    target_ref_id   TEXT NOT NULL,
+    title           TEXT NOT NULL,
+    description     TEXT DEFAULT '',
+    priority        SMALLINT DEFAULT 0,
+    estimated_minutes INT DEFAULT 10,
+    linked_node_ids JSONB DEFAULT '[]'::jsonb,
+    proposed_scheduled_for TIMESTAMPTZ,
+    status          VARCHAR(20) DEFAULT 'pending',
+    expires_at      TIMESTAMPTZ,
+    accepted_at     TIMESTAMPTZ,
+    dismissed_at    TIMESTAMPTZ,
+    metadata        JSONB DEFAULT '{}'::jsonb,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_plan_item_confirmations_user_status
+    ON plan_item_confirmations(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_plan_item_confirmations_request_id
+    ON plan_item_confirmations(user_id, request_id);
+CREATE INDEX IF NOT EXISTS idx_plan_item_confirmations_suggestion_id
+    ON plan_item_confirmations(user_id, suggestion_id);
+
+
+-- 3. 自定义视图方案
 CREATE TABLE IF NOT EXISTS plan_view_layouts (
     id           TEXT PRIMARY KEY,
     user_id      TEXT NOT NULL,
@@ -60,7 +92,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_view_layouts_user_default
     ON plan_view_layouts(user_id) WHERE is_default = TRUE;
 
 
--- 3. 目标
+-- 4. 目标
 CREATE TABLE IF NOT EXISTS plan_goals (
     id              TEXT PRIMARY KEY,
     user_id         TEXT NOT NULL,
@@ -83,7 +115,7 @@ CREATE INDEX IF NOT EXISTS idx_plan_goals_deadline_active
     ON plan_goals(user_id, deadline) WHERE status = 'active';
 
 
--- 4. 周期回顾
+-- 5. 周期回顾
 CREATE TABLE IF NOT EXISTS plan_periodic_reviews (
     id              TEXT PRIMARY KEY,
     user_id         TEXT NOT NULL,
@@ -99,7 +131,7 @@ CREATE INDEX IF NOT EXISTS idx_plan_reviews_user_period
     ON plan_periodic_reviews(user_id, period_start DESC);
 
 
--- 5. 计划草稿
+-- 6. 计划草稿
 CREATE TABLE IF NOT EXISTS plan_drafts (
     id           TEXT PRIMARY KEY,
     user_id      TEXT NOT NULL,
@@ -114,7 +146,7 @@ CREATE INDEX IF NOT EXISTS idx_plan_drafts_user_date
     ON plan_drafts(user_id, plan_date);
 
 
--- 6. 偏差记录
+-- 7. 偏差记录
 CREATE TABLE IF NOT EXISTS plan_deviations (
     id                 TEXT PRIMARY KEY,
     plan_item_id       TEXT NOT NULL REFERENCES plan_items(id) ON DELETE CASCADE,

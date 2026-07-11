@@ -1424,6 +1424,34 @@ class PlanDeviationRecorded(DomainEvent):
 
 
 @dataclass(frozen=True)
+class PlanItemSuggested(DomainEvent):
+    """规划壳向秘书编排器建议创建计划项
+
+    规划壳基于学习事件和自身算法发现建项机会，但不直接创建计划项，
+    而是交由秘书编排器统一决策是否发起 PlanItemRequested。
+    """
+    user_id: str = ""
+    source_module: str = "planning"
+    suggestion_id: str = ""           # 幂等键
+    trigger_event_type: str = ""      # 触发来源事件类型，如 "SessionCompleted"
+    trigger_event_id: str = ""
+    target_type: str = ""             # flashcard / practice / review / reading 等
+    target_ref_id: str = ""
+    title: str = ""
+    description: str = ""
+    priority: int = 0
+    estimated_minutes: int = 10
+    linked_node_ids: list[str] = field(default_factory=list)
+    proposed_scheduled_for: datetime | None = None
+    reason: str = ""                  # 生成原因，如 "mastery_dropped"
+    suggested_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "PlanItemSuggested"
+
+
+@dataclass(frozen=True)
 class PlanItemRequested(DomainEvent):
     """秘书编排器请求规划壳创建计划项
 
@@ -1431,10 +1459,10 @@ class PlanItemRequested(DomainEvent):
     - requires_user_confirmation=True 时，规划壳应先向前端展示确认，用户同意后再创建
     - requires_user_confirmation=False 时，规划壳可直接创建 plan item
 
-    source_module 固定为 "secretary"，表示请求来源。
+    source_module 通常为 "secretary"，也可由秘书代表规划壳中转（metadata 记录 suggestion_id）。
     """
     user_id: str = ""
-    source_module: str = ""  # 固定为 "secretary"
+    source_module: str = ""  # 通常为 "secretary"
     request_id: str = ""     # 幂等键，避免秘书重复请求创建同一计划
     target_type: str = ""
     target_ref_id: str = ""
@@ -1445,6 +1473,7 @@ class PlanItemRequested(DomainEvent):
     requires_user_confirmation: bool = True
     estimated_minutes: int = 10
     proposed_scheduled_for: datetime | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
     requested_at: datetime = field(default_factory=_now)
 
     @property
@@ -2488,6 +2517,7 @@ EVENT_TYPES: dict[str, type[DomainEvent]] = {
         PlanGoalCompleted,
         PlanPeriodicReviewGenerated,
         PlanDeviationRecorded,
+        PlanItemSuggested,
         PlanItemRequested,
         PlanGoalRequested,
         # FlashCard 域事件 (docs/modules/flashcard/events.md)

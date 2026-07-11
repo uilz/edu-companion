@@ -151,6 +151,34 @@ class PeriodicReviewResponse(BaseModel):
 
 
 # ──────────────────────────────────────────────
+# 计划项确认请求 (plan_item_confirmations)
+# ──────────────────────────────────────────────
+
+
+class PlanItemConfirmationResponse(BaseModel):
+    id: str
+    user_id: str
+    request_id: str
+    suggestion_id: Optional[str] = None
+    source_module: str = "secretary"
+    target_type: str
+    target_ref_id: str
+    title: str
+    description: str = ""
+    priority: int = 0
+    estimated_minutes: int = 10
+    linked_node_ids: list[str] = Field(default_factory=list)
+    proposed_scheduled_for: Optional[datetime] = None
+    status: str = "pending"
+    expires_at: Optional[datetime] = None
+    accepted_at: Optional[datetime] = None
+    dismissed_at: Optional[datetime] = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+# ──────────────────────────────────────────────
 # 视图聚合（daily / weekly / knowledge）
 # ──────────────────────────────────────────────
 

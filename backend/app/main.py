@@ -238,6 +238,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning("PlanningEventHandler 订阅失败: %s", e)
 
+    # Task #61: 订阅 Planning 主动生成器
+    try:
+        from app.api.planning.proactive_generator import planning_proactive_generator
+        planning_proactive_generator.subscribe(container.event_bus)
+        logger.info("📡 PlanningProactiveGenerator 已订阅事件总线")
+    except Exception as e:
+        logger.warning("PlanningProactiveGenerator 订阅失败: %s", e)
+
     # 初始化 Planning 数据表
     try:
         from app.services.planning import _ensure_tables as _ensure_planning_tables

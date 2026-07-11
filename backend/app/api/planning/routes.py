@@ -39,6 +39,7 @@ from app.api.planning.schemas import (
     PlanGoalResponse,
     PlanGoalUpdate,
     PlanItemComplete,
+    PlanItemConfirmationResponse,
     PlanItemCreate,
     PlanItemResponse,
     PlanItemUpdate,
@@ -426,3 +427,52 @@ async def create_view_layout(
         raise HTTPException(status_code=401, detail="请先登录")
     layout = svc.create_view_layout(user_id, body.model_dump())
     return _to_layout_response(layout)
+
+
+# ── 计划项确认请求 ──
+
+
+def _to_confirmation_response(d: dict) -> PlanItemConfirmationResponse:
+    return PlanItemConfirmationResponse(**d)
+
+
+@router.get("/confirmations", summary="查询计划项确认请求")
+async def list_confirmations(
+    status: Optional[str] = Query(default=None),
+    user_id: str = Depends(current_user_id),
+):
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="请先登录")
+    confirmations = svc.list_confirmations(user_id, status)
+    return {
+        "confirmations": [_to_confirmation_response(x).model_dump(mode="json") for x in confirmations],
+        "total": len(confirmations),
+    }
+
+
+@router.post("/confirmations/{confirmation_id}/accept", response_model=PlanItemResponse, summary="接受计划项确认请求")
+async def accept_confirmation(
+    confirmation_id: str,
+    user_id: str = Depends(current_user_id),
+):
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="请先登录")
+    try:
+        item = svc.accept_confirmation(user_id, confirmation_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return _to_item_response(item)
+
+
+@router.post("/confirmations/{confirmation_id}/dismiss", response_model=PlanItemConfirmationResponse, summary="忽略计划项确认请求")
+async def dismiss_confirmation(
+    confirmation_id: str,
+    user_id: str = Depends(current_user_id),
+):
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="请先登录")
+    try:
+        confirmation = svc.dismiss_confirmation(user_id, confirmation_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return _to_confirmation_response(confirmation)

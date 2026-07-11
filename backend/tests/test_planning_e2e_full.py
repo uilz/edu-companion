@@ -1626,13 +1626,13 @@ class TestViewLayouts:
 
 
 class TestAllRoutesRegistered:
-    """验证 routes.py 注册的 18 个端点全部可达"""
+    """验证 routes.py 注册的 21 个端点全部可达（含 Phase 5 confirmation 3 端点）"""
 
-    def test_97_all_18_routes_registered(self):
-        """routes.py 注册的端点数 == 18"""
+    def test_97_all_21_routes_registered(self):
+        """routes.py 注册的端点数 == 21"""
         from app.api.planning.routes import router
         paths = [r.path for r in router.routes]
-        assert len(paths) == 18, f"期望 18 个端点, 实际 {len(paths)}: {paths}"
+        assert len(paths) == 21, f"期望 21 个端点, 实际 {len(paths)}: {paths}"
 
     @pytest.mark.parametrize("path,method", [
         ("/api/planning/daily", "GET"),
@@ -1653,9 +1653,12 @@ class TestAllRoutesRegistered:
         ("/api/planning/reviews/generate", "POST"),
         ("/api/planning/view-layouts", "GET"),
         ("/api/planning/view-layouts", "POST"),
+        ("/api/planning/confirmations", "GET"),
+        ("/api/planning/confirmations/{confirmation_id}/accept", "POST"),
+        ("/api/planning/confirmations/{confirmation_id}/dismiss", "POST"),
     ])
     def test_98_route_exists(self, path, method):
-        """所有 18 个端点都注册到 router"""
+        """所有 21 个端点都注册到 router"""
         from app.api.planning.routes import router
         for r in router.routes:
             if r.path == path and method in r.methods:
