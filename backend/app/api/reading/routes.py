@@ -232,6 +232,7 @@ async def update_session_activity(
         user_id, session_id,
         chapter_visited=body.chapter_visited,
         state_snapshot=body.state_snapshot,
+        progress_pct=body.progress_pct,
         annotations_delta=body.annotations_delta,
         notes_delta=body.notes_delta,
         cards_delta=body.cards_delta,

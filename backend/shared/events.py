@@ -1703,6 +1703,22 @@ class ReadingReviewReminderScheduled(DomainEvent):
         return "ReadingReviewReminderScheduled"
 
 
+@dataclass(frozen=True)
+class ReadingComparisonCreated(DomainEvent):
+    """创建对比阅读分组"""
+
+    user_id: str = ""
+    comparison_id: str = ""
+    material_id_left: str = ""
+    material_id_right: str = ""
+    sync_scroll: bool = False
+    created_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "ReadingComparisonCreated"
+
+
 # ──────────────────────────────────────────────
 # 知识树域事件 (Task 0024)
 #
@@ -2546,6 +2562,7 @@ EVENT_TYPES: dict[str, type[DomainEvent]] = {
         MaterialProgressUpdated,
         ReadingMaterialCompleted,
         ReadingReviewReminderScheduled,
+        ReadingComparisonCreated,
         # 知识树域事件 (Task 0024)
         TreeNodeCreated,
         TreeNodeUpdated,

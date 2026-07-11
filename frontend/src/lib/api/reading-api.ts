@@ -154,6 +154,7 @@ export const readingService = {
     payload: {
       chapter_visited?: string;
       state_snapshot?: Record<string, any>;
+      progress_pct?: number;
       annotations_delta?: number;
       notes_delta?: number;
       cards_delta?: number;

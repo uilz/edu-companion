@@ -112,7 +112,7 @@ def cleanup_test_data(db, user_id):
     for tbl in (
         "reading_annotations", "reading_sessions", "reading_comparisons",
         "reading_prefs", "flashcards", "plan_items",
-        "project_nodes", "projects",
+        "project_nodes", "projects", "knowledge_nodes",
     ):
         try:
             db.execute(f"DELETE FROM {tbl} WHERE user_id = %s", (user_id,))
@@ -273,8 +273,9 @@ class TestAnnotationLinkedToCognitiveNode:
         # 先创建一个 cognitive_node
         from app.domain.cognitive.writer import CognitiveNodeWriter
         writer = CognitiveNodeWriter(user_id)
+        node_label = f"微积分.导数.{user_id[-8:]}"
         node = writer.create_node(
-            label="微积分.导数",
+            label=node_label,
             level="atom",
             node_type="auto_generated",
             created_by="reading_test",
@@ -622,8 +623,9 @@ class TestHighlightMatchToKnowledgeGraph:
 
         # 创建 1 个 CognitiveNode
         writer = CognitiveNodeWriter(user_id)
+        node_label = f"数据结构.二叉树.{user_id[-8:]}"
         node = writer.create_node(
-            label="数据结构.二叉树",
+            label=node_label,
             level="atom",
             node_type="auto_generated",
             created_by="reading_highlight_test",
@@ -797,3 +799,64 @@ class TestReadingEventsPublishing:
             assert my[0].new_mode == "skim"
         finally:
             bus.unsubscribe("ReadingModeChanged", _cap)
+
+    def test_update_session_activity_emits_material_progress_updated(self, db, user_id):
+        """update_session_activity 发布 MaterialProgressUpdated"""
+        _ensure_reading_tables(db)
+        from app.services.reading.sessions import start_session, update_session_activity
+        from app.application.di import container
+
+        bus = container.event_bus
+        captured: list = []
+
+        async def _cap(event):
+            captured.append(event)
+
+        bus.subscribe("MaterialProgressUpdated", _cap)
+        try:
+            s = start_session(user_id, f"mat_{user_id}", mode="intensive")
+            update_session_activity(
+                user_id, s["id"],
+                state_snapshot={"last_chunk_id": "chunk_2", "last_offset": 120},
+                progress_pct=0.42,
+            )
+            time.sleep(0.3)
+            my = [e for e in captured
+                  if e.user_id == user_id and e.session_id == s["id"]]
+            assert len(my) == 1
+            assert my[0].progress_pct == pytest.approx(0.42)
+            assert my[0].last_chunk_id == "chunk_2"
+            assert my[0].last_offset == 120
+            assert my[0].source_module == "reading"
+        finally:
+            bus.unsubscribe("MaterialProgressUpdated", _cap)
+
+    def test_create_comparison_emits_reading_comparison_created(self, db, user_id):
+        """create_comparison 发布 ReadingComparisonCreated"""
+        _ensure_reading_tables(db)
+        from app.services.reading.compare import create_comparison
+        from app.application.di import container
+
+        bus = container.event_bus
+        captured: list = []
+
+        async def _cap(event):
+            captured.append(event)
+
+        bus.subscribe("ReadingComparisonCreated", _cap)
+        try:
+            cmp = create_comparison(
+                user_id,
+                material_id_left=f"mat_left_{user_id[-8:]}",
+                material_id_right=f"mat_right_{user_id[-8:]}",
+                sync_scroll=True,
+            )
+            time.sleep(0.3)
+            my = [e for e in captured if e.user_id == user_id]
+            assert len(my) == 1
+            assert my[0].comparison_id == cmp["id"]
+            assert my[0].material_id_left == f"mat_left_{user_id[-8:]}"
+            assert my[0].material_id_right == f"mat_right_{user_id[-8:]}"
+            assert my[0].sync_scroll is True
+        finally:
+            bus.unsubscribe("ReadingComparisonCreated", _cap)

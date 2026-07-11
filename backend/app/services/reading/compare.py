@@ -8,11 +8,12 @@
 """
 from __future__ import annotations
 
-import json
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Optional
+
+from app.infrastructure.event_bus_utils import publish_event_safe
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,11 @@ def _ensure_tables() -> None:
     _et()
 
 
+def _publish(event) -> None:
+    """发布事件 — 委托给 publish_event_safe (自动处理 sync/async 上下文)"""
+    publish_event_safe(event)
+
+
 # ── 对比分组 CRUD ──
 
 
@@ -44,12 +50,22 @@ def create_comparison(
     from app.infrastructure.db.database import get_db
     db = get_db()
     cid = _uid()
+    now = _now()
     db.execute(
         """INSERT INTO reading_comparisons
            (id, user_id, material_id_left, material_id_right, sync_scroll, created_at)
            VALUES (%s, %s, %s, %s, %s, %s)""",
-        (cid, user_id, material_id_left, material_id_right, sync_scroll, _now()),
+        (cid, user_id, material_id_left, material_id_right, sync_scroll, now),
     )
+    from shared.events import ReadingComparisonCreated
+    _publish(ReadingComparisonCreated(
+        user_id=user_id,
+        comparison_id=cid,
+        material_id_left=material_id_left,
+        material_id_right=material_id_right,
+        sync_scroll=sync_scroll,
+        created_at=now,
+    ))
     return get_comparison(user_id, cid) or {}
 
 

@@ -94,6 +94,7 @@ class SessionActivityRequest(BaseModel):
     """POST /api/reading/sessions/{id}/activity 请求体（增量）"""
     chapter_visited: Optional[str] = None
     state_snapshot: Optional[dict] = None
+    progress_pct: Optional[float] = Field(None, ge=0.0, le=1.0)
     annotations_delta: int = 0
     notes_delta: int = 0
     cards_delta: int = 0

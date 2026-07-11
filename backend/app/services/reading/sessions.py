@@ -137,18 +137,37 @@ def list_sessions(
     return [_row_to_dict(r) for r in rows]  # type: ignore[misc]
 
 
+def _compute_progress_pct(state_snapshot: Optional[dict]) -> float:
+    """从 state_snapshot 推断进度百分比，兜底 0.0。"""
+    if not state_snapshot:
+        return 0.0
+    explicit = state_snapshot.get("progress_pct")
+    if isinstance(explicit, (int, float)) and 0.0 <= float(explicit) <= 1.0:
+        return float(explicit)
+    last_chunk_index = state_snapshot.get("last_chunk_index")
+    total_chunks = state_snapshot.get("total_chunks")
+    if (
+        isinstance(last_chunk_index, int)
+        and isinstance(total_chunks, int)
+        and total_chunks > 0
+    ):
+        return min(1.0, (last_chunk_index + 1) / total_chunks)
+    return 0.0
+
+
 def update_session_activity(
     user_id: str,
     session_id: str,
     *,
     chapter_visited: Optional[str] = None,
     state_snapshot: Optional[dict] = None,
+    progress_pct: Optional[float] = None,
     annotations_delta: int = 0,
     notes_delta: int = 0,
     cards_delta: int = 0,
     node_linked: Optional[str] = None,
 ) -> dict | None:
-    """更新会话活动（增量统计）。"""
+    """更新会话活动（增量统计）并发布 MaterialProgressUpdated。"""
     _ensure_tables()
     from app.infrastructure.db.database import get_db
     db = get_db()
@@ -163,9 +182,11 @@ def update_session_activity(
             visited.append(chapter_visited)
         sets.append("chapters_visited = %s::jsonb")
         params.append(json.dumps(visited, ensure_ascii=False))
+    merged_snapshot: Optional[dict] = None
     if state_snapshot is not None:
+        merged_snapshot = {**(existing.get("state_snapshot") or {}), **state_snapshot}
         sets.append("state_snapshot = %s::jsonb")
-        params.append(json.dumps(state_snapshot, ensure_ascii=False, default=str))
+        params.append(json.dumps(merged_snapshot, ensure_ascii=False, default=str))
     if annotations_delta:
         sets.append("annotations_created = annotations_created + %s")
         params.append(int(annotations_delta))
@@ -187,7 +208,26 @@ def update_session_activity(
         f"WHERE id = %s AND user_id = %s",
         tuple(params),
     )
-    return get_session(user_id, session_id)
+    updated = get_session(user_id, session_id)
+    # 发布 MaterialProgressUpdated（阅读进度审计事件）
+    pct = progress_pct if progress_pct is not None else _compute_progress_pct(merged_snapshot)
+    last_chunk_id = ""
+    last_offset = 0
+    if merged_snapshot:
+        last_chunk_id = merged_snapshot.get("last_chunk_id", "")
+        last_offset = merged_snapshot.get("last_offset", 0)
+    from shared.events import MaterialProgressUpdated
+    _publish(MaterialProgressUpdated(
+        user_id=user_id,
+        source_module="reading",
+        material_id=existing.get("material_id", ""),
+        session_id=session_id,
+        progress_pct=float(pct),
+        last_chunk_id=str(last_chunk_id),
+        last_offset=int(last_offset),
+        updated_at=_now(),
+    ))
+    return updated
 
 
 def end_session(

@@ -829,6 +829,14 @@ def suggest_followup(annotation: ReadingAnnotation) -> dict:
 
 ---
 
-## 12. 下一步
+## 12. 实施状态（Task #77-#81）
+
+- [x] 后端：会话/标注/笔记/回顾提醒/偏好/对比服务已落地
+- [x] 事件协议：ReadingSessionStarted/Ended/Resumed/ModeChanged、ReadingAnnotationCreated/Updated/Deleted/Processed、ReadingNoteCreated、ReadingReviewReminderScheduled、MaterialProgressUpdated、ReadingComparisonCreated 已注册并发布
+- [x] 前端：阅读首页、材料详情、笔记管理、对比阅读四页已可用
+- [x] 测试：`test_reading_e2e_full.py` 100+ 用例、`test_reading_cross_module.py` 跨模块事件审计通过
+- [ ] 待后续：材料实际内容展示依赖 file-management MaterialChunk 集成（当前为占位文本）
+
+## 13. 下一步
 
 Task #24：知识树壳（Knowledge Tree Shell）深度设计。
