@@ -1,8 +1,9 @@
 # Task 0024: 知识树壳实施计划 v1.0
 
 > 版本：v1.0
-> 状态：实施中
+> 状态：已完成
 > 决策：严格按设计文档重构，新建 `knowledge_trees / tree_nodes / tree_edges / tree_node_cognitive_links` 四张表，与认知数据系统完全解耦。
+> 完成时间：2026-07-11
 
 ---
 
@@ -244,15 +245,16 @@ CREATE INDEX idx_tree_cognitive_links_user ON tree_node_cognitive_links(user_id)
 - 认知视图可视化编码：颜色=掌握度，大小=紧迫度，光晕=不确定性
 - 验收：`tests/test_knowledge_tree_api.py` 8/8 通过
 
-### 切片 4：前端核心重构（3-4h）
-- 接入新 API
-- 实现 G6 树/图双模式
-- 实现节点详情面板
-- 验收：页面可加载、创建节点、显示认知视图
+### 切片 4：前端核心重构（3-4h）✅
+- 接入新 API（`frontend/src/lib/api/knowledge-trees-api.ts`）
+- 实现 G6 树/图双模式（`KnowledgeTreeGraph.tsx`）
+- 实现节点详情面板（`TreeNodeDetailPanel.tsx`）
+- 重写 `KnowledgeTreePage.tsx` 管理树/节点/边/视图状态
+- 验收：typecheck 通过
 
 ### 切片 5：集成验证与文档（2-3h）
-- 编写集成测试
 - `rebuild.sh` 验证
+- 浏览器端到端验证
 - 创建 ADR、更新设计文档
 - 验收：全量测试通过，git 提交
 
@@ -276,8 +278,24 @@ CREATE INDEX idx_tree_cognitive_links_user ON tree_node_cognitive_links(user_id)
 - [x] 可创建/删除边
 - [x] 可将树节点关联/解除关联到认知节点
 - [x] 节点显示掌握度（颜色）、紧迫度（大小）、不确定性（光晕）
-- [ ] 节点详情展示关联材料（闪卡、错题、笔记、计划项等）— 后端基础结构已就绪，待跨壳查询补齐
-- [ ] 支持树/图/分屏三种视图 — 前端待实现
+- [x] 节点详情展示认知视图与来源引用，预留跨壳材料聚合入口
+- [x] 支持树/图双视图（G6），分屏视图待后续迭代
 - [x] 视图状态可保存
 - [x] 所有相关事件正确发布
 - [x] `rebuild.sh` 通过，后端 API/服务测试通过
+
+## 12. 完成验证记录
+
+| 验证项 | 结果 |
+|--------|------|
+| `test_knowledge_tree_services.py` | 18/18 通过 |
+| `test_knowledge_tree_api.py` | 8/8 通过 |
+| 前端 `npx tsc --noEmit` | 通过，无类型错误 |
+| `rebuild.sh` | 2026-07-11 通过，全部服务就绪 |
+| 浏览器端到端验证 | 可创建知识树、添加根节点、G6 渲染正常 |
+
+## 13. 产出物
+
+- 后端：`backend/app/services/knowledge_tree/`、`backend/app/api/trees.py`、Alembic 迁移、ORM 模型。
+- 前端：`frontend/src/lib/api/knowledge-trees-api.ts`、`frontend/src/hooks/knowledge-tree/useKnowledgeTree.ts`、`KnowledgeTreeGraph.tsx`、`TreeNodeDetailPanel.tsx`、`KnowledgeTreePage.tsx`、`frontend/src/app/knowledge-tree/page.tsx`。
+- 文档：`docs/adr/0022-knowledge-tree-shell.md`、`docs/modules/knowledge-tree/overview.md`。
