@@ -297,3 +297,10 @@ async def api_exam_result(session_id: str, user_id: str = Depends(current_user_i
     if not result:
         raise HTTPException(404, "考试不存在")
     return result
+
+
+@router.get("/feedback/{attempt_id}")
+async def api_get_feedback(attempt_id: str, user_id: str = Depends(current_user_id)):
+    """按 attempt_id 查询答题后的信息增益、掌握度变化与元认知建议。"""
+    from app.api.practice.feedback_service import get_feedback
+    return get_feedback(user_id=user_id, attempt_id=attempt_id)

@@ -18,8 +18,12 @@ import type {
 } from "@/store/notification/types";
 import EventStream from "@/components/secretary/EventStream";
 import {
-  ACTION_TYPE_LABELS, TabKey, ViewMode, ProposalItem, SnapshotData, toNotification,
+  ACTION_TYPE_LABELS, TabKey, ViewMode, ProposalItem, SnapshotData, toNotification, confirmationToNotification,
 } from "@/components/secretary/shared";
+import {
+  usePlanItemConfirmations, acceptPlanItemConfirmation, dismissPlanItemConfirmation,
+  type PlanItemConfirmation,
+} from "@/hooks/planning/usePlanning";
 import ProposalCard from "@/components/secretary/ProposalCard";
 import FilterBar from "@/components/secretary/FilterBar";
 import BatchActions from "@/components/secretary/BatchActions";
@@ -37,6 +41,7 @@ export default function SecretaryPage() {
   const [generating, setGenerating] = useState(false);
   const [checking, setChecking] = useState(false);
   const [checkerResult, setCheckerResult] = useState<{ proposals: number; modules: number; reasons: string[] } | null>(null);
+  const [confirmations, setConfirmations] = useState<PlanItemConfirmation[]>([]);
 
   // ── 筛选状态 ──
   const [filterSource, setFilterSource] = useState<NotificationSource | "">("");
@@ -68,9 +73,10 @@ export default function SecretaryPage() {
     setLoading(true);
     try {
       const userId = user.id;
-      const [snapRes, propRes] = await Promise.all([
+      const [snapRes, propRes, confRes] = await Promise.all([
         authedFetch(`/api/secretary/snapshot?user_id=${userId}`),
         authedFetch(`/api/secretary/proposals/pending?user_id=${userId}`),
+        authedFetch(`/api/planning/confirmations?status=pending`),
       ]);
       if (snapRes.ok) setSnapshot(await snapRes.json());
       if (propRes.ok) {
@@ -85,6 +91,10 @@ export default function SecretaryPage() {
             store.addNotification(notif);
           }
         }
+      }
+      if (confRes.ok) {
+        const data: { confirmations: PlanItemConfirmation[] } = await confRes.json();
+        setConfirmations(data.confirmations || []);
       }
     } finally {
       setLoading(false);
@@ -115,6 +125,8 @@ export default function SecretaryPage() {
   }, [filterSource, filterActionType, priorityMin, searchText]);
 
   // ── 根据 tab 获取数据 ──
+  const confirmationIds = useMemo(() => new Set(confirmations.map((c) => c.id)), [confirmations]);
+
   const { items, countLabel } = useMemo(() => {
     const store = useNotificationStore.getState();
     let list: SecretaryNotification[];
@@ -123,6 +135,12 @@ export default function SecretaryPage() {
     switch (activeTab) {
       case "pending": {
         list = store.getActiveNotifications(activeFilter);
+        // 合并待确认计划项
+        const confNotifications = confirmations
+          .filter((c) => !activeFilter || activeFilter.actionType === "" || activeFilter.actionType === "plan_item_confirmation")
+          .filter((c) => !activeFilter?.search || c.title.toLowerCase().includes(activeFilter.search.toLowerCase()) || c.description.toLowerCase().includes(activeFilter.search.toLowerCase()))
+          .map(confirmationToNotification);
+        list = [...confNotifications, ...list];
         label = `待处理 (${list.length})`;
         break;
       }
@@ -146,11 +164,26 @@ export default function SecretaryPage() {
     }
 
     return { items: list, countLabel: label };
-  }, [activeTab, activeFilter, notifications]);
+  }, [activeTab, activeFilter, notifications, confirmations]);
 
   // ── 处理函数 ──
   const handleAccept = useCallback(async (id: string, options?: { navigate?: boolean }) => {
     if (!user) return;
+
+    // 计划项确认请求：调用 planning API
+    if (confirmationIds.has(id)) {
+      try {
+        await acceptPlanItemConfirmation(id);
+        setConfirmations((prev) => prev.filter((c) => c.id !== id));
+        setLocalFeedback({ id, message: "已加入计划", success: true });
+        setTimeout(() => setLocalFeedback(null), 4000);
+      } catch {
+        setLocalFeedback({ id, message: "加入计划失败", success: false });
+        setTimeout(() => setLocalFeedback(null), 4000);
+      }
+      return;
+    }
+
     try {
       const userId = user.id;
       const res = await authedFetch(`/api/secretary/proposals/${id}/accept?user_id=${userId}`, {
@@ -190,11 +223,20 @@ export default function SecretaryPage() {
     } catch {
       acceptNotification(id);
     }
-  }, [user, notifications, acceptNotification, addActionFeedback]);
+  }, [user, notifications, acceptNotification, addActionFeedback, confirmationIds]);
 
-  const handleDismiss = useCallback((id: string) => {
+  const handleDismiss = useCallback(async (id: string) => {
+    if (confirmationIds.has(id)) {
+      try {
+        await dismissPlanItemConfirmation(id);
+        setConfirmations((prev) => prev.filter((c) => c.id !== id));
+      } catch {
+        // 静默失败
+      }
+      return;
+    }
     dismissNotification(id);
-  }, []);
+  }, [confirmationIds]);
 
   const handleSnooze = useCallback((id: string, ms: number) => {
     const until = Date.now() + ms;

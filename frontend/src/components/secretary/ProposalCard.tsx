@@ -127,7 +127,24 @@ export default function ProposalCard({
 
           {/* 操作按钮 */}
           <div className="flex gap-1.5 mt-2 flex-wrap">
-            {tab === "pending" && (
+            {tab === "pending" && item.actionType === "plan_item_confirmation" && (
+              <>
+                <button
+                  onClick={onAccept}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-success text-white rounded hover:opacity-90 active:scale-[0.97] transition-all"
+                >
+                  <Check size={10} />加入计划
+                </button>
+                <button
+                  onClick={onDismiss}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-[10px] text-muted hover:text bg-surface rounded border border hover:border-text-muted transition-colors"
+                >
+                  <X size={10} />忽略
+                </button>
+              </>
+            )}
+
+            {tab === "pending" && item.actionType !== "plan_item_confirmation" && (
               <>
                 <button
                   onClick={onAccept}

@@ -240,12 +240,17 @@ def insert_attempt(
     error_analysis: dict = None,
     confidence_before: int = None,
     now: str = "",
+    attempt_id: str | None = None,
 ) -> str:
-    """插入答题记录 (D9: 唯一记录源, session_questions 不再存状态)"""
+    """插入答题记录 (D9: 唯一记录源, session_questions 不再存状态)
+
+    如果调用方传入 attempt_id，则使用该 id（用于与 AnswerSubmitted.attempt_id 保持一致）。
+    """
     from datetime import datetime
     if not now:
         now = datetime.now().isoformat()
-    attempt_id = f"att_{session_id}_{question_id}_{int(datetime.now().timestamp())}"
+    if attempt_id is None:
+        attempt_id = f"att_{session_id}_{question_id}_{int(datetime.now().timestamp())}"
     db.execute(
         """INSERT INTO practice_attempts
            (id, session_id, question_id, user_id, is_correct, user_answer,

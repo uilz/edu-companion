@@ -14,9 +14,13 @@ import {
   PointerSensor,
   DragEndEvent,
 } from "@dnd-kit/core";
-import { useDailyView, completePlanItem, startPlanItem, skipPlanItem, updatePlanItem, PlanItem, createPlanItem, DailyView } from "@/hooks/planning/usePlanning";
+import {
+  useDailyView, completePlanItem, startPlanItem, skipPlanItem, updatePlanItem, PlanItem, createPlanItem, DailyView,
+  usePlanItemConfirmations, acceptPlanItemConfirmation, dismissPlanItemConfirmation,
+} from "@/hooks/planning/usePlanning";
 import { useAuth } from "@/contexts/AuthContext";
 import Card from "@/components/ui/Card";
+import PlanItemConfirmationPool from "@/components/planning/PlanItemConfirmationPool";
 
 const HABIT_LABELS: Record<string, string> = {
   beginner: "🌱 初学",
@@ -73,6 +77,7 @@ function timeOf(iso: string | null | undefined): number {
 export default function DailyPage() {
   const { user } = useAuth();
   const { data, loading, error, reload } = useDailyView();
+  const { confirmations, loading: confirmationsLoading, reload: reloadConfirmations } = usePlanItemConfirmations("pending");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -208,6 +213,32 @@ export default function DailyPage() {
     }
   };
 
+  const handleAcceptConfirmation = async (id: string) => {
+    setBusyId(id);
+    try {
+      await acceptPlanItemConfirmation(id);
+      await Promise.all([reloadConfirmations(), reload()]);
+    } catch (e) {
+      console.error(e);
+      setActionError(e instanceof Error ? e.message : "接受计划项失败");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleDismissConfirmation = async (id: string) => {
+    setBusyId(id);
+    try {
+      await dismissPlanItemConfirmation(id);
+      await reloadConfirmations();
+    } catch (e) {
+      console.error(e);
+      setActionError(e instanceof Error ? e.message : "忽略计划项失败");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -263,8 +294,24 @@ export default function DailyPage() {
           </div>
         </div>
 
+        {/* 待确认计划项池 */}
+        {confirmationsLoading ? (
+          <div className="mt-4 flex items-center gap-2 text-xs text-muted">
+            <Loader2 size={14} className="animate-spin" /> 加载待确认计划项…
+          </div>
+        ) : (
+          <div className="mt-4">
+            <PlanItemConfirmationPool
+              confirmations={confirmations}
+              busyId={busyId}
+              onAccept={handleAcceptConfirmation}
+              onDismiss={handleDismissConfirmation}
+            />
+          </div>
+        )}
+
         {/* 顶部状态条 */}
-        <Card title="状态条">
+        <Card title="状态条" className="mt-4">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
             <div>
               <span className="text-muted">疲劳</span>

@@ -234,16 +234,20 @@ class PracticeEngine:
             except Exception:
                 pass
 
-        # 4. 写入答题记录
+        # 4. 生成统一 attempt_id（事件、数据库、遥测一致）
+        attempt_id = f"att_{session_id}_{question_id}_{int(datetime.now().timestamp())}"
+
+        # 5. 写入答题记录
         repo.insert_attempt(
             db, session_id, question_id, user_id, is_correct, user_answer or [],
             time_spent, hints_used, error_pattern, error_analysis, confidence_before, now,
+            attempt_id=attempt_id,
         )
 
-        # 5. 更新会话统计
+        # 6. 更新会话统计
         repo.update_session_stats(db, session_id)
 
-        # 6. 发布领域事件（单一事实来源 = AnswerSubmitted）
+        # 7. 发布领域事件（单一事实来源 = AnswerSubmitted）
         correlation_id = f"{session_id}:{question_id}:{int(datetime.now().timestamp() * 1000)}"
         skill_id = question.get("skill_id", "") or ""
         cognitive_node_ids = safe_json(question.get("cognitive_node_ids"), [])
@@ -262,7 +266,7 @@ class PracticeEngine:
             source_module="practice",
             source_id=session_id,
             correlation_id=correlation_id,
-            attempt_id=str(uuid.uuid4())[:16],
+            attempt_id=attempt_id,
             session_id=session_id,
             question_id=question_id,
             skill_id=skill_id,
@@ -320,6 +324,7 @@ class PracticeEngine:
             "error_type": error_pattern,
             "error_detail": error_analysis.get("llm_detail", ""),
             "metacognition_feedback": _get_metacognition_feedback(confidence_before, is_correct),
+            "attempt_id": attempt_id,
             "submitted_event_id": answer_event.event_id,
         }
 

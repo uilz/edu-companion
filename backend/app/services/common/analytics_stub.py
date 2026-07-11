@@ -29,7 +29,7 @@ class AnalyticsStub:
         stats["answer_count"] += 1
         if event.is_correct:
             stats["correct_count"] += 1
-        stats["total_time_spent"] += event.time_spent
+        stats["total_time_spent"] += getattr(event, "response_time_seconds", 0.0)
 
     async def _gather_daily_data(self, user_id: str, days: int = 7) -> dict[str, Any]:
         from app.infrastructure.db.database import get_db

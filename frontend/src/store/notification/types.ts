@@ -29,6 +29,7 @@ export type ActionType =
   | "rest"
   | "explore"
   | "exam_prep"
+  | "plan_item_confirmation"
   | "";
 
 /** 通知路由目标 */

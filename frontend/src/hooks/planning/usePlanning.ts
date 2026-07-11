@@ -126,6 +126,29 @@ export interface PlanGoal {
   completed_at?: string | null;
 }
 
+export interface PlanItemConfirmation {
+  id: string;
+  user_id: string;
+  request_id: string;
+  suggestion_id?: string | null;
+  source_module: string;
+  target_type: string;
+  target_ref_id: string;
+  title: string;
+  description: string;
+  priority: number;
+  estimated_minutes: number;
+  linked_node_ids: string[];
+  proposed_scheduled_for?: string | null;
+  status: "pending" | "accepted" | "dismissed" | string;
+  expires_at?: string | null;
+  accepted_at?: string | null;
+  dismissed_at?: string | null;
+  metadata: Record<string, unknown>;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
 export interface PeriodicReview {
   id: string;
   user_id: string;
@@ -283,6 +306,39 @@ export function usePlanItems() {
   );
 
   return { items, loading, reload: load };
+}
+
+export function usePlanItemConfirmations(status?: string) {
+  const { user, loading: authLoading } = useAuth();
+  const [confirmations, setConfirmations] = useState<PlanItemConfirmation[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    if (authLoading || !user) return;
+    setLoading(true);
+    setError("");
+    try {
+      const params = new URLSearchParams();
+      if (status) params.set("status", status);
+      const qs = params.toString();
+      const r = await api<{ confirmations: PlanItemConfirmation[]; total: number }>(
+        `/api/planning/confirmations${qs ? `?${qs}` : ""}`,
+      );
+      setConfirmations(r.confirmations || []);
+    } catch (e) {
+      setError(String((e as Error).message || e));
+      setConfirmations([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [authLoading, user, status]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return { confirmations, loading, error, reload: load };
 }
 
 export function useGoals() {
@@ -473,4 +529,12 @@ export async function extendPlanItem(
     `/api/planning/items/${id}/extend?minutes=${minutes}`,
     { method: "POST" },
   );
+}
+
+export async function acceptPlanItemConfirmation(id: string): Promise<PlanItem> {
+  return api<PlanItem>(`/api/planning/confirmations/${id}/accept`, { method: "POST" });
+}
+
+export async function dismissPlanItemConfirmation(id: string): Promise<PlanItemConfirmation> {
+  return api<PlanItemConfirmation>(`/api/planning/confirmations/${id}/dismiss`, { method: "POST" });
 }

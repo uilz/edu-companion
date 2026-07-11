@@ -1,6 +1,7 @@
 import type {
   SecretaryNotification, PageType, ActionType, NotificationSource,
 } from "@/store/notification/types";
+import type { PlanItemConfirmation } from "@/hooks/planning/usePlanning";
 
 // ══════════════════════════════════════════════════════════════
 //  Constants
@@ -22,6 +23,7 @@ export const ACTION_TYPE_OPTIONS: { value: ActionType | ""; label: string }[] = 
   { value: "rest", label: "休息" },
   { value: "explore", label: "探索" },
   { value: "exam_prep", label: "备考" },
+  { value: "plan_item_confirmation", label: "计划项确认" },
 ];
 
 export const ACTION_TYPE_LABELS: Record<string, string> = {
@@ -30,6 +32,7 @@ export const ACTION_TYPE_LABELS: Record<string, string> = {
   rest: "休息",
   explore: "探索",
   exam_prep: "备考",
+  plan_item_confirmation: "计划项确认",
 };
 
 export const SNOOZE_PRESETS = [
@@ -90,5 +93,22 @@ export function toNotification(p: ProposalItem): SecretaryNotification {
     read: false,
     status: "pending",
     created_at: p.created_at ? new Date(p.created_at).getTime() : Date.now(),
+  };
+}
+
+export function confirmationToNotification(c: PlanItemConfirmation): SecretaryNotification {
+  return {
+    id: c.id,
+    emoji: (c.metadata?.emoji as string) || "⏳",
+    title: c.title,
+    description: c.description,
+    priority: c.priority,
+    target: { pages: ["secretary" as PageType, "learn" as PageType] },
+    source: "secretary",
+    actionType: "plan_item_confirmation",
+    sourceModule: "planning",
+    read: false,
+    status: "pending",
+    created_at: c.created_at ? new Date(c.created_at).getTime() : Date.now(),
   };
 }

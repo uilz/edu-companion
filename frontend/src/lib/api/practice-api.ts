@@ -55,6 +55,45 @@ export interface V7SubmitResult {
   mastered: boolean;
   wrong_count_increased: boolean;
   metacognition_feedback?: string;
+  attempt_id?: string;
+  submitted_event_id?: string;
+}
+
+export interface AttemptFeedbackNode {
+  node_id: string | null;
+  label: string;
+  information_gain: number;
+  proficiency_before: number;
+  proficiency_after: number;
+}
+
+export interface AttemptFeedback {
+  attempt_id: string;
+  session_id: string;
+  question_id: string;
+  is_correct: boolean;
+  submitted_at: string | null;
+  is_final: boolean;
+  feedback: {
+    information_gain: number;
+    uncertainty_reduction_percent: number;
+    proficiency_before: number;
+    proficiency_after: number;
+    uncertainty_before: number;
+    uncertainty_after: number;
+    nodes: AttemptFeedbackNode[];
+  };
+  metacognition: {
+    advice: string;
+    confidence_before: number | null;
+    bias: string;
+  };
+  suggestions: Array<{
+    type: string;
+    title: string;
+    node_id?: string | null;
+    reason: string;
+  }>;
 }
 
 export interface V7Bank {
@@ -140,6 +179,11 @@ export async function submitAnswer(
       confidence_before: confidenceBefore,
     }),
   });
+}
+
+/** 按 attempt_id 查询答题后的信息增益与掌握度变化 */
+export async function getAttemptFeedback(attemptId: string): Promise<AttemptFeedback> {
+  return apiFetch(`/feedback/${attemptId}`);
 }
 
 /** 完成会话 */
@@ -1252,6 +1296,7 @@ export const practiceService = {
   getAchievements,
   getAchievementStats,
   getAnswerHistory,
+  getAttemptFeedback,
   getBank,
   getBankQuestions,
   getDailyTrend,

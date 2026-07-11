@@ -282,6 +282,7 @@ function QuestionCardImpl({
             skipped={skipped}
             metacognitionFeedback={lastResult.metacognition_feedback}
             confidenceBefore={confidenceBefore}
+            attemptId={lastResult.attempt_id}
           />
         </div>
       )}
