@@ -20,6 +20,7 @@ from app.schemas.conversation import TextBlock
 from app.services.common import get_data_repo
 from app.services.knowledge.tree_service import tree_ops
 from app.domain.auth.dependencies import current_user_id
+from app.services.conversation import conversation_note_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -96,6 +97,34 @@ class PersistMessageRequest(BaseModel):
     content: str
     source: str = "user"
     metadata: dict = {}
+
+
+class CreateConversationNoteRequest(BaseModel):
+    source_message_id: str
+    front_text: str
+    back_text: str = ""
+    back_context: str = ""
+    language: str = ""
+    linked_node_ids: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    auto_create_flashcard: bool = True
+
+
+class UpdateConversationNoteRequest(BaseModel):
+    front_text: str | None = None
+    back_text: str | None = None
+    back_context: str | None = None
+    language: str | None = None
+    linked_node_ids: list[str] | None = None
+    tags: list[str] | None = None
+
+
+class CreateConversationTaskRequest(BaseModel):
+    task_type: str = "generate_practice"
+    user_request_text: str
+    linked_node_ids: list[str] = Field(default_factory=list)
+    context_summary: str = ""
+    constraints: list[str] = Field(default_factory=list)
 
 
 # ══════════════════ ETag 辅助 ══════════════════
@@ -517,6 +546,148 @@ async def handle_tool_result(
 
     # 返回简单 JSON（原 SSE 连接保持打开，继续接收恢复后的事件）
     return {"ok": True, "message": "答案已提交，AI 正在继续回复"}
+
+
+# ═══════════════════════════════════════════
+# 对话笔记（与闪卡双向同步）
+# ═══════════════════════════════════════════
+
+
+@router.post("/tree/conversation/{conv_id}/notes")
+async def create_conversation_note(
+    conv_id: str,
+    req: CreateConversationNoteRequest,
+    user_id: str = Depends(current_user_id),
+):
+    """创建对话笔记，并自动发布 ConversationNoteCreatedAsFlashcard 事件。"""
+    if not user_id:
+        raise HTTPException(401, "请先登录")
+    try:
+        note = conversation_note_service.create_note(
+            user_id=user_id,
+            conv_id=conv_id,
+            source_message_id=req.source_message_id,
+            front_text=req.front_text,
+            back_text=req.back_text,
+            back_context=req.back_context,
+            language=req.language,
+            linked_node_ids=req.linked_node_ids,
+            tags=req.tags,
+            auto_create_flashcard=req.auto_create_flashcard,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception:
+        logger.exception("创建对话笔记失败")
+        raise HTTPException(500, "Internal server error")
+    return {"note": note}
+
+
+@router.get("/tree/conversation/{conv_id}/notes")
+async def list_conversation_notes(
+    conv_id: str,
+    user_id: str = Depends(current_user_id),
+):
+    """列出一个对话下的所有笔记。"""
+    if not user_id:
+        raise HTTPException(401, "请先登录")
+    notes = conversation_note_service.list_notes_by_conv(user_id, conv_id)
+    return {"notes": notes}
+
+
+@router.get("/tree/conversation/{conv_id}/notes/{note_id}")
+async def get_conversation_note(
+    conv_id: str,
+    note_id: str,
+    user_id: str = Depends(current_user_id),
+):
+    """获取单个笔记详情（含关联闪卡状态）。"""
+    if not user_id:
+        raise HTTPException(401, "请先登录")
+    note = conversation_note_service.get_note(user_id, note_id)
+    if not note or note.get("conv_id") != conv_id:
+        raise HTTPException(404, "Note not found")
+    return {"note": note}
+
+
+@router.patch("/tree/conversation/{conv_id}/notes/{note_id}")
+async def update_conversation_note(
+    conv_id: str,
+    note_id: str,
+    req: UpdateConversationNoteRequest,
+    user_id: str = Depends(current_user_id),
+):
+    """更新笔记内容字段（源优先）。"""
+    if not user_id:
+        raise HTTPException(401, "请先登录")
+    existing = conversation_note_service.get_note(user_id, note_id)
+    if not existing or existing.get("conv_id") != conv_id:
+        raise HTTPException(404, "Note not found")
+    try:
+        note = conversation_note_service.update_note(
+            user_id=user_id,
+            note_id=note_id,
+            front_text=req.front_text,
+            back_text=req.back_text,
+            back_context=req.back_context,
+            language=req.language,
+            linked_node_ids=req.linked_node_ids,
+            tags=req.tags,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception:
+        logger.exception("更新对话笔记失败")
+        raise HTTPException(500, "Internal server error")
+    return {"note": note}
+
+
+@router.delete("/tree/conversation/{conv_id}/notes/{note_id}")
+async def delete_conversation_note(
+    conv_id: str,
+    note_id: str,
+    user_id: str = Depends(current_user_id),
+):
+    """删除对话笔记（不级联删除闪卡）。"""
+    if not user_id:
+        raise HTTPException(401, "请先登录")
+    existing = conversation_note_service.get_note(user_id, note_id)
+    if not existing or existing.get("conv_id") != conv_id:
+        raise HTTPException(404, "Note not found")
+    ok = conversation_note_service.delete_note(user_id, note_id)
+    return {"deleted": ok, "note_id": note_id}
+
+
+# ═══════════════════════════════════════════
+# 对话内子任务（出题 / 制卡 / 规划）
+# ═══════════════════════════════════════════
+
+
+@router.post("/tree/conversation/{conv_id}/tasks")
+async def create_conversation_task(
+    conv_id: str,
+    req: CreateConversationTaskRequest,
+    user_id: str = Depends(current_user_id),
+):
+    """在对话中发起子任务，由目标壳消费。"""
+    if not user_id:
+        raise HTTPException(401, "请先登录")
+    from app.infrastructure.event_bus_utils import publish_event_safe
+    from shared.events import InConversationTaskCreated
+    import uuid
+
+    task_id = f"task_{uuid.uuid4().hex[:12]}"
+    publish_event_safe(InConversationTaskCreated(
+        user_id=user_id,
+        conv_id=conv_id,
+        task_id=task_id,
+        task_type=req.task_type,
+        user_request_text=req.user_request_text,
+        linked_node_ids=req.linked_node_ids,
+        context_summary=req.context_summary,
+        constraints=req.constraints,
+    ))
+    return {"task_id": task_id, "status": "pending", "result_ref_id": None}
 
 
 async def _sse_generator(conv_id: str):

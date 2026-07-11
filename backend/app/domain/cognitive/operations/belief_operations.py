@@ -138,6 +138,9 @@ def belief_update(
             f"ig={information_gain:.4f}"
         ),
         "belief_after": belief_after,
+        "entropy_before": round(entropy_before, 6),
+        "entropy_after": round(entropy_after, 6),
+        "information_gain": round(information_gain, 6),
     }
 
 

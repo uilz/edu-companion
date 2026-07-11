@@ -19,7 +19,6 @@ from typing import Any, Optional
 from shared.events import (
     DomainEvent,
     MessageClassified,
-    PracticeSubmitted,
     NodeCreated,
     ProposalAccepted,
     EVENT_TYPES,
@@ -31,7 +30,7 @@ logger = logging.getLogger(__name__)
 # ── 事件类型常量 ──
 
 EVT_MESSAGE_CLASSIFIED = "MessageClassified"
-EVT_PRACTICE_SUBMITTED = "PracticeSubmitted"
+EVT_ANSWER_SUBMITTED = "AnswerSubmitted"
 EVT_NODE_CREATED = "NodeCreated"
 EVT_PROPOSAL_ACCEPTED = "ProposalAccepted"
 
@@ -134,19 +133,25 @@ class EventService:
         )
 
     @staticmethod
-    def emit_practice_submitted(
+    def emit_answer_submitted(
         user_id: str,
-        atom_node_ids: list[str] | None = None,
-        correctness: float = 0.0,
-        latency_ms: float = 0.0,
+        question_id: str,
+        is_correct: bool,
+        cognitive_node_ids: list[str] | None = None,
+        response_time_seconds: float = 0.0,
     ) -> str:
+        """持久化一条 AnswerSubmitted 事件到 events 表。
+
+        这是练习模块之外需要显式写入答题事实时的辅助方法。
+        """
         return EventService.emit_event(
-            EVT_PRACTICE_SUBMITTED,
+            EVT_ANSWER_SUBMITTED,
             user_id=user_id,
             payload={
-                "atom_node_ids": atom_node_ids or [],
-                "correctness": correctness,
-                "latency_ms": latency_ms,
+                "question_id": question_id,
+                "is_correct": is_correct,
+                "cognitive_node_ids": cognitive_node_ids or [],
+                "response_time_seconds": response_time_seconds,
             },
         )
 

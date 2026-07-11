@@ -47,22 +47,23 @@ def make_answer_event(
     user_id: str = "test_user",
     session_id: str = "test_session",
     question_id: str = "q_001",
-    time_spent: float = 30.0,
+    response_time_seconds: float = 30.0,
 ) -> object:
     """创建测试用 AnswerSubmitted 事件"""
     from shared.events import AnswerSubmitted
     return AnswerSubmitted(
         user_id=user_id,
+        source_module="practice",
+        attempt_id="att_001",
         session_id=session_id,
         question_id=question_id,
         skill_id=skill_id,
         is_correct=is_correct,
-        answer="A",
-        correct_answer="A",
-        time_spent=time_spent,
+        answer=["A"],
+        correct_answer=["A"],
+        response_time_seconds=response_time_seconds,
         hints_used=0,
-        p_known_before=0.5,
-        p_known_after=0.72 if is_correct else 0.3,
+        cognitive_node_ids=[skill_id],
     )
 
 

@@ -98,6 +98,109 @@ class CognitiveEventHandler:
 
     # ── practice_response ──
 
+    def handle_answer_submitted(
+        self, event: "AnswerSubmitted",
+    ) -> list[dict[str, Any]]:
+        """将练习域 AnswerSubmitted 事件转为 cognitive practice_response 处理。
+
+        每道题目可能关联多个认知节点，这里对每个节点调用 handle_practice_response，
+        保持与原有同步调用路径同一事务。
+        """
+        from shared.events import AnswerSubmitted
+        if not isinstance(event, AnswerSubmitted):
+            return []
+
+        results = []
+        user_id = event.user_id
+        session_id = event.session_id
+        question_id = event.question_id
+        is_correct = event.is_correct
+        response_time_seconds = float(getattr(event, "response_time_seconds", 0) or 0)
+        response_time_ms = response_time_seconds * 1000.0
+        confidence_before = getattr(event, "confidence_before", None)
+        difficulty = getattr(event, "difficulty", None)
+        hints_used = getattr(event, "hints_used", 0)
+
+        for node_id in event.cognitive_node_ids or []:
+            record = CognitiveEventRecord(
+                event_type="practice_response",
+                user_id=user_id,
+                source_type="practice",
+                source_id=session_id,
+                actor_type="user",
+                payload={
+                    "node_id": node_id,
+                    "success": is_correct,
+                    "session_id": session_id,
+                    "question_id": question_id,
+                    "latency_ms": response_time_ms,
+                    "weight": 1.0,
+                    "difficulty": difficulty,
+                    "confidence_before": float(confidence_before) / 100.0
+                    if confidence_before is not None
+                    else None,
+                    "hints_used": hints_used,
+                    "time_spent": response_time_seconds,
+                },
+            )
+            results.append(self.handle_practice_response(record))
+        return results
+
+    def _append_cognitive_reward(
+        self,
+        user_id: str,
+        node_id: str,
+        source_event: "PracticeEventORM",
+        ig_result: dict[str, float],
+    ) -> None:
+        """写入 cognitive_reward 只读事件，用于审计与跨模块消费。"""
+        from app.infrastructure.db.models.cognitive import CognitiveEventORM
+
+        reward_id = f"cr_{source_event.id}_{node_id}"
+        existing = (
+            self._session.query(CognitiveEventORM)
+            .filter_by(id=reward_id)
+            .first()
+        )
+        if existing is not None:
+            return
+
+        reward_event = CognitiveEventORM(
+            id=reward_id,
+            user_id=user_id,
+            event_type="cognitive_reward",
+            actor_type="system",
+            source_type="practice_response",
+            source_id=source_event.id,
+            node_id=node_id,
+            payload={
+                "node_id": node_id,
+                "source_type": "practice_response",
+                "source_event_id": source_event.id,
+                "reward_value": ig_result.get("information_gain", 0.0),
+                "reward_unit": "nats",
+                "belief_before": {
+                    "alpha": ig_result.get("belief_alpha_before", 1.0),
+                    "beta": ig_result.get("belief_beta_before", 1.0),
+                },
+                "belief_after": {
+                    "alpha": ig_result.get("belief_alpha_after", 1.0),
+                    "beta": ig_result.get("belief_beta_after", 1.0),
+                },
+                "uncertainty_reduction_percent": ig_result.get(
+                    "uncertainty_reduction_percent", 0.0
+                ),
+                "confidence": 1.0,
+                "context": {
+                    "is_correct": source_event.success,
+                    "question_id": source_event.question_id,
+                    "session_id": source_event.session_id,
+                    "difficulty": source_event.difficulty,
+                },
+            },
+        )
+        self._session.add(reward_event)
+
     def handle_practice_response(
         self, event: CognitiveEventRecord
     ) -> dict[str, Any]:
@@ -139,11 +242,19 @@ class CognitiveEventHandler:
         )
         persisted = self._event_repo.append_practice_event(practice_event)
 
-        # 增量更新投影
-        self._builder.apply_practice_event(persisted)
+        # 增量更新投影，并获取本次信息增益
+        ig_result = self._builder.apply_practice_event(persisted)
 
         projection = self._projection_repo.get(node_id)
         proficiency = self._builder._belief_proficiency(projection)
+
+        # 记录 cognitive_reward 只读事件（审计 + 跨模块消费）
+        self._append_cognitive_reward(
+            user_id=user_id,
+            node_id=node_id,
+            source_event=persisted,
+            ig_result=ig_result,
+        )
 
         # 记录认知领域事件（用于审计与回放）
         self._event_repo.append_cognitive_event(
@@ -157,15 +268,40 @@ class CognitiveEventHandler:
                 "reason": f"practice_response on node {node_id}",
                 "success": success,
                 "proficiency_after": proficiency,
+                "information_gain": ig_result.get("information_gain", 0.0),
             },
+        )
+
+        # 组装完整的认知状态变化视图，供上游发布 CognitiveStateChanged 使用
+        from datetime import datetime, timezone
+        next_review_ts = getattr(projection, "sched_next_review", 0.0) or 0.0
+        next_review_at = (
+            datetime.fromtimestamp(next_review_ts, tz=timezone.utc)
+            if next_review_ts > 0
+            else None
         )
 
         return {
             "status": "ok",
             "event_type": "practice_response",
             "node_id": node_id,
-            "proficiency_after": proficiency,
+            "user_id": user_id,
             "success": success,
+            "proficiency_before": ig_result.get("proficiency_before", 0.0),
+            "proficiency_after": ig_result.get("proficiency_after", proficiency),
+            "uncertainty_before": ig_result.get("uncertainty_before", 0.0),
+            "uncertainty_after": ig_result.get("uncertainty_after", 0.0),
+            "belief_alpha": ig_result.get("belief_alpha_after", 1.0),
+            "belief_beta": ig_result.get("belief_beta_after", 1.0),
+            "urgency": getattr(projection, "sched_urgency", 0.0) or 0.0,
+            "stagnation_days": getattr(projection, "trend_stagnation_days", 0.0) or 0.0,
+            "next_review_at": next_review_at,
+            "next_action_type": getattr(projection, "sched_next_action_type", "") or "",
+            "information_gain": ig_result.get("information_gain", 0.0),
+            "uncertainty_reduction_percent": ig_result.get(
+                "uncertainty_reduction_percent", 0.0
+            ),
+            "source_event_id": persisted.id,
         }
 
     # ── conversation_assessment ──

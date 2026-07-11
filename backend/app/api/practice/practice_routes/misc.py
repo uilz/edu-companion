@@ -16,7 +16,7 @@ from app.services.practice.engine import (
     get_hint_for_question,
     get_inline_hint,
     build_reply_text,
-    update_cognitive_after_practice,
+    publish_practice_events,
 )
 
 logger = logging.getLogger(__name__)
@@ -220,8 +220,6 @@ async def get_hint(req: _HintRequest):
 async def inline_answer(req: _InlineAnswerRequest, user_id: str = Depends(current_user_id)):
     """对话内联练习 — 提交答案，读取 response_block 内容校验"""
     from app.services.common import get_data_repo
-    from shared.knowledge_trace import get_cognitive_state
-    from shared.constants import get_mastery_label
 
     data = get_data_repo().load(user_id)
     block = data.response_blocks.get(req.block_id)
@@ -234,22 +232,23 @@ async def inline_answer(req: _InlineAnswerRequest, user_id: str = Depends(curren
     skill_id = content.get("skill_id", "")
     is_correct = req.answer.strip().upper() == correct_answer
 
-    # 更新知识状态
-    knowledge_update = {}
+    # 内联练习只发布 AnswerSubmitted 事件，认知更新由认知中心订阅处理。
+    # 不再直接调用 update_cognitive_after_practice 双写认知状态。
     if skill_id:
-        state = get_cognitive_state(user_id, skill_id)
-        cog = update_cognitive_after_practice(
+        await publish_practice_events(
             user_id=user_id,
-            skill_id=skill_id,
+            session_id=req.block_id,
+            question_id=req.block_id,
+            question={
+                "skill_id": skill_id,
+                "cognitive_node_ids": [skill_id],
+            },
             is_correct=is_correct,
+            user_answer=req.answer,
+            correct_answer=content.get("correct_answer", ""),
+            time_spent_seconds=0,
+            hints_used=0,
         )
-        knowledge_update = {
-            "skill_id": skill_id,
-            "p_known_before": cog["p_before"],
-            "p_known_after": cog["p_after"],
-            "mastery_level": get_mastery_label(state.p_known, state.attempt_count),
-            "cognitive_proficiency": cog["cognitive_proficiency"],
-        }
 
     correct_label = content.get("correct_answer", "")
     reply_text = build_reply_text(is_correct, correct_label, explanation)
@@ -257,7 +256,7 @@ async def inline_answer(req: _InlineAnswerRequest, user_id: str = Depends(curren
     return {
         "is_correct": is_correct,
         "reply_text": reply_text,
-        "knowledge_update": knowledge_update,
+        "knowledge_update": {},
     }
 
 
@@ -304,8 +303,7 @@ async def submit_answer(req: _SubmitAnswerRequest, user_id: str = Depends(curren
     路径: /api/practice/submit (与 /api/practice/sessions/{id}/submit 共用逻辑)
     """
     from app.infrastructure.db.database import get_db
-    from app.services.practice.practice_service import check_answer
-    from app.services.practice.engine import update_cognitive_after_practice, record_attempt, publish_practice_events
+    from app.services.practice.practice_service import check_answer, record_attempt
     from app.services.practice.practice_session import _get_metacognition_feedback
 
     db = get_db()
@@ -325,22 +323,6 @@ async def submit_answer(req: _SubmitAnswerRequest, user_id: str = Depends(curren
     explanation = row.get("analysis", "") or row.get("explanation", "")
     skill_id = row.get("skill_id", "")
 
-    knowledge_update = None
-    if skill_id:
-        cog = update_cognitive_after_practice(
-            user_id=user_id,
-            skill_id=skill_id,
-            is_correct=is_correct,
-            latency_ms=int(req.time_spent_seconds * 1000),
-            confidence_before=req.confidence_before,
-        )
-        knowledge_update = {
-            "skill_id": skill_id,
-            "p_known_before": round(cog["p_before"], 4),
-            "p_known_after": round(cog["p_after"], 4),
-            "mastery_level": cog["mastery_label"],
-        }
-
     record_attempt(
         user_id=user_id,
         session_id=req.session_id,
@@ -353,6 +335,7 @@ async def submit_answer(req: _SubmitAnswerRequest, user_id: str = Depends(curren
     )
 
     # 发布领域事件 (SSOT = engine.publish_practice_events)
+    # 认知更新由认知中心订阅 AnswerSubmitted 统一处理，不再直接调用认知服务。
     await publish_practice_events(
         user_id=user_id,
         session_id=req.session_id,
@@ -369,9 +352,50 @@ async def submit_answer(req: _SubmitAnswerRequest, user_id: str = Depends(curren
         "is_correct": is_correct,
         "correct_answer": correct_answer,
         "explanation": explanation,
-        "knowledge_update": knowledge_update,
+        "knowledge_update": {},
         "metacognition_feedback": _get_metacognition_feedback(req.confidence_before, is_correct),
     }
+
+
+# ──────────────────────────────────────────────
+# 答题遥测（前端微行为采集）
+# ──────────────────────────────────────────────
+
+
+class _TelemetrySubmitRequest(BaseModel):
+    telemetry_id: str
+    session_id: str = ""
+    question_id: str
+    attempt_id: str
+    raw_events: list[dict] = []
+    derived: dict = {}
+
+
+@router.post("/telemetry")
+async def submit_practice_telemetry(
+    req: _TelemetrySubmitRequest,
+    user_id: str = Depends(current_user_id),
+):
+    """接收前端答题遥测数据，落库并发布 PracticeAnswerBehaviorRecorded。"""
+    if not user_id:
+        raise HTTPException(401, "请先登录")
+    try:
+        from app.services.practice.telemetry_service import save_telemetry
+        result = save_telemetry(
+            user_id=user_id,
+            telemetry_id=req.telemetry_id,
+            session_id=req.session_id,
+            question_id=req.question_id,
+            attempt_id=req.attempt_id,
+            raw_events=req.raw_events,
+            derived=req.derived,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception:
+        logger.exception("保存答题遥测失败")
+        raise HTTPException(500, "Internal server error")
+    return result
 
 
 # ──────────────────────────────────────────────

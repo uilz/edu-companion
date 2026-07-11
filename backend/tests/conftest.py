@@ -43,16 +43,17 @@ def sample_answer_event():
     from shared.events import AnswerSubmitted
     return AnswerSubmitted(
         user_id="test_user",
+        source_module="practice",
+        attempt_id="att_001",
         session_id="test_session_001",
         question_id="q_001",
         skill_id="微积分.导数",
         is_correct=True,
-        answer="A",
-        correct_answer="A",
-        time_spent=30.0,
+        answer=["A"],
+        correct_answer=["A"],
+        response_time_seconds=30.0,
         hints_used=0,
-        p_known_before=0.5,
-        p_known_after=0.72,
+        cognitive_node_ids=["微积分.导数"],
     )
 
 
@@ -62,14 +63,15 @@ def sample_error_answer_event():
     from shared.events import AnswerSubmitted
     return AnswerSubmitted(
         user_id="test_user",
+        source_module="practice",
+        attempt_id="att_002",
         session_id="test_session_002",
         question_id="q_002",
         skill_id="微积分.极限",
         is_correct=False,
-        answer="B",
-        correct_answer="A",
-        time_spent=120.0,
+        answer=["B"],
+        correct_answer=["A"],
+        response_time_seconds=120.0,
         hints_used=2,
-        p_known_before=0.5,
-        p_known_after=0.32,
+        cognitive_node_ids=["微积分.极限"],
     )

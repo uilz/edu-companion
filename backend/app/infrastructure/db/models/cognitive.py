@@ -401,3 +401,78 @@ class CognitiveNodeCompositionMemberORM(Base):
     __table_args__ = (
         UniqueConstraint("chunk_id", "node_id", name="uq_composition_members"),
     )
+
+
+# ═══════════════════════════════════════════════════════════════
+# 6. 练习聚合根与反馈投影（Practice Engine 重构新增）
+# ═══════════════════════════════════════════════════════════════
+
+
+class PracticeAggregateSnapshotORM(Base):
+    """练习聚合根快照：按 session 缓存聚合根状态，用于快速重建。"""
+
+    __tablename__ = "practice_aggregate_snapshots"
+
+    session_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="created")
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utc_now, onupdate=_utc_now
+    )
+
+    __table_args__ = (
+        Index("ix_practice_snapshots_user_status", "user_id", "status"),
+    )
+
+
+class PracticeCommandRecordORM(Base):
+    """练习命令记录：事件溯源的真相源，用于快照追赶和审计。"""
+
+    __tablename__ = "practice_command_records"
+
+    command_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    session_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    command_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utc_now
+    )
+
+    __table_args__ = (
+        Index("ix_practice_commands_session_version", "session_id", "version"),
+        Index("ix_practice_commands_user_type", "user_id", "command_type"),
+    )
+
+
+class PracticeFeedbackProjectionORM(Base):
+    """练习反馈投影：从答题事实和认知投影生成的完整反馈视图。"""
+
+    __tablename__ = "practice_feedback_projections"
+
+    attempt_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    session_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    question_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    node_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("knowledge_nodes.id", ondelete="SET NULL"), nullable=True
+    )
+    is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    information_gain: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    uncertainty_reduction_percent: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    metacognition_feedback: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    analysis: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    learning_tips: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    next_action_type: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    next_action_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utc_now
+    )
+
+    __table_args__ = (
+        Index("ix_practice_feedback_session", "session_id"),
+        Index("ix_practice_feedback_user", "user_id"),
+    )

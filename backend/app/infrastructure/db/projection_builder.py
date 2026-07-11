@@ -66,8 +66,11 @@ class ProjectionBuilder:
         self,
         event,
         projection=None,
-    ) -> None:
-        """将单个 PracticeEvent 增量应用到投影（生产环境调用）。"""
+    ) -> dict[str, float]:
+        """将单个 PracticeEvent 增量应用到投影（生产环境调用）。
+
+        返回本次更新的信息增益相关指标，供 cognitive_reward 事件与反馈生成使用。
+        """
         from app.infrastructure.db.models.cognitive import PracticeEventORM
 
         if not isinstance(event, PracticeEventORM):
@@ -104,6 +107,12 @@ class ProjectionBuilder:
         )
         self._apply_result(projection, belief_result["belief_after"])
         observed_belief = belief_result["belief_after"]
+
+        information_gain = float(belief_result.get("information_gain", 0.0))
+        entropy_before = float(belief_result.get("entropy_before", 0.0))
+        uncertainty_reduction_percent = 0.0
+        if entropy_before > 0:
+            uncertainty_reduction_percent = min(99.9, information_gain / entropy_before * 100)
 
         # 2. 收缩先验：若有父节点，计算 effective belief 用于下游
         effective_belief = dict(observed_belief)
@@ -269,6 +278,28 @@ class ProjectionBuilder:
         self._update_composition(event, projection)
 
         self._projection_repo.upsert(projection)
+
+        proficiency_before = belief_before.get("belief_alpha", 1.0) / (
+            belief_before.get("belief_alpha", 1.0) + belief_before.get("belief_beta", 1.0)
+        )
+        proficiency_after = observed_belief.get("belief_alpha", 1.0) / (
+            observed_belief.get("belief_alpha", 1.0) + observed_belief.get("belief_beta", 1.0)
+        )
+
+        return {
+            "information_gain": round(information_gain, 6),
+            "uncertainty_reduction_percent": round(uncertainty_reduction_percent, 2),
+            "entropy_before": round(entropy_before, 6),
+            "entropy_after": round(float(belief_result.get("entropy_after", 0.0)), 6),
+            "uncertainty_before": round(entropy_before, 6),
+            "uncertainty_after": round(float(belief_result.get("entropy_after", 0.0)), 6),
+            "proficiency_before": round(float(proficiency_before), 4),
+            "proficiency_after": round(float(proficiency_after), 4),
+            "belief_alpha_before": round(float(belief_before.get("belief_alpha", 1.0)), 4),
+            "belief_beta_before": round(float(belief_before.get("belief_beta", 1.0)), 4),
+            "belief_alpha_after": round(float(observed_belief.get("belief_alpha", 1.0)), 4),
+            "belief_beta_after": round(float(observed_belief.get("belief_beta", 1.0)), 4),
+        }
 
     def _propagate_to_neighbors(
         self,

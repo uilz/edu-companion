@@ -114,16 +114,21 @@ class PracticeServiceImpl:
             "explanation": question.get("explanation", ""),
         }
 
+        import uuid
+
         await self._bus.publish(AnswerSubmitted(
             user_id=user_id,
+            source_module="practice",
+            attempt_id=str(uuid.uuid4())[:16],
             session_id=session_id,
             question_id=question_id,
             skill_id=question.get("skill_id", ""),
             is_correct=is_correct,
-            answer=answer,
+            answer=[answer] if isinstance(answer, str) else (answer or []),
             correct_answer=correct_answers,
-            time_spent=time_spent,
+            response_time_seconds=float(time_spent or 0),
             hints_used=hints_used,
+            cognitive_node_ids=question.get("cognitive_node_ids", []),
         ))
 
         if not is_correct:
@@ -138,24 +143,13 @@ class PracticeServiceImpl:
 
             await self._bus.publish(ErrorRecorded(
                 user_id=user_id,
+                source_module="practice",
                 question_id=question_id,
                 skill_id=question.get("skill_id", ""),
                 error_type=distractor_type or "careless",
                 user_answer=answer,
                 correct_answer=correct_answers,
             ))
-
-        # 发布 PracticeSubmitted 事件 → 触发认知节点信念更新
-        try:
-            from shared.events import PracticeSubmitted
-            await self._bus.publish(PracticeSubmitted(
-                user_id=user_id,
-                atom_node_ids=question.get("cognitive_node_ids", []),
-                correctness=1.0 if is_correct else 0.0,
-                latency_ms=time_spent * 1000,
-            ))
-        except Exception:
-            logger.warning("publish PracticeSubmitted failed", exc_info=True)
 
         return feedback
 
@@ -174,14 +168,18 @@ class PracticeServiceImpl:
         return {"branch_id": branch_id, "practice_summary": {}}
 
     # ═══════════════════════════════════════════════════════
-    # 认知更新
+    # 认知更新（已废弃：练习模块不再直接更新认知状态，统一由认知中心
+    # 订阅 AnswerSubmitted 事件处理。保留占位方法以避免协议立即断裂。）
     # ═══════════════════════════════════════════════════════
 
     def update_cognitive_after_practice(
         self, user_id: str, skill_id: str, is_correct: bool, latency_ms: int = 0,
     ) -> dict:
-        from app.services.practice.engine import update_cognitive_after_practice
-        return update_cognitive_after_practice(user_id, skill_id, is_correct, latency_ms)
+        logger.warning(
+            "update_cognitive_after_practice is deprecated; "
+            "cognitive updates are now driven by AnswerSubmitted events."
+        )
+        return {"status": "deprecated", "skill_id": skill_id}
 
     # ═══════════════════════════════════════════════════════
     # 答案校验

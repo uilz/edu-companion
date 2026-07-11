@@ -34,14 +34,54 @@ def _uid() -> str:
 
 @dataclass(frozen=True)
 class DomainEvent:
-    """领域事件基类"""
+    """领域事件基类
+
+    所有事件必须携带统一上下文字段，以支持跨模块追踪、审计与因果回放。
+    """
     event_id: str = field(default_factory=_uid)
     occurred_at: datetime = field(default_factory=_now)
+    source_id: str = ""            # 业务来源 ID（如 session_id / node_id / plan_item_id）
+    correlation_id: str = ""       # 一次请求/会话的追踪 ID
+    caused_by_event_id: str | None = None  # 因果链上一个事件 ID（防循环与审计）
+
+    # 注意：source_module 未放在基类中，因为不同事件对其语义要求不同
+    # （PlanningSourceModule vs CrossModuleTarget vs 模块名）。
+    # 需要 source_module 的事件应自行定义，并使用统一枚举值。
 
 
 # ──────────────────────────────────────────────
 # 跨模块目标枚举（统一 7 模块 target_module 字段）
 # ──────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class SourceRef:
+    """跨模块来源引用值对象 (SSOT)
+
+    用于统一描述「内容来自哪里」，被 ConversationNoteCreatedAsFlashcard、FlashCardCreated、
+    ReadingAnnotationProcessed、TreeContentImported 等事件复用。
+
+    核心字段：
+    - module: 来源模块名（如 reading / conversation / practice / project）
+    - id:     来源实体主键（如 material_id / conv_id / question_id）
+    - sub_id: 子实体标识（如 chunk_id / message_id / attempt_id）
+    - title:  来源标题（可选，用于前端展示）
+    - url:    可回跳的深链接（可选）
+    - offset/length: 在来源内容中的位置（可选，阅读/对话长文本场景）
+    - metadata: 模块特定扩展字段（阅读 chunk_id_range、对话消息角色等）
+
+    兼容性：
+    - 事件字段声明仍使用 dict，以保持 JSON 序列化简单；
+    - 业务层应使用 SourceRef(**dict) 校验/构造，保证字段统一。
+    """
+    module: str = ""
+    id: str = ""
+    sub_id: str = ""
+    title: str = ""
+    url: str = ""
+    offset: int = 0
+    length: int = 0
+    metadata: dict = field(default_factory=dict)
 
 
 class CrossModuleTarget(str, Enum):
@@ -107,19 +147,30 @@ class PlanningSourceModule(str, Enum):
 class AnswerSubmitted(DomainEvent):
     """答题提交事件 — submit_answer 核心路径发布
 
-    替代之前的 PracticeAnswerSubmitted 引用，统称为 AnswerSubmitted。
+    替代之前的 PracticeAnswerSubmitted / PracticeSubmitted 引用，
+    是练习模块与认知中心、秘书系统、错题本之间的单一事实源。
+
+    注意：
+    - source_module 应设为 "practice"
+    - source_id 应设为 attempt_id
+    - cognitive_node_ids 必填，用于认知中心定位节点
+    - answer / correct_answer 均为 list[str]，单选也统一用单元素列表
+    - p_known_* 等派生状态不在本事件中携带，改由 CognitiveStateChanged 发布
     """
     user_id: str = ""
+    source_module: str = ""  # 固定为 "practice"
+    attempt_id: str = ""
     session_id: str = ""
     question_id: str = ""
     skill_id: str = ""
     is_correct: bool = False
-    answer: str = ""
-    correct_answer: str = ""
-    time_spent: float = 0.0
+    answer: list[str] = field(default_factory=list)
+    correct_answer: list[str] = field(default_factory=list)
+    response_time_seconds: float = 0.0   # 本题作答耗时（秒）
     hints_used: int = 0
-    p_known_before: float = 0.5
-    p_known_after: float = 0.5
+    confidence_before: int | None = None  # 答题前自信度（0-100），元认知反馈使用
+    difficulty: float | None = None    # 题目难度（0-1 或 1-5 归一化），信息增益计算使用
+    cognitive_node_ids: list[str] = field(default_factory=list)  # 关联认知节点
     submitted_at: datetime = field(default_factory=_now)
 
     @property
@@ -129,8 +180,14 @@ class AnswerSubmitted(DomainEvent):
 
 @dataclass(frozen=True)
 class ErrorRecorded(DomainEvent):
-    """错题记录事件 — 答错时发布，驱动错题本 + 多媒体讲解"""
+    """错题记录事件 — 答错时发布，驱动错题本 + 多媒体讲解
+
+    注意：
+    - source_module 应设为 "practice"
+    - caused_by_event_id 指向对应的 AnswerSubmitted.event_id
+    """
     user_id: str = ""
+    source_module: str = ""  # 固定为 "practice"
     question_id: str = ""
     skill_id: str = ""
     error_type: str = "careless"
@@ -144,17 +201,47 @@ class ErrorRecorded(DomainEvent):
 
 @dataclass(frozen=True)
 class SessionCompleted(DomainEvent):
-    """练习会话完成事件"""
+    """练习/考试会话完成事件"""
     user_id: str = ""
     session_id: str = ""
+    session_type: Literal["practice", "exam", "review"] = "practice"
     total_questions: int = 0
     correct_count: int = 0
     accuracy: float = 0.0
     duration_minutes: float = 0.0
+    score: float | None = None           # 考试模式分数
+    passing_score: float | None = None   # 考试模式及格线
 
     @property
     def event_type(self) -> str:
         return "SessionCompleted"
+
+
+@dataclass(frozen=True)
+class PracticeAnswerBehaviorRecorded(DomainEvent):
+    """答题行为遥测记录 — 练习壳发布
+
+    遥测详情（悬停、选择、输入停顿等）通常单独存储，
+    本事件携带 telemetry_id 引用，避免事件体积过大。
+    """
+    user_id: str = ""
+    telemetry_id: str = ""
+    session_id: str = ""
+    question_id: str = ""
+    attempt_id: str = ""                 # 关联的 AnswerSubmitted
+
+    time_on_question_ms: int = 0
+    hesitation_ms: int = 0
+    answer_change_count: int = 0
+    total_hover_ms: int = 0
+    avg_text_pause_ms: float = 0.0
+    hint_count: int = 0
+
+    recorded_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "PracticeAnswerBehaviorRecorded"
 
 
 # ──────────────────────────────────────────────
@@ -243,7 +330,11 @@ class MessageClassified(DomainEvent):
 
 @dataclass(frozen=True)
 class PracticeSubmitted(DomainEvent):
-    """练习提交事件 — 驱动掌握度更新"""
+    """练习提交事件 — 驱动掌握度更新
+
+    DEPRECATED: 由 AnswerSubmitted 统一替代。本切片保留以兼容旧订阅者，
+    但所有新逻辑应订阅 AnswerSubmitted。
+    """
     user_id: str = ""
     atom_node_ids: list[str] = field(default_factory=list)
     correctness: float = 0.0
@@ -269,16 +360,72 @@ class NodeCreated(DomainEvent):
 
 
 @dataclass(frozen=True)
-class ProposalAccepted(DomainEvent):
-    """秘书提案采纳事件 — 执行图谱操作"""
+class ProposalGenerated(DomainEvent):
+    """秘书提案生成事件 — 秘书系统发布
+
+    由秘书系统基于学习事件流和认知状态生成，
+    前端展示后等待用户接受/忽略。
+
+    注意：
+    - source_module 固定为 "secretary"
+    - source_id 为 proposal_id
+    - caused_by_event_id 指向触发本提案的事件 ID
+    - target_module 使用 CrossModuleTarget 合法值
+    """
     user_id: str = ""
+    source_module: str = ""  # 固定为 "secretary"
+    proposal_id: str = ""
+    action_type: str = ""  # review / practice / explore / deep_processing / planning
+    target_module: str = ""  # practice / planning / explore / flashcard / reading
+    target_ref_id: str = ""
+    title: str = ""
+    description: str = ""
+    priority: int = 0
+    insight_source: str = ""  # 触发提案的洞察来源
+    linked_node_ids: list[str] = field(default_factory=list)
+    payload: dict = field(default_factory=dict)
+    generated_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "ProposalGenerated"
+
+
+@dataclass(frozen=True)
+class ProposalAccepted(DomainEvent):
+    """秘书提案采纳事件 — 用户/前端接受提案后发布
+
+    注意：
+    - source_module 固定为 "secretary"（提案由秘书生成）
+    - source_id 为 proposal_id
+    - caused_by_event_id 指向 ProposalGenerated.event_id
+    """
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "secretary"
     proposal_id: str = ""
     action_type: str = ""
-    target_node_id: str = ""
+    target_module: str = ""
+    target_ref_id: str = ""
+    linked_node_ids: list[str] = field(default_factory=list)
+    accepted_at: datetime = field(default_factory=_now)
 
     @property
     def event_type(self) -> str:
         return "ProposalAccepted"
+
+
+@dataclass(frozen=True)
+class ProposalDismissed(DomainEvent):
+    """秘书提案忽略事件 — 用户/前端忽略提案后发布"""
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "secretary"
+    proposal_id: str = ""
+    reason: str | None = None
+    dismissed_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "ProposalDismissed"
 
 
 @dataclass(frozen=True)
@@ -297,14 +444,114 @@ class PendingCrossTopic(DomainEvent):
         return "PendingCrossTopic"
 
 
+@dataclass(frozen=True)
+class UserMessageSent(DomainEvent):
+    """用户发送消息事件 — 对话壳发布
+
+    用于秘书编排器感知用户活跃、意图、情绪，以及分析模块统计。
+    """
+    user_id: str = ""
+    conv_id: str = ""
+    msg_id: str = ""
+    dir_id: str = ""
+    raw_text: str = ""
+    linked_node_ids: list[str] = field(default_factory=list)
+    sent_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "UserMessageSent"
+
+
+@dataclass(frozen=True)
+class ConversationNoteCreatedAsFlashcard(DomainEvent):
+    """对话中的笔记被保存为闪卡 — 对话壳发布，闪卡壳消费
+
+    携带完整来源上下文，确保闪卡可回到原始对话消息。
+    source_ref 应遵循 SourceRef schema：
+        module="conversation", id=conv_id, sub_id=source_message_id,
+        metadata={"note_id": note_id, "message_role": "assistant"}
+    """
+    user_id: str = ""
+    conv_id: str = ""
+    note_id: str = ""          # 对话侧笔记 ID
+    flashcard_id: str = ""     # 闪卡侧卡片 ID
+    source_message_id: str = ""
+
+    front_text: str = ""
+    back_text: str = ""
+    linked_node_ids: list[str] = field(default_factory=list)
+    source_ref: dict = field(default_factory=dict)  # 遵循 SourceRef schema
+    created_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "ConversationNoteCreatedAsFlashcard"
+
+
+@dataclass(frozen=True)
+class InConversationTaskCreated(DomainEvent):
+    """对话内发起子任务 — 对话壳发布，目标壳消费
+
+    保留完整对话上下文，避免信息丢失。
+    """
+    user_id: str = ""
+    conv_id: str = ""
+    task_id: str = ""
+    task_type: Literal[
+        "generate_practice",
+        "generate_flashcard",
+        "generate_plan",
+        "generate_note",
+        "search_media",
+        "generate_mindmap",
+    ] = "generate_practice"
+
+    user_request_text: str = ""
+    linked_node_ids: list[str] = field(default_factory=list)
+    context_summary: str = ""
+    constraints: list[str] = field(default_factory=list)
+    created_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "InConversationTaskCreated"
+
+
+@dataclass(frozen=True)
+class ConversationBranchCreated(DomainEvent):
+    """对话发生分支 — 对话壳发布"""
+    user_id: str = ""
+    conv_id: str = ""
+    branch_id: str = ""
+    source_message_id: str = ""  # 从哪条消息分叉
+    branched_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "ConversationBranchCreated"
+
+
+@dataclass(frozen=True)
+class ConversationArchived(DomainEvent):
+    """对话归档 — 对话壳发布"""
+    user_id: str = ""
+    conv_id: str = ""
+    archived_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "ConversationArchived"
+
+
 # ──────────────────────────────────────────────
 # 认知域事件 (Phase 9)
 #
 # 旧 CognitiveNodeUpdated 已拆分：
 #   - CognitiveNodeLinked          : 节点与其他实体的链接变化
 #   - CognitiveNodeMetadataChanged : 节点元数据（描述/标签/层级等）变化
-# 掌握度（Belief）变化由 cognitive engine 通过 CognitiveEventRecord 内部处理，
-# 不再走 DomainEvent 总线，避免与上述元事件语义混淆。
+# 掌握度（Belief）变化通过 CognitiveStateChanged 发布，
+# 秘书系统、规划系统、知识树壳等通过订阅本事件感知认知变化。
 # ──────────────────────────────────────────────
 
 
@@ -335,6 +582,70 @@ class CognitiveNodeMetadataChanged(DomainEvent):
     @property
     def event_type(self) -> str:
         return "CognitiveNodeMetadataChanged"
+
+
+@dataclass(frozen=True)
+class CognitiveStateChanged(DomainEvent):
+    """认知节点状态变化 — 认知中心发布
+
+    由 ProjectionBuilder 在应用学习事实事件后发布，
+    秘书系统、规划系统通过订阅本事件感知认知变化。
+
+    注意：
+    - source_module 固定为 "cognitive"
+    - source_id 为 node_id
+    - caused_by_event_id 指向触发本次变化的学习事实事件 ID
+    """
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "cognitive"
+    node_id: str = ""
+    proficiency_before: float = 0.0
+    proficiency_after: float = 0.0
+    uncertainty_before: float = 0.0
+    uncertainty_after: float = 0.0
+    belief_alpha: float = 1.0
+    belief_beta: float = 1.0
+    urgency: float = 0.0
+    stagnation_days: float = 0.0
+    next_review_at: datetime | None = None
+    next_action_type: str = ""  # review / practice / explore / deep_processing / idle
+
+    # 信息增益（用于练习后反馈面板）
+    information_gain: float = 0.0
+    uncertainty_reduction_percent: float = 0.0
+
+    updated_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "CognitiveStateChanged"
+
+
+@dataclass(frozen=True)
+class CognitiveReward(DomainEvent):
+    """认知奖励审计事件 — 练习/闪卡/规划等学习事实处理完成后写入
+
+    只读审计事件，用于信息增益反馈、复盘、分析。
+    幂等键：cr_{caused_by_event_id}_{node_id}
+    """
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "cognitive"
+    node_id: str = ""
+
+    information_gain: float = 0.0
+    uncertainty_reduction_percent: float = 0.0
+    proficiency_before: float = 0.0
+    proficiency_after: float = 0.0
+    uncertainty_before: float = 0.0
+    uncertainty_after: float = 0.0
+
+    reward_type: Literal["practice", "flashcard", "plan", "conversation"] = "practice"
+    idempotency_key: str = ""
+    recorded_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "CognitiveReward"
 
 
 # ──────────────────────────────────────────────
@@ -839,18 +1150,44 @@ class ProjectNodeExported(DomainEvent):
 
 @dataclass(frozen=True)
 class PlanItemCreated(DomainEvent):
-    """计划项创建事件"""
+    """计划项创建事件
+
+    注意：
+    - source_module 固定为 "planning"
+    - source_id 为 plan_item_id
+    - caused_by_event_id 指向触发创建的来源事件（如 ProposalAccepted.event_id）
+    """
     user_id: str = ""
+    source_module: str = ""  # 固定为 "planning"
     plan_item_id: str = ""
-    source_module: str = ""   # PlanningSourceModule 字符串值 (SSOT)
     target_type: str = ""
     target_ref_id: str = ""
     title: str = ""
+    description: str = ""
+    priority: int = 0
+    linked_node_ids: list[str] = field(default_factory=list)
+    generation_reason: str = ""  # 生成原因描述（用于前端展示）
     created_at: datetime = field(default_factory=_now)
 
     @property
     def event_type(self) -> str:
         return "PlanItemCreated"
+
+
+@dataclass(frozen=True)
+class PlanItemUpdated(DomainEvent):
+    """计划项更新事件 — 合并去重时发布"""
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "planning"
+    plan_item_id: str = ""
+    updated_fields: list[str] = field(default_factory=list)
+    priority: int | None = None
+    generation_reason: str = ""
+    updated_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "PlanItemUpdated"
 
 
 @dataclass(frozen=True)
@@ -1018,6 +1355,53 @@ class PlanDeviationRecorded(DomainEvent):
         return "PlanDeviationRecorded"
 
 
+@dataclass(frozen=True)
+class PlanItemRequested(DomainEvent):
+    """秘书编排器请求规划壳创建计划项
+
+    支持「提案 + 直接请求并存」模式：
+    - requires_user_confirmation=True 时，规划壳应先向前端展示确认，用户同意后再创建
+    - requires_user_confirmation=False 时，规划壳可直接创建 plan item
+
+    source_module 固定为 "secretary"，表示请求来源。
+    """
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "secretary"
+    request_id: str = ""     # 幂等键，避免秘书重复请求创建同一计划
+    target_type: str = ""
+    target_ref_id: str = ""
+    title: str = ""
+    description: str = ""
+    priority: int = 0
+    linked_node_ids: list[str] = field(default_factory=list)
+    requires_user_confirmation: bool = True
+    proposed_scheduled_for: datetime | None = None
+    requested_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "PlanItemRequested"
+
+
+@dataclass(frozen=True)
+class PlanGoalRequested(DomainEvent):
+    """秘书编排器请求规划壳创建目标"""
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "secretary"
+    request_id: str = ""
+    title: str = ""
+    target_module: str = ""
+    target_metric: str = ""
+    target_value: int = 0
+    deadline: str = ""
+    requires_user_confirmation: bool = True
+    requested_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "PlanGoalRequested"
+
+
 # ──────────────────────────────────────────────
 # Reading 域事件 (ADR 0003)
 #
@@ -1168,6 +1552,46 @@ class ReadingNoteCreated(DomainEvent):
 
 
 @dataclass(frozen=True)
+class MaterialProgressUpdated(DomainEvent):
+    """阅读材料进度更新
+
+    由阅读壳在滚动、切换章节、保存阅读位置时发布，
+    用于进度投影、秘书感知、规划自动完成触发。
+    """
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "reading"
+    material_id: str = ""
+    session_id: str = ""
+    progress_pct: float = 0.0          # 0.0 - 1.0
+    last_chunk_id: str = ""
+    last_offset: int = 0
+    updated_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "MaterialProgressUpdated"
+
+
+@dataclass(frozen=True)
+class ReadingMaterialCompleted(DomainEvent):
+    """阅读材料完成
+
+    当 progress_pct 达到阈值（如 0.95）或用户手动标记完成时发布。
+    """
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "reading"
+    material_id: str = ""
+    session_id: str = ""
+    progress_pct: float = 0.0
+    duration_seconds: int = 0
+    completed_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "ReadingMaterialCompleted"
+
+
+@dataclass(frozen=True)
 class ReadingReviewReminderScheduled(DomainEvent):
     """阅读回顾提醒已排入 Planning（复用 PlanItemScheduled）"""
     user_id: str = ""
@@ -1179,6 +1603,193 @@ class ReadingReviewReminderScheduled(DomainEvent):
     @property
     def event_type(self) -> str:
         return "ReadingReviewReminderScheduled"
+
+
+# ──────────────────────────────────────────────
+# 知识树域事件 (Task 0024)
+#
+# 设计原则：
+#   - 用户知识结构（tree_nodes / tree_edges）与认知数据系统解耦
+#   - 知识树壳只发布用户创作/操作事件，不直接发布认知状态变化
+#   - TreeNodeLinkedToCognitiveNode 由认知中心订阅后，再发布
+#     CognitiveNodeLinked(target_ref_type="tree_node") 供其他模块感知
+# ──────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class TreeNodeCreated(DomainEvent):
+    """用户在知识树上创建节点"""
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "knowledge_tree"
+    tree_id: str = ""
+    node_id: str = ""
+    parent_id: str = ""
+    label: str = ""
+    node_type: str = "concept"
+    linked_cognitive_node_ids: list[str] = field(default_factory=list)
+    created_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "TreeNodeCreated"
+
+
+@dataclass(frozen=True)
+class TreeNodeUpdated(DomainEvent):
+    """用户更新知识树节点"""
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "knowledge_tree"
+    tree_id: str = ""
+    node_id: str = ""
+    changed_fields: list[str] = field(default_factory=list)
+    old_label: str = ""
+    new_label: str = ""
+    updated_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "TreeNodeUpdated"
+
+
+@dataclass(frozen=True)
+class TreeNodeDeleted(DomainEvent):
+    """用户删除知识树节点"""
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "knowledge_tree"
+    tree_id: str = ""
+    node_id: str = ""
+    deleted_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "TreeNodeDeleted"
+
+
+@dataclass(frozen=True)
+class TreeNodeMoved(DomainEvent):
+    """用户拖拽移动节点（改变父节点或图位置）"""
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "knowledge_tree"
+    tree_id: str = ""
+    node_id: str = ""
+    old_parent_id: str = ""
+    new_parent_id: str = ""
+    new_position: dict = field(default_factory=dict)
+    moved_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "TreeNodeMoved"
+
+
+@dataclass(frozen=True)
+class TreeEdgeCreated(DomainEvent):
+    """用户创建知识树边"""
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "knowledge_tree"
+    tree_id: str = ""
+    edge_id: str = ""
+    source_node_id: str = ""
+    target_node_id: str = ""
+    edge_type: str = "parent_child"
+    strength: float = 1.0
+    is_inferred: bool = False
+    created_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "TreeEdgeCreated"
+
+
+@dataclass(frozen=True)
+class TreeEdgeDeleted(DomainEvent):
+    """用户删除知识树边"""
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "knowledge_tree"
+    tree_id: str = ""
+    edge_id: str = ""
+    deleted_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "TreeEdgeDeleted"
+
+
+@dataclass(frozen=True)
+class TreeNodeLinkedToCognitiveNode(DomainEvent):
+    """知识树节点关联到认知节点
+
+    由知识树壳发布；认知中心订阅后更新 cognitive_node 的 metadata.anchors，
+    并再发布 CognitiveNodeLinked(target_ref_type="tree_node") 供其他模块感知。
+    """
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "knowledge_tree"
+    tree_id: str = ""
+    tree_node_id: str = ""
+    cognitive_node_id: str = ""
+    link_role: str = "primary"
+    linked_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "TreeNodeLinkedToCognitiveNode"
+
+
+@dataclass(frozen=True)
+class TreeNodeUnlinkedFromCognitiveNode(DomainEvent):
+    """知识树节点解除与认知节点的关联"""
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "knowledge_tree"
+    tree_id: str = ""
+    tree_node_id: str = ""
+    cognitive_node_id: str = ""
+    unlinked_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "TreeNodeUnlinkedFromCognitiveNode"
+
+
+@dataclass(frozen=True)
+class TreeContentImported(DomainEvent):
+    """从其他壳导入内容到知识树
+
+    source_ref 应遵循 SourceRef schema：
+        module=content_source_module, id=source_ref_id,
+        sub_id=target_node_id（可选）, title=内容标题
+    """
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "knowledge_tree"
+    tree_id: str = ""
+    target_node_id: str = ""
+    content_source_module: str = ""  # flashcard / reading / conversation / practice
+    source_ref_id: str = ""
+    source_ref: dict = field(default_factory=dict)  # 遵循 SourceRef schema
+    auto_create_node: bool = False
+    imported_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "TreeContentImported"
+
+
+@dataclass(frozen=True)
+class TreeViewChanged(DomainEvent):
+    """用户切换知识树视图模式、筛选或画布状态"""
+    user_id: str = ""
+    source_module: str = ""  # 固定为 "knowledge_tree"
+    tree_id: str = ""
+    view_mode: str = "tree"
+    layout: str = "layered"
+    filters: dict = field(default_factory=dict)
+    zoom: float = 1.0
+    pan_x: float = 0.0
+    pan_y: float = 0.0
+    changed_at: datetime = field(default_factory=_now)
+
+    @property
+    def event_type(self) -> str:
+        return "TreeViewChanged"
 
 
 # ──────────────────────────────────────────────
@@ -1753,15 +2364,25 @@ EVENT_TYPES: dict[str, type[DomainEvent]] = {
         AnswerSubmitted,
         ErrorRecorded,
         SessionCompleted,
+        PracticeAnswerBehaviorRecorded,
         ErrorBookEntryReviewed,
         ErrorBookEntryResolved,
         AssistantReplied,
+        UserMessageSent,
+        ConversationNoteCreatedAsFlashcard,
+        InConversationTaskCreated,
+        ConversationBranchCreated,
+        ConversationArchived,
         CognitiveNodeLinked,
         CognitiveNodeMetadataChanged,
+        CognitiveStateChanged,
+        CognitiveReward,
         MessageClassified,
         PracticeSubmitted,
         NodeCreated,
+        ProposalGenerated,
         ProposalAccepted,
+        ProposalDismissed,
         PendingCrossTopic,
         MoodStressRecorded,
         MoodStressInterventionTriggered,
@@ -1782,6 +2403,7 @@ EVENT_TYPES: dict[str, type[DomainEvent]] = {
         ProjectNodeExported,
         # Planning 域事件
         PlanItemCreated,
+        PlanItemUpdated,
         PlanItemScheduled,
         PlanItemActivated,
         PlanItemStarted,
@@ -1793,6 +2415,8 @@ EVENT_TYPES: dict[str, type[DomainEvent]] = {
         PlanGoalCompleted,
         PlanPeriodicReviewGenerated,
         PlanDeviationRecorded,
+        PlanItemRequested,
+        PlanGoalRequested,
         # FlashCard 域事件 (docs/modules/flashcard/events.md)
         FlashCardCreated,
         FlashCardUpdated,
@@ -1816,7 +2440,20 @@ EVENT_TYPES: dict[str, type[DomainEvent]] = {
         ReadingAnnotationProcessed,
         ReadingModeChanged,
         ReadingNoteCreated,
+        MaterialProgressUpdated,
+        ReadingMaterialCompleted,
         ReadingReviewReminderScheduled,
+        # 知识树域事件 (Task 0024)
+        TreeNodeCreated,
+        TreeNodeUpdated,
+        TreeNodeDeleted,
+        TreeNodeMoved,
+        TreeEdgeCreated,
+        TreeEdgeDeleted,
+        TreeNodeLinkedToCognitiveNode,
+        TreeNodeUnlinkedFromCognitiveNode,
+        TreeContentImported,
+        TreeViewChanged,
         # LanguageRoom 域事件 (ADR 0004)
         LanguageRoomCreated,
         LanguageRoomStarted,

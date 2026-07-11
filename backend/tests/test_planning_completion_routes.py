@@ -254,7 +254,7 @@ class TestRoutePractice:
             captured.append(event)
         # practice 路由可能重发的源事件: SessionCompleted (会话完成)
         bus.subscribe("SessionCompleted", _cap_sc)
-        bus.subscribe("PracticeSubmitted", _cap_sc)
+        bus.subscribe("AnswerSubmitted", _cap_sc)
         writer.subscribe(bus)
 
         event = PlanItemCompleted(
@@ -621,7 +621,7 @@ class TestNoEventLoopResend:
         async def practice_loop(event):
             loop_calls.append(event)
         bus.subscribe("SessionCompleted", practice_loop)
-        bus.subscribe("PracticeSubmitted", practice_loop)
+        bus.subscribe("AnswerSubmitted", practice_loop)
         writer.subscribe(bus)
 
         event = PlanItemCompleted(
@@ -760,7 +760,7 @@ class TestDeviationTypeSchema:
 class TestBeliefNotDirectlyUpdatedByPlanning:
     """ADR 0006 关键设计: 计划项是"用户决定"而非"学习行为", 不触发 Belief 更新.
 
-    Belief 更新应由源模块的实际学习事件驱动 (PracticeSubmitted/FlashCardReviewed/...),
+    Belief 更新应由源模块的实际学习事件驱动 (AnswerSubmitted/FlashCardReviewed/...),
     completion_writer 仅路由 plan_items 状态, 不应直接修改 Beliefs.
     """
 

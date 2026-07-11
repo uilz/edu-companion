@@ -16,7 +16,7 @@ Practice 模块端到端测试 (Task #81)
   - 题目质量 (quality_routes.py — 3 端点)
   - 参考资料 (references.py — 3 端点)
   - 导入 (import_routes.py — 5 端点)
-  - 4 个领域事件 (AnswerSubmitted/ErrorRecorded/SessionCompleted/PracticeSubmitted)
+  - 3 个领域事件 (AnswerSubmitted/ErrorRecorded/SessionCompleted)
   - 跨模块联动 (knowledge/errorbook/media/secretary)
   - 数据隔离 (user_a vs user_b)
 
@@ -1716,20 +1716,26 @@ class TestEventPublishing:
         assert evt.user_id == user_id
         assert evt.session_id == s["session_id"]
 
-    def test_04_practice_submitted_event(
+    def test_04_answer_submitted_event_is_single_source(
         self, client, user_id, db, auth_headers
     ):
-        """submit_answer 必须发布 PracticeSubmitted 事件"""
+        """submit_answer 只发布 AnswerSubmitted，不再发布 PracticeSubmitted"""
         from app.application.di import container
-        from shared.events import PracticeSubmitted
+        from shared.events import AnswerSubmitted, PracticeSubmitted
 
-        captured: list[Any] = []
+        answer_captured: list[Any] = []
+        practice_captured: list[Any] = []
 
-        async def _capture(evt):
+        async def _capture_answer(evt):
+            if isinstance(evt, AnswerSubmitted):
+                answer_captured.append(evt)
+
+        async def _capture_practice(evt):
             if isinstance(evt, PracticeSubmitted):
-                captured.append(evt)
+                practice_captured.append(evt)
 
-        container.event_bus.subscribe("PracticeSubmitted", _capture)
+        container.event_bus.subscribe("AnswerSubmitted", _capture_answer)
+        container.event_bus.subscribe("PracticeSubmitted", _capture_practice)
 
         bank = _create_bank(client, auth_headers)
         for i in range(2):
@@ -1751,9 +1757,12 @@ class TestEventPublishing:
                 "time_spent": 10,
             },
         )
-        assert len(captured) >= 1, "PracticeSubmitted 事件未发布"
-        evt = captured[0]
+        assert len(answer_captured) >= 1, "AnswerSubmitted 事件未发布"
+        evt = answer_captured[0]
         assert evt.user_id == user_id
+        assert evt.answer == ["A"]
+        assert evt.response_time_seconds == 10.0
+        assert len(practice_captured) == 0, "PracticeSubmitted 不应再被发布"
 
 
 # ════════════════════════════════════════════════════════════════════

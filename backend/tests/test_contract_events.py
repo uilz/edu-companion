@@ -20,18 +20,40 @@ import pytest
 from shared.events import (
     DomainEvent,
     AnswerSubmitted,
+    PracticeAnswerBehaviorRecorded,
     AssistantReplied,
     CognitiveNodeLinked,
     CognitiveNodeMetadataChanged,
+    CognitiveReward,
+    CognitiveStateChanged,
+    ConversationArchived,
+    ConversationBranchCreated,
     ErrorBookEntryReviewed,
     ErrorBookEntryResolved,
     ErrorRecorded,
+    InConversationTaskCreated,
+    MaterialProgressUpdated,
     MessageClassified,
     NodeCreated,
+    ConversationNoteCreatedAsFlashcard,
     PendingCrossTopic,
+    PlanGoalRequested,
+    PlanItemRequested,
     PracticeSubmitted,
     ProposalAccepted,
+    ReadingMaterialCompleted,
     SessionCompleted,
+    TreeEdgeCreated,
+    TreeEdgeDeleted,
+    TreeContentImported,
+    TreeNodeCreated,
+    TreeNodeDeleted,
+    TreeNodeLinkedToCognitiveNode,
+    TreeNodeMoved,
+    TreeNodeUnlinkedFromCognitiveNode,
+    TreeNodeUpdated,
+    TreeViewChanged,
+    UserMessageSent,
     EVENT_TYPES,
 )
 
@@ -111,18 +133,30 @@ class TestAnswerSubmitted:
         e = AnswerSubmitted()
         assert e.event_type == "AnswerSubmitted"
         assert e.is_correct is False
-        assert e.p_known_before == 0.5
+        assert e.source_module == ""
         assert e.hints_used == 0
 
     def test_full_construction(self):
         e = AnswerSubmitted(
-            user_id="u1", session_id="s1", question_id="q1",
-            skill_id="calculus", is_correct=True,
-            p_known_before=0.3, p_known_after=0.7,
-            time_spent=12.5, hints_used=1,
+            user_id="u1",
+            source_module="practice",
+            attempt_id="a1",
+            session_id="s1",
+            question_id="q1",
+            skill_id="calculus",
+            is_correct=True,
+            answer=["A"],
+            correct_answer=["A"],
+            cognitive_node_ids=["calculus"],
+            response_time_seconds=12.5,
+            hints_used=1,
         )
         assert e.user_id == "u1"
-        assert e.p_known_before == 0.3
+        assert e.source_module == "practice"
+        assert e.attempt_id == "a1"
+        assert e.answer == ["A"]
+        assert e.cognitive_node_ids == ["calculus"]
+        assert e.response_time_seconds == 12.5
         assert e.is_correct is True
 
     def test_is_frozen(self):
@@ -139,6 +173,110 @@ class TestSessionCompleted:
         e = SessionCompleted()
         assert e.total_questions == 0
         assert e.accuracy == 0.0
+
+
+class TestPracticeAnswerBehaviorRecorded:
+    def test_event_type(self):
+        assert PracticeAnswerBehaviorRecorded().event_type == "PracticeAnswerBehaviorRecorded"
+
+    def test_telemetry_reference(self):
+        e = PracticeAnswerBehaviorRecorded(telemetry_id="t1", attempt_id="a1")
+        assert e.telemetry_id == "t1"
+        assert e.attempt_id == "a1"
+
+
+class TestConversationEvents:
+    def test_user_message_sent(self):
+        assert UserMessageSent().event_type == "UserMessageSent"
+
+    def test_note_created_as_flashcard(self):
+        e = ConversationNoteCreatedAsFlashcard(flashcard_id="f1", conv_id="c1")
+        assert e.flashcard_id == "f1"
+        assert e.conv_id == "c1"
+
+    def test_in_conversation_task_created(self):
+        e = InConversationTaskCreated(task_type="generate_practice")
+        assert e.task_type == "generate_practice"
+
+    def test_conversation_branch_created(self):
+        assert ConversationBranchCreated().event_type == "ConversationBranchCreated"
+
+    def test_conversation_archived(self):
+        assert ConversationArchived().event_type == "ConversationArchived"
+
+
+class TestCognitiveEvents:
+    def test_cognitive_reward(self):
+        e = CognitiveReward(reward_type="practice")
+        assert e.event_type == "CognitiveReward"
+        assert e.reward_type == "practice"
+
+    def test_cognitive_state_changed_information_gain(self):
+        e = CognitiveStateChanged(
+            information_gain=0.5,
+            uncertainty_reduction_percent=25.0,
+        )
+        assert e.information_gain == 0.5
+        assert e.uncertainty_reduction_percent == 25.0
+
+
+class TestPlanningRequestEvents:
+    def test_plan_item_requested(self):
+        e = PlanItemRequested(request_id="r1", requires_user_confirmation=False)
+        assert e.event_type == "PlanItemRequested"
+        assert e.requires_user_confirmation is False
+
+    def test_plan_goal_requested(self):
+        assert PlanGoalRequested().event_type == "PlanGoalRequested"
+
+
+class TestReadingProgressEvents:
+    def test_material_progress_updated(self):
+        e = MaterialProgressUpdated(material_id="m1", progress_pct=0.75)
+        assert e.progress_pct == 0.75
+
+    def test_reading_material_completed(self):
+        e = ReadingMaterialCompleted(material_id="m1")
+        assert e.material_id == "m1"
+
+
+class TestKnowledgeTreeEvents:
+    def test_tree_node_created(self):
+        e = TreeNodeCreated(tree_id="t1", node_id="n1", label="Bayes")
+        assert e.label == "Bayes"
+
+    def test_tree_node_updated(self):
+        assert TreeNodeUpdated().event_type == "TreeNodeUpdated"
+
+    def test_tree_node_deleted(self):
+        assert TreeNodeDeleted().event_type == "TreeNodeDeleted"
+
+    def test_tree_node_moved(self):
+        assert TreeNodeMoved().event_type == "TreeNodeMoved"
+
+    def test_tree_edge_created(self):
+        e = TreeEdgeCreated(edge_type="prerequisite")
+        assert e.edge_type == "prerequisite"
+
+    def test_tree_edge_deleted(self):
+        assert TreeEdgeDeleted().event_type == "TreeEdgeDeleted"
+
+    def test_tree_node_linked_to_cognitive_node(self):
+        e = TreeNodeLinkedToCognitiveNode(
+            tree_node_id="tn1", cognitive_node_id="cn1"
+        )
+        assert e.tree_node_id == "tn1"
+        assert e.cognitive_node_id == "cn1"
+
+    def test_tree_node_unlinked_from_cognitive_node(self):
+        assert TreeNodeUnlinkedFromCognitiveNode().event_type == "TreeNodeUnlinkedFromCognitiveNode"
+
+    def test_tree_imported_content(self):
+        e = TreeContentImported(content_source_module="reading")
+        assert e.content_source_module == "reading"
+
+    def test_tree_view_changed(self):
+        assert TreeViewChanged().event_type == "TreeViewChanged"
 
 
 # ═══════════════════════════════════════════

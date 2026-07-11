@@ -203,7 +203,7 @@ export function useConversation() {
     // Mapped handlers
     handleSelectConversation: actions.selectConversation,
     handleNewConversation: actions.handleNewConversation,
-    handleSend: actions.sendMessage,
+    handleSendMessage: actions.sendMessage,
     handleDeleteMessage: actions.deleteMessage,
     handleEditMessage: actions.editMessage,
     handleVersionSwitch: actions.versionSwitch,

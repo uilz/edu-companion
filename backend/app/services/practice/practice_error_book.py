@@ -236,15 +236,27 @@ def review_error_question(
          mastered, node_ids, now),
     )
 
-    # 更新认知节点
-    for nid in node_ids:
-        try:
-            get_repo().sync_from_practice_event(
-                user_id=user_id, skill_id=nid,
-                is_correct=is_correct, time_spent=float(time_spent), hints_used=0,
-            )
-        except Exception:
-            pass
+    # 错题复习也发布 AnswerSubmitted，由认知中心订阅统一更新认知状态。
+    # 不再直接调用 sync_from_practice_event 双写认知 repository。
+    try:
+        from app.infrastructure.event_bus_utils import publish_event_safe
+        from shared.events import AnswerSubmitted
+
+        publish_event_safe(AnswerSubmitted(
+            user_id=user_id,
+            source_module="practice",
+            attempt_id=attempt_id,
+            session_id=f"review_{question_id}",
+            question_id=question_id,
+            is_correct=is_correct,
+            answer=[],
+            correct_answer=[],
+            response_time_seconds=float(time_spent or 0),
+            hints_used=0,
+            cognitive_node_ids=[str(n) for n in node_ids] if node_ids else [],
+        ))
+    except Exception:
+        pass
 
     return {
         "attempt_id": attempt_id,

@@ -174,7 +174,7 @@ class TestEventBusChain:
         )
 
         secretary_event_handler.subscribe(container.event_bus)
-        # Secretary 订阅 CognitiveNodeMetadataChanged / SessionCompleted / PracticeSubmitted
+        # Secretary 订阅 CognitiveNodeMetadataChanged / SessionCompleted / AnswerSubmitted
         handlers = container.event_bus._handlers.get("CognitiveNodeMetadataChanged", [])
         handler_names = [h.__qualname__ for h in handlers]
         assert any("SecretaryEventHandler" in h for h in handler_names)

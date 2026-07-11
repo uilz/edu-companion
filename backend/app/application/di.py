@@ -205,6 +205,22 @@ class AppContainer:
         bus.subscribe("AnswerSubmitted", self.habit_service.on_answer_submitted)
         bus.subscribe("AnswerSubmitted", self.knowledge_service.on_answer_submitted)
 
+        # 答题 → 认知中心: 练习事件驱动信念更新（投影更新单一路径）
+        async def _on_answer_submitted_to_cognitive(event: DomainEvent) -> None:
+            from shared.events import AnswerSubmitted
+            if not isinstance(event, AnswerSubmitted):
+                return
+            try:
+                from app.domain.cognitive.events import CognitiveEventHandler
+                from app.infrastructure.db.session import get_db_session
+                with get_db_session() as session:
+                    handler = CognitiveEventHandler(session)
+                    handler.handle_answer_submitted(event)
+                    session.commit()
+            except Exception:
+                logger.debug("Cognitive handler failed for AnswerSubmitted", exc_info=True)
+        bus.subscribe("AnswerSubmitted", _on_answer_submitted_to_cognitive)
+
         # 错题 → 知识图谱 + 媒体推荐
         bus.subscribe("ErrorRecorded", self.knowledge_service.on_error_recorded)
         bus.subscribe("ErrorRecorded", self.media_service.on_error_recorded)
@@ -440,6 +456,41 @@ class AppContainer:
             except Exception:
                 logger.debug("ZPD scheduler not available")
         bus.subscribe("SessionCompleted", _on_practice_to_knowledge_tree)
+
+        # ═══ Phase 3: 对话笔记 ↔ 闪卡双向同步 ═══
+        async def _on_conversation_note_created_as_flashcard(event: DomainEvent) -> None:
+            from shared.events import ConversationNoteCreatedAsFlashcard
+            if not isinstance(event, ConversationNoteCreatedAsFlashcard):
+                return
+            try:
+                from app.services.flashcard.conversation_note_handler import conversation_note_flashcard_handler
+                await conversation_note_flashcard_handler._on_note_created_as_flashcard(event)
+            except Exception:
+                logger.debug("ConversationNote→Flashcard handler failed", exc_info=True)
+        bus.subscribe("ConversationNoteCreatedAsFlashcard", _on_conversation_note_created_as_flashcard)
+
+        async def _on_flashcard_updated_reverse_sync(event: DomainEvent) -> None:
+            from shared.events import FlashCardUpdated
+            if not isinstance(event, FlashCardUpdated):
+                return
+            try:
+                from app.services.conversation.conversation_note_service import on_flashcard_updated
+                await on_flashcard_updated(event)
+            except Exception:
+                logger.debug("FlashCardUpdated reverse sync failed", exc_info=True)
+        bus.subscribe("FlashCardUpdated", _on_flashcard_updated_reverse_sync)
+
+        # ═══ Phase 3: 答题微行为 → DiagnosticSignal ═══
+        async def _on_practice_behavior_recorded(event: DomainEvent) -> None:
+            from shared.events import PracticeAnswerBehaviorRecorded
+            if not isinstance(event, PracticeAnswerBehaviorRecorded):
+                return
+            try:
+                from app.domain.cognitive.diagnostic_signal_builder import diagnostic_signal_builder
+                await diagnostic_signal_builder._on_behavior_recorded(event)
+            except Exception:
+                logger.debug("DiagnosticSignal builder failed", exc_info=True)
+        bus.subscribe("PracticeAnswerBehaviorRecorded", _on_practice_behavior_recorded)
 
         # ── EventSystem: 工作记忆生命周期 ──
         async def _on_session_completed(event: DomainEvent) -> None:

@@ -11,29 +11,18 @@ class KnowledgeGraphServiceImpl:
         self._bus = event_bus
 
     async def on_answer_submitted(self, event):
-        """事件: 答题 → 同步 CognitiveNode belief + practice_summary"""
+        """事件: 答题 → 只读侧处理（日志/联动），不直接写认知状态。
+
+        认知状态更新由认知中心通过订阅 AnswerSubmitted 统一处理，避免双写。
+        """
         user_id = getattr(event, "user_id", "?")
         skill_id = getattr(event, "skill_id", "?")
         is_correct = getattr(event, "is_correct", False)
-        time_spent = getattr(event, "time_spent", 0.0)
-        hints_used = getattr(event, "hints_used", 0)
 
-        # 已经支持 CognitiveNode，通过 sync_from_practice_event 统一更新
-        try:
-            from app.domain.cognitive import get_repo
-            get_repo().sync_from_practice_event(
-                user_id=user_id,
-                skill_id=skill_id,
-                is_correct=bool(is_correct),
-                time_spent=time_spent,
-                hints_used=hints_used,
-            )
-            logger.info(
-                "Knowledge: synced practice to CognitiveNode user=%s skill=%s correct=%s",
-                user_id, skill_id, is_correct,
-            )
-        except Exception as exc:
-            logger.warning("Knowledge: failed to sync practice to CognitiveNode: %s", exc)
+        logger.info(
+            "Knowledge: observed AnswerSubmitted user=%s skill=%s correct=%s",
+            user_id, skill_id, is_correct,
+        )
 
     async def on_error_recorded(self, event):
         """事件: 错误 → 标记薄弱知识点，更新 CognitiveNode 的 error_clusters"""

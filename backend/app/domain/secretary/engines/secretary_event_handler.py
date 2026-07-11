@@ -16,10 +16,12 @@ import logging
 from typing import Any
 
 from shared.events import (
+    AnswerSubmitted,
     CognitiveNodeMetadataChanged,
+    ConversationNoteCreatedAsFlashcard,
     DomainEvent,
+    PracticeAnswerBehaviorRecorded,
     SessionCompleted,
-    PracticeSubmitted,
 )
 
 logger = logging.getLogger(__name__)
@@ -49,9 +51,11 @@ class SecretaryEventHandler:
 
         bus.subscribe("SessionCompleted", self._on_session_completed)
         bus.subscribe("CognitiveNodeMetadataChanged", self._on_cognitive_metadata_changed)
-        bus.subscribe("PracticeSubmitted", self._on_practice_submitted)
+        bus.subscribe("AnswerSubmitted", self._on_answer_submitted)
+        bus.subscribe("ConversationNoteCreatedAsFlashcard", self._on_conversation_note_created_as_flashcard)
+        bus.subscribe("PracticeAnswerBehaviorRecorded", self._on_practice_behavior_recorded)
         self._subscribed = True
-        logger.info("📡 秘书已订阅领域事件: SessionCompleted / CognitiveNodeMetadataChanged / PracticeSubmitted")
+        logger.info("📡 秘书已订阅领域事件: SessionCompleted / CognitiveNodeMetadataChanged / AnswerSubmitted / ConversationNoteCreatedAsFlashcard / PracticeAnswerBehaviorRecorded")
 
     def unsubscribe(self) -> None:
         """取消订阅"""
@@ -59,7 +63,9 @@ class SecretaryEventHandler:
             return
         self._bus.unsubscribe("SessionCompleted", self._on_session_completed)
         self._bus.unsubscribe("CognitiveNodeMetadataChanged", self._on_cognitive_metadata_changed)
-        self._bus.unsubscribe("PracticeSubmitted", self._on_practice_submitted)
+        self._bus.unsubscribe("AnswerSubmitted", self._on_answer_submitted)
+        self._bus.unsubscribe("ConversationNoteCreatedAsFlashcard", self._on_conversation_note_created_as_flashcard)
+        self._bus.unsubscribe("PracticeAnswerBehaviorRecorded", self._on_practice_behavior_recorded)
         self._subscribed = False
         logger.info("📡 秘书已取消事件订阅")
 
@@ -109,15 +115,14 @@ class SecretaryEventHandler:
         except Exception as e:
             logger.debug("会话完成行为触发失败: %s", e)
 
-    async def _on_practice_submitted(self, event: DomainEvent) -> None:
-        """练习提交事件 → 低正确率时生成复习提案"""
-        if not isinstance(event, PracticeSubmitted):
+    async def _on_answer_submitted(self, event: DomainEvent) -> None:
+        """答题提交事件 → 低正确率时生成复习提案"""
+        if not isinstance(event, AnswerSubmitted):
             return
 
-        payload = getattr(event, 'payload', {}) or {}
-        correctness = getattr(event, 'correctness', payload.get('correctness', 0.0))
-        atom_node_ids = getattr(event, 'atom_node_ids', payload.get('atom_node_ids', []))
-        logger.debug("练习提交: user=%s correctness=%.2f nodes=%d",
+        correctness = 1.0 if event.is_correct else 0.0
+        atom_node_ids = event.cognitive_node_ids or []
+        logger.debug("答题提交: user=%s correctness=%.2f nodes=%d",
                      event.user_id, correctness, len(atom_node_ids))
 
         try:
@@ -151,6 +156,105 @@ class SecretaryEventHandler:
             )
         except Exception as e:
             logger.debug("计划调整失败: %s", e)
+
+    async def _on_conversation_note_created_as_flashcard(self, event: DomainEvent) -> None:
+        """对话笔记转闪卡 → 生成复习计划提案"""
+        if not isinstance(event, ConversationNoteCreatedAsFlashcard):
+            return
+
+        logger.debug("对话笔记转闪卡: user=%s note=%s", event.user_id, event.note_id)
+
+        try:
+            from ..models import Proposal
+            front_preview = (event.front_text or "")[:30]
+            proposal = Proposal(
+                emoji="📝",
+                title=f"为新闪卡安排复习计划",
+                description=f"你刚从对话创建了一张闪卡「{front_preview}...」，是否将其加入今日复习？",
+                action_type="planning",
+                priority=2,
+                payload={
+                    "source": "conversation_note_flashcard",
+                    "note_id": event.note_id,
+                    "flashcard_linked_node_ids": event.linked_node_ids,
+                },
+                insight_source="conversation_note_created_as_flashcard",
+                generated_by="secretary_event_handler",
+            )
+            if self._store:
+                self._store.save_proposal(
+                    proposal,
+                    user_id=event.user_id,
+                    session_id=f"note:{event.note_id}",
+                )
+                logger.info("对话笔记转闪卡触发计划提案: user=%s note=%s", event.user_id, event.note_id)
+        except Exception as e:
+            logger.debug("对话笔记转闪卡提案生成失败: %s", e)
+
+    async def _on_practice_behavior_recorded(self, event: DomainEvent) -> None:
+        """答题微行为 → 检测到高犹豫/多次改选时生成讲解/复习提案"""
+        if not isinstance(event, PracticeAnswerBehaviorRecorded):
+            return
+
+        hesitation_ratio = 0.0
+        if event.time_on_question_ms > 0:
+            hesitation_ratio = event.hesitation_ms / event.time_on_question_ms
+
+        logger.debug("答题微行为: user=%s attempt=%s hesitation=%.2f changes=%d",
+                     event.user_id, event.attempt_id, hesitation_ratio, event.answer_change_count)
+
+        try:
+            from ..models import Proposal
+
+            if hesitation_ratio > 0.4 and event.time_on_question_ms > 5000:
+                proposal = Proposal(
+                    emoji="🤔",
+                    title="检测到答题犹豫，建议回顾相关概念",
+                    description=f"本题答题过程中犹豫时间占比 {hesitation_ratio:.0%}，可能需要重新讲解或练习。",
+                    action_type="review",
+                    priority=3,
+                    payload={
+                        "source": "practice_behavior_hesitation",
+                        "attempt_id": event.attempt_id,
+                        "question_id": event.question_id,
+                        "hesitation_ratio": hesitation_ratio,
+                    },
+                    insight_source="practice_answer_behavior:hesitation",
+                    generated_by="secretary_event_handler",
+                )
+                if self._store:
+                    self._store.save_proposal(
+                        proposal,
+                        user_id=event.user_id,
+                        session_id=f"behavior:{event.attempt_id}",
+                    )
+                    logger.info("答题犹豫触发复习提案: user=%s attempt=%s", event.user_id, event.attempt_id)
+
+            if event.answer_change_count >= 2:
+                proposal = Proposal(
+                    emoji="🔄",
+                    title="多次改选答案，建议辨析易混点",
+                    description=f"本题改选 {event.answer_change_count} 次，可能存在选项混淆，建议针对性练习。",
+                    action_type="practice",
+                    priority=3,
+                    payload={
+                        "source": "practice_behavior_indecision",
+                        "attempt_id": event.attempt_id,
+                        "question_id": event.question_id,
+                        "answer_change_count": event.answer_change_count,
+                    },
+                    insight_source="practice_answer_behavior:indecision",
+                    generated_by="secretary_event_handler",
+                )
+                if self._store:
+                    self._store.save_proposal(
+                        proposal,
+                        user_id=event.user_id,
+                        session_id=f"behavior:{event.attempt_id}",
+                    )
+                    logger.info("多次改选触发练习提案: user=%s attempt=%s", event.user_id, event.attempt_id)
+        except Exception as e:
+            logger.debug("答题微行为提案生成失败: %s", e)
 
 
 # ── 全局实例 ──

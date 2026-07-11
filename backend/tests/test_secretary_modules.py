@@ -176,13 +176,13 @@ def test_event_handler():
     # EventBus 的 _handlers 是 dict[type_str, list[callable]]
     _check("SessionCompleted 已订阅", "SessionCompleted" in bus._handlers)
     _check("CognitiveNodeMetadataChanged 已订阅", "CognitiveNodeMetadataChanged" in bus._handlers)
-    _check("PracticeSubmitted 已订阅", "PracticeSubmitted" in bus._handlers)
+    _check("AnswerSubmitted 已订阅", "AnswerSubmitted" in bus._handlers)
 
     handler.unsubscribe()
     _check("取消订阅", not handler._subscribed)
     # EventBus.unsubscribe 只移除 handler 不删除键，检查列表为空
     _check("SessionCompleted handler 已移除", len(bus._handlers.get("SessionCompleted", [])) == 0)
-    _check("PracticeSubmitted handler 已移除", len(bus._handlers.get("PracticeSubmitted", [])) == 0)
+    _check("AnswerSubmitted handler 已移除", len(bus._handlers.get("AnswerSubmitted", [])) == 0)
 
 
 # ═══════════════════════════════════════════

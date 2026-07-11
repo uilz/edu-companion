@@ -174,10 +174,12 @@ FlashCard 是基于 `CognitiveNode` 设计的**复习材料**。系统提供 FSR
 | 练习 → FlashCard | 错题一键生成 FlashCard（`source='practice_error'`）|
 | 阅读 → FlashCard | 笔记（反思型）自动生成（`source='reading_note'`）|
 | 对话 → FlashCard | 选中文本提取（`source='conversation'`）|
+| 对话笔记 → FlashCard | `ConversationNoteCreatedAsFlashcard` 事件自动创建反思型卡片（`source='conversation'`），并回填 `flashcard_id` |
 | 项目 → FlashCard | 节点内容提取（`source='project'`）|
 | 语言房间 → FlashCard | 转写片段提取（`source='language_room'`）|
 | 兴趣探索 → FlashCard | 稍后读内容生成（`source='interest_explorer'`）|
 | FlashCard → 知识图谱 | 复习自评事件回写 Belief |
+| FlashCard → 对话笔记 | `FlashCardUpdated` 事件反向同步内容字段到 `conversation_notes` |
 | FlashCard → 规划模块 | 提供到期卡片列表和优先级 |
 | FlashCard → 秘书 | 复习会话事件进入全局事件流 |
 

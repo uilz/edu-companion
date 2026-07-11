@@ -14,9 +14,7 @@ from typing import Optional
 
 from app.services.practice.session_engine import (
     validate_transition,
-    check_answer,
     compute_stats,
-    classify_error,
     safe_json,
     safe_iso,
     safe_int,
@@ -24,49 +22,6 @@ from app.services.practice.session_engine import (
 from app.services.practice import session_repository as repo
 
 logger = logging.getLogger(__name__)
-
-
-def _get_metacognition_feedback(confidence_before, is_correct: bool) -> str:
-    """根据自信度和正确性返回元认知反馈文案"""
-    if confidence_before is None:
-        return ""
-    if confidence_before >= 3:
-        if is_correct:
-            return "你确实掌握了，自信是对的"
-        else:
-            return "⚠️ 元认知偏差：你以为掌握了但其实没有。建议重新学习推导过程。"
-    else:
-        if is_correct:
-            return "💡 谦逊的正确：你比你以为的更懂。试着给别人讲一遍确认。"
-        else:
-            return "还有提升空间，继续努力"
-
-
-async def _publish_practice_events(
-    *,
-    user_id: str,
-    session_id: str,
-    question_id: str,
-    question: dict,
-    is_correct: bool,
-    user_answer,
-    correct_answer,
-    time_spent_seconds: int,
-    hints_used: int,
-) -> None:
-    """发布练习答题领域事件 — 委托到 engine.publish_practice_events (SSOT 单一来源)"""
-    from app.services.practice.engine import publish_practice_events
-    await publish_practice_events(
-        user_id=user_id,
-        session_id=session_id,
-        question_id=question_id,
-        question=question,
-        is_correct=is_correct,
-        user_answer=user_answer,
-        correct_answer=correct_answer,
-        time_spent_seconds=time_spent_seconds,
-        hints_used=hints_used,
-    )
 
 
 def _session_to_dict(session) -> dict:
@@ -551,151 +506,22 @@ def submit_answer(
     hints_used: int = 0,
     confidence_before: int = None,
 ) -> dict:
+    """提交答题 — 委托给 PracticeEngine.submit_answer。
+
+    本函数保留原有签名以保证路由/调用方兼容，实际逻辑已上移到
+    app.services.practice.engine.PracticeEngine，实现单一事件源：
+    只通过 PersistentEventBus 发布事件，不再直接调用认知仓库。
     """
-    提交答题 (D9: session_questions 不再存状态, 仅 practice_attempts).
-
-    流程:
-    1. 验证会话 & 题目归属
-    2. 判对错
-    3. 写入 practice_attempts (含错因分析)
-    4. 更新会话统计
-    5. 认知节点联动
-    """
-    from app.infrastructure.db.database import get_db
-    from app.domain.cognitive import get_repo
-    db = get_db()
-
-    # 1. 验证 (D9: 从 practice_attempts 检查是否已答)
-    #    先校验 session 归属当前 user (防止跨用户提交)
-    session = repo.get_session(db, session_id, user_id)
-    if not session:
-        return {"error": "会话不存在或不属于当前用户", "is_correct": False}
-    sq = repo.get_session_question(db, session_id, question_id)
-    if not sq:
-        return {"error": "题目不属于该会话", "is_correct": False}
-    existing = db.fetchone(
-        "SELECT is_correct, user_answer FROM practice_attempts WHERE session_id = %s AND question_id = %s",
-        (session_id, question_id),
+    from app.services.practice.engine import PracticeEngine
+    return PracticeEngine.submit_answer(
+        session_id=session_id,
+        question_id=question_id,
+        user_id=user_id,
+        user_answer=user_answer,
+        time_spent=time_spent,
+        hints_used=hints_used,
+        confidence_before=confidence_before,
     )
-    if existing:
-        # 已答过，返回之前的结果而不是报错
-        question = db.fetchone(
-            "SELECT * FROM questions WHERE id = %s AND deleted_at IS NULL",
-            (question_id,),
-        )
-        correct_answer = safe_json(question.get("answer"), []) if question else []
-        explanation = (question.get("explanation", "") or question.get("analysis", "")) if question else ""
-        return {
-            "is_correct": existing["is_correct"],
-            "correct_answer": correct_answer,
-            "analysis": explanation,
-            "explanation": explanation,
-            "consecutive_correct": 0,
-            "mastered": existing["is_correct"],
-            "wrong_count_increased": not existing["is_correct"],
-            "already_answered": True,
-        }
-
-    question = db.fetchone(
-        "SELECT * FROM questions WHERE id = %s AND deleted_at IS NULL",
-        (question_id,),
-    )
-    if not question:
-        return {"error": "题目不存在", "is_correct": False}
-
-    correct_answer = safe_json(question.get("answer"), [])
-    explanation = question.get("explanation", "") or question.get("analysis", "")
-
-    # 2. 判对错
-    is_correct = check_answer(user_answer, correct_answer, question.get("question_type", "single"))
-    now = datetime.now().isoformat()
-
-    # 3. 错因分析
-    error_pattern = ""
-    error_analysis = {}
-    if not is_correct:
-        error_pattern = classify_error(question, user_answer) or ""
-        try:
-            from app.services.analytics.error_attribution import classify_llm
-            error_detail = classify_llm(
-                question_data=question,
-                user_answer=user_answer,
-                correct_answer=correct_answer,
-            )
-            error_analysis = {"llm_detail": error_detail} if error_detail else {}
-        except Exception:
-            pass
-
-    # 4. 写入答题记录 (D9: 唯一记录源)
-    repo.insert_attempt(db, session_id, question_id, user_id, is_correct, user_answer or [],
-                         time_spent, hints_used, error_pattern, error_analysis, confidence_before, now)
-
-    # 5. 更新会话统计
-    repo.update_session_stats(db, session_id)
-
-    # 6. 认知节点联动
-    try:
-        cognitive_node_ids = safe_json(question.get("cognitive_node_ids"), [])
-        for node_id in cognitive_node_ids:
-            get_repo().sync_from_practice_event(
-                user_id=user_id,
-                skill_id=node_id,
-                is_correct=is_correct,
-                response_time_ms=float(time_spent * 1000),
-                topic=question.get("subject", ""),
-                question_id=question_id,
-            )
-    except Exception as e:
-        logger.debug("认知节点同步失败: %s", e)
-
-    # 7. 发布领域事件 (SSOT: shared/events.py)
-    #   - AnswerSubmitted  → analytics/habit/knowledge 3 个订阅者
-    #   - ErrorRecorded    → knowledge/media 2 个订阅者
-    #   - PracticeSubmitted → cognitive service
-    # publish_practice_events 是 async; submit_answer 是 sync (FastAPI sync route);
-    # 用 asyncio 异步 fire-and-forget 让事件真正进入总线。
-    try:
-        import asyncio
-        from app.services.practice.engine import publish_practice_events
-        coro = publish_practice_events(
-            user_id=user_id,
-            session_id=session_id,
-            question_id=question_id,
-            question=dict(question) if question else {},
-            is_correct=is_correct,
-            user_answer=user_answer or [],
-            correct_answer=correct_answer,
-            time_spent_seconds=time_spent,
-            hints_used=hints_used,
-        )
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # FastAPI 已经在 event loop 中 → create_task
-                asyncio.ensure_future(coro)
-            else:
-                loop.run_until_complete(coro)
-        except RuntimeError:
-            # 无 event loop (线程上下文)
-            try:
-                asyncio.run(coro)
-            except Exception:
-                pass
-    except Exception as e:
-        logger.debug("Practice 事件发布失败: %s", e)
-
-    return {
-        "is_correct": is_correct,
-        "correct_answer": correct_answer,
-        "analysis": explanation,
-        "explanation": explanation,
-        "consecutive_correct": 0,
-        "mastered": is_correct,
-        "wrong_count_increased": not is_correct,
-        "error_type": error_pattern,
-        "error_detail": error_analysis.get("llm_detail", ""),
-        "metacognition_feedback": _get_metacognition_feedback(confidence_before, is_correct),
-    }
 
 
 def start_session(session_id: str, user_id: str) -> Optional[dict]:

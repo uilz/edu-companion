@@ -8,7 +8,7 @@ Task #82 — Knowledge / Knowledge-Tree 模块 E2E 测试
   4. /api/knowledge/graph (1)
   5. 8 个本域事件: NodeCreated, CognitiveNodeLinked,
      CognitiveNodeMetadataChanged, MessageClassified,
-     PracticeSubmitted, PendingCrossTopic, ProposalAccepted,
+     AnswerSubmitted, PendingCrossTopic, ProposalAccepted,
      InterestTagFromKnowledgeCreated
   6. 跨模块联动 5 条:
      - CognitiveNodeLinked          → InterestExplorer
@@ -83,7 +83,7 @@ KNOWLEDGE_DOMAIN_EVENTS = (
     "CognitiveNodeLinked",
     "CognitiveNodeMetadataChanged",
     "MessageClassified",
-    "PracticeSubmitted",
+    "AnswerSubmitted",
     "PendingCrossTopic",
     "ProposalAccepted",
     "InterestTagFromKnowledgeCreated",
