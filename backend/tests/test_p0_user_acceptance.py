@@ -675,8 +675,8 @@ class TestPlanningModule:
 
     def test_create_plan_item_via_rest(self, client, user_id, db, auth_headers):
         """通过 REST 创建计划项, 验证模块入口"""
-        from app.api.planning import service as svc
-        svc._ensure_tables()
+        from app.services.planning import _ensure_tables
+        _ensure_tables()
         r = client.post(
             "/api/planning/items",
             headers=auth_headers,
@@ -706,12 +706,13 @@ class TestPlanningModule:
         """P0-2 验证: 标记完成触发 PlanItemCompleted,
         消费后**不**重发源事件 (如 ProjectNodeCompleted)
         """
-        from app.api.planning import service as svc
+        from app.services.planning import _ensure_tables
+        from app.services.planning.items import create_plan_item
         from app.services import project as project_service
         from app.infrastructure.event_bus import EventBus
         from shared.events import PlanItemCompleted, ProjectNodeCompleted
 
-        svc._ensure_tables()
+        _ensure_tables()
         project_service.ensure_tables()
 
         # 创建 project + node
@@ -722,7 +723,7 @@ class TestPlanningModule:
 
         # 创建 plan_item (source_module=project)
         from shared.events import PlanningSourceModule
-        item = svc.create_plan_item(user_id, {
+        item = create_plan_item(user_id, {
             "source_module": PlanningSourceModule.PROJECT.value,
             "target_type": "project_node",
             "target_ref_id": node["id"],
@@ -769,8 +770,8 @@ class TestPlanningModule:
 
         合法值集合由 PlanningSourceModule 枚举派生（Task #57: 禁止硬编码模块数）
         """
-        from app.api.planning import service as svc
-        svc._ensure_tables()
+        from app.services.planning import _ensure_tables
+        _ensure_tables()
         # 1) 合法值 — manual
         r = client.post(
             "/api/planning/items",

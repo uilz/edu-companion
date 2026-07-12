@@ -224,10 +224,10 @@ class TestSecretaryPlanItemSuggestedHandling:
         clean_bus.subscribe("PlanItemRequested", lambda ev: requested.append(ev))
 
         with patch(
-            "app.api.planning.service.find_confirmation_by_suggestion_id",
+            "app.services.planning.confirmations.find_confirmation_by_suggestion_id",
             return_value=None,
         ) as mock_find, patch(
-            "app.api.planning.service.count_pending_confirmations",
+            "app.services.planning.confirmations.count_pending_confirmations",
             return_value=0,
         ):
             suggestion = PlanItemSuggested(
@@ -254,7 +254,16 @@ class TestSecretaryPlanItemSuggestedHandling:
 
     def test_duplicate_suggestion_is_idempotent(self, clean_bus, db, user_id, cleanup_test_data):
         from app.domain.secretary.engines.secretary_event_handler import SecretaryEventHandler
-        from app.api.planning import service as svc
+        from app.services.planning import _ensure_tables
+        from app.services.planning.confirmations import (
+            accept_confirmation,
+            create_confirmation,
+            dismiss_confirmation,
+            find_confirmation_by_request_id,
+            get_confirmation,
+            list_confirmations,
+        )
+        from app.services.planning.items import create_plan_item, find_plan_item_by_request_id
         from shared.events import PlanItemSuggested, PlanItemRequested
 
         handler = SecretaryEventHandler()
@@ -263,7 +272,7 @@ class TestSecretaryPlanItemSuggestedHandling:
         requested: list[Any] = []
         clean_bus.subscribe("PlanItemRequested", lambda ev: requested.append(ev))
 
-        svc.create_confirmation(
+        create_confirmation(
             user_id=user_id,
             body={
                 "request_id": f"req_sug_dup",
@@ -305,10 +314,10 @@ class TestSecretaryPlanItemSuggestedHandling:
             "app.domain.secretary.analysis.predict_fatigue_risk",
             return_value={"risk_level": "high"},
         ), patch(
-            "app.api.planning.service.find_confirmation_by_suggestion_id",
+            "app.services.planning.confirmations.find_confirmation_by_suggestion_id",
             return_value=None,
         ), patch(
-            "app.api.planning.service.count_pending_confirmations",
+            "app.services.planning.confirmations.count_pending_confirmations",
             return_value=0,
         ):
             suggestion = PlanItemSuggested(
@@ -339,7 +348,16 @@ class TestPlanningEventHandlerConfirmationMode:
         self, db, user_id, clean_bus, cleanup_test_data
     ):
         from app.api.planning.event_handler import PlanningEventHandler
-        from app.api.planning import service as svc
+        from app.services.planning import _ensure_tables
+        from app.services.planning.confirmations import (
+            accept_confirmation,
+            create_confirmation,
+            dismiss_confirmation,
+            find_confirmation_by_request_id,
+            get_confirmation,
+            list_confirmations,
+        )
+        from app.services.planning.items import create_plan_item, find_plan_item_by_request_id
         from shared.events import PlanItemRequested
 
         handler = PlanningEventHandler()
@@ -357,7 +375,7 @@ class TestPlanningEventHandlerConfirmationMode:
         )
         asyncio.run(clean_bus.publish(event))
 
-        confirmation = svc.find_confirmation_by_request_id(user_id, event.request_id)
+        confirmation = find_confirmation_by_request_id(user_id, event.request_id)
         assert confirmation is not None
         assert confirmation["status"] == "pending"
         assert confirmation["metadata"].get("suggestion_id") == "sug_abc"
@@ -367,7 +385,16 @@ class TestPlanningEventHandlerConfirmationMode:
         self, db, user_id, clean_bus, cleanup_test_data
     ):
         from app.api.planning.event_handler import PlanningEventHandler
-        from app.api.planning import service as svc
+        from app.services.planning import _ensure_tables
+        from app.services.planning.confirmations import (
+            accept_confirmation,
+            create_confirmation,
+            dismiss_confirmation,
+            find_confirmation_by_request_id,
+            get_confirmation,
+            list_confirmations,
+        )
+        from app.services.planning.items import create_plan_item, find_plan_item_by_request_id
         from shared.events import PlanItemRequested
 
         handler = PlanningEventHandler()
@@ -384,7 +411,7 @@ class TestPlanningEventHandlerConfirmationMode:
         )
         asyncio.run(clean_bus.publish(event))
 
-        item = svc.find_plan_item_by_request_id(user_id, event.request_id)
+        item = find_plan_item_by_request_id(user_id, event.request_id)
         assert item is not None
         assert item["source_module"] == "secretary"
         handler.unsubscribe()
@@ -399,9 +426,18 @@ class TestPlanItemConfirmationLifecycle:
     """确认请求的生命周期与幂等"""
 
     def test_accept_confirmation_creates_plan_item(self, db, user_id, cleanup_test_data):
-        from app.api.planning import service as svc
+        from app.services.planning import _ensure_tables
+        from app.services.planning.confirmations import (
+            accept_confirmation,
+            create_confirmation,
+            dismiss_confirmation,
+            find_confirmation_by_request_id,
+            get_confirmation,
+            list_confirmations,
+        )
+        from app.services.planning.items import create_plan_item, find_plan_item_by_request_id
 
-        confirmation = svc.create_confirmation(
+        confirmation = create_confirmation(
             user_id=user_id,
             body={
                 "request_id": f"req_accept_{user_id}",
@@ -414,17 +450,26 @@ class TestPlanItemConfirmationLifecycle:
             },
         )
 
-        item = svc.accept_confirmation(user_id, confirmation["id"])
+        item = accept_confirmation(user_id, confirmation["id"])
         assert item["title"] == "复习节点"
         assert item["metadata"].get("suggestion_id") == "sug_accept"
 
-        confirmation2 = svc.get_confirmation(user_id, confirmation["id"])
+        confirmation2 = get_confirmation(user_id, confirmation["id"])
         assert confirmation2["status"] == "accepted"
 
     def test_accept_confirmation_is_idempotent(self, db, user_id, cleanup_test_data):
-        from app.api.planning import service as svc
+        from app.services.planning import _ensure_tables
+        from app.services.planning.confirmations import (
+            accept_confirmation,
+            create_confirmation,
+            dismiss_confirmation,
+            find_confirmation_by_request_id,
+            get_confirmation,
+            list_confirmations,
+        )
+        from app.services.planning.items import create_plan_item, find_plan_item_by_request_id
 
-        confirmation = svc.create_confirmation(
+        confirmation = create_confirmation(
             user_id=user_id,
             body={
                 "request_id": f"req_idem_{user_id}",
@@ -435,14 +480,23 @@ class TestPlanItemConfirmationLifecycle:
             },
         )
 
-        item1 = svc.accept_confirmation(user_id, confirmation["id"])
-        item2 = svc.accept_confirmation(user_id, confirmation["id"])
+        item1 = accept_confirmation(user_id, confirmation["id"])
+        item2 = accept_confirmation(user_id, confirmation["id"])
         assert item1["id"] == item2["id"]
 
     def test_dismiss_confirmation_updates_status(self, db, user_id, cleanup_test_data):
-        from app.api.planning import service as svc
+        from app.services.planning import _ensure_tables
+        from app.services.planning.confirmations import (
+            accept_confirmation,
+            create_confirmation,
+            dismiss_confirmation,
+            find_confirmation_by_request_id,
+            get_confirmation,
+            list_confirmations,
+        )
+        from app.services.planning.items import create_plan_item, find_plan_item_by_request_id
 
-        confirmation = svc.create_confirmation(
+        confirmation = create_confirmation(
             user_id=user_id,
             body={
                 "request_id": f"req_dismiss_{user_id}",
@@ -453,7 +507,7 @@ class TestPlanItemConfirmationLifecycle:
             },
         )
 
-        dismissed = svc.dismiss_confirmation(user_id, confirmation["id"])
+        dismissed = dismiss_confirmation(user_id, confirmation["id"])
         assert dismissed["status"] == "dismissed"
 
 
@@ -471,7 +525,16 @@ class TestProactiveGenerationEndToEnd:
         from app.api.planning.proactive_generator import PlanningProactiveGenerator
         from app.domain.secretary.engines.secretary_event_handler import SecretaryEventHandler
         from app.api.planning.event_handler import PlanningEventHandler
-        from app.api.planning import service as svc
+        from app.services.planning import _ensure_tables
+        from app.services.planning.confirmations import (
+            accept_confirmation,
+            create_confirmation,
+            dismiss_confirmation,
+            find_confirmation_by_request_id,
+            get_confirmation,
+            list_confirmations,
+        )
+        from app.services.planning.items import create_plan_item, find_plan_item_by_request_id
         from shared.events import SessionCompleted
 
         proactive = PlanningProactiveGenerator()
@@ -491,7 +554,7 @@ class TestProactiveGenerationEndToEnd:
         asyncio.run(clean_bus.publish(event))
 
         # 应生成 pending confirmation
-        confirmations = svc.list_confirmations(user_id, status="pending")
+        confirmations = list_confirmations(user_id, status="pending")
         assert any(
             c["target_type"] == "practice" and c["user_id"] == user_id
             for c in confirmations

@@ -154,7 +154,8 @@ class SecretaryService:
         due_plan_items: list[dict] = []
         active_goals: list[dict] = []
         try:
-            from app.api.planning.service import list_plan_items, list_goals
+            from app.services.planning.items import list_plan_items
+            from app.services.planning.goals import list_goals
             from datetime import date
             due_plan_items = list_plan_items(
                 user_id=user_id,

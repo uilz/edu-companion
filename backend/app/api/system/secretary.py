@@ -23,7 +23,7 @@ from app.infrastructure.db.silent_task_store import SilentTaskStore
 from app.infrastructure.db.user_profile_store import UserOrchestrationProfileStore
 
 # Dashboard aggregation imports
-from app.api.planning import service as planning_service
+from app.services.planning.confirmations import list_confirmations as list_planning_confirmations
 from app.api.learning_activity import service as activity_service
 from app.services.practice.practice_stats import get_overview as get_practice_overview
 from app.services.analytics.adaptive_planner import adaptive_planner
@@ -1583,7 +1583,7 @@ async def get_dashboard(
     loop = asyncio.get_event_loop()
     overview = await loop.run_in_executor(None, get_practice_overview, user_id)
     proposals = await loop.run_in_executor(None, store.get_pending_proposals, user_id)
-    confirmations = await loop.run_in_executor(None, planning_service.list_confirmations, user_id, "pending")
+    confirmations = await loop.run_in_executor(None, list_planning_confirmations, user_id, "pending")
     activities = await loop.run_in_executor(None, activity_service.list_activities, user_id)
 
     assess = await assess_task

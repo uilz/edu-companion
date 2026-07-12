@@ -29,7 +29,31 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.api.planning import service as svc
+from app.services.planning import (
+    accept_confirmation as accept_confirmation_svc,
+    build_daily_view,
+    build_knowledge_view,
+    build_weekly_view,
+    complete_plan_item,
+    create_confirmation as create_confirmation_svc,
+    create_goal as create_goal_svc,
+    create_plan_item,
+    create_view_layout as create_view_layout_svc,
+    delete_plan_item,
+    dismiss_confirmation as dismiss_confirmation_svc,
+    extend_plan_item,
+    generate_review as generate_review_svc,
+    get_goal,
+    list_confirmations as list_confirmations_svc,
+    list_goals as list_goals_svc,
+    list_plan_items,
+    list_reviews as list_reviews_svc,
+    list_view_layouts as list_view_layouts_svc,
+    skip_plan_item,
+    start_plan_item,
+    update_goal as update_goal_svc,
+    update_plan_item,
+)
 from app.api.planning.schemas import (
     DailyViewResponse,
     KnowledgeViewResponse,
@@ -39,6 +63,7 @@ from app.api.planning.schemas import (
     PlanGoalResponse,
     PlanGoalUpdate,
     PlanItemComplete,
+    PlanItemConfirmationCreate,
     PlanItemConfirmationResponse,
     PlanItemCreate,
     PlanItemResponse,
@@ -85,7 +110,7 @@ async def get_daily_view(
     if user_id is None:
         raise HTTPException(status_code=401, detail="请先登录")
     on_date = date or _date.today()
-    data = svc.build_daily_view(user_id, on_date)
+    data = build_daily_view(user_id, on_date)
     return DailyViewResponse(
         date=data["date"],
         status_bar=StatusBarResponse(**data["status_bar"]),
@@ -106,7 +131,7 @@ async def get_weekly_view(
     today = _date.today()
     if week_start is None:
         week_start = today - timedelta(days=today.weekday())
-    data = svc.build_weekly_view(user_id, week_start)
+    data = build_weekly_view(user_id, week_start)
     return WeeklyViewResponse(**data)
 
 
@@ -117,7 +142,7 @@ async def get_knowledge_view(
 ):
     if user_id is None:
         raise HTTPException(status_code=401, detail="请先登录")
-    data = svc.build_knowledge_view(user_id, selected_node_id)
+    data = build_knowledge_view(user_id, selected_node_id)
     return KnowledgeViewResponse(
         nodes=data["nodes"],
         selected_node_id=data["selected_node_id"],
@@ -138,7 +163,7 @@ async def list_items(
 ):
     if user_id is None:
         raise HTTPException(status_code=401, detail="请先登录")
-    items = svc.list_plan_items(user_id, date, status, source_module, limit)
+    items = list_plan_items(user_id, date, status, source_module, limit)
     return {"items": [_to_item_response(x).model_dump(mode="json") for x in items], "total": len(items)}
 
 
@@ -149,7 +174,7 @@ async def create_item(
 ):
     if user_id is None:
         raise HTTPException(status_code=401, detail="请先登录")
-    item = svc.create_plan_item(user_id, body.model_dump())
+    item = create_plan_item(user_id, body.model_dump())
     if not item:
         raise HTTPException(status_code=500, detail="创建失败")
     return _to_item_response(item)
@@ -163,35 +188,9 @@ async def update_item(
 ):
     if user_id is None:
         raise HTTPException(status_code=401, detail="请先登录")
-    item = svc.update_plan_item(user_id, item_id, body.model_dump(exclude_none=True))
+    item = update_plan_item(user_id, item_id, body.model_dump(exclude_none=True))
     if not item:
         raise HTTPException(status_code=404, detail="计划项不存在")
-    # 如果设了 scheduled_for，发布 PlanItemScheduled 事件
-    if body.scheduled_for is not None:
-        try:
-            from app.application.di import container
-            from shared.events import PlanItemScheduled
-            bus = getattr(container, "event_bus", None)
-            if bus is not None:
-                ev = PlanItemScheduled(
-                    user_id=user_id,
-                    plan_item_id=item_id,
-                    source_module=item["source_module"],
-                    scheduled_for=body.scheduled_for,
-                    plan_date=str(body.plan_date or _date.today()),
-                    is_mood_rule_affected=item.get("is_mood_rule_affected", False),
-                )
-                import asyncio
-                try:
-                    loop = asyncio.get_event_loop()
-                except RuntimeError:
-                    loop = None
-                if loop and loop.is_running():
-                    asyncio.ensure_future(bus.publish(ev))
-                else:
-                    asyncio.run(bus.publish(ev))
-        except Exception as e:
-            logger.debug("PlanItemScheduled 事件发布失败: %s", e)
     return _to_item_response(item)
 
 
@@ -202,7 +201,7 @@ async def delete_item(
 ):
     if user_id is None:
         raise HTTPException(status_code=401, detail="请先登录")
-    ok = svc.delete_plan_item(user_id, item_id)
+    ok = delete_plan_item(user_id, item_id)
     if not ok:
         raise HTTPException(status_code=404, detail="计划项不存在")
     return {"status": "deleted", "id": item_id}
@@ -217,7 +216,7 @@ async def complete_item(
     if user_id is None:
         raise HTTPException(status_code=401, detail="请先登录")
     try:
-        item = svc.complete_plan_item(user_id, item_id, body.model_dump())
+        item = complete_plan_item(user_id, item_id, body.model_dump())
     except ValueError:
         raise HTTPException(status_code=404, detail="计划项不存在")
     if not item:
@@ -232,35 +231,10 @@ async def start_item(
 ):
     if user_id is None:
         raise HTTPException(status_code=401, detail="请先登录")
-    item = svc.get_plan_item(user_id, item_id)
+    item = start_plan_item(user_id, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="计划项不存在")
-    # 先同步更新 plan_items 状态（source of truth）
-    svc.start_plan_item(user_id, item_id)
-    # 再发布 PlanItemStarted 事件供其他模块订阅
-    try:
-        from app.application.di import container
-        from shared.events import PlanItemStarted
-        bus = getattr(container, "event_bus", None)
-        if bus is not None:
-            ev = PlanItemStarted(
-                user_id=user_id,
-                plan_item_id=item_id,
-                source_module=item["source_module"],
-            )
-            import asyncio
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = None
-            if loop and loop.is_running():
-                asyncio.ensure_future(bus.publish(ev))
-            else:
-                asyncio.run(bus.publish(ev))
-    except Exception as e:
-        logger.debug("PlanItemStarted 事件发布失败: %s", e)
-    item2 = svc.get_plan_item(user_id, item_id)
-    return _to_item_response(item2) if item2 else _to_item_response(item)
+    return _to_item_response(item)
 
 
 @router.post("/items/{item_id}/skip", response_model=PlanItemResponse, summary="标记跳过")
@@ -270,35 +244,10 @@ async def skip_item(
 ):
     if user_id is None:
         raise HTTPException(status_code=401, detail="请先登录")
-    item = svc.get_plan_item(user_id, item_id)
+    item = skip_plan_item(user_id, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="计划项不存在")
-    # 先同步更新 plan_items 状态（source of truth）
-    svc.skip_plan_item(user_id, item_id)
-    # 再发布 PlanItemSkipped 事件供其他模块订阅
-    try:
-        from app.application.di import container
-        from shared.events import PlanItemSkipped
-        bus = getattr(container, "event_bus", None)
-        if bus is not None:
-            ev = PlanItemSkipped(
-                user_id=user_id,
-                plan_item_id=item_id,
-                source_module=item["source_module"],
-            )
-            import asyncio
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = None
-            if loop and loop.is_running():
-                asyncio.ensure_future(bus.publish(ev))
-            else:
-                asyncio.run(bus.publish(ev))
-    except Exception as e:
-        logger.debug("PlanItemSkipped 事件发布失败: %s", e)
-    item2 = svc.get_plan_item(user_id, item_id)
-    return _to_item_response(item2) if item2 else _to_item_response(item)
+    return _to_item_response(item)
 
 
 @router.post("/items/{item_id}/extend", response_model=PlanItemResponse, summary="延长")
@@ -309,36 +258,10 @@ async def extend_item(
 ):
     if user_id is None:
         raise HTTPException(status_code=401, detail="请先登录")
-    item = svc.get_plan_item(user_id, item_id)
+    item = extend_plan_item(user_id, item_id, minutes)
     if not item:
         raise HTTPException(status_code=404, detail="计划项不存在")
-    # 先同步更新 plan_items 状态（source of truth）
-    svc.extend_plan_item(user_id, item_id, minutes)
-    # 再发布 PlanItemExtended 事件供其他模块订阅
-    try:
-        from app.application.di import container
-        from shared.events import PlanItemExtended
-        bus = getattr(container, "event_bus", None)
-        if bus is not None:
-            ev = PlanItemExtended(
-                user_id=user_id,
-                plan_item_id=item_id,
-                source_module=item["source_module"],
-                extended_minutes=minutes,
-            )
-            import asyncio
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = None
-            if loop and loop.is_running():
-                asyncio.ensure_future(bus.publish(ev))
-            else:
-                asyncio.run(bus.publish(ev))
-    except Exception as e:
-        logger.debug("PlanItemExtended 事件发布失败: %s", e)
-    item2 = svc.get_plan_item(user_id, item_id)
-    return _to_item_response(item2) if item2 else _to_item_response(item)
+    return _to_item_response(item)
 
 
 # ── 目标 ──
@@ -351,7 +274,7 @@ async def list_goals(
 ):
     if user_id is None:
         raise HTTPException(status_code=401, detail="请先登录")
-    goals = svc.list_goals(user_id, status)
+    goals = list_goals_svc(user_id, status)
     return {"goals": [_to_goal_response(x).model_dump(mode="json") for x in goals], "total": len(goals)}
 
 
@@ -362,7 +285,7 @@ async def create_goal(
 ):
     if user_id is None:
         raise HTTPException(status_code=401, detail="请先登录")
-    goal = svc.create_goal(user_id, body.model_dump())
+    goal = create_goal_svc(user_id, body.model_dump())
     if not goal:
         raise HTTPException(status_code=500, detail="创建失败")
     return _to_goal_response(goal)
@@ -376,7 +299,7 @@ async def update_goal(
 ):
     if user_id is None:
         raise HTTPException(status_code=401, detail="请先登录")
-    goal = svc.update_goal(user_id, goal_id, body.model_dump(exclude_none=True))
+    goal = update_goal_svc(user_id, goal_id, body.model_dump(exclude_none=True))
     if not goal:
         raise HTTPException(status_code=404, detail="目标不存在")
     return _to_goal_response(goal)
@@ -392,7 +315,7 @@ async def list_reviews(
 ):
     if user_id is None:
         raise HTTPException(status_code=401, detail="请先登录")
-    reviews = svc.list_reviews(user_id, limit)
+    reviews = list_reviews_svc(user_id, limit)
     return {"reviews": [_to_review_response(x).model_dump(mode="json") for x in reviews]}
 
 
@@ -403,7 +326,7 @@ async def generate_review(
 ):
     if user_id is None:
         raise HTTPException(status_code=401, detail="请先登录")
-    review = svc.generate_review(user_id, body.model_dump())
+    review = generate_review_svc(user_id, body.model_dump())
     return _to_review_response(review)
 
 
@@ -414,7 +337,7 @@ async def generate_review(
 async def list_view_layouts(user_id: str = Depends(current_user_id)):
     if user_id is None:
         raise HTTPException(status_code=401, detail="请先登录")
-    layouts = svc.list_view_layouts(user_id)
+    layouts = list_view_layouts_svc(user_id)
     return {"layouts": [_to_layout_response(x).model_dump(mode="json") for x in layouts]}
 
 
@@ -425,7 +348,7 @@ async def create_view_layout(
 ):
     if user_id is None:
         raise HTTPException(status_code=401, detail="请先登录")
-    layout = svc.create_view_layout(user_id, body.model_dump())
+    layout = create_view_layout_svc(user_id, body.model_dump())
     return _to_layout_response(layout)
 
 
@@ -443,11 +366,22 @@ async def list_confirmations(
 ):
     if user_id is None:
         raise HTTPException(status_code=401, detail="请先登录")
-    confirmations = svc.list_confirmations(user_id, status)
+    confirmations = list_confirmations_svc(user_id, status)
     return {
         "confirmations": [_to_confirmation_response(x).model_dump(mode="json") for x in confirmations],
         "total": len(confirmations),
     }
+
+
+@router.post("/confirmations", response_model=PlanItemConfirmationResponse, summary="创建计划项确认请求")
+async def create_confirmation(
+    body: PlanItemConfirmationCreate,
+    user_id: str = Depends(current_user_id),
+):
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="请先登录")
+    confirmation = create_confirmation_svc(user_id, body.model_dump())
+    return _to_confirmation_response(confirmation)
 
 
 @router.post("/confirmations/{confirmation_id}/accept", response_model=PlanItemResponse, summary="接受计划项确认请求")
@@ -458,7 +392,7 @@ async def accept_confirmation(
     if user_id is None:
         raise HTTPException(status_code=401, detail="请先登录")
     try:
-        item = svc.accept_confirmation(user_id, confirmation_id)
+        item = accept_confirmation_svc(user_id, confirmation_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return _to_item_response(item)
@@ -472,7 +406,7 @@ async def dismiss_confirmation(
     if user_id is None:
         raise HTTPException(status_code=401, detail="请先登录")
     try:
-        confirmation = svc.dismiss_confirmation(user_id, confirmation_id)
+        confirmation = dismiss_confirmation_svc(user_id, confirmation_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return _to_confirmation_response(confirmation)

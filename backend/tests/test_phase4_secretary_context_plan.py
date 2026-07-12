@@ -192,7 +192,7 @@ class TestPlanItemRequestedHandling:
         self, db, user_id, clean_bus, cleanup_test_data
     ):
         from app.api.planning.event_handler import PlanningEventHandler
-        from app.api.planning import service as svc
+        from app.services.planning.items import find_plan_item_by_request_id
         from shared.events import PlanItemRequested
 
         handler = PlanningEventHandler()
@@ -216,7 +216,7 @@ class TestPlanItemRequestedHandling:
         asyncio.run(clean_bus.publish(event))
 
         # 验证 plan item 已创建
-        item = svc.find_plan_item_by_request_id(user_id, request_id)
+        item = find_plan_item_by_request_id(user_id, request_id)
         assert item is not None
         assert item["title"] == "复习闪卡：测试"
         assert item["target_type"] == "flashcard"
@@ -227,7 +227,7 @@ class TestPlanItemRequestedHandling:
 
     def test_plan_item_requested_is_idempotent(self, db, user_id, clean_bus, cleanup_test_data):
         from app.api.planning.event_handler import PlanningEventHandler
-        from app.api.planning import service as svc
+        from app.services.planning.items import find_plan_item_by_request_id
         from shared.events import PlanItemRequested
 
         handler = PlanningEventHandler()
@@ -248,11 +248,11 @@ class TestPlanItemRequestedHandling:
         )
 
         asyncio.run(clean_bus.publish(event))
-        first_id = svc.find_plan_item_by_request_id(user_id, request_id)["id"]
+        first_id = find_plan_item_by_request_id(user_id, request_id)["id"]
 
         # 再次发布同一 request_id
         asyncio.run(clean_bus.publish(event))
-        second_id = svc.find_plan_item_by_request_id(user_id, request_id)["id"]
+        second_id = find_plan_item_by_request_id(user_id, request_id)["id"]
 
         assert first_id == second_id
 
@@ -262,7 +262,7 @@ class TestPlanItemRequestedHandling:
         self, db, user_id, clean_bus, cleanup_test_data
     ):
         from app.api.planning.event_handler import PlanningEventHandler
-        from app.api.planning import service as svc
+        from app.services.planning.items import find_plan_item_by_request_id
         from shared.events import PlanItemRequested
 
         handler = PlanningEventHandler()
@@ -284,7 +284,7 @@ class TestPlanItemRequestedHandling:
 
         asyncio.run(clean_bus.publish(event))
 
-        item = svc.find_plan_item_by_request_id(user_id, request_id)
+        item = find_plan_item_by_request_id(user_id, request_id)
         assert item is None
 
         handler.unsubscribe()

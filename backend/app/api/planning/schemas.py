@@ -155,6 +155,20 @@ class PeriodicReviewResponse(BaseModel):
 # ──────────────────────────────────────────────
 
 
+class PlanItemConfirmationCreate(BaseModel):
+    request_id: str
+    source_module: str = "secretary"
+    target_type: str
+    target_ref_id: str
+    title: str
+    description: str = ""
+    priority: int = 0
+    estimated_minutes: int = 10
+    linked_node_ids: list[str] = Field(default_factory=list)
+    proposed_scheduled_for: Optional[datetime] = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class PlanItemConfirmationResponse(BaseModel):
     id: str
     user_id: str

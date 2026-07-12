@@ -92,7 +92,7 @@ def _ensure_flashcard_tables(db) -> None:
 
 def _ensure_planning_tables(db) -> None:
     try:
-        from app.api.planning.service import _ensure_tables
+        from app.services.planning import _ensure_tables
         _ensure_tables()
     except Exception:
         pass

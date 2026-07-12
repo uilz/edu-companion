@@ -35,3 +35,79 @@ def _ensure_tables() -> None:
             db.execute(s)
         except Exception as e:
             logger.warning("建表异常: %s", e)
+
+
+# 便捷导入（放在底部避免循环导入）
+from app.services.planning.items import (
+    complete_plan_item,
+    create_plan_item,
+    delete_plan_item,
+    extend_plan_item,
+    find_plan_item_by_request_id,
+    get_plan_item,
+    list_plan_items,
+    list_plan_items_by_node_ids,
+    skip_plan_item,
+    start_plan_item,
+    update_plan_item,
+)
+from app.services.planning.goals import create_goal, get_goal, list_goals, update_goal
+from app.services.planning.reviews import generate_review, list_reviews
+from app.services.planning.layouts import create_view_layout, list_view_layouts
+from app.services.planning.confirmations import (
+    accept_confirmation,
+    count_pending_confirmations,
+    create_confirmation,
+    dismiss_confirmation,
+    find_confirmation_by_request_id,
+    find_confirmation_by_suggestion_id,
+    get_confirmation,
+    list_confirmations,
+)
+from app.services.planning.views import (
+    build_daily_view,
+    build_knowledge_view,
+    build_weekly_view,
+)
+from app.services.planning.aggregators import consume_status_bar
+
+__all__ = [
+    "_ensure_tables",
+    # items
+    "list_plan_items",
+    "list_plan_items_by_node_ids",
+    "get_plan_item",
+    "create_plan_item",
+    "find_plan_item_by_request_id",
+    "update_plan_item",
+    "start_plan_item",
+    "skip_plan_item",
+    "extend_plan_item",
+    "complete_plan_item",
+    "delete_plan_item",
+    # goals
+    "list_goals",
+    "create_goal",
+    "get_goal",
+    "update_goal",
+    # reviews
+    "list_reviews",
+    "generate_review",
+    # layouts
+    "list_view_layouts",
+    "create_view_layout",
+    # confirmations
+    "find_confirmation_by_request_id",
+    "find_confirmation_by_suggestion_id",
+    "count_pending_confirmations",
+    "create_confirmation",
+    "list_confirmations",
+    "get_confirmation",
+    "accept_confirmation",
+    "dismiss_confirmation",
+    # views
+    "build_daily_view",
+    "build_weekly_view",
+    "build_knowledge_view",
+    "consume_status_bar",
+]

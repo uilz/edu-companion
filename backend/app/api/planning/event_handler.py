@@ -52,17 +52,22 @@ class PlanningEventHandler:
 
         try:
             from shared.events import PlanningSourceModule
-            from app.api.planning import service as svc
+            from app.services.planning import (
+                create_confirmation,
+                create_plan_item,
+                find_confirmation_by_request_id,
+                find_plan_item_by_request_id,
+            )
 
             # 幂等去重：同一 request_id 不重复创建 plan item
-            existing_item = svc.find_plan_item_by_request_id(user_id, request_id)
+            existing_item = find_plan_item_by_request_id(user_id, request_id)
             if existing_item:
                 logger.debug("PlanItem request_id=%s 已存在 plan item，跳过", request_id)
                 return
 
             if event.requires_user_confirmation:
                 # 幂等去重：同一 request_id 不重复创建 confirmation
-                existing_confirmation = svc.find_confirmation_by_request_id(user_id, request_id)
+                existing_confirmation = find_confirmation_by_request_id(user_id, request_id)
                 if existing_confirmation:
                     logger.debug("PlanItem request_id=%s 已存在 confirmation，跳过", request_id)
                     return
@@ -72,7 +77,7 @@ class PlanningEventHandler:
                 if event_metadata.get("suggestion_id"):
                     confirmation_metadata["suggestion_id"] = event_metadata["suggestion_id"]
 
-                svc.create_confirmation(
+                create_confirmation(
                     user_id=user_id,
                     body={
                         "request_id": request_id,
@@ -94,7 +99,7 @@ class PlanningEventHandler:
                 )
                 return
 
-            item = svc.create_plan_item(
+            item = create_plan_item(
                 user_id=user_id,
                 body={
                     "source_module": PlanningSourceModule.SECRETARY.value,

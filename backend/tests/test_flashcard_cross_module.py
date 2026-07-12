@@ -675,7 +675,7 @@ class TestEventLoopFix:
         })
 
         # 2. 创建 PlanItem 关联该 card
-        from app.api.planning.service import create_plan_item
+        from app.services.planning.items import create_plan_item
         plan = create_plan_item(user_id, {
             "source_module": "flashcard",
             "target_type": "flashcard",
@@ -697,7 +697,7 @@ class TestEventLoopFix:
         reviewed_count_before = len(reviewed_before)
 
         # 4. 标记 plan_item completed
-        from app.api.planning.service import complete_plan_item
+        from app.services.planning.items import complete_plan_item
         complete_plan_item(
             user_id=user_id, plan_item_id=plan_id,
             body={"actual_minutes": 5, "self_assessment": "good"},
@@ -725,7 +725,7 @@ class TestEventLoopFix:
         global_bus.subscribe("PlanItemCompleted", _cap)
         try:
             # 再触发一次 plan completion, 验证全局 bus 收到
-            from app.api.planning.service import create_plan_item
+            from app.services.planning.items import create_plan_item
             plan2 = create_plan_item(user_id, {
                 "source_module": "flashcard",
                 "target_type": "flashcard",
@@ -735,7 +735,7 @@ class TestEventLoopFix:
                 "estimated_minutes": 5,
                 "linked_node_ids": [f"node_{user_id}_l1"],
             })
-            from app.api.planning.service import complete_plan_item
+            from app.services.planning.items import complete_plan_item
             complete_plan_item(
                 user_id=user_id, plan_item_id=plan2["id"],
                 body={"actual_minutes": 5, "self_assessment": "good"},

@@ -98,8 +98,8 @@ def db():
         _ensure_tables()
         from app.api.flashcard.service import _ensure_tables as _fc_ensure
         _fc_ensure()
-        from app.api.planning import service as planning_svc
-        planning_svc._ensure_tables()
+        from app.services.planning import _ensure_tables
+        _ensure_tables()
         return d
     except Exception as exc:  # noqa: BLE001
         pytest.skip(f"数据库不可用: {exc}")

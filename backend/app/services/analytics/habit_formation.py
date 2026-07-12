@@ -82,7 +82,7 @@ class HabitFormation:
         TinyHabit(
             name="晨间一练",
             anchor="吃完早饭后",
-            behavior="打开学习伴侣做3道题",
+            behavior="打开学习助手工具做3道题",
             celebration="给自己一个 ✨",
         ),
         TinyHabit(

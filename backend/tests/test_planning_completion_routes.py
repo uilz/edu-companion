@@ -715,13 +715,13 @@ class TestDeviationTypeSchema:
 
     def test_deviation_table_records_inserted_on_complete(self):
         """complete_plan_item 路径会插入 plan_deviations 行, deviation_type 合法"""
-        from app.api.planning import service as svc
-        from app.api.planning.service import _ensure_tables
+        from app.services.planning import _ensure_tables
+        from app.services.planning.items import create_plan_item, complete_plan_item
 
         _ensure_tables()
         user_id = f"xplndev_{uuid.uuid4().hex[:12]}"
         # 直接调用 create + complete 走完整路径
-        item = svc.create_plan_item(user_id, {
+        item = create_plan_item(user_id, {
             "source_module": "manual",
             "target_type": "manual",
             "target_ref_id": "m_dev_test",
@@ -731,7 +731,7 @@ class TestDeviationTypeSchema:
         assert item is not None
         pid = item["id"]
         # complete 时 actual=10 < planned=30 → 期望 deviation_type='early_complete'
-        result = svc.complete_plan_item(user_id, pid, {"actual_minutes": 10})
+        result = complete_plan_item(user_id, pid, {"actual_minutes": 10})
         assert result is not None
         # 验证 plan_deviations 表有记录
         db = _try_connect()

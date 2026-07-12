@@ -476,10 +476,13 @@ class SecretaryEventHandler:
         )
 
         try:
-            from app.api.planning import service as svc
+            from app.services.planning.confirmations import (
+                count_pending_confirmations,
+                find_confirmation_by_suggestion_id,
+            )
 
             # 幂等去重：同一 suggestion_id 不重复发起请求
-            existing = svc.find_confirmation_by_suggestion_id(user_id, suggestion_id)
+            existing = find_confirmation_by_suggestion_id(user_id, suggestion_id)
             if existing:
                 logger.debug("PlanItem suggestion_id=%s 已存在 confirmation，跳过", suggestion_id)
                 return
@@ -500,7 +503,7 @@ class SecretaryEventHandler:
 
             # 策略 2：pending confirmation 上限
             try:
-                pending_count = svc.count_pending_confirmations(user_id)
+                pending_count = count_pending_confirmations(user_id)
                 if pending_count >= 20:
                     logger.debug(
                         "pending confirmation 已达上限 %d，跳过建议: user=%s",

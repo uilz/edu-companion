@@ -64,7 +64,8 @@ def schedule_review_reminder(
         title = f"回顾阅读：{material_id[:12]}{'...' if len(material_id) > 12 else ''}"
 
     # 调用 Planning service 创建 PlanItem
-    from app.api.planning import service as planning_svc
+    from app.services.planning.items import create_plan_item, delete_plan_item
+    from app.services.planning.items import list_plan_items as planning_list_plan_items
 
     now = _now()
     scheduled_for = now + timedelta(days=review_after_days)
@@ -131,14 +132,13 @@ def list_pending_reminders(
     PlanItem 的实际状态枚举包括 'scheduled' / 'pending' / 'in_progress' 等，
     planning 服务在创建时一般会落到 'scheduled'，因此同时查询这两个状态。
     """
-    from app.api.planning import service as planning_svc
-    items_scheduled = planning_svc.list_plan_items(
+    items_scheduled = planning_list_plan_items(
         user_id,
         source_module=CrossModuleTarget.READING.value,
         status="scheduled",
         limit=100,
     )
-    items_pending = planning_svc.list_plan_items(
+    items_pending = planning_list_plan_items(
         user_id,
         source_module=CrossModuleTarget.READING.value,
         status="pending",
@@ -159,5 +159,4 @@ def list_pending_reminders(
 
 def cancel_reminder(user_id: str, plan_item_id: str) -> bool:
     """取消已设置的回顾提醒（删除 PlanItem）。"""
-    from app.api.planning import service as planning_svc
-    return planning_svc.delete_plan_item(user_id, plan_item_id)
+    return delete_plan_item(user_id, plan_item_id)

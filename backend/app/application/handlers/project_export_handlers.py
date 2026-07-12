@@ -279,7 +279,7 @@ async def _export_to_plan(event: Any) -> None:
     description = back or ""
 
     try:
-        from app.api.planning.service import create_plan_item
+        from app.services.planning.items import create_plan_item
         result = create_plan_item(
             user_id=user_id,
             body={

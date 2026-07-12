@@ -31,7 +31,7 @@ from app.schemas.knowledge_tree import KnowledgeTree, TreeNode, TreeEdge
 import app.services.reading.annotations as ann_svc
 from app.services.practice.practice_session import list_sessions_by_node_ids
 from app.services.practice.practice_error_book import get_errors_by_node_ids
-from app.api.planning import service as planning_svc
+from app.services.planning.items import list_plan_items_by_node_ids
 from app.api.flashcard.service import get_flashcard_service
 
 logger = logging.getLogger(__name__)
@@ -757,7 +757,7 @@ async def get_node_materials(
         return get_errors_by_node_ids(user_id, cognitive_ids, limit=20)
 
     def _load_planning():
-        return planning_svc.list_plan_items_by_node_ids(user_id, cognitive_ids, limit=20)
+        return list_plan_items_by_node_ids(user_id, cognitive_ids, limit=20)
 
     # 使用 asyncio.gather 并发执行同步 IO（DB 查询）
     (
