@@ -5,31 +5,35 @@
 //   4 个 panel (topBar / bottomBar / leftPanel / rightPanel) 的：
 //   - visible    是否渲染
 //   - width/height 实际尺寸 (px)
-//   - collapsed  是否折叠（折叠时退化为最小尺寸）
+//   - state      expanded | collapsed | fullyCollapsed
+//
+// 状态语义：
+//   - expanded       正常展开（width/height 为用户设定值）
+//   - collapsed      窄边栏（保留图标/触发条，宽度为 collapsed 值）
+//   - fullyCollapsed 完全折叠（只留分隔栏 + 胶囊按钮）
 //
 // 持久化策略：
 //   - 优先 localStorage (key: layout-pref)
-//   - localStorage 不可用（SSR / 隐私模式）时回退到内存默认值
+//   - localStorage 不可用时回退到内存默认值
 //   - 跨 tab 同步：通过 storage 事件
 //   - 跨组件同步：自定义事件 layout-pref-changed
 //
 // 约束：
 //   - 所有尺寸 min/max 边界由 setWidth/setHeight 内部强制
-//   - 折叠 = 收缩到 0 + 留一条窄边（panel 实际渲染最小尺寸）
-//
-// 任务 #76 验收：SSR 安全 + 持久化 + 跨 tab 同步。
 // ============================================================
 
 "use client";
 
-import { useCallback, useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 // ── 边界常量 (与设计语言保持一致) ────────────────────────
 
+export type PanelState = "expanded" | "collapsed" | "fullyCollapsed";
+
 export const PANEL_BOUNDS = {
-  topBar: { min: 40, max: 96, default: 56, collapsed: 0 },
-  bottomBar: { min: 32, max: 80, default: 40, collapsed: 0 },
-  leftPanel: { min: 56, max: 400, default: 280, collapsed: 56 },
+  topBar: { min: 40, max: 96, default: 56, collapsed: 32 },
+  bottomBar: { min: 32, max: 80, default: 40, collapsed: 24 },
+  leftPanel: { min: 160, max: 400, default: 280, collapsed: 56 },
   rightPanel: { min: 200, max: 500, default: 320, collapsed: 56 },
 } as const;
 
@@ -41,7 +45,7 @@ export interface PanelPref {
   visible: boolean;
   width?: number;
   height?: number;
-  collapsed: boolean;
+  state: PanelState;
 }
 
 export interface LayoutPref {
@@ -54,20 +58,24 @@ export interface LayoutPref {
 // ── 默认值 ─────────────────────────────────────────────
 
 export const DEFAULT_LAYOUT_PREF: LayoutPref = {
-  topBar: { visible: true, height: PANEL_BOUNDS.topBar.default, collapsed: false },
-  bottomBar: { visible: true, height: PANEL_BOUNDS.bottomBar.default, collapsed: false },
-  leftPanel: { visible: true, width: PANEL_BOUNDS.leftPanel.default, collapsed: false },
-  rightPanel: { visible: true, width: PANEL_BOUNDS.rightPanel.default, collapsed: false },
+  topBar: { visible: true, height: PANEL_BOUNDS.topBar.default, state: "expanded" },
+  bottomBar: { visible: true, height: PANEL_BOUNDS.bottomBar.default, state: "expanded" },
+  leftPanel: { visible: true, width: PANEL_BOUNDS.leftPanel.default, state: "expanded" },
+  rightPanel: { visible: true, width: PANEL_BOUNDS.rightPanel.default, state: "expanded" },
 };
 
 const STORAGE_KEY = "layout-pref";
-const STORAGE_EVENT = "layout-pref-storage"; // 自定义事件：跨组件实时同步
-const NATIVE_STORAGE_EVENT = "storage"; // 跨 tab
+const STORAGE_EVENT = "layout-pref-storage";
+const NATIVE_STORAGE_EVENT = "storage";
 
 // ── 工具 ───────────────────────────────────────────────
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
+}
+
+function isPanelState(v: unknown): v is PanelState {
+  return v === "expanded" || v === "collapsed" || v === "fullyCollapsed";
 }
 
 function sanitize(input: unknown): LayoutPref {
@@ -80,12 +88,12 @@ function sanitize(input: unknown): LayoutPref {
     return {
       visible: typeof raw.visible === "boolean" ? raw.visible : fallback.visible,
       width: typeof raw.width === "number"
-        ? clamp(raw.width, b.collapsed || b.min, b.max)
+        ? clamp(raw.width, b.min, b.max)
         : fallback.width,
       height: typeof raw.height === "number"
-        ? clamp(raw.height, b.collapsed || b.min, b.max)
+        ? clamp(raw.height, b.min, b.max)
         : fallback.height,
-      collapsed: typeof raw.collapsed === "boolean" ? raw.collapsed : fallback.collapsed,
+      state: isPanelState(raw.state) ? raw.state : fallback.state,
     };
   };
   return {
@@ -97,7 +105,6 @@ function sanitize(input: unknown): LayoutPref {
 }
 
 function readFromStorage(): LayoutPref {
-  // SSR 安全：服务端无 localStorage
   if (typeof window === "undefined") return DEFAULT_LAYOUT_PREF;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -119,22 +126,14 @@ function writeToStorage(pref: LayoutPref) {
 
 // ── Hook ───────────────────────────────────────────────
 
-/**
- * useLayoutPrefs — 读写 5 栏布局偏好
- *
- * 关键约定：
- *   - 初始状态为 DEFAULT_LAYOUT_PREF（SSR 占位），首挂载时立即从 localStorage 同步，
- *     避免 SSR 闪烁
- *   - 所有 setter 内部会强制约束尺寸到合法范围
- *   - 写操作同时更新 localStorage + 派发自定义事件
- */
 export function useLayoutPrefs() {
   const [pref, setPrefState] = useState<LayoutPref>(DEFAULT_LAYOUT_PREF);
-  const isFirstRender = useRef(true);
+  const [isReady, setIsReady] = useState(false);
 
   // 首次挂载：从 localStorage 读
   useEffect(() => {
     setPrefState(readFromStorage());
+    setIsReady(true);
   }, []);
 
   // 跨 tab / 跨组件同步
@@ -159,7 +158,6 @@ export function useLayoutPrefs() {
       const next = typeof updater === "function" ? updater(prev) : updater;
       const sanitized = sanitize(next);
       writeToStorage(sanitized);
-      // 派发自定义事件通知同 tab 其他组件
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event(STORAGE_EVENT));
       }
@@ -176,9 +174,40 @@ export function useLayoutPrefs() {
     [setPref],
   );
 
+  const setState = useCallback(
+    (key: PanelKey, state: PanelState) => {
+      setPref((p) => {
+        const next = { ...p[key], state };
+        if (state === "expanded") {
+          const b = PANEL_BOUNDS[key];
+          if (key === "topBar" || key === "bottomBar") {
+            next.height = Math.max(b.min, p[key].height ?? b.default);
+          } else {
+            next.width = Math.max(b.min, p[key].width ?? b.default);
+          }
+        }
+        return { ...p, [key]: next };
+      });
+    },
+    [setPref],
+  );
+
   const toggleCollapsed = useCallback(
     (key: PanelKey) => {
-      setPref((p) => ({ ...p, [key]: { ...p[key], collapsed: !p[key].collapsed } }));
+      setPref((p) => {
+        const current = p[key].state;
+        const nextState: PanelState = current === "expanded" ? "collapsed" : "expanded";
+        const next = { ...p[key], state: nextState };
+        if (nextState === "expanded") {
+          const b = PANEL_BOUNDS[key];
+          if (key === "topBar" || key === "bottomBar") {
+            next.height = Math.max(b.min, p[key].height ?? b.default);
+          } else {
+            next.width = Math.max(b.min, p[key].width ?? b.default);
+          }
+        }
+        return { ...p, [key]: next };
+      });
     },
     [setPref],
   );
@@ -186,10 +215,9 @@ export function useLayoutPrefs() {
   const setWidth = useCallback(
     (key: PanelKey, width: number) => {
       const b = PANEL_BOUNDS[key];
-      if (b.collapsed === undefined) return; // 非 width 类型
       setPref((p) => ({
         ...p,
-        [key]: { ...p[key], width: clamp(width, b.collapsed || b.min, b.max) },
+        [key]: { ...p[key], width: clamp(width, 0, b.max) },
       }));
     },
     [setPref],
@@ -198,10 +226,9 @@ export function useLayoutPrefs() {
   const setHeight = useCallback(
     (key: PanelKey, height: number) => {
       const b = PANEL_BOUNDS[key];
-      if (b.collapsed === undefined) return; // 非 height 类型
       setPref((p) => ({
         ...p,
-        [key]: { ...p[key], height: clamp(height, b.collapsed || b.min, b.max) },
+        [key]: { ...p[key], height: clamp(height, 0, b.max) },
       }));
     },
     [setPref],
@@ -211,13 +238,11 @@ export function useLayoutPrefs() {
     setPref(DEFAULT_LAYOUT_PREF);
   }, [setPref]);
 
-  // 首次 render 时跳过 storage 写入（避免 mount 时把 default 覆盖回去）
-  // 实际逻辑：writeToStorage 在 setPref 内部被调用，而 setPref 仅在用户操作时被调用。
-
   return {
     pref,
-    isReady: !isFirstRender.current,
+    isReady,
     toggleVisible,
+    setState,
     toggleCollapsed,
     setWidth,
     setHeight,

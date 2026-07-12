@@ -12,9 +12,9 @@
 //   └──────────────────────────────────────────────┘
 //
 // 4 栏可 DIY：
-//   - 拖动分隔条改尺寸（节流 + requestAnimationFrame）
-//   - 双击分隔条折叠
-//   - PanelHeader ◀/▶ 按钮折叠
+//   - 拖动分隔栏 / 胶囊按钮改尺寸
+//   - 双击分隔栏折叠 / 展开
+//   - 胶囊按钮单击切换 collapsed
 //   - 设置页可见性开关
 //   - 全部状态由 useLayoutPrefs 持久化到 localStorage
 //
@@ -24,10 +24,11 @@
 
 "use client";
 
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { Home } from "lucide-react";
 import { useBreakpoint } from "@/hooks/useBreakpoint";
-import { useLayoutPrefs, PANEL_BOUNDS } from "@/hooks/useLayoutPrefs";
+import { useLayoutPrefs, PANEL_BOUNDS, type PanelKey, type PanelState } from "@/hooks/useLayoutPrefs";
 import { PanelContentProvider, usePanelContent } from "@/contexts/PanelContentContext";
 import ResizableContainer from "./ResizableContainer";
 import TopBar from "./TopBar";
@@ -35,8 +36,6 @@ import BottomBar from "./BottomBar";
 import LeftPanel from "./LeftPanel";
 import RightPanel from "./RightPanel";
 import Cockpit from "@/components/dashboard/Cockpit";
-import { Home } from "lucide-react";
-import ResizeHandle from "@/components/ui/ResizeHandle";
 
 export interface WorkbenchProps {
   /** 当前路由对应的页面内容 */
@@ -61,25 +60,19 @@ function useIsConversationRoute(): boolean {
 // ── 内部组件：读取 context 决定 RightPanel 内容 ──
 function WorkbenchInner({ children }: WorkbenchProps) {
   const { rightPanel } = usePanelContent();
-
-  // 当页面设置了自定义右栏时使用，否则用默认
   const renderRight = rightPanel ?? <RightPanel />;
-
   return <>{renderRight}</>;
 }
 
 export default function Workbench({ children }: WorkbenchProps) {
   const { isDesktop, isMounted } = useBreakpoint();
-  const { pref, setWidth, setHeight, toggleCollapsed } = useLayoutPrefs();
+  const { pref, isReady, setWidth, setHeight, setState } = useLayoutPrefs();
   const router = useRouter();
   const isCockpit = useIsCockpitRoute();
   const isConversation = useIsConversationRoute();
 
-  // 右栏拖拽初始宽度 ref — 用于总位移计算
-  const rightDragStartWidthRef = useRef(0);
-
-  // 移动端：完全不渲染 Workbench，由 AppShell 走 BottomNav / MobileDrawer 分支
-  if (!isMounted) {
+  // 挂载 / 布局偏好加载完成前：避免用默认值闪烁渲染
+  if (!isMounted || !isReady) {
     return (
       <div className="min-h-screen bg-page flex items-center justify-center text-ink-muted text-sm">
         加载中…
@@ -88,23 +81,20 @@ export default function Workbench({ children }: WorkbenchProps) {
   }
   if (!isDesktop) return null;
 
-  // ── 实际尺寸（折叠时取 collapsedSize）──
-  const topH = pref.topBar.collapsed
-    ? PANEL_BOUNDS.topBar.collapsed
-    : (pref.topBar.height ?? PANEL_BOUNDS.topBar.default);
-  const bottomH = pref.bottomBar.collapsed
-    ? PANEL_BOUNDS.bottomBar.collapsed
-    : (pref.bottomBar.height ?? PANEL_BOUNDS.bottomBar.default);
-  const leftW = pref.leftPanel.collapsed
-    ? PANEL_BOUNDS.leftPanel.collapsed
-    : (pref.leftPanel.width ?? PANEL_BOUNDS.leftPanel.default);
-  const rightW = pref.rightPanel.collapsed
-    ? PANEL_BOUNDS.rightPanel.collapsed
-    : (pref.rightPanel.width ?? PANEL_BOUNDS.rightPanel.default);
+  // ── 根据状态计算实际渲染尺寸 ──
+  const sizeFor = (key: PanelKey, userSize: number | undefined, defaultSize: number, collapsedSize: number) => {
+    const s = pref[key].state;
+    if (s === "fullyCollapsed") return 0;
+    if (s === "collapsed") return collapsedSize;
+    return userSize ?? defaultSize;
+  };
+
+  const topH = sizeFor("topBar", pref.topBar.height, PANEL_BOUNDS.topBar.default, PANEL_BOUNDS.topBar.collapsed);
+  const bottomH = sizeFor("bottomBar", pref.bottomBar.height, PANEL_BOUNDS.bottomBar.default, PANEL_BOUNDS.bottomBar.collapsed);
+  const leftW = sizeFor("leftPanel", pref.leftPanel.width, PANEL_BOUNDS.leftPanel.default, PANEL_BOUNDS.leftPanel.collapsed);
+  const rightW = sizeFor("rightPanel", pref.rightPanel.width, PANEL_BOUNDS.rightPanel.default, PANEL_BOUNDS.rightPanel.collapsed);
 
   // ── CSS Grid 模板 ──
-  // 行：topBar / mid / bottomBar
-  // 列：leftPanel / main / rightPanel
   const gridRows = [
     pref.topBar.visible ? `${topH}px` : "0px",
     "1fr",
@@ -115,6 +105,20 @@ export default function Workbench({ children }: WorkbenchProps) {
     "1fr",
     pref.rightPanel.visible ? `${rightW}px` : "0px",
   ].join(" ");
+
+  // 右栏拖拽时，Workbench 需要把总位移传给 setWidth
+  // ResizableContainer 内部基于当前 renderSize 计算 delta，这里直接透传
+  const handleResize = (key: PanelKey) => (size: number) => {
+    if (key === "topBar" || key === "bottomBar") {
+      setHeight(key, size);
+    } else {
+      setWidth(key, size);
+    }
+  };
+
+  const handleStateChange = (key: PanelKey) => (state: PanelState) => {
+    setState(key, state);
+  };
 
   return (
     <PanelContentProvider>
@@ -129,20 +133,22 @@ export default function Workbench({ children }: WorkbenchProps) {
         {/* ── 顶栏 (row 1, col 1 / -1) ── */}
         {pref.topBar.visible && (
           <div
-            className="row-start-1 col-span-3 min-w-0 overflow-hidden"
+            className="row-start-1 col-span-3 min-w-0"
             style={{ gridColumn: "1 / -1" }}
           >
             <ResizableContainer
               visible
               size={topH}
-              collapsed={pref.topBar.collapsed}
+              state={pref.topBar.state}
               direction="vertical"
+              panelPosition="top"
               minSize={PANEL_BOUNDS.topBar.min}
               maxSize={PANEL_BOUNDS.topBar.max}
               collapsedSize={PANEL_BOUNDS.topBar.collapsed}
-              onResize={(s) => setHeight("topBar", s)}
-              onResizeEnd={(s) => setHeight("topBar", s)}
-              onToggleCollapse={() => toggleCollapsed("topBar")}
+              panelKey="topBar"
+              onResize={handleResize("topBar")}
+              onResizeEnd={(size) => setHeight("topBar", size)}
+              onStateChange={handleStateChange("topBar")}
               title="顶栏"
               hideHeader
               resizable
@@ -155,21 +161,23 @@ export default function Workbench({ children }: WorkbenchProps) {
 
         {/* ── 左栏 (row 2, col 1) ── */}
         {pref.leftPanel.visible && (
-          <div className="row-start-2 col-start-1 min-h-0 overflow-hidden border-r border-divider">
+          <div className="row-start-2 col-start-1 min-h-0 border-r border-divider">
             <ResizableContainer
               visible
               size={leftW}
-              collapsed={pref.leftPanel.collapsed}
+              state={pref.leftPanel.state}
               direction="horizontal"
+              panelPosition="left"
               minSize={PANEL_BOUNDS.leftPanel.min}
               maxSize={PANEL_BOUNDS.leftPanel.max}
               collapsedSize={PANEL_BOUNDS.leftPanel.collapsed}
-              onResize={(s) => setWidth("leftPanel", s)}
-              onResizeEnd={(s) => setWidth("leftPanel", s)}
-              onToggleCollapse={() => toggleCollapsed("leftPanel")}
+              panelKey="leftPanel"
+              onResize={handleResize("leftPanel")}
+              onResizeEnd={(size) => setWidth("leftPanel", size)}
+              onStateChange={handleStateChange("leftPanel")}
               title="导航"
               headerRight={
-                pref.leftPanel.collapsed ? (
+                pref.leftPanel.state !== "expanded" ? (
                   <button
                     onClick={() => router.push("/")}
                     className="p-1 rounded text-ink-muted hover:text-ink-primary hover:bg-surface-hover"
@@ -194,26 +202,20 @@ export default function Workbench({ children }: WorkbenchProps) {
 
         {/* ── 右栏 (row 2, col 3) — 对话路由全局隐藏，由 ConversationPanel 自管 ── */}
         {!isConversation && pref.rightPanel.visible && (
-          <div className="row-start-2 col-start-3 min-h-0 border-l border-divider relative overflow-hidden">
-            <ResizeHandle
-              orientation="horizontal"
-              onResizeStart={() => { rightDragStartWidthRef.current = pref.rightPanel.collapsed ? PANEL_BOUNDS.rightPanel.collapsed : rightW; }}
-              onResize={(totalDelta) => setWidth("rightPanel", rightDragStartWidthRef.current - totalDelta)}
-              onDoubleClick={() => toggleCollapsed("rightPanel")}
-              collapsed={pref.rightPanel.collapsed}
-              style={{ position: 'absolute', left: -3, top: 0, bottom: 0, zIndex: 10 }}
-            />
+          <div className="row-start-2 col-start-3 min-h-0 border-l border-divider relative">
             <ResizableContainer
               visible
               size={rightW}
-              collapsed={pref.rightPanel.collapsed}
+              state={pref.rightPanel.state}
               direction="horizontal"
+              panelPosition="right"
               minSize={PANEL_BOUNDS.rightPanel.min}
               maxSize={PANEL_BOUNDS.rightPanel.max}
               collapsedSize={PANEL_BOUNDS.rightPanel.collapsed}
-              onResize={(s) => setWidth("rightPanel", s)}
-              onResizeEnd={(s) => setWidth("rightPanel", s)}
-              onToggleCollapse={() => toggleCollapsed("rightPanel")}
+              panelKey="rightPanel"
+              onResize={handleResize("rightPanel")}
+              onResizeEnd={(size) => setWidth("rightPanel", size)}
+              onStateChange={handleStateChange("rightPanel")}
               title="工作面板"
               className="h-full"
             >
@@ -225,20 +227,22 @@ export default function Workbench({ children }: WorkbenchProps) {
         {/* ── 底栏 (row 3, col 1 / -1) ── */}
         {pref.bottomBar.visible && (
           <div
-            className="row-start-3 col-span-3 min-w-0 overflow-hidden"
+            className="row-start-3 col-span-3 min-w-0"
             style={{ gridColumn: "1 / -1" }}
           >
             <ResizableContainer
               visible
               size={bottomH}
-              collapsed={pref.bottomBar.collapsed}
+              state={pref.bottomBar.state}
               direction="vertical"
+              panelPosition="bottom"
               minSize={PANEL_BOUNDS.bottomBar.min}
               maxSize={PANEL_BOUNDS.bottomBar.max}
               collapsedSize={PANEL_BOUNDS.bottomBar.collapsed}
-              onResize={(s) => setHeight("bottomBar", s)}
-              onResizeEnd={(s) => setHeight("bottomBar", s)}
-              onToggleCollapse={() => toggleCollapsed("bottomBar")}
+              panelKey="bottomBar"
+              onResize={handleResize("bottomBar")}
+              onResizeEnd={(size) => setHeight("bottomBar", size)}
+              onStateChange={handleStateChange("bottomBar")}
               title="底栏"
               hideHeader
               resizable
