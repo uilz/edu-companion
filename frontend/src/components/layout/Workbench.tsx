@@ -44,12 +44,12 @@ export interface WorkbenchProps {
 }
 
 /**
- * Cockpit 自动接管 /dashboard 路由，其他路径渲染 children。
- * 路径前缀包含 /dashboard 时进入智能驾驶舱模式。
+ * Cockpit 仅接管 /dashboard/ 子路由，/ 和 /dashboard 渲染 children。
+ * 任务 #120: 秘书仪表盘替代首页。
  */
 function useIsCockpitRoute(): boolean {
   const pathname = usePathname() || "/";
-  return pathname === "/" || pathname === "/dashboard" || pathname.startsWith("/dashboard/");
+  return pathname.startsWith("/dashboard/") && pathname !== "/dashboard";
 }
 
 /** 对话路由 → 隐藏全局右栏，由 ConversationPanel 自管 */

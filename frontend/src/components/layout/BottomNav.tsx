@@ -67,7 +67,7 @@ export default function BottomNav() {
                   strokeWidth={active ? 2.2 : 1.8}
                   className="mb-1"
                 />
-                {item.label === '秘书' && <SecretaryBellBadge />}
+                {item.path === '/' && <SecretaryBellBadge />}
               </span>
 
               <span

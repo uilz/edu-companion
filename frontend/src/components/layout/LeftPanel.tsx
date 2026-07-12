@@ -63,7 +63,7 @@ const GROUP_META: Record<GroupKey, { title: string; items: string[] }> = {
   },
   collab: {
     title: "协作",
-    items: ["/conversation", "/liveroom", "/secretary"],
+    items: ["/conversation", "/liveroom", "/"],
   },
   system: {
     title: "系统",
@@ -82,7 +82,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   "/planning": Calendar,
   "/interest": Compass,
   "/knowledge-tree": GitGraph,
-  "/secretary": Bell,
+  "/": Bell,
   "/project": Folder,
   "/resources": Library,
   "/files": FileText,

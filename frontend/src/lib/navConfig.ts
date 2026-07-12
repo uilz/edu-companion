@@ -169,13 +169,13 @@ export const primaryNavItems: NavItem[] = [
     },
   },
   {
-    path: "/secretary",
-    label: "秘书",
+    path: "/",
+    label: "首页",
     icon: Bell,
     priority: 5,
     requiresAuth: true,
-    // 任务 #31：BottomNav 让位；秘书/通知走 Sidebar + Drawer，移动端可在 QuickAction 或搜索
-    visibleIn: { sidebar: true, drawer: true, bottomNav: false, quickAction: false },
+    // 任务 #120：秘书仪表盘替代首页，/secretary 重定向到 /
+    visibleIn: { sidebar: true, drawer: true, bottomNav: true, quickAction: false },
   },
   {
     path: "/resources",

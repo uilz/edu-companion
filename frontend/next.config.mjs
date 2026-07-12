@@ -31,8 +31,8 @@ const nextConfig = {
   },
   async redirects() {
     return [
-      // 首页 → 驾驶舱
-      { source: '/', destination: '/dashboard', permanent: true },
+      // 任务 #120：/dashboard 统一重定向到 /，秘书仪表盘替代原驾驶舱首页
+      { source: '/dashboard', destination: '/', permanent: true },
       // 旧独立路由 → 统一统计页
       { source: '/stats', destination: '/analytics?tab=stats', permanent: true },
       { source: '/progress', destination: '/analytics?tab=stats', permanent: true },

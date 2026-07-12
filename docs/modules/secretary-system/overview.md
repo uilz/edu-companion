@@ -46,6 +46,7 @@
 | 检查器 | `POST /api/secretary/checker/run` | 手动触发主动检查 |
 | 检查器 | `GET /api/secretary/checker/status` | 检查器状态 |
 | 检查器 | `POST /api/secretary/checker/configure` | 配置 `check_interval` (持久化到 `secretary_prefs`) |
+| 仪表盘 | `GET /api/secretary/dashboard` | 聚合首页数据：快照、练习统计、今日焦点、待处理、AI 推荐、学习活动流 (30s 缓存) |
 | 引导 | `GET /api/secretary/onboarding` | 冷启动状态 + 4 步引导 (基于 `mastery>0.5` 节点数) |
 | 数据 | `GET /api/secretary/data/export` | 导出所有秘书数据 (JSON) |
 | 数据 | `DELETE /api/secretary/data/delete` | 删除所有秘书数据 (遗忘权) |
@@ -129,6 +130,7 @@
 | `behavior_signals` | `behavior_signals` 表 | ✅ | 独立表 |
 | 通知偏好 (UI) | **localStorage** `notification-prefs` | ❌ | UI 状态, 可保持 |
 | 事件流查询 | `events` 表 (PersistentEventBus) | ✅ | 全局 |
+| 仪表盘首页聚合缓存 | 内存 `_dashboard_cache` (按 user_id, 30s TTL) | ❌ | 仅提升读取性能，非持久状态 |
 
 **统一状态**: 核心偏好 + 提案已统一 (D16), 心情压力保持自治 (Task #84 ADR 0008 决策)
 
@@ -172,6 +174,62 @@
 | 心情压力 | 手动记录 + 4 种干预 + 行为信号 | ✅ 已实现 |
 | Agent 助手 | SSE 流式对话 + 工具调用 | ✅ 已实现 |
 | 学习活动流 | 跨壳学习活动实时同步与多源聚合 | ✅ 已实现 (Task #118) |
+
+## 秘书仪表盘首页 (Task #120)
+
+原 Cockpit 驾驶舱与 `/secretary` 入口合并为统一首页 `/`，由秘书仪表盘承载登录后的核心学习枢纽。
+
+### 路由变更
+
+| 路径 | 行为 | 说明 |
+|------|------|------|
+| `/` | 渲染 `SecretaryDashboard` | 统一首页，替代原 Cockpit |
+| `/dashboard` | 308 永久重定向到 `/` | 保留旧书签兼容 |
+| `/secretary` | 客户端 `router.replace("/")` | 保留文件兼容旧入口 |
+| `/secretary/settings` | 原秘书设置页 | 保持不变，从仪表盘「设置」按钮进入 |
+
+### 聚合 API
+
+`GET /api/secretary/dashboard` 合并 6 类数据源，30s 内存缓存：
+
+| 字段 | 来源 | 说明 |
+|------|------|------|
+| `greeting` | 本地时间 + 用户显示名 | "早上好，苹果果" 等 |
+| `date` | UTC 当前日期 | ISO-8601 日期字符串 |
+| `focus` | `adaptive_planner.generate` | 今日首个未完成的计划项 |
+| `stats` | `quick_assess` + `practice_stats` | 8 张动态优先级统计卡 |
+| `pending` | `proposals` + `planning.confirmations` | 建议 / 计划确认 / 通知 统一流 |
+| `recommendations` | `knowledge_trace` + `recommend_practice_items` | AI 补强建议，分 urgent/building/new_topic |
+| `activities` | `learning_activity_service.list_activities` | 最近学习活动流 |
+
+### 前端组件
+
+| 组件 | 路径 | 职责 |
+|------|------|------|
+| `SecretaryDashboard` | `frontend/src/components/dashboard/SecretaryDashboard.tsx` | 仪表盘容器、数据获取、错误/骨架屏 |
+| `FocusCard` | `frontend/src/components/dashboard/FocusCard.tsx` | 今日焦点任务卡 |
+| `SmartStatsGrid` | `frontend/src/components/dashboard/SmartStatsGrid.tsx` | 8 张动态统计卡，按 high/medium/low 自动调整尺寸 |
+| `PendingPanel` | `frontend/src/components/dashboard/PendingPanel.tsx` | 待处理流，支持标签筛选与搜索 |
+| `PendingItemCard` | `frontend/src/components/dashboard/PendingItemCard.tsx` | 单条待处理项，可采纳/忽略/展开 |
+| `RecommendationCard` | `frontend/src/components/dashboard/RecommendationCard.tsx` | AI 推荐分组展示 |
+| `ActivityCard` | `frontend/src/components/dashboard/ActivityCard.tsx` | 学习活动流 + SSE 实时更新 |
+| `useSecretaryDashboard` | `frontend/src/hooks/useSecretaryDashboard.ts` | 聚合数据查询 hook (30s stale, 60s 轮询) |
+| `secretary-dashboard-api.ts` | `frontend/src/lib/api/secretary-dashboard-api.ts` | TypeScript 类型与 API 客户端 |
+
+### 8 张统计卡动态优先级
+
+| key | 标签 | 默认优先级 | 动态提升条件 |
+|-----|------|------------|--------------|
+| `weak_count` | 薄弱点 | low | `>0` → high |
+| `stagnant_count` | 停滞项 | low | `>0` → high |
+| `today_questions` | 今日题数 | low | `>0` → medium |
+| `cognitive_load` | 认知负荷 | low | `>0.7` → high; `>0.3` → medium |
+| `total_questions` | 累计练习 | low | — |
+| `study_minutes` | 学习时长 | low | — |
+| `mastered_count` | 已掌握 | low | — |
+| `streak_days` | 连续天数 | low | `>0` → medium |
+
+布局规则：`high` 占 2×2，`medium` 占 1×2，`low` 占 1×1，按优先级 + 固定顺序排列。
 
 ## 学习活动流 (Task #118)
 

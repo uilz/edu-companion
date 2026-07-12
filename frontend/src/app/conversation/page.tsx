@@ -21,8 +21,8 @@ export default function ConversationPage() {
   // ── 面包屑：从 selectedNode.path + dirList 构建 ──
   const breadcrumbs = useMemo(() => {
     const crumbs: Array<{ label: string; href?: string }> = [];
-    // 驾驶舱 → /dashboard
-    crumbs.push({ label: "驾驶舱", href: "/dashboard" });
+    // 首页 → /（任务 #120：秘书仪表盘替代驾驶舱）
+    crumbs.push({ label: "首页", href: "/" });
     // 学习空间 → /conversation
     crumbs.push({ label: "学习空间", href: "/conversation" });
 

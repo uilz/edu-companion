@@ -74,7 +74,7 @@ describe("navConfig — 角色/订阅过滤（任务 #34 / #45 / #75）", () => 
       expect(items).toContain("/practice");
       expect(items).toContain("/project");
       expect(items).toContain("/knowledge-tree");
-      expect(items).toContain("/secretary");
+      expect(items).toContain("/");
       expect(items).toContain("/resources");
       expect(items).toContain("/flashcard");
       expect(items).toContain("/reading");

@@ -98,7 +98,8 @@ const ACTION_ROUTES: Record<string, (payload?: Record<string, unknown>) => Navig
   },
 
   rest: () => ({
-    path: "/dashboard",
+    // 任务 #120：秘书仪表盘替代首页，/dashboard 重定向到 /
+    path: "/",
     page: "dashboard",
     context: "rest",
   }),

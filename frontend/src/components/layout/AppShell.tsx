@@ -21,11 +21,12 @@ const FULLSCREEN_ROUTES = ['/focus'];
 
 /**
  * 判断当前路径是否是 Cockpit 驾驶舱路由
- * 任务 #78: Cockpit 接管所有设备，不再区分 mobile/tablet/desktop
+ * 任务 #120: 秘书仪表盘替代首页，/ 和 /dashboard 不再走 Cockpit
  */
 function useIsCockpitRoute(): boolean {
   const pathname = usePathname() || "/";
-  return pathname === "/" || pathname === "/dashboard" || pathname.startsWith("/dashboard/");
+  // 仅保留 /dashboard/ 子路由为 cockpit 模式（如有）
+  return pathname.startsWith("/dashboard/") && pathname !== "/dashboard";
 }
 
 /**
@@ -78,8 +79,8 @@ export default function AppShell({ children }: AppShellProps) {
         <ActionFeedbackToast />
         {isDesktop && (
           <Link
-            href="/dashboard"
-            aria-label="返回驾驶舱"
+            href="/"
+            aria-label="返回首页"
             className="fixed top-3 left-3 z-40 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface/80 backdrop-blur border border text-muted hover:text hover:bg-surface text-xs transition-colors shadow-sm"
           >
             <ArrowLeft size={12} />

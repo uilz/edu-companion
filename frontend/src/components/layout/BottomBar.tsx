@@ -104,8 +104,8 @@ export default function BottomBar() {
     };
   }, [user]);
 
-  // 快速记录：跳到秘书页
-  const onQuickRecord = () => router.push("/secretary");
+  // 快速记录：跳到首页（任务 #120）
+  const onQuickRecord = () => router.push("/");
 
   // 心情图标选择
   const moodIcon = (() => {
@@ -144,9 +144,9 @@ export default function BottomBar() {
 
       {/* 通知 */}
       <button
-        onClick={() => router.push("/secretary")}
+        onClick={() => router.push("/")}
         className="relative flex items-center gap-1.5 px-2 h-7 rounded hover:bg-surface-hover transition-colors"
-        title="通知"
+        title="首页"
       >
         <Bell size={14} />
         <span>通知</span>
