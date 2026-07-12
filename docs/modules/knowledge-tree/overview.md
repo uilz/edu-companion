@@ -32,7 +32,7 @@
 | 认知视图 | 颜色=掌握度、大小=紧迫度、光晕=不确定性 | ✅ 已实现 |
 | 树/图双视图 | G6 树视图与力导向图视图切换 | ✅ 已实现 |
 | 视图状态 | 保存/恢复缩放、平移、布局 | ✅ 已实现 |
-| 跨壳材料聚合 | 闪卡、笔记、错题、计划入口（预留） | 🔄 待后续壳层对接 |
+| 跨壳材料聚合 | 闪卡、阅读标注/笔记、练习会话/错题、计划项展示 + 创建 + source_ref 回写 | ✅ 已实现 |
 
 ## API 概览
 
@@ -59,6 +59,8 @@
 | PUT | `/api/trees/{tree_id}/viewport` | 保存视图状态 |
 | GET | `/api/trees/cognitive-nodes/search` | 搜索认知节点 |
 | GET | `/api/trees/cognitive-nodes/{id}/projection` | 认知节点投影 |
+| GET | `/api/trees/{tree_id}/nodes/{node_id}/materials` | 跨壳材料聚合 |
+| POST | `/api/trees/{tree_id}/nodes/{node_id}/source-refs` | 追加 source_ref（去重） |
 
 ## 事件协议
 
@@ -84,7 +86,8 @@
 |------|------|
 | `KnowledgeTreePage` | 页面集成与状态协调 |
 | `KnowledgeTreeGraph` | G6 图渲染与交互 |
-| `TreeNodeDetailPanel` | 节点详情与认知视图 |
+| `TreeNodeDetailPanel` | 节点详情、认知视图、跨壳材料聚合与创建入口 |
+| `Create*Dialog` | 闪卡/阅读笔记/练习会话/计划项创建弹窗 |
 | `LayerPanel` | 层级导航 |
 | `ContextMenu` | 节点右键菜单 |
 | `StatusBar` | 统计与筛选 |

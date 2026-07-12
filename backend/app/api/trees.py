@@ -13,6 +13,7 @@ Trees API — 知识树壳（四实体解耦架构）
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -25,6 +26,13 @@ from app.domain.auth.dependencies import current_user_id
 from app.infrastructure.db.database import get_db
 from app.services.knowledge_tree import kt_svc, tn_svc, te_svc, cl_svc
 from app.schemas.knowledge_tree import KnowledgeTree, TreeNode, TreeEdge
+
+# 跨壳材料聚合依赖
+import app.services.reading.annotations as ann_svc
+from app.services.practice.practice_session import list_sessions_by_node_ids
+from app.services.practice.practice_error_book import get_errors_by_node_ids
+from app.api.planning import service as planning_svc
+from app.api.flashcard.service import get_flashcard_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/trees", tags=["知识树壳"])
@@ -74,6 +82,12 @@ class UpdateNodeRequest(BaseModel):
     tags: list[str] | None = None
     meta: dict[str, Any] | None = None
     status: str | None = None
+
+
+class AddSourceRefRequest(BaseModel):
+    module: str
+    id: str
+    sub_id: str | None = None
 
 
 class MoveNodeRequest(BaseModel):
@@ -413,6 +427,26 @@ async def update_node(
     return {"node": _node_to_dict(updated)}
 
 
+@router.post("/{tree_id}/nodes/{node_id}/source-refs")
+async def add_source_ref(
+    tree_id: str,
+    node_id: str,
+    body: AddSourceRefRequest,
+    user_id: str = Depends(current_user_id),
+):
+    """为树节点追加跨壳材料 source_ref（去重）。"""
+    node = tn_svc.get_node(user_id, node_id)
+    if not node or node.tree_id != tree_id:
+        raise HTTPException(404, "节点不存在")
+    try:
+        updated = tn_svc.add_source_ref(user_id, node_id, body.model_dump())
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    if not updated:
+        raise HTTPException(404, "节点不存在")
+    return {"node": _node_to_dict(updated)}
+
+
 @router.post("/{tree_id}/nodes/{node_id}/move")
 async def move_node(
     tree_id: str,
@@ -677,7 +711,7 @@ async def get_node_materials(
     node_id: str,
     user_id: str = Depends(current_user_id),
 ):
-    """获取树节点关联的认知节点及材料摘要。"""
+    """获取树节点关联的认知节点及跨壳材料聚合。"""
     node = tn_svc.get_node(user_id, node_id)
     if not node or node.tree_id != tree_id:
         raise HTTPException(404, "节点不存在")
@@ -685,14 +719,76 @@ async def get_node_materials(
     links = cl_svc.list_links_by_tree_node(user_id, node_id)
     cognitive_ids = [l.cognitive_node_id for l in links]
 
-    # 目前返回认知节点视图列表；后续可扩展为跨壳材料聚合
+    # 认知节点视图
+    cognitive_views = [
+        view for cid in cognitive_ids
+        if (view := _compute_cognitive_view(cid)) is not None
+    ]
+
+    # 跨壳材料并发聚合（每模块上限 20 条）
+    def _load_flashcards():
+        svc = get_flashcard_service(event_bus=None)
+        return svc.list_cards(
+            user_id=user_id,
+            node_ids=cognitive_ids,
+            limit=20,
+        ).get("cards", [])
+
+    def _load_reading_annotations():
+        return ann_svc.list_annotations(
+            user_id=user_id,
+            linked_node_ids=cognitive_ids,
+            limit=20,
+        )
+
+    def _load_reading_notes():
+        svc = get_flashcard_service(event_bus=None)
+        return svc.list_cards(
+            user_id=user_id,
+            source="reading_note",
+            node_ids=cognitive_ids,
+            limit=20,
+        ).get("cards", [])
+
+    def _load_practice_sessions():
+        return list_sessions_by_node_ids(user_id, cognitive_ids, limit=20)
+
+    def _load_practice_errors():
+        return get_errors_by_node_ids(user_id, cognitive_ids, limit=20)
+
+    def _load_planning():
+        return planning_svc.list_plan_items_by_node_ids(user_id, cognitive_ids, limit=20)
+
+    # 使用 asyncio.gather 并发执行同步 IO（DB 查询）
+    (
+        flashcards,
+        reading_annotations,
+        reading_notes,
+        practice_sessions,
+        practice_errors,
+        plan_items,
+    ) = await asyncio.gather(
+        asyncio.to_thread(_load_flashcards),
+        asyncio.to_thread(_load_reading_annotations),
+        asyncio.to_thread(_load_reading_notes),
+        asyncio.to_thread(_load_practice_sessions),
+        asyncio.to_thread(_load_practice_errors),
+        asyncio.to_thread(_load_planning),
+    )
+
     materials = {
-        "cognitive_nodes": [
-            _compute_cognitive_view(cid)
-            for cid in cognitive_ids
-            if _compute_cognitive_view(cid)
-        ],
-        "source_refs": node.source_refs,
+        "cognitive_nodes": cognitive_views,
+        "source_refs": node.source_refs or [],
+        "flashcards": flashcards,
+        "reading": {
+            "annotations": reading_annotations,
+            "notes": reading_notes,
+        },
+        "practice": {
+            "sessions": practice_sessions,
+            "errors": practice_errors,
+        },
+        "planning": plan_items,
     }
     return {"materials": materials}
 

@@ -3,8 +3,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus, X, Check, AlertCircle, Sparkles, Loader2, ZoomIn, ZoomOut,
-  RefreshCw, Brain, Trash2,
+  RefreshCw, Brain, Trash2, Maximize2, Minimize2,
 } from "lucide-react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useKnowledgeTree } from "@/hooks/knowledge-tree/useKnowledgeTree";
 import KnowledgeTreeGraph from "./KnowledgeTreeGraph";
 import LayerPanel from "./LayerPanel";
@@ -291,6 +292,30 @@ function CognitiveLinkDialog({
 export default function KnowledgeTreePage() {
   const kt = useKnowledgeTree();
   const isMobile = useIsMobile();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const [isFullscreen, setIsFullscreen] = useState(() => searchParams.get("fullscreen") === "1");
+
+  // ESC 退出全屏
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isFullscreen) {
+        setIsFullscreen(false);
+        router.replace("/knowledge-tree", { scroll: false });
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [isFullscreen, router]);
+
+  const toggleFullscreen = useCallback(() => {
+    setIsFullscreen((prev) => {
+      const next = !prev;
+      const url = next ? "/knowledge-tree?fullscreen=1" : "/knowledge-tree";
+      router.replace(url, { scroll: false });
+      return next;
+    });
+  }, [router]);
 
   const [showCreateTree, setShowCreateTree] = useState(false);
   const [newTreeName, setNewTreeName] = useState("");
@@ -392,7 +417,7 @@ export default function KnowledgeTreePage() {
     : kt.nodes;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className={`flex flex-col h-full ${isFullscreen ? "fixed inset-0 z-50 bg-page" : ""}`}>
       {/* Top Bar */}
       <div className="flex items-center gap-3 h-[48px] px-4 border-b border bg-surface flex-shrink-0">
         <div className="flex items-center gap-2">
@@ -429,6 +454,12 @@ export default function KnowledgeTreePage() {
           <button onClick={() => setShowDetailPanel(v => !v)}
             className={`text-[11px] px-2 py-1 rounded transition-all ${showDetailPanel ? "bg-accent/10 text-accent" : "text-muted hover:text"}`}>
             详情
+          </button>
+          <button onClick={toggleFullscreen}
+            className="text-[11px] px-2 py-1 rounded text-muted hover:text flex items-center gap-1"
+            title={isFullscreen ? "退出全屏" : "全屏沉浸"}>
+            {isFullscreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+            {isFullscreen ? "退出" : "全屏"}
           </button>
           <button onClick={() => setShowCreateTree(true)}
             className="text-[11px] px-2 py-1 rounded text-muted hover:text">
@@ -486,6 +517,19 @@ export default function KnowledgeTreePage() {
             <div style={{ width: detailWidth }} className="flex-shrink-0">
               <TreeNodeDetailPanel
                 node={kt.selectedNode}
+                treeId={kt.selectedTreeId!}
+                materials={kt.materials}
+                materialsLoading={kt.materialsLoading}
+                materialsError={kt.materialsError}
+                onLoadMaterials={() => {
+                  if (kt.selectedTreeId && kt.selectedNode) {
+                    kt.loadMaterials(kt.selectedTreeId, kt.selectedNode.id);
+                  }
+                }}
+                onAddSourceRef={(sourceRef) => {
+                  if (!kt.selectedTreeId || !kt.selectedNode) return Promise.resolve(false);
+                  return kt.addSourceRef(kt.selectedTreeId, kt.selectedNode.id, sourceRef);
+                }}
                 onClose={() => kt.selectNode(null)}
                 onDelete={() => kt.deleteNode(kt.selectedNode!.id)}
                 onLinkCognitive={() => setLinkDialogOpen(true)}
@@ -499,6 +543,19 @@ export default function KnowledgeTreePage() {
               onClick={e => e.stopPropagation()}>
               <TreeNodeDetailPanel
                 node={kt.selectedNode}
+                treeId={kt.selectedTreeId!}
+                materials={kt.materials}
+                materialsLoading={kt.materialsLoading}
+                materialsError={kt.materialsError}
+                onLoadMaterials={() => {
+                  if (kt.selectedTreeId && kt.selectedNode) {
+                    kt.loadMaterials(kt.selectedTreeId, kt.selectedNode.id);
+                  }
+                }}
+                onAddSourceRef={(sourceRef) => {
+                  if (!kt.selectedTreeId || !kt.selectedNode) return Promise.resolve(false);
+                  return kt.addSourceRef(kt.selectedTreeId, kt.selectedNode.id, sourceRef);
+                }}
                 onClose={() => kt.selectNode(null)}
                 onDelete={() => kt.deleteNode(kt.selectedNode!.id)}
                 onLinkCognitive={() => setLinkDialogOpen(true)}

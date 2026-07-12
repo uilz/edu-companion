@@ -77,7 +77,7 @@
 ## 影响
 
 - 知识树从「认知数据的可视化」升级为「用户独立创作 + 认知数据叠加」的复合壳层。
-- 旧版 `/api/knowledge-tree/graph/...` 结构接口不再被知识树页使用，仅保留给对话推荐等历史路径。
+- 旧版 `/api/knowledge-tree/*` 路由与文件已彻底移除；认知图谱能力统一由 `/api/knowledge-graph/*` 提供，AI 展开逻辑下沉到 `app.services.knowledge_tree.ai_expansion_service`，供 API 与 LLM Function Calling 共用。
 - 秘书编排器、规划壳、练习壳后续可通过事件协议感知用户知识结构变化。
 
 ## 实现要点
@@ -88,7 +88,8 @@
 - `backend/app/services/knowledge_tree/tree_node_service.py`：节点 CRUD、移动、排序。
 - `backend/app/services/knowledge_tree/tree_edge_service.py`：边 CRUD。
 - `backend/app/services/knowledge_tree/cognitive_link_service.py`：认知节点关联。
-- `backend/app/api/trees.py`：`/api/trees` 路由，含投影查询。
+- `backend/app/services/knowledge_tree/ai_expansion_service.py`：AI 展开节点逻辑，供 API 与 LLM 工具共用。
+- `backend/app/api/trees.py`：`/api/trees` 路由，含投影查询、跨壳材料聚合与 source_ref 回写。
 - `backend/app/infrastructure/db/models/knowledge_tree.py`：四实体 ORM 模型。
 - Alembic 迁移 `47b28cb8e774_add_knowledge_tree_tables.py`。
 
@@ -97,7 +98,7 @@
 - `frontend/src/lib/api/knowledge-trees-api.ts`：`/api/trees` API 客户端与类型。
 - `frontend/src/hooks/knowledge-tree/useKnowledgeTree.ts`：集中状态管理。
 - `frontend/src/components/knowledge-tree/KnowledgeTreeGraph.tsx`：G6 图组件，支持树/图双模式。
-- `frontend/src/components/knowledge-tree/TreeNodeDetailPanel.tsx`：节点详情 + 认知视图 + 材料聚合预留。
+- `frontend/src/components/knowledge-tree/TreeNodeDetailPanel.tsx`：节点详情 + 认知视图 + 跨壳材料聚合展示与创建。
 - `frontend/src/components/knowledge-tree/KnowledgeTreePage.tsx`：页面集成。
 - `frontend/src/app/knowledge-tree/page.tsx`：独立路由入口。
 

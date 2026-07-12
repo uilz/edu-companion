@@ -230,7 +230,7 @@ async def _handle_expand_node(params: dict) -> dict:
         if not node:
             return {"ok": False, "error": "节点不存在"}
 
-        from app.api.knowledge_tree_ai import ai_expand
+        from app.services.knowledge_tree.ai_expansion_service import expand_node as ai_expand
         result = await ai_expand(user_id, node_id, depth, direction)
         return {"ok": True, "node_id": node_id, "result": result}
     except Exception as e:

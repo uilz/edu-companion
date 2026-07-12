@@ -243,6 +243,55 @@ class TreeNodeService:
             ))
         return node
 
+    def add_source_ref(
+        self,
+        user_id: str,
+        node_id: str,
+        source_ref: dict[str, Any],
+    ) -> Optional[TreeNode]:
+        """向 tree_node.source_refs 追加一条引用；按 (module, id, sub_id) 去重。"""
+        module = source_ref.get("module")
+        ref_id = source_ref.get("id")
+        if not module or not ref_id:
+            raise ValueError("source_ref 必须包含 module 与 id")
+
+        node = self.get_node(user_id, node_id)
+        if not node:
+            return None
+
+        refs = node.source_refs or []
+        sub_id = source_ref.get("sub_id")
+        key = (module, ref_id, sub_id)
+        existing_keys = {
+            (r.get("module"), r.get("id"), r.get("sub_id"))
+            for r in refs
+        }
+        if key in existing_keys:
+            return node
+
+        refs.append({"module": module, "id": ref_id, "sub_id": sub_id})
+
+        db = get_db()
+        db.execute(
+            "UPDATE tree_nodes SET source_refs = %s, version = version + 1, updated_at = NOW() "
+            "WHERE id = %s AND user_id = %s",
+            (json.dumps(refs, ensure_ascii=False), node_id, user_id),
+        )
+
+        node = self.get_node(user_id, node_id)
+        if node:
+            from shared.events import TreeNodeUpdated
+            _publish("TreeNodeUpdated", TreeNodeUpdated(
+                user_id=user_id,
+                source_module="knowledge_tree",
+                tree_id=node.tree_id,
+                node_id=node_id,
+                changed_fields=["source_refs"],
+                old_label=node.label,
+                new_label=node.label,
+            ))
+        return node
+
     def move_node(
         self,
         user_id: str,

@@ -128,6 +128,60 @@ def get_error_book(
     }
 
 
+def get_errors_by_node_ids(
+    user_id: str,
+    cognitive_node_ids: list[str],
+    limit: int = 20,
+) -> list[dict]:
+    """按认知节点 ID 列表查询错题（去重，按错误次数排序）。"""
+    if not cognitive_node_ids:
+        return []
+    from app.infrastructure.db.database import get_db
+    db = get_db()
+    rows = db.fetchall(
+        """SELECT att.question_id,
+                  q.bank_id, q.stem, q.options, q.question_type, q.difficulty,
+                  q.cognitive_node_ids, q.explanation,
+                  COUNT(*) as total_attempts,
+                  SUM(CASE WHEN att.is_wrong THEN 1 ELSE 0 END) as wrongs,
+                  MAX(CASE WHEN att.is_wrong THEN att.created_at ELSE NULL END) as last_wrong,
+                  MAX(att.created_at) as last_done,
+                  MAX(att.consecutive_correct) as max_consecutive
+           FROM practice_attempts att
+           JOIN questions q ON att.question_id = q.id AND q.deleted_at IS NULL
+           WHERE att.user_id = %s AND att.is_wrong = true AND q.cognitive_node_ids && %s::jsonb
+           GROUP BY att.question_id, q.bank_id, q.stem, q.options,
+                    q.question_type, q.difficulty, q.cognitive_node_ids, q.explanation
+           ORDER BY wrongs DESC LIMIT %s""",
+        (user_id, cognitive_node_ids, limit),
+    )
+
+    from app.services.practice.practice_question_bank import _safe_json
+
+    items = []
+    for r in rows:
+        wrongs = r["wrongs"] or 0
+        total_att = r["total_attempts"] or 0
+        mastered = (r["max_consecutive"] or 0) >= 3
+        items.append({
+            "question_id": r["question_id"],
+            "bank_id": r["bank_id"],
+            "stem": r["stem"],
+            "options": _safe_json(r.get("options"), []),
+            "question_type": r["question_type"],
+            "difficulty": r["difficulty"],
+            "cognitive_node_ids": r.get("cognitive_node_ids") or [],
+            "explanation": r.get("explanation", "") or r.get("analysis", ""),
+            "total_attempts": total_att,
+            "wrong_count": wrongs,
+            "wrong_rate": round(wrongs / max(total_att, 1) * 100, 1),
+            "mastered": mastered,
+            "last_wrong": _safe_iso(r.get("last_wrong")),
+            "last_done": _safe_iso(r.get("last_done")),
+        })
+    return items
+
+
 def get_error_session_stats(user_id: str) -> dict:
     """错题本概览统计"""
     from app.infrastructure.db.database import get_db

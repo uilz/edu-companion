@@ -95,9 +95,10 @@ backend/
 │   ├── api/                    # 表示层 — REST API 路由
 │   │   ├── conversation/       # 对话 API（树消息、SSE 流、WS）
 │   │   ├── knowledge/          # 知识图谱 API
-│   │   ├── knowledge_tree.py   # 知识树 API（四实体解耦）
-│   │   ├── knowledge_tree_ai.py    # 知识树 AI 对话
-│   │   ├── knowledge_tree_sse.py   # 知识树 SSE 流
+│   │   ├── trees.py            # 知识树壳 API（四实体解耦）
+│   │   ├── knowledge_graph.py      # 认知图谱 API
+│   │   ├── knowledge_graph_ai.py   # 认知图谱 AI 生成/扩充
+│   │   ├── knowledge_graph_sse.py  # 认知图谱 SSE 流
 │   │   ├── learning/           # 学习 API（进度、画像、认知、增强）
 │   │   ├── practice/           # 练习 API（题库、会话、错题、出题、统计、导入、解释卡片、质量）
 │   │   ├── system/             # 系统 API（秘书、搜索、成就、文件管理、多模态、摘要、数据管理）

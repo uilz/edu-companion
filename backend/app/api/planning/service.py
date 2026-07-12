@@ -335,6 +335,27 @@ def list_plan_items(
     return [_row_to_plan_item(r) for r in rows]
 
 
+def list_plan_items_by_node_ids(
+    user_id: str,
+    cognitive_node_ids: list[str],
+    limit: int = 20,
+) -> list[dict]:
+    """按 linked_node_ids 重叠查询计划项。"""
+    if not cognitive_node_ids:
+        return []
+    _ensure_tables()
+    from app.infrastructure.db.database import get_db
+    db = get_db()
+    rows = db.fetchall(
+        """SELECT * FROM plan_items
+           WHERE user_id = %s AND linked_node_ids && %s::jsonb
+           ORDER BY COALESCE(scheduled_for, '9999-12-31'::timestamptz), priority DESC, created_at DESC
+           LIMIT %s""",
+        (user_id, cognitive_node_ids, limit),
+    )
+    return [_row_to_plan_item(r) for r in rows]
+
+
 def get_plan_item(user_id: str, plan_item_id: str) -> Optional[dict]:
     _ensure_tables()
     from app.infrastructure.db.database import get_db

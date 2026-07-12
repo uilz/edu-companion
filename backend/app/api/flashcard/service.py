@@ -249,6 +249,7 @@ class FlashCardService:
         source: str | None = None,
         tag: str | None = None,
         node_id: str | None = None,
+        node_ids: list[str] | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> dict:
@@ -268,7 +269,10 @@ class FlashCardService:
         if tag:
             conditions.append("tags @> %s::jsonb")
             params.append(_json([tag]))
-        if node_id:
+        if node_ids:
+            conditions.append("linked_node_ids && %s::jsonb")
+            params.append(_json(node_ids))
+        elif node_id:
             conditions.append("linked_node_ids @> %s::jsonb")
             params.append(_json([node_id]))
         where = " AND ".join(conditions)

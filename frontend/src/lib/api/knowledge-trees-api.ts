@@ -302,6 +302,12 @@ export const treeNodesApi = {
 
   delete: (treeId: string, nodeId: string) =>
     api<{ ok: boolean }>(`/api/trees/${treeId}/nodes/${nodeId}`, { method: "DELETE" }),
+
+  addSourceRef: (treeId: string, nodeId: string, ref: SourceRef) =>
+    api<{ node: TreeNode }>(`/api/trees/${treeId}/nodes/${nodeId}/source-refs`, {
+      method: "POST",
+      body: JSON.stringify(ref),
+    }),
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -369,10 +375,82 @@ export const treeViewportApi = {
 // Node Materials & Cognitive Projection
 // ═══════════════════════════════════════════════════════════════
 
+export interface FlashcardMaterial {
+  id: string;
+  front_text: string;
+  back_text?: string;
+  status: string;
+  source?: string;
+  linked_node_ids?: string[];
+  created_at?: number | string;
+  updated_at?: number | string;
+}
+
+export interface ReadingAnnotationMaterial {
+  id: string;
+  material_id: string;
+  color: string;
+  intent: string;
+  text?: string;
+  note?: string;
+  linked_node_id?: string;
+  created_at?: number | string;
+  updated_at?: number | string;
+}
+
+export interface PracticeSessionMaterial {
+  session_id: string;
+  bank_id: string;
+  bank_name?: string;
+  session_type: string;
+  mode: string;
+  status: string;
+  question_count: number;
+  cognitive_node_ids?: string[];
+  created_at?: string;
+}
+
+export interface PracticeErrorMaterial {
+  question_id: string;
+  bank_id: string;
+  stem: string;
+  question_type: string;
+  difficulty: number;
+  cognitive_node_ids?: string[];
+  wrong_count: number;
+  wrong_rate: number;
+  mastered: boolean;
+  last_wrong?: string;
+}
+
+export interface PlanningMaterial {
+  id: string;
+  title: string;
+  description?: string;
+  status: string;
+  priority?: number;
+  estimated_minutes?: number;
+  source_module?: string;
+  linked_node_ids?: string[];
+  scheduled_for?: string;
+  plan_date?: string;
+  created_at?: string;
+}
+
 export interface NodeMaterialsResponse {
   materials: {
     cognitive_nodes: CognitiveNodeView[];
     source_refs: SourceRef[];
+    flashcards: FlashcardMaterial[];
+    reading: {
+      annotations: ReadingAnnotationMaterial[];
+      notes: FlashcardMaterial[];
+    };
+    practice: {
+      sessions: PracticeSessionMaterial[];
+      errors: PracticeErrorMaterial[];
+    };
+    planning: PlanningMaterial[];
   };
 }
 

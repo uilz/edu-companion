@@ -3,12 +3,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   knowledgeTreesApi,
+  treeMaterialsApi,
   type KnowledgeTree,
   type TreeNode,
   type TreeEdge,
   type ViewportState,
   type TreeViewMode,
   type TreeLayout,
+  type NodeMaterialsResponse,
+  type SourceRef,
 } from "@/lib/api/knowledge-trees-api";
 
 export interface KnowledgeTreeState {
@@ -32,6 +35,11 @@ export interface KnowledgeTreeState {
   zoom: number;
   viewport: ViewportState;
 
+  // 跨壳材料聚合
+  materials: NodeMaterialsResponse["materials"] | null;
+  materialsLoading: boolean;
+  materialsError: string | null;
+
   // UI
   loading: boolean;
   error: string | null;
@@ -51,6 +59,8 @@ export interface KnowledgeTreeState {
   linkCognitive: (nodeId: string, cognitiveNodeId: string) => Promise<boolean>;
   unlinkCognitive: (nodeId: string, cognitiveNodeId: string) => Promise<boolean>;
   saveViewport: (patch: ViewportState) => Promise<void>;
+  loadMaterials: (treeId: string, nodeId: string) => Promise<void>;
+  addSourceRef: (treeId: string, nodeId: string, sourceRef: SourceRef) => Promise<boolean>;
   setViewMode: (mode: TreeViewMode) => void;
   setLayout: (layout: TreeLayout) => void;
   setZoom: (zoom: number) => void;
@@ -71,6 +81,11 @@ export function useKnowledgeTree(): KnowledgeTreeState {
   const [viewport, setViewport] = useState<ViewportState>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 跨壳材料聚合
+  const [materials, setMaterials] = useState<NodeMaterialsResponse["materials"] | null>(null);
+  const [materialsLoading, setMaterialsLoading] = useState(false);
+  const [materialsError, setMaterialsError] = useState<string | null>(null);
 
   const selectedTree = useMemo(
     () => trees.find((t) => t.id === selectedTreeId) || null,
@@ -175,6 +190,8 @@ export function useKnowledgeTree(): KnowledgeTreeState {
 
   const selectNode = useCallback((nodeId: string | null) => {
     setSelectedNodeId(nodeId);
+    setMaterials(null);
+    setMaterialsError(null);
   }, []);
 
   const createNode = useCallback(
@@ -336,6 +353,38 @@ export function useKnowledgeTree(): KnowledgeTreeState {
     [selectedTreeId, loadTreeData]
   );
 
+  const loadMaterials = useCallback(async (treeId: string, nodeId: string) => {
+    setMaterialsLoading(true);
+    setMaterialsError(null);
+    try {
+      const res = await treeMaterialsApi.get(treeId, nodeId);
+      setMaterials(res.materials);
+    } catch (e: any) {
+      setMaterialsError(e.message || "加载跨壳材料失败");
+    } finally {
+      setMaterialsLoading(false);
+    }
+  }, []);
+
+  const addSourceRef = useCallback(
+    async (treeId: string, nodeId: string, sourceRef: SourceRef) => {
+      try {
+        const res = await knowledgeTreesApi.nodes.addSourceRef(treeId, nodeId, sourceRef);
+        setNodes((prev) => prev.map((n) => (n.id === nodeId ? res.node : n)));
+        setMaterials((prev) =>
+          prev
+            ? { ...prev, source_refs: [...prev.source_refs, sourceRef] }
+            : prev
+        );
+        return true;
+      } catch (e: any) {
+        setMaterialsError(e.message || "添加 source_ref 失败");
+        return false;
+      }
+    },
+    []
+  );
+
   const saveViewport = useCallback(
     async (patch: ViewportState) => {
       if (!selectedTreeId) return;
@@ -383,6 +432,9 @@ export function useKnowledgeTree(): KnowledgeTreeState {
     viewport,
     loading,
     error,
+    materials,
+    materialsLoading,
+    materialsError,
     loadTrees,
     selectTree,
     createTree,
@@ -396,6 +448,8 @@ export function useKnowledgeTree(): KnowledgeTreeState {
     deleteEdge,
     linkCognitive,
     unlinkCognitive,
+    loadMaterials,
+    addSourceRef,
     saveViewport,
     setViewMode,
     setLayout,

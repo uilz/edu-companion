@@ -177,6 +177,7 @@ def list_annotations(
     color: Optional[str] = None,
     chunk_id: Optional[str] = None,
     linked_node_id: Optional[str] = None,
+    linked_node_ids: Optional[list[str]] = None,
     is_processed: Optional[bool] = None,
     limit: int = 200,
 ) -> list[dict]:
@@ -194,7 +195,10 @@ def list_annotations(
     if chunk_id:
         conds.append("chunk_id = %s")
         params.append(chunk_id)
-    if linked_node_id:
+    if linked_node_ids:
+        conds.append("linked_node_id = ANY(%s)")
+        params.append(linked_node_ids)
+    elif linked_node_id:
         conds.append("linked_node_id = %s")
         params.append(linked_node_id)
     if is_processed is not None:

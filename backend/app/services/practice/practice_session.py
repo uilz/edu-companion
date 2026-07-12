@@ -709,3 +709,23 @@ def delete_session(session_id: str, user_id: str) -> bool:
     from app.infrastructure.db.database import get_db
     db = get_db()
     return repo.delete_session(db, session_id, user_id)
+
+
+def list_sessions_by_node_ids(
+    user_id: str,
+    node_ids: list[str],
+    limit: int = 20,
+) -> list[dict]:
+    """按认知节点 ID 列表查询关联的练习会话（内存过滤，后续可下沉到 repo）"""
+    from app.infrastructure.db.database import get_db
+    db = get_db()
+    sessions, _ = repo.list_sessions(db, user_id, limit=limit)
+    node_id_set = set(node_ids)
+    items = []
+    for s in sessions:
+        session_node_ids = getattr(s, "cognitive_node_ids", None) or []
+        if any(nid in node_id_set for nid in session_node_ids):
+            items.append(_session_to_dict(s))
+            if len(items) >= limit:
+                break
+    return items

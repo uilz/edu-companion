@@ -30,12 +30,14 @@ from app.api.system.summaries import router as summaries_router
 
 # 笔记/目标/探索项目
 from app.api.learning.learning_enhance import router as learning_enhance_router
+from app.api.learning.explain import router as learning_explain_router
+from app.api.analytics.retention import router as analytics_router
 
 # 文件管理
 from app.api.system.files_routes import router as files_router, recover_stuck_files
 
 # 解释卡片
-from app.api.practice.explain_cards import router as explain_cards_router
+from app.api.conversations.explain_cards import router as explain_cards_router
 
 # 智能题库
 from app.api.practice.practice_routes import router as practice_routes_router
@@ -46,11 +48,13 @@ from app.api.system.data_routes import router as data_router
 # 事件系统（客户端驱动聚合）+ 工具定义 API
 from app.infrastructure.scheduler.events_api import router as events_router, _tools_router
 
-# 知识树系统 (四实体解耦架构)
-from app.api.knowledge_tree import router as knowledge_tree_router
-from app.api.knowledge_tree_sse import router as knowledge_tree_sse_router
-from app.api.knowledge_tree_ai import router as knowledge_tree_ai_router
+# 知识树系统 (四实体解耦架构) — 统一入口 /api/trees
 from app.api.trees import router as trees_router
+
+# 认知图谱（/api/knowledge-graph）
+from app.api.knowledge_graph import router as kg_router
+from app.api.knowledge_graph_ai import router as kg_ai_router
+from app.api.knowledge_graph_sse import router as kg_sse_router
 
 # 项目工作台
 from app.api.project import router as project_router
@@ -518,15 +522,23 @@ app.include_router(flashcard_router)
 # 学习数据管理
 app.include_router(data_router)
 
+# 通用学习解释
+app.include_router(learning_explain_router)
+
+# 学情分析
+app.include_router(analytics_router)
+
 # 事件系统（客户端驱动聚合）
 app.include_router(events_router)
 app.include_router(_tools_router)
 
 # 知识树系统 (四实体解耦架构)
-app.include_router(knowledge_tree_router)
-app.include_router(knowledge_tree_sse_router)
-app.include_router(knowledge_tree_ai_router)
 app.include_router(trees_router)
+
+# 认知图谱
+app.include_router(kg_router)
+app.include_router(kg_ai_router)
+app.include_router(kg_sse_router)
 
 # 知识图谱 (硬编码 / 动态加载)
 from app.api.knowledge.knowledge import router as knowledge_graph_router

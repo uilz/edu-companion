@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export default function KnowledgeTreeRoute() {
   return (
-    <main className="route-fullscreen absolute inset-0 overflow-hidden bg-page">
+    <main className="h-full w-full overflow-hidden bg-page">
       <ErrorBoundary>
         <KnowledgeTreePage />
       </ErrorBoundary>
