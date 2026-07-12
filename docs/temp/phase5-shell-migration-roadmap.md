@@ -50,7 +50,7 @@ Practice 服务层已较完整，但 API 路由仍残留以下业务逻辑：
 - **Slice 5.5**：会话与考试路由瘦身（sessions.py）— ✅ 完成
 - **Slice 5.6**： miscellaneous 路由瘦身（misc.py：历史、独立答题、内联、遥测、自信度、自我解释）— ✅ 完成
 - **Slice 5.7**：错题/统计/出题/质量路由检查与补齐 — ✅ 完成（`generation.py` 资料出题逻辑下沉）
-- **Slice 5.8**：文档重写（overview.md + events.md）+ ADR 0025
+- **Slice 5.8**：文档重写（overview.md + events.md）+ ADR 0025 — ✅ 完成
 - **Slice 5.9**：端到端验证（rebuild.sh + verify_practice_service_sink.py + pytest）
 
 ---
