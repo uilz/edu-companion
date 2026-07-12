@@ -21,7 +21,7 @@
 |---|------------|---------|---------|------|
 | **Reading 阅读** | `app/services/reading/` 已拆分 | `app/api/reading/routes.py` 较薄 | 已完成 | ✅ 已迁移 |
 | **Planning 规划** | `app/services/planning/` 已拆分 8 个模块 | `app/api/planning/routes.py` 较薄 | overview + events + ADR 已完成 | ✅ 已迁移 |
-| **Practice 练习** | `app/services/practice/` 已有 20+ 服务文件 | 路由层仍含业务逻辑 | `docs/modules/practice-system/` 存在但需按新架构重写 | 🔄 进行中 |
+| **Practice 练习** | `app/services/practice/` 已有 20+ 服务文件 | 路由层已瘦身，业务逻辑下沉 | `docs/modules/practice-system/` overview + events + ADR 已完成 | ✅ 已迁移 |
 | **Secretary 秘书** | `app/domain/secretary/` + `app/services/secretary/` 已较成熟 | 路由归属可再整理 | 较完整 | ⏳ 待整理 |
 
 ---
@@ -51,7 +51,7 @@ Practice 服务层已较完整，但 API 路由仍残留以下业务逻辑：
 - **Slice 5.6**： miscellaneous 路由瘦身（misc.py：历史、独立答题、内联、遥测、自信度、自我解释）— ✅ 完成
 - **Slice 5.7**：错题/统计/出题/质量路由检查与补齐 — ✅ 完成（`generation.py` 资料出题逻辑下沉）
 - **Slice 5.8**：文档重写（overview.md + events.md）+ ADR 0025 — ✅ 完成
-- **Slice 5.9**：端到端验证（rebuild.sh + verify_practice_service_sink.py + pytest）
+- **Slice 5.9**：端到端验证（rebuild.sh + verify_practice_service_sink.py + pytest）— ✅ 完成
 
 ---
 
@@ -68,4 +68,4 @@ Practice 服务层已较完整，但 API 路由仍残留以下业务逻辑：
 
 ## 五、下一步
 
-启动 **Practice Slice 5.4：题库与题目路由瘦身**。
+启动 **Secretary 秘书壳整理**：路由层检查、事件边界梳理、文档补齐，作为 Phase 5 最后一个壳的收尾。

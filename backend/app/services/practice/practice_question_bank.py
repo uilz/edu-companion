@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 def _ensure_tables():
     """确保练习系统所有表存在（幂等），统一从 practice_schema.sql 读取"""
+    import re
     from app.infrastructure.db.database import get_db
     db = get_db()
     possible_paths = [
@@ -30,6 +31,8 @@ def _ensure_tables():
         return
     with open(sql_path) as f:
         sql = f.read()
+    # 移除行内注释，避免注释中的分号被误判为语句结束符
+    sql = re.sub(r"--[^\n]*", "", sql)
     for statement in sql.split(";"):
         s = statement.strip()
         if s:

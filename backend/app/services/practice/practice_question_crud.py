@@ -36,7 +36,10 @@ def add_question(bank_id, user_id, question_type, stem, answer,
 def update_question(question_id, user_id, **kwargs):
     from app.infrastructure.db.database import get_db
     db = get_db()
-    allowed = {"stem", "options", "answer", "explanation", "analysis", "difficulty",
+    # 前端/历史 API 使用 analysis，数据库存 explanation，统一映射
+    if "analysis" in kwargs:
+        kwargs["explanation"] = kwargs.pop("analysis")
+    allowed = {"stem", "options", "answer", "explanation", "difficulty",
                "question_type", "cognitive_node_ids", "status", "metadata"}
     updates, params = [], []
     for k, v in kwargs.items():
