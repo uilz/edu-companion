@@ -18,6 +18,25 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+def create_exam_from_request(
+    user_id: str,
+    bank_id: str,
+    body: dict,
+) -> dict:
+    """根据 API 请求体创建考试会话（仅做参数归一化，核心逻辑在 create_exam）。"""
+    config = body.get("config") or {}
+    if isinstance(config, dict):
+        config["exam_type"] = body.get("exam_type", "standard")
+    return create_exam(
+        user_id=user_id,
+        bank_id=bank_id,
+        count=body.get("count", 20),
+        duration_minutes=body.get("duration_minutes", body.get("time_limit", 60)),
+        config=config,
+        cognitive_node_ids=body.get("cognitive_node_ids"),
+    )
+
+
 def create_exam(
     user_id: str,
     bank_id: str = "",

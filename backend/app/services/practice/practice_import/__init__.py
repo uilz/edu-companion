@@ -48,6 +48,7 @@ from .parser import (
 )
 from .service import (
     preview_import,
+    preview_questions_from_text,
     confirm_import,
     get_import_history,
 )
@@ -59,6 +60,7 @@ __all__ = [
     "ai_correct_question",
     "match_cognitive_nodes",
     "preview_import",
+    "preview_questions_from_text",
     "confirm_import",
     "get_import_history",
 ]

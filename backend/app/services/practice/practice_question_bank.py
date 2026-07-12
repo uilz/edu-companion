@@ -86,6 +86,7 @@ def create_bank(user_id, name, description="", ref_node_id=None, ref_node_level=
 
 def update_bank(bank_id, user_id, name=None, description=None):
     """更新题库基本信息"""
+    _ensure_tables()
     from app.infrastructure.db.database import get_db
     db = get_db()
     row = db.fetchone(
@@ -385,6 +386,64 @@ def _generate_bank_id(user_id, hint):
     suffix = user_id[-8:] if len(user_id) > 8 else user_id
     slug = re.sub(r"[^a-zA-Z0-9\u4e00-\u9fff]", "_", str(hint))[:20]
     return f"bnk_{suffix}_{slug}"
+
+
+def search_banks(user_id: str, keyword: str = "") -> dict:
+    """按名称/描述搜索题库，返回 {total, items}"""
+    banks = list_banks(user_id)
+    if keyword:
+        kw = keyword.lower()
+        banks = [
+            b for b in banks
+            if kw in (b.get("name") or "").lower()
+            or kw in (b.get("description") or "").lower()
+        ]
+    return {"total": len(banks), "items": banks}
+
+
+def get_bank_with_preview(
+    bank_id, user_id: str, preview: bool = True, preview_count: int = 5
+) -> dict | None:
+    """获取题库详情，可选择附带题目预览或仅统计数量。"""
+    bank = get_bank(bank_id, user_id)
+    if not bank:
+        return None
+
+    if preview:
+        questions = list_questions(
+            bank_id, user_id,
+            page=1, page_size=preview_count,
+        )
+        bank["question_preview"] = questions.get("items", [])
+        bank["total_questions"] = questions.get("total", 0)
+    else:
+        from app.infrastructure.db.database import get_db
+        db = get_db()
+        row = db.fetchone(
+            "SELECT COUNT(*) as cnt FROM questions WHERE bank_id = %s AND deleted_at IS NULL",
+            (bank_id,),
+        )
+        bank["total_questions"] = row["cnt"] if row else 0
+
+    return bank
+
+
+def resolve_and_get_bank_for_conversation(
+    conv_id: str, user_id: str, user_specified_bank_id: str | None = None
+) -> dict:
+    """解析对话所属题库并返回题库详情。"""
+    bank_id = resolve_bank_for_conversation(
+        conv_id, user_id, user_specified_bank_id=user_specified_bank_id
+    )
+    bank = get_bank(bank_id, user_id)
+    return {"bank_id": bank_id, "bank": bank}
+
+
+def resolve_and_get_bank_for_node(node_id: str, user_id: str) -> dict:
+    """解析知识点所属题库并返回题库详情。"""
+    bank_id = resolve_bank_for_node(node_id, user_id)
+    bank = get_bank(bank_id, user_id)
+    return {"bank_id": bank_id, "bank": bank}
 
 
 def _row_to_bank(row):

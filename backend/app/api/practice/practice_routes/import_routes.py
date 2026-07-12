@@ -1,4 +1,8 @@
-"""题库导入 — 文件导入 + 批量导入 + 导入历史"""
+"""题库导入 — 文件导入 + 批量导入 + 导入历史
+
+本文件仅做 HTTP 参数转换与错误映射，所有业务逻辑委托给
+app.services.practice.practice_import。
+"""
 from __future__ import annotations
 
 import logging
@@ -9,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from app.domain.auth.dependencies import current_user_id
 from app.services.practice.practice_question_bank import _ensure_tables
 from app.services.practice.practice_question_crud import batch_import_questions
-from app.services.practice.practice_import import get_import_history
+from app.services.practice.practice_import import get_import_history, preview_import, preview_questions_from_text
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -28,7 +32,6 @@ async def api_import_upload(body: dict, user_id: str = Depends(current_user_id))
         raise HTTPException(400, "file_path 不能为空")
     file_type = body.get("file_type", "")
     bank_id = body.get("bank_id", "")
-    from app.services.practice.practice_import import preview_import
     try:
         return preview_import(file_path, user_id, file_type, bank_id)
     except FileNotFoundError as e:
@@ -47,31 +50,20 @@ async def api_import_preview(body: dict, user_id: str = Depends(current_user_id)
     text = body.get("text", "").strip()
     if not text:
         raise HTTPException(400, "text 不能为空")
-    from app.services.practice.practice_import import (
-        parse_questions_from_text, ai_correct_question, match_cognitive_nodes,
-    )
-    questions = parse_questions_from_text(text)
-    for q in questions:
-        q = ai_correct_question(q)
-        q["suggested_node_ids"] = match_cognitive_nodes(q, user_id)
-    high = sum(1 for q in questions if q.get("confidence", 0) >= 0.8)
-    return {
-        "questions": questions,
-        "stats": {"total": len(questions), "high_confidence": high, "low_confidence": len(questions) - high},
-    }
+    return preview_questions_from_text(text, user_id)
 
 
 @router.post("/import/confirm")
 async def api_import_confirm(body: dict, user_id: str = Depends(current_user_id)):
     """确认导入题目到题库"""
     _ensure_tables()
+    from app.services.practice.practice_import import confirm_import
     bank_id = body.get("bank_id", "").strip()
     if not bank_id:
         raise HTTPException(400, "bank_id 不能为空")
     questions = body.get("questions", [])
     if not questions:
         raise HTTPException(400, "questions 不能为空")
-    from app.services.practice.practice_import import confirm_import
     return confirm_import(questions, bank_id, user_id)
 
 

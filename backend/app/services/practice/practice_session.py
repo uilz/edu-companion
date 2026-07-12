@@ -711,6 +711,41 @@ def delete_session(session_id: str, user_id: str) -> bool:
     return repo.delete_session(db, session_id, user_id)
 
 
+def get_unfinished_sessions(user_id: str) -> dict:
+    """获取用户未完成的练习会话（created/active/paused 且非空）。"""
+    from app.infrastructure.db.database import get_db
+    db = get_db()
+    rows = db.fetchall(
+        """SELECT ps.id, ps.bank_id, ps.session_type, ps.mode, ps.status, ps.total_count, ps.conversation_id,
+                  (SELECT COUNT(*) FROM practice_attempts pa
+                   WHERE pa.session_id = ps.id
+                  ) as answered_count,
+                  ps.created_at
+           FROM practice_sessions ps
+           WHERE ps.user_id = %s AND ps.status IN ('created', 'active', 'paused')
+             AND ps.total_count > 0
+           ORDER BY ps.created_at DESC LIMIT 10""",
+        (user_id,),
+    )
+    items = []
+    for r in rows:
+        answered = r.get("answered_count", 0) or 0
+        if r["status"] == "created" and answered == 0:
+            continue
+        items.append({
+            "session_id": r["id"],
+            "bank_id": r["bank_id"],
+            "session_type": r["session_type"],
+            "mode": r["mode"],
+            "status": r["status"],
+            "total_count": r["total_count"],
+            "conv_id": r.get("conversation_id", "") or "",
+            "answered_count": answered,
+            "created_at": r["created_at"].isoformat() if hasattr(r["created_at"], "isoformat") else str(r["created_at"]),
+        })
+    return {"items": items, "total": len(items)}
+
+
 def list_sessions_by_node_ids(
     user_id: str,
     node_ids: list[str],

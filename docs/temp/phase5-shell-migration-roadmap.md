@@ -15,44 +15,43 @@
 
 ---
 
-## 二、各壳现状与差距
+## 二、各壳现状
 
-| 壳 | 后端服务现状 | API 现状 | 文档现状 | 迁移复杂度 | 备注 |
-|---|------------|---------|---------|----------|------|
-| **Reading 阅读** | `app/services/reading/` 已拆分 7 个服务，结构干净 | `app/api/reading/routes.py` 较薄 | 缺 `docs/modules/reading/` | 低 | 最接近完成，优先收尾 |
-| **Planning 规划** | 仅 `app/services/planning/completion_writer.py` | 核心业务在 `app/api/planning/service.py` | 缺 `docs/modules/planning/` | 中 | 需把 service.py 下沉到 services/planning/ |
-| **Practice 练习** | `app/services/practice/` 已有 20+ 服务文件 | 路由层 `app/api/practice/` 仍含业务逻辑 | `docs/modules/practice-system/` 已存在 | 高 | 需按子域（题库/会话/错题/出题/统计/导入）切片 |
-| **Secretary 秘书** | `app/domain/secretary/` + `app/services/secretary/` 已较成熟 | `app/api/system/secretary.py` + `app/api/secretary/mood_stress.py` | `docs/modules/secretary-system/` 已完整 | 低-中 | 仅需整理路由归属，非核心迁移 |
+| 壳 | 后端服务现状 | API 现状 | 文档现状 | 状态 |
+|---|------------|---------|---------|------|
+| **Reading 阅读** | `app/services/reading/` 已拆分 | `app/api/reading/routes.py` 较薄 | 已完成 | ✅ 已迁移 |
+| **Planning 规划** | `app/services/planning/` 已拆分 8 个模块 | `app/api/planning/routes.py` 较薄 | overview + events + ADR 已完成 | ✅ 已迁移 |
+| **Practice 练习** | `app/services/practice/` 已有 20+ 服务文件 | 路由层仍含业务逻辑 | `docs/modules/practice-system/` 存在但需按新架构重写 | 🔄 进行中 |
+| **Secretary 秘书** | `app/domain/secretary/` + `app/services/secretary/` 已较成熟 | 路由归属可再整理 | 较完整 | ⏳ 待整理 |
 
 ---
 
-## 三、推荐迁移顺序
+## 三、Practice 壳服务下沉计划
 
-按「依赖少 → 依赖多、风险低 → 风险高、收尾 → 大改」排序：
+### 3.1 现状差距
 
-### 3.1 Reading 阅读壳（收尾，1-2 个切片）
+Practice 服务层已较完整，但 API 路由仍残留以下业务逻辑：
 
-- **Slice 5.1**：补齐 `docs/modules/reading/overview.md` + `events.md`；检查 `app/api/reading/routes.py` 是否仅做 HTTP 转换。
-- **Slice 5.2**：前端 API 路径与类型对齐；运行 rebuild.sh + 阅读标注/笔记端到端验证。
+| 路由文件 | 残留业务逻辑 | 目标服务 | 状态 |
+|---------|------------|---------|------|
+| `banks.py` | 题库搜索过滤、题目预览组装、resolve 结果包装 | `practice_question_bank` | ✅ 已下沉 |
+| `sessions.py` | 未完成的会话查询与组装、考试 config 包装 | `practice_session` / `practice_exam` | ✅ 已下沉 |
+| `misc.py` | 秘书提案过滤、答题历史查询组装、独立答题提交、内联练习、遥测入口、自信度报告、自我解释评估 | 新建/复用 `proposals.py` `history.py` `standalone.py` `inline.py` `confidence.py` | ✅ 已下沉 |
+| `references.py` | 搜索关键词生成 helper | `practice/references.py` service | ✅ 已下沉 |
+| `import_routes.py` | 预览解析循环 | `practice_import/service.py` | ✅ 已下沉 |
+| `errors.py` | 错题本/复习调度接口已直接委托服务层 | `practice_error_book` / `practice_scheduler` | ✅ 已较薄 |
+| `stats.py` | 统计/成就接口已直接委托服务层 | `practice_stats` / `analytics.achievement_service` | ✅ 已较薄 |
+| `generation.py` | 资料出题参数归一化、bank 解析、响应组装 | `practice_question_gen.py` | ✅ 已下沉 |
+| `quality_routes.py` | 质量监控接口已直接委托 analyzer | `analytics.quality_analyzer` | ✅ 已较薄 |
 
-### 3.2 Planning 规划壳（中等，3-4 个切片）
+### 3.2 切片
 
-- **Slice 5.3**：将 `app/api/planning/service.py` 中的业务逻辑迁移到 `app/services/planning/`（拆分 `items.py`、`goals.py`、`reviews.py`、`layouts.py`）。
-- **Slice 5.4**：更新 `app/api/planning/routes.py` 仅调用新 services；更新 `app/api/planning/event_handler.py`。
-- **Slice 5.5**：补齐 `docs/modules/planning/overview.md` + `events.md`。
-- **Slice 5.6**：端到端验证（日/周/知识视图、计划项 CRUD、完成回写）。
-
-### 3.3 Practice 练习壳（大改，6-8 个切片）
-
-- **Slice 5.7**：文档与现状盘点，确定每个路由文件对应的服务映射。
-- **Slice 5.8-5.13**：按子域逐个迁移（banks、sessions、errors、generation、stats、import/quality）。
-- **Slice 5.14**：移除 API 层残留业务逻辑，统一错误处理与事件发布。
-- **Slice 5.15**：端到端验证（题库、组卷、练习会话、错题本、AI 出题、统计）。
-
-### 3.4 Secretary 秘书壳（可选整理，1-2 个切片）
-
-- **Slice 5.16**：评估 `mood_stress.py` 是否应并入 `app/api/system/secretary.py` 或保持独立；补齐缺失文档。
-- **Slice 5.17**：验证 45 个端点 + 92 E2E 测试仍通过。
+- **Slice 5.4**：题库与题目路由瘦身（banks.py）— ✅ 完成
+- **Slice 5.5**：会话与考试路由瘦身（sessions.py）— ✅ 完成
+- **Slice 5.6**： miscellaneous 路由瘦身（misc.py：历史、独立答题、内联、遥测、自信度、自我解释）— ✅ 完成
+- **Slice 5.7**：错题/统计/出题/质量路由检查与补齐 — ✅ 完成（`generation.py` 资料出题逻辑下沉）
+- **Slice 5.8**：文档重写（overview.md + events.md）+ ADR 0025
+- **Slice 5.9**：端到端验证（rebuild.sh + verify_practice_service_sink.py + pytest）
 
 ---
 
@@ -61,16 +60,12 @@
 | 风险点 | 影响 | 缓解措施 |
 |-------|------|---------|
 | Practice 壳体量大，一次性迁移易出回归 | 高 | 严格按子域切片，每片单独 rebuild + 测试 |
-| Planning 完成回写事件链路复杂 | 中 | 迁移前后对比 `completion_writer.py` 调用路径 |
-| Reading 与 file-management 耦合 | 低 | 保持只读/复用边界，不改 file-management |
-| 当前仓库有大量无关未提交变更 | 中 | Phase 5 切片提交前确保不混入其他模块改动 |
+| 路由层残留的事件发布路径需保持 | 中 | 移动逻辑时保持 `publish_practice_events` 调用不变 |
+| 当前仓库有大量无关未提交变更 | 中 | Practice 切片提交前确保不混入其他模块改动 |
 | 会话系统正被其他 Agent 重构 | 高 | Phase 5 不碰 `backend/app/api/conversations/` 及相关 untracked 文件 |
 
 ---
 
-## 五、下一步待确认
+## 五、下一步
 
-1. 是否按上述顺序启动 Phase 5？
-2. 是否先从 **Reading Slice 5.1** 开始（最小收尾切片）？
-3. Secretary 壳是否纳入 Phase 5，还是放到后续阶段？
-4. Practice 壳是否需要先出一份更细的子域拆分方案再动手？
+启动 **Practice Slice 5.4：题库与题目路由瘦身**。

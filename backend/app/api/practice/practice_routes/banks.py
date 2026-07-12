@@ -1,4 +1,8 @@
-"""题库管理 — Bank CRUD + Question CRUD + Resolve"""
+"""题库管理 — Bank CRUD + Question CRUD + Resolve
+
+本文件仅做 HTTP 参数转换与错误映射，所有业务逻辑委托给
+app.services.practice.practice_question_bank / practice_question_crud。
+"""
 from __future__ import annotations
 
 import logging
@@ -12,9 +16,10 @@ from app.services.practice.practice_question_crud import (
     toggle_favorite, toggle_slash, batch_import_questions, copy_questions_to_bank, reorder_questions_in_bank,
 )
 from app.services.practice.practice_question_bank import (
-    _ensure_tables, list_banks, get_bank, create_bank, update_bank, delete_bank,
+    list_banks, get_bank_with_preview, create_bank, update_bank, delete_bank,
     list_questions, get_question, get_question_preview, search_questions,
-    resolve_bank_for_conversation, resolve_bank_for_node,
+    resolve_and_get_bank_for_conversation, resolve_and_get_bank_for_node,
+    search_banks,
 )
 
 logger = logging.getLogger(__name__)
@@ -27,13 +32,11 @@ router = APIRouter()
 
 @router.get("/banks")
 async def api_list_banks(user_id: str = Depends(current_user_id)):
-    _ensure_tables()
     return list_banks(user_id)
 
 
 @router.post("/banks")
 async def api_create_bank(body: dict, user_id: str = Depends(current_user_id)):
-    _ensure_tables()
     name = body.get("name", "").strip()
     if not name:
         raise HTTPException(400, "题库名称不能为空")
@@ -52,16 +55,7 @@ async def api_search_banks(
     user_id: str = Depends(current_user_id),
 ):
     """按名称/描述搜索题库"""
-    _ensure_tables()
-    banks = list_banks(user_id)
-    if keyword:
-        kw = keyword.lower()
-        banks = [
-            b for b in banks
-            if kw in (b.get("name") or "").lower()
-            or kw in (b.get("description") or "").lower()
-        ]
-    return {"total": len(banks), "items": banks}
+    return search_banks(user_id, keyword=keyword)
 
 
 @router.get("/banks/{bank_id}")
@@ -71,35 +65,17 @@ async def api_get_bank(
     preview: bool = Query(True, description="是否包含题目预览"),
     preview_count: int = Query(5, ge=0, le=50, description="预览题目数量"),
 ):
-    _ensure_tables()
-    bank = get_bank(bank_id, user_id)
+    bank = get_bank_with_preview(
+        bank_id, user_id,
+        preview=preview, preview_count=preview_count,
+    )
     if not bank:
         raise HTTPException(404, "题库不存在")
-
-    # 附带题目预览
-    if preview:
-        questions = list_questions(
-            bank_id, user_id,
-            page=1, page_size=preview_count,
-        )
-        bank["question_preview"] = questions.get("items", [])
-        bank["total_questions"] = questions.get("total", 0)
-    else:
-        # 仅统计数量
-        from app.infrastructure.db.database import get_db
-        db = get_db()
-        row = db.fetchone(
-            "SELECT COUNT(*) as cnt FROM questions WHERE bank_id = %s AND deleted_at IS NULL",
-            (bank_id,),
-        )
-        bank["total_questions"] = row["cnt"] if row else 0
-
     return bank
 
 
 @router.delete("/banks/{bank_id}")
 async def api_delete_bank(bank_id: str, user_id: str = Depends(current_user_id)):
-    _ensure_tables()
     ok = delete_bank(bank_id, user_id)
     if not ok:
         raise HTTPException(404, "题库不存在")
@@ -108,7 +84,6 @@ async def api_delete_bank(bank_id: str, user_id: str = Depends(current_user_id))
 
 @router.patch("/banks/{bank_id}")
 async def api_update_bank(bank_id: str, body: dict, user_id: str = Depends(current_user_id)):
-    _ensure_tables()
     result = update_bank(
         bank_id=bank_id, user_id=user_id,
         name=body.get("name"),
@@ -130,7 +105,6 @@ async def api_search_questions(
     user_id: str = Depends(current_user_id),
 ):
     """跨题库搜索题目"""
-    _ensure_tables()
     return search_questions(
         keyword=keyword, bank_id=bank_id,
         question_type=question_type, bloom_level=bloom_level,
@@ -153,7 +127,6 @@ async def api_list_questions(
     status: Optional[str] = None,
     cognitive_node_id: Optional[str] = None,
 ):
-    _ensure_tables()
     return list_questions(
         bank_id, user_id,
         page=page, page_size=page_size,
@@ -165,7 +138,6 @@ async def api_list_questions(
 
 @router.post("/banks/{bank_id}/questions")
 async def api_add_question(bank_id: str, body: dict, user_id: str = Depends(current_user_id)):
-    _ensure_tables()
     stem = body.get("stem", "").strip()
     if not stem:
         raise HTTPException(400, "题干不能为空")
@@ -190,7 +162,6 @@ async def api_add_question(bank_id: str, body: dict, user_id: str = Depends(curr
 @router.post("/banks/{bank_id}/questions/copy")
 async def api_copy_questions(bank_id: str, body: dict, user_id: str = Depends(current_user_id)):
     """从其他题库复制题目到当前题库"""
-    _ensure_tables()
     question_ids = body.get("question_ids", [])
     source_bank_id = body.get("source_bank_id")
     if not question_ids and not source_bank_id:
@@ -207,7 +178,6 @@ async def api_copy_questions(bank_id: str, body: dict, user_id: str = Depends(cu
 @router.put("/banks/{bank_id}/questions/reorder")
 async def api_reorder_questions(bank_id: str, body: dict, user_id: str = Depends(current_user_id)):
     """批量调整题目顺序 (question_ids 按新顺序排列)"""
-    _ensure_tables()
     question_ids = body.get("question_ids", [])
     if not question_ids:
         raise HTTPException(400, "question_ids 不能为空")
@@ -217,7 +187,6 @@ async def api_reorder_questions(bank_id: str, body: dict, user_id: str = Depends
 
 @router.get("/questions/{question_id}")
 async def api_get_question(question_id: str, user_id: str = Depends(current_user_id)):
-    _ensure_tables()
     q = get_question(question_id, user_id)
     if not q:
         raise HTTPException(404, "题目不存在")
@@ -232,7 +201,6 @@ async def api_preview_question(
     include_materials: bool = True,
 ):
     """题目富预览：详情 + 相似题 + 关联资料 + 答题统计 + 知识点"""
-    _ensure_tables()
     preview = get_question_preview(
         question_id, user_id,
         include_similar=include_similar,
@@ -245,7 +213,6 @@ async def api_preview_question(
 
 @router.patch("/questions/{question_id}")
 async def api_update_question(question_id: str, body: dict, user_id: str = Depends(current_user_id)):
-    _ensure_tables()
     q = update_question(question_id, user_id, **body)
     if not q:
         raise HTTPException(404, "题目不存在")
@@ -254,7 +221,6 @@ async def api_update_question(question_id: str, body: dict, user_id: str = Depen
 
 @router.delete("/questions/{question_id}")
 async def api_delete_question(question_id: str, user_id: str = Depends(current_user_id)):
-    _ensure_tables()
     ok = delete_question(question_id, user_id)
     if not ok:
         raise HTTPException(404, "题目不存在")
@@ -263,14 +229,12 @@ async def api_delete_question(question_id: str, user_id: str = Depends(current_u
 
 @router.post("/questions/{question_id}/favorite")
 async def api_toggle_favorite(question_id: str, user_id: str = Depends(current_user_id)):
-    _ensure_tables()
     now_fav = toggle_favorite(question_id, user_id)
     return {"is_favorite": now_fav}
 
 
 @router.post("/questions/{question_id}/slash")
 async def api_toggle_slash(question_id: str, user_id: str = Depends(current_user_id)):
-    _ensure_tables()
     now_slashed = toggle_slash(question_id, user_id)
     return {"is_slashed": now_slashed}
 
@@ -281,16 +245,13 @@ async def api_toggle_slash(question_id: str, user_id: str = Depends(current_user
 
 @router.post("/resolve/conversation")
 async def api_resolve_conversation(body: dict, user_id: str = Depends(current_user_id)):
-    _ensure_tables()
     conv_id = body.get("conv_id", "")
     if not conv_id:
         raise HTTPException(400, "conv_id 不能为空")
-    bank_id = resolve_bank_for_conversation(
+    return resolve_and_get_bank_for_conversation(
         conv_id, user_id,
         user_specified_bank_id=body.get("bank_id"),
     )
-    bank = get_bank(bank_id, user_id)
-    return {"bank_id": bank_id, "bank": bank}
 
 
 @router.post("/resolve/node")
@@ -298,6 +259,4 @@ async def api_resolve_node(body: dict, user_id: str = Depends(current_user_id)):
     node_id = body.get("node_id", "")
     if not node_id:
         raise HTTPException(400, "node_id 不能为空")
-    bank_id = resolve_bank_for_node(node_id, user_id)
-    bank = get_bank(bank_id, user_id)
-    return {"bank_id": bank_id, "bank": bank}
+    return resolve_and_get_bank_for_node(node_id, user_id)

@@ -268,6 +268,64 @@ async def handle_question_generation(
     }
 
 
+async def generate_from_materials_request(
+    body: dict,
+    user_id: str,
+) -> dict:
+    """基于指定资料出题的请求级入口：参数归一化 → 题库解析 → 资料上下文 → 生成 → 响应组装。"""
+    _ensure_tables()
+
+    material_ids = body.get("material_ids", [])
+    subject = body.get("subject", "通用")
+    skill_id = body.get("skill_id", subject)
+    bloom_level = body.get("bloom_level", "apply")
+    difficulty = float(body.get("difficulty", 0.5))
+    count = max(1, min(10, int(body.get("count", 5))))
+    content_type = body.get("content_type", "choice")
+    bank_id = body.get("bank_id")
+    reference_mode = body.get("reference_mode", "reference")
+
+    if not bank_id:
+        bank_id = resolve_bank_for_conversation(
+            f"materials_{hash(str(material_ids))}", user_id
+        )
+
+    material_context = None
+    if material_ids:
+        material_context = await get_material_context(material_ids, user_id)
+
+    saved = await generate_and_save(
+        bank_id=bank_id,
+        user_id=user_id,
+        subject=subject,
+        skill_id=skill_id,
+        bloom_level=bloom_level,
+        difficulty=difficulty,
+        count=count,
+        content_type=content_type,
+        material_context=material_context,
+        reference_mode=reference_mode,
+    )
+
+    bank = get_bank(bank_id, user_id)
+    return {
+        "bank_id": bank_id,
+        "bank_name": bank["name"] if bank else "",
+        "generated": len(saved),
+        "questions": saved,
+        "has_material_context": material_context is not None,
+        "material_count": len(material_ids),
+        "params": {
+            "subject": subject,
+            "skill_id": skill_id,
+            "bloom_level": bloom_level,
+            "difficulty": difficulty,
+            "count": count,
+            "content_type": content_type,
+        },
+    }
+
+
 async def generate_for_conversation(
     conv_id: str,
     user_message: str,

@@ -25,7 +25,23 @@ def preview_import(
     解析文件 → 预览（含 AI 修正 + 认知节点匹配）
     """
     questions = parse_file(file_path, file_type)
+    return _build_preview_response(questions, user_id, source_file=Path(file_path).name, bank_id=bank_id)
 
+
+def preview_questions_from_text(text: str, user_id: str) -> dict:
+    """解析原始文本为题目预览（无需上传文件），含 AI 修正与认知节点匹配。"""
+    from .parser import parse_questions_from_text
+    questions = parse_questions_from_text(text)
+    return _build_preview_response(questions, user_id)
+
+
+def _build_preview_response(
+    questions: list[dict],
+    user_id: str,
+    source_file: str = "",
+    bank_id: Optional[str] = None,
+) -> dict:
+    """统一构建导入预览响应。"""
     total = len(questions)
     high_conf = 0
     low_conf = 0
@@ -40,12 +56,15 @@ def preview_import(
         node_ids = match_cognitive_nodes(q, user_id)
         q["suggested_node_ids"] = node_ids
 
-    return {
+    result = {
         "questions": questions,
         "stats": {"total": total, "high_confidence": high_conf, "low_confidence": low_conf},
-        "source_file": Path(file_path).name,
-        "suggestions": {"suggested_bank": bank_id or ""},
     }
+    if source_file:
+        result["source_file"] = source_file
+    if bank_id is not None:
+        result["suggestions"] = {"suggested_bank": bank_id or ""}
+    return result
 
 
 def confirm_import(
