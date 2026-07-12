@@ -16,7 +16,7 @@ import { navigateToProposal } from "@/store/notification/proposal-navigator";
 import type {
   SecretaryNotification, PageType, ActionType, NotificationSource,
 } from "@/store/notification/types";
-import EventStream from "@/components/secretary/EventStream";
+import LearningActivityStream from "@/components/secretary/LearningActivityStream";
 import {
   ACTION_TYPE_LABELS, TabKey, ViewMode, ProposalItem, SnapshotData, toNotification, confirmationToNotification,
 } from "@/components/secretary/shared";
@@ -156,7 +156,7 @@ export default function SecretaryPage() {
       }
       case "events": {
         list = [];
-        label = "事件流";
+        label = "学习活动";
         break;
       }
       default:
@@ -440,7 +440,7 @@ export default function SecretaryPage() {
           { key: "pending" as TabKey, label: "待处理", icon: Bell },
           { key: "snoozed" as TabKey, label: "已延后", icon: Timer },
           { key: "history" as TabKey, label: "历史", icon: Clock },
-          { key: "events" as TabKey, label: "事件流", icon: Activity },
+          { key: "events" as TabKey, label: "学习活动", icon: Activity },
         ]).map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -491,8 +491,8 @@ export default function SecretaryPage() {
       )}
 
       {/* ── 列表 / 分组视图 ── */}
-      {/* 事件流 tab — 独立渲染 */}
-      {activeTab === "events" && <EventStream />}
+      {/* 学习活动 tab — 独立渲染 */}
+      {activeTab === "events" && <LearningActivityStream />}
 
       {/* 通知 tabs */}
       {activeTab !== "events" && !loading && items.length === 0 ? (

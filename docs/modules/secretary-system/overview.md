@@ -171,6 +171,22 @@
 | 每日简报 | 每日学习摘要 | ✅ 已实现 |
 | 心情压力 | 手动记录 + 4 种干预 + 行为信号 | ✅ 已实现 |
 | Agent 助手 | SSE 流式对话 + 工具调用 | ✅ 已实现 |
+| 学习活动流 | 跨壳学习活动实时同步与多源聚合 | ✅ 已实现 (Task #118) |
+
+## 学习活动流 (Task #118)
+
+秘书页「学习活动」标签展示跨壳学习活动的实时流，数据来源与消费路径如下：
+
+| 项目 | 说明 |
+|------|------|
+| 事件源 | `AnswerSubmitted` / `SessionCompleted` / `FlashCardReviewed` / `ReadingSessionEnded` / `TreeNodeCreated` / `PlanItemCompleted` 等 |
+| 处理器 | `backend/app/application/handlers/learning_activity_handler.py` — `LearningActivityEventHandler` |
+| 存储 | `learning_activities` 表，按 `(user_id, idempotency_key)` 幂等 |
+| 实时通道 | `GET /api/activities/stream` SSE 端点，query token 认证 |
+| 事件总线 | `LearningActivityEventBus` 内存发布-订阅，按 user_id 隔离 |
+| 前端 Hook | `frontend/src/hooks/useLearningActivityStream.ts` |
+| 前端组件 | `frontend/src/components/secretary/LearningActivityStream.tsx` |
+| 多源冲突 | `SOURCE_AUTHORITY` 优先级：`practice(100) > error_book(90) > flashcard/reading(80) > knowledge_tree/planning(70) > secretary(60)` |
 
 ## 实现文档
 
@@ -180,6 +196,7 @@
 | [extension-modules.md](extension-modules.md) | 内置模块详解 |
 | [events.md](events.md) | 事件矩阵 + 联动关系 (Task #83) |
 | [design.md](design.md) | 设计原理 + 数据模型 (Task #83) |
+| [../../temp/task0114-learning-activity-realtime-sync-design.md](../../temp/task0114-learning-activity-realtime-sync-design.md) | Phase 3: 跨壳学习活动实时同步与多源聚合设计 |
 
 ## 工作流程
 

@@ -9,17 +9,31 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 
 from app.api.learning_activity.schemas import (
     LearningActivityListResponse,
     LearningActivityStatsResponse,
 )
 from app.api.learning_activity import service
+from app.application.handlers.learning_activity_event_bus import learning_activity_event_bus
 from app.domain.auth.dependencies import current_user_id
+from app.domain.auth.service import AuthService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/activities", tags=["Learning Activity 学习活动流"])
+
+
+def _user_id_from_query_token(request: Request) -> str | None:
+    """SSE 端点专用：EventSource 无法自定义 header，从 query token 解析 user_id。"""
+    token = request.query_params.get("token")
+    if not token:
+        return None
+    payload = AuthService.decode_token(token)
+    if not payload:
+        return None
+    return payload.get("sub")
 
 
 def _parse_iso_datetime(value: str | None) -> datetime | None:
@@ -80,3 +94,34 @@ async def get_activity_stats(
 
     data = service.get_stats(user_id, days=days, module=module)
     return LearningActivityStatsResponse(**data)
+
+
+@router.get(
+    "/stream",
+    summary="学习活动实时 SSE 流",
+)
+async def stream_activities(request: Request):
+    """SSE 端点 — 实时推送学习活动变更。
+
+    认证方式：EventSource 无法自定义 header，需通过 query token 传入：
+        /api/activities/stream?token=<jwt_access_token>
+
+    事件类型：
+      - connected: 连接建立
+      - activity_created: 新活动创建
+      - activity_updated: 活动更新（多源覆盖）
+      - heartbeat: 心跳保活
+    """
+    user_id = _user_id_from_query_token(request)
+    if not user_id:
+        raise HTTPException(401, "请先登录或提供有效 token")
+
+    return StreamingResponse(
+        learning_activity_event_bus.stream_events(user_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

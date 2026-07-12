@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -60,32 +61,57 @@ def _deep_link(module: str, ref_id: str, sub_id: str = "") -> str:
     return ""
 
 
-def _upsert_activity(record: dict[str, Any]) -> str | None:
-    """写入或跳过 learning_activities 表，返回 activity id。"""
+def _upsert_activity_sync(record: dict[str, Any]) -> tuple[str | None, str]:
+    """同步实现：写入或更新 learning_activities 表。
+
+    由 async 包装器在 executor 中调用，避免阻塞事件循环。
+    """
     from app.infrastructure.db.session import get_db_session
     from app.infrastructure.db.models.learning_activity import LearningActivityORM
+    from app.api.learning_activity.service import get_source_authority
     from sqlalchemy.exc import IntegrityError
 
     user_id = record.get("user_id")
     idempotency_key = record.get("idempotency_key")
+    module = record.get("module", "unknown")
     if not user_id:
-        return None
+        return None, "skipped"
 
     try:
         with get_db_session() as session:
-            # 幂等：同一用户 + 同一业务键只记录一次
+            new_authority = record.get("source_authority") or get_source_authority(module)
+
+            # 幂等：同一用户 + 同一业务键
             if idempotency_key:
                 existing = session.query(LearningActivityORM).filter_by(
                     user_id=user_id,
                     idempotency_key=idempotency_key,
-                ).first()
+                ).with_for_update().first()
                 if existing:
-                    return existing.id
+                    existing_authority = get_source_authority(existing.module)
+                    if new_authority >= existing_authority:
+                        # 覆盖更新
+                        existing.module = module
+                        existing.activity_type = record.get("activity_type", "unknown")
+                        existing.source_event_id = record.get("source_event_id") or existing.source_event_id
+                        existing.source_event_type = record.get("source_event_type") or existing.source_event_type
+                        existing.title = record.get("title", existing.title)
+                        existing.description = record.get("description", existing.description)
+                        existing.status = record.get("status", existing.status)
+                        existing.timestamp = record.get("timestamp") or existing.timestamp
+                        existing.deep_link = record.get("deep_link", existing.deep_link)
+                        existing.meta = {**(existing.meta or {}), **(record.get("meta") or {})}
+                        existing.updated_at = _now()
+                        session.commit()
+                        return existing.id, "activity_updated"
+                    else:
+                        # 低优先级来源，跳过
+                        return existing.id, "skipped"
 
             activity = LearningActivityORM(
                 user_id=user_id,
                 activity_type=record.get("activity_type", "unknown"),
-                module=record.get("module", "unknown"),
+                module=module,
                 source_event_id=record.get("source_event_id") or None,
                 source_event_type=record.get("source_event_type") or None,
                 idempotency_key=idempotency_key,
@@ -106,11 +132,20 @@ def _upsert_activity(record: dict[str, Any]) -> str | None:
                     user_id=user_id,
                     idempotency_key=idempotency_key,
                 ).first()
-                return existing.id if existing else None
-            return activity.id
+                return (existing.id, "skipped") if existing else (None, "skipped")
+            return activity.id, "activity_created"
     except Exception:
         logger.exception("写入 learning_activities 失败: %s", record.get("source_event_type"))
-        return None
+        return None, "skipped"
+
+
+async def _upsert_activity(record: dict[str, Any]) -> tuple[str | None, str]:
+    """写入或更新 learning_activities 表，返回 (activity_id, event_type)。
+
+    event_type 为 'activity_created' | 'activity_updated' | 'skipped'。
+    """
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _upsert_activity_sync, record)
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -572,82 +607,94 @@ class LearningActivityEventHandler:
 
     # ── 事件处理入口 ──
 
-    async def _on_answer_submitted(self, event: Any) -> None:
-        if not isinstance(event, AnswerSubmitted):
+    @staticmethod
+    async def _handle(record: dict[str, Any] | None) -> None:
+        if not record:
             return
-        _upsert_activity(_record_answer_submitted(event))
+        activity_id, change_type = await _upsert_activity(record)
+        if activity_id and change_type in ("activity_created", "activity_updated"):
+            try:
+                from app.application.handlers.learning_activity_event_bus import (
+                    learning_activity_event_bus,
+                )
+                await learning_activity_event_bus.publish(
+                    event_type=change_type,
+                    user_id=record.get("user_id", ""),
+                    activity_id=activity_id,
+                    data={
+                        "activity_type": record.get("activity_type"),
+                        "module": record.get("module"),
+                        "title": record.get("title"),
+                        "description": record.get("description"),
+                        "status": record.get("status"),
+                        "timestamp": record.get("timestamp").isoformat() if record.get("timestamp") else None,
+                        "deep_link": record.get("deep_link"),
+                        "meta": record.get("meta") or {},
+                        "idempotency_key": record.get("idempotency_key"),
+                    },
+                )
+            except Exception:
+                logger.debug("发布 LearningActivity SSE 事件失败", exc_info=True)
+
+    async def _on_answer_submitted(self, event: Any) -> None:
+        if isinstance(event, AnswerSubmitted):
+            await self._handle(_record_answer_submitted(event))
 
     async def _on_session_completed(self, event: Any) -> None:
-        if not isinstance(event, SessionCompleted):
-            return
-        _upsert_activity(_record_session_completed(event))
+        if isinstance(event, SessionCompleted):
+            await self._handle(_record_session_completed(event))
 
     async def _on_flashcard_reviewed(self, event: Any) -> None:
-        if not isinstance(event, FlashCardReviewed):
-            return
-        _upsert_activity(_record_flashcard_reviewed(event))
+        if isinstance(event, FlashCardReviewed):
+            await self._handle(_record_flashcard_reviewed(event))
 
     async def _on_flashcard_created(self, event: Any) -> None:
-        if not isinstance(event, FlashCardCreated):
-            return
-        _upsert_activity(_record_flashcard_created(event))
+        if isinstance(event, FlashCardCreated):
+            await self._handle(_record_flashcard_created(event))
 
     async def _on_flashcard_session_ended(self, event: Any) -> None:
-        if not isinstance(event, FlashCardSessionEnded):
-            return
-        _upsert_activity(_record_flashcard_session_ended(event))
+        if isinstance(event, FlashCardSessionEnded):
+            await self._handle(_record_flashcard_session_ended(event))
 
     async def _on_reading_session_ended(self, event: Any) -> None:
-        if not isinstance(event, ReadingSessionEnded):
-            return
-        _upsert_activity(_record_reading_session_ended(event))
+        if isinstance(event, ReadingSessionEnded):
+            await self._handle(_record_reading_session_ended(event))
 
     async def _on_reading_annotation_created(self, event: Any) -> None:
-        if not isinstance(event, ReadingAnnotationCreated):
-            return
-        _upsert_activity(_record_reading_annotation_created(event))
+        if isinstance(event, ReadingAnnotationCreated):
+            await self._handle(_record_reading_annotation_created(event))
 
     async def _on_reading_material_completed(self, event: Any) -> None:
-        if not isinstance(event, ReadingMaterialCompleted):
-            return
-        _upsert_activity(_record_reading_material_completed(event))
+        if isinstance(event, ReadingMaterialCompleted):
+            await self._handle(_record_reading_material_completed(event))
 
     async def _on_reading_progress_updated(self, event: Any) -> None:
-        if not isinstance(event, MaterialProgressUpdated):
-            return
-        record = _record_reading_progress_updated(event)
-        if record:
-            _upsert_activity(record)
+        if isinstance(event, MaterialProgressUpdated):
+            await self._handle(_record_reading_progress_updated(event))
 
     async def _on_tree_node_created(self, event: Any) -> None:
-        if not isinstance(event, TreeNodeCreated):
-            return
-        _upsert_activity(_record_tree_node_created(event))
+        if isinstance(event, TreeNodeCreated):
+            await self._handle(_record_tree_node_created(event))
 
     async def _on_tree_node_linked(self, event: Any) -> None:
-        if not isinstance(event, TreeNodeLinkedToCognitiveNode):
-            return
-        _upsert_activity(_record_tree_node_linked(event))
+        if isinstance(event, TreeNodeLinkedToCognitiveNode):
+            await self._handle(_record_tree_node_linked(event))
 
     async def _on_plan_item_completed(self, event: Any) -> None:
-        if not isinstance(event, PlanItemCompleted):
-            return
-        _upsert_activity(_record_plan_item_completed(event))
+        if isinstance(event, PlanItemCompleted):
+            await self._handle(_record_plan_item_completed(event))
 
     async def _on_plan_item_started(self, event: Any) -> None:
-        if not isinstance(event, PlanItemStarted):
-            return
-        _upsert_activity(_record_plan_item_started(event))
+        if isinstance(event, PlanItemStarted):
+            await self._handle(_record_plan_item_started(event))
 
     async def _on_error_book_reviewed(self, event: Any) -> None:
-        if not isinstance(event, ErrorBookEntryReviewed):
-            return
-        _upsert_activity(_record_error_book_reviewed(event))
+        if isinstance(event, ErrorBookEntryReviewed):
+            await self._handle(_record_error_book_reviewed(event))
 
     async def _on_error_book_resolved(self, event: Any) -> None:
-        if not isinstance(event, ErrorBookEntryResolved):
-            return
-        _upsert_activity(_record_error_book_resolved(event))
+        if isinstance(event, ErrorBookEntryResolved):
+            await self._handle(_record_error_book_resolved(event))
 
 
 # 全局单例

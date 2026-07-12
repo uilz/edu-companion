@@ -11,6 +11,36 @@ from app.infrastructure.db.models.learning_activity import LearningActivityORM
 from app.infrastructure.db.session import get_db_session
 
 
+# 来源优先级：数值越高越权威。
+# 用于多源聚合冲突解决：同一 idempotency_key 被多个来源写入时，
+# 高优先级覆盖低优先级。
+SOURCE_AUTHORITY: dict[str, int] = {
+    "practice": 100,
+    "error_book": 90,
+    "flashcard": 80,
+    "reading": 80,
+    "knowledge_tree": 70,
+    "planning": 70,
+    "secretary": 60,
+}
+
+
+def get_source_authority(module: str) -> int:
+    return SOURCE_AUTHORITY.get(module, 50)
+
+
+def get_activity_by_idempotency_key(user_id: str, idempotency_key: str) -> dict[str, Any] | None:
+    """通过业务幂等键查询单条活动。"""
+    with get_db_session() as session:
+        activity = session.query(LearningActivityORM).filter_by(
+            user_id=user_id,
+            idempotency_key=idempotency_key,
+        ).first()
+        if activity is None:
+            return None
+        return _orm_to_dict(activity)
+
+
 def list_activities(
     user_id: str,
     *,
