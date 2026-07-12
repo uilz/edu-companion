@@ -1,179 +1,219 @@
-# Reading 事件 schema
+# 阅读壳事件协议
 
-> Reading 模块产生和消费的事件定义。
-
-**ADR**：[`docs/adr/0003-reading-module.md`](../../adr/0003-reading-module.md)
+> 阅读壳通过事件总线发布用户阅读行为，供秘书编排器、规划壳、认知状态中心等消费；同时消费来自规划壳和认知状态中心的事件。
 
 ---
 
-## 1. 事件清单
+## 发出的事件
 
-| 事件 | 触发时机 |
+### 会话生命周期
+
+#### `ReadingSessionStarted`
+
+阅读会话开始。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `user_id` | str | 用户 ID |
+| `session_id` | str | 会话 ID |
+| `material_id` | str | 材料 ID |
+| `mode` | `intensive` \| `skim` \| `review` | 阅读模式 |
+| `started_at` | datetime | 开始时间 |
+
+#### `ReadingSessionEnded`
+
+阅读会话结束。关键事件，触发秘书与规划模块联动。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `user_id` | str | 用户 ID |
+| `session_id` | str | 会话 ID |
+| `material_id` | str | 材料 ID |
+| `duration_seconds` | float | 阅读时长（秒） |
+| `annotations_count` | int | 标注数量 |
+| `notes_count` | int | 创建的 FlashCard 反思型数量 |
+| `cards_generated` | int | 生成的卡片数量 |
+| `linked_node_ids` | list[str] | 关联的认知节点 ID 列表 |
+| `ended_at` | datetime | 结束时间 |
+
+#### `ReadingSessionResumed`
+
+中断后恢复阅读会话。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `user_id` | str | 用户 ID |
+| `session_id` | str | 会话 ID |
+| `last_chunk_id` | str | 最后浏览的 chunk ID |
+| `resumed_at` | datetime | 恢复时间 |
+
+#### `ReadingModeChanged`
+
+阅读模式切换。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `user_id` | str | 用户 ID |
+| `session_id` | str | 会话 ID |
+| `old_mode` | `intensive` \| `skim` \| `review` | 旧模式 |
+| `new_mode` | `intensive` \| `skim` \| `review` | 新模式 |
+| `changed_at` | datetime | 切换时间 |
+
+---
+
+### 标注
+
+#### `ReadingAnnotationCreated`
+
+创建标注（5 颜色多意图分类）。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `user_id` | str | 用户 ID |
+| `annotation_id` | str | 标注 ID |
+| `material_id` | str | 材料 ID |
+| `chunk_id` | str | Chunk ID |
+| `color` | `yellow` \| `blue` \| `green` \| `purple` \| `orange` | 颜色 |
+| `intent` | `important_concept` \| `data_fact` \| `quotable` \| `doubt` \| `conflict` | 意图 |
+| `linked_node_id` | str | 关联认知节点 ID（可选） |
+| `created_at` | datetime | 创建时间 |
+
+#### `ReadingAnnotationUpdated`
+
+更新标注。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `user_id` | str | 用户 ID |
+| `annotation_id` | str | 标注 ID |
+| `changed_fields` | list[str] | 变更字段列表 |
+| `updated_at` | datetime | 更新时间 |
+
+#### `ReadingAnnotationDeleted`
+
+删除标注。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `user_id` | str | 用户 ID |
+| `annotation_id` | str | 标注 ID |
+| `deleted_at` | datetime | 删除时间 |
+
+#### `ReadingAnnotationProcessed`
+
+标注被处理（提取为 FlashCard / 发起对话 / 转知识点）。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `user_id` | str | 用户 ID |
+| `annotation_id` | str | 标注 ID |
+| `target_module` | `flashcard` \| `conversation` \| `cognitive_node` \| `project` | 目标模块 |
+| `target_ref_id` | str | 目标模块产生记录的 ID |
+| `processed_at` | datetime | 处理时间 |
+
+---
+
+### 笔记与提醒
+
+#### `ReadingNoteCreated`
+
+阅读笔记创建（实际是创建 FlashCard 反思型）。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `user_id` | str | 用户 ID |
+| `material_id` | str | 材料 ID |
+| `card_id` | str | FlashCard ID |
+| `source` | `reading_note` | 固定值 |
+| `cross_module_source` | `reading` \| `None` | 跨模块引用来源 |
+| `created_at` | datetime | 创建时间 |
+
+#### `ReadingReviewReminderScheduled`
+
+阅读回顾提醒已排入 Planning（复用 PlanItem）。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `user_id` | str | 用户 ID |
+| `material_id` | str | 材料 ID |
+| `reminder_days` | int | 提醒间隔天数（7/30/90） |
+| `scheduled_for` | datetime | 计划提醒时间 |
+| `plan_item_id` | str | PlanItem ID |
+
+---
+
+### 进度与对比
+
+#### `MaterialProgressUpdated`
+
+阅读材料进度更新。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `user_id` | str | 用户 ID |
+| `source_module` | str | 固定为 `reading` |
+| `material_id` | str | 材料 ID |
+| `session_id` | str | 会话 ID |
+| `progress_pct` | float | 进度百分比 0.0-1.0 |
+| `last_chunk_id` | str | 最后浏览 chunk ID |
+| `last_offset` | int | 最后浏览 offset |
+| `updated_at` | datetime | 更新时间 |
+
+#### `ReadingMaterialCompleted`
+
+阅读材料完成（progress_pct 达到阈值或用户手动标记完成）。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `user_id` | str | 用户 ID |
+| `source_module` | str | 固定为 `reading` |
+| `material_id` | str | 材料 ID |
+| `session_id` | str | 会话 ID |
+| `progress_pct` | float | 完成时进度百分比 |
+| `duration_seconds` | int | 总阅读时长（秒） |
+| `completed_at` | datetime | 完成时间 |
+
+#### `ReadingComparisonCreated`
+
+创建对比阅读分组。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `user_id` | str | 用户 ID |
+| `comparison_id` | str | 对比分组 ID |
+| `material_id_left` | str | 左侧材料 ID |
+| `material_id_right` | str | 右侧材料 ID |
+| `sync_scroll` | bool | 是否同步滚动 |
+| `created_at` | datetime | 创建时间 |
+
+---
+
+## 消费的事件
+
+### `PlanItemCompleted`
+
+当 `source_module='reading'` 的 PlanItem（回顾提醒）被完成时，规划壳通过 `completion_writer.py` 路由回阅读壳，阅读壳可据此更新材料复习状态或发布后续事件。
+
+### `CognitiveStateChanged`
+
+认知状态中心发布。阅读壳刷新已关联认知节点的掌握度展示（如高亮已掌握/薄弱知识点）。
+
+---
+
+## 事件发布位置
+
+| 事件 | 发布位置 |
 |------|---------|
-| `ReadingSessionStarted` | 用户开始阅读会话 |
-| `ReadingSessionEnded` | 用户结束阅读会话 |
-| `ReadingSessionResumed` | 中断后恢复会话 |
-| `ReadingAnnotationCreated` | 创建标注 |
-| `ReadingAnnotationUpdated` | 修改标注 |
-| `ReadingAnnotationDeleted` | 删除标注 |
-| `ReadingAnnotationProcessed` | 标注被处理（提取/转卡片/转对话）|
-| `ReadingNoteCreated` | 创建笔记（实际是创建 FlashCard 反思型）|
-| `ReadingReviewReminderScheduled` | 触发 0006 Planning 回顾提醒 |
-
----
-
-## 2. 事件 Schema
-
-### 2.1 阅读会话
-
-```python
-class ReadingSessionStarted(DomainEvent):
-    user_id: str
-    session_id: str
-    material_id: str
-    mode: Literal["intensive", "skim", "review"]
-    started_at: datetime
-
-class ReadingSessionEnded(DomainEvent):
-    user_id: str
-    session_id: str
-    material_id: str
-    duration_seconds: float
-    annotations_count: int
-    notes_count: int  # 创建的 FlashCard 反思型数量（cross_module_source='reading'）
-    cards_generated: int
-    linked_node_ids: list[str]  # 本次会话关联/创建的 CognitiveNode（统一命名，原 nodes_linked）
-    ended_at: datetime
-
-class ReadingSessionResumed(DomainEvent):
-    user_id: str
-    session_id: str
-    resumed_at: datetime
-    last_chunk_id: str
-```
-
-### 2.2 标注事件
-
-```python
-class ReadingAnnotationCreated(DomainEvent):
-    user_id: str
-    annotation_id: str
-    material_id: str
-    chunk_id: str
-    color: Literal["yellow", "blue", "green", "purple", "orange"]
-    intent: Literal["important_concept", "data_fact", "quotable", "doubt", "conflict"]
-    linked_node_id: str | None
-    created_at: datetime
-
-class ReadingAnnotationUpdated(DomainEvent):
-    user_id: str
-    annotation_id: str
-    changed_fields: list[str]
-    updated_at: datetime
-
-class ReadingAnnotationDeleted(DomainEvent):
-    user_id: str
-    annotation_id: str
-    deleted_at: datetime
-
-class ReadingAnnotationProcessed(DomainEvent):
-    """标注被处理（提取为 FlashCard、发起对话、转知识点）"""
-    user_id: str
-    annotation_id: str
-    # target_module 必须为 CrossModuleTarget 枚举的合法值（来自 shared.events.CrossModuleTarget）
-    #   - flashcard      : 提取为 FlashCard
-    #   - conversation   : 发起对话
-    #   - cognitive_node : 转为知识点
-    target_module: CrossModuleTarget = CrossModuleTarget.FLASHCARD
-    target_ref_id: str
-    processed_at: datetime
-```
-
-### 2.3 笔记与提醒
-
-```python
-class ReadingNoteCreated(DomainEvent):
-    """实际是创建 FlashCard 反思型"""
-    user_id: str
-    material_id: str
-    card_id: str              # FlashCard.id
-    # source: 本模块内部来源（笔记的内部归类）
-    #   - reading_note : 阅读笔记反思型
-    # cross_module_source: 跨模块引用来源（与 source 互斥，二选一）
-    #   - reading      : 来自阅读模块（当前唯一合法跨模块来源）
-    source: Literal["reading_note"] = "reading_note"
-    cross_module_source: Literal["reading"] | None = "reading"
-    created_at: datetime
-
-class ReadingReviewReminderScheduled(DomainEvent):
-    """触发 0006 Planning 回顾提醒"""
-    user_id: str
-    material_id: str
-    reminder_days: int        # 7 / 30 / 90
-    scheduled_for: datetime
-    plan_item_id: str         # 0006 PlanItem.id
-```
-
----
-
-## 3. 事件消费者
-
-### 3.1 本模块消费
-
-- `ReadingSessionStarted` → 写入 `reading_sessions` 表
-- `FlashCardCreated`（`source='reading_note'`）→ 更新 `reading_sessions.notes_count`
-
-### 3.2 其他模块消费
-
-| 事件 | 消费者 | 行为 |
-|------|--------|------|
-| `ReadingAnnotationCreated` | 秘书系统 | 记录阅读活动 |
-| `ReadingSessionEnded` | 规划模块 | 计算下次回顾提醒 |
-| `ReadingSessionEnded` | 知识图谱 | 更新关联节点的最近访问时间 |
-| `ReadingNoteCreated` | 知识图谱 | 关联 `linked_node_ids` 记录 |
-| `ReadingAnnotationProcessed`（target=flashcard）| FlashCard | 显示标注来源 |
-| `ReadingAnnotationProcessed`（target=cognitive_node）| 知识图谱 | 显示标注引用 |
-| `ReadingReviewReminderScheduled` | 0006 Planning | 创建 `PlanItem`（`source_module='reading'`）|
-
-### 3.3 不更新的状态
-
-**关键设计原则**：
-
-- `ReadingSessionEnded` **不**触发 `CognitiveNode.Belief` 更新
-- 标注创建/笔记创建**不**触发 `Belief` 更新
-- Belief 的合法来源仅：练习答题、FlashCard 复习、对话深度参与、错题标记
-- **阅读是被动接收，不构成"主动学习行为"**
-
----
-
-## 4. 事件粒度
-
-### 4.1 标注处理粒度
-
-- `ReadingAnnotationProcessed` 每次**单个目标**发一次事件
-- 同一标注同时提取到 FlashCard 和知识点，发**两次**事件
-
-### 4.2 笔记创建粒度
-
-- 每创建一个反思型 FlashCard 发**一次** `ReadingNoteCreated`
-- `source='reading_note'` 标识
-- `card_id` 字段关联 `flashcards.id`
-
-### 4.3 回顾提醒粒度
-
-- 用户设置"阅读后 N 天回顾"时，发**一次** `ReadingReviewReminderScheduled`
-- 0006 接收后创建 `PlanItem`（`source_module='reading'`，`target_type='reading'`）
-
----
-
-## 5. 与 0006 Planning 的事件协调
-
-```
-ReadingSessionEnded
-    └─→ 规划模块消费
-        └─→ 创建 PlanItemScheduled(source_module='reading')
-            └─→ N 天后触发 PlanItemActivated
-                └─→ 用户看到"回顾阅读"提醒
-```
-
-**不**新建独立提醒系统，**完全**复用 0006 Planning 的事件链。
+| `ReadingSessionStarted` | `app/services/reading/sessions.py` |
+| `ReadingSessionEnded` | `app/services/reading/sessions.py` |
+| `ReadingSessionResumed` | `app/services/reading/sessions.py` |
+| `ReadingModeChanged` | `app/services/reading/sessions.py` |
+| `ReadingAnnotationCreated` | `app/services/reading/annotations.py` |
+| `ReadingAnnotationUpdated` | `app/services/reading/annotations.py` |
+| `ReadingAnnotationDeleted` | `app/services/reading/annotations.py` |
+| `ReadingAnnotationProcessed` | `app/services/reading/annotations.py` |
+| `ReadingNoteCreated` | `app/services/reading/notes.py` |
+| `ReadingReviewReminderScheduled` | `app/services/reading/review_reminder.py` |
+| `ReadingComparisonCreated` | `app/services/reading/compare.py` |
+| `MaterialProgressUpdated` | `app/services/reading/sessions.py` |
+| `ReadingMaterialCompleted` | `app/services/reading/sessions.py` |

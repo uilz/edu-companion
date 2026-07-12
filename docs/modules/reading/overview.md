@@ -1,274 +1,164 @@
-# Reading（知识加工车间）
+# 阅读壳（Reading Shell）
 
-> 在 file-management 之上的**阅读体验 + 加工工具**增强层。
-
-**ADR**：[`docs/adr/0003-reading-module.md`](../../adr/0003-reading-module.md)
+> 用户与「学习材料」之间的交互界面：把 PDF、文章、视频等原始材料组织成可阅读、可标注、可笔记、可复习的认知加工入口。
 
 ---
 
-## 1. 模块定位
+## 定位
 
-Reading **不是文档查看器**，而是**知识加工车间**。帮助用户在阅读过程中完成**信息拆解、关联、转化**，让每一处标注都能进入卡片、知识图谱、练习系统。
+阅读壳是「认知操作系统 + 场景壳层」架构中的场景壳层之一，负责：
 
-**解决**：用户阅读后如何系统化拆解、关联知识，把单次阅读转化为长期学习资产。
+1. 在 `file-management` 之上提供阅读体验增强层（章节展示、阅读模式、标注、笔记、对比、回顾）。
+2. 把用户的阅读行为（标注、笔记、进度、模式切换）转化为学习事实事件，供认知诊断、秘书提案、规划安排消费。
+3. 与认知节点、闪卡、对话、规划、项目等壳层通过事件协议联动，但不直接维护它们的内部状态。
 
-**不解决**：材料的存储和解析（由 file-management 负责）；阅读后的状态管理（由知识图谱负责）；间隔重复调度（由 FlashCard 负责）。
+### 与 file-management 的关系
+
+| 层级 | 职责 | 现有归属 |
+|------|------|---------|
+| 存储/解析层 | 文件上传、格式解析、分块、向量化、TOC、RAG 索引 | `file-management` |
+| **阅读体验层** | 章节展示、阅读模式、标注、笔记、对比、回顾 | **阅读壳（本模块）** |
+| 知识层 | 知识点状态、掌握度、关联 | `CognitiveNode` |
+| 材料层 | FlashCard / Question / ErrorBookEntry / ExplainCard | 已有 + FlashCard 模块 |
+
+### 不做的事
+
+| 禁止项 | 原因 | 应该由谁做 |
+|--------|------|-----------|
+| 直接更新认知投影 | 破坏 SSOT | 认知状态中心 |
+| 维护闪卡复习调度 | 属于闪卡壳 | 闪卡壳 |
+| 维护计划项生命周期 | 属于规划壳 | 规划壳 |
+| 生成跨模块计划 | 属于秘书编排器 | 秘书编排器 |
+| 直接维护错题本 | 属于练习壳 | 练习壳 |
 
 ---
 
-## 2. 层级定位（4 层）
+## 核心实体
 
-| 层级 | 职责 | 归属 |
+| 实体 | 说明 | 对应表 |
+|------|------|--------|
+| Reading Material | 原始学习材料（复用 `file-management` 的 `Material`） | `materials` |
+| Material Chunk | 材料分块/章节（复用 `file-management` 的 `MaterialChunk`） | `material_chunks` |
+| Reading Session | 一次阅读会话 | `reading_sessions` |
+| Reading Annotation | 5 色多意图高亮标注 | `reading_annotations` |
+| Reading Note | 阅读笔记（复用 FlashCard 反思型） | `flashcards`（`source='reading_note'`） |
+| Review Reminder | 阅读回顾提醒（复用 PlanItem） | `plan_items`（`source_module='reading'`） |
+| Reading Comparison | 对比阅读分组 | `reading_comparisons` |
+| Reading Prefs | 用户阅读偏好 | `reading_prefs` |
+
+---
+
+## 核心功能
+
+| 功能 | 说明 | 状态 |
 |------|------|------|
-| 存储/解析层 | 上传、解析、分块、向量化、TOC、RAG | `file-management`（已有）|
-| **阅读体验层** | 章节展示、标注、笔记、模式、对比 | **本模块** |
-| 知识层 | 知识点状态 | `CognitiveNode` |
-| 材料层 | `FlashCard` / `Question` / `ErrorBookEntry` | 已有各模块 |
-
-**核心原则**：Reading 是 file-management 之上的"体验层"，不重建存储、不重建解析、不重建索引。
-
----
-
-## 3. 复用 vs 新建
-
-### 3.1 复用（不重新造轮子）
-
-| 复用项 | 来源 |
-|--------|------|
-| 章节结构 | `Material.table_of_contents` |
-| 段落锚点 | `MaterialChunk.chunk_id` |
-| 知识点匹配 | `MaterialChunk.embedding` + `CognitiveNode.embedding` |
-| 上下文对话 | `ExplainCard` |
-| 多源卡片提取 | `FlashCard` 多源提取接口 |
-| 回顾提醒 | **0006 Planning 提醒机制** |
-| 趋势展示 | 秘书 `daily_brief` |
-
-### 3.2 新建（独立表）
-
-- `reading_annotations`（标注）
-- `reading_sessions`（阅读会话）
-- **阅读笔记 = 复用 FlashCard 反思型**（`source='reading_note'`）— **不新建 reading_notes**
+| 阅读会话 | 开始、继续、结束会话；中断恢复；模式切换 | 已实现 |
+| 5 色多意图标注 | yellow/blue/green/purple/orange 对应重要概念/数据事实/可引用/疑问/冲突 | 已实现 |
+| 标注处理 | 将标注提取为 FlashCard / 发起对话 / 转认知节点 | 已实现 |
+| 阅读笔记 | 创建 FlashCard 反思型，自动获得 FSRS 调度 | 已实现 |
+| 节点关联 | 标注/笔记关联到认知节点 | 已实现 |
+| 进度追踪 | 阅读位置、完成百分比、访问章节 | 已实现 |
+| 对比阅读 | 两篇材料并排对比、同步滚动 | 已实现 |
+| 回顾提醒 | 基于材料创建复习计划项（复用规划壳） | 已实现 |
+| 阅读偏好 | 默认模式、高亮设置、复习间隔等 | 已实现 |
+| 颜色后续动作映射 | 前后端共享 5 色 → 意图 → 后续动作元数据 | 已实现 |
 
 ---
 
-## 4. 阅读中的知识互动
+## API 概览
 
-### 4.1 已有知识点高亮（分层显示）
+统一前缀：`/api/reading`
 
-- 知识图谱节点与正文匹配（**混合策略**：标签精确匹配 + embedding 相似度）
-- 核心知识点（掌握度高）淡标记，薄弱知识点醒目标记
-- 悬停弹出：概念定义、掌握度、关联卡片数、上次复习时间
-- 点击跳转：进入该知识点的完整页面
-
-### 4.2 划线与标注（多用途分类，5 种颜色）
-
-| 颜色 | 意图 | 后续动作提示 |
-|------|------|-------------|
-| 黄色 | 重要概念 | 关联知识点或创建 FlashCard |
-| 蓝色 | 数据/事实 | 提取为数据卡片 |
-| 绿色 | 可引用段落 | 保留为原文引用 |
-| 紫色 | 疑问/反驳 | 发起对话讨论 |
-| 橙色 | 与其他内容冲突 | 对比分析 |
-
-标注在侧栏形成结构化列表，按颜色分类、按章节分组。
-
-### 4.3 上下文提问
-
-- 选中文本唤起对话
-- **复用 `ExplainCard` 浮卡机制**（已实现完整机制）
-- 对话自动携带：选中文本、章节上下文、已关联知识点
-- 对话结果可保存为笔记（FlashCard 反思型）或转为 FlashCard
-
-### 4.4 跨材料参照提示
-
-- 用户选中一段文本关联到知识点 X 时，系统检索该知识点的已有引用
-- 显示"其他材料引用"，列出书名和段落摘要
-- 点击跳转
+| 方法 | 路由 | 功能 |
+|------|------|------|
+| POST | `/sessions` | 开始阅读会话 |
+| GET | `/sessions/active` | 查询某材料的未结束会话 |
+| GET | `/sessions/{id}` | 查询会话 |
+| GET | `/sessions` | 列出阅读会话 |
+| POST | `/sessions/{id}/end` | 结束会话 |
+| POST | `/sessions/{id}/mode` | 切换阅读模式 |
+| POST | `/sessions/{id}/activity` | 增量更新会话活动 |
+| POST | `/annotations` | 创建标注 |
+| GET | `/annotations/{id}` | 查询标注 |
+| GET | `/materials/{id}/annotations` | 列出某材料标注（支持按颜色分组） |
+| PATCH | `/annotations/{id}` | 更新标注 |
+| DELETE | `/annotations/{id}` | 删除标注 |
+| POST | `/annotations/{id}/process` | 标记标注已处理 |
+| POST | `/notes` | 创建阅读笔记（FlashCard 反思型） |
+| GET | `/notes` | 列出阅读笔记 |
+| POST | `/review-reminder` | 创建回顾提醒（PlanItem） |
+| GET | `/review-reminder` | 查询待处理回顾提醒 |
+| DELETE | `/review-reminder/{plan_item_id}` | 取消回顾提醒 |
+| GET | `/prefs` | 获取阅读偏好 |
+| PATCH | `/prefs` | 更新阅读偏好 |
+| POST | `/compare` | 创建对比阅读分组 |
+| GET | `/compare` | 获取对比阅读分屏数据 |
+| GET | `/compare/list` | 查询对比阅读分组列表 |
+| GET | `/meta/colors` | 获取 5 色标注 → 后续动作映射 |
 
 ---
 
-## 5. 阅读笔记（复用 FlashCard 反思型）
+## 事件协议
 
-**关键决策**：**不**新建 `reading_notes` 表，笔记 = FlashCard 反思型。
+详见 [events.md](./events.md)。
 
-### 5.1 笔记到 FlashCard 的映射
+### 发出的事件
 
-| 笔记三段式 | 对应 FlashCard 字段 |
-|----------|------------------|
-| 我的问题 | `front_text`（正面）|
-| 关键论述 | `back_context`（反面附加）|
-| 我的回应 | `back_text`（反面）|
-| 关联材料 | `source_ref.material_id` |
-| 关联段落 | `source_ref.chunk_id_range` |
-| 关联知识点 | `linked_node_ids` |
-| 来源 | `source='reading_note'` |
+- `ReadingSessionStarted`
+- `ReadingSessionEnded`
+- `ReadingSessionResumed`
+- `ReadingModeChanged`
+- `ReadingAnnotationCreated`
+- `ReadingAnnotationUpdated`
+- `ReadingAnnotationDeleted`
+- `ReadingAnnotationProcessed`
+- `ReadingNoteCreated`
+- `ReadingReviewReminderScheduled`
+- `ReadingComparisonCreated`
+- `MaterialProgressUpdated`
+- `ReadingMaterialCompleted`
 
-### 5.2 复用优势
+### 消费的事件
 
-- **纵向对比**：反思卡片的特殊功能"定期回顾对比回答变化"自动实现
-- **统一复习入口**：笔记与其他 FlashCard 一起进入 FSRS 调度
-- **避免双数据结构**：所有复习材料都在 `flashcards` 表
-- **Belief 更新一致**：用户复习笔记时触发 `FlashCardReviewed`
-
----
-
-## 6. 阅读后的综合处理
-
-### 6.1 阅读收获面板
-
-完成阅读后系统汇总所有标注、笔记、提问、关联知识点。
-
-用户可在此：
-
-- 复查所有标注，删改无用的
-- 标注拖入"生成卡片"区域（批量）
-- 标注拖入"更新知识点"区域
-- 笔记拖入"生成练习"区域（可选）
-
-所有操作由用户手动执行。
-
-### 6.2 阅读回顾提醒（复用 0006 Planning）
-
-- 用户可设置"阅读后 N 天回顾"（默认 7/30/90 天）
-- 到时**触发 0006 Planning 提醒**——在用户打开应用时显示
-- 0006 触发 `PlanItemScheduled` 事件（`source_module='reading'`）
-- 与 FSRS 无关（FSRS 调度的是 FlashCard）
-- **不**新建独立提醒机制
-
-### 6.3 阅读事件
-
-完成阅读后触发 `ReadingSessionEnded` 事件，schema 见 `events.md`。
+- `PlanItemCompleted`：阅读回顾提醒被完成时，由规划壳路由回阅读壳更新状态。
+- `CognitiveStateChanged`：刷新已关联认知节点的掌握度展示。
 
 ---
 
-## 7. 阅读策略支持
+## 前端组件
 
-### 7.1 可选阅读模式
-
-- **精读模式**：边栏全展开，显示标注工具、知识点提示、笔记区
-- **略读模式**：边栏最小化，只保留目录和简单划线
-- **回顾模式**：只显示已有标注和笔记
-
-### 7.2 阅读速度与进度统计
-
-- 每章节的阅读用时
-- 全书预计完成时间
-- 纯客观统计，不催促、不评价
+| 组件/文件 | 职责 |
+|----------|------|
+| `frontend/src/app/reading/page.tsx` | 阅读材料入口 |
+| `frontend/src/app/reading/materials/[id]/page.tsx` | 单材料阅读器 |
+| `frontend/src/app/reading/notes/page.tsx` | 阅读笔记列表 |
+| `frontend/src/app/reading/compare/page.tsx` | 对比阅读 |
+| `frontend/src/lib/api/reading-api.ts` | `/api/reading` API 客户端与类型 |
 
 ---
 
-## 8. 多材料对比阅读
+## 后端结构
 
-- 左右分屏，各自独立滚动（可同步滚动）
-- 标注自动带上材料来源标记
-- 对比标注可导出为对比表（存入项目模块）或转为对比卡片
-
----
-
-## 9. 阅读材料版本管理
-
-- 同一材料的多个版本（PDF 扫描+文字版、原文+译文）归组为"同一材料的不同版本"
-- 可在版本间切换
-- 标注和笔记自动按版本分组，可跨版本查看
-
-**对比 vs 版本管理**：
-
-- 对比阅读 = 多个**独立材料**的分屏操作
-- 版本管理 = **同一材料**的多个版本归组
-
----
-
-## 10. 关键设计决策（10 个）
-
-| # | 决策点 | 方案 |
-|---|--------|------|
-| 1 | 与 file-management 关系 | **增强层**（不重建存储）|
-| 2 | 章节模型 | 复用 `Material.table_of_contents` |
-| 3 | 段落锚点 ID | 复用 `MaterialChunk.chunk_id` |
-| 4 | 术语嗅探归属 | 知识图谱模块 |
-| 5 | 知识点高亮匹配 | **混合策略**（标签 + embedding）|
-| 6 | 标注数据存储 | 新表 `reading_annotations` |
-| 7 | 笔记数据存储 | **复用 FlashCard 反思型** |
-| 8 | 上下文提问 | 复用 `ExplainCard` |
-| 9 | 回顾提醒与 FSRS 关系 | **复用 0006 Planning 提醒** |
-| 10 | 对比 vs 版本 | **清晰区分** |
-
----
-
-## 11. 系统边界
-
-**系统可做**：
-
-- 章节展示、标注、笔记、对比
-- 已有知识点高亮（混合匹配）
-- 标注汇总展示
-- 统计数据记录
-- 复用 0006 提醒机制
-- 复用 `ExplainCard` 对话
-
-**系统不做**：
-
-- 不自动摘要、自动提炼中心思想
-- 不自动推荐"重点读哪些部分"
-- 不自动创建知识点或卡片
-- 不自动判断"重要性"
-- **不**根据阅读内容更新 `CognitiveNode.Belief`（避免阅读行为过强影响认知状态）
-
----
-
-## 12. 与其他模块联动
-
-| 联动 | 内容 |
+| 路径 | 职责 |
 |------|------|
-| 知识图谱 | 高亮、悬停、关联、创建新知识点 |
-| FlashCard | 笔记（反思型）、标注转卡片、批量提取 |
-| 对话模块 | 上下文提问（`ExplainCard`）|
-| 练习 | 笔记生成自测题（手动）|
-| 项目 | 材料关联为项目节点、对比阅读输出到项目 |
-| 规划 | 阅读回顾提醒 |
-| 事件流 | `ReadingSessionEnded` 事件 |
+| `backend/app/api/reading/routes.py` | REST API 路由（仅做 HTTP 转换、参数校验、错误映射） |
+| `backend/app/api/reading/schemas.py` | Pydantic 请求/响应模型 |
+| `backend/app/services/reading/sessions.py` | 阅读会话业务逻辑与事件发布 |
+| `backend/app/services/reading/annotations.py` | 标注 CRUD 与事件发布 |
+| `backend/app/services/reading/notes.py` | 阅读笔记（FlashCard 反思型）创建与事件发布 |
+| `backend/app/services/reading/review_reminder.py` | 回顾提醒（PlanItem）调度与事件发布 |
+| `backend/app/services/reading/compare.py` | 对比阅读分组与事件发布 |
+| `backend/app/services/reading/prefs.py` | 阅读偏好 CRUD |
+| `backend/app/services/reading/node_ref.py` | 标注/笔记与认知节点关联 |
+| `backend/app/infrastructure/db/reading_schema.sql` | 阅读模块表结构 |
 
 ---
 
-## 13. 3 个压力测试场景
+## 相关文档
 
-### 场景 A：纯阅读体验（精读 500 页教材）
-
-用户精读 500 页教材，做 100+ 标注、20+ 笔记。
-
-**压力测试点**：
-
-1. 大量标注/笔记的侧栏组织
-2. 阅读会话中断后的状态恢复
-3. 标注与笔记的批量编辑
-4. 已有知识点的高亮识别准确性
-
-### 场景 B：跨模块联动
-
-用户从标注提取 FlashCard，对比阅读输出到项目，事件进入规划。
-
-**压力测试点**：
-
-1. 标注 → FlashCard 的批量提取
-2. 对比阅读结果导出到项目成果板
-3. 阅读事件触发规划模块的回顾提醒
-4. 反思型笔记（`source='reading_note'`）进入 FSRS 调度
-
-### 场景 C：加工闭环
-
-阅读 → 对话 → 卡片 → 复习 → 回顾 → 更新 Belief 的完整链路。
-
-**压力测试点**：
-
-1. 上下文提问（`ExplainCard`）到复习卡的路径
-2. 反思型笔记的纵向对比
-3. 阅读事件流与全局事件流的整合
-4. **不**因阅读更新 Belief（保持设计原则）
-
----
-
-## 14. 相关文档
-
-- [`data-model.md`](./data-model.md) — 数据模型
-- [`events.md`](./events.md) — 事件 schema
-- [`docs/adr/0003-reading-module.md`](../../adr/0003-reading-module.md) — 架构决策记录
+- [events.md](./events.md)
+- [ADR 0003: Reading 模块](../adr/0003-reading-module.md)
+- [临时设计稿](/docs/temp/task0023-reading-shell-design.md)
+- [file-management 模块](../file-management/overview.md)
+- [flashcard 模块](../flashcard/overview.md)
+- [planning 模块](../planning/overview.md)
