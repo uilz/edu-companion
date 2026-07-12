@@ -22,6 +22,20 @@
          前端秘书面板
 ```
 
+## 服务层结构 (Task #168)
+
+秘书壳采用 **薄 API 路由 + 服务编排 + 领域引擎** 三层结构。API 路由仅负责 HTTP 转换、参数校验与错误映射，业务编排下沉到 `app/services/secretary/`。
+
+| 服务文件 | 职责 | 对应 API |
+|----------|------|----------|
+| `dashboard.py` | 仪表盘 6 类数据源聚合、30s 内存缓存、统计卡优先级 | `GET /api/secretary/dashboard` |
+| `proposal_actions.py` | 提案采纳后的动作执行、policy 记忆、plan_bridge 联动、`ProposalAccepted` 事件发布 | `POST /api/secretary/proposals/{id}/accept` / `dismiss` |
+| `onboarding.py` | 冷启动判定与 4 步引导步骤生成 | `GET /api/secretary/onboarding` |
+| `data_lifecycle.py` | 秘书数据导出（可移植性）与删除（遗忘权） | `GET /api/secretary/data/export` / `DELETE /api/secretary/data/delete` |
+| `mood_stress_store.py` | 情绪/压力/能量与干预工具的数据访问 | `/api/secretary/mood-stress/*` |
+| `modules/mood_stress.py` | MoodStress 模块扩展、规则评估与 `MoodStressRuleTriggered` 事件 | `/api/secretary/mood-stress/*` |
+| `tool_handler.py` | LLM 工具系统中 diagnostic 处理器入口 | `/api/secretary/agent/chat` 工具调用 |
+
 ## API 端点矩阵 (45 端点, Task #83 全面审计)
 
 ### 1. 主 API (`backend/app/api/system/secretary.py`) — 24 端点

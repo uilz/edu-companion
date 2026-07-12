@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import time
@@ -23,12 +22,7 @@ from app.infrastructure.db.silent_task_store import SilentTaskStore
 from app.infrastructure.db.user_profile_store import UserOrchestrationProfileStore
 
 # Dashboard aggregation imports
-from app.services.planning.confirmations import list_confirmations as list_planning_confirmations
-from app.api.learning_activity import service as activity_service
-from app.services.practice.practice_stats import get_overview as get_practice_overview
-from app.services.analytics.adaptive_planner import adaptive_planner
-from shared.constants import recommend_practice_items
-from shared.knowledge_trace import get_all_cognitive_states
+from app.services.secretary.dashboard import build_dashboard as _build_dashboard
 
 logger = logging.getLogger(__name__)
 
@@ -322,60 +316,8 @@ async def accept_proposal(
     if not ok:
         raise HTTPException(404, "提案不存在或已处理")
 
-    # 执行提案动作
-    action_result = None
-    plan_adjustment = None
-    if proposal:
-        from app.domain.secretary.engines.proposal_service import action_handler
-        from app.domain.secretary.engines.policy_engine import policy_engine
-        try:
-            action_result = await action_handler.execute(proposal, user_id)
-            logger.info("提案动作执行: %s → %s", proposal.action_type, action_result.get("success"))
-
-            # 记录策略交互
-            policy_engine.record_interaction(user_id, proposal, "accepted")
-
-            # 同时写入 UserOrchestrationProfile 关系记忆
-            try:
-                from app.infrastructure.db.user_profile_store import user_profile_store
-                kp_id = (proposal.payload or {}).get("kp_id", "")
-                user_profile_store.update_relation_memory(user_id, proposal.action_type, kp_id, "accept")
-            except Exception as e:
-                logger.debug("UserOrchestrationProfile 关系记忆更新失败: %s", e)
-
-            # 触发学习路径调整 (Task #83 B-9/B-20: 单独 try/except)
-            if action_result.get("success"):
-                try:
-                    from app.domain.secretary.engines.secretary_plan_bridge import plan_bridge
-                    plan_adjustment = await plan_bridge.on_proposal_accepted(proposal, user_id)
-                except Exception as pe:
-                    logger.warning("plan_bridge.on_proposal_accepted 失败: %s", pe)
-                    plan_adjustment = None
-
-            # v6: 发射 ProposalAccepted 事件 → EventBus
-            try:
-                from app.application.di import get_event_bus
-                from shared.events import ProposalAccepted
-                target_node_id = (proposal.payload or {}).get("parent_id", "") or \
-                                 (proposal.payload or {}).get("target_node_id", "")
-                await get_event_bus().publish(ProposalAccepted(
-                    user_id=user_id,
-                    proposal_id=proposal_id,
-                    action_type=proposal.action_type,
-                    target_node_id=target_node_id,
-                ))
-            except Exception as e:
-                logger.debug("ProposalAccepted 事件发射失败: %s", e)
-        except Exception as e:
-            logger.warning("提案动作/计划调整失败: %s", e)
-
-    # WS 已移除，跳过广播（由 TokenBuffer 等机制取代）
-
-    return {
-        "status": "accepted",
-        "action_result": action_result,
-        "plan_adjustment": plan_adjustment,
-    }
+    from app.services.secretary.proposal_actions import execute_accepted_action
+    return await execute_accepted_action(proposal, user_id)
 
 
 @router.post("/proposals/{proposal_id}/present")
@@ -403,23 +345,10 @@ async def dismiss_proposal(
     if not ok:
         raise HTTPException(404, "提案不存在或已处理")
 
-    # WS 已移除，跳过广播（由 TokenBuffer 等机制取代）
-
-    # 记录策略关系记忆（同时写入 UserOrchestrationProfile）
-    try:
-        proposal = _get_proposal_by_id(store, proposal_id, user_id)
-        if proposal:
-            from app.domain.secretary.engines.policy_engine import policy_engine
-            result = policy_engine.record_interaction(user_id, proposal, "dismissed")
-
-            from app.infrastructure.db.user_profile_store import user_profile_store
-            kp_id = (proposal.payload or {}).get("kp_id", "")
-            user_profile_store.update_relation_memory(user_id, proposal.action_type, kp_id, "dismiss")
-            return {"status": "dismissed", "policy": result}
-    except Exception as e:
-        logger.warning("Policy record_interaction failed on dismiss: %s", e)
-
-    return {"status": "dismissed"}
+    proposal = _get_proposal_by_id(store, proposal_id, user_id)
+    from app.services.secretary.proposal_actions import record_dismiss
+    policy_result = await record_dismiss(proposal, user_id)
+    return policy_result if policy_result else {"status": "dismissed"}
 
 
 # ═══════════════════════════════════════════
@@ -764,45 +693,9 @@ async def configure_checker(
 async def get_onboarding_status(
     user_id: str = Depends(current_user_id),
 ) -> dict:
-    """获取冷启动状态与引导信息 (Task #83 B-5: 改进 cold_start 判定)
-
-    新判定: 基于 mastery > 0.5 的有效节点数 (有学习数据)
-      - cold_start: 有效节点 < 5
-      - 引导步骤: 第 1 步仅当 total_nodes == 0
-    """
-    try:
-        from app.domain.cognitive import get_repo
-        nodes = get_repo().list_all_nodes(user_id)
-        # 排除虚拟分区根节点
-        real_nodes = [n for n in nodes if not (n.level == "partition" and n.created_by == "system")]
-        total_nodes = len(real_nodes) if real_nodes else 0
-        # B-5: 有效学习节点 (有 mastery 进展)
-        learned_nodes = sum(
-            1 for n in real_nodes
-            if n.belief and n.belief.alpha + n.belief.beta > 4
-        )
-    except Exception:
-        total_nodes = 0
-        learned_nodes = 0
-
-    is_cold_start = total_nodes < 5 or learned_nodes == 0
-    has_suggestions = total_nodes > 0
-
-    guide_steps = [
-        {"step": 1, "title": "开始学习", "description": "打开任意分区开始你的第一次学习对话", "link": "/", "done": has_suggestions},
-        {"step": 2, "title": "完成练习", "description": "做几道练习题，秘书系统会根据错题生成个性化建议", "link": "/practice", "done": learned_nodes > 0},
-        {"step": 3, "title": "查看秘书建议", "description": "回到秘书页面，查看系统为你生成的个性化学习建议", "link": "/secretary", "done": learned_nodes > 2},
-        {"step": 4, "title": "个性化配置", "description": "关闭不需要的模块，设置安静时段，定制秘书行为", "link": "/secretary/settings", "done": False},
-    ]
-
-    return {
-        "is_cold_start": is_cold_start,
-        "total_nodes": total_nodes,
-        "learned_nodes": learned_nodes,
-        "guide_steps": guide_steps,
-        "current_step": 1 if total_nodes == 0 else 2 if learned_nodes == 0 else 3 if learned_nodes < 3 else 4,
-        "message": "你好！我是你的学习秘书，欢迎开始学习之旅 🎉" if is_cold_start else "感谢继续使用！你的学习数据正在丰富中 📈",
-    }
+    """获取冷启动状态与引导信息 (Task #83 B-5 / Task #168)"""
+    from app.services.secretary.onboarding import get_onboarding_status as _get_onboarding_status
+    return await _get_onboarding_status(user_id)
 
 
 # ═══════════════════════════════════════════
@@ -825,13 +718,9 @@ async def report_execution_result(
         details: str | None
         completed_at: int (epoch ms)
     """
+    from app.services.secretary.proposal_actions import build_execution_result_payload
     try:
-        result_payload = {
-            "success": body.get("success", True),
-            "message": body.get("message", ""),
-            "details": body.get("details"),
-            "completed_at": body.get("completed_at", int(time.time() * 1000)),
-        }
+        result_payload = build_execution_result_payload(body)
         # 直接更新 metadata 中的 execution_result（顶级字段）
         db = store._get_db()
         db.execute(
@@ -857,72 +746,16 @@ async def report_execution_result(
 
 @router.get("/data/export")
 async def export_secretary_data(user_id: str = Depends(current_user_id)) -> dict:
-    """导出所有秘书相关个人数据"""
-    data = {
-        "user_id": user_id,
-        "exported_at": datetime.now(timezone.utc).isoformat(),
-        "preferences": _load_prefs(user_id),
-        "proposals": [],
-        "policy_memory": {},
-    }
-
-    # 提案历史
-    try:
-        from app.infrastructure.db.proposal_store import ProposalStore
-        store = ProposalStore()
-        db = store._get_db()
-        rows = db.fetchall(
-            "SELECT id, title, action_type, priority, status, created_at FROM secretary_proposals WHERE user_id = %s ORDER BY created_at DESC LIMIT 200",
-            (user_id,),
-        )
-        if rows:
-            data["proposals"] = [
-                {"id": r["id"], "title": r["title"], "action_type": r["action_type"],
-                 "priority": r["priority"], "status": r["status"],
-                 "created_at": str(r["created_at"]) if r["created_at"] else None}
-                for r in rows
-            ]
-    except Exception as e:
-        data["proposal_error"] = str(e)
-
-    # 关系记忆
-    try:
-        from app.services.common import get_data_repo
-        user_data = get_data_repo().load(user_id)
-        data["policy_memory"] = user_data.policy_memory
-    except Exception as e:
-        data["policy_memory_error"] = str(e)
-
-    return data
+    """导出所有秘书相关个人数据 (Task #168)"""
+    from app.services.secretary.data_lifecycle import export_secretary_data as _export_secretary_data
+    return _export_secretary_data(user_id)
 
 
 @router.delete("/data/delete")
 async def delete_secretary_data(user_id: str = Depends(current_user_id)) -> dict:
-    """删除所有秘书相关个人数据 (遗忘权)"""
-    deleted = {"proposals": False, "prefs": False, "policy_memory": False}
-
-    # 删除提案
-    try:
-        from app.infrastructure.db.proposal_store import ProposalStore
-        store = ProposalStore()
-        store._get_db().execute("DELETE FROM secretary_proposals WHERE user_id = %s", (user_id,))
-        deleted["proposals"] = True
-    except Exception as e:
-        logger.error("Failed to delete proposals for user %s: %s", user_id, e)
-
-    # 清空偏好 + 关系记忆（通过 DataRepository）
-    try:
-        from app.services.common import get_data_repo
-        user_data = get_data_repo().load(user_id)
-        user_data.secretary_prefs = {}
-        user_data.policy_memory = {}
-        get_data_repo().save(user_id, user_data)
-        deleted["prefs"] = True
-        deleted["policy_memory"] = True
-    except Exception as e:
-        logger.error("Failed to clear secretary data via storage: %s", e)
-
-    return {"status": "deleted", "details": deleted}
+    """删除所有秘书相关个人数据 (遗忘权) (Task #168)"""
+    from app.services.secretary.data_lifecycle import delete_secretary_data as _delete_secretary_data
+    return _delete_secretary_data(user_id)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1315,246 +1148,8 @@ async def set_agent_preferences(
 
 
 # ══════════════════════════════════════════════════════════════
-#  仪表盘聚合 (Task #120)
+#  仪表盘聚合 (Task #120 / Task #168)
 # ══════════════════════════════════════════════════════════════
-
-
-_dashboard_cache: dict[str, tuple[float, dict]] = {}
-_DASHBOARD_TTL = 30.0  # 30s
-
-
-def _greeting(name: str | None) -> str:
-    """根据当前时间生成问候语"""
-    hour = datetime.now(timezone.utc).hour
-    if 5 <= hour < 12:
-        prefix = "早上好"
-    elif 12 <= hour < 18:
-        prefix = "下午好"
-    elif 18 <= hour < 23:
-        prefix = "晚上好"
-    else:
-        prefix = "夜深了"
-    if name:
-        return f"{prefix}，{name}"
-    return prefix
-
-
-def _build_focus(plan_data: dict) -> dict | None:
-    """从学习计划中构建今日焦点"""
-    plan = plan_data.get("plan") if isinstance(plan_data, dict) else None
-    items = plan.get("items") if isinstance(plan, dict) else None
-    if not items:
-        return None
-    # 优先选择未完成的任务
-    pending = next(
-        (it for it in items if not it.get("completed") and not it.get("done")),
-        None,
-    )
-    target = pending or items[0]
-    return {
-        "id": target.get("task_id", ""),
-        "type": "plan_item",
-        "title": target.get("title", ""),
-        "description": target.get("description", ""),
-        "estimated_minutes": target.get("estimated_minutes", 0) or 0,
-        "action": {
-            "type": "navigate",
-            "target": f"/practice?node={target.get('skill_id', '')}",
-        },
-    }
-
-
-def _build_stats(snapshot: dict, overview: dict) -> list[dict]:
-    """构建 8 张统计卡，包含动态优先级"""
-    weak_count = int(snapshot.get("weak_count", 0) or 0)
-    stagnant_count = int(snapshot.get("stagnant_count", 0) or 0)
-    streak_days = int(snapshot.get("streak_days", 0) or 0)
-    cognitive_load = float(snapshot.get("cognitive_load", 0) or 0)
-
-    total_questions = int(overview.get("total_questions", 0) or 0)
-    study_minutes = float(overview.get("study_minutes", 0) or 0)
-    mastered_count = int(overview.get("mastered_count", 0) or 0)
-    today_questions = int(overview.get("today_questions", 0) or 0)
-    accuracy = float(overview.get("accuracy", 0) or 0)
-
-    cards = [
-        {
-            "key": "weak_count",
-            "label": "薄弱点",
-            "value": weak_count,
-            "priority": "high" if weak_count > 0 else "low",
-            "icon": "alert",
-            "deep_link": "/analytics?tab=weak",
-        },
-        {
-            "key": "stagnant_count",
-            "label": "停滞项",
-            "value": stagnant_count,
-            "priority": "high" if stagnant_count > 0 else "low",
-            "icon": "clock",
-            "deep_link": "/analytics?tab=stagnant",
-        },
-        {
-            "key": "today_questions",
-            "label": "今日题数",
-            "value": today_questions,
-            "priority": "medium" if today_questions > 0 else "low",
-            "icon": "target",
-        },
-        {
-            "key": "cognitive_load",
-            "label": "认知负荷",
-            "value": f"{int(cognitive_load * 100)}%",
-            "priority": "high" if cognitive_load > 0.7 else ("medium" if cognitive_load > 0.3 else "low"),
-            "icon": "brain",
-        },
-        {
-            "key": "total_questions",
-            "label": "累计练习",
-            "value": total_questions,
-            "priority": "low",
-            "icon": "bar-chart",
-        },
-        {
-            "key": "study_minutes",
-            "label": "学习时长",
-            "value": f"{int(study_minutes)}m",
-            "priority": "low",
-            "icon": "clock",
-        },
-        {
-            "key": "mastered_count",
-            "label": "已掌握",
-            "value": mastered_count,
-            "priority": "low",
-            "icon": "check-circle",
-        },
-        {
-            "key": "streak_days",
-            "label": "连续天数",
-            "value": streak_days,
-            "priority": "medium" if streak_days > 0 else "low",
-            "icon": "flame",
-        },
-    ]
-
-    # 排序：high > medium > low
-    priority_order = {"high": 0, "medium": 1, "low": 2}
-    order_map = {
-        "weak_count": 0,
-        "stagnant_count": 1,
-        "cognitive_load": 2,
-        "today_questions": 3,
-        "streak_days": 4,
-        "total_questions": 5,
-        "study_minutes": 6,
-        "mastered_count": 7,
-    }
-    cards.sort(key=lambda c: (priority_order.get(c["priority"], 9), order_map.get(c["key"], 99)))
-    return cards
-
-
-def _normalize_ts(value) -> float:
-    """将 datetime / 时间戳 / 字符串统一为 float 时间戳"""
-    if value is None:
-        return 0.0
-    if isinstance(value, datetime):
-        return value.timestamp()
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def _build_pending(proposals: list[dict], confirmations: list[dict]) -> dict:
-    """统一提案与计划确认为待处理流"""
-    items: list[dict] = []
-    for p in proposals:
-        items.append({
-            "id": p.get("id", ""),
-            "kind": "proposal",
-            "title": p.get("title", ""),
-            "description": p.get("description", ""),
-            "priority": p.get("priority", 3) or 3,
-            "action_type": p.get("action_type", ""),
-            "source": p.get("source", "secretary"),
-            "created_at": _normalize_ts(p.get("created_at")),
-            "tags": ["建议"],
-            "emoji": p.get("emoji", "💡"),
-            "target": p.get("target") or p.get("payload") or {},
-        })
-    for c in confirmations:
-        items.append({
-            "id": c.get("id", ""),
-            "kind": "confirmation",
-            "title": c.get("title", ""),
-            "description": c.get("description", ""),
-            "priority": c.get("priority", 3) or 3,
-            "action_type": "plan_item_confirmation",
-            "source": c.get("source_module", "planning"),
-            "created_at": _normalize_ts(c.get("created_at")),
-            "tags": ["计划确认"],
-            "emoji": "📋",
-            "target": {},
-        })
-
-    # 按优先级降序 + 创建时间降序
-    items.sort(key=lambda x: (-int(x.get("priority", 0) or 0), -x.get("created_at", 0.0)))
-    return {"items": items, "total": len(items)}
-
-
-def _build_recommendations(user_id: str) -> dict:
-    """聚合 AI 学习建议（复用 /api/study/suggestions 逻辑）"""
-    try:
-        states = get_all_cognitive_states(user_id)
-        recs = recommend_practice_items(states, top_n=10)
-
-        urgent: list[dict] = []
-        building: list[dict] = []
-        new_topic: list[dict] = []
-
-        from app.domain.knowledge.checker import PrerequisiteChecker
-        from app.domain.knowledge.prerequisites import SKILL_TO_SUBJECT
-        from app.services.knowledge.knowledge_state import get_knowledge_state as _canonical_get_ks
-
-        class _Adapter:
-            async def get_knowledge_state(self, uid, sid):
-                return await _canonical_get_ks(uid, sid)
-
-        checker = PrerequisiteChecker(_Adapter())
-        for rec in recs:
-            sid = rec["skill_id"]
-            entry = {
-                "skill_id": sid,
-                "label": checker._skill_display_name(sid),
-                "level": rec.get("level", ""),
-                "p_known": rec.get("p_known", 0),
-                "subject": SKILL_TO_SUBJECT.get(sid, "未知"),
-            }
-            if rec.get("level") == "接近掌握":
-                urgent.append(entry)
-            elif rec.get("level") == "发展中":
-                building.append(entry)
-            else:
-                new_topic.append(entry)
-
-        suggestion = (
-            f"建议优先突破「{urgent[0]['label']}」"
-            if urgent else
-            f"继续推进「{building[0]['label']}」"
-            if building else
-            "选择一个新主题开始学习吧 🌱"
-        )
-
-        return {
-            "suggestion": suggestion,
-            "urgent": urgent[:3],
-            "building": building[:3],
-            "new_topic": new_topic[:3],
-        }
-    except Exception as e:
-        logger.warning("构建推荐失败: %s", e)
-        return {"suggestion": "", "urgent": [], "building": [], "new_topic": []}
 
 
 @router.get("/dashboard")
@@ -1565,59 +1160,14 @@ async def get_dashboard(
 ) -> dict:
     """秘书仪表盘聚合数据 (Task #120)
 
-    聚合：学习快照、练习统计、学习计划、AI 推荐、待处理提案/确认、学习活动流。
-    30s 内存缓存。
+    聚合逻辑已下沉到 app.services.secretary.dashboard。
     """
-    now = time.time()
-    cached = _dashboard_cache.get(user_id)
-    if cached and (now - cached[0]) < _DASHBOARD_TTL:
-        return cached[1]
-
+    from app.api.learning_activity import service as activity_service
     await _ensure_db_schema(store)
-
-    # 并行聚合独立数据源
-    assess_task = service.quick_assess(user_id=user_id)
-    plan_task = adaptive_planner.generate(user_id=user_id, reason="auto")
-
-    # 同步数据源在事件循环中运行，避免阻塞
-    loop = asyncio.get_event_loop()
-    overview = await loop.run_in_executor(None, get_practice_overview, user_id)
-    proposals = await loop.run_in_executor(None, store.get_pending_proposals, user_id)
-    confirmations = await loop.run_in_executor(None, list_planning_confirmations, user_id, "pending")
-    activities = await loop.run_in_executor(None, activity_service.list_activities, user_id)
-
-    assess = await assess_task
-    plan_data = await plan_task
-
-    snapshot = {
-        "cognitive_load": assess.get("cognitive_load", 0),
-        "weak_count": assess.get("weak_count", 0),
-        "stagnant_count": assess.get("stagnant_count", 0),
-        "streak_days": assess.get("streak_days", 0),
-        "summary": assess.get("summary", ""),
-    }
-
-    # 获取用户显示名（从 DataRepository）
-    display_name = None
-    try:
-        from app.services.common import get_data_repo
-        data = get_data_repo().load(user_id)
-        display_name = data.profile.get("display_name") if hasattr(data, "profile") else None
-    except Exception as e:
-        logger.debug("读取用户显示名失败: %s", e)
-
-    proposals_list = [p.model_dump() for p in proposals]
-    result = {
-        "greeting": _greeting(display_name),
-        "date": datetime.now(timezone.utc).isoformat()[:10],
-        "focus": _build_focus(plan_data),
-        "stats": _build_stats(snapshot, overview),
-        "pending": _build_pending(proposals_list, confirmations),
-        "recommendations": _build_recommendations(user_id),
-        "activities": activities,
-    }
-
-    _dashboard_cache[user_id] = (now, result)
-    return result
+    return await _build_dashboard(
+        user_id=user_id,
+        service=service,
+        activity_list_fn=activity_service.list_activities,
+    )
 
 

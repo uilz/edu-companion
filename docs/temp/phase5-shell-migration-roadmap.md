@@ -22,7 +22,7 @@
 | **Reading 阅读** | `app/services/reading/` 已拆分 | `app/api/reading/routes.py` 较薄 | 已完成 | ✅ 已迁移 |
 | **Planning 规划** | `app/services/planning/` 已拆分 8 个模块 | `app/api/planning/routes.py` 较薄 | overview + events + ADR 已完成 | ✅ 已迁移 |
 | **Practice 练习** | `app/services/practice/` 已有 20+ 服务文件 | 路由层已瘦身，业务逻辑下沉 | `docs/modules/practice-system/` overview + events + ADR 已完成 | ✅ 已迁移 |
-| **Secretary 秘书** | `app/domain/secretary/` + `app/services/secretary/` 已较成熟 | 路由归属可再整理 | 较完整 | ⏳ 待整理 |
+| **Secretary 秘书** | `app/services/secretary/` 已拆分 dashboard / proposal_actions / onboarding / data_lifecycle / mood_stress 等 | `app/api/system/secretary.py` + `app/api/secretary/mood_stress.py` 已瘦身 | `docs/modules/secretary-system/` overview + events + ADR 0026 已完成 | ✅ 已迁移 |
 
 ---
 
@@ -53,6 +53,19 @@ Practice 服务层已较完整，但 API 路由仍残留以下业务逻辑：
 - **Slice 5.8**：文档重写（overview.md + events.md）+ ADR 0025 — ✅ 完成
 - **Slice 5.9**：端到端验证（rebuild.sh + verify_practice_service_sink.py + pytest）— ✅ 完成
 
+## 三（续）、Secretary 秘书壳整理计划
+
+### 3.3 切片
+
+- **Slice 5.10**：秘书壳路由层检查、服务下沉、事件边界梳理、文档补齐与端到端验证 — ✅ 完成
+  - `dashboard.py`：仪表盘 6 源聚合 + 30s 缓存
+  - `proposal_actions.py`：提案采纳副作用 + `ProposalAccepted` 事件发布
+  - `onboarding.py`：冷启动状态与 4 步引导
+  - `data_lifecycle.py`：数据可携带与删除权
+  - `mood_stress.py` / `mood_stress_store.py`：心情压力模块服务化
+  - 文档：`overview.md` / `events.md` + ADR 0026
+  - 验证：`scripts/test/task0168/verify_secretary_shell.py` 10 项检查 + pytest + rebuild.sh
+
 ---
 
 ## 四、关键依赖与风险
@@ -68,4 +81,8 @@ Practice 服务层已较完整，但 API 路由仍残留以下业务逻辑：
 
 ## 五、下一步
 
-启动 **Secretary 秘书壳整理**：路由层检查、事件边界梳理、文档补齐，作为 Phase 5 最后一个壳的收尾。
+Phase 5 全部壳（Reading / Planning / Practice / Secretary）已迁移完成。后续可选：
+
+1. **壳间事件链路端到端演练**：模拟一次完整学习流程（阅读 → 练习 → 秘书提案 → 规划确认 → 执行），验证事件在壳间的流转与消费。
+2. **Phase 5 收官复盘**：汇总各壳 ADR、梳理跨壳事件总线订阅关系、清理临时文档。
+3. **进入下一阶段**：按项目计划推进 Secretary dashboard 首页后续优化、跨壳学习活动流增强，或启动其他模块重构。
