@@ -29,16 +29,11 @@ import {
   LogOut,
   User as UserIcon,
   Settings as SettingsIcon,
-  PanelLeftClose,
-  PanelLeftOpen,
-  PanelRightClose,
-  PanelRightOpen,
   ArrowLeft,
 } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUser } from "@/hooks/useUser";
-import { useLayoutPrefs } from "@/hooks/useLayoutPrefs";
 import { usePanelContent } from "@/contexts/PanelContentContext";
 import { primaryNavItems } from "@/lib/navConfig";
 import { authedFetch } from "@/lib/api/api";
@@ -73,7 +68,6 @@ export default function TopBar() {
   const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
   const { navContext } = useUser();
-  const { pref, toggleCollapsed } = useLayoutPrefs();
   const { breadcrumbs } = usePanelContent();
   const router = useRouter();
   const pathname = usePathname();
@@ -233,15 +227,7 @@ export default function TopBar() {
         className="h-full w-full flex items-center gap-2 px-3 bg-page border-b border-divider"
         style={{ minHeight: 40 }}
       >
-        {/* 左侧：左栏折叠按钮 + 面包屑 */}
-        <button
-          onClick={() => toggleCollapsed("leftPanel")}
-          className="p-1.5 rounded text-ink-muted hover:text-ink-primary hover:bg-surface-hover transition-colors"
-          title={pref.leftPanel.collapsed ? "展开左栏" : "折叠左栏"}
-        >
-          {pref.leftPanel.collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-        </button>
-
+        {/* 左侧：返回按钮 + Logo + 面包屑 */}
         {/* 返回按钮 */}
         <button
           onClick={() => window.history.back()}
@@ -306,14 +292,6 @@ export default function TopBar() {
 
         {/* 右侧 */}
         <div className="flex items-center gap-1.5">
-          {/* 右栏切换 */}
-          <button
-            onClick={() => toggleCollapsed("rightPanel")}
-            className="p-1.5 rounded text-ink-muted hover:text-ink-primary hover:bg-surface-hover transition-colors"
-            title={pref.rightPanel.collapsed ? "展开右栏" : "折叠右栏"}
-          >
-            {pref.rightPanel.collapsed ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />}
-          </button>
           {/* 同步状态 */}
           <div
             className="flex items-center gap-1 px-2 h-8 rounded text-[12px] text-ink-muted hover:bg-surface-hover transition-colors cursor-default"

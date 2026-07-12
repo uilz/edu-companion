@@ -30,7 +30,7 @@ export const PANEL_BOUNDS = {
   topBar: { min: 40, max: 96, default: 56, collapsed: 0 },
   bottomBar: { min: 32, max: 80, default: 40, collapsed: 0 },
   leftPanel: { min: 56, max: 400, default: 280, collapsed: 56 },
-  rightPanel: { min: 200, max: 500, default: 320, collapsed: 4 },
+  rightPanel: { min: 200, max: 500, default: 320, collapsed: 56 },
 } as const;
 
 export type PanelKey = keyof typeof PANEL_BOUNDS;

@@ -194,10 +194,10 @@ export default function Workbench({ children }: WorkbenchProps) {
 
         {/* ── 右栏 (row 2, col 3) — 对话路由全局隐藏，由 ConversationPanel 自管 ── */}
         {!isConversation && pref.rightPanel.visible && (
-          <div className="row-start-2 col-start-3 min-h-0 border-l border-divider relative" style={{ overflow: 'visible' }}>
+          <div className="row-start-2 col-start-3 min-h-0 border-l border-divider relative overflow-hidden">
             <ResizeHandle
               orientation="horizontal"
-              onResizeStart={() => { rightDragStartWidthRef.current = pref.rightPanel.collapsed ? 0 : rightW; }}
+              onResizeStart={() => { rightDragStartWidthRef.current = pref.rightPanel.collapsed ? PANEL_BOUNDS.rightPanel.collapsed : rightW; }}
               onResize={(totalDelta) => setWidth("rightPanel", rightDragStartWidthRef.current - totalDelta)}
               onDoubleClick={() => toggleCollapsed("rightPanel")}
               collapsed={pref.rightPanel.collapsed}
@@ -219,20 +219,6 @@ export default function Workbench({ children }: WorkbenchProps) {
             >
               <WorkbenchInner>{children}</WorkbenchInner>
             </ResizableContainer>
-
-            {/* ── 右栏展开/收起按钮（放在右栏 div 内，relative 定位） ── */}
-            {pref.rightPanel.collapsed && (
-              <button onClick={() => toggleCollapsed("rightPanel")}
-                className="absolute -left-6 bottom-3 w-6 h-14 z-[51] bg-surface border border-r-0 rounded-l-md cursor-pointer text-muted grid place-items-center">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
-              </button>
-            )}
-            {!pref.rightPanel.collapsed && (
-              <button onClick={() => toggleCollapsed("rightPanel")}
-                className="absolute -left-6 bottom-3 w-6 h-14 z-[51] bg-surface border border-r-0 rounded-l-md cursor-pointer text-muted grid place-items-center">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
-              </button>
-            )}
           </div>
         )}
 
