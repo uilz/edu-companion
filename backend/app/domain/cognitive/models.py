@@ -1,6 +1,6 @@
 """CognitiveNode — 统一认知量子实体
 
-基于 AI 伴学系统中枢数据设计文档
+基于 AI 学习助手工具系统中枢数据设计文档
 """
 
 from __future__ import annotations

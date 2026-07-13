@@ -6,7 +6,7 @@ import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "知识树 · 伴学",
+  title: "知识树",
   description: "可视化知识结构，AI 对话探索学习路径",
 };
 

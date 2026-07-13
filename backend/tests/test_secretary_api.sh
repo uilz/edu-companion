@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 伴学系统 — API 级联动性测试脚本
+# 助手工具系统 — API 级联动性测试脚本
 # Phase 1 反馈循环: curl-based pass/fail 信号
 #
 # 用法:
@@ -16,7 +16,7 @@ pass() { PASS=$((PASS+1)); echo "  ✅ PASS: $1"; }
 fail() { FAIL=$((FAIL+1)); echo "  ❌ FAIL: $1 — $2"; }
 
 echo "═══════════════════════════════════════════"
-echo "伴学系统 API 联动性测试"
+echo "助手工具系统 API 联动性测试"
 echo "Base URL: $BASE"
 echo "User ID:  $USER_ID"
 echo "═══════════════════════════════════════════"

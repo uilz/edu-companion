@@ -6,7 +6,7 @@
 
 ## 1. 背景
 
-Cognitive Engine 是 AI 伴学系统的核心认知层。task #86 摸底发现 12 个 bug，包括：
+Cognitive Engine 是 AI 学习助手工具系统的核心认知层。task #86 摸底发现 12 个 bug，包括：
 
 - 事件总线双写（产生重复行）
 - 事件循环保护缺失（handler 嵌套 publish 可导致栈溢出）

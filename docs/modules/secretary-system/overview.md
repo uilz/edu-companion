@@ -266,9 +266,10 @@
 |------|------|
 | [event-consumers.md](event-consumers.md) | 事件消费逻辑 |
 | [extension-modules.md](extension-modules.md) | 内置模块详解 |
-| [events.md](events.md) | 事件矩阵 + 联动关系 (Task #83) |
-| [design.md](design.md) | 设计原理 + 数据模型 (Task #83) |
-| [../../temp/task0114-learning-activity-realtime-sync-design.md](../../temp/task0114-learning-activity-realtime-sync-design.md) | Phase 3: 跨壳学习活动实时同步与多源聚合设计 |
+| [events.md](events.md) | 事件矩阵 + 联动关系 |
+| [design.md](design.md) | 设计原理 + 数据模型 |
+| [docs/adr/0019-secretary-orchestrator-phase4.md](../../adr/0019-secretary-orchestrator-phase4.md) | Phase 4 秘书编排器架构决策 |
+| [docs/adr/0026-secretary-shell-migration.md](../../adr/0026-secretary-shell-migration.md) | Phase 5 秘书壳服务层整理决策 |
 
 ## 工作流程
 
