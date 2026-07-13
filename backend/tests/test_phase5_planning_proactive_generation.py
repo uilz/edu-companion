@@ -204,6 +204,89 @@ class TestPlanningProactiveGenerator:
         assert any(s.target_type == "explore" and s.reason == "high_accuracy_expansion" for s in suggestions)
         gen.unsubscribe()
 
+    def test_flashcard_reviewed_difficult_generates_review_suggestion(self, clean_bus):
+        from app.api.planning.proactive_generator import PlanningProactiveGenerator
+        from shared.events import FlashCardReviewed, PlanItemSuggested
+
+        captured: list[Any] = []
+        clean_bus.subscribe("PlanItemSuggested", lambda ev: captured.append(ev))
+
+        gen = PlanningProactiveGenerator()
+        gen.subscribe(clean_bus)
+
+        event = FlashCardReviewed(
+            user_id="u1",
+            card_id="card_1",
+            session_id="sess_fc",
+            self_assessment="difficult",
+            linked_node_ids=["node_1", "node_2"],
+        )
+        asyncio.run(clean_bus.publish(event))
+
+        suggestions = [e for e in captured if isinstance(e, PlanItemSuggested)]
+        assert any(
+            s.target_type == "review"
+            and s.reason == "flashcard_difficult"
+            and s.target_ref_id == "node_1"
+            and s.linked_node_ids == ["node_1", "node_2"]
+            for s in suggestions
+        )
+        gen.unsubscribe()
+
+    def test_flashcard_reviewed_good_does_not_generate_suggestion(self, clean_bus):
+        from app.api.planning.proactive_generator import PlanningProactiveGenerator
+        from shared.events import FlashCardReviewed, PlanItemSuggested
+
+        captured: list[Any] = []
+        clean_bus.subscribe("PlanItemSuggested", lambda ev: captured.append(ev))
+
+        gen = PlanningProactiveGenerator()
+        gen.subscribe(clean_bus)
+
+        event = FlashCardReviewed(
+            user_id="u1",
+            card_id="card_2",
+            session_id="sess_fc",
+            self_assessment="good",
+            linked_node_ids=["node_1"],
+        )
+        asyncio.run(clean_bus.publish(event))
+
+        suggestions = [e for e in captured if isinstance(e, PlanItemSuggested)]
+        assert len(suggestions) == 0
+        gen.unsubscribe()
+
+    def test_plan_goal_created_generates_breakdown_suggestion(self, clean_bus):
+        from app.api.planning.proactive_generator import PlanningProactiveGenerator
+        from shared.events import PlanGoalCreated, PlanItemSuggested
+
+        captured: list[Any] = []
+        clean_bus.subscribe("PlanItemSuggested", lambda ev: captured.append(ev))
+
+        gen = PlanningProactiveGenerator()
+        gen.subscribe(clean_bus)
+
+        event = PlanGoalCreated(
+            user_id="u1",
+            goal_id="goal_1",
+            title="完成 100 道题",
+            target_module="practice",
+            target_metric="question_count",
+            target_value=100,
+            deadline="2026-08-01",
+        )
+        asyncio.run(clean_bus.publish(event))
+
+        suggestions = [e for e in captured if isinstance(e, PlanItemSuggested)]
+        assert any(
+            s.target_type == "planning"
+            and s.reason == "goal_breakdown"
+            and s.target_ref_id == "goal_1"
+            and "100" in s.description
+            for s in suggestions
+        )
+        gen.unsubscribe()
+
 
 # ═══════════════════════════════════════════════════════════════════
 # §3. SecretaryEventHandler 中转

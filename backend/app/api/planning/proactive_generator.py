@@ -18,6 +18,8 @@ from uuid import uuid4
 
 from shared.events import (
     CognitiveNodeMetadataChanged,
+    FlashCardReviewed,
+    PlanGoalCreated,
     PlanItemSuggested,
     SessionCompleted,
 )
@@ -38,13 +40,18 @@ class PlanningProactiveGenerator:
         self._bus = bus
         bus.subscribe("CognitiveNodeMetadataChanged", self._on_cognitive_metadata_changed)
         bus.subscribe("SessionCompleted", self._on_session_completed)
-        logger.info("PlanningProactiveGenerator: subscribed to CognitiveNodeMetadataChanged / SessionCompleted")
+        bus.subscribe("FlashCardReviewed", self._on_flashcard_reviewed)
+        bus.subscribe("PlanGoalCreated", self._on_plan_goal_created)
+        self._subscribed = True
+        logger.info("PlanningProactiveGenerator: subscribed to CognitiveNodeMetadataChanged / SessionCompleted / FlashCardReviewed / PlanGoalCreated")
 
     def unsubscribe(self) -> None:
         if not self._bus or not self._subscribed:
             return
         self._bus.unsubscribe("CognitiveNodeMetadataChanged", self._on_cognitive_metadata_changed)
         self._bus.unsubscribe("SessionCompleted", self._on_session_completed)
+        self._bus.unsubscribe("FlashCardReviewed", self._on_flashcard_reviewed)
+        self._bus.unsubscribe("PlanGoalCreated", self._on_plan_goal_created)
         self._subscribed = False
         logger.info("PlanningProactiveGenerator: unsubscribed")
 
@@ -164,6 +171,70 @@ class PlanningProactiveGenerator:
                 linked_node_ids=[],
                 reason="high_accuracy_expansion",
             ))
+
+    async def _on_flashcard_reviewed(self, event: Any) -> None:
+        if not isinstance(event, FlashCardReviewed):
+            return
+
+        # 仅当用户自评为困难时才建议加强复习
+        if event.self_assessment != "difficult":
+            return
+
+        user_id = event.user_id
+        node_ids = list(event.linked_node_ids or [])
+        target_ref_id = node_ids[0] if node_ids else event.card_id
+
+        await self._publish_suggestion(PlanItemSuggested(
+            user_id=user_id,
+            source_module="planning",
+            suggestion_id=f"sug_{uuid4().hex[:12]}",
+            trigger_event_type="FlashCardReviewed",
+            trigger_event_id=getattr(event, "event_id", ""),
+            target_type="review",
+            target_ref_id=target_ref_id,
+            title="闪卡复习困难，建议巩固相关知识点",
+            description=f"本次闪卡自评为“困难”，建议安排针对相关知识点的复习。",
+            priority=3,
+            estimated_minutes=15,
+            linked_node_ids=node_ids,
+            reason="flashcard_difficult",
+        ))
+
+    async def _on_plan_goal_created(self, event: Any) -> None:
+        if not isinstance(event, PlanGoalCreated):
+            return
+
+        user_id = event.user_id
+        goal_id = event.goal_id
+        title = event.title or "新目标"
+        target_value = event.target_value or 1
+        deadline = event.deadline or ""
+
+        # 简单拆解：按目标量给出每日/每周建议任务量
+        if target_value > 0:
+            daily_amount = max(1, target_value // 7)
+            description = (
+                f"目标“{title}”建议拆解为每日约 {daily_amount} 个"
+                f"（共 {target_value} 个）小任务，逐步完成。"
+            )
+        else:
+            description = f"目标“{title}”已创建，建议拆解为可执行的小任务。"
+
+        await self._publish_suggestion(PlanItemSuggested(
+            user_id=user_id,
+            source_module="planning",
+            suggestion_id=f"sug_{uuid4().hex[:12]}",
+            trigger_event_type="PlanGoalCreated",
+            trigger_event_id=getattr(event, "event_id", ""),
+            target_type="planning",
+            target_ref_id=goal_id,
+            title=f"拆解目标：{title}",
+            description=description,
+            priority=2,
+            estimated_minutes=20,
+            linked_node_ids=[],
+            reason="goal_breakdown",
+        ))
 
 
 # 全局单例
