@@ -352,10 +352,27 @@ class CognitiveEventHandler:
     # ── node_created ──
 
     def handle_node_created(self, event: CognitiveEventRecord) -> dict[str, Any]:
-        """节点创建：初始化投影。"""
+        """节点创建：初始化 knowledge node 与投影。"""
         payload = event.payload or {}
         user_id = event.user_id
         node_id = payload.get("node_id", "")
+
+        # 先确保 knowledge node 存在，否则投影外键会失败
+        node = self._entity_repo.get(user_id, node_id)
+        if node is None:
+            label = payload.get("label", "")
+            if not label:
+                label = node_id.split(".")[-1] if "." in node_id else node_id
+            from app.infrastructure.db.models.cognitive import KnowledgeNodeORM
+            node = KnowledgeNodeORM(
+                id=node_id,
+                user_id=user_id,
+                label=label,
+                level=payload.get("level", "atom"),
+                node_type="auto_generated",
+                is_visible=False,
+            )
+            self._entity_repo.upsert(node)
 
         self._projection_repo.get_or_create(user_id, node_id)
 

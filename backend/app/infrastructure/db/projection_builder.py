@@ -131,6 +131,11 @@ class ProjectionBuilder:
                     },
                 )
                 effective_belief = shrinkage_result["effective_belief"]
+        if "proficiency" not in effective_belief:
+            alpha = effective_belief.get("belief_alpha", 1.0)
+            beta = effective_belief.get("belief_beta", 1.0)
+            total = alpha + beta
+            effective_belief["proficiency"] = alpha / total if total > 0 else 0.5
         proficiency = effective_belief["proficiency"]
 
         # 3. 图传播：把本次更新量沿边传播给邻居

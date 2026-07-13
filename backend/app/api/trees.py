@@ -211,15 +211,16 @@ def _compute_cognitive_view(cognitive_node_id: str) -> CognitiveNodeViewResponse
     beta = float(row.get("belief_beta", 1.0))
     total = alpha + beta
     proficiency = alpha / total if total > 0 else 0.0
-    # Beta 分布微分熵作为不确定性近似
+    # Beta 分布微分熵作为不确定性近似（使用 scipy.special.digamma，兼容 Python <3.12）
     import math
+    from scipy.special import digamma
     uncertainty = 0.0
     if alpha > 0 and beta > 0 and total > 2:
         entropy = (
             math.lgamma(alpha) + math.lgamma(beta) - math.lgamma(total)
-            - (alpha - 1) * math.digamma(alpha)
-            - (beta - 1) * math.digamma(beta)
-            + (total - 2) * math.digamma(total)
+            - (alpha - 1) * digamma(alpha)
+            - (beta - 1) * digamma(beta)
+            + (total - 2) * digamma(total)
         )
         max_entropy = math.log(total)
         uncertainty = max(0.0, min(1.0, entropy / max_entropy)) if max_entropy > 0 else 0.0

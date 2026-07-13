@@ -142,7 +142,7 @@ urgency = w_retention*(1-retention) + w_mastery*(target-proficiency) + w_core*is
 - 单元测试：`backend/tests/test_cognitive_operation_registry.py` 新增 `TestBeliefOperations`、`TestGraphPropagationOperations`、`TestSchedulingOperations`，共 19 项全部通过。
 - 相关集成测试：认知存储、writer、repo、phase9/phase10 等 119 项全部通过。
 - Alembic 迁移：`alembic upgrade head` 成功，当前版本 `45cad95ec888`。
-- 端到端：通过 `rebuild.sh` 拉起前后端后，验证 LLM 无关功能（分支切换、消息编辑等）。
+- 端到端：通过 `rebuild.sh` 拉起前后端后，运行 `scripts/test/task0169/verify_adr0015_cognitive_beta_model.py`，验证从答题提交到信念更新、图传播、认知视图的完整链路；节点 A 与 B 的掌握度均 > 0.5。
 
 ## 风险与回滚
 
@@ -165,3 +165,10 @@ urgency = w_retention*(1-retention) + w_mastery*(target-proficiency) + w_core*is
 **修订记录**
 
 - v1.0（2026-07-09）：Task #12 完成后归档。
+- v1.1（2026-07-13）：Task #169 端到端验证修复：
+  - `projection_builder.py`：无父节点时补充 `proficiency` 字段，避免 KeyError。
+  - `belief_operations.py`：信息增益显式转 `float`，避免 `np.float64` 序列化失败。
+  - `cognitive_event_repository.py`：幂等键改为 SHA-256 短哈希，避免中文字段超长。
+  - `trees.py`：认知视图不确定性计算改用 `scipy.special.digamma`，兼容 Python 3.11。
+  - `di.py`：增强认知事件 handler 的调用与异常日志。
+  - 新增 `scripts/test/task0169/verify_adr0015_cognitive_beta_model.py` 端到端验证脚本。

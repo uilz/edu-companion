@@ -157,10 +157,12 @@ class CognitiveEventRepository:
 
     @staticmethod
     def _make_idempotency_key(event: PracticeEventORM) -> str:
-        return (
+        from hashlib import sha256
+        raw = (
             f"pe:{event.user_id}:{event.node_id}:{event.session_id}:"
             f"{event.question_id}:{event.timestamp:.3f}"
         )
+        return sha256(raw.encode("utf-8")).hexdigest()[:32]
 
     # ═══════════════════════════════════════════════════════════════
     # CognitiveEvent

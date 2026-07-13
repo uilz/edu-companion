@@ -105,13 +105,13 @@ def belief_update(
 
     evidence_count += 1
     entropy_after = _beta_entropy(alpha, beta)
-    information_gain = max(0.0, entropy_before - entropy_after)
+    information_gain = float(max(0.0, entropy_before - entropy_after))
 
     # 稳定性随证据累积缓慢提升，遗忘率相应下降
     stability_factor = min(0.95, 0.5 + 0.02 * evidence_count)
     forgetting_rate = 0.1 * (1.0 - stability_factor)
 
-    total_information_gain = state["total_information_gain"] + information_gain
+    total_information_gain = float(state["total_information_gain"]) + information_gain
 
     belief_after = {
         "belief_alpha": round(alpha, 4),

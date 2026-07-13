@@ -210,15 +210,17 @@ class AppContainer:
             from shared.events import AnswerSubmitted
             if not isinstance(event, AnswerSubmitted):
                 return
+            logger.info("🧠 Cognitive handler invoked for AnswerSubmitted nodes=%s", getattr(event, "cognitive_node_ids", []))
             try:
                 from app.domain.cognitive.events import CognitiveEventHandler
                 from app.infrastructure.db.session import get_db_session
                 with get_db_session() as session:
                     handler = CognitiveEventHandler(session)
-                    handler.handle_answer_submitted(event)
+                    result = handler.handle_answer_submitted(event)
                     session.commit()
+                    logger.info("🧠 Cognitive handler completed: %s", result)
             except Exception:
-                logger.debug("Cognitive handler failed for AnswerSubmitted", exc_info=True)
+                logger.exception("❌ Cognitive handler failed for AnswerSubmitted")
         bus.subscribe("AnswerSubmitted", _on_answer_submitted_to_cognitive)
 
         # 错题 → 知识图谱 + 媒体推荐
