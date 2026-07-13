@@ -187,8 +187,11 @@ export default function ResizableContainer({
     [resizable, isHorizontal, renderSize],
   );
 
-  // 拖动方向：分隔栏始终位于面板朝向中心的一侧。
-  // 无论哪个面板，鼠标远离中心方向移动（右/下）=> 面板尺寸增加。
+  // 拖动方向：以“向屏幕边缘拖动 = 面板变小”为直觉。
+  // left/top 面板：分隔栏在右/下侧；向中心拖动（右/下）=> 尺寸增加，delta 取正。
+  // right/bottom 面板：分隔栏在左/上侧；向中心拖动（左/上）=> 尺寸增加，delta 取负。
+  const dragSign = panelPosition === "left" || panelPosition === "top" ? 1 : -1;
+
   useEffect(() => {
     if (!resizable) return;
 
@@ -201,7 +204,7 @@ export default function ResizableContainer({
         const pos = isHorizontal ? e.clientX : e.clientY;
         const delta = pos - ds.startPos;
         if (Math.abs(delta) > MOVE_THRESHOLD) ds.moved = true;
-        const next = Math.max(0, Math.min(maxSize, ds.startSize + delta));
+        const next = Math.max(0, Math.min(maxSize, ds.startSize + dragSign * delta));
         onResize(next);
         // 拖动中实时切换状态，保证父级 sizeFor 使用最新 width/height
         const inferred = resolveStateFromSize(next);
@@ -245,7 +248,7 @@ export default function ResizableContainer({
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
     };
-  }, [resizable, isHorizontal, maxSize, onResize, onResizeEnd, onStateChange, state, renderSize, resolveStateFromSize]);
+  }, [resizable, isHorizontal, dragSign, maxSize, onResize, onResizeEnd, onStateChange, state, renderSize, resolveStateFromSize]);
 
   // 双击分隔栏：expanded/collapsed → fullyCollapsed；fullyCollapsed → expanded
   const handleDoubleClick = useCallback(
@@ -267,23 +270,45 @@ export default function ResizableContainer({
       data-panel-key={panelKey}
       data-state={state}
     >
-      <div
-        className={`flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden ${
-          state === "fullyCollapsed" ? "hidden" : ""
-        }`}
-      >
-        {!hideHeader && (
-          <PanelHeader
+      {state === "fullyCollapsed" ? null : state === "collapsed" ? (
+        // 折叠态：保留一条窄轨，显示标题 / 图标，避免看起来像空白残边
+        <div
+          className={`
+            ${isHorizontal ? "h-full w-full flex-col py-3" : "w-full h-full flex-row px-3"}
+            bg-surface flex items-center justify-center gap-3 select-none
+          `}
+          aria-hidden="true"
+        >
+          {icon && (
+            <div className="text-ink-muted shrink-0">
+              {icon}
+            </div>
+          )}
+          <span
+            className={`
+              text-xs font-medium text-ink-muted tracking-wide truncate
+              ${isHorizontal ? "[writing-mode:vertical-rl]" : ""}
+            `}
             title={title}
-            icon={icon}
-            rightSlot={headerRight}
-            compact
-          />
-        )}
-        <div className={`flex-1 min-h-0 min-w-0 overflow-auto ${bodyClassName}`}>
-          {children}
+          >
+            {title}
+          </span>
         </div>
-      </div>
+      ) : (
+        <div className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
+          {!hideHeader && (
+            <PanelHeader
+              title={title}
+              icon={icon}
+              rightSlot={headerRight}
+              compact
+            />
+          )}
+          <div className={`flex-1 min-h-0 min-w-0 overflow-auto ${bodyClassName}`}>
+            {children}
+          </div>
+        </div>
+      )}
 
       {/* 分隔条 + 胶囊按钮 */}
       {resizable && (
@@ -304,13 +329,14 @@ export default function ResizableContainer({
             data-resizer-btn="true"
             className={`
               absolute z-20 w-6 h-6 rounded-full
-              bg-surface border border-divider shadow-sm
+              bg-transparent border border-divider
               flex items-center justify-center
               text-ink-muted hover:text-accent hover:border-accent
               cursor-inherit
               transition-colors
               ${btnPositionClass}
             `}
+            style={{ backgroundColor: "transparent" }}
             aria-label={state === "expanded" ? `折叠 ${title}` : `展开 ${title}`}
           >
             {btnIcon}
