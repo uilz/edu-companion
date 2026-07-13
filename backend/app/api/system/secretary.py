@@ -23,6 +23,7 @@ from app.infrastructure.db.user_profile_store import UserOrchestrationProfileSto
 
 # Dashboard aggregation imports
 from app.services.secretary.dashboard import build_dashboard as _build_dashboard
+from app.services.secretary.dashboard import invalidate_dashboard_cache as _invalidate_dashboard_cache
 
 logger = logging.getLogger(__name__)
 

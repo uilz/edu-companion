@@ -105,10 +105,11 @@ def db():
 
 @pytest.fixture
 def client():
-    """FastAPI TestClient (同步)"""
+    """FastAPI TestClient (同步) — 使用上下文管理器以触发 lifespan"""
     from fastapi.testclient import TestClient
     from app.main import app
-    return TestClient(app)
+    with TestClient(app) as c:
+        yield c
 
 
 @pytest.fixture
@@ -1044,10 +1045,17 @@ class TestAllSourceModulesCompletion:
         assert r.json()["status"] == "completed"
 
         # 关键验证: project_nodes 表的 status 应被更新为 completed
-        node_row = db.fetchone(
-            "SELECT status, completed_at FROM project_nodes WHERE id = %s",
-            (node_id,),
-        )
+        # (PlanItemCompleted 是 fire-and-forget 异步发布, 轮询等待 handler 完成)
+        import time
+        node_row = None
+        for _ in range(10):
+            node_row = db.fetchone(
+                "SELECT status, completed_at FROM project_nodes WHERE id = %s",
+                (node_id,),
+            )
+            if node_row and node_row["status"] == "completed":
+                break
+            time.sleep(0.5)
         assert node_row is not None
         assert node_row["status"] == "completed"
         assert node_row["completed_at"] is not None

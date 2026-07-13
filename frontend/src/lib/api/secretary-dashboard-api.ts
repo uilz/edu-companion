@@ -59,7 +59,7 @@ export interface DashboardActivity {
   timestamp: string;
   status: string;
   deep_link: string;
-  metadata?: Record<string, unknown>;
+  meta?: Record<string, unknown>;
 }
 
 export interface SecretaryDashboardData {

@@ -81,7 +81,7 @@ export default function ActivityCard({ activities, onRefetch }: ActivityCardProp
       timestamp: payload.timestamp || new Date().toISOString(),
       status: payload.status || "completed",
       deep_link: payload.deep_link || "",
-      metadata: payload.metadata,
+      meta: payload.meta,
     };
     setLiveItems((prev) => {
       const filtered = prev.filter((i) => i.id !== converted.id);

@@ -54,6 +54,7 @@ from app.services.planning import (
     update_goal as update_goal_svc,
     update_plan_item,
 )
+from app.services.secretary.dashboard import invalidate_dashboard_cache
 from app.api.planning.schemas import (
     DailyViewResponse,
     KnowledgeViewResponse,
@@ -381,6 +382,7 @@ async def create_confirmation(
     if user_id is None:
         raise HTTPException(status_code=401, detail="请先登录")
     confirmation = create_confirmation_svc(user_id, body.model_dump())
+    invalidate_dashboard_cache(user_id)
     return _to_confirmation_response(confirmation)
 
 
@@ -395,6 +397,7 @@ async def accept_confirmation(
         item = accept_confirmation_svc(user_id, confirmation_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    invalidate_dashboard_cache(user_id)
     return _to_item_response(item)
 
 
@@ -409,4 +412,5 @@ async def dismiss_confirmation(
         confirmation = dismiss_confirmation_svc(user_id, confirmation_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    invalidate_dashboard_cache(user_id)
     return _to_confirmation_response(confirmation)

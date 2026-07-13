@@ -17,7 +17,7 @@ interface SmartStatsGridProps {
   stats: DashboardStat[];
 }
 
-const ICON_MAP: Record<string, ComponentType<{ size?: number; className?: string }>> = {
+const ICON_MAP: Record<string, ComponentType<{ size?: number | string; className?: string }>> = {
   alert: AlertTriangle,
   clock: Clock,
   target: Target,

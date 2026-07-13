@@ -75,8 +75,13 @@ Phase 6 需要把这三类数据以可交互方式展示给用户，让用户在
 ## 验证
 
 - `test_phase6_feedback_api.py`：5 passed。
-- `test_phase5_planning_proactive_generation.py` + `test_planning_e2e_full.py` + `test_phase4_secretary_context_plan.py`：117 passed, 3 skipped。
+- `test_planning_e2e_full.py`：102 passed, 3 skipped（修复 TestClient fixture 使其触发 lifespan，确保 PlanningCompletionWriter 正确订阅）。
+- `scripts/test/task0187/verify_secretary_dashboard_e2e.py`：全部通过，覆盖 dashboard 结构、confirmation 聚合、缓存失效、活动流 API。
 - `rebuild.sh --skip-build --skip-admin`：全部服务正常启动。
+- 浏览器端到端验证：
+  - `/` 秘书仪表盘正确聚合今日焦点、智能统计、待处理（proposals/confirmations/notifications）、AI 推荐与学习活动流。
+  - `/planning/daily` 顶部渲染「待确认计划项池」，支持「加入计划」与「忽略」。
+  - 练习答题后 FeedbackPanel 展示信息增益（+0.04 nats）、不确定性降低、掌握度变化（62% → 51%）及学习建议。
 
 ## 相关文档
 
