@@ -77,3 +77,25 @@ async def event_cleanup() -> None:
                        rel_deleted, evt_deleted)
     except Exception:
         logger.exception("事件清理异常")
+
+
+# ── SilentTask 调度器（ADR 0019）──
+
+_SILENT_TASK_BATCH_SIZE = 10
+
+
+async def silent_task_tick() -> None:
+    """周期性执行秘书系统 pending 静默任务
+
+    每次 tick 最多处理 10 个任务，避免阻塞调度器其他任务。
+    实际执行逻辑在 SilentTaskManager.run_pending_global 中。
+    """
+    from app.domain.secretary.engines.silent_task_manager import silent_task_manager
+    try:
+        completed = await silent_task_manager.run_pending_global(
+            max_tasks=_SILENT_TASK_BATCH_SIZE
+        )
+        if completed:
+            logger.info("SilentTask 调度执行 %d 个任务", len(completed))
+    except Exception:
+        logger.exception("SilentTask 调度执行异常")

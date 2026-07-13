@@ -325,12 +325,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # 中央调度器 — 统一管理所有服务端后台任务
     # ═══════════════════════════════════════════
     from app.infrastructure.scheduler import BackgroundScheduler
-    from app.infrastructure.scheduler.tasks import event_bus_poll, event_consumer, event_cleanup
+    from app.infrastructure.scheduler.tasks import (
+        event_bus_poll,
+        event_consumer,
+        event_cleanup,
+        silent_task_tick,
+    )
 
     app.state.scheduler = BackgroundScheduler()
     app.state.scheduler.add_task("event_bus", 0.5, event_bus_poll)
     app.state.scheduler.add_task("event_consumer", 5.0, event_consumer)
     app.state.scheduler.add_task("event_cleanup", 3600, event_cleanup)  # 每小时清理过期事件
+    app.state.scheduler.add_task("silent_task", 60.0, silent_task_tick)  # ADR 0019
 
     # InterestExplorer 推送调度（ADR 0007）
     # 每 30 分钟检查一次推送时间窗口

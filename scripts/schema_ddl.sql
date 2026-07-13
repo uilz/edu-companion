@@ -661,6 +661,39 @@ CREATE TABLE IF NOT EXISTS public.secretary_proposals (
     updated_at timestamp without time zone DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS public.secretary_silent_tasks (
+    id text NOT NULL,
+    user_id text NOT NULL,
+    task_type text NOT NULL,
+    payload jsonb DEFAULT '{}'::jsonb,
+    status text DEFAULT 'pending'::text,
+    result_ref text DEFAULT ''::text,
+    priority integer DEFAULT 3,
+    created_at timestamp with time zone DEFAULT now(),
+    ready_at timestamp with time zone,
+    consumed_at timestamp with time zone,
+    updated_at timestamp with time zone DEFAULT now(),
+    metadata jsonb DEFAULT '{}'::jsonb
+);
+
+CREATE TABLE IF NOT EXISTS public.secretary_user_profiles (
+    user_id text NOT NULL,
+    trust_score double precision DEFAULT 0.5,
+    fatigue_score double precision DEFAULT 0.0,
+    proactive_quota_today integer DEFAULT 5,
+    last_proactive_at timestamp with time zone,
+    enabled_modules jsonb DEFAULT '["review_reminder", "fatigue_manager", "daily_brief", "behavior_trigger"]'::jsonb,
+    quiet_hours_start text DEFAULT '22:00'::text,
+    quiet_hours_end text DEFAULT '08:00'::text,
+    relation_memory jsonb DEFAULT '{}'::jsonb,
+    version integer DEFAULT 0,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_secretary_silent_tasks_user_status ON public.secretary_silent_tasks USING btree (user_id, status, priority DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_secretary_silent_tasks_user_type ON public.secretary_silent_tasks USING btree (user_id, task_type, status);
+
 CREATE TABLE IF NOT EXISTS public.session_questions (
     id text NOT NULL,
     session_id text NOT NULL,

@@ -164,6 +164,24 @@ class SilentTaskManager:
                 logger.warning("批量执行静默任务失败: %s", e)
         return completed
 
+    async def run_pending_global(
+        self,
+        max_tasks: int = 10,
+    ) -> list[SilentTask]:
+        """批量执行全局 pending 任务（供中央调度器周期性调用）
+
+        每次 tick 最多处理 max_tasks 个任务，避免单次执行过长阻塞调度器。
+        任务按优先级与创建时间排序，使用 SKIP LOCKED 保证多实例并发安全。
+        """
+        tasks = self._store.claim_next_pending_global(limit=max_tasks)
+        completed: list[SilentTask] = []
+        for task in tasks:
+            try:
+                completed.append(await self.execute(task))
+            except Exception as e:
+                logger.warning("全局批量执行静默任务失败: %s", e)
+        return completed
+
     def get_result(self, task_id: str, user_id: str | None = None) -> SilentTask | None:
         """获取任务结果"""
         return self._store.get_task(task_id, user_id=user_id)

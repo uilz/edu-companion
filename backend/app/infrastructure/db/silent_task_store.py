@@ -212,6 +212,32 @@ class SilentTaskStore:
         row = db.fetchone(sql, tuple(params))
         return self._row_to_task(row) if row else None
 
+    def claim_next_pending_global(
+        self,
+        limit: int = 10,
+    ) -> list[SilentTask]:
+        """原子地跨用户认领多个待处理任务
+
+        使用 SKIP LOCKED 避免并发调度器重复领取同一任务。
+        按优先级 ASC、创建时间 ASC 排序。
+        """
+        db = self._get_db()
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+
+        sql = (
+            "UPDATE secretary_silent_tasks "
+            "SET status = 'running', updated_at = %s "
+            "WHERE id IN ("
+            "  SELECT id FROM secretary_silent_tasks "
+            "  WHERE status = 'pending' "
+            "  ORDER BY priority ASC, created_at ASC LIMIT %s "
+            "  FOR UPDATE SKIP LOCKED"
+            ") RETURNING *"
+        )
+        rows = db.fetchall(sql, (now, limit))
+        return [t for t in (self._row_to_task(r) for r in rows) if t is not None]
+
     def _row_to_task(self, row: dict[str, Any] | None) -> SilentTask | None:
         if not row:
             return None
