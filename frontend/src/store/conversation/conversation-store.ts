@@ -233,9 +233,9 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
       switchBanner: null,
     });
     useMessageStore.setState({
-      messages: [], loadingMessages: false, convError: null,
-      nodeMap: {}, currentPath: [], pathPos: 0, pathReady: false,
-      streamingId: null, sending: false,
+      messages: [], isLoading: false, convError: null,
+      nodeMap: {}, currentPath: [], pathPosMap: new Map(),
+      streamingId: null,
     });
 
     // Phase 2：批量加载数据（通过 tree-store）

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, Target } from "lucide-react";
 import Card from "@/components/ui/Card";
-import { knowledgeNodesApi, type KnowledgeNode } from "@/lib/api/knowledge-tree-api";
+import { knowledgeNodesApi, type KnowledgeNode } from "@/lib/api/knowledge-graph-api";
 import { useAuth } from "@/contexts/AuthContext";
 
 // ── Types ──

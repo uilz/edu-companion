@@ -203,6 +203,7 @@ export function useConversation() {
     // Mapped handlers
     handleSelectConversation: actions.selectConversation,
     handleNewConversation: actions.handleNewConversation,
+    handleSend: actions.sendMessage,
     handleSendMessage: actions.sendMessage,
     handleDeleteMessage: actions.deleteMessage,
     handleEditMessage: actions.editMessage,
@@ -214,5 +215,6 @@ export function useConversation() {
     setShowDirSidebar: actions.setShowDirSidebar,
     setShowNewDir: actions.setShowNewDir,
     setSidebarCollapsed: actions.setSidebarCollapsed,
+    loadDirList: actions.loadDirList,
   };
 }

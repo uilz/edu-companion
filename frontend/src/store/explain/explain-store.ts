@@ -133,7 +133,7 @@ export const useExplainStore = create<ExplainStore>((set, get) => ({
   loadFromConversation: async (conversationId) => {
     try {
       const data = await api<ExplainCardData[]>(
-        `/api/knowledge-tree/explain-cards?conv_id=${encodeURIComponent(conversationId)}`,
+        `/api/conversations/explain-cards?conv_id=${encodeURIComponent(conversationId)}`,
       );
       set({ cards: data });
     } catch {
@@ -144,7 +144,7 @@ export const useExplainStore = create<ExplainStore>((set, get) => ({
   createCard: async (data) => {
     try {
       const card = await api<ExplainCardData>(
-        `/api/knowledge-tree/explain-cards`,
+        `/api/conversations/explain-cards`,
         {
           method: "POST",
           body: JSON.stringify(data),
@@ -188,7 +188,7 @@ export const useExplainStore = create<ExplainStore>((set, get) => ({
     }));
     // 同步到后端
     try {
-      await api<void>(`/api/knowledge-tree/explain-cards/${id}`, {
+      await api<void>(`/api/conversations/explain-cards/${id}`, {
         method: "PATCH",
         body: JSON.stringify(updates),
       });
@@ -206,7 +206,7 @@ export const useExplainStore = create<ExplainStore>((set, get) => ({
     }));
     // 同步到后端
     try {
-      await api<void>(`/api/knowledge-tree/explain-cards/${id}`, { method: "DELETE" });
+      await api<void>(`/api/conversations/explain-cards/${id}`, { method: "DELETE" });
     } catch {
       // 静默
     }
@@ -221,7 +221,7 @@ export const useExplainStore = create<ExplainStore>((set, get) => ({
       ),
     }));
     // 异步同步到后端（只同步根卡片）
-    api<void>(`/api/knowledge-tree/explain-cards/${id}`, {
+    api<void>(`/api/conversations/explain-cards/${id}`, {
       method: "PATCH",
       body: JSON.stringify({ collapsed }),
     }).catch(() => {});

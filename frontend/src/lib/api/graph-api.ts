@@ -1,8 +1,8 @@
 // 知识图谱 API 工具 — 四实体解耦架构
-// 新 API 前缀: /api/knowledge-tree
+// 新 API 前缀: /api/knowledge-graph
 
 import type { GraphData, GraphNode, GraphEdge } from "@/lib/types/graph-types";
-import { knowledgeNodesApi, navigationApi, type KnowledgeNode, type NavigationNode } from "@/lib/api/knowledge-tree-api";
+import { knowledgeNodesApi, navigationApi, type KnowledgeNode, type NavigationNode } from "@/lib/api/knowledge-graph-api";
 import { api } from "@/lib/api/api";
 
 // ══════════════════════════════════════════════════════════════
@@ -76,7 +76,7 @@ export function kgNodesToGraphData(nodes: KnowledgeNode[]): GraphData {
 }
 
 // ══════════════════════════════════════════════════════════════
-// 获取知识图谱数据 (从 /api/knowledge-tree/nodes)
+// 获取知识图谱数据 (从 /api/knowledge-graph/nodes)
 // ══════════════════════════════════════════════════════════════
 
 export async function fetchGraphData(partitionId?: string): Promise<GraphData> {

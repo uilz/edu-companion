@@ -3,7 +3,7 @@
 //
 //  封装 KnowledgeTreePage / NodeDetailPanel / TreeChatPanel
 //  之间重复的节点 CRUD 和 AI 操作逻辑。
-//  使用 knowledge-tree-api.ts (四实体解耦架构)
+//  使用 knowledge-graph-api.ts (四实体解耦架构)
 //
 //  用法：
 //     const actions = useGraphNodeActions({ onNodeUpdated: loadGraph });
@@ -12,7 +12,7 @@
 // ══════════════════════════════════════════════════════════════
 
 import { useCallback } from "react";
-import { knowledgeNodesApi } from "@/lib/api/knowledge-tree-api";
+import { knowledgeNodesApi } from "@/lib/api/knowledge-graph-api";
 import { authedFetch } from "@/lib/api/api";
 
 export interface GraphNodeActionsCallbacks {
@@ -85,7 +85,7 @@ export function useGraphNodeActions(
     options?: { depth?: number; direction?: "children" | "siblings" },
   ): Promise<boolean> => {
     try {
-      const res = await authedFetch(`/api/knowledge-tree/ai/expand/${nodeId}`, {
+      const res = await authedFetch(`/api/knowledge-graph/ai/expand/${nodeId}`, {
         method: "POST",
         body: JSON.stringify({ depth: options?.depth ?? 2, direction: options?.direction ?? "children" }),
       });
@@ -101,7 +101,7 @@ export function useGraphNodeActions(
   // ── AI 编辑/优化 ──
   const aiEdit = useCallback(async (nodeId: string): Promise<boolean> => {
     try {
-      const res = await authedFetch(`/api/knowledge-tree/ai/edit/${nodeId}`, {
+      const res = await authedFetch(`/api/knowledge-graph/ai/edit/${nodeId}`, {
         method: "POST",
         body: JSON.stringify({ instruction: "优化该节点的名称、描述和标签" }),
       });
@@ -121,7 +121,7 @@ export function useGraphNodeActions(
     convId?: string,
   ): Promise<{ response: string; conversationId?: string } | null> => {
     try {
-      const res = await authedFetch(`/api/knowledge-tree/ai/chat/${nodeId}`, {
+      const res = await authedFetch(`/api/knowledge-graph/ai/chat/${nodeId}`, {
         method: "POST",
         body: JSON.stringify({
           message,
@@ -144,7 +144,7 @@ export function useGraphNodeActions(
   // ── 生成知识树 ──
   const generateGraph = useCallback(async (): Promise<boolean> => {
     try {
-      const res = await authedFetch(`/api/knowledge-tree/ai/generate`, { method: "POST" });
+      const res = await authedFetch(`/api/knowledge-graph/ai/generate`, { method: "POST" });
       if (!res.ok) throw new Error(`服务返回 ${res.status}`);
       onNodeUpdated?.();
       return true;

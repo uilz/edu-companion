@@ -15,7 +15,7 @@ import PracticePanel from "@/components/practice/panels/PracticePanel";
 import NodeDetailPanel from "@/components/graph/panels/NodeDetailPanel";
 import TreeChatPanel from "@/components/graph/panels/TreeChatPanel";
 import { authedFetch, API_BASE } from "@/lib/api/api";
-import { knowledgeNodesApi } from "@/lib/api/knowledge-tree-api";
+import { knowledgeNodesApi } from "@/lib/api/knowledge-graph-api";
 import { useIsMobile } from '@/hooks/useMediaQuery';
 import { useGraphNodeActions } from "@/hooks/graph/useGraphNodeActions";
 

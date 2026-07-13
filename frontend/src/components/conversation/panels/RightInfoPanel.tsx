@@ -91,7 +91,7 @@ const labelCache = new Map<string, string>();
 async function fetchNodeLabel(id: string): Promise<string> {
   if (labelCache.has(id)) return labelCache.get(id)!;
   try {
-    const resp = await apiFetch<{ node: { label: string } }>(`/knowledge-tree/nodes/${id}`);
+    const resp = await apiFetch<{ node: { label: string } }>(`/knowledge-graph/nodes/${id}`);
     const label = resp.node?.label || id.slice(-6);
     labelCache.set(id, label);
     return label;

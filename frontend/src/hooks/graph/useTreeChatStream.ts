@@ -2,7 +2,7 @@
 //  useTreeChatStream — 知识树 SSE 流式对话 hook
 //
 //  封装知识树探索会话的完整流式对话流程：
-//    1. initChat(nodeId) → POST /api/knowledge-tree/ai/chat/{nodeId} → conv_id
+//    1. initChat(nodeId) → POST /api/knowledge-graph/ai/chat/{nodeId} → conv_id
   //    2. sendMessage(text, dirId) → POST /api/conversations/tree/conversation/{convId}/message
 //    3. SSE /api/conversations/stream/{convId} → token / tool_block / done / error
 //
@@ -65,7 +65,7 @@ export function useTreeChatStream(): UseTreeChatStreamReturn {
   // ── 初始化会话 ──
   const initChat = useCallback(async (nodeId: string): Promise<string> => {
     // 1. 验证知识树节点存在
-    const res = await authedFetch(`/api/knowledge-tree/ai/chat/${nodeId}`, {
+    const res = await authedFetch(`/api/knowledge-graph/ai/chat/${nodeId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),

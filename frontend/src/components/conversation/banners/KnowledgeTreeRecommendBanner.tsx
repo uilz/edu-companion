@@ -64,7 +64,7 @@ export default function KnowledgeTreeRecommendBanner() {
   useEffect(() => {
     const fetchRecs = async () => {
       try {
-        const res = await authedFetch("/api/knowledge-tree/ai/recommendation?source=conversation");
+        const res = await authedFetch("/api/knowledge-graph/ai/recommendation?source=conversation");
         if (!res.ok) return;
         const d = await res.json();
         const recs: Recommendation[] = d.recommendations || [];

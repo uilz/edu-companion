@@ -180,13 +180,18 @@ function _handleSSEEvent(event: Record<string, unknown>) {
           const placeholder: MessageNode = {
             id: msgId,
             directory_id: "",
+            parent_id: null,
+            children_ids: [],
             role: "assistant",
             content: "",
             content_blocks: [],
             text_summary: "",
-            status: "streaming",
             timestamp: Date.now() / 1000,
-          } as MessageNode;
+            token_count: 0,
+            version: 1,
+            is_deleted: false,
+            is_archived: false,
+          };
           return {
             streamingId: msgId,
             statusMessage: "正在生成...",

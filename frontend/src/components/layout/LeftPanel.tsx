@@ -96,8 +96,8 @@ export default function LeftPanel() {
   const { navContext } = useUser();
   const { pref } = useLayoutPrefs();
 
-  // 折叠状态：使用 layout pref（折叠按钮由 ResizableContainer 的 PanelHeader 提供）
-  const collapsed = pref.leftPanel.collapsed;
+  // 折叠状态：expanded 以外的状态都视为 collapsed 渲染
+  const collapsed = pref.leftPanel.state !== "expanded";
 
   // 根据用户权限过滤可见 nav
   const visibleItems = useMemo(() => {

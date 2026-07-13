@@ -17,7 +17,7 @@ export function RetentionPanel() {
   useEffect(() => {
     if (authLoading || !user) { setLoading(false); return; }
     const userId = user.id;
-    authedFetch(`/api/knowledge-tree/retention?user_id=${userId}`)
+    authedFetch(`/api/analytics/retention?user_id=${userId}`)
       .then((r) => r.json())
       .then(setData)
       .catch(() => {})
