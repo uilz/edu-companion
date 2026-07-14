@@ -38,8 +38,15 @@ type Mode = "login" | "register";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, loginByEmail, register } = useAuth();
+  const { user, loading: authLoading, login, loginByEmail, register } = useAuth();
   const [mode, setMode] = useState<Mode>("login");
+
+  // 已登录用户访问登录页时自动跳转到首页
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.replace("/");
+    }
+  }, [authLoading, user, router]);
   // 当前登录方式（仅在 login 模式下有意义）
   const [providerIdx, setProviderIdx] = useState(0);
   const provider: LocalLoginProvider = LOCAL_PROVIDERS[providerIdx];
