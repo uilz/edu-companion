@@ -1,5 +1,7 @@
 // ============================================================
-// navConfig — 应用导航集中配置（任务 #30 / #34 / #75）
+// navConfig — 应用导航集中配置
+//
+// V1 导航收敛：Today / Growth / Profile（Session 通过 Today 进入）
 //
 // 单一数据源 (Single Source of Truth)：
 //   • Sidebar      (桌面侧边栏)
@@ -7,38 +9,14 @@
 //   • BottomNav    (移动端底部 Tab)
 //   • HomePage     (首页四宫格)
 //
-// 任务 #34 扩展：基于用户角色 + 订阅状态过滤可见入口
-//   • UserRole         = student | guest
-//   • SubscriptionTier = free | pro | enterprise
-//   • NavItem.requiredRoles / requiredTiers 显式声明可见性
-//   • getNavItemsFor(slot, context)  接收上下文做过滤
-//
-// 任务 #45：admin 后台入口已从此处移除（admin 走独立 3001 项目）。
-// UserRole / requiredRoles / badgePro 机制保留以备未来扩展。
-//
-// 任务 #75：撤销 liveroom 的 Pro 档位过滤
-//   • liveroom.requiredTiers / badgePro 已删除
-//   • 所有已登录用户都可看到 liveroom
-//   • isItemVisible 现在也检查 requiresAuth（userRole=guest 时拦截）
+// 旧入口（conversation / practice / flashcard 等）的路由仍然存在，
+// 可通过 URL 直接访问，但不再在主导航中暴露。
 // ============================================================
 
 import {
-  Brain,
-  Dumbbell,
-  Bell,
-  Library,
-  GitGraph,
-  Folder,
-  MessageSquare,
-  Settings as SettingsIcon,
-  BarChart3,
-  Layers,
-  BookOpen,
-  Mic,
-  Heart,
-  Calendar,
-  Compass,
-  Lock,
+  CalendarDays,
+  TrendingUp,
+  User,
   type LucideIcon,
 } from "lucide-react";
 
@@ -116,201 +94,50 @@ export interface NavItem {
 
 export const primaryNavItems: NavItem[] = [
   {
-    path: "/conversation",
-    label: "学习空间",
-    icon: Brain,
+    path: "/",
+    label: "Today",
+    mobileLabel: "Today",
+    icon: CalendarDays,
     priority: 1,
     requiresAuth: true,
     visibleIn: { sidebar: true, drawer: true, bottomNav: true, quickAction: true },
     quickActionMeta: {
-      emoji: "💬",
-      title: "智能对话",
-      desc: "随时提问，启发式学习",
-      color: "from-info/20 to-info/10",
+      emoji: "📅",
+      title: "今天的学习",
+      desc: "苹果果的今日建议",
+      color: "from-primary/20 to-primary/10",
     },
   },
   {
-    path: "/practice",
-    label: "练习",
-    icon: Dumbbell,
+    path: "/growth",
+    label: "Growth",
+    mobileLabel: "Growth",
+    icon: TrendingUp,
     priority: 2,
     requiresAuth: true,
     visibleIn: { sidebar: true, drawer: true, bottomNav: true, quickAction: true },
     quickActionMeta: {
-      emoji: "✏️",
-      title: "开始练习",
-      desc: "定制化刷题检测",
-      color: "from-success/20 to-success/10",
+      emoji: "📈",
+      title: "成长回顾",
+      desc: "看看最近的进步",
+      color: "from-green-500/20 to-green-500/10",
     },
   },
   {
-    path: "/project",
-    label: "项目",
-    icon: Folder,
+    path: "/profile",
+    label: "Profile",
+    mobileLabel: "Profile",
+    icon: User,
     priority: 3,
     requiresAuth: true,
-    // 项目入口：桌面主导航 + 平板抽屉（任务 #31 修复：此前移动端用户无法访问项目）
-    // 移动端 BottomNav 不放，避免 Tab 拥挤
-    visibleIn: { sidebar: true, drawer: true, bottomNav: false, quickAction: false },
-  },
-  {
-    path: "/knowledge-tree",
-    label: "知识树",
-    icon: GitGraph,
-    priority: 4,
-    requiresAuth: true,
-    // 任务 #31：BottomNav 让位给 4 个新高频入口，knowledge-tree 仍在 QuickAction / Sidebar / Drawer 露出
-    visibleIn: { sidebar: true, drawer: true, bottomNav: false, quickAction: true },
-    quickActionMeta: {
-      emoji: "🧠",
-      title: "知识图谱",
-      desc: "查漏补缺",
-      color: "from-warning/20 to-warning/10",
-    },
-  },
-  {
-    path: "/",
-    label: "首页",
-    icon: Bell,
-    priority: 5,
-    requiresAuth: true,
-    // 任务 #120：秘书仪表盘替代首页，/secretary 重定向到 /
-    visibleIn: { sidebar: true, drawer: true, bottomNav: true, quickAction: false },
-  },
-  {
-    path: "/resources",
-    label: "我的资源",
-    // BottomNav 用短标签「资源」避免 6 个 Tab 拥挤
-    mobileLabel: "资源",
-    icon: Library,
-    priority: 6,
-    requiresAuth: true,
-    // 任务 #31：BottomNav 让位；资源管理走 Sidebar + Drawer
-    visibleIn: { sidebar: true, drawer: true, bottomNav: false, quickAction: false },
-  },
-  {
-    path: "/analytics",
-    label: "学情分析",
-    mobileLabel: "分析",
-    icon: BarChart3,
-    priority: 7,
-    requiresAuth: true,
-    // 学情分析从 /dashboard 进入；首页四宫格给一个直跳入口
-    visibleIn: { sidebar: false, drawer: false, bottomNav: false, quickAction: true },
-    quickActionMeta: {
-      emoji: "📊",
-      title: "学情分析",
-      desc: "全方位进度追踪",
-      color: "from-accent/20 to-accent/50/10",
-    },
-  },
-  {
-    path: "/settings",
-    label: "设置",
-    icon: SettingsIcon,
-    priority: 8,
-    requiresAuth: true,
-    // 任务 #31：移动端设置改为通过 QuickAction 直达
-    // 桌面/平板端仍在 footer 渲染（独立样式），所以主导航槽位不重复
-    visibleIn: { sidebar: false, drawer: false, bottomNav: false, quickAction: true },
-    quickActionMeta: {
-      emoji: "⚙️",
-      title: "设置",
-      desc: "个性化与系统配置",
-      color: "from-surface-hover/20 to-muted/10",
-    },
-  },
-  // ── 任务 #31：补齐 6 个新模块入口 ─────────────────────
-  // 之前 6 个模块对用户完全不可见（Sidebar / Drawer / BottomNav / QuickAction 都没入口）。
-  // 统一在此处声明，各槽位按需 filter + sort。
-  {
-    path: "/flashcard",
-    label: "卡片复习",
-    mobileLabel: "卡片",
-    icon: Layers,
-    priority: 9,
-    requiresAuth: true,
-    // 间隔重复记忆是高频学习场景，桌面 + 平板 + 移动 + 首页四宫格全部露出
     visibleIn: { sidebar: true, drawer: true, bottomNav: true, quickAction: true },
     quickActionMeta: {
-      emoji: "🎴",
-      title: "卡片复习",
-      desc: "间隔重复记忆",
-      color: "from-warning/20 to-warning/10",
+      emoji: "🍎",
+      title: "苹果果眼中的你",
+      desc: "你的学习画像",
+      color: "from-amber-500/20 to-amber-500/10",
     },
   },
-  {
-    path: "/reading",
-    label: "阅读",
-    mobileLabel: "阅读",
-    icon: BookOpen,
-    priority: 10,
-    requiresAuth: true,
-    // 阅读是高频场景，全部露出
-    visibleIn: { sidebar: true, drawer: true, bottomNav: true, quickAction: true },
-    quickActionMeta: {
-      emoji: "📖",
-      title: "阅读",
-      desc: "材料·笔记·对比",
-      color: "from-info/20 to-info/10",
-    },
-  },
-  // 任务 #75：撤销 Task #34 过度设计的 Pro 档位限制
-  // 用户从未要求 Pro 档位机制；后端无 subscriptionTier 字段。
-  // 语言房间对所有已登录用户开放（requiresAuth=true 已足够）。
-  {
-    path: "/liveroom",
-    label: "语言房间",
-    mobileLabel: "语言",
-    icon: Mic,
-    priority: 11,
-    requiresAuth: true,
-    // 语言房间使用频率相对低，桌面 + 平板抽屉 + 首页四宫格；移动 BottomNav 不放
-    visibleIn: { sidebar: true, drawer: true, bottomNav: false, quickAction: false },
-  },
-  {
-    path: "/emotion",
-    label: "心情压力",
-    mobileLabel: "心情",
-    icon: Heart,
-    priority: 12,
-    requiresAuth: true,
-    visibleIn: { sidebar: true, drawer: true, bottomNav: false, quickAction: false },
-  },
-  {
-    path: "/planning",
-    label: "规划",
-    mobileLabel: "规划",
-    icon: Calendar,
-    priority: 13,
-    requiresAuth: true,
-    // 每日规划是高频场景，全部露出
-    visibleIn: { sidebar: true, drawer: true, bottomNav: true, quickAction: true },
-    quickActionMeta: {
-      emoji: "📅",
-      title: "规划",
-      desc: "日/周目标与复盘",
-      color: "from-accent/20 to-info/10",
-    },
-  },
-  {
-    path: "/interest",
-    label: "兴趣探索",
-    mobileLabel: "兴趣",
-    icon: Compass,
-    priority: 14,
-    requiresAuth: true,
-    // 兴趣探索用于发现新方向，全部露出
-    visibleIn: { sidebar: true, drawer: true, bottomNav: true, quickAction: true },
-    quickActionMeta: {
-      emoji: "🧭",
-      title: "兴趣探索",
-      desc: "发现未知领域",
-      color: "from-success/20 to-success/10",
-    },
-  },
-  // 任务 #45：admin 后台入口已删除 — admin 是独立 Next.js 项目（端口 3001），
-  // 不再混入主前端 navConfig，避免误点产生 404。
 ];
 
 // ── 角色 / 订阅匹配辅助函数 ──────────────────────────────
@@ -427,13 +254,3 @@ export const TIER_LABELS: Record<SubscriptionTier, string> = {
   pro: "Pro",
   enterprise: "企业版",
 };
-
-/** MessageSquare 备用图标（保留导出以备未来某些场景下替换主图标） */
-export { MessageSquare };
-
-/** 锁图标 — 角标组件使用
- *
- * 任务 #45：admin 盾牌已不再需要（admin 入口从 navConfig 删除）；
- * 此处只保留 Pro 锁。
- */
-export { Lock };

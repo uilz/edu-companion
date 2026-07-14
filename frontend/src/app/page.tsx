@@ -1,19 +1,24 @@
 // ============================================================
-// / 根路径页面 (任务 #120)
+// / 根路径页面 — Today（PR-001）
 //
-// 设计决策：秘书仪表盘作为统一首页
-//   - 替代原 Cockpit 驾驶舱
-//   - AppShell / Workbench 不再将 / 判定为 cockpit 路由
-//   - 直接渲染 SecretaryDashboard
+// Today 是苹果果 V1 的首页，回答三个问题：
+//   1. 今天最值得学习什么？
+//   2. 为什么？
+//   3. 完成以后我成长了什么？
+//
+// 设计原则（Product Bible §007）：
+//   - 首页展示用户的状态，不展示功能模块
+//   - AI 主动推荐，用户确认后进入 Learning Session
+//   - 唯一 CTA：「开始今天」
 //
 // 历史：
-//   - 此处原为 HomePage → 占位返回 null（任务 #31/#34/#78）
-//   - 由 Cockpit 接管（任务 #76/#78）
-//   - 现由 SecretaryDashboard 替代（任务 #120）
+//   - 原为 Cockpit 驾驶舱（任务 #76/#78）
+//   - 后为 SecretaryDashboard（任务 #120）
+//   - PR-001 重构为 Today 页面
 // ============================================================
 
-import SecretaryDashboard from "@/components/dashboard/SecretaryDashboard";
+import TodayPage from "@/components/today/TodayPage";
 
-export default function HomePage() {
-  return <SecretaryDashboard />;
+export default function RootPage() {
+  return <TodayPage />;
 }

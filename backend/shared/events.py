@@ -244,6 +244,111 @@ class PracticeAnswerBehaviorRecorded(DomainEvent):
         return "PracticeAnswerBehaviorRecorded"
 
 
+# ════════════════════════════════════════════════════════════════
+# Session 学习会话事件 (AppleGo Domain Model v1.2)
+# 注意: 与练习 Session 不同，这是 Learning Session 的领域事件
+# ════════════════════════════════════════════════════════════════
+
+
+@dataclass(frozen=True)
+class LearningSessionCreated(DomainEvent):
+    """学习 Session 创建事件"""
+    session_id: str = ""
+    learner_id: str = ""
+    mission_id: str = ""
+    recommendation_id: str = ""
+    title: str = ""
+    estimated_minutes: int = 25
+
+    @property
+    def event_type(self) -> str:
+        return "LearningSessionCreated"
+
+
+@dataclass(frozen=True)
+class LearningSessionStageChanged(DomainEvent):
+    """学习 Session 阶段转移事件"""
+    session_id: str = ""
+    learner_id: str = ""
+    old_stage: str = ""
+    new_stage: str = ""
+
+    @property
+    def event_type(self) -> str:
+        return "LearningSessionStageChanged"
+
+
+@dataclass(frozen=True)
+class LearningSessionMissionUpdated(DomainEvent):
+    """Session 任务分解更新事件"""
+    session_id: str = ""
+    learner_id: str = ""
+    mission_title: str = ""
+    steps: int = 0
+
+    @property
+    def event_type(self) -> str:
+        return "LearningSessionMissionUpdated"
+
+
+@dataclass(frozen=True)
+class LearningSessionCompleted(DomainEvent):
+    """学习 Session 完成事件 — Growth Engine 将监听此事件"""
+    session_id: str = ""
+    learner_id: str = ""
+    mission_id: str = ""
+    recommendation_id: str = ""
+    started_at: float = 0.0
+    finished_at: float | None = None
+    final_stage: str = "reflect"
+    title: str = ""
+
+    @property
+    def event_type(self) -> str:
+        return "LearningSessionCompleted"
+
+
+@dataclass(frozen=True)
+class LearningSessionCancelled(DomainEvent):
+    """Session 取消事件"""
+    session_id: str = ""
+    learner_id: str = ""
+
+    @property
+    def event_type(self) -> str:
+        return "LearningSessionCancelled"
+
+
+@dataclass(frozen=True)
+class ReflectionGenerated(DomainEvent):
+    """Session 反思生成事件"""
+    session_id: str = ""
+    learner_id: str = ""
+    content: str = ""
+    key_takeaways: list[str] = field(default_factory=list)
+    next_steps: list[str] = field(default_factory=list)
+
+    @property
+    def event_type(self) -> str:
+        return "ReflectionGenerated"
+
+
+@dataclass(frozen=True)
+class GrowthRecordCreated(DomainEvent):
+    """Growth Engine 生成的成长记录事件"""
+    record_id: str = ""
+    learner_id: str = ""
+    session_id: str = ""
+    session_title: str = ""
+    total_gain: float = 0.0
+    skill_count: int = 0
+    duration_minutes: float = 0.0
+
+    @property
+    def event_type(self) -> str:
+        return "GrowthRecordCreated"
+
+
 # ──────────────────────────────────────────────
 # 错题本域事件
 # ──────────────────────────────────────────────
@@ -2604,5 +2709,13 @@ EVENT_TYPES: dict[str, type[DomainEvent]] = {
         InterestContentImported,
         InterestLocalWeightAdjusted,
         InterestPrefsUpdated,
+        # Session 学习会话事件 (Domain Model v1.2)
+        LearningSessionCreated,
+        LearningSessionStageChanged,
+        LearningSessionMissionUpdated,
+        LearningSessionCompleted,
+        LearningSessionCancelled,
+        ReflectionGenerated,
+        GrowthRecordCreated,
     ]
 }

@@ -20,6 +20,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.learning.study import router as study_router
 from app.api.learning.progress import router as progress_router
 from app.api.conversation.conversation import router as conversation_router
+from app.api.session.session import router as session_router
+from app.api.growth.growth import router as growth_router
+from app.api.profile.profile import router as profile_router
 from app.api.learning.partition_progress import router as partition_progress_router
 from app.api.system.multimodal import router as multimodal_router
 from app.api.system.achievements import router as achievements_router
@@ -486,6 +489,11 @@ app.include_router(study_router)
 app.include_router(progress_router)
 # 对话系统（树结构 + WebSocket）
 app.include_router(conversation_router, prefix="/api/conversations", tags=["conversations"])
+# 学习会话 (AppleGo Domain Model v1.2)
+app.include_router(session_router)
+# 成长记录 (AppleGo Domain Model v1.2)
+app.include_router(growth_router)
+app.include_router(profile_router)
 # 学习画像 (PartitionProgress)
 app.include_router(partition_progress_router)
 # 多模态（STT 转写）

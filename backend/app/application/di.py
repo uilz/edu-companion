@@ -80,6 +80,13 @@ class AppContainer:
         self.media_service: MediaService = self._create_media()
         self.multimedia_service: MultimediaService = self._create_multimedia()
 
+        # ── Session 服务 (AppleGo Domain Model v1.2) ──
+        self.session_service = self._create_session()
+
+        # ── Growth 服务 (AppleGo Domain Model v1.2) ──
+        self.growth_service = self._create_growth_service()
+        self.growth_engine = self._create_growth_engine()
+
         # ── Knowledge 服务 (四实体解耦架构) ──
         self.knowledge_services = self._create_knowledge_services()
 
@@ -192,6 +199,30 @@ class AppContainer:
             "navigation": NavigationService(),
             "message": MessageService(),
         }
+
+    def _create_session(self):
+        """创建 Session 领域服务 (AppleGo Domain Model v1.2)。"""
+        from app.domain.session.service import SessionService
+        from app.domain.session.repository import get_session_repo
+        return SessionService(
+            repo=get_session_repo(),
+            event_bus=self.event_bus,
+        )
+
+    def _create_growth_service(self):
+        """创建 Growth 查询服务 (AppleGo Domain Model v1.2)。"""
+        from app.domain.growth.service import GrowthService
+        from app.domain.growth.repository import get_growth_repo
+        return GrowthService(repo=get_growth_repo())
+
+    def _create_growth_engine(self):
+        """创建 GrowthEngine 事件驱动引擎 (AppleGo Domain Model v1.2)。"""
+        from app.domain.growth.engine import GrowthEngine
+        from app.domain.growth.repository import get_growth_repo
+        return GrowthEngine(
+            repo=get_growth_repo(),
+            event_bus=self.event_bus,
+        )
 
     # ═══════════════════════════════════════════════════════
     # 事件订阅 — 模块联动的唯一配置点
@@ -543,6 +574,16 @@ class AppContainer:
         )
         bus.subscribe("ProjectNodeExported", handle_project_node_exported)
 
+        # ── Growth Engine: Session → Growth 事件管道 (Domain Model v1.2) ──
+        bus.subscribe(
+            "LearningSessionCompleted",
+            self.growth_engine.on_session_completed,
+        )
+        bus.subscribe(
+            "ReflectionGenerated",
+            self.growth_engine.on_reflection_generated,
+        )
+
         logger.info("🔗 注册 %d 个事件订阅", sum(len(v) for v in bus._handlers.values()))
 
 
@@ -563,6 +604,16 @@ def get_event_store():
 def get_event_memory():
     """获取全局事件记忆"""
     return container.event_memory
+
+
+def get_session_service():
+    """获取 Session 领域服务 (AppleGo Domain Model v1.2)。"""
+    return container.session_service
+
+
+def get_growth_service():
+    """获取 Growth 查询服务 (AppleGo Domain Model v1.2)。"""
+    return container.growth_service
 
 
 # ── 事件处理辅助函数 ──
