@@ -1,133 +1,137 @@
-# 苹果果 - 个人知识体系
+# 苹果果 - AI Learning Companion
 
-> AI 驱动的个人学习助手，提供自主学习规划、精准答疑、多模态交互、知识追踪与个性化陪伴。
+> AI 驱动的个人学习伙伴，持续理解学习者、陪伴成长、优化学习路径。
 
 **技术栈**：Next.js 14 + React 18 + FastAPI + PostgreSQL + pgvector
-**核心定位**：以认知引擎为大脑、对话系统为交互枢纽，通过练习、阅读、卡片复习、项目探索等多维学习方式，结合知识图谱构建个人知识体系，辅以秘书系统、规划系统、情绪系统提供个性化学习陪伴。
+
+**核心定位**：以 Session（学习会话）为产品核心对象，通过 Learner Model 持续理解学习者。
 
 ---
 
 ## 快速开始
 
 ```bash
-# 一键启动（前后端 + Nginx + 认证网关）
-bash rebuild.sh
+bash rebuild.sh      # 一键启动（前后端 + Nginx + 认证网关）
 # 访问 http://localhost:8080
 
-# 前端开发（:3000）
-cd frontend && npm run dev
-
-# 后端开发（:8000）
-cd backend && uvicorn main:app --reload
+cd frontend && npm run dev          # 前端开发（:3000）
+cd backend && uvicorn main:app --reload  # 后端开发（:8000）
 ```
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
-| Nginx 统一入口 | 8080 | 路由分发、SSE 代理 |
-| Next.js 前端 | 3000 | App Router、SSR/CSR 混合 |
-| FastAPI 后端 | 8000 | 业务 API、LLM 调用 |
-| Auth Gateway | 18001 | 认证、JWT 管理 |
-| Admin 管理后台 | 3001 | 用户管理、数据监控 |
+| Nginx | 8080 | 统一入口、SSE 代理 |
+| Next.js | 3000 | App Router 前端 |
+| FastAPI | 8000 | 业务 API、LLM 调用 |
+| Auth Gateway | 18001 | 认证、JWT |
+| Admin | 3001 | 管理后台 |
 
 ---
 
-## 文档导航
+## 新手入口
 
-### 架构总览
-[architecture/overview.md](architecture/overview.md) — 系统分层架构、前后端通信、数据流、所有模块清单与依赖关系。
-
-### 架构专题
-| 文档 | 内容 |
-|------|------|
-| [architecture/message-tree.md](architecture/message-tree.md) | 对话消息树结构与操作 |
-| [architecture/event-hierarchy.md](architecture/event-hierarchy.md) | 领域事件分类体系 |
-| [architecture/event-system-v2.md](architecture/event-system-v2.md) | 事件系统 v2 设计 |
-| [architecture/tool-architecture.md](architecture/tool-architecture.md) | AI Tool 调用架构 |
-
-### 架构决策记录（ADR）
-[adr/readme.md](adr/readme.md) — 12 份 ADR，覆盖项目探索、记忆卡、阅读、语言房间、心情压力、规划、兴趣探索、设置、秘书、认知引擎、情绪系统、多视图架构等关键决策。
-
-### 模块文档
-
-#### 核心模块
-| 模块 | 文档 |
-|------|------|
-| 认知引擎 | [modules/cognitive-engine/overview.md](modules/cognitive-engine/overview.md) |
-| 对话系统 | [modules/conversation-system/overview.md](modules/conversation-system/overview.md) |
-
-#### 学习模块
-| 模块 | 文档 |
-|------|------|
-| 练习系统 | [modules/practice-system/overview.md](modules/practice-system/overview.md) |
-| 卡片复习 | [modules/flashcard/overview.md](modules/flashcard/overview.md) |
-| 阅读系统 | [modules/reading/overview.md](modules/reading/overview.md) |
-| 考试模式 | [modules/exam/overview.md](modules/exam/overview.md) |
-
-#### 知识模块
-| 模块 | 文档 |
-|------|------|
-| 知识图谱 | [modules/knowledge-graph/overview.md](modules/knowledge-graph/overview.md) |
-| 项目管理 | [modules/project-based-exploration/overview.md](modules/project-based-exploration/overview.md) |
-
-#### 辅助模块
-| 模块 | 文档 |
-|------|------|
-| 秘书系统 | [modules/secretary-system/overview.md](modules/secretary-system/overview.md) |
-| 规划系统 | [modules/planning/overview.md](modules/planning/overview.md) |
-| 情绪系统 | [modules/emotion-system/overview.md](modules/emotion-system/overview.md) |
-| 心情压力 | [modules/mood-stress/overview.md](modules/mood-stress/overview.md) |
-| 专注模式 | [modules/focus/overview.md](modules/focus/overview.md) |
-
-#### 发现模块
-| 模块 | 文档 |
-|------|------|
-| 兴趣探索 | [modules/interest-explorer/overview.md](modules/interest-explorer/overview.md) |
-| 语言房间 | [modules/language-room/overview.md](modules/language-room/overview.md) |
-| 多模态 | [modules/multimodal/overview.md](modules/multimodal/overview.md) |
-
-#### 基础设施
-| 模块 | 文档 |
-|------|------|
-| 文件管理 | [modules/file-management/overview.md](modules/file-management/overview.md) |
-| 设置 | [modules/settings/overview.md](modules/settings/overview.md) |
-| 驾驶舱 | [modules/dashboard/overview.md](modules/dashboard/overview.md) |
-| 学情分析 | [modules/analytics/overview.md](modules/analytics/overview.md) |
-| 资源管理 | [modules/resources/overview.md](modules/resources/overview.md) |
-| 质量分析 | [modules/quality/overview.md](modules/quality/overview.md) |
-| 数据导入 | [modules/import/overview.md](modules/import/overview.md) |
-
-### 设计规范
-| 文档 | 内容 |
-|------|------|
-| [design-language.md](design-language.md) | UI 设计语言规范（颜色、字体、组件） |
-| [design/sub-branch-design.md](design/sub-branch-design.md) | 子分支设计规范 |
-
-### 部署运维
-| 文档 | 内容 |
-|------|------|
-| [deploy/cloudflare-deploy.md](deploy/cloudflare-deploy.md) | Cloudflare 部署指南 |
-| [deploy/user-management.md](deploy/user-management.md) | 用户管理运维 |
-
-### AI 代理工作流
-| 文档 | 内容 |
-|------|------|
-| [agents/domain.md](agents/domain.md) | 领域模型与开发约定 |
-| [agents/triage-labels.md](agents/triage-labels.md) | Issue 分类标签规范 |
-| [agents/issue-tracker.md](agents/issue-tracker.md) | Issue 跟踪流程 |
-
-### 历史归档
-[old/](old/) — 早期架构设计、Roadmap、Phase 规划、历史审计报告、旧版 Specs 等。
+> **如果你是第一次来：请先读 [README_FIRST.md](../README_FIRST.md)。**
 
 ---
 
-## 新人阅读路线
+## 文档导航（AppleGo Product OS）
+
+### 00-foundation（最高决策层 — 永远不会轻易改）
+
+| 文档 | 唯一职责 |
+|------|---------|
+| [Manifesto](00-foundation/Manifesto.md) | 苹果果为什么存在 |
+| [Product Vision](00-foundation/Product%20Vision.md) | 为谁而做、核心飞轮、北极星指标 |
+| [Product Constitution](00-foundation/Product%20Constitution.md) | 12 条最高原则 |
+| [AI Constitution](00-foundation/AI%20Constitution.md) | AI 行为边界（6 条） |
+| [Product Principles](00-foundation/Product%20Principles.md) | 5 条设计原则（快速决策） |
+| [Interaction Laws](00-foundation/Interaction%20Laws.md) | 全产品交互定律（6 条，任何 Story 违反即打回） |
+| [Learning Principles](00-foundation/Learning%20Principles.md) | 学习理念（12 条，所有 Story 的最高仲裁） |
+| [V1 Scope](00-foundation/V1%20Scope.md) | V1 精确功能边界 |
+
+### 01-product（产品表现层 — 回答"产品怎么做给用户"）
+
+| 文档 | 唯一职责 |
+|------|---------|
+| [Product Bible](01-product/Product%20Bible.md) | 苹果果是什么（产品定义） |
+| [Product Blueprint](01-product/Product%20Blueprint.md) | V1 完整形态——用户的一天、一个月、半年 |
+| [Learning Session Design](01-product/Learning%20Session%20Design.md) | ⭐ 核心产品——一次学习的完整体验（9 章） |
+| [Session Interaction Spec](01-product/Session%20Interaction%20Spec.md) | Session 完整交互规范（Agent 编码的唯一交互依据） |
+| [Experience Backlog](01-product/Experience%20Backlog.md) | 用户会经历什么（7 条体验） |
+| [User Journey](01-product/User%20Journey.md) | 用户旅程——Day 1 ~ Day 30 |
+| [Capability Roadmap](01-product/Capability%20Roadmap.md) | 系统需要什么能力 |
+| [Roadmap](01-product/Roadmap.md) | 时间线演进路线 |
+
+### 02-domain（领域模型层 — 回答"系统怎么组织"）
+
+| 文档 | 唯一职责 |
+|------|---------|
+| [DDD](02-domain/DDD.md) | 为什么使用 DDD + Bounded Context + Aggregate + Event |
+| [Domain Model](02-domain/Domain%20Model.md) | 领域模型 |
+| [Context Map](02-domain/Context%20Map.md) | Bounded Context 映射 |
+| [Event Storming](02-domain/Event%20Storming.md) | 事件风暴 |
+| [Glossary](02-domain/Glossary.md) | 统一产品术语 |
+| [ADR/](02-domain/ADR/) | 架构决策记录（26 条） |
+
+### 03-engineering（工程规范层 — 回答"Agent 怎么写代码"）
+
+| 文档 | 唯一职责 |
+|------|---------|
+| [AGENTS](03-engineering/AGENTS.md) | Agent 开发规范 |
+| [Coding Standards](03-engineering/Coding%20Standards.md) | 编码规范 |
+| [API Standards](03-engineering/API%20Standards.md) | API 设计约定 |
+| [Architecture](03-engineering/Architecture.md) | 系统架构总览 |
+| [Definition of Done](03-engineering/Definition%20of%20Done.md) | PR 完成标准 |
+| [Development Workflow](03-engineering/Development%20Workflow.md) | EDD 开发流程 + Development Package |
+| [Testing](03-engineering/Testing.md) | 测试规范（产品验收导向） |
+| [specifications/](03-engineering/specifications/) | 8 份产品规格书（设计图纸） |
+
+### 04-delivery（交付层 — 回答"现在做什么"）
+
+| 文档 | 唯一职责 |
+|------|---------|
+| [Master Backlog](04-delivery/Master%20Backlog.md) | 唯一开发清单 |
+| [Acceptance](04-delivery/Acceptance.md) | 验收标准 |
+| [Releases](04-delivery/Releases.md) | 版本发布记录 |
+
+### 支撑目录
+
+| 目录 | 内容 |
+|------|------|
+| [modules/](modules/) | 模块技术文档（21 个模块） |
+| [templates/](templates/) | 文档模板 |
+| [rfcs/](rfcs/) | 技术方案 RFC |
+| [research/](research/) | 认知科学与学习科学研究 |
+| [archive/](archive/) | 历史归档（旧版 foundation/product/domain/principles 等） |
+| [old/](old/) | 更早的历史归档 |
+
+---
+
+## 文档依赖图（单向引用，禁止横向复制）
 
 ```
-第 1 步: docs/architecture/overview.md    — 了解系统全貌、分层架构、模块清单
-第 2 步: docs/adr/readme.md  — 理解关键架构决策的背景与取舍
-第 3 步: docs/modules/ 中选感兴趣模块    — 深入具体模块的设计与实现
-第 4 步: 阅读源码 frontend/src/ backend/ — 开始编码
+Manifesto
+    ↓
+Product Vision
+    ↓
+Product Constitution  ←  AI Constitution
+    ↓
+Product Bible  ←  Product Principles  ←  V1 Scope
+    ↓
+Experience Backlog  ←  User Journey
+    ↓
+Capability Roadmap
+    ↓
+Specifications（设计图纸，冻结后开发）
+    ↓
+DDD  ←  Glossary  ←  ADR
+    ↓
+Master Backlog
+    ↓
+AGENTS  ←  Coding Standards  ←  Definition of Done
 ```
+
+> **规则**：下层可引用上层。禁止横向复制内容。一件事实只写一次。
 
 ---
 
@@ -135,28 +139,27 @@ cd backend && uvicorn main:app --reload
 
 ```
 edu-companion/
-├── frontend/              # Next.js 14 前端（App Router + Zustand + Tailwind）
-├── backend/               # FastAPI 后端（分层架构：api/domain/services/infra）
-├── auth-gateway/          # 独立认证网关（FastAPI :18001）
-├── admin/                 # 管理后台（Next.js 14 :3001）
-├── docs/                  # 项目文档（本目录）
-│   ├── architecture/      # 架构文档
-│   ├── modules/           # 23 个模块文档
-│   ├── design-language.md # 设计规范
-│   ├── design/            # 设计专题
-│   ├── deploy/            # 部署文档
-│   ├── agents/            # AI 代理工作流
-│   └── old/               # 历史归档（ADR、Specs、Roadmap、Phase）
-├── scripts/               # 工具脚本
-└── rebuild.sh             # 一键重启（前后端 + Nginx + 认证网关）
+├── README_FIRST.md        # 新人入口
+├── AGENTS.md              # Agent 协作规则
+├── frontend/              # Next.js 14 前端
+├── backend/               # FastAPI 后端
+├── auth-gateway/          # 独立认证网关
+├── admin/                 # 管理后台
+├── docs/
+│   ├── 00-foundation/     # 最高决策层（6 份）
+│   ├── 01-product/        # 产品表现层（6 份）
+│   ├── 02-domain/         # 领域模型层（5 + ADR/）
+│   ├── 03-engineering/    # 工程规范层（7 + specifications/）
+│   ├── 04-delivery/       # 交付层（3 份）
+│   ├── modules/           # 模块文档
+│   ├── templates/         # 文档模板
+│   ├── rfcs/              # RFC 制度
+│   ├── research/          # 认知科学/学习科学
+│   ├── archive/           # 历史归档
+│   └── old/               # 更早归档
+└── rebuild.sh             # 一键重启
 ```
 
 ---
 
-## 文档维护约定
-
-- **新模块**：必须在 `docs/modules/<module-name>/` 创建 `overview.md`，描述模块定位、数据模型、API 接口、事件定义。
-- **重大架构变更**：需在 `docs/adr/` 创建 ADR 文档，记录决策背景、方案对比、最终选择。
-- **历史文档归档**：过期或废弃的文档移动到 `docs/old/` 对应子目录，不在主文档区保留旧版本。
-- **架构文档更新**：模块新增或重构后，同步更新 `docs/architecture/overview.md` 中的模块清单和依赖关系图。
-- **设计变更**：UI 层面的重大变更需同步更新 `docs/design-language.md`。
+> **维护者：Founder。最后更新：IA 重构完成后。**
