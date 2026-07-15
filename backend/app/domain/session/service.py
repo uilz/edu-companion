@@ -59,8 +59,9 @@ class SessionService:
         """创建 Session。
 
         1. 创建 Session 实体
-        2. 在 Conversation 树中创建目录 + 对话
-        3. 发布 LearningSessionCreated 事件
+        2. 基于 Learner Model 生成默认 Mission
+        3. 在 Conversation 树中创建目录 + 对话
+        4. 保存并发布 LearningSessionCreated 事件
         """
         from app.domain.conversation.tree_store import get_tree_store
 
@@ -76,7 +77,20 @@ class SessionService:
             estimated_minutes=estimated_minutes,
         )
 
-        # 2. 在 Conversation 中创建关联
+        # 2. 基于 Learner Model 生成默认 Mission（S2.2）
+        try:
+            mission_title, mission_minutes, mission_steps = (
+                self._build_mission_from_learner_model(
+                    user_id=user_id,
+                    topic=topic,
+                    estimated_minutes=estimated_minutes,
+                )
+            )
+            session.set_mission(mission_title, mission_minutes, mission_steps)
+        except Exception as e:
+            logger.warning("基于 Learner Model 生成 Mission 失败，使用默认空 Mission: %s", e)
+
+        # 3. 在 Conversation 中创建关联
         try:
             tree = get_tree_store()
             # 找到或创建 Session 目录
@@ -97,7 +111,7 @@ class SessionService:
         except Exception as e:
             logger.warning(f"Conversation 关联失败（Session 仍创建）: {e}")
 
-        # 3. 保存 + 发布事件
+        # 4. 保存 + 发布事件
         self._repo.save(session)
         await self._publish(created_event)
         logger.info(
@@ -105,13 +119,24 @@ class SessionService:
             session.id, user_id, session_title,
         )
 
-        return {
+        result = {
             "session_id": session.id,
             "title": session.title,
             "stage": session.stage,
             "conversation_id": session.conversation_id,
             "estimated_minutes": session.estimated_minutes,
         }
+        if session.mission:
+            result["mission"] = {
+                "title": session.mission.title,
+                "estimated_minutes": session.mission.estimated_minutes,
+                "steps": [
+                    {"order": s.order, "description": s.description,
+                     "type": s.step_type, "status": s.status}
+                    for s in session.mission.steps
+                ],
+            }
+        return result
 
     async def get_session(self, session_id: str) -> dict | None:
         """获取 Session 当前状态。"""
@@ -291,6 +316,75 @@ class SessionService:
             )
         except Exception as e:
             logger.warning(f"Failed to add initial message: {e}")
+
+    def _build_mission_from_learner_model(
+        self,
+        user_id: str,
+        topic: str,
+        estimated_minutes: int,
+    ) -> tuple[str, int, list[dict]]:
+        """基于 Learner Model 生成 Session 默认 Mission（S2.2）。
+
+        策略：
+        - 优先使用用户传入的 topic 作为 Mission 主题
+        - 读取 LearnerProfile 的 subjects / learning_style 做个性化微调
+        - 读取 ProgressSummary 的 struggling_skills，若 topic 与某个困难知识点
+          相关，则增加 review 步骤的比重
+        - 默认三步：explain → practice → review
+        """
+        from shared.learner_model import get_learner_model
+
+        engine = get_learner_model()
+        profile = engine.get_or_create_profile(user_id)
+        progress = engine.get_progress_summary(user_id)
+
+        # 主题：用户传入 topic 优先；若为空则使用 learner 的学科或默认主题
+        mission_topic = topic or (
+            profile.subjects[0] if profile.subjects else "今天的学习"
+        )
+        subject = (profile.subjects[0] if profile.subjects else "学习") or "学习"
+
+        # 判断是否命中困难知识点
+        struggling = [s for s in (progress.struggling_skills or []) if s]
+        is_struggling = any(mission_topic in s or s in mission_topic for s in struggling)
+
+        # 根据 learning_style 微调步骤文案
+        style = profile.learning_style or "reading"
+        style_hint = {
+            "visual": "看图/示例",
+            "auditory": "听讲解",
+            "reading": "阅读关键概念",
+            "kinesthetic": "动手尝试",
+        }.get(style, "阅读关键概念")
+
+        title = f"{subject}：{mission_topic}"
+        steps: list[dict] = [
+            {
+                "order": 1,
+                "description": f"先{style_hint}，理解「{mission_topic}」的核心",
+                "type": "explain",
+            },
+            {
+                "order": 2,
+                "description": f"做一道小题，检验对「{mission_topic}」的理解",
+                "type": "practice",
+            },
+        ]
+
+        if is_struggling:
+            steps.append({
+                "order": 3,
+                "description": f"回头复习：你之前对「{mission_topic}」相关的知识点有些吃力，再巩固一下",
+                "type": "review",
+            })
+        else:
+            steps.append({
+                "order": 3,
+                "description": f"总结今天关于「{mission_topic}」的关键收获",
+                "type": "review",
+            })
+
+        return title, estimated_minutes, steps
 
     # ═══════════════════════════════════════════════════════
     # 事件 + 序列化

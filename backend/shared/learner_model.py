@@ -40,6 +40,9 @@ class LearnerModelEngine:
         self._profiles: dict[str, LearnerProfile] = {}
         # 会话存储: session_id -> ConversationContext（临时缓存）
         self._sessions: dict[str, dict[str, Any]] = {}
+        # 画像更新日志与学习计划缓存
+        self._activity_log: dict[str, list[dict[str, Any]]] = {}
+        self._study_plans: dict[str, StudyPlan] = {}
         # 掌握度判定使用 shared.constants.get_mastery_label
 
     # ──────────────────────────────────────────────
@@ -319,3 +322,8 @@ class LearnerModelEngine:
 
 # ── 全局引擎实例 ──
 learner_engine = LearnerModelEngine()
+
+
+def get_learner_model() -> LearnerModelEngine:
+    """获取全局 LearnerModelEngine 实例。"""
+    return learner_engine
