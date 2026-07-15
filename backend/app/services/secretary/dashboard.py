@@ -203,11 +203,57 @@ def _build_pending(proposals: list[dict], confirmations: list[dict]) -> dict:
 
 
 def _build_recommendations(user_id: str) -> dict:
-    """聚合 AI 学习建议（复用 /api/study/suggestions 逻辑）"""
-    try:
-        states = get_all_cognitive_states(user_id)
-        recs = recommend_practice_items(states, top_n=10)
+    """聚合 AI 学习建议，融合 Learner Model 画像数据（S2.3）。
 
+    策略：
+    - 以 CognitiveNode 状态为底
+    - 叠加 Learner Model 的 struggling_skills、subjects
+    - 对困难知识点和偏好学科加权
+    - 无认知节点时，从 Learner Model 推导兜底推荐
+    - 排序确定性：优先级降序 + skill_id 升序
+    """
+    try:
+        # 1. 基础认知状态
+        states = get_all_cognitive_states(user_id)
+        recs = recommend_practice_items(states, top_n=20)
+
+        # 2. 读取 Learner Model
+        from shared.learner_model import get_learner_model
+
+        engine = get_learner_model()
+        profile = engine.get_or_create_profile(user_id)
+        progress = engine.get_progress_summary(user_id)
+
+        # 3. 兜底：推荐不足时，从 Learner Model 补充
+        existing_ids = {r["skill_id"] for r in recs}
+        fallback_ids = _derive_fallback_skill_ids(profile, progress, existing_ids)
+        for sid in fallback_ids:
+            recs.append({
+                "skill_id": sid,
+                "level": "未接触",
+                "priority": 0.3,
+                "p_known": 0.0,
+            })
+
+        # 4. 加权：困难知识点置顶
+        struggling = set(progress.struggling_skills or [])
+        for rec in recs:
+            if rec["skill_id"] in struggling:
+                rec["priority"] = max(rec.get("priority", 0.0), 1.2)
+
+        # 5. 加权：偏好学科优先
+        preferred_subjects = set(profile.subjects or [])
+        if preferred_subjects:
+            from app.domain.knowledge.prerequisites import SKILL_TO_SUBJECT
+
+            for rec in recs:
+                if SKILL_TO_SUBJECT.get(rec["skill_id"], "") in preferred_subjects:
+                    rec["priority"] = rec.get("priority", 0.0) + 0.4
+
+        # 6. 确定性排序
+        recs.sort(key=lambda r: (-r.get("priority", 0.0), r["skill_id"]))
+
+        # 7. 分类输出
         urgent: list[dict] = []
         building: list[dict] = []
         new_topic: list[dict] = []
@@ -221,7 +267,7 @@ def _build_recommendations(user_id: str) -> dict:
                 return await _canonical_get_ks(uid, sid)
 
         checker = PrerequisiteChecker(_Adapter())
-        for rec in recs:
+        for rec in recs[:10]:
             sid = rec["skill_id"]
             entry = {
                 "skill_id": sid,
@@ -230,20 +276,14 @@ def _build_recommendations(user_id: str) -> dict:
                 "p_known": rec.get("p_known", 0),
                 "subject": SKILL_TO_SUBJECT.get(sid, "未知"),
             }
-            if rec.get("level") == "接近掌握":
+            if sid in struggling or rec.get("level") == "接近掌握":
                 urgent.append(entry)
             elif rec.get("level") == "发展中":
                 building.append(entry)
             else:
                 new_topic.append(entry)
 
-        suggestion = (
-            f"建议优先突破「{urgent[0]['label']}」"
-            if urgent else
-            f"继续推进「{building[0]['label']}」"
-            if building else
-            "选择一个新主题开始学习吧 🌱"
-        )
+        suggestion = _build_recommendation_suggestion(urgent, building, new_topic)
 
         return {
             "suggestion": suggestion,
@@ -254,6 +294,92 @@ def _build_recommendations(user_id: str) -> dict:
     except Exception as e:
         logger.warning("构建推荐失败: %s", e)
         return {"suggestion": "", "urgent": [], "building": [], "new_topic": []}
+
+
+def _derive_fallback_skill_ids(
+    profile, progress, existing_ids: set[str]
+) -> list[str]:
+    """当 cognitive 推荐不足时，从 Learner Model 推导兜底技能 ID。"""
+    # 优先推荐困难知识点
+    result = [
+        sid for sid in (progress.struggling_skills or [])
+        if sid and sid not in existing_ids
+    ]
+    if result:
+        return result[:5]
+
+    # 其次按学科偏好取入口知识点
+    from app.domain.knowledge.prerequisites import SUBJECT_SKILLS
+
+    preferred = profile.subjects or []
+    if preferred:
+        for subject in preferred:
+            for sid in SUBJECT_SKILLS.get(subject, []):
+                if sid not in existing_ids:
+                    result.append(sid)
+        if result:
+            return result[:5]
+
+    # 默认：所有学科入口
+    for skills in SUBJECT_SKILLS.values():
+        for sid in skills:
+            if sid not in existing_ids:
+                result.append(sid)
+    return result[:5]
+
+
+def _build_recommendation_suggestion(
+    urgent: list[dict], building: list[dict], new_topic: list[dict]
+) -> str:
+    """生成个性化建议文案。"""
+    if urgent:
+        return f"建议优先突破「{urgent[0]['label']}」"
+    if building:
+        return f"继续推进「{building[0]['label']}」"
+    if new_topic:
+        subject = new_topic[0].get("subject")
+        prefix = f"在{subject}方面，" if subject else ""
+        return f"{prefix}可以从「{new_topic[0]['label']}」开始 🌱"
+    return "完成一次学习后，我会更清楚今天该带你学什么。"
+
+
+def _prioritize_plan_items(items: list[dict], user_id: str) -> list[dict]:
+    """用 Learner Model 对计划项重新排序（S2.3）。
+
+    排序优先级：
+    1. 困难知识点（struggling_skills）置顶
+    2. 偏好学科（profile.subjects）优先
+    3. 保留原规划优先级
+    4. skill_id 升序保证确定性
+    """
+    if not items:
+        return items
+
+    try:
+        from shared.learner_model import get_learner_model
+
+        engine = get_learner_model()
+        profile = engine.get_or_create_profile(user_id)
+        progress = engine.get_progress_summary(user_id)
+
+        struggling = set(progress.struggling_skills or [])
+        preferred_subjects = set(profile.subjects or [])
+
+        def _sort_key(item: dict) -> tuple:
+            sid = item.get("skill_id", "")
+            subject = item.get("subject", "")
+            original_priority = item.get("priority", 0) or 0
+            return (
+                0 if sid in struggling else 1,
+                0 if subject in preferred_subjects else 1,
+                -original_priority,
+                sid,
+            )
+
+        return sorted(items, key=_sort_key)
+    except Exception as e:
+        logger.warning("Learner Model 排序 plan items 失败: %s", e)
+        return items
 
 
 async def build_dashboard(
@@ -296,6 +422,12 @@ async def build_dashboard(
 
     assess = await assess_task
     plan_data = await plan_task
+
+    # S2.3: 用 Learner Model 对今日计划排序，使推荐更个性化
+    if isinstance(plan_data, dict) and isinstance(plan_data.get("plan"), dict):
+        plan_data["plan"]["items"] = _prioritize_plan_items(
+            plan_data["plan"].get("items", []), user_id
+        )
 
     snapshot = {
         "cognitive_load": assess.get("cognitive_load", 0),
