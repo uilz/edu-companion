@@ -26,7 +26,7 @@ interface ActiveSession {
 }
 
 interface ContinueContext {
-  type: "active_session" | "yesterday" | "none";
+  type: "active_session" | "yesterday" | "welcome_back" | "none";
   session_id?: string;
   title?: string;
   stage?: string;
@@ -263,6 +263,76 @@ function ContinueYesterdayCard({
   );
 }
 
+// ── 欢迎回来卡片（S3.1） ──────────────────────────────────
+
+function WelcomeBackCard({
+  context,
+  date,
+  onContinue,
+  onStartNew,
+  creating,
+}: {
+  context: ContinueContext;
+  date: string;
+  onContinue: () => void;
+  onStartNew: () => void;
+  creating: boolean;
+}) {
+  const title = context.title || "一次学习";
+  const takeaway = context.key_takeaways?.[0];
+
+  return (
+    <div className="max-w-lg mx-auto px-4 py-8 sm:py-10">
+      <div className="mb-6">
+        <h1 className="text-3xl sm:text-4xl font-bold text-ink-primary mb-1">
+          🍎 欢迎回来
+        </h1>
+        <p className="text-sm text-ink-muted">{date}</p>
+      </div>
+
+      <p className="text-sm leading-relaxed text-ink-secondary mb-6">
+        欢迎回来。上次我们聊到了「{title}」。
+      </p>
+
+      <div className="mb-8 p-5 rounded-xl bg-surface border border-border/60 space-y-2">
+        <p className="text-xs text-ink-muted">上次的学习</p>
+        <h2 className="text-lg font-semibold text-ink-primary">{title}</h2>
+        {takeaway && (
+          <p className="text-xs text-ink-muted">{takeaway}</p>
+        )}
+      </div>
+
+      <div className="flex flex-col items-center gap-3">
+        <Button
+          variant="primary"
+          size="lg"
+          disabled={creating}
+          onClick={onContinue}
+          className="text-base px-10 py-3 rounded-full shadow-md"
+        >
+          {creating ? (
+            <>
+              <Loader2 size={18} className="animate-spin" />
+              正在准备...
+            </>
+          ) : (
+            <>
+              <Play size={18} />
+              从这里继续
+            </>
+          )}
+        </Button>
+        <button
+          onClick={onStartNew}
+          className="text-xs text-ink-muted hover:text-ink-secondary transition-colors"
+        >
+          换个方向
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── 加载骨架屏 ────────────────────────────────────────────
 
 function TodaySkeleton() {
@@ -336,7 +406,7 @@ export default function TodayPage() {
 
   // ── 创建 Session 的通用 handler ──
   const handleCreateSession = useCallback(
-    async (params: { title: string; focus: string; goal: string; estimatedMinutes: number }) => {
+    async (params: { title: string; focus: string; goal: string; estimatedMinutes: number; source?: string }) => {
       setCreateError(null);
       setCreating(true);
       try {
@@ -347,6 +417,7 @@ export default function TodayPage() {
             focus: params.focus,
             goal: params.goal,
             estimated_minutes: params.estimatedMinutes,
+            source: params.source || "",
           }),
         });
         if (!res.ok) {
@@ -389,6 +460,34 @@ export default function TodayPage() {
     day: "numeric",
     weekday: "long",
   });
+
+  // ── S3.1: 欢迎回来（间隔 ≥ 3 天）— 优先级高于 Dashboard ──
+  if (continueContext?.type === "welcome_back" && !activeSession) {
+    return (
+      <WelcomeBackCard
+        context={continueContext}
+        date={todayDateStr}
+        onContinue={() =>
+          handleCreateSession({
+            title: `继续：${continueContext.title || ""}`,
+            focus: continueContext.title || "",
+            goal: continueContext.key_takeaways?.join("\n") || continueContext.reflection_snippet || "",
+            estimatedMinutes: 25,
+            source: "welcome_back",
+          })
+        }
+        onStartNew={() =>
+          handleCreateSession({
+            title: "",
+            focus: "",
+            goal: "",
+            estimatedMinutes: 25,
+          })
+        }
+        creating={creating}
+      />
+    );
+  }
 
   // ── 无数据（新用户） ──
   if (!data) {

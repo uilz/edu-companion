@@ -55,6 +55,7 @@ class SessionService:
         estimated_minutes: int = 25,
         recommendation_id: str | None = None,
         mission_id: str | None = None,
+        source: str = "",
     ) -> dict:
         """创建 Session。
 
@@ -77,13 +78,14 @@ class SessionService:
             estimated_minutes=estimated_minutes,
         )
 
-        # 2. 基于 Learner Model 生成默认 Mission（S2.2）
+        # 2. 基于 Learner Model 生成默认 Mission（S2.2 / S3.2）
         try:
             mission_title, mission_minutes, mission_steps = (
                 self._build_mission_from_learner_model(
                     user_id=user_id,
                     topic=topic,
                     estimated_minutes=estimated_minutes,
+                    source=source,
                 )
             )
             session.set_mission(mission_title, mission_minutes, mission_steps)
@@ -322,8 +324,9 @@ class SessionService:
         user_id: str,
         topic: str,
         estimated_minutes: int,
+        source: str = "",
     ) -> tuple[str, int, list[dict]]:
-        """基于 Learner Model 生成 Session 默认 Mission（S2.2）。
+        """基于 Learner Model 生成 Session 默认 Mission（S2.2 / S3.2）。
 
         策略：
         - 优先使用用户传入的 topic 作为 Mission 主题
@@ -331,6 +334,8 @@ class SessionService:
         - 读取 ProgressSummary 的 struggling_skills，若 topic 与某个困难知识点
           相关，则增加 review 步骤的比重
         - 默认三步：explain → practice → review
+        - S3.2: source="welcome_back" 时，读取上次 GrowthRecord 的
+          key_takeaways / reflection，用"我们聊到了"体现成长连续
         """
         from shared.learner_model import get_learner_model
 
@@ -348,7 +353,7 @@ class SessionService:
         struggling = [s for s in (progress.struggling_skills or []) if s]
         is_struggling = any(mission_topic in s or s in mission_topic for s in struggling)
 
-        # 根据 learning_style 微调步骤文案
+        # 根据 learning_style 微调步骤文案（CPO Note: 内部概念，不暴露为用户标签）
         style = profile.learning_style or "reading"
         style_hint = {
             "visual": "看图/示例",
@@ -357,11 +362,42 @@ class SessionService:
             "kinesthetic": "动手尝试",
         }.get(style, "阅读关键概念")
 
+        # ── S3.2: 从上次 GrowthRecord 提取成长上下文 ──
+        last_takeaway = ""
+        last_reflection = ""
+        if source == "welcome_back":
+            try:
+                from app.domain.growth.repository import GrowthRepository
+
+                repo = GrowthRepository()
+                latest_record = repo.get_latest(user_id)
+                if latest_record:
+                    last_takeaway = (
+                        latest_record.key_takeaways[0]
+                        if latest_record.key_takeaways else ""
+                    )
+                    last_reflection = latest_record.reflection_snippet or ""
+            except Exception as e:
+                logger.warning("S3.2 读取上次 GrowthRecord 失败: %s", e)
+
+        # ── 构建 Mission 步骤 ──
         title = f"{subject}：{mission_topic}"
+
+        # S3.2: explain 步骤引用上次学习（成长方式连续）
+        if source == "welcome_back" and last_takeaway:
+            step1_desc = (
+                f"上次我们聊到了「{mission_topic}」，发现了 {last_takeaway}。"
+                f"今天从这里继续。"
+            )
+        elif source == "welcome_back" and mission_topic != "今天的学习":
+            step1_desc = f"上次我们聊到了「{mission_topic}」。今天从这里继续。"
+        else:
+            step1_desc = f"先{style_hint}，理解「{mission_topic}」的核心"
+
         steps: list[dict] = [
             {
                 "order": 1,
-                "description": f"先{style_hint}，理解「{mission_topic}」的核心",
+                "description": step1_desc,
                 "type": "explain",
             },
             {
@@ -371,7 +407,16 @@ class SessionService:
             },
         ]
 
-        if is_struggling:
+        # S3.2: review 步骤引用 reflection 中的学习方式发现
+        if source == "welcome_back" and last_reflection:
+            # 清理 reflection 中的"今天"等时间词，避免与"上次"冲突
+            clean_reflection = last_reflection.replace("今天", "").replace("刚刚", "").strip()
+            steps.append({
+                "order": 3,
+                "description": f"上次你提到「{clean_reflection[:40]}」——今天看看是否还有效。",
+                "type": "review",
+            })
+        elif is_struggling:
             steps.append({
                 "order": 3,
                 "description": f"回头复习：你之前对「{mission_topic}」相关的知识点有些吃力，再巩固一下",
