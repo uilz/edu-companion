@@ -24,6 +24,56 @@ class GrowthRepository:
     def __init__(self):
         self._store: dict[str, GrowthRecord] = {}
         self._by_learner: dict[str, list[str]] = {}  # learner_id → [record_id, ...]
+        self._load_all()
+
+    def _load_all(self):
+        """从文件备份加载所有 GrowthRecord。"""
+        from app.domain.growth.models import GrowthRecord, SkillGain
+
+        if not os.path.isdir(_STORAGE_DIR):
+            return
+        for filename in os.listdir(_STORAGE_DIR):
+            if not filename.endswith(".json"):
+                continue
+            path = os.path.join(_STORAGE_DIR, filename)
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                continue
+            if not isinstance(data, list):
+                continue
+            for item in data:
+                try:
+                    record = GrowthRecord(
+                        id=item["id"],
+                        learner_id=item["learner_id"],
+                        session_id=item["session_id"],
+                        session_title=item.get("session_title", ""),
+                        session_started_at=item.get("session_started_at", 0.0),
+                        session_finished_at=item.get("session_finished_at"),
+                        created_at=item.get("created_at", 0.0),
+                        summary=item.get("summary", ""),
+                        reflection_snippet=item.get("reflection_snippet", ""),
+                        key_takeaways=item.get("key_takeaways", []),
+                        next_steps=item.get("next_steps", []),
+                        skill_gains=[
+                            SkillGain(
+                                skill=g.get("skill", ""),
+                                before=g.get("before", 0.0),
+                                after=g.get("after", 0.0),
+                                evidence=g.get("evidence", ""),
+                                category=g.get("category", "knowledge"),
+                            )
+                            for g in item.get("skill_gains", [])
+                        ],
+                    )
+                    self._store[record.id] = record
+                    ids = self._by_learner.setdefault(record.learner_id, [])
+                    if record.id not in ids:
+                        ids.append(record.id)
+                except (KeyError, TypeError):
+                    continue
 
     def save(self, record: GrowthRecord) -> None:
         """保存 GrowthRecord。"""

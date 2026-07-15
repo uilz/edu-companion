@@ -25,6 +25,18 @@ interface ActiveSession {
   started_at: number;
 }
 
+interface ContinueContext {
+  type: "active_session" | "yesterday" | "none";
+  session_id?: string;
+  title?: string;
+  stage?: string;
+  key_takeaways?: string[];
+  reflection_snippet?: string;
+  skills?: string[];
+  date_label?: string;
+  started_at?: number;
+}
+
 interface TodayViewModel {
   greeting: string;
   date: string;
@@ -189,6 +201,68 @@ function ActiveSessionCard({
   );
 }
 
+// ── 继续昨天卡片（S2.1） ──────────────────────────────────
+
+function ContinueYesterdayCard({
+  context,
+  greeting,
+  date,
+  onContinue,
+  onStartNew,
+}: {
+  context: ContinueContext;
+  greeting: string;
+  date?: string;
+  onContinue: () => void;
+  onStartNew: () => void;
+}) {
+  const title = context.title || "一次学习";
+  const label = context.date_label || "之前";
+
+  return (
+    <div className="max-w-lg mx-auto px-4 py-8 sm:py-10">
+      <div className="mb-6">
+        <h1 className="text-3xl sm:text-4xl font-bold text-ink-primary mb-1">
+          🍎 {greeting}
+        </h1>
+        {date && <p className="text-sm text-ink-muted">{date}</p>}
+      </div>
+
+      <p className="text-sm leading-relaxed text-ink-secondary mb-6">
+        {label}我们一起学习了「{title}」。今天从这里继续吗？
+      </p>
+
+      <div className="mb-8 p-5 rounded-xl bg-surface border border-border/60 space-y-2">
+        <p className="text-xs text-ink-muted">{label}的学习</p>
+        <h2 className="text-lg font-semibold text-ink-primary">{title}</h2>
+        {context.skills && context.skills.length > 0 && (
+          <p className="text-xs text-ink-muted">
+            涉及到：{context.skills.join("、")}
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-col items-center gap-3">
+        <Button
+          variant="primary"
+          size="lg"
+          onClick={onContinue}
+          className="text-base px-10 py-3 rounded-full shadow-md"
+        >
+          <Play size={18} />
+          继续昨天
+        </Button>
+        <button
+          onClick={onStartNew}
+          className="text-xs text-ink-muted hover:text-ink-secondary transition-colors"
+        >
+          今天想学点别的
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── 加载骨架屏 ────────────────────────────────────────────
 
 function TodaySkeleton() {
@@ -217,6 +291,8 @@ export default function TodayPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
   const [checkingActive, setCheckingActive] = useState(true);
+  const [continueContext, setContinueContext] = useState<ContinueContext | null>(null);
+  const [checkingContinue, setCheckingContinue] = useState(true);
   const { data, loading, error, refetch } = useSecretaryDashboard();
 
   // ── 拉取进行中的 Session（S1.2 / S1.3） ──
@@ -234,6 +310,24 @@ export default function TodayPage() {
       .catch(() => {})
       .finally(() => {
         if (mounted) setCheckingActive(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // ── 拉取「继续昨天」上下文（S2.1） ──
+  useEffect(() => {
+    let mounted = true;
+    authedFetch("/api/session/continue")
+      .then(async (res) => {
+        if (!res.ok) return;
+        const ctx: ContinueContext = await res.json();
+        if (mounted) setContinueContext(ctx.type !== "none" ? ctx : null);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (mounted) setCheckingContinue(false);
       });
     return () => {
       mounted = false;
@@ -274,7 +368,7 @@ export default function TodayPage() {
   );
 
   // ── Loading ──
-  if (loading || checkingActive) return <TodaySkeleton />;
+  if (loading || checkingActive || checkingContinue) return <TodaySkeleton />;
 
   // ── Error ──
   if (error) {
@@ -289,19 +383,46 @@ export default function TodayPage() {
     );
   }
 
+  const todayDateStr = new Date().toLocaleDateString("zh-CN", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  });
+
   // ── 无数据（新用户） ──
   if (!data) {
     if (activeSession) {
       return (
         <ActiveSessionCard
           session={activeSession}
-          date={new Date().toLocaleDateString("zh-CN", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-            weekday: "long",
-          })}
+          date={todayDateStr}
           onContinue={() => router.push(`/session/${activeSession.id}`)}
+        />
+      );
+    }
+    if (continueContext?.type === "yesterday") {
+      return (
+        <ContinueYesterdayCard
+          context={continueContext}
+          greeting="欢迎回来"
+          date={todayDateStr}
+          onContinue={() =>
+            handleCreateSession({
+              title: `继续：${continueContext.title || ""}`,
+              focus: continueContext.title || "",
+              goal: continueContext.key_takeaways?.join("\n") || continueContext.reflection_snippet || "",
+              estimatedMinutes: 25,
+            })
+          }
+          onStartNew={() =>
+            handleCreateSession({
+              title: "",
+              focus: "",
+              goal: "",
+              estimatedMinutes: 25,
+            })
+          }
         />
       );
     }
@@ -380,6 +501,68 @@ export default function TodayPage() {
             <Play size={18} />
             继续学习
           </Button>
+        </div>
+      ) : continueContext?.type === "yesterday" ? (
+        /* ── 无活跃 Session 但有昨天记录：主 CTA 为继续昨天（S2.1） ── */
+        <div className="mb-6 p-5 rounded-xl bg-surface border border-border/60">
+          <p className="text-xs text-ink-muted mb-2">
+            {continueContext.date_label}我们一起学习了
+          </p>
+          <h2 className="text-lg font-semibold text-ink-primary mb-4">
+            {continueContext.title || "一次学习"}
+          </h2>
+          {continueContext.skills && continueContext.skills.length > 0 && (
+            <p className="text-xs text-ink-muted mb-4">
+              涉及到：{continueContext.skills.join("、")}
+            </p>
+          )}
+          <div className="flex flex-col items-start gap-3">
+            <Button
+              variant="primary"
+              size="lg"
+              disabled={creating}
+              onClick={() =>
+                handleCreateSession({
+                  title: `继续：${continueContext.title || ""}`,
+                  focus: continueContext.title || "",
+                  goal:
+                    continueContext.key_takeaways?.join("\n") ||
+                    continueContext.reflection_snippet ||
+                    "",
+                  estimatedMinutes: 25,
+                })
+              }
+              className="text-base px-6 py-3 rounded-full shadow-md"
+            >
+              {creating ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  正在准备...
+                </>
+              ) : (
+                <>
+                  <Play size={18} />
+                  继续昨天
+                </>
+              )}
+            </Button>
+            <button
+              onClick={() =>
+                handleCreateSession({
+                  title: vm.focusTitle || "",
+                  focus: vm.focusTitle || "",
+                  goal: vm.focusCard?.description || "",
+                  estimatedMinutes: vm.focusCard?.estimatedMinutes || 25,
+                })
+              }
+              className="text-xs text-ink-muted hover:text-ink-secondary transition-colors"
+            >
+              今天想学点别的
+            </button>
+            {createError && (
+              <p className="text-xs text-red-500">{createError}</p>
+            )}
+          </div>
         </div>
       ) : hasFocus ? (
         <>
