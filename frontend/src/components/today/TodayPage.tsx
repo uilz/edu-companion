@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Clock, Loader2 } from "lucide-react";
+import { ArrowRight, Clock, Loader2, Play } from "lucide-react";
 import { useSecretaryDashboard } from "@/hooks/useSecretaryDashboard";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -16,6 +16,14 @@ import type {
 } from "@/lib/api/secretary-dashboard-api";
 
 // ── 视图模型（叙事驱动） ──────────────────────────────────
+
+interface ActiveSession {
+  id: string;
+  title: string;
+  stage: string;
+  status: string;
+  started_at: number;
+}
 
 interface TodayViewModel {
   greeting: string;
@@ -140,6 +148,47 @@ function buildAfterPlan(item: { label: string; p_known?: number } | undefined): 
   return `做完以后，你对「${item.label}」的理解会比现在更扎实。`;
 }
 
+// ── 进行中的 Session 卡片（S1.2 / S1.3） ──────────────────
+
+function ActiveSessionCard({
+  session,
+  onContinue,
+  date,
+}: {
+  session: ActiveSession;
+  onContinue: () => void;
+  date?: string;
+}) {
+  return (
+    <div className="max-w-lg mx-auto px-4 py-8 sm:py-10">
+      <div className="mb-6">
+        <h1 className="text-3xl sm:text-4xl font-bold text-ink-primary mb-1">🍎 下午好</h1>
+        {date && <p className="text-sm text-ink-muted">{date}</p>}
+      </div>
+      <p className="text-sm leading-relaxed text-ink-secondary mb-6">
+        你有一个进行中的学习，我们继续吧。
+      </p>
+      <div className="mb-8 p-5 rounded-xl bg-surface border border-border/60">
+        <p className="text-xs text-ink-muted mb-2">进行中的学习</p>
+        <h2 className="text-lg font-semibold text-ink-primary">
+          {session.title || "学习 Session"}
+        </h2>
+      </div>
+      <div className="flex flex-col items-center gap-2">
+        <Button
+          variant="primary"
+          size="lg"
+          onClick={onContinue}
+          className="text-base px-10 py-3 rounded-full shadow-md"
+        >
+          <Play size={18} />
+          继续学习
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ── 加载骨架屏 ────────────────────────────────────────────
 
 function TodaySkeleton() {
@@ -166,7 +215,30 @@ export default function TodayPage() {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
+  const [checkingActive, setCheckingActive] = useState(true);
   const { data, loading, error, refetch } = useSecretaryDashboard();
+
+  // ── 拉取进行中的 Session（S1.2 / S1.3） ──
+  useEffect(() => {
+    let mounted = true;
+    authedFetch("/api/session/active")
+      .then(async (res) => {
+        if (!res.ok) return;
+        const list: ActiveSession[] = await res.json();
+        const active = list.find(
+          (s) => s.status !== "completed" && s.status !== "cancelled",
+        );
+        if (mounted) setActiveSession(active || null);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (mounted) setCheckingActive(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // ── 创建 Session 的通用 handler ──
   const handleCreateSession = useCallback(
@@ -202,7 +274,7 @@ export default function TodayPage() {
   );
 
   // ── Loading ──
-  if (loading) return <TodaySkeleton />;
+  if (loading || checkingActive) return <TodaySkeleton />;
 
   // ── Error ──
   if (error) {
@@ -219,6 +291,20 @@ export default function TodayPage() {
 
   // ── 无数据（新用户） ──
   if (!data) {
+    if (activeSession) {
+      return (
+        <ActiveSessionCard
+          session={activeSession}
+          date={new Date().toLocaleDateString("zh-CN", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+            weekday: "long",
+          })}
+          onContinue={() => router.push(`/session/${activeSession.id}`)}
+        />
+      );
+    }
     return (
       <div className="max-w-lg mx-auto px-4 py-10">
         <EmptyState
@@ -278,7 +364,24 @@ export default function TodayPage() {
         {vm.observation}
       </p>
 
-      {hasFocus ? (
+      {activeSession ? (
+        /* ── 有未完成的 Session：主 CTA 为继续（S1.2 / S1.3） ── */
+        <div className="mb-6 p-5 rounded-xl bg-surface border border-border/60">
+          <p className="text-xs text-ink-muted mb-2">进行中的学习</p>
+          <h2 className="text-lg font-semibold text-ink-primary mb-4">
+            {activeSession.title || "学习 Session"}
+          </h2>
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={() => router.push(`/session/${activeSession.id}`)}
+            className="text-base px-6 py-3 rounded-full shadow-md"
+          >
+            <Play size={18} />
+            继续学习
+          </Button>
+        </div>
+      ) : hasFocus ? (
         <>
           {/* ── 今天想带你做的 ── */}
           <p className="text-sm text-ink-secondary mb-3">

@@ -76,6 +76,24 @@ def _generate_narrative(
 
     Future: 由 Memory + Persona + History + Growth + Goals 综合推导。
     """
+    total = growth_summary.get("total_sessions", 0)
+    records = growth_summary.get("recent_records", [])
+
+    # 第一次学习后：用真实学习记录生成「第一印象」
+    if total == 1 and records:
+        record = records[0]
+        title = record.get("session_title") or "一次学习"
+        reflection = record.get("reflection_snippet", "")
+        takeaways = record.get("key_takeaways", []) or []
+        parts = [f"你刚刚完成了在苹果果的第一次学习：「{title}」"]
+        if reflection:
+            snippet = reflection[:80] + ("…" if len(reflection) > 80 else "")
+            parts.append(f"。你提到：「{snippet}」")
+        elif takeaways:
+            parts.append(f"。你记录下了：{'、'.join(takeaways[:2])}")
+        parts.append("。苹果果会从这里开始认识你。")
+        return "".join(parts)
+
     parts: list[str] = []
 
     # 1. Persona → learning personality
@@ -92,11 +110,11 @@ def _generate_narrative(
     # 3. Streak → consistency observation
     streak = growth_summary.get("streak_days", 0)
     if streak >= 14:
-        parts.append(f"过去30天，你已经连续学习了{streak}天，学习节奏非常稳定。")
+        parts.append("过去一段时间，你的学习节奏非常稳定。")
     elif streak >= 7:
-        parts.append(f"过去30天里你坚持了{streak}天，正在养成稳定的学习习惯。")
+        parts.append("过去一段时间，你正在养成稳定的学习习惯。")
     elif streak >= 3:
-        parts.append(f"最近你开始了{streak}天的连续学习，是个不错的开始。")
+        parts.append("最近你开始了连续学习，是个不错的开始。")
     elif streak > 0:
         parts.append("你刚刚开始建立学习节奏，苹果果会陪着你。")
 
@@ -107,33 +125,27 @@ def _generate_narrative(
 
     # 5. Goals → what they're working toward
     active_goals = [g for g in goals if g.get("status") == "active"]
-    if len(active_goals) == 1:
-        parts.append(f"你正在为一个目标持续努力。")
-    elif len(active_goals) > 1:
-        parts.append(f"你同时在推进{len(active_goals)}个学习目标。")
+    if active_goals:
+        parts.append("你正在为一个目标持续努力。")
 
     return "".join(parts)
 
 
 def _generate_growth_narrative(growth_summary: dict) -> str:
-    """生成「你的成长」一句话叙事。"""
+    """生成「你的成长」一句话叙事（V1 不出现积分/等级/百分比）。"""
     total = growth_summary.get("total_sessions", 0)
     streak = growth_summary.get("streak_days", 0)
-    score = growth_summary.get("total_gain_score", 0)
 
     if total == 0:
         return "你刚刚开始认识苹果果，完成第一次学习后，这里会开始记录你的成长。"
 
     parts: list[str] = []
-    parts.append(f"你已经完成了{total}次学习。")
+    parts.append("你已经在苹果果完成了第一次学习。" if total == 1 else f"你已经完成了{total}次学习。")
 
     if streak >= 7:
-        parts.append(f"连续{streak}天的坚持，说明你正在认真对待自己的成长。")
+        parts.append("连续多天的坚持，说明你正在认真对待自己的成长。")
     elif streak >= 3:
-        parts.append(f"过去几天你保持了{streak}天连续学习，节奏正在形成。")
-
-    if score > 0:
-        parts.append(f"累计收获了{score}点成长积分。")
+        parts.append("过去几天你保持了连续学习，节奏正在形成。")
 
     return "".join(parts)
 

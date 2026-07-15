@@ -123,6 +123,26 @@ export default function SessionPage() {
     }
   };
 
+  // ── S1.10：取消 Session ──
+  const cancelSession = async () => {
+    if (!window.confirm("确定取消这次学习吗？你可以随时从 Today 继续。")) return;
+    setTransitioning(true);
+    try {
+      const res = await apiFetch(`/api/session/${sessionId}/cancel`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        router.push("/");
+      } else {
+        console.error("Cancel session failed:", await res.text().catch(() => ""));
+      }
+    } catch (e) {
+      console.error("Cancel session error:", e);
+    } finally {
+      setTransitioning(false);
+    }
+  };
+
   // ── Loading ──
   if (loading) return <SessionSkeleton />;
 
@@ -147,12 +167,19 @@ export default function SessionPage() {
       {/* ── Arrival 阶段：无标题栏，无 MissionBar ── */}
       {isArrival ? (
         /* 仅保留返回按钮，不展示标题/计时 */
-        <header className="flex items-center px-4 py-3 border-b border-border">
+        <header className="flex items-center justify-between px-4 py-3 border-b border-border">
           <button
             onClick={() => router.push("/")}
             className="p-1.5 rounded-lg hover:bg-bg-secondary transition-colors"
           >
             <ArrowLeft size={20} className="text-ink-muted" />
+          </button>
+          <button
+            onClick={cancelSession}
+            disabled={transitioning}
+            className="text-xs text-ink-muted hover:text-red-500 disabled:opacity-50 px-2 py-1"
+          >
+            取消
           </button>
         </header>
       ) : (
@@ -171,6 +198,13 @@ export default function SessionPage() {
             <span className="text-xs text-ink-muted">
               {Math.round((Date.now() / 1000 - session.started_at) / 60)}min
             </span>
+            <button
+              onClick={cancelSession}
+              disabled={transitioning}
+              className="text-xs text-ink-muted hover:text-red-500 disabled:opacity-50 px-2 py-1"
+            >
+              取消
+            </button>
           </header>
 
           {/* ── MissionBar（Arrival 阶段不显示）── */}

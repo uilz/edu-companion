@@ -13,13 +13,13 @@
 ## 总览
 
 ```
-EXP-01 第一次学习           ■■■■□□□□□□ 38%  ← 后端完成，前端链路待串
+EXP-01 第一次学习           ■■■■■■■■■□ 90%  ← Sprint 1 全链路已跑通，剩余文案/微调
 EXP-02 第二次回来继续         ■■■□□□□□□□ 25%
 EXP-03 中断一周后回来         □□□□□□□□□□ 0%
-EXP-04 苹果果真的记得我        ■■□□□□□□□□ 20%
+EXP-04 苹果果真的记得我        ■■■■□□□□□□ 40%
 EXP-05 完成长期目标           □□□□□□□□□□ 0%
 EXP-06 导入内容              □□□□□□□□□□ 0%
-EXP-07 Demo 演示路径         ■□□□□□□□□□ 10%
+EXP-07 Demo 演示路径         ■■■□□□□□□□ 30%
 ```
 
 ---
@@ -32,56 +32,56 @@ EXP-07 Demo 演示路径         ■□□□□□□□□□ 10%
 
 ---
 
-### Capability 1-A：Session Lifecycle（学习会话闭环）■■■■■ 50%
+### Capability 1-A：Session Lifecycle（学习会话闭环）■■■■■■■■■ 90%
 
-#### Epic 1.1：Today → Session 启动流 ⏳
-
-| Story | 描述 | 后端状态 | 前端状态 |
-|-------|------|----------|----------|
-| **S1.1** 从推荐创建 Session | Today 点击"开始今天"→ `POST /api/session` → `/session/[id]` | ✅ | ⏳ |
-| **S1.2** 从 Today 继续上次 Session | 显示未完成 Session → 点击"继续" | ✅ | ⏳ |
-| **S1.3** Today 状态展示 | 无任务 → AI 推荐。有进行中 → 继续选项 | - | ⏳ |
-
-#### Epic 1.2：Session 学习四阶段 ⏳
+#### Epic 1.1：Today → Session 启动流 ✅
 
 | Story | 描述 | 后端状态 | 前端状态 |
 |-------|------|----------|----------|
-| **S1.4** Session 基本布局 | 左侧对话区，右侧进度条，stage 状态栏 | ✅ | ⏳ |
+| **S1.1** 从推荐创建 Session | Today 点击"开始今天"→ `POST /api/session` → `/session/[id]` | ✅ | ✅ |
+| **S1.2** 从 Today 继续上次 Session | 显示未完成 Session → 点击"继续" | ✅ | ✅ |
+| **S1.3** Today 状态展示 | 无任务 → AI 推荐。有进行中 → 继续选项 | - | ✅ |
+
+#### Epic 1.2：Session 学习四阶段 ✅
+
+| Story | 描述 | 后端状态 | 前端状态 |
+|-------|------|----------|----------|
+| **S1.4** Session 基本布局 | 左侧对话区，右侧进度条，stage 状态栏 | ✅ | ✅ |
 | **S1.5** Intro → 设定 Mission | 展示学习目标 → `PUT /api/session/{id}/mission` | ✅ | ⏳ |
-| **S1.6** Learn → 对话学习 | 复用现有 conversation 组件 + SSE | ✅ | ⏳ |
-| **S1.7** Practice → 练习验证 | 阶段切换 → `PATCH /api/session/{id}/stage` | ✅ | ⏳ |
-| **S1.8** Reflection → 反思总结 | 用户输入反思 → `POST /api/session/{id}/complete` | ✅ | ⏳ |
+| **S1.6** Learn → 对话学习 | 复用现有 conversation 组件 + SSE | ✅ | ✅ |
+| **S1.7** Practice → 练习验证 | 阶段切换 → `PATCH /api/session/{id}/stage` | ✅ | ✅ |
+| **S1.8** Reflection → 反思总结 | 用户输入反思 → `POST /api/session/{id}/complete` | ✅ | ✅ |
 
-#### Epic 1.3：Session 完成流 ⏳
+#### Epic 1.3：Session 完成流 ✅
 
 | Story | 描述 | 后端状态 | 前端状态 |
 |-------|------|----------|----------|
-| **S1.9** 完成后导航 | 完成 → Today，显示"今天完成了 [标题]" | ✅ | ⏳ |
-| **S1.10** 取消流程 | 取消 → Today | ✅ | ⏳ |
+| **S1.9** 完成后导航 | 完成 → Today，显示"今天完成了 [标题]" | ✅ | ✅ |
+| **S1.10** 取消流程 | 取消 → Today | ✅ | ✅ |
 
 ---
 
-### Capability 1-B：Growth 第一条记录 ■■■■ 40%
+### Capability 1-B：Growth 第一条记录 ■■■■■■■■ 80%
 
-#### Epic 1.4：Session → Growth 事件链路
+#### Epic 1.4：Session → Growth 事件链路 ✅
 
 | Story | 描述 | 后端状态 | 前端状态 |
 |-------|------|----------|----------|
 | **S1.11** Session 完成后自动生成 GrowthRecord | GrowthEngine 监听 `LearningSessionCompleted` | ✅ | - |
 | **S1.12** Reflection 补充到 GrowthRecord | GrowthEngine 监听 `ReflectionGenerated` | ✅ | - |
-| **S1.13** Growth 页面展示第一条记录 | `GET /api/growth/records` → 叙事化展示 | ✅ | ⏳ |
-| **S1.14** Growth 记录不用数字 | 禁止 XP/积分/等级/百分比 | - | ⏳ |
+| **S1.13** Growth 页面展示第一条记录 | `GET /api/growth/records` → 叙事化展示 | ✅ | ✅ |
+| **S1.14** Growth 记录不用数字 | 禁止 XP/积分/等级/百分比 | - | ✅ |
 
 ---
 
-### Capability 1-C：Profile 初始画像 ■■ 20%
+### Capability 1-C：Profile 初始画像 ■■■■■■ 60%
 
-#### Epic 1.5：首次 Profile
+#### Epic 1.5：首次 Profile ✅
 
 | Story | 描述 | 后端状态 | 前端状态 |
 |-------|------|----------|----------|
-| **S1.15** 数据为空时的引导 | "完成一次学习后这里会更新" | - | ⏳ |
-| **S1.16** 第一次学习后 Profile 更新 | 学习偏好 + 学习统计首次展示 | ✅ | ⏳ |
+| **S1.15** 数据为空时的引导 | "完成一次学习后这里会更新" | - | ✅ |
+| **S1.16** 第一次学习后 Profile 更新 | 学习偏好 + 学习统计首次展示 | ✅ | ✅ |
 
 ---
 
@@ -186,10 +186,12 @@ EXP-07 Demo 演示路径         ■□□□□□□□□□ 10%
 ### 当前优先级
 
 ```
-🔴 正在做：EXP-01 — 第一次学习（Cap 1-A：Session Lifecycle）
-    ▸ 下一个 Story：S1.1 — 从 Today 推荐创建 Session
+🟢 EXP-01 — 第一次学习：Sprint 1 全链路已跑通
+    ▸ 已闭合：S1.1 ~ S1.4 / S1.6 ~ S1.10 / S1.11 ~ S1.16
+    ▸ 剩余：S1.5（Intro Mission 输入，当前 Arrival 已简化，待产品决策）
 
-🟡 下一步：EXP-01 完成后 → EXP-02（第二次回来继续）
+🔴 下一步：EXP-02 — 第二次回来继续学习
+    ▸ 待启动：S2.1（Today 显示"继续昨天"）/ S2.2 / S2.3
 ```
 
 ### Agent 不能做的事

@@ -126,12 +126,22 @@ export default function GrowthPage() {
 // ── 摘要卡片 ──
 
 function SummaryCard({ summary }: { summary: GrowthSummary }) {
-  const items = [
-    { icon: Calendar, label: "学习天数", value: `${summary.total_sessions} 次`, color: "text-blue-600" },
-    { icon: Clock, label: "累计时长", value: `${summary.total_duration_minutes}min`, color: "text-green-600" },
-    { icon: TrendingUp, label: "技能提升", value: `${summary.total_skill_gains} 项`, color: "text-purple-600" },
-    { icon: Zap, label: "连续学习", value: `${summary.streak_days} 天`, color: "text-orange-600" },
-  ];
+  const sessionSentence =
+    summary.total_sessions <= 1
+      ? "这是我们第一次一起学习。"
+      : `我们一起完成了 ${summary.total_sessions} 次学习。`;
+
+  const durationSentence = formatDurationSentence(summary.total_duration_minutes);
+
+  const streakSentence =
+    summary.streak_days <= 1
+      ? "今天是你连续学习的第一天。"
+      : `你已经连续学习了 ${summary.streak_days} 天。`;
+
+  const skillSentence =
+    summary.total_skill_gains > 0
+      ? "你正在不同方向上留下脚印。"
+      : "";
 
   return (
     <div className="p-4 border-b border-border bg-gradient-to-r from-brand/5 to-purple-500/5">
@@ -139,27 +149,17 @@ function SummaryCard({ summary }: { summary: GrowthSummary }) {
         <BarChart3 size={18} className="text-brand" />
         <h2 className="text-lg font-bold text-ink-primary">成长概览</h2>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        {items.map((item) => {
-          const Icon = item.icon;
-          return (
-            <div
-              key={item.label}
-              className="flex items-center gap-3 p-3 bg-white rounded-xl"
-            >
-              <Icon size={20} className={item.color} />
-              <div>
-                <p className="text-xs text-ink-muted">{item.label}</p>
-                <p className="text-base font-bold text-ink-primary">
-                  {item.value}
-                </p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      <p className="text-sm leading-relaxed text-ink-secondary">
+        {sessionSentence} {durationSentence} {streakSentence} {skillSentence}
+      </p>
     </div>
   );
+}
+
+function formatDurationSentence(minutes: number): string {
+  if (minutes < 5) return "刚刚学习了一小会儿。";
+  if (minutes < 60) return `累计学习了约 ${Math.round(minutes)} 分钟。`;
+  return `累计学习了约 ${Math.round(minutes / 60)} 小时。`;
 }
 
 // ── 成长记录卡片 ──
@@ -177,6 +177,12 @@ function GrowthCard({
   const dateStr = `${date.getMonth() + 1}月${date.getDate()}日`;
   const timeStr = `${date.getHours()}:${String(date.getMinutes()).padStart(2, "0")}`;
 
+  const durationText = formatDurationSentence(record.duration_minutes).replace(
+    "累计",
+    "这次",
+  );
+  const skillNames = record.skill_gains.map((g) => g.skill).filter(Boolean);
+
   return (
     <div
       className="bg-bg-secondary rounded-xl p-4 cursor-pointer hover:bg-bg-tertiary transition-colors"
@@ -190,22 +196,12 @@ function GrowthCard({
               {record.session_title || "学习 Session"}
             </h3>
           </div>
-          <div className="flex items-center gap-3 text-xs text-ink-muted">
-            <span className="flex items-center gap-1">
-              <Calendar size={11} />
-              {dateStr} {timeStr}
-            </span>
-            <span className="flex items-center gap-1">
-              <Clock size={11} />
-              {record.duration_minutes}min
-            </span>
-            {record.skill_gains.length > 0 && (
-              <span className="flex items-center gap-1 text-green-600">
-                <TrendingUp size={11} />
-                +{record.total_gain.toFixed(2)}
-              </span>
+          <p className="text-xs text-ink-muted leading-relaxed">
+            {dateStr} {timeStr} · {durationText}
+            {skillNames.length > 0 && (
+              <> · 你在「{skillNames.join("、")}」上留下了脚印</>
             )}
-          </div>
+          </p>
         </div>
         <ChevronRight
           size={16}
@@ -218,35 +214,10 @@ function GrowthCard({
       {/* 展开详情 */}
       {expanded && (
         <div className="mt-3 pt-3 border-t border-border space-y-3">
-          {/* 技能增益 */}
-          {record.skill_gains.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-ink-muted mb-2">技能提升</p>
-              <div className="space-y-2">
-                {record.skill_gains.map((g, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-ink-primary w-20 truncate">
-                      {g.skill}
-                    </span>
-                    <div className="flex-1 h-2 bg-bg-tertiary rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-green-500 rounded-full transition-all"
-                        style={{ width: `${Math.min(g.after * 100, 100)}%` }}
-                      />
-                    </div>
-                    <span className="text-xs text-ink-muted w-16 text-right">
-                      {Math.round(g.before * 100)}% → {Math.round(g.after * 100)}%
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* 反思 */}
+          {/* 收获 */}
           {record.key_takeaways.length > 0 && (
             <div>
-              <p className="text-xs font-medium text-ink-muted mb-1">收获</p>
+              <p className="text-xs font-medium text-ink-muted mb-1">这次学到的</p>
               <ul className="space-y-1">
                 {record.key_takeaways.map((t, i) => (
                   <li key={i} className="text-xs text-ink-secondary pl-3 border-l-2 border-brand/30">
@@ -259,7 +230,7 @@ function GrowthCard({
 
           {record.reflection_snippet && !record.key_takeaways.length && (
             <div>
-              <p className="text-xs font-medium text-ink-muted mb-1">反思</p>
+              <p className="text-xs font-medium text-ink-muted mb-1">你的反思</p>
               <p className="text-xs text-ink-secondary leading-relaxed">
                 {record.reflection_snippet}
               </p>

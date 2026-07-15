@@ -130,11 +130,6 @@ export default function ProfilePage() {
         <div className="flex items-center gap-2 text-amber-600">
           <Target className="w-5 h-5" />
           <h2 className="text-lg font-semibold">正在努力</h2>
-          {activeGoals.length > 0 && (
-            <span className="text-xs text-muted-foreground ml-auto">
-              {activeGoals.length} 个目标
-            </span>
-          )}
         </div>
 
         {activeGoals.length === 0 ? (
@@ -151,18 +146,6 @@ export default function ProfilePage() {
                 <BookOpen className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">{goal.title}</p>
-                  {/* 进度条保留但极简化 */}
-                  <div className="flex items-center gap-2 mt-1.5">
-                    <div className="h-1 flex-1 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-amber-500 rounded-full transition-all"
-                        style={{ width: `${Math.min(100, (goal.progress_pct ?? 0) * 100)}%` }}
-                      />
-                    </div>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      {Math.round((goal.progress_pct ?? 0) * 100)}%
-                    </span>
-                  </div>
                 </div>
               </div>
             ))}
