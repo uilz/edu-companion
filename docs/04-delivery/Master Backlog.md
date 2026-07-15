@@ -13,8 +13,8 @@
 ## 总览
 
 ```
-EXP-01 第一次学习           ■■■■■■■■■□ 90%  ← Sprint 1 全链路已跑通，剩余文案/微调
-EXP-02 第二次回来继续         ■■■■■■□□□□ 60%  ← S2.1/S2.2/S2.3 已跑通
+EXP-01 第一次学习           ■■■■■■■■■■ 100% ← Sprint 1 全链路已跑通
+EXP-02 第二次回来继续         ■■■■■■■■□□ 80%  ← S2.1 ~ S2.4 已跑通
 EXP-03 中断一周后回来         □□□□□□□□□□ 0%
 EXP-04 苹果果真的记得我        ■■■■□□□□□□ 40%
 EXP-05 完成长期目标           □□□□□□□□□□ 0%
@@ -32,7 +32,7 @@ EXP-07 Demo 演示路径         ■■■□□□□□□□ 30%
 
 ---
 
-### Capability 1-A：Session Lifecycle（学习会话闭环）■■■■■■■■■ 90%
+### Capability 1-A：Session Lifecycle（学习会话闭环）■■■■■■■■■■ 100%
 
 #### Epic 1.1：Today → Session 启动流 ✅
 
@@ -47,7 +47,7 @@ EXP-07 Demo 演示路径         ■■■□□□□□□□ 30%
 | Story | 描述 | 后端状态 | 前端状态 |
 |-------|------|----------|----------|
 | **S1.4** Session 基本布局 | 左侧对话区，右侧进度条，stage 状态栏 | ✅ | ✅ |
-| **S1.5** Intro → 设定 Mission | 展示学习目标 → `PUT /api/session/{id}/mission` | ✅ | ⏳ |
+| **S1.5** Intro → 设定 Mission | Arrival 已简化为无输入；Mission 由后端基于 Learner Model 自动生成，进入 learn 后在 MissionBar 展示 | ✅ | ✅ |
 | **S1.6** Learn → 对话学习 | 复用现有 conversation 组件 + SSE | ✅ | ✅ |
 | **S1.7** Practice → 练习验证 | 阶段切换 → `PATCH /api/session/{id}/stage` | ✅ | ✅ |
 | **S1.8** Reflection → 反思总结 | 用户输入反思 → `POST /api/session/{id}/complete` | ✅ | ✅ |
@@ -61,7 +61,7 @@ EXP-07 Demo 演示路径         ■■■□□□□□□□ 30%
 
 ---
 
-### Capability 1-B：Growth 第一条记录 ■■■■■■■■ 80%
+### Capability 1-B：Growth 第一条记录 ■■■■■■■■■■ 100%
 
 #### Epic 1.4：Session → Growth 事件链路 ✅
 
@@ -74,7 +74,7 @@ EXP-07 Demo 演示路径         ■■■□□□□□□□ 30%
 
 ---
 
-### Capability 1-C：Profile 初始画像 ■■■■■■ 60%
+### Capability 1-C：Profile 初始画像 ■■■■■■■■■■ 100%
 
 #### Epic 1.5：首次 Profile ✅
 
@@ -93,13 +93,14 @@ EXP-07 Demo 演示路径         ■■■□□□□□□□ 30%
 
 ---
 
-### Capability 2-A：跨 Session 记忆 ■■■■ 40%
+### Capability 2-A：跨 Session 记忆 ■■■■■■■■ 80%
 
 | Story | 描述 | 后端状态 | 前端状态 |
 |-------|------|----------|----------|
 | **S2.1** Today 显示"继续昨天" | 基于活跃 Session + Growth 摘要，Today 优先展示昨日进度 | ✅ | ✅ |
 | **S2.2** Session 创建时关联 Learner Model | 影响 Mission 建议 | ✅ | ✅ |
 | **S2.3** 今天推荐不随机 | Secretary 引擎根据历史推荐 | ✅ | ✅ |
+| **S2.4** 学习路径连续性 | 从「继续昨天」创建的 Session 自动承接昨日主题/goal，Mission 围绕同一主题生成 | ✅ | ✅ |
 
 ---
 
@@ -186,13 +187,10 @@ EXP-07 Demo 演示路径         ■■■□□□□□□□ 30%
 ### 当前优先级
 
 ```
-🟢 EXP-01 — 第一次学习：Sprint 1 全链路已跑通
-    ▸ 已闭合：S1.1 ~ S1.4 / S1.6 ~ S1.10 / S1.11 ~ S1.16
-    ▸ 剩余：S1.5（Intro Mission 输入，当前 Arrival 已简化，待产品决策）
+🟢 EXP-01 — 第一次学习：Sprint 1 全链路已闭合（S1.1 ~ S1.16）
 
-🔴 下一步：EXP-02 — 第二次回来继续学习
-    ▸ 已完成：S2.1 / S2.2 / S2.3
-    ▸ 待启动：S2.4（学习路径连续性，待 CPO 拆解）
+🟢 EXP-02 — 第二次回来继续学习：S2.1 ~ S2.4 已闭合
+    ▸ 待确认：是否进入 EXP-03 / 继续补 EXP-02 剩余 20%（如 Demo 数据、文案打磨）
 ```
 
 ### Agent 不能做的事
