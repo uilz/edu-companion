@@ -62,6 +62,11 @@ export interface DashboardActivity {
   meta?: Record<string, unknown>;
 }
 
+export interface DashboardTodayInfo {
+  quote_enabled: boolean;
+  memory_pulse: string | null;
+}
+
 export interface SecretaryDashboardData {
   greeting: string;
   date: string;
@@ -78,6 +83,7 @@ export interface SecretaryDashboardData {
     limit: number;
     offset: number;
   };
+  today: DashboardTodayInfo;
 }
 
 export const secretaryDashboardApi = {

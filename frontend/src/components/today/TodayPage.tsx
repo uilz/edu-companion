@@ -6,7 +6,6 @@ import { ArrowRight, Clock, Loader2, Play } from "lucide-react";
 import { useSecretaryDashboard } from "@/hooks/useSecretaryDashboard";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
 import { authedFetch } from "@/lib/api/api";
 import type {
@@ -52,6 +51,28 @@ interface TodayViewModel {
   afterPlan: string;
   /** 焦点标题（用于创建 Session） */
   focusTitle: string;
+  /** 今日名言 */
+  quote: string;
+  /** 是否显示名言 */
+  quoteEnabled: boolean;
+  /** 记忆脉冲（最新成长摘要） */
+  memoryPulse: string | null;
+}
+
+const TODAY_QUOTES = [
+  "理解一个概念，比记住一百个更重要。",
+  "学习的节奏，是你自己的节奏。",
+  "今天少做一点，也是向前。",
+  "困惑是理解的开始。",
+];
+
+function pickDailyQuote(seedDate: string): string {
+  let hash = 0;
+  for (let i = 0; i < seedDate.length; i++) {
+    hash = seedDate.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const idx = Math.abs(hash) % TODAY_QUOTES.length;
+  return TODAY_QUOTES[idx];
 }
 
 function buildViewModel(data: {
@@ -60,8 +81,9 @@ function buildViewModel(data: {
   focus: DashboardFocus | null;
   recommendations: DashboardRecommendations;
   activities: { items: DashboardActivity[] };
+  today: { quote_enabled: boolean; memory_pulse: string | null };
 }): TodayViewModel {
-  const { greeting, date, focus, recommendations, activities } = data;
+  const { greeting, date, focus, recommendations, activities, today } = data;
   const { suggestion, urgent, building, new_topic } = recommendations;
 
   // ── Observation：一段叙事 ──
@@ -81,6 +103,9 @@ function buildViewModel(data: {
     focusCard,
     afterPlan,
     focusTitle: focus?.title || topItem?.label || "",
+    quote: pickDailyQuote(date),
+    quoteEnabled: today.quote_enabled,
+    memoryPulse: today.memory_pulse,
   };
 }
 
@@ -158,6 +183,129 @@ function buildAfterPlan(item: { label: string; p_known?: number } | undefined): 
     return `做完以后，你对「${item.label}」的理解会更深入，距离熟练掌握就更近一步了。`;
   }
   return `做完以后，你对「${item.label}」的理解会比现在更扎实。`;
+}
+
+// ── 今日名言 ─────────────────────────────────────────────
+
+function TodayQuote({ text }: { text: string }) {
+  return (
+    <p
+      className="text-center text-sm italic text-ink-muted mb-4 leading-relaxed"
+      style={{ fontFamily: "var(--font-display)" }}
+    >
+      「{text}」
+    </p>
+  );
+}
+
+// ── 记忆脉冲：又懂你一点 ─────────────────────────────────
+
+function MemoryPulse({ text }: { text: string }) {
+  return (
+    <div className="mb-5 p-3 rounded-lg bg-accent-soft border-l-2 border-accent flex items-start gap-3">
+      <div className="text-lg leading-none mt-0.5">🍎</div>
+      <p className="text-sm text-ink-secondary leading-relaxed">{text}</p>
+    </div>
+  );
+}
+
+// ── 快捷工具托盘 ─────────────────────────────────────────
+
+function TodayTools() {
+  const router = useRouter();
+  const tools = [
+    {
+      icon: "🧠",
+      label: "复习卡片",
+      desc: "3 张待复习",
+      bg: "bg-violet-500/15",
+      onClick: () => router.push("/flashcard/review"),
+    },
+    {
+      icon: "📖",
+      label: "继续阅读",
+      desc: "继续上次阅读",
+      bg: "bg-teal-500/15",
+      onClick: () => router.push("/reading"),
+    },
+    {
+      icon: "🗣️",
+      label: "练口语",
+      desc: "10 分钟房间",
+      bg: "bg-pink-500/15",
+      onClick: () => router.push("/liveroom"),
+    },
+  ];
+
+  return (
+    <div className="flex gap-3 overflow-x-auto pb-2 mb-6 -mx-1 px-1">
+      {tools.map((tool) => (
+        <button
+          key={tool.label}
+          onClick={tool.onClick}
+          className="flex items-center gap-2.5 bg-surface border border-divider rounded-xl px-3 py-2.5 flex-shrink-0 transition-colors hover:bg-surface-hover"
+        >
+          <div
+            className={`w-9 h-9 rounded-lg ${tool.bg} flex items-center justify-center text-base`}
+          >
+            {tool.icon}
+          </div>
+          <div className="text-left">
+            <strong className="block text-xs font-semibold text-ink-primary">
+              {tool.label}
+            </strong>
+            <span className="text-[10px] text-ink-muted">{tool.desc}</span>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── 新用户欢迎页 ─────────────────────────────────────────
+
+function WelcomeHero({
+  quote,
+  quoteEnabled,
+  onStart,
+  creating,
+}: {
+  quote: string;
+  quoteEnabled: boolean;
+  onStart: () => void;
+  creating: boolean;
+}) {
+  return (
+    <div className="max-w-lg mx-auto px-4 py-12 sm:py-16 text-center animate-fadeIn">
+      {quoteEnabled && <TodayQuote text={quote} />}
+      <span className="text-5xl mb-5 block">🍎</span>
+      <h1 className="text-2xl font-bold text-ink-primary mb-3">
+        欢迎来到苹果果
+      </h1>
+      <p className="text-sm text-ink-secondary max-w-xs mx-auto mb-8 leading-relaxed">
+        我是你的 AI 学习伙伴。开始第一次学习后，我会越来越了解你。
+      </p>
+      <Button
+        variant="primary"
+        size="lg"
+        disabled={creating}
+        onClick={onStart}
+        className="text-base px-10 py-3 rounded-full shadow-md"
+      >
+        {creating ? (
+          <>
+            <Loader2 size={18} className="animate-spin" />
+            正在准备...
+          </>
+        ) : (
+          <>
+            开始第一次学习
+            <ArrowRight size={18} />
+          </>
+        )}
+      </Button>
+    </div>
+  );
 }
 
 // ── 进行中的 Session 卡片（S1.2 / S1.3） ──────────────────
@@ -503,79 +651,35 @@ export default function TodayPage() {
     );
   }
 
-  // ── 无数据（新用户），且未手动隐藏 ──
-  if (!data && !continueDismissed) {
-    if (activeSession) {
-      return (
-        <ActiveSessionCard
-          session={activeSession}
-          date={todayDateStr}
-          onContinue={() => router.push(`/session/${activeSession.id}`)}
-        />
-      );
-    }
-    if (continueContext?.type === "yesterday") {
-      return (
-        <ContinueYesterdayCard
-          context={continueContext}
-          greeting="欢迎回来"
-          date={todayDateStr}
-          onContinue={() =>
-            handleCreateSession({
-              title: `继续：${continueContext.title || ""}`,
-              focus: continueContext.title || "",
-              goal: continueContext.key_takeaways?.join("\n") || continueContext.reflection_snippet || "",
-              estimatedMinutes: 25,
-            })
-          }
-          onStartNew={() =>
-            handleCreateSession({
-              title: "",
-              focus: "",
-              goal: "",
-              estimatedMinutes: 25,
-            })
-          }
-          onDismiss={() => setContinueDismissed(true)}
-        />
-      );
-    }
+  // ── 新用户：没有学习历史且无进行/回归上下文 ──
+  const hasHistory = data ? data.activities.items.length > 0 : false;
+  const isNewUser = !hasHistory && !activeSession && !continueContext;
+  if (isNewUser) {
+    return (
+      <WelcomeHero
+        quote={pickDailyQuote(todayDateStr)}
+        quoteEnabled={data?.today.quote_enabled ?? true}
+        onStart={() =>
+          handleCreateSession({
+            title: "",
+            focus: "",
+            goal: "",
+            estimatedMinutes: 25,
+          })
+        }
+        creating={creating}
+      />
+    );
+  }
+
+  if (!data) {
     return (
       <div className="max-w-lg mx-auto px-4 py-10">
-        <EmptyState
-          icon="🍎"
-          title="欢迎来到苹果果"
-          description="我是你的 AI 学习伙伴。开始第一次学习后，我会在这里为你生成每日学习建议。"
-          action={
-            <Button
-              variant="primary"
-              disabled={creating}
-              onClick={() =>
-                handleCreateSession({
-                  title: "",
-                  focus: "",
-                  goal: "",
-                  estimatedMinutes: 25,
-                })
-              }
-            >
-              {creating ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  正在准备今天...
-                </>
-              ) : (
-                <>
-                  开始第一次学习
-                  <ArrowRight size={16} />
-                </>
-              )}
-            </Button>
-          }
+        <ErrorState
+          title="加载失败"
+          message="无法获取今日学习建议，请稍后重试。"
+          onRetry={() => refetch()}
         />
-        {createError && (
-          <p className="text-center text-sm text-red-500 mt-4">{createError}</p>
-        )}
       </div>
     );
   }
@@ -585,6 +689,9 @@ export default function TodayPage() {
 
   return (
     <div className="max-w-lg mx-auto px-4 py-8 sm:py-10">
+
+      {/* ── 今日名言 ── */}
+      {vm.quoteEnabled && <TodayQuote text={vm.quote} />}
 
       {/* ── 问候 ── */}
       <div className="mb-6">
@@ -599,6 +706,9 @@ export default function TodayPage() {
         {vm.observation}
       </p>
 
+      {/* ── 记忆脉冲 ── */}
+      {vm.memoryPulse && <MemoryPulse text={vm.memoryPulse} />}
+
       {activeSession ? (
         /* ── 有未完成的 Session：主 CTA 为继续（S1.2 / S1.3） ── */
         <div className="mb-6 p-5 rounded-xl bg-surface border border-border/60">
@@ -606,6 +716,9 @@ export default function TodayPage() {
           <h2 className="text-lg font-semibold text-ink-primary mb-4">
             {activeSession.title || "学习 Session"}
           </h2>
+
+          <TodayTools />
+
           <div className="flex flex-col items-start gap-3">
             <Button
               variant="primary"
@@ -661,6 +774,9 @@ export default function TodayPage() {
               涉及到：{continueContext.skills.join("、")}
             </p>
           )}
+
+          <TodayTools />
+
           <div className="flex flex-col items-start gap-3">
             <Button
               variant="primary"
@@ -739,6 +855,8 @@ export default function TodayPage() {
               {vm.afterPlan}
             </p>
           )}
+
+          <TodayTools />
 
           {/* ── CTA ── */}
           <div className="flex flex-col items-center gap-2">

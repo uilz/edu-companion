@@ -89,12 +89,14 @@ class LearningPrefsRequest(BaseModel):
     socratic_mode: bool | None = None
     socratic_follow_up_mode: bool | None = None
     auto_scroll_on_load: bool | None = None
+    today_quote_enabled: bool | None = None
 
 
 class LearningPrefsResponse(BaseModel):
     socratic_mode: bool = False
     socratic_follow_up_mode: bool = False
     auto_scroll_on_load: bool = True
+    today_quote_enabled: bool = True
 
 
 def _mask_api_key(key: str) -> str:

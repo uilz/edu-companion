@@ -14,6 +14,7 @@ from typing import Any, Callable
 
 from app.domain.secretary.secretary_service import SecretaryService
 from app.infrastructure.db.proposal_store import ProposalStore
+from app.infrastructure.db.user_settings_repo import get_user_settings_repo
 from app.services.analytics.adaptive_planner import adaptive_planner
 from app.services.planning.confirmations import list_confirmations as list_planning_confirmations
 from app.services.practice.practice_stats import get_overview as get_practice_overview
@@ -446,6 +447,19 @@ async def build_dashboard(
         logger.debug("读取用户显示名失败: %s", e)
 
     proposals_list = [p.model_dump() for p in proposals]
+
+    # ── 今日入口元数据：名言开关 + 最新成长摘要（记忆脉冲） ──
+    settings_repo = get_user_settings_repo()
+    learning_prefs = settings_repo.get_learning_prefs(user_id)
+    today_quote_enabled = bool(learning_prefs.get("today_quote_enabled", True))
+
+    from app.domain.growth.service import GrowthService
+    from app.domain.growth.repository import get_growth_repo
+
+    growth_service = GrowthService(repo=get_growth_repo())
+    latest_growth = await growth_service.get_latest_growth(user_id)
+    memory_pulse = latest_growth.get("summary") if latest_growth else None
+
     result = {
         "greeting": _greeting(display_name),
         "date": datetime.now(timezone.utc).isoformat()[:10],
@@ -454,6 +468,10 @@ async def build_dashboard(
         "pending": _build_pending(proposals_list, confirmations),
         "recommendations": _build_recommendations(user_id),
         "activities": activities,
+        "today": {
+            "quote_enabled": today_quote_enabled,
+            "memory_pulse": memory_pulse,
+        },
     }
 
     _dashboard_cache[user_id] = (now, result)

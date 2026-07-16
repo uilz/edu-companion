@@ -32,6 +32,7 @@ interface LearningSettingsResponse {
   socratic_mode?: boolean;
   socratic_follow_up_mode?: boolean;
   auto_scroll_on_load?: boolean;
+  today_quote_enabled?: boolean;
 }
 
 interface DeviceSession {
@@ -839,6 +840,7 @@ function PreferencesTab() {
   const [socraticFollowUp, setSocraticFollowUp] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState("");
   const [autoScrollOnLoad, setAutoScrollOnLoad] = useState(true);
+  const [todayQuoteEnabled, setTodayQuoteEnabled] = useState(true);
   const [loaded, setLoaded] = useState(false);
 
   // Task #84: B3 修复 — 学习偏好跨设备一致
@@ -852,6 +854,7 @@ function PreferencesTab() {
         setSocraticFollowUp(parsed.socraticFollowUpMode || false);
         setSystemPrompt(parsed.systemPrompt || "");
         setAutoScrollOnLoad(parsed.autoScrollOnLoad ?? true);
+        setTodayQuoteEnabled(parsed.todayQuoteEnabled ?? true);
       }
     } catch { /* */ }
     // 再从服务端拉取最新值
@@ -861,6 +864,7 @@ function PreferencesTab() {
           setSocratic(Boolean(data.socratic_mode));
           setSocraticFollowUp(Boolean(data.socratic_follow_up_mode));
           setAutoScrollOnLoad(Boolean(data.auto_scroll_on_load));
+          setTodayQuoteEnabled(Boolean(data.today_quote_enabled));
         }
       })
       .catch(() => {})
@@ -872,6 +876,7 @@ function PreferencesTab() {
     socratic_mode?: boolean;
     socratic_follow_up_mode?: boolean;
     auto_scroll_on_load?: boolean;
+    today_quote_enabled?: boolean;
   }) => {
     // 写本地缓存
     try {
@@ -880,6 +885,7 @@ function PreferencesTab() {
         socraticFollowUpMode: patch.socratic_follow_up_mode ?? socraticFollowUp,
         systemPrompt: patch.socratic_mode != null ? "" : systemPrompt,
         autoScrollOnLoad: patch.auto_scroll_on_load ?? autoScrollOnLoad,
+        todayQuoteEnabled: patch.today_quote_enabled ?? todayQuoteEnabled,
       }));
     } catch { /* */ }
     // 同步服务端
@@ -891,7 +897,7 @@ function PreferencesTab() {
     } catch (e) {
       console.warn("[settings] learning prefs 同步服务端失败:", e);
     }
-  }, [socratic, socraticFollowUp, systemPrompt, autoScrollOnLoad]);
+  }, [socratic, socraticFollowUp, systemPrompt, autoScrollOnLoad, todayQuoteEnabled]);
 
   // 兼容旧逻辑: 单独切换时立即写 localStorage（保持流畅）
   useEffect(() => {
@@ -902,9 +908,10 @@ function PreferencesTab() {
         socraticFollowUpMode: socraticFollowUp,
         systemPrompt,
         autoScrollOnLoad,
+        todayQuoteEnabled,
       }));
     } catch { /* */ }
-  }, [socratic, socraticFollowUp, systemPrompt, autoScrollOnLoad, loaded]);
+  }, [socratic, socraticFollowUp, systemPrompt, autoScrollOnLoad, todayQuoteEnabled, loaded]);
 
   const toggleSocratic = (v: boolean) => {
     setSocratic(v);
@@ -917,6 +924,10 @@ function PreferencesTab() {
   const toggleAutoScroll = (v: boolean) => {
     setAutoScrollOnLoad(v);
     persistLearning({ auto_scroll_on_load: v });
+  };
+  const toggleTodayQuote = (v: boolean) => {
+    setTodayQuoteEnabled(v);
+    persistLearning({ today_quote_enabled: v });
   };
 
   return (
@@ -990,6 +1001,24 @@ function PreferencesTab() {
             className={`relative w-11 h-6 rounded-full transition-colors ${autoScrollOnLoad ? "bg-accent" : "bg-surface border border"}`}
           >
             <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${autoScrollOnLoad ? "translate-x-[22px]" : "translate-x-[2px]"}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* 显示首页一言 */}
+      <div className="p-4 rounded-lg bg-surface border border">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-semibold text">显示首页一言</div>
+            <p className="text-xs text-muted mt-1">
+              在 Today 页面顶部显示每日名言
+            </p>
+          </div>
+          <button
+            onClick={() => toggleTodayQuote(!todayQuoteEnabled)}
+            className={`relative w-11 h-6 rounded-full transition-colors ${todayQuoteEnabled ? "bg-accent" : "bg-surface border border"}`}
+          >
+            <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${todayQuoteEnabled ? "translate-x-[22px]" : "translate-x-[2px]"}`} />
           </button>
         </div>
       </div>

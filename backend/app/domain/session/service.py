@@ -231,6 +231,13 @@ class SessionService:
         # 输出完成事件（Growth Engine 将监听）
         await self._publish(event_data)
 
+        # 使今日仪表盘缓存失效，确保回到 Today 能看到最新成长摘要
+        try:
+            from app.services.secretary.dashboard import invalidate_dashboard_cache
+            invalidate_dashboard_cache(session.learner_id)
+        except Exception:
+            logger.debug("Dashboard 缓存失效失败", exc_info=True)
+
         # 如果有反思内容，输出额外的反思事件
         if reflection:
             reflection_event = {

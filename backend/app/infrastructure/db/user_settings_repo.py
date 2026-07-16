@@ -179,7 +179,7 @@ class UserSettingsRepo:
         """写入学习偏好 (合并写)."""
         current = self.get_learning_prefs(user_id)
         merged = {**current, **{k: v for k, v in prefs.items() if v is not None}}
-        for k in ("socratic_mode", "socratic_follow_up_mode", "auto_scroll_on_load"):
+        for k in ("socratic_mode", "socratic_follow_up_mode", "auto_scroll_on_load", "today_quote_enabled"):
             if k in merged and not isinstance(merged[k], bool):
                 merged[k] = bool(merged[k])
         self.set_key(user_id, self.NS_LEARNING, merged)
