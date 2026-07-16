@@ -13,6 +13,7 @@ import { render, screen, act, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Exp04LearnScreen from "@/components/session/exp04/Exp04LearnScreen";
 import { createConversationEngine } from "@/lib/exp04/conversation-engine";
+import type { Exp04State } from "@/lib/exp04/types";
 
 beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
@@ -24,7 +25,7 @@ const defaultProps = () => {
   const onStateTransition = vi.fn();
   return {
     engine,
-    currentState: "LEARN" as const,
+    currentState: "LEARN" as Exp04State,
     mission: null as { title: string; steps: { order: number; description: string; type: "explain" | "practice" | "review" }[] } | null,
     onValidate,
     onStateTransition,

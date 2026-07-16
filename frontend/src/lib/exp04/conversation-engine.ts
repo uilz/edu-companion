@@ -26,22 +26,39 @@ function isSilenced(state: Exp04State, trigger: ConversationTrigger): boolean {
 
   switch (state) {
     case "LEARN":
-      // LEARN 中只在 USER_MESSAGE 时说话
-      return trigger !== "USER_MESSAGE" && trigger !== "ENERGY_DECLINING";
+      // LEARN 中：用户消息、能量下降、工具/练习/闪卡主动提示可说话
+      return ![
+        "USER_MESSAGE",
+        "ENERGY_DECLINING",
+        "TOOL_NUDGE",
+        "PRACTICE_PROMPT",
+        "PRACTICE_FEEDBACK",
+        "FLASHCARD_SUGGESTION",
+      ].includes(trigger);
 
     case "COGNITIVE_SEARCH":
       // COGNITIVE_SEARCH 只在 SEARCH_DETECTED（第二阶段）时说话
       return trigger !== "SEARCH_DETECTED";
 
     case "SELF_VALIDATION":
-      // SELF_VALIDATION 只在 VALIDATION_REQUESTED 时说话
-      // 用户写的过程中不能说话
-      return trigger !== "VALIDATION_REQUESTED";
+      // SELF_VALIDATION：进入验证、工具/闪卡提示可说话；用户写的过程中其他触发静默
+      return !["VALIDATION_REQUESTED", "TOOL_NUDGE", "FLASHCARD_SUGGESTION"].includes(
+        trigger
+      );
+
+    case "OBSERVATION":
+      // OBSERVATION：练习、工具、闪卡提示可说话
+      return ![
+        "TOOL_NUDGE",
+        "PRACTICE_PROMPT",
+        "PRACTICE_FEEDBACK",
+        "FLASHCARD_SUGGESTION",
+      ].includes(trigger);
 
     case "REFLECTION":
-      // REFLECTION 只在进入时说一句提取问题
+      // REFLECTION 只在进入时说一句提取问题；闪卡建议可轻声提示
       // 用户写的过程中完全沉默
-      return trigger !== "REFLECTION_ENTERED";
+      return !["REFLECTION_ENTERED", "FLASHCARD_SUGGESTION"].includes(trigger);
 
     case "ENTER":
       // ENTER 只在 SESSION_ENTER 时说话
@@ -80,12 +97,20 @@ function validateMessage(text: string, spec: MessageSpec): string | null {
 
 // ── 硬编码文案 ────────────────────────────────────────────
 
+export interface HardcodedContext {
+  last_title?: string | null;
+  /** PRACTICE_FEEDBACK / TOOL_NUDGE 等场景使用 */
+  correct?: boolean;
+  tool?: string;
+  prompt?: string;
+}
+
 /**
  * 非 AI 内容——问候、确认、结束语等固定文案。
  * 这些内容不由 LLM 生成，直接硬编码。
  */
 const HARDCODED_MESSAGES: Partial<
-  Record<ConversationTrigger, (ctx: { last_title?: string | null }) => string>
+  Record<ConversationTrigger, (ctx: HardcodedContext) => string>
 > = {
   SESSION_ENTER: (ctx) =>
     ctx.last_title
@@ -100,6 +125,20 @@ const HARDCODED_MESSAGES: Partial<
   SESSION_ENDING: () => "今天就到这里。我会记住今天的这些。",
 
   ENERGY_DECLINING: () => "今天就到这里吧。你已经想了很久了。",
+
+  TOOL_NUDGE: (ctx) => {
+    if (ctx.tool === "voice") return "要不用语音说出来？";
+    if (ctx.tool === "canvas") return "需要用画布梳理思路吗？";
+    if (ctx.tool === "handwriting") return "动手写一写，也许会更清楚。";
+    return "需要换个工具试试吗？";
+  },
+
+  PRACTICE_PROMPT: () => "来检验一下理解吧～",
+
+  PRACTICE_FEEDBACK: (ctx) =>
+    ctx.correct ? "这个思路很清晰。" : "我们再看看这里。",
+
+  FLASHCARD_SUGGESTION: () => "这个点值得记下来，以后复习。",
 };
 
 // ── 公共 API ──────────────────────────────────────────────
@@ -128,7 +167,7 @@ export function createConversationEngine(options?: ConversationEngineOptions) {
     getHardcodedMessage(
       state: Exp04State,
       trigger: ConversationTrigger,
-      ctx: { last_title?: string | null } = {}
+      ctx: HardcodedContext = {}
     ): string | null {
       if (!this.canSpeak(state, trigger)) return null;
 
@@ -158,7 +197,7 @@ export function createConversationEngine(options?: ConversationEngineOptions) {
       state: Exp04State,
       trigger: ConversationTrigger,
       aiMessage?: string,
-      ctx: { last_title?: string | null } = {}
+      ctx: HardcodedContext = {}
     ): EngineOutput {
       // 1. 检查是否允许说话
       if (!this.canSpeak(state, trigger)) {

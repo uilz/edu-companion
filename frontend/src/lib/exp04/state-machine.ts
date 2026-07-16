@@ -20,24 +20,55 @@ import type {
  * key = 当前状态，value = 允许的事件类型集合。
  */
 const TRANSITIONS: Record<Exp04State, Set<StateEvent["type"]>> = {
-  ENTER: new Set(["START_CLICKED", "ENTER_TIMEOUT", "SESSION_CANCELLED"]),
-  LEARN: new Set([
+  ENTER: new Set<StateEvent["type"]>([
+    "START_CLICKED", "ENTER_TIMEOUT", "SESSION_CANCELLED",
+  ]),
+  LEARN: new Set<StateEvent["type"]>([
     "INACTIVITY_DETECTED",
     "VALIDATION_REQUESTED",
     "SESSION_CANCELLED",
+    // 工具 / 练习 / 主动提示 / 闪卡
+    "TOOL_OPENED",
+    "TOOL_CLOSED",
+    "PRACTICE_STARTED",
+    "PRACTICE_DONE",
+    "FLASHCARD_CREATED",
+    "PROMPT_CLICKED",
   ]),
-  COGNITIVE_SEARCH: new Set([
-    "INTERACTION_RESUMED",
-    "SESSION_CANCELLED",
+  COGNITIVE_SEARCH: new Set<StateEvent["type"]>([
+    "INTERACTION_RESUMED", "SESSION_CANCELLED",
   ]),
-  SELF_VALIDATION: new Set([
+  SELF_VALIDATION: new Set<StateEvent["type"]>([
     "BACK_TO_LEARN",
     "VALIDATION_DONE",
     "SESSION_CANCELLED",
+    // 工具 / 闪卡
+    "TOOL_OPENED",
+    "TOOL_CLOSED",
+    "FLASHCARD_CREATED",
+    "PROMPT_CLICKED",
   ]),
-  OBSERVATION: new Set(["OBSERVATION_DONE", "SESSION_CANCELLED"]),
-  REFLECTION: new Set(["REFLECTION_DONE", "SESSION_CANCELLED"]),
-  END: new Set([]), // 终态，不可转换
+  OBSERVATION: new Set<StateEvent["type"]>([
+    "OBSERVATION_DONE",
+    "SESSION_CANCELLED",
+    // 工具 / 练习 / 闪卡
+    "TOOL_OPENED",
+    "TOOL_CLOSED",
+    "PRACTICE_STARTED",
+    "PRACTICE_DONE",
+    "FLASHCARD_CREATED",
+    "PROMPT_CLICKED",
+  ]),
+  REFLECTION: new Set<StateEvent["type"]>([
+    "REFLECTION_DONE",
+    "SESSION_CANCELLED",
+    // 工具 / 闪卡
+    "TOOL_OPENED",
+    "TOOL_CLOSED",
+    "FLASHCARD_CREATED",
+    "PROMPT_CLICKED",
+  ]),
+  END: new Set<StateEvent["type"]>([]), // 终态，不可转换
 };
 
 /**
@@ -53,6 +84,13 @@ const NEXT_STATE: Record<string, Record<string, Exp04State>> = {
     INACTIVITY_DETECTED: "COGNITIVE_SEARCH",
     VALIDATION_REQUESTED: "SELF_VALIDATION",
     SESSION_CANCELLED: "END",
+    // 工具 / 练习 / 主动提示 / 闪卡均为自环
+    TOOL_OPENED: "LEARN",
+    TOOL_CLOSED: "LEARN",
+    PRACTICE_STARTED: "LEARN",
+    PRACTICE_DONE: "LEARN",
+    FLASHCARD_CREATED: "LEARN",
+    PROMPT_CLICKED: "LEARN",
   },
   COGNITIVE_SEARCH: {
     INTERACTION_RESUMED: "LEARN",
@@ -62,14 +100,31 @@ const NEXT_STATE: Record<string, Record<string, Exp04State>> = {
     BACK_TO_LEARN: "LEARN",
     VALIDATION_DONE: "OBSERVATION",
     SESSION_CANCELLED: "END",
+    // 工具 / 闪卡自环
+    TOOL_OPENED: "SELF_VALIDATION",
+    TOOL_CLOSED: "SELF_VALIDATION",
+    FLASHCARD_CREATED: "SELF_VALIDATION",
+    PROMPT_CLICKED: "SELF_VALIDATION",
   },
   OBSERVATION: {
     OBSERVATION_DONE: "REFLECTION",
     SESSION_CANCELLED: "END",
+    // 工具 / 练习 / 闪卡自环
+    TOOL_OPENED: "OBSERVATION",
+    TOOL_CLOSED: "OBSERVATION",
+    PRACTICE_STARTED: "OBSERVATION",
+    PRACTICE_DONE: "OBSERVATION",
+    FLASHCARD_CREATED: "OBSERVATION",
+    PROMPT_CLICKED: "OBSERVATION",
   },
   REFLECTION: {
     REFLECTION_DONE: "END",
     SESSION_CANCELLED: "END",
+    // 工具 / 闪卡自环
+    TOOL_OPENED: "REFLECTION",
+    TOOL_CLOSED: "REFLECTION",
+    FLASHCARD_CREATED: "REFLECTION",
+    PROMPT_CLICKED: "REFLECTION",
   },
   END: {},
 };

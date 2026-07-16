@@ -90,10 +90,10 @@ export default function Exp04ObservationScreen({
   }, [sessionId]);
 
   // ── 默认观察内容（fallback） ──
-  const defaultObservation = {
+  const defaultObservation: ObservationData = {
     coverage: "你已经提到了建立连接需要三次交互。",
     gaps: "不过，\u201C确认\u201D具体是通过什么机制实现的，还可以再深入想想。",
-    question: "你说的\u201C确认\u201D\u2014\u2014具体是指什么？",
+    guidance_question: "你说的\u201C确认\u201D\u2014\u2014具体是指什么？",
   };
 
   if (loading) {
@@ -157,7 +157,7 @@ export default function Exp04ObservationScreen({
             <div className="bg-[#FFF6E8] rounded-2xl border border-[#FFF6E8] p-5 sm:p-6">
               <h3 className="text-sm font-semibold text-[#A96F00] mb-2">想一想</h3>
               <p className="text-base text-[#A96F00] leading-relaxed">
-                {fallback ? defaultObservation.question : obs.guidance_question || "你觉得自己刚才的解释还有哪里可以补充？"}
+                {obs.guidance_question || "你觉得自己刚才的解释还有哪里可以补充？"}
               </p>
             </div>
           </div>

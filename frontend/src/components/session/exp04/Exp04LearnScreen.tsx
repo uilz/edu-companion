@@ -78,17 +78,19 @@ export default function Exp04LearnScreen({
 
   // ── 停留检测 ──
   const inactivityTimedOut = useRef(false);
-  const handleInactive = useCallback(() => {
+  const handleCognitiveSearch = useCallback(() => {
     inactivityTimedOut.current = true;
-    onStateTransition("INACTIVITY_DETECTED");
+    onStateTransition({ type: "INACTIVITY_DETECTED" });
   }, [onStateTransition]);
-  const handleResumed = useCallback(() => {
-    onStateTransition("INTERACTION_RESUMED");
+  const handleResume = useCallback(() => {
+    onStateTransition({ type: "INTERACTION_RESUMED" });
   }, [onStateTransition]);
 
   useInactivityDetection({
-    onInactive: handleInactive,
-    onResumed: handleResumed,
+    onCognitiveSearch: handleCognitiveSearch,
+    onResume: handleResume,
+    enabled: currentState === "LEARN" || currentState === "COGNITIVE_SEARCH",
+    isInCognitiveSearch: currentState === "COGNITIVE_SEARCH",
   });
 
   // ── 阅读内容 ──

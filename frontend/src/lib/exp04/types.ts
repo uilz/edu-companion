@@ -46,7 +46,14 @@ export type StateEvent =
   | { type: "VALIDATION_DONE" }
   | { type: "OBSERVATION_DONE" }
   | { type: "REFLECTION_DONE" }
-  | { type: "SESSION_CANCELLED" };
+  | { type: "SESSION_CANCELLED" }
+  // 工具 / 练习 / 主动提示 / 闪卡事件（自环，用于追踪交互）
+  | { type: "TOOL_OPENED"; tool: string }
+  | { type: "TOOL_CLOSED"; tool: string }
+  | { type: "PRACTICE_STARTED" }
+  | { type: "PRACTICE_DONE"; correct: boolean }
+  | { type: "FLASHCARD_CREATED"; cardId?: string }
+  | { type: "PROMPT_CLICKED"; prompt: string };
 
 // ── 对话触发 ──────────────────────────────────────────────
 
@@ -57,7 +64,12 @@ export type ConversationTrigger =
   | "VALIDATION_REQUESTED"
   | "REFLECTION_ENTERED"
   | "ENERGY_DECLINING"
-  | "SESSION_ENDING";
+  | "SESSION_ENDING"
+  // 工具 / 练习 / 主动提示 / 闪卡触发
+  | "TOOL_NUDGE"
+  | "PRACTICE_PROMPT"
+  | "PRACTICE_FEEDBACK"
+  | "FLASHCARD_SUGGESTION";
 
 // ── 消息规格 ──────────────────────────────────────────────
 

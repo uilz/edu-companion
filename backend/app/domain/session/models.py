@@ -61,6 +61,7 @@ class Session:
     reflection_next_steps: list[str] = field(default_factory=list)
     mission_analysis: dict | None = None  # LI-01 产出，JSON 兼容 dict
     understanding_analysis: dict | None = None  # LI-02 产出，JSON 兼容 dict
+    tool_state: dict | None = None  # 工具托盘状态（EXP-04 陪伴循环）
 
     # ── 状态机命令 ───────────────────────────────────
 

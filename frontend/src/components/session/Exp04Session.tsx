@@ -29,12 +29,48 @@ import Exp04SelfValidationScreen from "./exp04/Exp04SelfValidationScreen";
 import Exp04ObservationScreen from "./exp04/Exp04ObservationScreen";
 import Exp04ReflectionScreen from "./exp04/Exp04ReflectionScreen";
 import Exp04EndScreen from "./exp04/Exp04EndScreen";
+import StageDots from "./exp04/StageDots";
+import ProgressBar from "./exp04/ProgressBar";
+import ToolTray, { type ToolKey } from "./exp04/ToolTray";
+import ActivePrompt from "./exp04/ActivePrompt";
+import PracticeCard from "./exp04/PracticeCard";
+import FlashcardCreatePanel from "./exp04/FlashcardCreatePanel";
+import { getToolState, updateToolState } from "@/lib/api/session-tool-api";
+import { generateQuestions } from "@/lib/api/practice-api";
+import type { V7Question } from "@/lib/api/practice-api";
+import { toast, useToastStore } from "@/components/ui/Toast";
 import { initMechanismLogger, logMechanismEvent, flushEvents } from "@/lib/exp04/mechanism-logger";
 
 // ── API helpers ───────────────────────────────────────────
 
 async function apiFetch(path: string, options?: RequestInit): Promise<Response> {
   return authedFetch(path, options);
+}
+
+// ── EXP-04 工具 / 练习 / 闪卡 fallback ──────────────────
+
+const FALLBACK_PRACTICE_QUESTION: V7Question = {
+  id: "fallback_session_q1",
+  bank_id: "fallback",
+  question_type: "single",
+  stem: "TCP 三次握手中，第三次握手的核心作用是什么？",
+  options: [
+    { letter: "A", text: "确认客户端到服务器的双向通路都已建立", is_correct: true },
+    { letter: "B", text: "服务器通知客户端可以开始发送数据", is_correct: false },
+    { letter: "C", text: "客户端第一次携带实际数据", is_correct: false },
+    { letter: "D", text: "关闭旧的连接状态", is_correct: false },
+  ],
+  difficulty: 1,
+  cognitive_node_ids: [],
+  metadata: {},
+};
+
+interface ToolState {
+  nudges?: string[];
+  activeTool?: ToolKey | null;
+  cardCreated?: boolean;
+  practiceDone?: boolean;
+  [key: string]: unknown;
 }
 
 // ── 类型（与 SessionPage 同源，后续 Epic 统一迁移） ──────
@@ -79,6 +115,16 @@ export default function Exp04Session() {
   const [transitioning, setTransitioning] = useState(false);
   const [reflectionContent, setReflectionContent] = useState<string | null>(null);
 
+  // ── EXP-04 工具托盘 / 主动提示 / 练习 / 闪卡 ──
+  const [toolState, setToolState] = useState<ToolState>({});
+  const [activeTool, setActiveTool] = useState<ToolKey | null>(null);
+  const [practiceOpen, setPracticeOpen] = useState(false);
+  const [practiceQuestion, setPracticeQuestion] = useState<V7Question | null>(null);
+  const [practiceLoading, setPracticeLoading] = useState(false);
+  const [flashcardOpen, setFlashcardOpen] = useState(false);
+  const [flashcardDefaultFront, setFlashcardDefaultFront] = useState("");
+  const [prompts, setPrompts] = useState<string[]>([]);
+
   const fetchSession = useCallback(async () => {
     try {
       const res = await apiFetch(`/api/session/${sessionId}`);
@@ -104,7 +150,18 @@ export default function Exp04Session() {
     }
   }, [sessionId, sm.currentState]);
 
-  useEffect(() => { fetchSession(); }, [fetchSession]);
+  // ── 加载工具托盘状态 ──
+  const fetchToolState = useCallback(async () => {
+    if (!sessionId) return;
+    try {
+      const state = await getToolState(sessionId);
+      setToolState((state || {}) as ToolState);
+    } catch (e) {
+      console.debug("[EXP04] tool-state 加载失败，使用本地状态", e);
+    }
+  }, [sessionId]);
+
+  useEffect(() => { fetchSession(); fetchToolState(); }, [fetchSession, fetchToolState]);
 
   // ── Mechanism Logger 初始化 ──
   useEffect(() => {
@@ -239,6 +296,129 @@ export default function Exp04Session() {
     }
   };
 
+  // ── EXP-04 工具托盘 / 主动提示 / 练习 / 闪卡逻辑 ──
+
+  const patchToolState = useCallback(async (patch: Partial<ToolState>) => {
+    if (!sessionId) return;
+    const next = { ...toolState, ...patch };
+    setToolState(next);
+    try {
+      await updateToolState(sessionId, next);
+    } catch (e) {
+      console.warn("[EXP04] 工具状态同步失败", e);
+    }
+  }, [sessionId, toolState]);
+
+  const handleOpenTool = useCallback((tool: ToolKey) => {
+    setActiveTool(tool);
+    patchToolState({ activeTool: tool });
+
+    if (tool === "flashcard") {
+      setFlashcardDefaultFront("");
+      setFlashcardOpen(true);
+      return;
+    }
+
+    // 其余工具当前为占位：记录 nudge 并给出轻反馈
+    const nudges = [...(toolState.nudges || [])];
+    if (!nudges.includes(tool)) nudges.push(tool);
+    patchToolState({ nudges });
+
+    const labels: Record<ToolKey, string> = {
+      voice: "语音",
+      canvas: "画布",
+      handwriting: "手写",
+      files: "文件",
+      pomodoro: "番茄钟",
+      flashcard: "闪卡",
+    };
+    toast.info(`${labels[tool]}工具`, "即将开放，先专注当前学习吧");
+  }, [patchToolState, toolState.nudges]);
+
+  const handleStartPractice = useCallback(async () => {
+    if (practiceLoading || practiceOpen) return;
+    setPracticeLoading(true);
+    try {
+      const topic = session?.title || session?.mission?.title || "当前学习内容";
+      const result = await generateQuestions(topic);
+      const question = result.questions?.[0] || FALLBACK_PRACTICE_QUESTION;
+      setPracticeQuestion(question);
+      setPracticeOpen(true);
+      sm.transition({ type: "PRACTICE_STARTED" });
+    } catch (e) {
+      console.warn("[EXP04] 出题失败，使用 fallback", e);
+      setPracticeQuestion(FALLBACK_PRACTICE_QUESTION);
+      setPracticeOpen(true);
+      sm.transition({ type: "PRACTICE_STARTED" });
+    } finally {
+      setPracticeLoading(false);
+    }
+  }, [practiceLoading, practiceOpen, session?.title, session?.mission?.title, sm]);
+
+  const handlePracticeDone = useCallback((correct: boolean) => {
+    setPracticeOpen(false);
+    sm.transition({ type: "PRACTICE_DONE", correct });
+    patchToolState({ practiceDone: true });
+    useToastStore.getState().push({
+      type: "info",
+      title: correct ? "这个思路很清晰。" : "我们再看看这里。",
+      duration: 2500,
+    });
+  }, [patchToolState, sm]);
+
+  const handleFlashcardCreated = useCallback((card: { front_text?: string }) => {
+    setFlashcardOpen(false);
+    sm.transition({ type: "FLASHCARD_CREATED" });
+    patchToolState({ cardCreated: true });
+    toast.success("已保存闪卡", card.front_text || "以后复习会再见到");
+  }, [patchToolState, sm]);
+
+  const handlePromptClick = useCallback((prompt: string) => {
+    sm.transition({ type: "PROMPT_CLICKED", prompt });
+    if (prompt.includes("练习") || prompt.includes("检验") || prompt.includes("练一练")) {
+      handleStartPractice();
+      return;
+    }
+    if (prompt.includes("闪卡") || prompt.includes("记下")) {
+      setFlashcardDefaultFront("");
+      setFlashcardOpen(true);
+      return;
+    }
+    if (prompt.includes("画布")) {
+      handleOpenTool("canvas");
+      return;
+    }
+    if (prompt.includes("手写")) {
+      handleOpenTool("handwriting");
+      return;
+    }
+    // 默认：当作与苹果果的对话输入（仅 toast 反馈）
+    toast.info("苹果果听到了", prompt);
+  }, [handleOpenTool, handleStartPractice, sm]);
+
+  // 根据当前状态维护主动提示
+  useEffect(() => {
+    const next: string[] = [];
+    if (sm.currentState === "LEARN") {
+      if (!toolState.practiceDone) next.push("来检验一下理解吧～");
+      if (!toolState.cardCreated) next.push("这个点值得记下来");
+    } else if (sm.currentState === "OBSERVATION") {
+      if (!toolState.practiceDone) next.push("再练一道");
+      if (!toolState.cardCreated) next.push("做成一张卡记住它");
+    }
+    setPrompts(next);
+  }, [sm.currentState, toolState.practiceDone, toolState.cardCreated]);
+
+  // 一段时间后轻轻提示工具托盘（仅在 LEARN 且未主动展开过工具）
+  useEffect(() => {
+    if (sm.currentState !== "LEARN") return;
+    if (toolState.nudges?.length || activeTool) return;
+    const timer = setTimeout(() => {
+      patchToolState({ nudges: ["tool"] });
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [sm.currentState, toolState.nudges, activeTool, patchToolState]);
+
   // ── 原文参考（EPIC-04: 后端生成前，从 mission 提取 fallback） ──
 
   const referenceText = useMemo(() => {
@@ -266,19 +446,39 @@ export default function Exp04Session() {
 
   const isEnd = sm.currentState === "END";
   const isEnter = sm.currentState === "ENTER";
+  const showHeader = !isEnd;
 
   return (
-    <div className="flex flex-col min-h-screen bg-bg-primary">
+    <div className="flex flex-col min-h-screen bg-page">
       {/* ── Header ── */}
-      {isEnter ? (
-        /* ENTER: 极简头 — 仅返回 + 取消 */
-        <header className="flex items-center justify-between px-4 py-3 border-b border-border">
+      {showHeader && (
+        <header
+          className={`flex items-center gap-3 px-4 py-3 border-b border-border bg-page/80 backdrop-blur sticky top-0 z-10 ${
+            isEnter ? "justify-between" : ""
+          }`}
+        >
           <button
             onClick={() => router.push("/")}
-            className="p-1.5 rounded-lg hover:bg-bg-secondary transition-colors"
+            className="p-1.5 rounded-lg hover:bg-surface-hover transition-colors"
           >
             <ArrowLeft size={20} className="text-ink-muted" />
           </button>
+
+          {!isEnter && (
+            <>
+              <h1 className="text-base font-semibold text-ink-primary flex-1 truncate">
+                {session.title || "学习 Session"}
+              </h1>
+              <StageDots currentState={sm.currentState} />
+              <div className="w-2" />
+              <ToolTray
+                nudge={toolState.nudges?.[0] ?? null}
+                activeTool={activeTool}
+                onOpenTool={handleOpenTool}
+              />
+            </>
+          )}
+
           <button
             onClick={cancelSession}
             disabled={transitioning}
@@ -287,26 +487,14 @@ export default function Exp04Session() {
             取消
           </button>
         </header>
-      ) : isEnd ? null : (
-        /* LEARN+：简化头 — 无计时器；END 屏无 Header */
-        <header className="flex items-center gap-3 px-4 py-3 border-b border-border bg-bg-primary/80 backdrop-blur sticky top-0 z-10">
-          <button
-            onClick={() => router.push("/")}
-            className="p-1.5 rounded-lg hover:bg-bg-secondary transition-colors"
-          >
-            <ArrowLeft size={20} className="text-ink-muted" />
-          </button>
-          <h1 className="text-lg font-semibold text-ink-primary flex-1 truncate">
-            {session.title || "学习 Session"}
-          </h1>
-          <button
-            onClick={cancelSession}
-            disabled={transitioning}
-            className="text-xs text-ink-muted hover:text-red-500 disabled:opacity-50 px-2 py-1"
-          >
-            取消
-          </button>
-        </header>
+      )}
+
+      {/* ── Progress Bar ── */}
+      {showHeader && <ProgressBar currentState={sm.currentState} />}
+
+      {/* ── Active Prompts ── */}
+      {!isEnter && !isEnd && (
+        <ActivePrompt prompts={prompts} onPromptClick={handlePromptClick} />
       )}
 
       {/* ── Stage Content ── */}
@@ -333,6 +521,25 @@ export default function Exp04Session() {
           />
         )}
       </div>
+
+      {/* ── Practice Card Overlay ── */}
+      {practiceOpen && practiceQuestion && (
+        <PracticeCard
+          question={practiceQuestion}
+          onDone={handlePracticeDone}
+          onClose={() => setPracticeOpen(false)}
+        />
+      )}
+
+      {/* ── Flashcard Create Panel Overlay ── */}
+      {flashcardOpen && (
+        <FlashcardCreatePanel
+          sessionId={sessionId}
+          defaultFront={flashcardDefaultFront}
+          onCreated={handleFlashcardCreated}
+          onClose={() => setFlashcardOpen(false)}
+        />
+      )}
     </div>
   );
 }

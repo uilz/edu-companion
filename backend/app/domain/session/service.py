@@ -7,6 +7,7 @@ Conversation 是 Session 内部实现细节，不暴露为产品概念。
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from app.domain.session.models import (
@@ -259,6 +260,84 @@ class SessionService:
         return self._to_dict(session)
 
     # ═══════════════════════════════════════════════════════
+    # EXP-04 工具托盘 / 闪卡打通
+    # ═══════════════════════════════════════════════════════
+
+    def get_tool_state(self, session_id: str) -> dict:
+        """获取 Session 工具托盘状态。"""
+        session = self._repo.get(session_id)
+        if not session:
+            raise SessionDomainError(f"Session not found: {session_id}")
+        return session.tool_state or {}
+
+    def update_tool_state(self, session_id: str, patch: dict) -> dict:
+        """合并更新工具托盘状态。"""
+        session = self._repo.get(session_id)
+        if not session:
+            raise SessionDomainError(f"Session not found: {session_id}")
+
+        current = session.tool_state or {}
+        merged = {**current, **patch}
+        session.tool_state = merged
+        self._repo.save(session)
+        return merged
+
+    def add_session_flashcard(self, session_id: str, payload: dict) -> dict:
+        """在 Session 内创建 FlashCard 并建立关联。
+
+        payload 字段：front_text, back_text, type, tags, linked_node_ids 等。
+        """
+        session = self._repo.get(session_id)
+        if not session:
+            raise SessionDomainError(f"Session not found: {session_id}")
+
+        from app.api.flashcard.service import get_flashcard_service
+
+        svc = get_flashcard_service(event_bus=self._bus)
+        card_payload = {
+            "type": payload.get("type", 1),
+            "source": "conversation",
+            "cross_module_source": "conversation",
+            "front_text": payload.get("front_text", ""),
+            "back_text": payload.get("back_text", ""),
+            "back_context": payload.get(
+                "back_context", f"来自学习 Session: {session.title or session_id}"
+            ),
+            "linked_node_ids": payload.get("linked_node_ids", []),
+            "tags": payload.get("tags", []),
+            "language": payload.get("language", ""),
+        }
+        card = svc.create_card(session.learner_id, card_payload)
+
+        # 建立 Session ↔ FlashCard 关联表
+        self._ensure_session_flashcards_table()
+        db = get_db()
+        db.execute(
+            """
+            INSERT INTO session_flashcards (session_id, card_id, created_at)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (session_id, card_id) DO NOTHING
+            """,
+            (session_id, card["id"], datetime.now(timezone.utc).isoformat()),
+        )
+
+        return {"card": card, "session_id": session_id}
+
+    @staticmethod
+    def _ensure_session_flashcards_table() -> None:
+        db = get_db()
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS session_flashcards (
+                session_id TEXT NOT NULL,
+                card_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (session_id, card_id)
+            )
+            """
+        )
+
+    # ═══════════════════════════════════════════════════════
     # 内部辅助
     # ═══════════════════════════════════════════════════════
 
@@ -478,6 +557,7 @@ class SessionService:
             "conversation_id": session.conversation_id,
             "mission_id": session.mission_id,
             "recommendation_id": session.recommendation_id,
+            "tool_state": session.tool_state,
         }
         if session.mission:
             data["mission"] = {

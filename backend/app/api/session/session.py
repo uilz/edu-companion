@@ -477,6 +477,21 @@ class UpdateMemoryRequest(BaseModel):
     reflection: dict | None = None  # {content, key_takeaways}
 
 
+class ToolStateUpdateRequest(BaseModel):
+    """EXP-04：工具托盘状态更新（增量合并）。"""
+    tool_state: dict = {}
+
+
+class SessionFlashcardCreateRequest(BaseModel):
+    """EXP-04：在 Session 内创建 FlashCard。"""
+    front_text: str
+    back_text: str = ""
+    type: int = 1
+    tags: list[str] = []
+    linked_node_ids: list[str] = []
+    back_context: str = ""
+
+
 @router.post("/{session_id}/update-memory", response_model=dict)
 async def update_learner_memory(
     session_id: str,
@@ -544,3 +559,63 @@ async def cancel_session(
         return await service.cancel_session(session_id)
     except SessionDomainError as e:
         raise HTTPException(status_code=409, detail=str(e))
+
+
+# ════════════════════════════════════════════════════════════════════
+# EXP-04 工具托盘 / 闪卡打通
+# ════════════════════════════════════════════════════════════════════
+
+@router.get("/{session_id}/tool-state", response_model=dict)
+async def get_tool_state(
+    session_id: str,
+    user_id: str = Depends(current_user_id),
+    service: SessionService = Depends(get_session_service),
+):
+    """获取 Session 工具托盘状态。"""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="请先登录")
+
+    try:
+        return {"session_id": session_id, "tool_state": service.get_tool_state(session_id)}
+    except SessionDomainError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/{session_id}/tool-state", response_model=dict)
+async def update_tool_state(
+    session_id: str,
+    body: ToolStateUpdateRequest,
+    user_id: str = Depends(current_user_id),
+    service: SessionService = Depends(get_session_service),
+):
+    """更新 Session 工具托盘状态（增量合并）。"""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="请先登录")
+
+    try:
+        merged = service.update_tool_state(session_id, body.tool_state)
+        return {"session_id": session_id, "tool_state": merged}
+    except SessionDomainError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/{session_id}/flashcards", response_model=dict)
+async def create_session_flashcard(
+    session_id: str,
+    body: SessionFlashcardCreateRequest,
+    user_id: str = Depends(current_user_id),
+    service: SessionService = Depends(get_session_service),
+):
+    """在 Session 内创建 FlashCard 并建立关联。"""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="请先登录")
+
+    if not body.front_text.strip():
+        raise HTTPException(status_code=400, detail="front_text 不能为空")
+
+    try:
+        return service.add_session_flashcard(session_id, body.model_dump())
+    except SessionDomainError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
