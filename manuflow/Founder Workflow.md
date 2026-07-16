@@ -1,98 +1,74 @@
 # Founder Workflow
 
-> 你只需要关心这三件事。
-> 其他所有事情由我和 CPO 自动处理。
+> 你（橙子）只需要发一句话：`LOOP`
+> 其余一切由 Agent 按 Vision-Driven 流程自动推进。
 
 ---
 
-## 三方角色
+## 一句话启动
 
-| 角色 | 是谁 | 负责什么 |
-|------|------|----------|
-| **Founder** | **你（橙子）** | 选方向、验收成果、做最终决定 |
-| **Agent（我）** | Trae IDE Agent | 写 Story、写 Spec、编码、测试 |
-| **CPO** | GPT | Review Story、Review Interaction |
+```
+LOOP
+```
+
+Agent 会读取 `/prompts/LOOP.md`，自动进入：
+
+```
+Vision Guardian → 选 Gap → Architecture Planner → 等你批准 → Implementation Lead → Release Reviewer → 更新 GAP.md → 回到起点
+```
 
 ---
 
-## 工作流全景（你的视角）
+## 你的参与点
 
-你只出现在以下 **4 个环节**：
-
-```
-[你] 选下一条 Experience
-     ↓
-[我] 写 Story Plan
-     ↓
-[CPO] Review Story ──→ 不通过 → [我] 修改 → 再 Review
-     ↓ 通过
-[我] 写 Interaction Spec
-     ↓
-[CPO] Review Interaction ──→ 不通过 → [我] 修改 → 再 Review
-     ↓ 通过
-[我] 编码 + 测试
-     ↓
-[你] 产品验收 ←── 你现在在这里
-     ↓ 不通过 → [我] 修改 → 再验收
-     ↓ 通过
-[我] Merge + 更新 Dashboard
-     ↓
-回到顶部，等你的下一个方向
-```
-
-**你的参与点只有 4 个：**
-1. **选方向** — 告诉我下一条想做的 Experience
-2. **回答我的问题** — 当我拿不准时，我会用 `AskUserQuestion` 问你
-3. **产品验收** — 编码完成后，你体验一下，说 OK 我就 Merge
-4. **最终决策** — 任何争议，你说"不"就是不
+| 环节 | 你要做什么 |
+|------|-----------|
+| **启动** | 说 `LOOP` |
+| **选 Gap 后** | 听 Agent 汇报 Architecture Plan，说 `批准` 或 `换另一个 Gap` |
+| **实现后** | 体验 Reality，确认是否更接近 Vision |
+| **争议时** | 你说了算 |
 
 ---
 
 ## 你不需要做的事
 
-| ❌ 不需要 | ✅ 交给谁 |
-|-----------|----------|
-| 写 Story 文档 | 我 |
-| 写 Interaction Spec | 我 |
-| Review Story 细节 | CPO |
-| Review Interaction 细节 | CPO |
-| 管 Sprint / 管进度 | 我 |
-| 管 Release 计划 | 我 |
-| 维护 Dashboard | 我 |
-| 决定技术方案 | 我（我会问你确认） |
-| 追着问进度 | 我会主动汇报 |
+- 写 Prompt
+- 写 Story
+- Review 代码
+- 管 Release
+- 维护 Dashboard
+- 追进度
+
+Agent 会自动读取 `/prompts/` 下的四个角色 Prompt，并更新 `/vision/GAP.md`。
 
 ---
 
-## 什么时候你会收到我的消息
+## 如果 Agent 跑歪了
 
-| 场景 | 你会看到什么 | 你需要做什么 |
-|------|-------------|-------------|
-| 开始新 Story | 我发 Story Plan | 等待 CPO Review 即可 |
-| 我有疑问 | `AskUserQuestion` 弹窗 | 选一个选项或回答 |
-| CPO Review 不通过 | 我汇报修改方案 | 通常不需要你介入 |
-| 编码完成 | 我通知你验收 | 体验一下，告诉我 OK 或哪里不对 |
-| 你主动给我方向 | 你直接告诉我 | 告诉我就好 |
+直接说：
 
----
+> "你重新读 /vision/preview.html，现在偏离 Vision 了。"
 
-## 快速参考：如何启动一次开发
+或：
 
-1. 告诉我：**接下来做 X**
-2. 我会出 Story Plan → 发给 CPO Review
-3. CPO 通过 → 我编码 → 通知你验收
-4. 你验收通过 → 我 Merge
-
-全程你只说两句话：
-- 「接下来做 X」
-- 「OK，验收通过」或「这里不对，改一下」
+> "STOP，这个方向不对。"
 
 ---
 
-## 当前状态速查
+## 关键文件
 
-打开 [Project Dashboard](Project%20Dashboard.md) 就能看到当前进度。
+| 文件 | 作用 |
+|------|------|
+| `/vision/preview.html` | 最终产品原型，唯一真相源 |
+| `/vision/VISION.md` | 产品理念 |
+| `/vision/GAP.md` | 当前 Reality 与 Vision 的差距 |
+| `/vision/ROADMAP.md` | 按 Gap 排序的长期计划 |
+| `/prompts/LOOP.md` | 你给 Agent 的唯一指令 |
+| `/prompts/01-vision-guardian.md` | 角色 1 |
+| `/prompts/02-architecture-planner.md` | 角色 2 |
+| `/prompts/03-implementation-lead.md` | 角色 3 |
+| `/prompts/04-release-reviewer.md` | 角色 4 |
 
 ---
 
-> **一句话概括：** 你选方向、验成果，中间的一切我来跑。
+> **核心原则：Vision 永远不变，Reality 持续靠近。**

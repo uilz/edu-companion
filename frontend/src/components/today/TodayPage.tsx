@@ -209,23 +209,36 @@ function ContinueYesterdayCard({
   date,
   onContinue,
   onStartNew,
+  onDismiss,
 }: {
   context: ContinueContext;
   greeting: string;
   date?: string;
   onContinue: () => void;
   onStartNew: () => void;
+  onDismiss?: () => void;
 }) {
   const title = context.title || "一次学习";
   const label = context.date_label || "之前";
 
   return (
     <div className="max-w-lg mx-auto px-4 py-8 sm:py-10">
-      <div className="mb-6">
-        <h1 className="text-3xl sm:text-4xl font-bold text-ink-primary mb-1">
-          🍎 {greeting}
-        </h1>
-        {date && <p className="text-sm text-ink-muted">{date}</p>}
+      <div className="flex justify-between items-start mb-6">
+        <div>
+          <h1 className="text-3xl sm:text-4xl font-bold text-ink-primary mb-1">
+            🍎 {greeting}
+          </h1>
+          {date && <p className="text-sm text-ink-muted">{date}</p>}
+        </div>
+        {onDismiss && (
+          <button
+            onClick={onDismiss}
+            className="text-xs text-ink-muted hover:text-ink-secondary transition-colors px-2 py-1"
+            aria-label="关闭"
+          >
+            ✕
+          </button>
+        )}
       </div>
 
       <p className="text-sm leading-relaxed text-ink-secondary mb-6">
@@ -362,6 +375,7 @@ export default function TodayPage() {
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
   const [checkingActive, setCheckingActive] = useState(true);
   const [continueContext, setContinueContext] = useState<ContinueContext | null>(null);
+  const [continueDismissed, setContinueDismissed] = useState(false);
   const [checkingContinue, setCheckingContinue] = useState(true);
   const { data, loading, error, refetch } = useSecretaryDashboard();
 
@@ -461,8 +475,8 @@ export default function TodayPage() {
     weekday: "long",
   });
 
-  // ── S3.1: 欢迎回来（间隔 ≥ 3 天）— 优先级高于 Dashboard ──
-  if (continueContext?.type === "welcome_back" && !activeSession) {
+  // ── S3.1: 欢迎回来（间隔 ≥ 3 天）— 优先级高于 Dashboard，且未手动隐藏 ──
+  if (continueContext?.type === "welcome_back" && !activeSession && !continueDismissed) {
     return (
       <WelcomeBackCard
         context={continueContext}
@@ -489,8 +503,8 @@ export default function TodayPage() {
     );
   }
 
-  // ── 无数据（新用户） ──
-  if (!data) {
+  // ── 无数据（新用户），且未手动隐藏 ──
+  if (!data && !continueDismissed) {
     if (activeSession) {
       return (
         <ActiveSessionCard
@@ -522,6 +536,7 @@ export default function TodayPage() {
               estimatedMinutes: 25,
             })
           }
+          onDismiss={() => setContinueDismissed(true)}
         />
       );
     }
@@ -591,25 +606,56 @@ export default function TodayPage() {
           <h2 className="text-lg font-semibold text-ink-primary mb-4">
             {activeSession.title || "学习 Session"}
           </h2>
-          <Button
-            variant="primary"
-            size="lg"
-            onClick={() => router.push(`/session/${activeSession.id}`)}
-            className="text-base px-6 py-3 rounded-full shadow-md"
-          >
-            <Play size={18} />
-            继续学习
-          </Button>
+          <div className="flex flex-col items-start gap-3">
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={() => router.push(`/session/${activeSession.id}`)}
+              className="text-base px-6 py-3 rounded-full shadow-md"
+            >
+              <Play size={18} />
+              继续学习
+            </Button>
+            <button
+              onClick={() => {
+                const c = continueContext;
+                const title = c?.type === "yesterday" && c.title ? `继续：${c.title}` : vm.focusTitle || "";
+                handleCreateSession({
+                  title,
+                  focus: vm.focusTitle || "",
+                  goal: c?.type === "yesterday" ? (c as any).reflection_snippet || c?.key_takeaways?.join("\n") || "" : vm.focusCard?.description || "",
+                  estimatedMinutes: vm.focusCard?.estimatedMinutes || 25,
+                });
+              }}
+              className="text-xs text-ink-muted hover:text-ink-secondary transition-colors"
+            >
+              今天想学点别的
+            </button>
+            {createError && (
+              <p className="text-xs text-red-500">{createError}</p>
+            )}
+          </div>
         </div>
-      ) : continueContext?.type === "yesterday" ? (
+      ) : continueContext?.type === "yesterday" && !continueDismissed ? (
         /* ── 无活跃 Session 但有昨天记录：主 CTA 为继续昨天（S2.1） ── */
         <div className="mb-6 p-5 rounded-xl bg-surface border border-border/60">
-          <p className="text-xs text-ink-muted mb-2">
-            {continueContext.date_label}我们一起学习了
-          </p>
-          <h2 className="text-lg font-semibold text-ink-primary mb-4">
-            {continueContext.title || "一次学习"}
-          </h2>
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-xs text-ink-muted mb-2">
+                {continueContext.date_label}我们一起学习了
+              </p>
+              <h2 className="text-lg font-semibold text-ink-primary mb-4">
+                {continueContext.title || "一次学习"}
+              </h2>
+            </div>
+            <button
+              onClick={() => setContinueDismissed(true)}
+              className="text-xs text-ink-muted hover:text-ink-secondary transition-colors px-2 py-1"
+              aria-label="关闭"
+            >
+              ✕
+            </button>
+          </div>
           {continueContext.skills && continueContext.skills.length > 0 && (
             <p className="text-xs text-ink-muted mb-4">
               涉及到：{continueContext.skills.join("、")}

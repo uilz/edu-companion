@@ -40,6 +40,8 @@ import {
   Compass,
   Bell,
   FileText,
+  TrendingUp,
+  User,
   ChevronRight,
   type LucideIcon,
 } from "lucide-react";
@@ -51,26 +53,22 @@ import SecretaryBellBadge from "@/components/secretary/SecretaryBellBadge";
 import NavBadge from "./NavBadge";
 
 // ── 分组定义 ──
-type GroupKey = "study" | "data" | "collab" | "system";
+type GroupKey = "daily" | "study" | "system";
 const GROUP_META: Record<GroupKey, { title: string; items: string[] }> = {
+  daily: {
+    title: "日常",
+    items: ["/", "/growth", "/profile"],
+  },
   study: {
-    title: "学习",
+    title: "学习工具",
     items: ["/flashcard", "/reading", "/practice", "/planning", "/knowledge-tree"],
-  },
-  data: {
-    title: "数据",
-    items: ["/dashboard", "/analytics"],
-  },
-  collab: {
-    title: "协作",
-    items: ["/conversation", "/liveroom", "/"],
   },
   system: {
     title: "系统",
-    items: ["/project", "/resources", "/files", "/emotion", "/interest", "/settings"],
+    items: ["/conversation", "/liveroom", "/dashboard", "/analytics", "/project", "/resources", "/files", "/emotion", "/interest", "/settings"],
   },
 };
-const GROUP_ORDER: GroupKey[] = ["study", "data", "collab", "system"];
+const GROUP_ORDER: GroupKey[] = ["daily", "study", "system"];
 
 const ICON_MAP: Record<string, LucideIcon> = {
   "/conversation": MessageSquare,
@@ -83,6 +81,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   "/interest": Compass,
   "/knowledge-tree": GitGraph,
   "/": Bell,
+  "/growth": TrendingUp,
+  "/profile": User,
   "/project": Folder,
   "/resources": Library,
   "/files": FileText,

@@ -771,12 +771,15 @@ _context_pipeline: ContextPipeline | None = None
 
 
 def get_context_pipeline() -> ContextPipeline:
-    """获取全局单例 ContextPipeline"""
     global _context_pipeline
     if _context_pipeline is None:
+        from app.domain.conversation.providers.session_mission_provider import (
+            SessionMissionProvider,
+        )
         _context_pipeline = ContextPipeline([
             ConversationModeProvider(),
             ConversationLocation(),
+            SessionMissionProvider(),  # LI-04: Mission 上下文注入
             SecretaryContext(),
             LearnerEmotion(),
             LearnerCognition(),

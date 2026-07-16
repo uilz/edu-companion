@@ -59,6 +59,8 @@ class Session:
     reflection_text: str | None = None
     reflection_takeaways: list[str] = field(default_factory=list)
     reflection_next_steps: list[str] = field(default_factory=list)
+    mission_analysis: dict | None = None  # LI-01 产出，JSON 兼容 dict
+    understanding_analysis: dict | None = None  # LI-02 产出，JSON 兼容 dict
 
     # ── 状态机命令 ───────────────────────────────────
 

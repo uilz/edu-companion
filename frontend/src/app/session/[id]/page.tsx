@@ -1,18 +1,15 @@
 // ============================================================
-// /session/[id] 路由 — Learning Session（PR-002b）
+// /session/[id] 路由 — Learning Session
 //
-// Session 是苹果果 V1 核心聚合根。
-// Today 通过 POST /api/session 创建 Session → redirect 到此页面。
+// Feature Flag 路由：
+//   - exp04_enabled=true  → Exp04Session（新状态机驱动）
+//   - exp04_enabled=false → SessionPage（旧实现，fallback）
 //
-// Domain Model v1.2:
-//   - Session 有自己的生命周期（intro → learn → practice → reflect）
-//   - Conversation 是 Session 的内部交互组件
-//   - Stage 来自 Session 状态机，不靠关键词猜测
-//   - 结束后 Growth Engine 监听 SessionCompleted 生成 GrowthSummary
+// EPIC-01: Session Runtime Foundation
 // ============================================================
 
-import SessionPage from "@/components/session/SessionPage";
+import { SessionRouter } from "./SessionRouter";
 
 export default function SessionRoute() {
-  return <SessionPage />;
+  return <SessionRouter />;
 }

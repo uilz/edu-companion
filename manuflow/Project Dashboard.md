@@ -1,96 +1,53 @@
 # AppleGo Project Dashboard
 
-> Founder Dashboard
->
-> 每天开始开发前，只阅读这一份文档。
+> 每天只看这一份。
+> 数据来自 `/vision/GAP.md`。
 
 ---
 
-# 当前阶段
+## Vision Coverage
 
-| 字段 | 当前值 |
-|------|--------|
-| Version | AppleGo V1 |
-| Current Experience | EXP-01 |
-| Current Capability | Learning Session |
-| Current Epic | Today → Session |
-| Current Story | S1.2 |
-
----
-
-# Overall Progress
-
-```
-Foundation      ██████████ 100%
-Product         ██████████ 100%
-Domain          ████████░░ 85%
-Engineering     ██████░░░░ 60%
-Experience      ██░░░░░░░░ 20%
----------------------------------
-Overall         ██░░░░░░░░ 18%
-```
+| 模块 | 当前覆盖率 | 目标 | 状态 |
+|------|-----------|------|------|
+| Today | 0% | 100% | 🔴 |
+| Session | 0% | 100% | 🔴 |
+| Growth | 0% | 100% | 🔴 |
+| Profile | 0% | 100% | 🔴 |
+| **Overall** | **0%** | 100% | 🔴 |
 
 ---
 
-# Current Sprint
+## Current Loop
 
-**正在开发：**
+**当前最高 Gap：** Vision Prototype 尚未被代码实现。
 
-S1.2 Intro Stage
+**正在实现：** 未开始。
 
-**目标：**
-
-让用户自然进入一次学习。
-
-**完成标准：**
-
-- Intro 完整
-- Resume 完整
-- Session 不重复创建
+**等待 Founder 决策：** 无。
 
 ---
 
-# Next Stories
+## Next Gaps
 
-```
-S1.2 Intro
-    ↓
-S1.3 Learning
-    ↓
-S1.4 Practice
-    ↓
-S1.5 Reflection
-    ↓
-S1.6 Finish
-```
+1. Today 页面不存在。
+2. Session 流程不存在。
+3. Growth 页面不存在。
+4. Profile 页面不存在。
 
 ---
 
-# Frozen Documents
+## Frozen Decisions
 
-- ✅ Product Bible
-- ✅ Learning Principles
-- ✅ AI Companion
-- ✅ Copywriting Guide
-- ✅ Learning Session Design
-- ✅ Session State Machine
-- ✅ Capability Roadmap
-- ✅ Master Backlog
+- [FD-001](FD-001.md)：AppleGo 不是老师，是自习室朋友。
 
 ---
 
-# Risks
+## Product Debt
 
-暂无
+见 [Product Debt.md](Product%20Debt.md)。
 
 ---
 
-# Today Goal
+## Release Plan
 
-**一句话：**
-
-今天只完成 S1.2。
-
-不要扩大 Scope。
-
-不要新增功能。
+见 [Release Plan.md](Release%20Plan.md)。
