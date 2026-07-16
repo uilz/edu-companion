@@ -99,6 +99,10 @@ design.md
 .rebuild.lock
 .rebuild.last_run
 
+# Local runtime data & demo source
+.data/
+demo/
+
 # Generated schema sync file
 scripts/schema_ddl.sql
 
