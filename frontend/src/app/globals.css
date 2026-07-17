@@ -1446,3 +1446,33 @@
     bottom: var(--bottom-nav-height);
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Profile 页面 — 对齐 /vision/preview.html 镜像叙事
+   ═══════════════════════════════════════════════════════════════ */
+
+.profile-mirror {
+  font-family: var(--font-display, 'Iowan Old Style', 'Songti SC', 'Noto Serif SC', serif);
+  font-size: 17px;
+  line-height: 1.85;
+  padding: var(--space-5, 20px);
+  background: var(--color-surface);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: 0 0 0 1px var(--color-divider-soft);
+  margin-bottom: var(--space-6, 24px);
+}
+
+.profile-mirror .highlight {
+  background: linear-gradient(transparent 60%, var(--color-accent-soft) 60%);
+  padding: 0 2px;
+}
+
+/* 页面淡入动画 */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
