@@ -10,24 +10,85 @@ from datetime import datetime
 
 
 def build_growth_narrative(growth_summary: dict) -> str:
-    """生成「你的成长」一句话叙事（V1 不出现积分/等级/百分比）。"""
+    """生成「你的成长」一句话叙事。
+
+    对齐 Vision preview.html (行 564-568) Narrative.growthNarrative：
+      - sessionsDone ≤ 2：刚开始的样子，每一次都更了解
+      - sessionsDone < 15：这一个月感觉在变（从觉得难到慢慢上手）
+      - sessionsDone ≥ 15：三个月完全不一样了（真切走过的）
+
+    V1 不出现积分/等级/百分比，只用人话讲「时间在流动，你在变」。
+    """
     total = growth_summary.get("total_sessions", 0)
     streak = growth_summary.get("streak_days", 0)
+    topic = _primary_topic(growth_summary)
 
     if total == 0:
         return "你刚刚开始认识苹果果，完成第一次学习后，这里会开始记录你的成长。"
 
     parts: list[str] = []
-    parts.append(
-        "你已经在苹果果完成了第一次学习。" if total == 1 else f"你已经完成了{total}次学习。"
-    )
 
-    if streak >= 7:
-        parts.append("连续多天的坚持，说明你正在认真对待自己的成长。")
-    elif streak >= 3:
+    # ── 时间深度分档（对齐 Vision 3 档） ──
+    if total <= 2:
+        # Vision 行 566：这是我们刚开始的样子
+        parts.append("这是我们刚开始的样子。每一次学习，我都会更了解你一点。")
+    elif total < 15:
+        # Vision 行 567：这一个月，感觉在变（从难到上手）
+        if topic:
+            parts.append(
+                f"你已经一起学了 {total} 次。"
+                f"这一个月，你对「{topic}」的感觉在变。从觉得难，到慢慢上手。"
+            )
+        else:
+            parts.append(
+                f"你已经一起学了 {total} 次。"
+                "这一个月，你的感觉在变。从觉得难，到慢慢上手。"
+            )
+    else:
+        # Vision 行 568：三个月，完全不一样了
+        if topic:
+            parts.append(
+                f"你已经一起学了 {total} 次。三个月。"
+                f"你对「{topic}」的感觉完全不一样了。"
+                "这不是分数能说的，是你真真切切走过来的。"
+            )
+        else:
+            parts.append(
+                f"你已经一起学了 {total} 次。三个月走过来了。"
+                "这不是分数能说的，是你真真切切走过来的。"
+            )
+
+    # ── streak 维度 ──
+    if streak >= 7 and total >= 3:
+        parts.append("连续多天的坚持，你自己可能没注意到——但我知道。")
+    elif streak >= 3 and total >= 3:
         parts.append("过去几天你保持了连续学习，节奏正在形成。")
 
     return "".join(parts)
+
+
+def _primary_topic(growth_summary: dict) -> str:
+    """从最近 GrowthRecords 提取主要学习主题（取最近一条记录的第一个 skill）。"""
+    records = growth_summary.get("recent_records", [])
+    for r in records:
+        skill_gains = r.get("skill_gains", [])
+        if skill_gains:
+            skill = skill_gains[0].get("skill", "")
+            if skill:
+                return skill
+        # 兜底：用 session_title 提取主题，清理常见前缀
+        title = r.get("session_title", "")
+        if title:
+            # 去掉 "练习:" / "测验:" / "主题:" 等前缀
+            for sep in (":", "：", " ", "　"):
+                if sep in title:
+                    parts = title.split(sep, 1)
+                    if len(parts) > 1 and len(parts[0]) <= 4:
+                        title = parts[1].strip()
+                        break
+            if title:
+                return title
+    return ""
 
 
 def build_growth_insights(growth_summary: dict) -> list[dict]:
@@ -87,6 +148,14 @@ def build_growth_insights(growth_summary: dict) -> list[dict]:
             "icon": "🔥",
         })
 
+    # 4. 学习次数里程碑（≥3 次时显示，让用户感到被计数）
+    if total >= 3:
+        insights.append({
+            "type": "milestone",
+            "text": f"你已经完成了 {total} 次学习。每一次，都让你离自己想成为的样子更近一点。",
+            "icon": "🍎",
+        })
+
     return insights[:4]
 
 
@@ -95,11 +164,17 @@ def build_growth_timeline(growth_summary: dict) -> list[dict]:
     records = growth_summary.get("recent_records", [])
     result: list[dict] = []
     for idx, r in enumerate(records[:5]):
+        # summary 优先级：reflection_snippet（用户自己的话）→ summary → session_title
+        summary = (
+            r.get("reflection_snippet", "")
+            or r.get("summary", "")
+            or r.get("session_title", "")
+        )
         entry: dict = {
             "id": r.get("id", ""),
             "date": r.get("session_started_at", 0),
             "title": r.get("session_title", ""),
-            "summary": r.get("summary", "") or r.get("session_title", ""),
+            "summary": summary,
             "is_latest": idx == 0,
         }
         result.append(entry)

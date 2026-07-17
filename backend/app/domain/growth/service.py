@@ -71,6 +71,12 @@ class GrowthService:
                 self._record_to_dict(r) for r in records[:5]
             ],
         }
+        # 第一条记录（Memory 系统：最早的起点数据）
+        if records:
+            summary["first_record"] = self._record_to_dict(records[-1])
+        else:
+            summary["first_record"] = None
+
         summary["growth_narrative"] = build_growth_narrative(summary)
         summary["timeline"] = build_growth_timeline(summary)
         summary["insights"] = build_growth_insights(summary)

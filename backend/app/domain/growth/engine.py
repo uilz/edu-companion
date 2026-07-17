@@ -52,6 +52,12 @@ class GrowthEngine:
             )
             return
 
+        # 生成 companion-like summary：第一人称叙事，而非裸标题
+        if event.title:
+            summary = f"你完成了「{event.title}」的学习。"
+        else:
+            summary = "完成了一次学习。"
+
         # 生成 GrowthRecord
         record = create_growth_record(
             learner_id=learner_id,
@@ -59,7 +65,7 @@ class GrowthEngine:
             session_title=event.title or "",
             session_started_at=event.started_at,
             session_finished_at=event.finished_at,
-            summary=event.title or "",
+            summary=summary,
         )
 
         self._repo.save(record)

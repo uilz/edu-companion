@@ -51,6 +51,67 @@ def _weekday_pattern(growth_summary: dict) -> str | None:
     return "和".join(names)
 
 
+def _first_record_quote(first_record: dict | None) -> str | None:
+    """从第一条 GrowthRecord 提取用户引述用于起点对比。
+
+    优先 reflection_snippet（最像用户自己的话），次选 summary。
+    返回引述字符串（不含引号），长度 ≤ 35 字。
+    """
+    if not first_record:
+        return None
+    snippet = (first_record.get("reflection_snippet") or "").strip()
+    if snippet and len(snippet) > 5:
+        quote = snippet[:35]
+        if len(snippet) > 35:
+            quote += "…"
+        return quote
+    summary = (first_record.get("summary") or "").strip()
+    if summary and len(summary) > 5:
+        quote = summary[:35]
+        if len(summary) > 35:
+            quote += "…"
+        return quote
+    return None
+
+
+def _build_contrast_sentence(
+    primary: str,
+    primary_text: str,
+    first_quote: str | None,
+    is_long_term: bool,
+) -> str:
+    """生成起点对比句，优先使用 first_record 引述。
+
+    is_long_term: True 用于 ≥15 次（「三个月前你…」），False 用于 <15 次（「这一个月你…」）。
+    """
+    if not primary:
+        if is_long_term:
+            return (
+                "还记得你第一天开始学习的样子吗。"
+                "一路走来，你已经掌握了很多之前觉得难的内容。"
+            )
+        return (
+            "还记得刚开始的时候吗？到现在，你已经能自己解出不少问题了。"
+        )
+
+    if first_quote:
+        return (
+            f"还记得你刚开始学{primary_text}时"
+            f"<span class=\"highlight\">\u201c{_esc(first_quote)}\u201d</span>。"
+            f"今天你已经能熟练运用了。"
+        )
+
+    if is_long_term:
+        return (
+            f"三个月前你<span class=\"highlight\">刚开始接触{primary_text}</span>。"
+            "今天你已经能熟练运用了。"
+        )
+    return (
+        f"你<span class=\"highlight\">一开始觉得{primary_text}很抽象</span>，"
+        f"到现在能自己算出结果。"
+    )
+
+
 def build_mirror_narrative(
     profile: dict,
     growth_summary: dict,
@@ -58,7 +119,7 @@ def build_mirror_narrative(
     """生成「苹果果眼中的你」镜像叙事。
 
     返回带 <span class="highlight"> 标记的 HTML 字符串（已转义用户数据）。
-    三段式：起点对比 → 学习偏好 → 状态观察。
+    三段式：起点对比（Memory 驱动）→ 学习偏好 → 状态观察。
 
     对齐 Vision preview.html (行 538-562) Narrative.profileMirror。
     """
@@ -67,6 +128,9 @@ def build_mirror_narrative(
     style = profile.get("learning_style", "")
     subjects = profile.get("subjects", []) or []
     topic = _primary_topic(growth_summary)
+    first_record = growth_summary.get("first_record")
+
+    first_quote = _first_record_quote(first_record)
 
     # ── 学习偏好映射 ──────────────────────────
     style_map: dict[str, str] = {
@@ -104,28 +168,11 @@ def build_mirror_narrative(
         parts.append(f"你{style_text}。")
     elif total < 15:
         # Vision 行 544-550：这一个月，起点对比 + 学习偏好
-        if primary:
-            parts.append(
-                f"你<span class=\"highlight\">一开始觉得{primary_text}很抽象</span>，"
-                f"到现在能自己算出结果。"
-            )
-        else:
-            parts.append(
-                "还记得刚开始的时候吗？到现在，你已经能自己解出不少问题了。"
-            )
+        parts.append(_build_contrast_sentence(primary, primary_text, first_quote, is_long_term=False))
         parts.append(f"你{style_text}。")
     else:
         # Vision 行 551-558：三个月，强烈起点对比 + 主动追问 + 时间模式
-        if primary:
-            parts.append(
-                f"三个月前你<span class=\"highlight\">刚开始接触{primary_text}</span>。"
-                "今天你已经能熟练运用了。"
-            )
-        else:
-            parts.append(
-                "还记得你第一天开始学习的样子吗。"
-                "一路走来，你已经掌握了很多之前觉得难的内容。"
-            )
+        parts.append(_build_contrast_sentence(primary, primary_text, first_quote, is_long_term=True))
         parts.append(
             '你从绕着走，到现在会主动追问\u201c为什么\u201d。'
         )
@@ -146,6 +193,7 @@ def build_mirror_narrative(
 def build_prefs(
     profile: dict,
     growth_summary: dict,
+    first_record: dict | None = None,
 ) -> list[dict]:
     """生成「关于你的学习」偏好网格。
 
@@ -186,8 +234,11 @@ def build_prefs(
     )
 
     # 已经一起走过：相对时间为主表达，次数为 fallback
-    # 从 earliest record 推「N 周 / N 个月 / N 年」
-    earliest_ts = _earliest_started_at(records)
+    # 优先使用 first_record（完整历史的真实起点），兜底用 recent_records
+    if first_record and first_record.get("session_started_at"):
+        earliest_ts = first_record["session_started_at"]
+    else:
+        earliest_ts = _earliest_started_at(records)
     span_label = _relative_span(earliest_ts) if earliest_ts else ""
 
     if total == 0:

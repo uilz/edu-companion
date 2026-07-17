@@ -458,7 +458,7 @@ async def build_dashboard(
 
     growth_service = GrowthService(repo=get_growth_repo())
     latest_growth = await growth_service.get_latest_growth(user_id)
-    memory_pulse = latest_growth.get("summary") if latest_growth else None
+    memory_pulse = _build_memory_pulse(latest_growth)
 
     result = {
         "greeting": _greeting(display_name),
@@ -476,6 +476,45 @@ async def build_dashboard(
 
     _dashboard_cache[user_id] = (now, result)
     return result
+
+
+def _build_memory_pulse(latest_growth: dict | None) -> str | None:
+    """从最新 GrowthRecord 生成记忆脉冲（companion-like 洞察）。
+
+    对齐 Vision preview.html (行 579-589) Narrative.newInsightAfterSession：
+      第一人称、短句、表达「我又更懂你一点了」。
+
+    优先级：
+      1. skill_gains 有显著进步（delta > 0.15）→ 个性化技能洞察
+      2. reflection_snippet 可用 → 用学习者自己的话
+      3. summary 可用 → 保留原始 summary
+      4. 无可用的 → None（不展示）
+    """
+    if not latest_growth:
+        return None
+
+    # 1. 技能进步洞察
+    skill_gains = latest_growth.get("skill_gains", [])
+    for sg in skill_gains:
+        delta = sg.get("delta", 0)
+        skill = sg.get("skill", "")
+        if delta > 0.15 and skill:
+            return f"你对「{skill}」又熟了一点。我记下了。"
+
+    # 2. reflection_snippet（最像学习者自己的话）
+    snippet = (latest_growth.get("reflection_snippet") or "").strip()
+    if snippet and len(snippet) >= 6:
+        text = snippet[:40]
+        if len(snippet) > 40:
+            text += "…"
+        return f"今天的反思很有意思——{text}"
+
+    # 3. summary（原始 fallback）
+    summary = (latest_growth.get("summary") or "").strip()
+    if summary:
+        return summary
+
+    return None
 
 
 def invalidate_dashboard_cache(user_id: str) -> None:

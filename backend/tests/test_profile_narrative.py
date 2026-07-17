@@ -121,6 +121,49 @@ class TestMirrorNarrative:
         assert "学习时间最长" in result
 
 
+    def test_many_sessions_with_first_record_quote(self):
+        """≥15 次且有 first_record 时优先使用记忆系统引述。"""
+        result = build_mirror_narrative(
+            _profile(subjects=["微积分"], learning_style="reading"),
+            _growth(
+                total_sessions=20,
+                streak_days=10,
+                first_record={
+                    "summary": "今天第一次接触极限概念，对 epsilon-delta 比较困惑",
+                    "reflection_snippet": "极限的 epsilon-delta 定义好抽象",
+                    "skill_gains": [{"skill": "极限", "before": 0.1, "after": 0.3}],
+                },
+            ),
+        )
+        # 应使用 first_record 的 reflection_snippet 引述
+        assert "极限的 epsilon-delta 定义好抽象" in result
+        assert "今天你已经能熟练运用了" in result
+
+    def test_first_record_quote_takes_reflection_over_summary(self):
+        """reflection_snippet 优先于 summary。"""
+        result = build_mirror_narrative(
+            _profile(subjects=["矩阵"], learning_style="reading"),
+            _growth(
+                total_sessions=10,
+                streak_days=3,
+                first_record={
+                    "summary": "矩阵基础概念介绍",
+                    "reflection_snippet": "矩阵乘法好难，位置总是搞混",
+                },
+            ),
+        )
+        assert "矩阵乘法好难" in result
+        assert "矩阵基础概念介绍" not in result
+
+    def test_missing_first_record_falls_back_to_generic(self):
+        """没有 first_record 时回退到通用文案。"""
+        result = build_mirror_narrative(
+            _profile(subjects=["线性代数"], learning_style="visual"),
+            _growth(total_sessions=20, streak_days=5),
+        )
+        assert "三个月前你" in result
+
+
 # ── build_prefs ───────────────────────────────────────────
 
 class TestBuildPrefs:
@@ -220,6 +263,68 @@ class TestBuildPrefs:
         )
         assert "一起走过" in prefs[3]["value"]
         assert "个月" in prefs[3]["value"] or "周" in prefs[3]["value"]
+
+    def test_first_record_overrides_relative_span(self):
+        """first_record 的时间戳应覆盖 recent_records 的截断计算。"""
+        import time
+        now = time.time()
+        day = 86400
+        prefs = build_prefs(
+            _profile(),
+            _growth(
+                total_sessions=28,
+                streak_days=5,
+                # recent_records 只有最近 5 条（最早 10 天前）
+                recent_records=[
+                    {"session_started_at": now - day, "skill_gains": []},
+                    {"session_started_at": now - 10 * day, "skill_gains": []},
+                ],
+            ),
+            first_record={
+                "session_started_at": now - 90 * day,
+                "summary": "第一次学习",
+            },
+        )
+        # 应使用 first_record（90 天前），而非 recent_records（10 天前）
+        assert "一起走过" in prefs[3]["value"]
+        assert "个月" in prefs[3]["value"]
+
+    def test_first_record_none_falls_back_to_recent(self):
+        """first_record 为 None 时回退到 recent_records 计算。"""
+        import time
+        now = time.time()
+        day = 86400
+        prefs = build_prefs(
+            _profile(),
+            _growth(
+                total_sessions=10,
+                streak_days=3,
+                recent_records=[
+                    {"session_started_at": now - 30 * day, "skill_gains": []},
+                ],
+            ),
+            first_record=None,
+        )
+        assert "一起走过" in prefs[3]["value"]
+        assert "周" in prefs[3]["value"]  # 30 天 = 4 周（< 60 天归入周）
+
+    def test_first_record_zero_ts_falls_back(self):
+        """first_record.session_started_at 为 0 时回退到 recent_records。"""
+        import time
+        now = time.time()
+        day = 86400
+        prefs = build_prefs(
+            _profile(),
+            _growth(
+                total_sessions=8,
+                recent_records=[
+                    {"session_started_at": now - 21 * day, "skill_gains": []},
+                ],
+            ),
+            first_record={"session_started_at": 0, "summary": "无时间戳"},
+        )
+        assert "一起走过" in prefs[3]["value"]
+        assert "周" in prefs[3]["value"]  # 21 天 = 3 周
 
     def test_xss_subjects_escaped_in_prefs(self):
         prefs = build_prefs(

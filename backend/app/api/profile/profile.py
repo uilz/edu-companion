@@ -34,7 +34,7 @@ async def get_profile(
     growth_summary = await growth_service.get_growth_summary(user_id)
 
     mirror_narrative = build_mirror_narrative(profile, growth_summary)
-    prefs = build_prefs(profile, growth_summary)
+    prefs = build_prefs(profile, growth_summary, first_record=growth_summary.get("first_record"))
 
     return {
         "mirror_narrative": mirror_narrative,
