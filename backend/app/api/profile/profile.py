@@ -8,6 +8,10 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.domain.auth.dependencies import current_user_id
 from app.domain.growth.service import GrowthService
+from app.domain.growth.narrative import (
+    build_growth_narrative,
+    build_growth_timeline,
+)
 from app.application.di import get_growth_service
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
@@ -33,10 +37,10 @@ async def get_profile(
     narrative = _generate_narrative(profile, goals, growth_summary)
 
     # ── Growth narrative：一句话总结成长 ──
-    growth_narrative = _generate_growth_narrative(growth_summary)
+    growth_narrative = build_growth_narrative(growth_summary)
 
     # ── Timeline：最近学会了什么 ──
-    timeline = _build_timeline(growth_summary)
+    timeline = build_growth_timeline(growth_summary)
 
     return {
         "narrative": narrative,
@@ -129,40 +133,6 @@ def _generate_narrative(
         parts.append("你正在为一个目标持续努力。")
 
     return "".join(parts)
-
-
-def _generate_growth_narrative(growth_summary: dict) -> str:
-    """生成「你的成长」一句话叙事（V1 不出现积分/等级/百分比）。"""
-    total = growth_summary.get("total_sessions", 0)
-    streak = growth_summary.get("streak_days", 0)
-
-    if total == 0:
-        return "你刚刚开始认识苹果果，完成第一次学习后，这里会开始记录你的成长。"
-
-    parts: list[str] = []
-    parts.append("你已经在苹果果完成了第一次学习。" if total == 1 else f"你已经完成了{total}次学习。")
-
-    if streak >= 7:
-        parts.append("连续多天的坚持，说明你正在认真对待自己的成长。")
-    elif streak >= 3:
-        parts.append("过去几天你保持了连续学习，节奏正在形成。")
-
-    return "".join(parts)
-
-
-def _build_timeline(growth_summary: dict) -> list[dict]:
-    """从最近 GrowthRecords 构建「最近学会了什么」时间线。"""
-    records = growth_summary.get("recent_records", [])
-    result: list[dict] = []
-    for r in records[:5]:
-        entry: dict = {
-            "date": r.get("session_started_at", ""),
-            "title": r.get("session_title", ""),
-            "summary": r.get("summary", ""),
-            "key_takeaways": r.get("key_takeaways", []),
-        }
-        result.append(entry)
-    return result
 
 
 def _get_learner_profile(user_id: str) -> dict:

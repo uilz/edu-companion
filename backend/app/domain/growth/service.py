@@ -7,6 +7,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from app.domain.growth.narrative import (
+    build_growth_narrative,
+    build_growth_timeline,
+)
+
 if TYPE_CHECKING:
     from app.domain.growth.repository import GrowthRepository
 
@@ -55,7 +60,7 @@ class GrowthService:
             else:
                 break
 
-        return {
+        summary = {
             "total_sessions": total_sessions,
             "total_duration_minutes": round(total_duration, 1),
             "total_skill_gains": total_skill_gains,
@@ -65,6 +70,9 @@ class GrowthService:
                 self._record_to_dict(r) for r in records[:5]
             ],
         }
+        summary["growth_narrative"] = build_growth_narrative(summary)
+        summary["timeline"] = build_growth_timeline(summary)
+        return summary
 
     @staticmethod
     def _record_to_dict(record) -> dict:
