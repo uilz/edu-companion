@@ -36,6 +36,7 @@ import ActivePrompt from "./exp04/ActivePrompt";
 import PracticeCard from "./exp04/PracticeCard";
 import FlashcardCreatePanel from "./exp04/FlashcardCreatePanel";
 import PomodoroPanel from "./exp04/PomodoroPanel";
+import CanvasPanel from "./exp04/CanvasPanel";
 import { getToolState, updateToolState } from "@/lib/api/session-tool-api";
 import { generateQuestions } from "@/lib/api/practice-api";
 import type { V7Question } from "@/lib/api/practice-api";
@@ -125,6 +126,7 @@ export default function Exp04Session() {
   const [flashcardOpen, setFlashcardOpen] = useState(false);
   const [flashcardDefaultFront, setFlashcardDefaultFront] = useState("");
   const [pomodoroOpen, setPomodoroOpen] = useState(false);
+  const [canvasOpen, setCanvasOpen] = useState(false);
   const [prompts, setPrompts] = useState<string[]>([]);
 
   const fetchSession = useCallback(async () => {
@@ -323,6 +325,11 @@ export default function Exp04Session() {
 
     if (tool === "pomodoro") {
       setPomodoroOpen(true);
+      return;
+    }
+
+    if (tool === "canvas") {
+      setCanvasOpen(true);
       return;
     }
 
@@ -553,6 +560,13 @@ export default function Exp04Session() {
         sessionTitle={session?.title || session?.mission?.title}
         open={pomodoroOpen}
         onClose={() => setPomodoroOpen(false)}
+      />
+
+      {/* ── Canvas Panel Overlay ── */}
+      <CanvasPanel
+        sessionTitle={session?.title || session?.mission?.title}
+        open={canvasOpen}
+        onClose={() => setCanvasOpen(false)}
       />
     </div>
   );
