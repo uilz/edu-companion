@@ -309,202 +309,6 @@ function WelcomeHero({
   );
 }
 
-// ── 进行中的 Session 卡片（S1.2 / S1.3） ──────────────────
-
-function ActiveSessionCard({
-  session,
-  onContinue,
-  date,
-}: {
-  session: ActiveSession;
-  onContinue: () => void;
-  date?: string;
-}) {
-  return (
-    <div className="max-w-lg mx-auto px-4 py-8 sm:py-10">
-      <div className="mb-6">
-        <h1 className="text-3xl sm:text-4xl font-bold text-ink-primary mb-1">🍎 下午好</h1>
-        {date && <p className="text-sm text-ink-muted">{date}</p>}
-      </div>
-      <p className="text-sm leading-relaxed text-ink-secondary mb-6">
-        你有一个进行中的学习，我们继续吧。
-      </p>
-      <div className="mb-8 p-5 rounded-xl bg-surface border border-border/60">
-        <p className="text-xs text-ink-muted mb-2">进行中的学习</p>
-        <h2 className="text-lg font-semibold text-ink-primary">
-          {session.title || "学习 Session"}
-        </h2>
-      </div>
-      <div className="flex flex-col items-center gap-2">
-        <Button
-          variant="primary"
-          size="lg"
-          onClick={onContinue}
-          className="text-base px-10 py-3 rounded-full shadow-md"
-        >
-          <Play size={18} />
-          继续学习
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// ── 继续昨天卡片（S2.1） ──────────────────────────────────
-
-function ContinueYesterdayCard({
-  context,
-  greeting,
-  date,
-  onContinue,
-  onStartNew,
-  onDismiss,
-}: {
-  context: ContinueContext;
-  greeting: string;
-  date?: string;
-  onContinue: () => void;
-  onStartNew: () => void;
-  onDismiss?: () => void;
-}) {
-  const title = context.title || "一次学习";
-  const label = context.date_label || "之前";
-
-  return (
-    <div className="max-w-lg mx-auto px-4 py-8 sm:py-10">
-      <div className="flex justify-between items-start mb-6">
-        <div>
-          <h1 className="text-3xl sm:text-4xl font-bold text-ink-primary mb-1">
-            🍎 {greeting}
-          </h1>
-          {date && <p className="text-sm text-ink-muted">{date}</p>}
-        </div>
-        {onDismiss && (
-          <button
-            onClick={onDismiss}
-            className="text-xs text-ink-muted hover:text-ink-secondary transition-colors px-2 py-1"
-            aria-label="关闭"
-          >
-            ✕
-          </button>
-        )}
-      </div>
-
-      <p className="text-sm leading-relaxed text-ink-secondary mb-6">
-        {label}我们一起学习了「{title}」。今天从这里继续吗？
-      </p>
-
-      <div className="mb-8 p-5 rounded-xl bg-surface border border-border/60 space-y-2">
-        <p className="text-xs text-ink-muted">{label}的学习</p>
-        <h2 className="text-lg font-semibold text-ink-primary">{title}</h2>
-        {context.skills && context.skills.length > 0 && (
-          <p className="text-xs text-ink-muted">
-            涉及到：{context.skills.join("、")}
-          </p>
-        )}
-        {context.topic_status && (
-          <p className="text-xs text-ink-muted">
-            苹果果对你的理解：{context.topic_status}
-          </p>
-        )}
-      </div>
-
-      <div className="flex flex-col items-center gap-3">
-        <Button
-          variant="primary"
-          size="lg"
-          onClick={onContinue}
-          className="text-base px-10 py-3 rounded-full shadow-md"
-        >
-          <Play size={18} />
-          继续昨天
-        </Button>
-        <button
-          onClick={onStartNew}
-          className="text-xs text-ink-muted hover:text-ink-secondary transition-colors"
-        >
-          今天想学点别的
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── 欢迎回来卡片（S3.1） ──────────────────────────────────
-
-function WelcomeBackCard({
-  context,
-  date,
-  onContinue,
-  onStartNew,
-  creating,
-}: {
-  context: ContinueContext;
-  date: string;
-  onContinue: () => void;
-  onStartNew: () => void;
-  creating: boolean;
-}) {
-  const title = context.title || "一次学习";
-  const takeaway = context.key_takeaways?.[0];
-
-  return (
-    <div className="max-w-lg mx-auto px-4 py-8 sm:py-10">
-      <div className="mb-6">
-        <h1 className="text-3xl sm:text-4xl font-bold text-ink-primary mb-1">
-          🍎 欢迎回来
-        </h1>
-        <p className="text-sm text-ink-muted">{date}</p>
-      </div>
-
-      <p className="text-sm leading-relaxed text-ink-secondary mb-6">
-        欢迎回来。上次我们聊到了「{title}」。
-      </p>
-
-      <div className="mb-8 p-5 rounded-xl bg-surface border border-border/60 space-y-2">
-        <p className="text-xs text-ink-muted">上次的学习</p>
-        <h2 className="text-lg font-semibold text-ink-primary">{title}</h2>
-        {takeaway && (
-          <p className="text-xs text-ink-muted">{takeaway}</p>
-        )}
-        {context.topic_status && (
-          <p className="text-xs text-ink-muted">
-            苹果果对你的理解：{context.topic_status}
-          </p>
-        )}
-      </div>
-
-      <div className="flex flex-col items-center gap-3">
-        <Button
-          variant="primary"
-          size="lg"
-          disabled={creating}
-          onClick={onContinue}
-          className="text-base px-10 py-3 rounded-full shadow-md"
-        >
-          {creating ? (
-            <>
-              <Loader2 size={18} className="animate-spin" />
-              正在准备...
-            </>
-          ) : (
-            <>
-              <Play size={18} />
-              从这里继续
-            </>
-          )}
-        </Button>
-        <button
-          onClick={onStartNew}
-          className="text-xs text-ink-muted hover:text-ink-secondary transition-colors"
-        >
-          换个方向
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ── 加载骨架屏 ────────────────────────────────────────────
 
 function TodaySkeleton() {
@@ -634,34 +438,6 @@ export default function TodayPage() {
     weekday: "long",
   });
 
-  // ── S3.1: 欢迎回来（间隔 ≥ 3 天）— 优先级高于 Dashboard，且未手动隐藏 ──
-  if (continueContext?.type === "welcome_back" && !activeSession && !continueDismissed) {
-    return (
-      <WelcomeBackCard
-        context={continueContext}
-        date={todayDateStr}
-        onContinue={() =>
-          handleCreateSession({
-            title: `继续：${continueContext.title || ""}`,
-            focus: continueContext.title || "",
-            goal: continueContext.key_takeaways?.join("\n") || continueContext.reflection_snippet || "",
-            estimatedMinutes: 25,
-            source: "welcome_back",
-          })
-        }
-        onStartNew={() =>
-          handleCreateSession({
-            title: "",
-            focus: "",
-            goal: "",
-            estimatedMinutes: 25,
-          })
-        }
-        creating={creating}
-      />
-    );
-  }
-
   // ── 新用户：没有学习历史且无进行/回归上下文 ──
   const hasHistory = data ? data.activities.items.length > 0 : false;
   const isNewUser = !hasHistory && !activeSession && !continueContext;
@@ -760,6 +536,79 @@ export default function TodayPage() {
             )}
           </div>
         </div>
+      ) : continueContext?.type === "welcome_back" && !continueDismissed ? (
+        /* ── 欢迎回来（≥3天未学）：三段式布局 ── */
+        <>
+          <div className="mb-6 p-5 rounded-xl bg-surface border border-border/60 relative">
+            <button
+              onClick={() => setContinueDismissed(true)}
+              className="absolute top-4 right-4 text-xs text-ink-muted hover:text-ink-secondary transition-colors"
+              aria-label="关闭"
+            >
+              ✕
+            </button>
+            <p className="text-xs text-ink-muted mb-1.5">上次的学习</p>
+            <h2 className="text-lg font-semibold text-ink-primary mb-2">
+              {continueContext.title || "一次学习"}
+            </h2>
+            {continueContext.key_takeaways?.[0] && (
+              <p className="text-xs text-ink-muted mb-1">{continueContext.key_takeaways[0]}</p>
+            )}
+            {continueContext.topic_status && (
+              <p className="text-xs text-ink-muted">
+                苹果果对你的理解：{continueContext.topic_status}
+              </p>
+            )}
+          </div>
+          <div className="mb-6">
+            <TodayTools />
+          </div>
+          <div className="flex flex-col items-center gap-2 mb-6">
+            <Button
+              variant="primary"
+              size="lg"
+              disabled={creating}
+              onClick={() =>
+                handleCreateSession({
+                  title: `继续：${continueContext.title || ""}`,
+                  focus: continueContext.title || "",
+                  goal: continueContext.key_takeaways?.join("\n") || continueContext.reflection_snippet || "",
+                  estimatedMinutes: 25,
+                  source: "welcome_back",
+                })
+              }
+              className="text-base px-10 py-3 rounded-full shadow-md"
+            >
+              {creating ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  正在准备...
+                </>
+              ) : (
+                <>
+                  <Play size={18} />
+                  从这里继续
+                </>
+              )}
+            </Button>
+            <button
+              onClick={() =>
+                handleCreateSession({
+                  title: "",
+                  focus: "",
+                  goal: "",
+                  estimatedMinutes: 25,
+                })
+              }
+              className="text-xs text-ink-muted hover:text-ink-secondary transition-colors"
+            >
+              换个方向
+            </button>
+            {createError && (
+              <p className="text-xs text-red-500 mt-1">{createError}</p>
+            )}
+          </div>
+        </>
       ) : continueContext?.type === "yesterday" && !continueDismissed ? (
         /* ── 昨日学习：三段式布局（对齐 Vision） ── */
         <>

@@ -9,11 +9,11 @@
 
 | 模块 | 覆盖率 | 状态 |
 |------|--------|------|
-| Today | 68% | 🟡 三段式布局 + 理解字段已落，与 Vision 差距主要是新用户引导页 |
+| Today | 73% | 🟡 统一入口结构完成，所有分支共享 quote→greeting→narrative→cards 结构 |
 | Session | 85% | 🟡 核心循环已完成，剩余细节打磨 |
 | Growth | 75% | 🟡 相对时间标签收敛完毕，接下来关注 insight 卡片多样性 |
 | Profile | 80% | 🟢 镜像叙事 + 偏好网格已对齐 Vision，剩余动态相对时间标签待接入 |
-| **Overall** | **77%** | 🟡 Today 持续收敛，Growth/Profile 接近完成 |
+| **Overall** | **78%** | 🟢 四页均已对齐 Vision 核心结构，剩余细节打磨 |
 
 ---
 
