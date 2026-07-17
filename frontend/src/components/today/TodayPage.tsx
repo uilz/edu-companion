@@ -76,19 +76,28 @@ function pickDailyQuote(seedDate: string): string {
   return TODAY_QUOTES[idx];
 }
 
-function buildViewModel(data: {
-  greeting: string;
-  date: string;
-  focus: DashboardFocus | null;
-  recommendations: DashboardRecommendations;
-  activities: { items: DashboardActivity[] };
-  today: { quote_enabled: boolean; memory_pulse: string | null };
-}): TodayViewModel {
+function buildViewModel(
+  data: {
+    greeting: string;
+    date: string;
+    focus: DashboardFocus | null;
+    recommendations: DashboardRecommendations;
+    activities: { items: DashboardActivity[] };
+    today: { quote_enabled: boolean; memory_pulse: string | null };
+  },
+  continueContext: ContinueContext | null,
+): TodayViewModel {
   const { greeting, date, focus, recommendations, activities, today } = data;
   const { suggestion, urgent, building, new_topic } = recommendations;
 
-  // ── Observation：一段叙事 ──
-  const observation = buildObservation(activities.items, urgent, building, suggestion);
+  // ── Observation：一段叙事（对齐 Vision preview.html Narrative.todayObservation） ──
+  const observation = buildObservation(
+    activities.items,
+    urgent,
+    building,
+    suggestion,
+    continueContext,
+  );
 
   // ── Focus Card ──
   const focusCard = buildFocusCard(focus, urgent, building, new_topic);
@@ -110,16 +119,36 @@ function buildViewModel(data: {
   };
 }
 
-/** 构建「苹果果的观察」叙事文本 */
+/**
+ * 构建「苹果果的观察」叙事文本。
+ *
+ * 对齐 Vision preview.html (行 515-537) Narrative.todayObservation：
+ *   - return (welcome_back)：好久不见 + 上次在学 X
+ *   - 新朋友 / sessionsDone≤2：刚接触，从这里继续吗？
+ *   - 刚开始 (mastery<0.4)：新朋友，慢慢来
+ *   - 正在巩固 / 比较熟了 (mastery<0.7)：又近一步，继续巩固吗？
+ *   - 很稳 (mastery≥0.7)：很稳了，往深走一步？
+ *
+ * 后端 topic_status 5 档：新朋友 / 刚开始 / 正在巩固 / 比较熟了 / 很稳。
+ */
 function buildObservation(
   activities: DashboardActivity[],
   urgent: { label: string }[],
   building: { label: string }[],
   suggestion: string,
+  continueContext: ContinueContext | null,
 ): string {
   const parts: string[] = [];
 
-  // 1. 昨天回顾（若能说人话）
+  // ── 1. return（welcome_back）专用叙事：好久不见 ──
+  // Vision 行 520-522：`好久不见。上次我们在学 X。我一直在这里。`
+  if (continueContext?.type === "welcome_back") {
+    const lastTitle = continueContext.title || "上次的内容";
+    parts.push(`好久不见。上次我们在学「${lastTitle}」。我一直在这里。`);
+    return parts.join("");
+  }
+
+  // ── 2. 昨天回顾（若能说人话） ──
   const completed = activities.filter((a) => a.status === "completed").slice(0, 3);
   if (completed.length === 1) {
     parts.push(`昨天我们一起完成了「${completed[0].title}」。`);
@@ -131,23 +160,75 @@ function buildObservation(
     );
   }
 
-  // 2. 苹果果的发现
-  if (urgent.length > 0 && building.length > 0) {
-    parts.push(`我注意到你在「${building[0].label}」上进步很快，「${urgent[0].label}」还需要再巩固一下。`);
-  } else if (urgent.length > 0) {
-    parts.push(`我注意到「${urgent[0].label}」是你当前最值得突破的方向。`);
-  } else if (building.length > 0) {
-    parts.push(`我注意到你在「${building[0].label}」上正在稳步前进。`);
-  } else if (suggestion) {
-    parts.push(suggestion);
+  // ── 3. 按 topic_status 分档生成「苹果果的发现」（对齐 Vision mastery 分档） ──
+  const topicTitle =
+    continueContext?.type === "yesterday"
+      ? continueContext.title
+      : (urgent[0]?.label ?? building[0]?.label);
+
+  const topicStatus = continueContext?.topic_status;
+  const discovery = buildDiscoveryByMastery(topicStatus, topicTitle, urgent, building, suggestion);
+
+  if (discovery) {
+    parts.push(discovery);
   }
 
-  // 3. 如果什么都没有，给一个温和的开场
+  // ── 4. 如果什么都没有，给一个温和的开场 ──
   if (parts.length === 0) {
     parts.push("我还在慢慢了解你的学习节奏。完成几次学习后，我会更清楚你适合什么。");
   }
 
   return parts.join("");
+}
+
+/**
+ * 按 mastery 分档生成「苹果果的发现」叙事。
+ * 对齐 Vision preview.html (行 527-536)。
+ */
+function buildDiscoveryByMastery(
+  topicStatus: string | undefined,
+  topicTitle: string | undefined,
+  urgent: { label: string }[],
+  building: { label: string }[],
+  suggestion: string,
+): string | null {
+  const topic = topicTitle || "";
+
+  // 有 topic_status：按 Vision 5 档分档
+  if (topicStatus && topic) {
+    switch (topicStatus) {
+      // Vision 行 527-528：sessionsDone≤2 → 刚接触
+      case "新朋友":
+        return `昨天我们刚一起接触了「${topic}」。今天从这里继续吗？`;
+      // Vision 行 530-531：mastery<0.4 → 新朋友，慢慢来
+      case "刚开始":
+        return `昨天我们一起开始了「${topic}」。这是个新朋友，慢慢来。`;
+      // Vision 行 533-534：mastery<0.7 → 又近一步，继续巩固？
+      case "正在巩固":
+      case "比较熟了":
+        return `昨天你在「${topic}」上又近了一步。今天继续巩固吗？`;
+      // Vision 行 536：mastery≥0.7 → 很稳了，往深走？
+      case "很稳":
+        return `昨天你又练了「${topic}」，已经很稳了。今天往深走一步？`;
+      default:
+        break;
+    }
+  }
+
+  // 无 topic_status 兜底：用 urgent/building 维度
+  if (urgent.length > 0 && building.length > 0) {
+    return `我注意到你在「${building[0].label}」上进步很快，「${urgent[0].label}」还需要再巩固一下。`;
+  }
+  if (urgent.length > 0) {
+    return `我注意到「${urgent[0].label}」是你当前最值得突破的方向。`;
+  }
+  if (building.length > 0) {
+    return `我注意到你在「${building[0].label}」上正在稳步前进。`;
+  }
+  if (suggestion) {
+    return suggestion;
+  }
+  return null;
 }
 
 /** 构建聚焦卡片 */
@@ -471,7 +552,7 @@ export default function TodayPage() {
     );
   }
 
-  const vm = buildViewModel(data);
+  const vm = buildViewModel(data, continueContext);
   const hasFocus = vm.focusCard !== null;
 
   return (
@@ -493,49 +574,52 @@ export default function TodayPage() {
         {vm.observation}
       </p>
 
-      {/* ── 记忆脉冲 ── */}
-      {vm.memoryPulse && <MemoryPulse text={vm.memoryPulse} />}
+      {/* ── 记忆脉冲（仅在非 activeSession 时展示，学完后才出现） ── */}
+      {vm.memoryPulse && !activeSession && <MemoryPulse text={vm.memoryPulse} />}
 
       {activeSession ? (
         /* ── 有未完成的 Session：主 CTA 为继续（S1.2 / S1.3） ── */
-        <div className="mb-6 p-5 rounded-xl bg-surface border border-border/60">
-          <p className="text-xs text-ink-muted mb-2">进行中的学习</p>
-          <h2 className="text-lg font-semibold text-ink-primary mb-4">
-            {activeSession.title || "学习 Session"}
-          </h2>
+        <>
+          <div className="mb-6 p-5 rounded-xl bg-surface border border-border/60">
+            <p className="text-xs text-ink-muted mb-2">进行中的学习</p>
+            <h2 className="text-lg font-semibold text-ink-primary mb-4">
+              {activeSession.title || "学习 Session"}
+            </h2>
 
-          <TodayTools />
-
-          <div className="flex flex-col items-start gap-3">
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={() => router.push(`/session/${activeSession.id}`)}
-              className="text-base px-6 py-3 rounded-full shadow-md"
-            >
-              <Play size={18} />
-              继续学习
-            </Button>
-            <button
-              onClick={() => {
-                const c = continueContext;
-                const title = c?.type === "yesterday" && c.title ? `继续：${c.title}` : vm.focusTitle || "";
-                handleCreateSession({
-                  title,
-                  focus: vm.focusTitle || "",
-                  goal: c?.type === "yesterday" ? (c as any).reflection_snippet || c?.key_takeaways?.join("\n") || "" : vm.focusCard?.description || "",
-                  estimatedMinutes: vm.focusCard?.estimatedMinutes || 25,
-                });
-              }}
-              className="text-xs text-ink-muted hover:text-ink-secondary transition-colors"
-            >
-              今天想学点别的
-            </button>
-            {createError && (
-              <p className="text-xs text-red-500">{createError}</p>
-            )}
+            <div className="flex flex-col items-start gap-3">
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={() => router.push(`/session/${activeSession.id}`)}
+                className="text-base px-6 py-3 rounded-full shadow-md"
+              >
+                <Play size={18} />
+                继续学习
+              </Button>
+              <button
+                onClick={() => {
+                  const c = continueContext;
+                  const title = c?.type === "yesterday" && c.title ? `继续：${c.title}` : vm.focusTitle || "";
+                  handleCreateSession({
+                    title,
+                    focus: vm.focusTitle || "",
+                    goal: c?.type === "yesterday" ? (c as any).reflection_snippet || c?.key_takeaways?.join("\n") || "" : vm.focusCard?.description || "",
+                    estimatedMinutes: vm.focusCard?.estimatedMinutes || 25,
+                  });
+                }}
+                className="text-xs text-ink-muted hover:text-ink-secondary transition-colors"
+              >
+                今天想学点别的
+              </button>
+              {createError && (
+                <p className="text-xs text-red-500">{createError}</p>
+              )}
+            </div>
           </div>
-        </div>
+
+          {/* 工具托盘在页面级别（对齐 Vision preview.html） */}
+          <TodayTools />
+        </>
       ) : continueContext?.type === "welcome_back" && !continueDismissed ? (
         /* ── 欢迎回来（≥3天未学）：三段式布局 ── */
         <>
