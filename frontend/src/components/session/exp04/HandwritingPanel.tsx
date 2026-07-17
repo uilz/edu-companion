@@ -16,6 +16,7 @@ interface SavedDrawing {
   id: string;
   dataUrl: string;
   timestamp: number;
+  materialId?: string;   // server-side material_id for cross-device
 }
 
 const STORAGE_KEY = "hw_saved_drawings";
@@ -61,6 +62,7 @@ export default function HandwritingPanel({ open, onClose }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>("draw");
   const [savedDrawings, setSavedDrawings] = useState<SavedDrawing[]>([]);
   const [savedToast, setSavedToast] = useState(false);
+  const [savingToBackend, setSavingToBackend] = useState(false);
 
   // ── Load saved drawings on open ──
 
@@ -140,22 +142,58 @@ export default function HandwritingPanel({ open, onClose }: Props) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   };
 
-  // ── Save ──
+  // ── Save (localStorage + backend upload) ──
 
-  const saveCanvas = () => {
+  const saveCanvas = async () => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || savingToBackend) return;
+
     const dataUrl = canvas.toDataURL("image/png");
+
+    // 1. Save to localStorage immediately (offline fallback)
     const drawing: SavedDrawing = {
       id: `hw_${Date.now()}`,
       dataUrl,
       timestamp: Date.now(),
     };
-    const updated = [drawing, ...savedDrawings].slice(0, 20); // keep max 20
+    const updated = [drawing, ...savedDrawings].slice(0, 20);
     setSavedDrawings(updated);
     saveDrawings(updated);
     setSavedToast(true);
     setTimeout(() => setSavedToast(false), 2000);
+
+    // 2. Upload to backend (cross-device persistence)
+    try {
+      setSavingToBackend(true);
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob((b) => resolve(b), "image/png");
+      });
+      if (!blob) return;
+
+      const form = new FormData();
+      form.append("file", blob, `handwrite_${Date.now()}.png`);
+      form.append("purpose", "session");
+      form.append("upload_source", "session_tool");
+
+      const res = await fetch("/api/files/upload", {
+        method: "POST",
+        credentials: "include",
+        body: form,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        // Tag the local drawing with the server material_id
+        const tagged: SavedDrawing = { ...drawing, materialId: data.material_id };
+        const withTag = [tagged, ...updated.slice(1)];
+        setSavedDrawings(withTag);
+        saveDrawings(withTag);
+      }
+    } catch {
+      // Backend unavailable — localStorage copy is sufficient
+    } finally {
+      setSavingToBackend(false);
+    }
   };
 
   // ── Delete drawing ──
@@ -233,7 +271,8 @@ export default function HandwritingPanel({ open, onClose }: Props) {
           {/* Save toast */}
           {savedToast && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-accent text-white text-xs font-medium px-3 py-1.5 rounded-full shadow-md animate-in fade-in slide-in-from-top-2">
-              ✅ 已保存
+              已保存
+              {savingToBackend && <span className="ml-1 opacity-80">· 同步中...</span>}
             </div>
           )}
 
@@ -295,7 +334,10 @@ export default function HandwritingPanel({ open, onClose }: Props) {
                     onClick={() => window.open(d.dataUrl, "_blank")}
                   />
                   <div className="px-2 py-1.5 flex items-center justify-between">
-                    <span className="text-[10px] text-ink-muted">{formatTime(d.timestamp)}</span>
+                    <span className="text-[10px] text-ink-muted">
+                      {formatTime(d.timestamp)}
+                      {d.materialId && <span className="ml-1 text-teal-500 font-medium">· 已同步</span>}
+                    </span>
                     <button
                       onClick={() => deleteDrawing(d.id)}
                       className="text-[10px] text-danger hover:text-danger/80 opacity-0 group-hover:opacity-100 transition-opacity"
