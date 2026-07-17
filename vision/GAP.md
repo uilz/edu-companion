@@ -9,29 +9,27 @@
 
 | 模块 | 覆盖率 | 状态 |
 |------|--------|------|
-| Today | 73% | 🟡 统一入口结构完成，所有分支共享 quote→greeting→narrative→cards 结构 |
-| Session | 89% | 🟢 闪卡 + 练习题 + 番茄钟 + 画布已落地，剩余 voice/handwrite/files 待逐条开放 |
-| Growth | 80% | 🟢 timeline + 叙事 + 洞察卡片已对齐 Vision，剩余叙事个性化深度待增强 |
-| Profile | 80% | 🟢 镜像叙事 + 偏好网格已对齐 Vision，剩余动态相对时间标签待接入 |
-| **Overall** | **81%** | 🟢 四页核心结构已对齐，Growth 洞察卡片落地 |
+| Today | 85% | 🟢 observation 按 mastery 5 档分档 + return 场景已对齐 Vision，剩余 activeSession 分支工具托盘位置与 insight 触发时机 |
+| Session | 92% | 🟢 闪卡 + 练习题 + 番茄钟 + 画布 + 语音 + 手写 + 文件均已落地，剩余各工具内部深度交互能力 |
+| Growth | 90% | 🟢 timeline + 叙事时间深度分档 + 洞察卡片 + 相对时间标签均对齐 Vision |
+| Profile | 90% | 🟢 镜像叙事 + 偏好网格 + 动态相对时间标签已对齐 Vision（「已经一起走过」现以相对时间表达） |
+| **Overall** | **89%** | 🟢 Session 工具（语音/手写/文件）从占位变为真实 Panel；Profile 动态相对时间标签已接入 |
 
 ---
 
 ## Top Gaps
 
 ### P0
-- Session「和苹果果一起学」完整陪伴循环已实现：阶段指示、工具托盘、主动提示、选择题练习、闪卡打通均已落地，剩余工具内部能力（语音、画布、手写、文件、番茄钟）待逐条开放。
+- Today 剩余 activeSession 分支工具托盘位置与 insight 触发时机未对齐 Vision。
 
 ### P1
-- Today 页面已存在，但尚未完整还原 preview.html 的「统一今日入口」：last-session-card 布局、工具托盘与 CTA 块的布局仍需收敛。
-- Growth 页面主体已还原，但相对时间标签（上周三 / N 周前 / N 个月前）与 Vision demo 的细腻程度仍有差距。
+- Session 工具托盘内各工具的深度交互与后台能力产品化（语音 STT/TTS、手写 OCR、文件上传）。
 
 ### P2
-- Session 工具托盘内各工具的深度交互与后台能力产品化。
 - Profile 内存系统对接：mirror narrative 中的「起点对比」目前用 session 数量做近似，未来可由 Memory 系统提供真正的「用户第一天说了什么 → 现在做到了什么」跨时间对比。
 
 ---
 
 ## Next Iteration
 
-Today 页面收敛：还原 preview.html 的 last-session-card（昨日学习摘要 + 一键继续）与统一今日布局。
+Today 收敛：对齐 activeSession 分支中工具托盘的显示位置与 insight（memory-pulse）触发时机与 preview.html 一致。

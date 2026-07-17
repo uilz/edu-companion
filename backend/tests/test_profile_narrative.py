@@ -55,7 +55,8 @@ class TestMirrorNarrative:
             _profile(subjects=["线性代数"], learning_style="kinesthetic"),
             _growth(total_sessions=9, streak_days=5),
         )
-        assert "还记得刚开始的时候吗" in result
+        # 对齐 Vision preview.html 行 546：起点对比 + 学习偏好
+        assert "一开始觉得" in result or "到现在能自己" in result
         assert "更喜欢先动手算一遍" in result
 
     def test_many_sessions_includes_long_term(self):
@@ -63,7 +64,8 @@ class TestMirrorNarrative:
             _profile(subjects=["矩阵求逆"], learning_style="visual"),
             _growth(total_sessions=28, streak_days=14),
         )
-        assert "还记得你第一天开始学习" in result
+        # 对齐 Vision preview.html 行 551-558：三个月起点对比 + 主动追问
+        assert "三个月" in result
         assert "主动追问" in result
         assert "节奏非常稳定" in result
 
@@ -88,6 +90,35 @@ class TestMirrorNarrative:
             _growth(total_sessions=5, streak_days=1),
         )
         assert "有自己独特的学习节奏" in result
+
+    def test_many_sessions_with_weekday_pattern(self):
+        """对齐 Vision 行 557：≥3 月学习应检测到学习时间模式。"""
+        import time
+        from datetime import datetime
+        now = time.time()
+        day = 86400
+        # 构造周二(1) 周四(3) 各 2 次
+        ts = []
+        for offset in range(0, 30):
+            t = now - offset * day
+            if datetime.fromtimestamp(t).weekday() in (1, 3):
+                ts.append(int(t))
+                if len(ts) >= 4:
+                    break
+        result = build_mirror_narrative(
+            _profile(subjects=["线性代数"], learning_style="reading"),
+            _growth(
+                total_sessions=20,
+                streak_days=10,
+                recent_records=[
+                    {"session_started_at": ts[0], "skill_gains": [{"skill": "矩阵", "after": 0.8}]},
+                    {"session_started_at": ts[1], "skill_gains": [{"skill": "向量", "after": 0.7}]},
+                    {"session_started_at": ts[2], "skill_gains": [{"skill": "行列式", "after": 0.6}]},
+                    {"session_started_at": ts[3], "skill_gains": [{"skill": "逆矩阵", "after": 0.5}]},
+                ],
+            ),
+        )
+        assert "学习时间最长" in result
 
 
 # ── build_prefs ───────────────────────────────────────────
@@ -138,16 +169,57 @@ class TestBuildPrefs:
         prefs = build_prefs(_profile(subjects=[]), _growth())
         assert prefs[2]["value"] == "还在探索不同领域"
 
-    def test_total_sessions_appears_in_sessions_label(self):
+    def test_total_sessions_fallback_when_no_history(self):
         prefs = build_prefs(
             _profile(),
             _growth(total_sessions=12),
         )
-        assert "12 次学习" in prefs[3]["value"]
+        # 无 earliest record，回退到次数
+        assert prefs[3]["value"] == "12 次学习"
 
     def test_zero_sessions_shows_new_label(self):
         prefs = build_prefs(_profile(), _growth(total_sessions=0))
         assert prefs[3]["value"] == "刚认识"
+
+    def test_one_session_shows_just_started(self):
+        prefs = build_prefs(_profile(), _growth(total_sessions=1))
+        assert prefs[3]["value"] == "刚刚开始"
+
+    def test_two_sessions_short_span_shows_count(self):
+        """≥2 次但时间跨度<14 天则 fallback 到次数。"""
+        import time
+        now = time.time()
+        day = 86400
+        prefs = build_prefs(
+            _profile(),
+            _growth(
+                total_sessions=2,
+                streak_days=1,
+                recent_records=[
+                    {"session_started_at": now - 3 * day, "skill_gains": []},
+                ],
+            ),
+        )
+        assert prefs[3]["value"] == "2 次学习"
+
+    def test_long_span_shows_relative_time(self):
+        """对齐 GAP.md：≥14 天跨度时显示相对时间（N 周/N 个月）。"""
+        import time
+        now = time.time()
+        day = 86400
+        prefs = build_prefs(
+            _profile(),
+            _growth(
+                total_sessions=12,
+                streak_days=5,
+                recent_records=[
+                    {"session_started_at": now - day, "skill_gains": [{"skill": "矩阵", "after": 0.7}]},
+                    {"session_started_at": now - 60 * day, "skill_gains": [{"skill": "向量", "after": 0.3}]},
+                ],
+            ),
+        )
+        assert "一起走过" in prefs[3]["value"]
+        assert "个月" in prefs[3]["value"] or "周" in prefs[3]["value"]
 
     def test_xss_subjects_escaped_in_prefs(self):
         prefs = build_prefs(

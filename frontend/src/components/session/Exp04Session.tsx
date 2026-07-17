@@ -37,6 +37,9 @@ import PracticeCard from "./exp04/PracticeCard";
 import FlashcardCreatePanel from "./exp04/FlashcardCreatePanel";
 import PomodoroPanel from "./exp04/PomodoroPanel";
 import CanvasPanel from "./exp04/CanvasPanel";
+import VoicePanel from "./exp04/VoicePanel";
+import HandwritingPanel from "./exp04/HandwritingPanel";
+import FileListPanel from "./exp04/FileListPanel";
 import { getToolState, updateToolState } from "@/lib/api/session-tool-api";
 import { generateQuestions } from "@/lib/api/practice-api";
 import type { V7Question } from "@/lib/api/practice-api";
@@ -127,6 +130,9 @@ export default function Exp04Session() {
   const [flashcardDefaultFront, setFlashcardDefaultFront] = useState("");
   const [pomodoroOpen, setPomodoroOpen] = useState(false);
   const [canvasOpen, setCanvasOpen] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [handwritingOpen, setHandwritingOpen] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
   const [prompts, setPrompts] = useState<string[]>([]);
 
   const fetchSession = useCallback(async () => {
@@ -333,7 +339,22 @@ export default function Exp04Session() {
       return;
     }
 
-    // 其余工具当前为占位：记录 nudge 并给出轻反馈
+    if (tool === "voice") {
+      setVoiceOpen(true);
+      return;
+    }
+
+    if (tool === "handwriting") {
+      setHandwritingOpen(true);
+      return;
+    }
+
+    if (tool === "files") {
+      setFilesOpen(true);
+      return;
+    }
+
+    // 其余工具（不应走到这里）当前为占位
     const nudges = [...(toolState.nudges || [])];
     if (!nudges.includes(tool)) nudges.push(tool);
     patchToolState({ nudges });
@@ -567,6 +588,25 @@ export default function Exp04Session() {
         sessionTitle={session?.title || session?.mission?.title}
         open={canvasOpen}
         onClose={() => setCanvasOpen(false)}
+      />
+
+      {/* ── Voice Panel Overlay ── */}
+      <VoicePanel
+        open={voiceOpen}
+        onClose={() => setVoiceOpen(false)}
+      />
+
+      {/* ── Handwriting Panel Overlay ── */}
+      <HandwritingPanel
+        open={handwritingOpen}
+        onClose={() => setHandwritingOpen(false)}
+      />
+
+      {/* ── File List Panel Overlay ── */}
+      <FileListPanel
+        sessionTitle={session?.title || session?.mission?.title}
+        open={filesOpen}
+        onClose={() => setFilesOpen(false)}
       />
     </div>
   );
