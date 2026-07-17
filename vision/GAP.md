@@ -10,10 +10,10 @@
 | 模块 | 覆盖率 | 状态 |
 |------|--------|------|
 | Today | 73% | 🟡 统一入口结构完成，所有分支共享 quote→greeting→narrative→cards 结构 |
-| Session | 85% | 🟡 核心循环已完成，剩余细节打磨 |
+| Session | 87% | 🟢 核心循环 + 闪卡 + 练习题 + 番茄钟已落地，剩余 voice/canvas/handwrite/files 待逐条开放 |
 | Growth | 75% | 🟡 相对时间标签收敛完毕，接下来关注 insight 卡片多样性 |
 | Profile | 80% | 🟢 镜像叙事 + 偏好网格已对齐 Vision，剩余动态相对时间标签待接入 |
-| **Overall** | **78%** | 🟢 四页均已对齐 Vision 核心结构，剩余细节打磨 |
+| **Overall** | **79%** | 🟢 四页核心结构均已对齐，Session 工具托盘首个深度工具落地 |
 
 ---
 

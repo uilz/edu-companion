@@ -35,6 +35,7 @@ import ToolTray, { type ToolKey } from "./exp04/ToolTray";
 import ActivePrompt from "./exp04/ActivePrompt";
 import PracticeCard from "./exp04/PracticeCard";
 import FlashcardCreatePanel from "./exp04/FlashcardCreatePanel";
+import PomodoroPanel from "./exp04/PomodoroPanel";
 import { getToolState, updateToolState } from "@/lib/api/session-tool-api";
 import { generateQuestions } from "@/lib/api/practice-api";
 import type { V7Question } from "@/lib/api/practice-api";
@@ -123,6 +124,7 @@ export default function Exp04Session() {
   const [practiceLoading, setPracticeLoading] = useState(false);
   const [flashcardOpen, setFlashcardOpen] = useState(false);
   const [flashcardDefaultFront, setFlashcardDefaultFront] = useState("");
+  const [pomodoroOpen, setPomodoroOpen] = useState(false);
   const [prompts, setPrompts] = useState<string[]>([]);
 
   const fetchSession = useCallback(async () => {
@@ -316,6 +318,11 @@ export default function Exp04Session() {
     if (tool === "flashcard") {
       setFlashcardDefaultFront("");
       setFlashcardOpen(true);
+      return;
+    }
+
+    if (tool === "pomodoro") {
+      setPomodoroOpen(true);
       return;
     }
 
@@ -540,6 +547,13 @@ export default function Exp04Session() {
           onClose={() => setFlashcardOpen(false)}
         />
       )}
+
+      {/* ── Pomodoro Panel Overlay ── */}
+      <PomodoroPanel
+        sessionTitle={session?.title || session?.mission?.title}
+        open={pomodoroOpen}
+        onClose={() => setPomodoroOpen(false)}
+      />
     </div>
   );
 }
