@@ -32,6 +32,7 @@ interface ContinueContext {
   key_takeaways?: string[];
   reflection_snippet?: string;
   skills?: string[];
+  topic_status?: string;
   date_label?: string;
   started_at?: number;
 }
@@ -401,6 +402,11 @@ function ContinueYesterdayCard({
             涉及到：{context.skills.join("、")}
           </p>
         )}
+        {context.topic_status && (
+          <p className="text-xs text-ink-muted">
+            苹果果对你的理解：{context.topic_status}
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col items-center gap-3">
@@ -460,6 +466,11 @@ function WelcomeBackCard({
         <h2 className="text-lg font-semibold text-ink-primary">{title}</h2>
         {takeaway && (
           <p className="text-xs text-ink-muted">{takeaway}</p>
+        )}
+        {context.topic_status && (
+          <p className="text-xs text-ink-muted">
+            苹果果对你的理解：{context.topic_status}
+          </p>
         )}
       </div>
 

@@ -114,6 +114,28 @@ async def list_active_sessions(
     return await service.list_active_sessions(user_id)
 
 
+def _derive_topic_status(skill_gains: list[dict]) -> str | None:
+    """从最新 GrowthRecord 的 skill_gains 推导「苹果果对你的理解」标签。
+
+    取第一个技能的 mastery after 值，映射为中文状态标签。
+    V1 规则：after >= 0.8 → 很稳 / >= 0.6 → 比较熟了 / >= 0.4 → 正在巩固
+    / >= 0.2 → 刚开始 / < 0.2 → 新朋友 / 无数据 → None
+    """
+    if not skill_gains:
+        return None
+    first = skill_gains[0]
+    after = first.get("after", 0)
+    if after >= 0.8:
+        return "很稳"
+    if after >= 0.6:
+        return "比较熟了"
+    if after >= 0.4:
+        return "正在巩固"
+    if after >= 0.2:
+        return "刚开始"
+    return "新朋友"
+
+
 @router.get("/continue", response_model=dict)
 async def get_continue_context(
     user_id: str = Depends(current_user_id),
@@ -166,6 +188,8 @@ async def get_continue_context(
         if g.get("skill")
     ]
 
+    topic_status = _derive_topic_status(latest.get("skill_gains", []))
+
     # S3.1: 间隔 >= 3 天 → 欢迎回来（不暴露天数）
     if days_ago >= 3:
         # 异常流程：只有一次 Session 且无有效记忆 → 不伪造熟悉感
@@ -179,6 +203,7 @@ async def get_continue_context(
             "key_takeaways": key_takeaways,
             "reflection_snippet": reflection_snippet,
             "skills": skills,
+            "topic_status": topic_status,
             "started_at": latest.get("session_started_at", 0),
         }
 
@@ -195,6 +220,7 @@ async def get_continue_context(
         "key_takeaways": key_takeaways,
         "reflection_snippet": reflection_snippet,
         "skills": skills,
+        "topic_status": topic_status,
         "date_label": date_label,
         "started_at": latest.get("session_started_at", 0),
     }
