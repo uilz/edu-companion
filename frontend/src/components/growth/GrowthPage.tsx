@@ -16,6 +16,12 @@ interface TimelineItem {
   is_latest: boolean;
 }
 
+interface InsightItem {
+  type: string;
+  text: string;
+  icon: string;
+}
+
 interface GrowthSummary {
   total_sessions: number;
   total_duration_minutes: number;
@@ -25,6 +31,7 @@ interface GrowthSummary {
   recent_records: unknown[];
   growth_narrative: string;
   timeline: TimelineItem[];
+  insights?: InsightItem[];
 }
 
 // ── 页面组件 ──
@@ -86,6 +93,23 @@ export default function GrowthPage() {
           style={{ fontFamily: "var(--font-display)" }}
         >
           {summary.growth_narrative}
+        </div>
+      )}
+
+      {/* ── 苹果果的观察（洞察卡片） ── */}
+      {summary?.insights && summary.insights.length > 0 && (
+        <div className="space-y-3 mb-space-6">
+          {summary.insights.map((insight, i) => (
+            <div
+              key={i}
+              className="flex items-start gap-3 p-4 rounded-lg bg-accent/5 border-l-[3px] border-l-accent"
+            >
+              <span className="text-lg flex-shrink-0">{insight.icon}</span>
+              <p className="text-sm text-ink-secondary leading-relaxed">
+                {insight.text}
+              </p>
+            </div>
+          ))}
         </div>
       )}
 

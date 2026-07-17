@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from app.domain.growth.narrative import (
     build_growth_narrative,
     build_growth_timeline,
+    build_growth_insights,
 )
 
 if TYPE_CHECKING:
@@ -72,6 +73,7 @@ class GrowthService:
         }
         summary["growth_narrative"] = build_growth_narrative(summary)
         summary["timeline"] = build_growth_timeline(summary)
+        summary["insights"] = build_growth_insights(summary)
         return summary
 
     @staticmethod
