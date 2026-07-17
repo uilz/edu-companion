@@ -761,34 +761,37 @@ export default function TodayPage() {
           </div>
         </div>
       ) : continueContext?.type === "yesterday" && !continueDismissed ? (
-        /* ── 无活跃 Session 但有昨天记录：主 CTA 为继续昨天（S2.1） ── */
-        <div className="mb-6 p-5 rounded-xl bg-surface border border-border/60">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-xs text-ink-muted mb-2">
-                {continueContext.date_label}我们一起学习了
-              </p>
-              <h2 className="text-lg font-semibold text-ink-primary mb-4">
-                {continueContext.title || "一次学习"}
-              </h2>
-            </div>
+        /* ── 昨日学习：三段式布局（对齐 Vision） ── */
+        <>
+          {/* 段1: 昨日卡片 — 严格三行 label / title / 理解 */}
+          <div className="mb-6 p-5 rounded-xl bg-surface border border-border/60 relative">
             <button
               onClick={() => setContinueDismissed(true)}
-              className="text-xs text-ink-muted hover:text-ink-secondary transition-colors px-2 py-1"
+              className="absolute top-4 right-4 text-xs text-ink-muted hover:text-ink-secondary transition-colors"
               aria-label="关闭"
             >
               ✕
             </button>
-          </div>
-          {continueContext.skills && continueContext.skills.length > 0 && (
-            <p className="text-xs text-ink-muted mb-4">
-              涉及到：{continueContext.skills.join("、")}
+            <p className="text-xs text-ink-muted mb-1.5">
+              {continueContext.date_label}的学习
             </p>
-          )}
+            <h2 className="text-lg font-semibold text-ink-primary mb-2">
+              {continueContext.title || "一次学习"}
+            </h2>
+            {continueContext.topic_status && (
+              <p className="text-xs text-ink-muted">
+                苹果果对你的理解：{continueContext.topic_status}
+              </p>
+            )}
+          </div>
 
-          <TodayTools />
+          {/* 段2: 工具托盘 */}
+          <div className="mb-6">
+            <TodayTools />
+          </div>
 
-          <div className="flex flex-col items-start gap-3">
+          {/* 段3: CTA */}
+          <div className="flex flex-col items-center gap-2 mb-6">
             <Button
               variant="primary"
               size="lg"
@@ -804,7 +807,7 @@ export default function TodayPage() {
                   estimatedMinutes: 25,
                 })
               }
-              className="text-base px-6 py-3 rounded-full shadow-md"
+              className="text-base px-10 py-3 rounded-full shadow-md"
             >
               {creating ? (
                 <>
@@ -832,10 +835,10 @@ export default function TodayPage() {
               今天想学点别的
             </button>
             {createError && (
-              <p className="text-xs text-red-500">{createError}</p>
+              <p className="text-xs text-red-500 mt-1">{createError}</p>
             )}
           </div>
-        </div>
+        </>
       ) : hasFocus ? (
         <>
           {/* ── 今天想带你做的 ── */}
