@@ -151,7 +151,24 @@ function formatRelativeTime(startedAtSeconds: number): string {
   if (dayDiff === 0) return "今天";
   if (dayDiff === 1) return "昨天";
   if (dayDiff < 7) return `${dayDiff} 天前`;
-  return `${date.getMonth() + 1}月${date.getDate()}日`;
+
+  // 7-13 天：上周 N
+  const weekDayNames = ["日", "一", "二", "三", "四", "五", "六"];
+  if (dayDiff >= 7 && dayDiff < 14) {
+    return `上周${weekDayNames[date.getDay()]}`;
+  }
+
+  // 14-30 天：N 周前
+  const weekDiff = Math.floor(dayDiff / 7);
+  if (dayDiff < 30) return `${weekDiff} 周前`;
+
+  // 30-365 天：N 个月前
+  const monthDiff = Math.floor(dayDiff / 30);
+  if (dayDiff < 365) return `${monthDiff} 个月前`;
+
+  // >= 365 天：N 年前
+  const yearDiff = Math.floor(dayDiff / 365);
+  return `${yearDiff} 年前`;
 }
 
 // ── 骨架屏 ──
