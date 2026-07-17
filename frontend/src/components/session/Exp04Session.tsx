@@ -592,6 +592,8 @@ export default function Exp04Session() {
 
       {/* ── Voice Panel Overlay ── */}
       <VoicePanel
+        convId={session?.conversation_id}
+        sessionId={session?.id}
         open={voiceOpen}
         onClose={() => setVoiceOpen(false)}
       />
