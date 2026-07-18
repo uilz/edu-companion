@@ -6,8 +6,9 @@
 <title>🍎 苹果果 · AI 学习伙伴</title>
 <style>
 /* ═══════════════════════════════════════════════════════════════
-   AppleGo Demo v3 — 会成长的伙伴
-   核心：活记忆引擎 + 时间维度 + 工具打通 + AI 主动
+   AppleGo Demo v4 — 对话驱动的学习伙伴
+   核心：活记忆引擎 + 时间维度 + 对话中嵌入工具
+   Session：对话为主，练习/卡片在聊天中由苹果果主动推荐
    守 Manifesto：四页主导 + 更多聚合 + 建模隐藏叙事
    ═══════════════════════════════════════════════════════════════ */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;500&display=swap');
@@ -720,7 +721,7 @@ function renderToday() {
         <h1>欢迎来到苹果果</h1>
         <p>我是你的 AI 学习伙伴。开始第一次学习后，我会越来越了解你。</p>
         <div class="cta-block">
-          <button class="btn btn-primary btn-lg" onclick="startSession('intro')">
+          <button class="btn btn-primary btn-lg" onclick="startSession()">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             开始第一次学习
           </button>
@@ -746,20 +747,22 @@ function renderToday() {
       </div>
       ${toolsHtml}
       <div class="cta-block">
-        <button class="btn btn-primary btn-lg" onclick="startSession('intro')">
+        <button class="btn btn-primary btn-lg" onclick="startSession()">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
           ${cta}
         </button>
-        <button class="text-link" onclick="startSession('intro',true)">今天想学点别的</button>
+        <button class="text-link" onclick="startSession(null,true)">今天想学点别的</button>
       </div>
     </div>`;
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   SESSION
+   SESSION — 对话驱动的学习体验
+   AppleGo 是自习室朋友，不是老师。
+   工具（练习/卡片/画布）由苹果果在对话中自然推荐。
    ═══════════════════════════════════════════════════════════════ */
 function startSession(stage, switchTopic) {
-  Object.assign(state.session, { active:true, stage: stage||'intro', practiceAnswered:false, reflectionText:'', learnTurn:0, toolNudged:false, cardCreatedThisSession:false, stuckSignal:false });
+  Object.assign(state.session, { active:true, stage: stage||'enter', practiceAnswered:false, reflectionText:'', learnTurn:0, toolNudged:false, cardCreatedThisSession:false, stuckSignal:false });
   document.getElementById('session-overlay').classList.add('active');
   document.getElementById('session-title').textContent = DATA[state.subject].missionTitle;
   document.getElementById('tool-nudge').classList.remove('show');
@@ -772,75 +775,150 @@ function exitSession() {
   renderPage();
 }
 function renderSession() {
-  const stages = ['intro','learn','practice','reflect','finish'];
+  const stages = ['enter','chat','reflect','finish'];
   const idx = stages.indexOf(state.session.stage);
-  document.getElementById('session-stages').innerHTML = stages.slice(0,4).map((s,i)=>`<div class="stage-dot ${i<idx?'done':''} ${i===idx?'active':''}"></div>`).join('');
-  document.getElementById('progress-fill').style.width = (idx/4*100)+'%';
+  document.getElementById('session-stages').innerHTML = stages.slice(0,3).map((s,i)=>`<div class="stage-dot ${i<idx?'done':''} ${i===idx?'active':''}"></div>`).join('');
+  document.getElementById('progress-fill').style.width = (idx/3*100)+'%';
   document.getElementById('session-body').innerHTML = '';
-  ({intro:renderIntro, learn:renderLearn, practice:renderPractice, reflect:renderReflect, finish:renderFinish}[state.session.stage]||renderIntro)();
+  ({enter:renderEnter, chat:renderChat, reflect:renderReflect, finish:renderFinish}[state.session.stage]||renderEnter)();
   document.getElementById('session-body').scrollTop = 0;
 }
-function renderIntro() {
+
+// ── 进入：苹果果问候 ──────────────────────────────────────
+function renderEnter() {
   const d = DATA[state.subject];
-  let firstLine;
-  if (state.scene==='new' || mem.sessionsDone===0) firstLine = '你想从什么开始？';
-  else if (state.scene==='return') firstLine = `好久不见。上次我们在做${state.subject==='linear'?'梯度下降':'循环'}。我一直在这里。`;
-  else {
+  let line1, line2;
+  if (state.scene==='new' || mem.sessionsDone===0) {
+    line1 = '你想从什么开始？'; line2 = '我还不太了解你，但一起学几次，我就会越来越懂你。';
+  } else if (state.scene==='return') {
+    line1 = '好久不见。我一直在这里。';
+    line2 = `上次我们在学${state.subject==='linear'?'梯度下降':'循环'}。今天继续吗？`;
+  } else {
     const topic = state.subject==='linear'?'矩阵乘法':'递归';
     const t = mem.topics[topic]||{status:'新朋友'};
-    firstLine = mem.sessionsDone<=2 ? `昨天我们刚接触了${topic}。今天从这里继续吗？` : `昨天你在${topic}上又近了一步（${t.status}）。今天继续吗？`;
+    line1 = `今天聊聊${topic}吗？`; line2 = mem.sessionsDone<=2 ? `刚开始一起学，不着急。` : `你对${topic}的理解——${t.status}。今天往深走一步？`;
   }
   document.getElementById('session-body').innerHTML = `
     <div class="stage-center fade-in">
-      <p class="ai-quote">${firstLine}</p>
+      <p class="ai-quote">${line1}</p>
+      <p style="font-size:14px;color:var(--color-ink-secondary);line-height:1.7;margin-bottom:var(--space-5)">${line2}</p>
       <div class="cta-block">
-        <button class="btn btn-primary btn-lg" onclick="goStage('learn')"><svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>继续</button>
-        <button class="text-link" onclick="renderIntroSwitch()">今天想学点别的</button>
+        <button class="btn btn-primary btn-lg" onclick="goStage('chat')"><svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>坐下来聊聊</button>
+        <button class="text-link" onclick="renderEnterSwitch()">今天想聊点别的</button>
       </div>
     </div>`;
 }
-function renderIntroSwitch() {
+function renderEnterSwitch() {
   document.getElementById('session-body').innerHTML = `
     <div class="stage-center fade-in">
-      <p class="ai-quote">今天想学什么？</p>
-      <input type="text" class="input-field" placeholder="输入你想学的……（不填也行）" style="margin-bottom:20px;">
+      <p class="ai-quote">今天想聊什么？</p>
+      <input type="text" class="input-field" placeholder="输入你想聊的……（不填也行）" style="margin-bottom:20px;">
       <div class="cta-block">
-        <button class="btn btn-primary btn-lg" onclick="goStage('learn')">开始学习</button>
-        <button class="text-link" onclick="renderIntro()">还是继续昨天</button>
+        <button class="btn btn-primary btn-lg" onclick="goStage('chat')">开始聊天</button>
+        <button class="text-link" onclick="renderEnter()">还是聊聊昨天的</button>
       </div>
     </div>`;
 }
-function renderLearn() {
+
+// ── 对话：苹果果主导节奏，工具在对话中出现 ──────────────
+function renderChat() {
   const d = DATA[state.subject];
   document.getElementById('session-body').innerHTML = `
     <div class="conversation">
       <div class="msg-list" id="msg-list"></div>
       <div class="suggestion-row" id="suggestions"></div>
       <div class="learn-input-bar">
-        <input type="text" id="learn-input" placeholder="问苹果果……" onkeydown="if(event.key==='Enter')sendLearnMsg()">
-        <button class="learn-send" onclick="sendLearnMsg()"><svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <input type="text" id="learn-input" placeholder="跟苹果果说说……" onkeydown="if(event.key==='Enter')sendChatMsg()">
+        <button class="learn-send" onclick="sendChatMsg()"><svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </div>
     </div>`;
   let i = 0;
   const play = () => {
-    if (i < d.learnConversation.length) { appendTypingAI(d.learnConversation[i].text, ()=>{ i++; setTimeout(play, 400); }); }
-    else { showSuggestions(); scheduleToolNudge(); }
+    if (i < d.learnConversation.length) {
+      appendTypingAI(d.learnConversation[i].text, () => { i++; setTimeout(play, 400); });
+    } else {
+      // 对话主体结束后，苹果果主动递出「练一下」工具卡片
+      setTimeout(() => showInlinePractice(), 600);
+      scheduleToolNudge();
+    }
   };
   play();
 }
-// 苹果果主动递工具:Learn 开始一段时间后,工具按钮出现红点提示
+
+// ── 苹果果在对话中发起练习（tool_call 方式）─────────────
+function showInlinePractice() {
+  const d = DATA[state.subject];
+  const ml = document.getElementById('msg-list'); if (!ml) return;
+  // 苹果果说一句邀请
+  appendTypingAI('来，想不想试试看？', () => {
+    // 直接在对话中嵌入练习卡片
+    const embed = document.createElement('div'); embed.className='msg ai';
+    embed.innerHTML = `<div class="msg-avatar">🍎</div><div class="msg-bubble" style="padding:0;background:transparent;max-width:100%">
+      <div class="practice-question" style="margin:0;box-shadow:0 0 0 1px var(--color-divider)">
+        <p class="q-label">来一道</p>
+        <p class="q-text">${d.practice.question}</p>
+        ${d.practice.code?`<pre class="q-code">${escapeHtml(d.practice.code)}</pre>`:''}
+        <div class="q-options" id="inline-options">${d.practice.options.map((o,i)=>`<button class="q-option" onclick="answerInlinePractice(${i})">${o}</button>`).join('')}</div>
+        <div id="inline-feedback"></div>
+      </div></div>`;
+    ml.appendChild(embed);
+    embed.querySelector('.practice-question').scrollIntoView({behavior:'smooth',block:'center'});
+    ml.scrollTop = ml.scrollHeight;
+  });
+}
+
+function answerInlinePractice(idx) {
+  if (state.session.practiceAnswered) return;
+  state.session.practiceAnswered = true;
+  const d = DATA[state.subject];
+  const opts = document.querySelectorAll('#inline-options .q-option');
+  opts.forEach(o => o.classList.add('locked'));
+  opts[d.practice.correct].classList.add('correct');
+  const ok = idx === d.practice.correct;
+  if (!ok) opts[idx].classList.add('wrong');
+  updateMemoryFromPractice(ok);
+  const fb = document.getElementById('inline-feedback');
+  setTimeout(() => {
+    fb.innerHTML = `<div class="msg-bubble feedback-bubble ${ok?'ok':'nope'}" style="margin-top:12px"><div class="verdict">${ok?'算对了。':'这里有点绕。'}</div>${ok?d.practice.okFeedback:d.practice.nopeFeedback}</div>`;
+    setTimeout(() => {
+      // 苹果果推荐做成卡片
+      const ml = document.getElementById('msg-list');
+      const suggest = document.createElement('div'); suggest.className='msg ai';
+      suggest.innerHTML = `<div class="msg-avatar">🍎</div><div class="msg-bubble" style="padding:0;background:transparent;max-width:100%">
+        <div class="embed-tool-card" style="margin:0"><div class="et-icon" style="background:var(--color-purple-soft)">🧠</div><div class="et-text"><strong>做成一张卡记住它</strong>${ok?'':'这个点值得记住'}</div><button class="et-btn" onclick="createCardInline(this)">＋ 创建</button></div></div>`;
+      ml.appendChild(suggest);
+      // 对话后建议
+      const pr = document.getElementById('suggestions');
+      pr.innerHTML = `
+        <button class="suggestion-pill" onclick="state.session.practiceAnswered=false;renderChat()">再聊聊这个主题</button>
+        <button class="suggestion-pill" onclick="showInlinePractice()">再来一道</button>
+        <button class="suggestion-pill" onclick="goStage('reflect')" style="border-color:var(--color-accent);color:var(--color-accent);font-weight:600">差不多了</button>`;
+      pr.scrollIntoView({behavior:'smooth',block:'end'});
+    }, 500);
+  }, 300);
+}
+function createCardInline(btn) {
+  if (state.session.cardCreatedThisSession) return;
+  state.session.cardCreatedThisSession = true;
+  const d = DATA[state.subject];
+  state.customCards.push(d.cardFromPractice);
+  const card = btn.closest('.embed-tool-card');
+  card.innerHTML = `<div class="et-icon" style="background:var(--color-success-soft)">✓</div><div class="et-text" style="color:var(--color-success)">已经加进你的卡片了。下次复习会再见到。</div>`;
+}
+
+// ── 通用对话函数 ──────────────────────────────────────────
 function scheduleToolNudge() {
   if (state.session.toolNudged) return;
   setTimeout(() => {
-    if (state.session.stage === 'learn' && !state.session.toolNudged) {
+    if ((state.session.stage === 'chat') && !state.session.toolNudged) {
       state.session.toolNudged = true;
       document.getElementById('tool-nudge').classList.add('show');
     }
-  }, 6000);
+  }, 8000);
 }
 function showSuggestions() {
   const d = DATA[state.subject];
-  document.getElementById('suggestions').innerHTML = d.learnSuggestions.map(s=>`<button class="suggestion-pill" onclick="sendLearnMsg('${s.replace(/'/g,"\\'")}')">${s}</button>`).join('');
+  document.getElementById('suggestions').innerHTML = d.learnSuggestions.map(s=>`<button class="suggestion-pill" onclick="sendChatMsg('${s.replace(/'/g,"\\'")}')">${s}</button>`).join('');
 }
 function appendTypingAI(text, onDone) {
   const ml = document.getElementById('msg-list'); if (!ml) return;
@@ -863,7 +941,7 @@ function appendUserMsg(text) {
   m.innerHTML = `<div class="msg-avatar">你</div><div class="msg-bubble">${escapeHtml(text)}</div>`;
   ml.appendChild(m); ml.scrollTop = ml.scrollHeight;
 }
-function sendLearnMsg(preset) {
+function sendChatMsg(preset) {
   const input = document.getElementById('learn-input');
   const text = preset || input.value.trim(); if (!text) return;
   if (!preset) input.value='';
@@ -873,84 +951,32 @@ function sendLearnMsg(preset) {
   const reply = d.learnReply[text] || d.learnReply['default'];
   state.session.learnTurn++;
   appendTypingAI(reply, () => {
-    // 第三轮后,苹果果主动建议用画布把概念摆开(工具打通)
     if (state.session.learnTurn >= 2 && !state.session.toolNudged) {
       state.session.toolNudged = true;
       appendTypingAI('这个概念有点抽象。要不要把它在画布上摆开看？', () => {
         document.getElementById('tool-nudge').classList.add('show');
         const pr = document.getElementById('suggestions');
         pr.innerHTML = `
-          <button class="suggestion-pill" onclick="goStage('practice')" style="border-color:var(--color-accent);color:var(--color-accent);font-weight:600">去练习</button>
+          <button class="suggestion-pill" onclick="showInlinePractice()" style="border-color:var(--color-accent);color:var(--color-accent);font-weight:600">来一道题</button>
           <button class="suggestion-pill" onclick="openToolPage('canvas')">打开画布看看</button>
-          <button class="suggestion-pill" onclick="goStage('reflect')">今天就到这里</button>`;
+          <button class="suggestion-pill" onclick="goStage('reflect')">差不多了</button>`;
       });
     } else {
       const pr = document.getElementById('suggestions');
       pr.innerHTML = `
-        <button class="suggestion-pill" onclick="goStage('practice')" style="border-color:var(--color-accent);color:var(--color-accent);font-weight:600">去练习</button>
-        <button class="suggestion-pill" onclick="goStage('reflect')">今天就到这里</button>`;
+        <button class="suggestion-pill" onclick="showInlinePractice()" style="border-color:var(--color-accent);color:var(--color-accent);font-weight:600">来一道题</button>
+        <button class="suggestion-pill" onclick="goStage('reflect')">差不多了</button>`;
     }
   });
-}
-function renderPractice() {
-  const d = DATA[state.subject];
-  document.getElementById('session-body').innerHTML = `
-    <div class="practice-box">
-      <div class="practice-question">
-        <p class="q-label">练一练</p>
-        <p class="q-text">${d.practice.question}</p>
-        ${d.practice.code?`<pre class="q-code">${escapeHtml(d.practice.code)}</pre>`:''}
-        <div class="q-options">${d.practice.options.map((o,i)=>`<button class="q-option" onclick="answerPractice(${i})">${o}</button>`).join('')}</div>
-      </div>
-      <div id="feedback-area"></div>
-    </div>`;
-}
-function answerPractice(idx) {
-  if (state.session.practiceAnswered) return;
-  state.session.practiceAnswered = true;
-  const d = DATA[state.subject];
-  document.querySelectorAll('.q-option').forEach(o=>o.classList.add('locked'));
-  document.querySelectorAll('.q-option')[d.practice.correct].classList.add('correct');
-  const ok = idx === d.practice.correct;
-  if (!ok) document.querySelectorAll('.q-option')[idx].classList.add('wrong');
-  // 更新记忆:答对熟练度+,答错标记为"正在巩固"
-  updateMemoryFromPractice(ok);
-  const area = document.getElementById('feedback-area');
-  setTimeout(() => {
-    const m = document.createElement('div'); m.className='msg ai';
-    m.innerHTML = `<div class="msg-avatar">🍎</div><div class="msg-bubble feedback-bubble ${ok?'ok':'nope'}"><div class="verdict">${ok?'算对了。':'这里有点绕。'}</div>${ok?d.practice.okFeedback:d.practice.nopeFeedback}</div>`;
-    area.appendChild(m);
-    setTimeout(() => {
-      // 嵌入"做成卡片"(工具打通:练习→闪卡)
-      const embed = document.createElement('div'); embed.className='embed-tool-card';
-      embed.innerHTML = `
-        <div class="et-icon" style="background:var(--color-purple-soft)">🧠</div>
-        <div class="et-text"><strong>做成一张卡记住它</strong>${ok?'':'这个点容易绕，值得记住'}</div>
-        <button class="et-btn" onclick="createCardFromPractice(this)">＋ 创建</button>`;
-      area.appendChild(embed);
-      const actions = document.createElement('div'); actions.className='suggestion-row'; actions.style.paddingTop='8px';
-      actions.innerHTML = `<button class="suggestion-pill" onclick="state.session.practiceAnswered=false;renderPractice()">再来一道</button><button class="suggestion-pill" onclick="goStage('reflect')" style="border-color:var(--color-accent);color:var(--color-accent);font-weight:600">去反思</button>`;
-      area.appendChild(actions);
-      actions.scrollIntoView({behavior:'smooth',block:'end'});
-    }, 700);
-  }, 400);
-}
-function createCardFromPractice(btn) {
-  if (state.session.cardCreatedThisSession) return;
-  state.session.cardCreatedThisSession = true;
-  const d = DATA[state.subject];
-  state.customCards.push(d.cardFromPractice);
-  const card = btn.closest('.embed-tool-card');
-  card.innerHTML = `<div class="et-icon" style="background:var(--color-success-soft)">✓</div><div class="et-text" style="color:var(--color-success)">已经加进你的卡片了。下次复习会再见到。</div>`;
 }
 function renderReflect() {
   document.getElementById('session-body').innerHTML = `
     <div class="reflect-box fade-in">
-      <p class="reflect-prompt">今天你学到了什么？</p>
-      <p class="reflect-sub">写下你自己的理解。不写也行。</p>
+      <p class="reflect-prompt">学到什么了？</p>
+      <p class="reflect-sub">写不写都行。苹果果已经记住了。</p>
       <textarea class="reflect-textarea" id="reflect-text" placeholder="今天我对……有了新的理解……">${escapeHtml(state.session.reflectionText)}</textarea>
       <button class="reflect-draft-btn" id="draft-btn" onclick="fillDraft()"><svg viewBox="0 0 24 24" width="15" height="15" fill="none"><path d="M12 4v16M4 12h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>苹果果帮你整理</button>
-      <div class="reflect-actions"><button class="text-link" onclick="goStage('finish')">跳过</button><button class="btn btn-primary" onclick="submitReflection()">完成今天</button></div>
+      <div class="reflect-actions"><button class="text-link" onclick="goStage('finish')">不用了</button><button class="btn btn-primary" onclick="submitReflection()">好了</button></div>
     </div>`;
 }
 function fillDraft() {
@@ -964,7 +990,8 @@ function renderFinish() {
   document.getElementById('session-body').innerHTML = `
     <div class="stage-center fade-in finish-hero">
       <div style="font-size:48px;margin-bottom:24px">🍎</div>
-      <p class="ai-quote">今天就到这里。我会记住今天。</p>
+      <p class="ai-quote">今天就到这里。<br>我会记住今天的。</p>
+      <p style="font-size:14px;color:var(--color-ink-muted);margin-bottom:var(--space-6);line-height:1.6">下次再打开，你会变得不一样。</p>
       <button class="btn btn-outline btn-lg" onclick="finishSession()">返回首页</button>
     </div>`;
 }
