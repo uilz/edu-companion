@@ -17,6 +17,7 @@ import {
   CalendarDays,
   TrendingUp,
   User,
+  Grid3x3,
   type LucideIcon,
 } from "lucide-react";
 
@@ -137,6 +138,15 @@ export const primaryNavItems: NavItem[] = [
       desc: "你的学习画像",
       color: "from-amber-500/20 to-amber-500/10",
     },
+  },
+  {
+    path: "/tools",
+    label: "更多",
+    mobileLabel: "更多",
+    icon: Grid3x3,
+    priority: 4,
+    requiresAuth: true,
+    visibleIn: { sidebar: true, drawer: true, bottomNav: true, quickAction: false },
   },
 ];
 
