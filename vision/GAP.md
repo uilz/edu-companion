@@ -6,33 +6,27 @@
 
 ---
 
-## Latest PR: Companion 真实 Workspace 感知
+## Latest PR: ResourcesSidebar 真实切换 — 资源感知 Canvas + Companion
 
 ### 改动内容
-1. **StudioCompanion.tsx (重写)**: 从静态 Mock 文案升级为状态驱动观察引擎
-2. **Exp04Session.tsx**: 新增 `messageCount` 追踪 + 透传 `stage/mode/toolState/messageCount` 给 Companion
+1. **ResourcesSidebar.tsx**: 从独立 `useState` 改为受控组件，导出 `ResourceKey` 类型和 `RESOURCES` 常量
+2. **ResourceContextBar.tsx (新)**: Canvas 顶部的资源上下文条（图标 + 名称 + 关闭按钮）
+3. **Exp04Session.tsx**: 新增 `activeResource` 状态（默认 `"web"`），透传至 Sidebar/Companion/ContextBar
+4. **StudioCompanion.tsx**: 新增 `resourceKey` 参数，观察文案引用当前资源（如"你在看📖 计算机网络"）
 
 ### 收敛的 Gap
-- [x] Companion 使用静态 Mock 文案，用户一眼看穿 AI 没有真正观察
+- [x] ResourcesSidebar 点击后仅切换 active 样式，Canvas 内容不变
+- [x] 各资源类型无差异化显示
+- [x] Companion 不感知资源切换
 
-### 观察引擎行为
+### 体验变化
 
-| 用户状态 | Companion 文案 |
-|---------|---------------|
-| enter 阶段 | "准备好了吗？今天的 Mission 是：{title}" |
-| chat, messageCount=0 | "刚刚开始。你对这个话题已经了解多少了？" |
-| chat, messageCount≤2 | "你已经开始深入了。感觉到你的思考方向。" |
-| chat, messageCount>2 | "你已经在深入讨论了。需要我帮你理一下思路？" |
-| stuck 模式 | "你好像卡住了。要不要换个角度想想？" |
-| breakthrough 模式 | "感觉你有了新的理解！趁热来一道题？" |
-| silent 模式 | "不用着急。有些概念需要时间沉淀。" |
-| !practiceDone | 建议按钮："来一道题" → 打开画布暂代 |
-| !cardCreated | 建议按钮："记闪卡" → 打开闪卡 |
-| reflect 阶段 | "全部学完了。把今天的理解写下来吧？" |
-| finish 阶段 | "今天学完了。你的理解又深了一层。明天见。" |
-
-### 仍存在的 Gap（更新）
-- [ ] Canvas 内容根据资源切换（`ResourcesSidebar` 点击后只前端切换 active，实际 Canvas 内容不变）
+| 用户操作 | 效果 |
+|---------|------|
+| 点击侧栏「📖 Book」| Canvas 顶部出现「📖 Book · 计算机网络（第 7 版）」|
+| 点击「🎬 Video」| 资源条切换，Companion 更新为「你在看🎬 TCP 视频」|
+| 点击✕关闭资源条 | 资源条隐藏，Companion 观察去掉资源引用 |
+| 进入 enter 阶段 | Companion 说「今天我们在看🌐 RFC 793」|
 
 ---
 
@@ -41,25 +35,29 @@
 | 模块 | 覆盖率 | 状态 | 说明 |
 |------|--------|------|------|
 | Layout（5 区域网格） | 50% | 🟡 骨架已上线 | 网格对齐 Demo，内容待填充 |
-| Resources Sidebar | 30% | 🟡 有 UI，无逻辑 | 静态 Demo 数据，点击切换无实际效果 |
-| Canvas | 80% | 🟢 齐平 | Session 流程运转正常 |
-| Companion | **75%** | 🟢 已感知 | 状态驱动观察，建议按钮可触发工具 |
+| Resources Sidebar | **75%** | 🟢 可切换 | 点击有效，资源条在 Canvas 显示，Companion 感知 |
+| Canvas | 80% | 🟢 齐平 | Session 流程运转正常，+ResourceContextBar |
+| Companion | 80% | 🟢 有感知 | 引用当前资源，观察更具体 |
 | Bottom Dock | 40% | 🟡 6/10 工具 | 缺少导图/练习/项目/计算器/搜索 |
 | Adaptive Layout | 0% | ⚪ 未开始 | explore/dialogue/focus 仅 Demo 存在 |
 | Context Panel | 0% | ⚪ 未开始 | 对话模式右侧上下文未实现 |
-| **Overall** | **+4% → 38%** | 🟡 | Companion 提升拉动 Overall +4% |
+| **Overall** | **+7% → 45%** | 🟡 | 资源切换拉动 Overall +7% |
 
 ---
 
 ## Next Gap
 
-**ResourcesSidebar 真实切换 Canvas 内容**
+**Bottom Dock 对齐 Studio Demo**
 
-当前左侧资源点击后仅切换 active 样式，Canvas 内容不变。用户点击「📖 Book」或「🎬 Video」后看到同样的 Session 画面，操作无反馈。
+当前 BottomDock 仅 6 个工具项（闪卡/画布/语音/手写/文件/番茄钟），与 Studio Demo 的 Dock 不完整对齐。
 
-具体需求：
-- ResourcesSidebar 点击后触发 Canvas 内容变化
-- 每个资源类型对应不同的 Canvas 视图（至少差异化显示）
-- 点击后 Companion 感知到资源切换并更新观察文案
+Demo 显示 10 个工具：笔记、导图、白板、练习、闪卡、语音、番茄钟、项目、计算器、搜索。
 
-Challenge: 需要设计 Canvas 资源视图切换层，或初步的 "workspace" 上下文。
+当前缺失：
+- 导图（MindMap - 映射至现有 CanvasPanel）
+- 练习（Practice - 尚无独立实现）
+- 项目（Project - 尚无独立实现）
+- 计算器（Calculator）
+- 搜索（Search）
+
+Challenge: 需要为新工具创建面板或映射到现有功能。

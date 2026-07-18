@@ -1,8 +1,6 @@
 "use client";
 
-import { useState } from "react";
-
-type ResourceKey = "book" | "video" | "note" | "mindmap" | "web";
+export type ResourceKey = "book" | "video" | "note" | "mindmap" | "web";
 
 interface ResourceItem {
   key: ResourceKey;
@@ -11,7 +9,7 @@ interface ResourceItem {
   sublabel: string;
 }
 
-const RESOURCES: ResourceItem[] = [
+export const RESOURCES: ResourceItem[] = [
   { key: "book", icon: "📖", label: "Book", sublabel: "计算机网络（第 7 版）" },
   { key: "video", icon: "🎬", label: "Video", sublabel: "TCP 三次握手深入" },
   { key: "note", icon: "📝", label: "Note", sublabel: "TCP 笔记" },
@@ -19,9 +17,12 @@ const RESOURCES: ResourceItem[] = [
   { key: "web", icon: "🌐", label: "RFC", sublabel: "RFC 793" },
 ];
 
-export default function ResourcesSidebar() {
-  const [active, setActive] = useState<ResourceKey>("web");
+interface Props {
+  active: ResourceKey;
+  onChange: (key: ResourceKey) => void;
+}
 
+export default function ResourcesSidebar({ active, onChange }: Props) {
   return (
     <div className="rs-root">
       <div className="rs-header">Resources</div>
@@ -30,7 +31,7 @@ export default function ResourcesSidebar() {
           <button
             key={r.key}
             className={`rs-item ${active === r.key ? "active" : ""}`}
-            onClick={() => setActive(r.key)}
+            onClick={() => onChange(r.key)}
           >
             <span className="rs-icon">{r.icon}</span>
             <div className="rs-info">

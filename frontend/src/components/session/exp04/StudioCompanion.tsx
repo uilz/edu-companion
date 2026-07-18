@@ -7,16 +7,35 @@ interface Props {
   mode: string;
   toolState: { practiceDone?: boolean; cardCreated?: boolean; };
   messageCount: number;
+  resourceKey?: string;
   sessionTitle?: string | null;
   onOpenCanvas?: () => void;
   onOpenFlashcard?: () => void;
   onOpenPractice?: () => void;
 }
 
+// ── 资源上下文映射 ──
+
+const RESOURCE_NAMES: Record<string, string> = {
+  book: "计算机网络",
+  video: "TCP 视频",
+  note: "你的笔记",
+  mindmap: "三次握手导图",
+  web: "RFC 793",
+};
+
+const RESOURCE_ICONS: Record<string, string> = {
+  book: "📖",
+  video: "🎬",
+  note: "📝",
+  mindmap: "🧩",
+  web: "🌐",
+};
+
 // ── 观察引擎：根据真实状态生成文案 ──
 
 function buildObservations(props: Props) {
-  const { stage, mode, toolState, messageCount, sessionTitle } = props;
+  const { stage, mode, toolState, messageCount, resourceKey, sessionTitle } = props;
   const list: Array<{
     id: number;
     time: string;
@@ -27,10 +46,16 @@ function buildObservations(props: Props) {
   let id = 0;
 
   if (stage === "enter") {
+    const resName = resourceKey ? RESOURCE_NAMES[resourceKey] : null;
+    const resIcon = resourceKey ? RESOURCE_ICONS[resourceKey] : null;
+    const resRef = resName && resIcon ? `${resIcon} ${resName}` : null;
+
     list.push({
       id: id++,
       time: "刚刚",
-      text: `准备好了吗？今天的 Mission 是：<strong>${sessionTitle || "探索新知识"}</strong>`,
+      text: resRef
+        ? `准备好了吗？今天我们在看<strong>${resRef}</strong>`
+        : `准备好了吗？今天的 Mission 是：<strong>${sessionTitle || "探索新知识"}</strong>`,
       type: "observation",
     });
     list.push({
@@ -77,10 +102,11 @@ function buildObservations(props: Props) {
     } else {
       // normal / deep_chat
       if (messageCount === 0) {
+        const resRef = resourceKey ? `${RESOURCE_ICONS[resourceKey] || ""} ${RESOURCE_NAMES[resourceKey] || ""}`.trim() : null;
         list.push({
           id: id++,
           time: "刚刚",
-          text: `我们刚刚开始。<br>你对 <strong>${sessionTitle || "这个话题"}</strong> 已经了解多少了？`,
+          text: `我们刚刚开始。${resRef ? `你在看<strong>${resRef}</strong>，` : ""}你对这个话题已经了解多少了？`,
           type: "observation",
         });
       } else if (messageCount <= 2) {
@@ -131,10 +157,13 @@ function buildObservations(props: Props) {
   }
 
   if (stage === "reflect") {
+    const resRef = resourceKey ? `${RESOURCE_ICONS[resourceKey] || ""} ${RESOURCE_NAMES[resourceKey] || ""}`.trim() : null;
     list.push({
       id: id++,
       time: "刚刚",
-      text: "全部学完了。把今天的理解写下来吧？<br><span style=\"font-size:12px;color:var(--color-ink-muted)\">没有对错，苹果果只是想知道你记住了什么。</span>",
+      text: resRef
+        ? `关于<strong>${resRef}</strong>的内容学完了。把今天的理解写下来吧？<br><span style="font-size:12px;color:var(--color-ink-muted)">没有对错，苹果果只是想知道你记住了什么。</span>`
+        : `全部学完了。把今天的理解写下来吧？<br><span style="font-size:12px;color:var(--color-ink-muted)">没有对错，苹果果只是想知道你记住了什么。</span>`,
       type: "observation",
     });
   }
@@ -159,7 +188,7 @@ export default function StudioCompanion(props: Props) {
   // 每次 props 变化重新生成观察
   const cards = useMemo(() => buildObservations(props), [
     props.stage, props.mode, props.toolState.practiceDone,
-    props.toolState.cardCreated, props.messageCount, props.sessionTitle,
+    props.toolState.cardCreated, props.messageCount, props.resourceKey, props.sessionTitle,
   ]);
 
   // 滚动到底部

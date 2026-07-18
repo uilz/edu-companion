@@ -25,7 +25,8 @@ import Exp04ReflectionScreen from "./exp04/Exp04ReflectionScreen";
 import Exp04EndScreen from "./exp04/Exp04EndScreen";
 import StageDots from "./exp04/StageDots";
 import ProgressBar from "./exp04/ProgressBar";
-import ResourcesSidebar from "./exp04/ResourcesSidebar";
+import ResourcesSidebar, { type ResourceKey } from "./exp04/ResourcesSidebar";
+import ResourceContextBar from "./exp04/ResourceContextBar";
 import StudioCompanion from "./exp04/StudioCompanion";
 import BottomDock from "./exp04/BottomDock";
 import type { ToolKey } from "./exp04/BottomDock";
@@ -99,6 +100,7 @@ export default function Exp04Session() {
   const [filesOpen, setFilesOpen] = useState(false);
   const [prompts, setPrompts] = useState<string[]>([]);
   const [messageCount, setMessageCount] = useState(0);
+  const [activeResource, setActiveResource] = useState<ResourceKey>("web");
 
   // ── Fetch Session ──
   const fetchSession = useCallback(async () => {
@@ -314,12 +316,18 @@ export default function Exp04Session() {
 
       {/* ═══ SIDEBAR ZONE ═══ */}
       <nav className="studio-sidebar">
-        <ResourcesSidebar />
+        <ResourcesSidebar active={activeResource} onChange={setActiveResource} />
       </nav>
 
       {/* ═══ CANVAS ZONE ═══ */}
       <main className="studio-canvas">
         <div className="sc-canvas">
+          {!isFinish && (
+            <ResourceContextBar
+              resourceKey={!isFinish && !isEnter ? activeResource : null}
+              onClose={() => setActiveResource("web")}
+            />
+          )}
           {!isEnter && !isFinish && sm.stage === "chat" && sm.mode !== "deep_chat" && (
             <ActivePrompt prompts={prompts} onPromptClick={handlePromptClick} />
           )}
@@ -367,10 +375,11 @@ export default function Exp04Session() {
           mode={sm.mode}
           toolState={toolState}
           messageCount={messageCount}
+          resourceKey={activeResource}
           sessionTitle={session.mission?.title}
           onOpenCanvas={() => handleOpenTool("canvas")}
           onOpenFlashcard={() => handleOpenTool("flashcard")}
-          onOpenPractice={() => handleOpenTool("canvas")} /* 练习 → 画布暂代 */
+          onOpenPractice={() => handleOpenTool("canvas")}
         />
       </aside>
 
