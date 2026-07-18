@@ -479,42 +479,39 @@ async def build_dashboard(
 
 
 def _build_memory_pulse(latest_growth: dict | None) -> str | None:
-    """从最新 GrowthRecord 生成记忆脉冲（companion-like 洞察）。
+    """从最新 GrowthRecord 生成记忆脉冲。
 
     对齐 Vision preview.html (行 579-589) Narrative.newInsightAfterSession：
-      第一人称、短句、表达「我又更懂你一点了」。
-
-    优先级：
-      1. skill_gains 有显著进步（delta > 0.15）→ 个性化技能洞察
-      2. reflection_snippet 可用 → 用学习者自己的话
-      3. summary 可用 → 保留原始 summary
-      4. 无可用的 → None（不展示）
+      始终返回第一人称同行风格的消息。
+      只要有 session_title 就不返回 None。
     """
     if not latest_growth:
         return None
 
-    # 1. 技能进步洞察
+    topic = (latest_growth.get("session_title") or "").strip() or "学习"
+
+    # 1. 有技能增益时 — 使用实际 skill 名称
     skill_gains = latest_growth.get("skill_gains", [])
     for sg in skill_gains:
-        delta = sg.get("delta", 0)
         skill = sg.get("skill", "")
-        if delta > 0.15 and skill:
-            return f"你对「{skill}」又熟了一点。我记下了。"
+        if skill:
+            pool = [
+                f"你对「{skill}」又熟了一点。我记下了。",
+                f"你今天在「{skill}」上没有卡太久，比上次顺。",
+                f"今天的「{skill}」，你算得更稳了。",
+            ]
+            idx = hash(sg.get("evidence", "") or "") % len(pool)
+            return pool[idx]
 
-    # 2. reflection_snippet（最像学习者自己的话）
-    snippet = (latest_growth.get("reflection_snippet") or "").strip()
-    if snippet and len(snippet) >= 6:
-        text = snippet[:40]
-        if len(snippet) > 40:
-            text += "…"
-        return f"今天的反思很有意思——{text}"
-
-    # 3. summary（原始 fallback）
-    summary = (latest_growth.get("summary") or "").strip()
-    if summary:
-        return summary
-
-    return None
+    # 2. 无技能增益 — 用 session_title 生成 Vision 风格洞察
+    pool = [
+        f"这次你对「{topic}」又熟了一点。我记下了。",
+        f"你今天在「{topic}」上没有卡太久，比上次顺。",
+        f"我注意到你今天学得很专注。这个习惯很好。",
+        f"今天的「{topic}」，你算得更稳了。",
+    ]
+    idx = hash(topic) % len(pool)
+    return pool[idx]
 
 
 def invalidate_dashboard_cache(user_id: str) -> None:

@@ -284,7 +284,10 @@ function TodayQuote({ text }: { text: string }) {
 
 function MemoryPulse({ text }: { text: string }) {
   return (
-    <div className="mb-5 p-3 rounded-lg bg-accent-soft border-l-2 border-accent flex items-start gap-3">
+    <div
+      className="mb-5 p-3 rounded-lg bg-accent-soft border-l-2 border-accent flex items-start gap-3"
+      style={{ animation: 'msgIn .4s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
+    >
       <div className="text-lg leading-none mt-0.5">🍎</div>
       <p className="text-sm text-ink-secondary leading-relaxed">{text}</p>
     </div>

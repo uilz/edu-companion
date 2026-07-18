@@ -1311,6 +1311,11 @@
 }
 
 /* ── 脉冲光点 ── */
+@keyframes msgIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @keyframes kt-particle {
   0%, 100% { opacity: 0; transform: translateY(0) scale(0.5); }
   50% { opacity: 0.6; transform: translateY(-6px) scale(1); }
