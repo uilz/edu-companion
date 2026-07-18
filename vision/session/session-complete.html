@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🍎 学习完成 · Session 状态演示</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+/* ── Session Overlay ── */
+#session-overlay{position:fixed;inset:0;background:var(--color-page);z-index:200;display:none;flex-direction:column;animation:sessionEnter .3s var(--ease-out)}
+#session-overlay.active{display:flex}
+@keyframes sessionEnter{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.session-topbar{background:rgba(255,255,255,.88);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--color-divider);padding:14px var(--space-4);display:flex;align-items:center;gap:var(--space-3);padding-top:calc(14px + env(safe-area-inset-top,0))}
+.session-back{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:var(--color-ink-secondary);flex-shrink:0;transition:background .15s}
+.session-back:hover{background:var(--color-surface-hover)}
+.session-title{flex:1;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.session-tools-trigger{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:var(--color-ink-secondary);transition:all .15s;position:relative}
+.session-tools-trigger:hover{background:var(--color-surface-hover);color:var(--color-ink-primary)}
+.session-stages{display:flex;gap:4px;align-items:center}
+.stage-dot{width:6px;height:6px;border-radius:50%;background:var(--color-divider);transition:all .3s var(--ease-out)}
+.stage-dot.active{background:var(--color-accent);width:18px;border-radius:3px}
+.stage-dot.done{background:var(--color-accent)}
+.session-progress{height:3px;background:var(--color-divider-soft);position:relative}
+.session-progress-fill{position:absolute;left:0;top:0;bottom:0;background:var(--color-accent);border-radius:0 3px 3px 0;transition:width .5s var(--ease-out)}
+.session-body{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+.stage-center{flex:1;display:flex;flex-direction:column;justify-content:center;padding:var(--space-6) var(--space-5);max-width:var(--content-max);margin:0 auto;width:100%}
+.finish-hero{text-align:center}
+.finish-hero .ai-quote{font-family:var(--font-serif);font-size:21px;line-height:1.7;margin-bottom:var(--space-6);font-weight:400}
+.memory-pulse{margin:var(--space-4) 0;padding:14px 16px;background:linear-gradient(135deg,var(--color-accent-soft),transparent);border-radius:var(--radius-md);border-left:3px solid var(--color-accent);display:flex;gap:10px;align-items:flex-start;animation:msgIn .4s var(--ease-spring)}
+.memory-pulse .mp-icon{font-size:18px;flex-shrink:0}
+.memory-pulse .mp-text{font-size:13.5px;line-height:1.6;color:var(--color-ink-primary)}
+.memory-pulse .mp-text strong{color:var(--color-accent)}
+@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:transform:translateY(0)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.card{background:var(--color-surface);border-radius:var(--radius-lg);box-shadow:0 1px 3px rgba(0,0,0,.04),0 0 0 1px var(--color-divider-soft);padding:var(--space-5)}
+
+/* ── Page-specific ── */
+.page-wrap{max-width:var(--content-max);margin:0 auto;padding:24px var(--space-4) var(--space-5)}
+.session-preview{position:relative;overflow:hidden;border-radius:var(--radius-xl);box-shadow:0 8px 40px rgba(0,0,0,.1);margin-top:var(--space-3)}
+.session-preview #session-overlay{position:relative;display:flex;border-radius:var(--radius-xl);min-height:620px}
+.session-preview .session-back{cursor:default}
+.memory-summary{background:var(--color-surface);border-radius:var(--radius-lg);padding:var(--space-4);margin-top:var(--space-4);box-shadow:0 0 0 1px var(--color-divider-soft)}
+.memory-summary .ms-head{font-size:12px;color:var(--color-ink-muted);font-weight:600;margin-bottom:8px}
+.memory-summary .ms-text{font-size:13.5px;line-height:1.7;color:var(--color-ink-secondary)}
+.stats-grid{display:flex;gap:var(--space-3);margin-bottom:var(--space-6);justify-content:center}
+.stat-card{background:var(--color-surface);border-radius:var(--radius-md);padding:var(--space-4);text-align:center;flex:1;max-width:120px;box-shadow:0 0 0 1px var(--color-divider-soft)}
+.stat-card .stat-num{font-size:24px;font-weight:700;color:var(--color-accent);margin-bottom:4px}
+.stat-card .stat-label{font-size:11px;color:var(--color-ink-muted);line-height:1.4}
+.growth-record-badge{display:inline-flex;align-items:center;gap:6px;background:var(--color-success-soft);color:var(--color-success);padding:8px 16px;border-radius:var(--radius-full);font-size:13px;font-weight:600;margin-bottom:var(--space-5)}
+</style>
+</head>
+<body>
+
+<div class="page-wrap">
+
+  <!-- State Meta -->
+  <div class="state-meta">
+    <div class="sm-row">
+      <span class="sm-label">状态</span>
+      <span class="sm-value">学习结束 · 完成页面</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">情绪目标</span>
+      <span class="sm-emotion warm">🟢 warm</span>
+      <span class="sm-value">完成感 + 被记住 — "我今天学到了东西"</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">AI 行为</span>
+      <span class="sm-value">庆祝完成 + 展示学习统计 + 记忆脉冲通知 Today 页</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">时间维度</span>
+      <span class="sm-value">第一周 · 第 2 次学习 · finish 阶段 · GrowthRecord 已创建</span>
+    </div>
+  </div>
+
+  <!-- Session Preview -->
+  <div class="session-preview">
+    <div id="session-overlay" class="active">
+      <div class="session-topbar">
+        <button class="session-back"><svg viewBox="0 0 24 24" fill="none" width="22" height="22"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <div class="session-title">理解矩阵乘法</div>
+        <button class="session-tools-trigger">
+          <svg viewBox="0 0 24 24" fill="none" width="20" height="20"><path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2-2 2.5-2.5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="session-stages">
+          <div class="stage-dot done"></div>
+          <div class="stage-dot done"></div>
+          <div class="stage-dot done"></div>
+          <div class="stage-dot done"></div>
+        </div>
+      </div>
+      <div class="session-progress"><div class="session-progress-fill" style="width:100%"></div></div>
+      <div class="session-body">
+
+        <div class="stage-center fade-in finish-hero">
+
+          <!-- Big apple emoji -->
+          <div style="font-size:64px;margin-bottom:20px;animation:slideUp .5s var(--ease-spring)">🍎</div>
+
+          <!-- AI quote -->
+          <p class="ai-quote" style="animation:slideUp .5s var(--ease-spring) 0.1s both">
+            今天就到这里。我会记住今天。
+          </p>
+
+          <!-- Growth record notification -->
+          <div class="growth-record-badge" style="animation:slideUp .5s var(--ease-spring) 0.2s both">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M9 12l2 2 4-4M20 12a8 8 0 11-16 0 8 8 0 0116 0z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            GrowthRecord 已创建 · 矩阵乘法的理解在加深
+          </div>
+
+          <!-- Session stats -->
+          <div class="stats-grid" style="animation:slideUp .5s var(--ease-spring) 0.3s both">
+            <div class="stat-card">
+              <div class="stat-num">18</div>
+              <div class="stat-label">学习分钟</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-num">5</div>
+              <div class="stat-label">概念掌握</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-num">4</div>
+              <div class="stat-label">对话轮次</div>
+            </div>
+          </div>
+
+          <!-- Memory pulse for Today -->
+          <div class="memory-pulse" style="animation:slideUp .5s var(--ease-spring) 0.4s both;text-align:left">
+            <div class="mp-icon">🍎</div>
+            <div class="mp-text">
+              这次你对<strong>矩阵乘法</strong>又熟了一点。我记下了。<br>
+              回到首页后，我会告诉你今天的新发现。
+            </div>
+          </div>
+
+          <!-- CTA -->
+          <div class="cta-block" style="animation:slideUp .5s var(--ease-spring) 0.5s both">
+            <button class="btn btn-primary btn-lg" style="margin-bottom:8px">返回首页</button>
+            <span class="cta-hint">今天的学习已保存</span>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Context note -->
+  <div class="memory-summary">
+    <div class="ms-head">🍎 苹果果的内部记录</div>
+    <div class="ms-text">Session 完成。苹果果更新了"矩阵乘法"话题的掌握度（+0.08），在 Growth 页新增一条记录，并在 Today 页生成了新的记忆洞察。用户回到 Today 会看到绿色的 memory-pulse 提示。</div>
+  </div>
+
+</div>
+
+</body>
+</html>

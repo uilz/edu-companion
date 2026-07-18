@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🍎 苹果果 · Today — 坚持一周</title>
+<link rel="stylesheet" href="../design-system.css">
+</head>
+<body>
+
+<main id="app">
+  <!-- State Meta Card (for vision documentation) -->
+  <div class="state-meta">
+    <div class="sm-row">
+      <span class="sm-label">Emotion Goal</span>
+      <span class="sm-value"><span class="sm-emotion warm">🟢 warm</span> 成就感 + 持续感 — "我已经坚持一周了"</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">AI Behavior</span>
+      <span class="sm-value">Greeting: "下午好" · Observation: 肯定一周坚持 · FocusCard: 周 streak 徽章 · MemoryPulse: 周统计 · 学习状态卡片 · CTA: 继续学习</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">Time Dimension</span>
+      <span class="sm-value">连续学习 7 天 · 本周第 4 次学习</span>
+    </div>
+  </div>
+
+  <!-- Quote (optional) -->
+  <p class="today-quote">「坚持一周，比想象的容易。」</p>
+
+  <!-- Main Content -->
+  <div class="fade-in">
+    <!-- Greeting -->
+    <h1 class="today-greeting">🍎 下午好</h1>
+    <p class="today-date">2026 年 7 月 18 日 · 星期六</p>
+
+    <!-- AI Observation -->
+    <p class="today-observation">
+      你已经坚持一周了。从矩阵的基本概念到现在，你一直在往前走。今天继续矩阵乘法的应用吗？
+    </p>
+
+    <!-- Memory Pulse: weekly achievement -->
+    <div class="memory-pulse">
+      <div class="mp-icon">🍎</div>
+      <div class="mp-text">这周你完成了 <strong>4 次学习</strong>。矩阵的熟练度从「刚开始」到了「比较熟了」。</div>
+    </div>
+
+    <!-- Weekly Streak Badge (Focus Card) -->
+    <div class="focus-card">
+      <div class="card" style="text-align:center;padding:var(--space-5) var(--space-4)">
+        <div style="font-size:44px;margin-bottom:12px">🔥</div>
+        <div class="focus-title" style="margin-bottom:4px">连续学习 7 天</div>
+        <div class="focus-desc" style="margin-bottom:12px">这是你坚持学习的第一周。一个好的开始。</div>
+        <div style="display:flex;justify-content:center;gap:6px">
+          <span style="width:28px;height:28px;border-radius:50%;background:var(--color-accent);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700">一</span>
+          <span style="width:28px;height:28px;border-radius:50%;background:var(--color-accent);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700">二</span>
+          <span style="width:28px;height:28px;border-radius:50%;background:var(--color-accent);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700">三</span>
+          <span style="width:28px;height:28px;border-radius:50%;background:var(--color-accent);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700">四</span>
+          <span style="width:28px;height:28px;border-radius:50%;background:var(--color-accent);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700">五</span>
+          <span style="width:28px;height:28px;border-radius:50%;background:var(--color-accent-soft);color:var(--color-accent);display:grid;place-items:center;font-size:12px;font-weight:600">六</span>
+          <span style="width:28px;height:28px;border-radius:50%;background:var(--color-accent-soft);color:var(--color-accent);display:grid;place-items:center;font-size:12px;font-weight:600">日</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Learning Stats -->
+    <div class="today-tools">
+      <div class="tool-quick">
+        <div class="tq-icon" style="background:var(--color-success-soft)">📊</div>
+        <div class="tq-text"><strong>本周学习</strong><span>4 次 · 平均 22 分钟</span></div>
+      </div>
+      <div class="tool-quick">
+        <div class="tq-icon" style="background:var(--color-accent-soft)">📈</div>
+        <div class="tq-text"><strong>矩阵熟练度</strong><span>刚开始 → 比较熟了</span></div>
+      </div>
+      <div class="tool-quick">
+        <div class="tq-icon" style="background:var(--color-purple-soft)">🧠</div>
+        <div class="tq-text"><strong>掌握概念</strong><span>4 个 · 3 张卡片</span></div>
+      </div>
+    </div>
+
+    <!-- Last Session Card -->
+    <div class="last-session-card">
+      <p class="label">昨天学习的</p>
+      <h2 class="title">矩阵乘法的应用</h2>
+      <p class="skills">下一步：矩阵乘法的几何意义</p>
+    </div>
+
+    <!-- Quick Tools -->
+    <div class="today-tools">
+      <button class="tool-quick">
+        <div class="tq-icon" style="background:var(--color-purple-soft)">🧠</div>
+        <div class="tq-text"><strong>复习卡片</strong><span>3 张待复习</span></div>
+      </button>
+      <button class="tool-quick">
+        <div class="tq-icon" style="background:var(--color-teal-soft)">📖</div>
+        <div class="tq-text"><strong>继续阅读</strong><span>还剩 12 分钟</span></div>
+      </button>
+      <button class="tool-quick">
+        <div class="tq-icon" style="background:var(--color-warning-soft)">✏️</div>
+        <div class="tq-text"><strong>随手练</strong><span>5 分钟练习</span></div>
+      </button>
+    </div>
+
+    <!-- CTA -->
+    <div class="cta-block">
+      <button class="btn btn-primary btn-lg">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+        继续今天的任务
+      </button>
+      <button class="text-link">今天想学点别的</button>
+    </div>
+  </div>
+</main>
+
+<!-- Bottom Navigation -->
+<nav id="bottom-nav">
+  <button class="nav-tab active" data-page="today">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Today</span>
+  </button>
+  <button class="nav-tab" data-page="growth">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 17l6-6 4 4 8-8M14 7h7v7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Growth</span>
+  </button>
+  <button class="nav-tab" data-page="profile">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>Profile</span>
+  </button>
+  <button class="nav-tab" data-page="more">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/></svg>
+    <span>更多</span>
+  </button>
+</nav>
+
+</body>
+</html>

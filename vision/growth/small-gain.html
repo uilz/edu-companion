@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🍎 苹果果 · 微小成长</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+.insight-grid { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-5); }
+.insight-card {
+  background: var(--color-surface); border-radius: var(--radius-md);
+  padding: var(--space-4); border-left: 3px solid var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-divider-soft);
+  animation: msgIn 0.3s var(--ease-out);
+}
+.insight-card .ic-label { font-size: 11px; font-weight: 600; color: var(--color-accent); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+.insight-card .ic-text { font-size: 14px; color: var(--color-ink-secondary); line-height: 1.7; }
+.insight-card .ic-text strong { color: var(--color-ink-primary); }
+.insight-card.honest { border-left-color: var(--color-ink-muted); }
+.insight-card.honest .ic-label { color: var(--color-ink-muted); }
+.small-meta {
+  text-align: center; margin-bottom: var(--space-4);
+  font-size: 13px; color: var(--color-ink-muted);
+}
+</style>
+</head>
+<body>
+
+<main id="app">
+  <!-- State Meta -->
+  <div class="state-meta">
+    <div class="sm-row">
+      <span class="sm-label">Emotion Goal</span>
+      <span class="sm-value"><span class="sm-emotion neutral">🔵 neutral</span> 诚实 + 持续</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">AI Behavior</span>
+      <span class="sm-value">肯定微小进步 · 诚实不夸张 · 鼓励持续</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">Time Dimension</span>
+      <span class="sm-value">第 6 次学习 · 渐进累积</span>
+    </div>
+  </div>
+
+  <!-- Page Title -->
+  <h1 class="page-title">📈 成长记录</h1>
+
+  <!-- Growth Narrative -->
+  <div class="growth-narrative">
+    今天的进步不大，但你的概念理解在变深。
+  </div>
+
+  <!-- Honest Insight -->
+  <div class="insight-grid">
+    <div class="insight-card honest">
+      <div class="ic-label">🔍 诚实观察</div>
+      <div class="ic-text">
+        熟练度虽然只涨了 <strong>5%</strong>，但你花的时间比上次少了。同样的内容，上次用了 35 分钟，这次只用了 22 分钟。效率在提高。
+      </div>
+    </div>
+  </div>
+
+  <!-- Timeline -->
+  <div class="timeline">
+    <div class="timeline-item new-item">
+      <div class="ti-time">今天 · 第 6 次学习</div>
+      <div class="ti-title">📝 矩阵转置练习</div>
+      <div class="ti-summary">完成了 5 道转置题，全部正确。用时比上次同类练习减少了 37%。虽然知识点不多，但操作更流畅了。</div>
+    </div>
+    <div class="timeline-item">
+      <div class="ti-time">2 天前 · 第 5 次学习</div>
+      <div class="ti-title">🔢 标量乘法复习</div>
+      <div class="ti-summary">练习了标量与矩阵的乘法，正确率 100%。这是基础运算，但熟练度从 88% 提到 93%。</div>
+    </div>
+  </div>
+
+  <div class="small-meta">每一步都算数，哪怕很小。</div>
+</main>
+
+<!-- Bottom Nav -->
+<nav id="bottom-nav">
+  <button class="nav-tab" data-page="today">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Today</span>
+  </button>
+  <button class="nav-tab active" data-page="growth">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 17l6-6 4 4 8-8M14 7h7v7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Growth</span>
+  </button>
+  <button class="nav-tab" data-page="profile">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>Profile</span>
+  </button>
+  <button class="nav-tab" data-page="more">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/></svg>
+    <span>更多</span>
+  </button>
+</nav>
+
+</body>
+</html>

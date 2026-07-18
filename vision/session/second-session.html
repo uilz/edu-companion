@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🍎 苹果果 · 第二次学习 Session</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+/* ── Session Overlay ── */
+#session-overlay {
+  position: fixed; inset: 0; background: var(--color-page); z-index: 200;
+  display: flex; flex-direction: column;
+  animation: sessionEnter .3s var(--ease-out);
+}
+@keyframes sessionEnter {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.session-topbar {
+  background: rgba(255,255,255,.88); backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--color-divider);
+  padding: 14px var(--space-4); display: flex; align-items: center; gap: var(--space-3);
+  padding-top: calc(14px + env(safe-area-inset-top, 0));
+}
+.session-back {
+  width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center;
+  color: var(--color-ink-secondary); flex-shrink: 0; transition: background .15s;
+}
+.session-back:hover { background: var(--color-surface-hover); }
+.session-title {
+  flex: 1; font-size: 15px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.session-tools-trigger {
+  width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+  color: var(--color-ink-secondary); transition: all .15s; position: relative;
+}
+.session-tools-trigger:hover { background: var(--color-surface-hover); color: var(--color-ink-primary); }
+.session-stages { display: flex; gap: 4px; align-items: center; }
+.stage-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--color-divider);
+  transition: all .3s var(--ease-out);
+}
+.stage-dot.active { background: var(--color-accent); width: 18px; border-radius: 3px; }
+.stage-dot.done { background: var(--color-accent); }
+.session-progress { height: 3px; background: var(--color-divider-soft); position: relative; }
+.session-progress-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: var(--color-accent); border-radius: 0 3px 3px 0;
+  transition: width .5s var(--ease-out);
+}
+.session-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+.stage-center {
+  flex: 1; display: flex; flex-direction: column; justify-content: center;
+  padding: var(--space-6) var(--space-5);
+  max-width: var(--content-max); margin: 0 auto; width: 100%;
+}
+.stage-center .ai-quote {
+  font-size: 19px; line-height: 1.6; font-weight: 500;
+  margin-bottom: var(--space-5); letter-spacing: -0.01em;
+}
+.fade-in { animation: fadeIn .4s var(--ease-out); }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes msgIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Intro-specific ── */
+.intro-head {
+  display: flex; align-items: center; gap: 10px; margin-bottom: var(--space-5);
+  animation: msgIn .4s var(--ease-spring);
+}
+@keyframes ease-spring { from { } to { } }
+.intro-head .ih-icon {
+  width: 40px; height: 40px; border-radius: 12px;
+  background: linear-gradient(135deg, #c4a3d4 0%, #7a5a8c 100%);
+  display: grid; place-items: center; font-size: 20px; color: #fff;
+}
+.intro-head .ih-text {
+  font-size: 14px; color: var(--color-ink-muted); line-height: 1.5;
+}
+.intro-head .ih-text strong { color: var(--color-ink-primary); display: block; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<main id="app" style="display:none">
+  <p>Session overlay below</p>
+</main>
+
+<!-- Session Overlay -->
+<div id="session-overlay">
+  <div class="session-topbar">
+    <button class="session-back">
+      <svg viewBox="0 0 24 24" fill="none" width="22" height="22">
+        <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+    <div class="session-title">理解矩阵乘法</div>
+    <button class="session-tools-trigger" title="学习工具">
+      <svg viewBox="0 0 24 24" fill="none" width="20" height="20">
+        <path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2-2 2.5-2.5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+      </svg>
+    </button>
+    <div class="session-stages">
+      <div class="stage-dot active"></div>
+      <div class="stage-dot"></div>
+      <div class="stage-dot"></div>
+      <div class="stage-dot"></div>
+    </div>
+  </div>
+  <div class="session-progress"><div class="session-progress-fill" style="width:0%"></div></div>
+  <div class="session-body">
+
+    <!-- State Meta -->
+    <div class="state-meta" style="margin:var(--space-4) var(--space-4) 0">
+      <div class="sm-row">
+        <span class="sm-label">Emotion Goal</span>
+        <span class="sm-value"><span class="sm-emotion neutral">🔵 neutral</span> 熟悉 + 连续 — "我昨天来过这里"</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-label">AI Behavior</span>
+        <span class="sm-value">Stage: intro · 显示 last session card（矩阵乘法） · "继续"</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-label">Time Dimension</span>
+        <span class="sm-value">第 2 次学习 · 有历史可延续</span>
+      </div>
+    </div>
+
+    <!-- Stage: Intro -->
+    <div class="stage-center fade-in">
+      <div class="intro-head">
+        <div class="ih-icon">🍎</div>
+        <div class="ih-text">
+          <strong>欢迎回来</strong>
+          第二次学习，越来越熟悉了
+        </div>
+      </div>
+
+      <p class="ai-quote">昨天我们刚接触了矩阵乘法。今天从这里继续吗？</p>
+
+      <!-- Last Session Card -->
+      <div class="last-session-card">
+        <p class="label">昨天的学习</p>
+        <h2 class="title">矩阵乘法：从定义开始</h2>
+        <p class="skills">苹果果对你的理解：刚开始</p>
+      </div>
+
+      <div class="cta-block">
+        <button class="btn btn-primary btn-lg">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+            <path d="M8 5v14l11-7z" fill="currentColor"/>
+          </svg>
+          继续
+        </button>
+        <button class="text-link">今天想学点别的</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Bottom Nav -->
+<nav id="bottom-nav">
+  <button class="nav-tab active" data-page="today">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Today</span>
+  </button>
+  <button class="nav-tab" data-page="growth">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 17l6-6 4 4 8-8M14 7h7v7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Growth</span>
+  </button>
+  <button class="nav-tab" data-page="profile">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>Profile</span>
+  </button>
+  <button class="nav-tab" data-page="more">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/></svg>
+    <span>更多</span>
+  </button>
+</nav>
+
+</body>
+</html>

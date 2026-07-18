@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🍎 次日继续 · Session 状态演示</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+/* ── Session Overlay ── */
+#session-overlay{position:fixed;inset:0;background:var(--color-page);z-index:200;display:none;flex-direction:column;animation:sessionEnter .3s var(--ease-out)}
+#session-overlay.active{display:flex}
+@keyframes sessionEnter{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.session-topbar{background:rgba(255,255,255,.88);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--color-divider);padding:14px var(--space-4);display:flex;align-items:center;gap:var(--space-3);padding-top:calc(14px + env(safe-area-inset-top,0))}
+.session-back{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:var(--color-ink-secondary);flex-shrink:0;transition:background .15s}
+.session-back:hover{background:var(--color-surface-hover)}
+.session-title{flex:1;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.session-tools-trigger{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:var(--color-ink-secondary);transition:all .15s;position:relative}
+.session-tools-trigger:hover{background:var(--color-surface-hover);color:var(--color-ink-primary)}
+.session-stages{display:flex;gap:4px;align-items:center}
+.stage-dot{width:6px;height:6px;border-radius:50%;background:var(--color-divider);transition:all .3s var(--ease-out)}
+.stage-dot.active{background:var(--color-accent);width:18px;border-radius:3px}
+.stage-dot.done{background:var(--color-accent)}
+.session-progress{height:3px;background:var(--color-divider-soft);position:relative}
+.session-progress-fill{position:absolute;left:0;top:0;bottom:0;background:var(--color-accent);border-radius:0 3px 3px 0;transition:width .5s var(--ease-out)}
+.session-body{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+.stage-center{flex:1;display:flex;flex-direction:column;justify-content:center;padding:var(--space-6) var(--space-5);max-width:var(--content-max);margin:0 auto;width:100%}
+.stage-center .ai-quote{font-size:19px;line-height:1.6;font-weight:500;margin-bottom:var(--space-5);letter-spacing:-.01em}
+.card{background:var(--color-surface);border-radius:var(--radius-lg);box-shadow:0 1px 3px rgba(0,0,0,.04),0 0 0 1px var(--color-divider-soft);padding:var(--space-5)}
+.last-session-card{background:var(--color-surface);border-radius:var(--radius-lg);padding:var(--space-5);margin-bottom:var(--space-6);box-shadow:0 0 0 1px var(--color-divider-soft)}
+.last-session-card .label{font-size:12px;color:var(--color-ink-muted);margin-bottom:6px}
+.last-session-card .title{font-size:18px;font-weight:600;margin-bottom:8px}
+.last-session-card .skills{font-size:12px;color:var(--color-ink-muted)}
+.memory-pulse{margin:var(--space-4) 0;padding:14px 16px;background:linear-gradient(135deg,var(--color-accent-soft),transparent);border-radius:var(--radius-md);border-left:3px solid var(--color-accent);display:flex;gap:10px;align-items:flex-start;animation:msgIn .4s var(--ease-spring)}
+.memory-pulse .mp-icon{font-size:18px;flex-shrink:0}
+.memory-pulse .mp-text{font-size:13.5px;line-height:1.6;color:var(--color-ink-primary)}
+.memory-pulse .mp-text strong{color:var(--color-accent)}
+@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── Page-specific ── */
+.page-wrap{max-width:var(--content-max);margin:0 auto;padding:24px var(--space-4) var(--space-5)}
+.session-preview{position:relative;overflow:hidden;border-radius:var(--radius-xl);box-shadow:0 8px 40px rgba(0,0,0,.1);margin-top:var(--space-3)}
+.session-preview #session-overlay{position:relative;display:flex;border-radius:var(--radius-xl);min-height:620px}
+.session-preview .session-back{cursor:default}
+.memory-summary{background:var(--color-surface);border-radius:var(--radius-lg);padding:var(--space-4);margin-top:var(--space-4);box-shadow:0 0 0 1px var(--color-divider-soft)}
+.memory-summary .ms-head{font-size:12px;color:var(--color-ink-muted);font-weight:600;margin-bottom:8px}
+.memory-summary .ms-text{font-size:13.5px;line-height:1.7;color:var(--color-ink-secondary)}
+.mastery-indicator{display:flex;align-items:center;gap:10px;margin-top:var(--space-3)}
+.mastery-bar{flex:1;height:6px;background:var(--color-divider-soft);border-radius:3px;overflow:hidden}
+.mastery-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--color-accent),var(--color-success));transition:width .5s var(--ease-out)}
+.mastery-label{font-size:11px;color:var(--color-ink-muted);white-space:nowrap}
+.next-preview{background:var(--color-surface-alt);border-radius:var(--radius-md);padding:var(--space-4);margin-top:var(--space-3);border-left:3px solid var(--color-accent)}
+.next-preview .np-label{font-size:11px;color:var(--color-ink-muted);font-weight:600;margin-bottom:4px}
+.next-preview .np-text{font-size:14px;color:var(--color-ink-secondary);line-height:1.6}
+</style>
+</head>
+<body>
+
+<div class="page-wrap">
+
+  <!-- State Meta -->
+  <div class="state-meta">
+    <div class="sm-row">
+      <span class="sm-label">状态</span>
+      <span class="sm-value">第二天继续之前的 Session</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">情绪目标</span>
+      <span class="sm-emotion warm">🟢 warm</span>
+      <span class="sm-value">连续 + 被期待 — "苹果果在等我"</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">AI 行为</span>
+      <span class="sm-value">回顾上次进度 + 显示详细的学习卡片 + 提供继续/复习选项</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">时间维度</span>
+      <span class="sm-value">第一周 · 第 3 次学习 · intro 阶段 · 距上次学习 1 天</span>
+    </div>
+  </div>
+
+  <!-- Session Preview -->
+  <div class="session-preview">
+    <div id="session-overlay" class="active">
+      <div class="session-topbar">
+        <button class="session-back"><svg viewBox="0 0 24 24" fill="none" width="22" height="22"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <div class="session-title">理解矩阵乘法</div>
+        <button class="session-tools-trigger">
+          <svg viewBox="0 0 24 24" fill="none" width="20" height="20"><path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2-2 2.5-2.5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="session-stages">
+          <div class="stage-dot active"></div>
+          <div class="stage-dot"></div>
+          <div class="stage-dot"></div>
+          <div class="stage-dot"></div>
+        </div>
+      </div>
+      <div class="session-progress"><div class="session-progress-fill" style="width:0%"></div></div>
+      <div class="session-body">
+
+        <div class="stage-center fade-in">
+
+          <!-- AI greeting with memory -->
+          <p class="ai-quote">
+            昨天我们在<strong>矩阵乘法的应用</strong>上停下来了。今天继续吗？
+          </p>
+
+          <!-- Detailed last session card -->
+          <div class="last-session-card" style="animation:slideUp .4s var(--ease-spring) 0.1s both">
+            <p class="label">昨天的学习</p>
+            <h2 class="title">矩阵乘法：从规则到应用</h2>
+            <p class="skills">覆盖了行×列规则、点积计算、线性组合的直观理解</p>
+
+            <!-- Topic mastery -->
+            <div class="mastery-indicator">
+              <span style="font-size:13px;font-weight:500">掌握度</span>
+              <div class="mastery-bar">
+                <div class="mastery-fill" style="width:55%"></div>
+              </div>
+              <span class="mastery-label">55% · 正在巩固</span>
+            </div>
+
+            <!-- Next preview -->
+            <div class="next-preview">
+              <div class="np-label">→ 今天可以继续</div>
+              <div class="np-text">线性组合的深入理解 → 矩阵乘法的几何意义（线性变换的复合）。上次你已经开始追问"为什么是行乘列"。</div>
+            </div>
+          </div>
+
+          <!-- Memory pulse -->
+          <div class="memory-pulse" style="animation:slideUp .4s var(--ease-spring) 0.2s both">
+            <div class="mp-icon">🍎</div>
+            <div class="mp-text">我记得你昨天算 C₁₁ 的时候停了一下在想。今天可以从这里继续。</div>
+          </div>
+
+          <!-- CTAs -->
+          <div class="cta-block" style="animation:slideUp .4s var(--ease-spring) 0.3s both">
+            <button class="btn btn-primary btn-lg">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+              继续前进
+            </button>
+            <button class="btn btn-outline">复习一下</button>
+            <button class="text-link">今天想学点别的</button>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Context note -->
+  <div class="memory-summary">
+    <div class="ms-head">🍎 苹果果的内部记录</div>
+    <div class="ms-text">第二天回访。苹果果记住了昨天的进度和用户卡住的位置，用"我记得你昨天……"建立连续感。掌握度 55% 处于"正在巩固"区间，适合先复习再推进。</div>
+  </div>
+
+</div>
+
+</body>
+</html>

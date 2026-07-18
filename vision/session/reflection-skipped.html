@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🍎 反思跳过 · Session 状态演示</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+/* ── Session Overlay (from preview.html) ── */
+#session-overlay{position:fixed;inset:0;background:var(--color-page);z-index:200;display:none;flex-direction:column;animation:sessionEnter .3s var(--ease-out)}
+#session-overlay.active{display:flex}
+@keyframes sessionEnter{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.session-topbar{background:rgba(255,255,255,.88);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--color-divider);padding:14px var(--space-4);display:flex;align-items:center;gap:var(--space-3);padding-top:calc(14px + env(safe-area-inset-top,0))}
+.session-back{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:var(--color-ink-secondary);flex-shrink:0;transition:background .15s}
+.session-back:hover{background:var(--color-surface-hover)}
+.session-title{flex:1;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.session-tools-trigger{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:var(--color-ink-secondary);transition:all .15s;position:relative}
+.session-tools-trigger:hover{background:var(--color-surface-hover);color:var(--color-ink-primary)}
+.session-stages{display:flex;gap:4px;align-items:center}
+.stage-dot{width:6px;height:6px;border-radius:50%;background:var(--color-divider);transition:all .3s var(--ease-out)}
+.stage-dot.active{background:var(--color-accent);width:18px;border-radius:3px}
+.stage-dot.done{background:var(--color-accent)}
+.session-progress{height:3px;background:var(--color-divider-soft);position:relative}
+.session-progress-fill{position:absolute;left:0;top:0;bottom:0;background:var(--color-accent);border-radius:0 3px 3px 0;transition:width .5s var(--ease-out)}
+.session-body{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+.stage-center{flex:1;display:flex;flex-direction:column;justify-content:center;padding:var(--space-6) var(--space-5);max-width:var(--content-max);margin:0 auto;width:100%}
+.stage-center .ai-quote{font-size:19px;line-height:1.6;font-weight:500;margin-bottom:var(--space-5);letter-spacing:-.01em}
+.reflect-box{padding:var(--space-5);max-width:var(--content-max);margin:0 auto;width:100%}
+.reflect-prompt{font-size:19px;font-weight:500;margin-bottom:var(--space-2);letter-spacing:-.01em}
+.reflect-sub{font-size:14px;color:var(--color-ink-muted);margin-bottom:var(--space-5)}
+.reflect-textarea{width:100%;min-height:160px;background:var(--color-surface);border:1.5px solid var(--color-divider);border-radius:var(--radius-md);padding:16px;font-size:15px;font-family:var(--font-serif);line-height:1.8;resize:vertical;outline:none;transition:border-color .15s;margin-bottom:var(--space-4)}
+.reflect-textarea:focus{border-color:var(--color-accent)}
+.reflect-textarea::placeholder{color:var(--color-ink-muted);font-family:var(--font-sans)}
+.reflect-draft-btn{display:inline-flex;align-items:center;gap:6px;color:var(--color-accent);font-size:13px;font-weight:500;padding:8px 0;transition:opacity .15s}
+.reflect-draft-btn:hover{opacity:.7}
+.reflect-actions{display:flex;justify-content:space-between;align-items:center;margin-top:var(--space-5)}
+.msg{display:flex;gap:10px;align-items:flex-end;animation:msgIn .3s var(--ease-out)}
+@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.msg-avatar{width:28px;height:28px;border-radius:50%;flex-shrink:0;display:grid;place-items:center;font-size:13px;font-weight:600}
+.msg.ai .msg-avatar{background:linear-gradient(135deg,#c4a3d4 0%,#7a5a8c 100%);color:#fff}
+.msg-bubble{max-width:80%;padding:13px 16px;font-size:15px;line-height:1.65}
+.msg.ai .msg-bubble{background:var(--color-ai-msg);border-radius:3px 18px 18px 18px}
+.last-session-card{background:var(--color-surface);border-radius:var(--radius-lg);padding:var(--space-5);margin-bottom:var(--space-6);box-shadow:0 0 0 1px var(--color-divider-soft)}
+.last-session-card .label{font-size:12px;color:var(--color-ink-muted);margin-bottom:6px}
+.last-session-card .title{font-size:18px;font-weight:600;margin-bottom:8px}
+.last-session-card .skills{font-size:12px;color:var(--color-ink-muted)}
+
+/* ── Page-specific ── */
+.page-wrap{max-width:var(--content-max);margin:0 auto;padding:24px var(--space-4) var(--space-5)}
+.session-preview{position:relative;overflow:hidden;border-radius:var(--radius-xl);box-shadow:0 8px 40px rgba(0,0,0,.1);margin-top:var(--space-3)}
+.session-preview #session-overlay{position:relative;display:flex;border-radius:var(--radius-xl);min-height:620px}
+.session-preview .session-back{cursor:default}
+.memory-summary{background:var(--color-surface);border-radius:var(--radius-lg);padding:var(--space-4);margin-top:var(--space-4);box-shadow:0 0 0 1px var(--color-divider-soft)}
+.memory-summary .ms-head{font-size:12px;color:var(--color-ink-muted);font-weight:600;margin-bottom:8px}
+.memory-summary .ms-text{font-size:13.5px;line-height:1.7;color:var(--color-ink-secondary)}
+</style>
+</head>
+<body>
+
+<div class="page-wrap">
+
+  <!-- State Meta -->
+  <div class="state-meta">
+    <div class="sm-row">
+      <span class="sm-label">状态</span>
+      <span class="sm-value">用户跳过反思环节</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">情绪目标</span>
+      <span class="sm-emotion neutral">🔵 neutral</span>
+      <span class="sm-value">被尊重 — "不写也可以"</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">AI 行为</span>
+      <span class="sm-value">接受跳过 + 仍展示 AI 摘要 + 无压力去完成</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">时间维度</span>
+      <span class="sm-value">第一周 · 第 2 次学习 · reflect 阶段</span>
+    </div>
+  </div>
+
+  <!-- Session Preview -->
+  <div class="session-preview">
+    <div id="session-overlay" class="active">
+      <div class="session-topbar">
+        <button class="session-back"><svg viewBox="0 0 24 24" fill="none" width="22" height="22"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <div class="session-title">理解矩阵乘法</div>
+        <button class="session-tools-trigger">
+          <svg viewBox="0 0 24 24" fill="none" width="20" height="20"><path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2-2 2.5-2.5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="session-stages">
+          <div class="stage-dot done"></div>
+          <div class="stage-dot done"></div>
+          <div class="stage-dot done"></div>
+          <div class="stage-dot active"></div>
+        </div>
+      </div>
+      <div class="session-progress"><div class="session-progress-fill" style="width:75%"></div></div>
+      <div class="session-body">
+
+        <div class="reflect-box">
+          <p class="reflect-prompt">今天你学到了什么？</p>
+          <p class="reflect-sub">写下你自己的理解。不写也行。</p>
+
+          <textarea class="reflect-textarea" placeholder="今天我对……有了新的理解……" style="min-height:100px;font-size:14px;color:var(--color-ink-muted);">（用户选择跳过，未填写）</textarea>
+
+          <button class="reflect-draft-btn" style="opacity:0.4;cursor:default">苹果果帮你整理</button>
+
+          <!-- AI message after skip -->
+          <div class="msg ai fade-in" style="margin-top:var(--space-4)">
+            <div class="msg-avatar">🍎</div>
+            <div class="msg-bubble">
+              没关系。有时候想比写更重要。我记住了你今天学到的东西。<br><br>
+              根据刚才的练习，你对<strong>矩阵乘法规则</strong>的理解在加深。今天你亲手算出了 C₁₁ = 19，这不是背的，是自己算出来的。下次我们可以继续往"几何意义"走一步。
+            </div>
+          </div>
+
+          <div class="reflect-actions">
+            <div></div>
+            <button class="btn btn-primary">完成今天</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Context note -->
+  <div class="memory-summary">
+    <div class="ms-head">🍎 苹果果的内部记录</div>
+    <div class="ms-text">用户虽跳过反思，但苹果果仍基于 session 数据（练习正确 + 学习时长）生成了摘要，并存入长期记忆。用户获得一种"即使不写，也被记住了"的感受。</div>
+  </div>
+
+</div>
+
+</body>
+</html>

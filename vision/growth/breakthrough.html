@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🍎 苹果果 · 突破性成长</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+.insight-grid { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-5); }
+.insight-card {
+  background: var(--color-surface); border-radius: var(--radius-md);
+  padding: var(--space-4); border-left: 3px solid var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-divider-soft);
+  animation: msgIn 0.3s var(--ease-out);
+}
+.insight-card .ic-label { font-size: 11px; font-weight: 600; color: var(--color-accent); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+.insight-card .ic-text { font-size: 14px; color: var(--color-ink-secondary); line-height: 1.7; }
+.insight-card .ic-text strong { color: var(--color-ink-primary); }
+.badge-progress {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 500;
+}
+.badge-progress .bar {
+  width: 80px; height: 6px; background: var(--color-divider-soft);
+  border-radius: 3px; overflow: hidden;
+}
+.badge-progress .bar-fill { height: 100%; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<main id="app">
+  <!-- State Meta -->
+  <div class="state-meta">
+    <div class="sm-row">
+      <span class="sm-label">Emotion Goal</span>
+      <span class="sm-value"><span class="sm-emotion warm">🟢 warm</span> 自豪 + 被看见</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">AI Behavior</span>
+      <span class="sm-value">回忆起点对比 · 数据见证 · 肯定成长路径</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">Time Dimension</span>
+      <span class="sm-value">第 12 次学习 · 突破性进展</span>
+    </div>
+  </div>
+
+  <!-- Page Title -->
+  <h1 class="page-title">📈 成长记录</h1>
+
+  <!-- Growth Narrative -->
+  <div class="growth-narrative">
+    还记得你第一次说"我数学很差"吗。今天你的矩阵乘法熟练度超过了 80%。这不是分数能说的。
+  </div>
+
+  <!-- Insight Cards -->
+  <div class="insight-grid">
+    <div class="insight-card">
+      <div class="ic-label">📊 成长观察</div>
+      <div class="ic-text">
+        你的矩阵乘法熟练度从 <strong>23%</strong> 提升到了 <strong>82%</strong>，累计完成了 <strong>47 道</strong>练习。进步速度在最近一周明显加快。
+      </div>
+    </div>
+    <div class="insight-card">
+      <div class="ic-label">🧠 学习模式</div>
+      <div class="ic-text">
+        从最初的"对照公式一步一步算"，到现在"一眼看出矩阵维度是否匹配"。你建立起了直觉层面的理解。
+      </div>
+    </div>
+  </div>
+
+  <!-- Timeline -->
+  <div class="timeline">
+    <div class="timeline-item new-item">
+      <div class="ti-time">今天 · 第 12 次学习</div>
+      <div class="ti-title">🎯 矩阵乘法熟练度突破 80%</div>
+      <div class="ti-summary">连续答对 8 道进阶题，平均用时 45 秒。苹果果判断：你已经掌握了这个知识点。</div>
+    </div>
+    <div class="timeline-item">
+      <div class="ti-time">3 天前 · 第 11 次学习</div>
+      <div class="ti-title">开始独立解决 3×3 矩阵</div>
+      <div class="ti-summary">不再需要逐格对照，能够一次性写出整个结果矩阵。错误率从 40% 降到 15%。</div>
+    </div>
+    <div class="timeline-item">
+      <div class="ti-time">1 周前 · 第 9 次学习</div>
+      <div class="ti-title">理解"行 × 列"的本质</div>
+      <div class="ti-summary">顿悟时刻：矩阵乘法不是元素对应相乘，而是行与列的点积组合。之后正确率大幅提升。</div>
+    </div>
+    <div class="timeline-item">
+      <div class="ti-time">2 周前 · 第 5 次学习</div>
+      <div class="ti-title">第一次独立完成 2×2 矩阵乘法</div>
+      <div class="ti-summary">虽然花了 3 分钟，但全程没有看公式。这是一个重要的转折点。</div>
+    </div>
+  </div>
+</main>
+
+<!-- Bottom Nav -->
+<nav id="bottom-nav">
+  <button class="nav-tab" data-page="today">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Today</span>
+  </button>
+  <button class="nav-tab active" data-page="growth">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 17l6-6 4 4 8-8M14 7h7v7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Growth</span>
+  </button>
+  <button class="nav-tab" data-page="profile">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>Profile</span>
+  </button>
+  <button class="nav-tab" data-page="more">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/></svg>
+    <span>更多</span>
+  </button>
+</nav>
+
+</body>
+</html>

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🍎 苹果果 · 回归</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+.insight-grid { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-5); }
+.insight-card {
+  background: var(--color-surface); border-radius: var(--radius-md);
+  padding: var(--space-4); border-left: 3px solid var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-divider-soft);
+  animation: msgIn 0.3s var(--ease-out);
+}
+.insight-card .ic-label { font-size: 11px; font-weight: 600; color: var(--color-accent); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+.insight-card .ic-text { font-size: 14px; color: var(--color-ink-secondary); line-height: 1.7; }
+.insight-card .ic-text strong { color: var(--color-ink-primary); }
+.insight-card.warm { border-left-color: var(--color-pink); }
+.insight-card.warm .ic-label { color: var(--color-pink); }
+.welcome-back {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background: linear-gradient(135deg, var(--color-accent-soft), transparent 80%);
+  border-radius: var(--radius-md); margin-bottom: var(--space-5);
+  animation: msgIn 0.4s var(--ease-spring);
+}
+.welcome-back .wb-emoji { font-size: 32px; flex-shrink: 0; }
+.welcome-back .wb-text { font-size: 15px; font-weight: 600; }
+.welcome-back .wb-sub { font-size: 13px; color: var(--color-ink-muted); font-weight: 400; }
+.gap-marker {
+  text-align: center; padding: var(--space-3);
+  font-size: 12px; color: var(--color-ink-muted);
+  position: relative;
+}
+.gap-marker::before, .gap-marker::after {
+  content: ''; position: absolute; top: 50%;
+  width: 35%; height: 1px; background: var(--color-divider);
+}
+.gap-marker::before { left: 0; }
+.gap-marker::after { right: 0; }
+</style>
+</head>
+<body>
+
+<main id="app">
+  <!-- State Meta -->
+  <div class="state-meta">
+    <div class="sm-row">
+      <span class="sm-label">Emotion Goal</span>
+      <span class="sm-value"><span class="sm-emotion warm">🟢 warm</span> 被记住 + 温暖</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">AI Behavior</span>
+      <span class="sm-value">记住中断前内容 · 不施压 · 温暖回归</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">Time Dimension</span>
+      <span class="sm-value">上次学习 15 天前 · 中断后回归</span>
+    </div>
+  </div>
+
+  <!-- Page Title -->
+  <h1 class="page-title">📈 成长记录</h1>
+
+  <!-- Growth Narrative -->
+  <div class="growth-narrative">
+    你回来了。上次学习还是半个月前，但没关系——记录都在这里。
+  </div>
+
+  <!-- Welcome Back Banner -->
+  <div class="welcome-back">
+    <div class="wb-emoji">👋</div>
+    <div>
+      <div class="wb-text">欢迎回来，继续之前的内容</div>
+      <div class="wb-sub">上次学的是：矩阵乘法 · 已学到进阶</div>
+    </div>
+  </div>
+
+  <!-- Insight -->
+  <div class="insight-grid">
+    <div class="insight-card warm">
+      <div class="ic-label">💡 苹果果发现</div>
+      <div class="ic-text">
+        我发现你每次中断后回来，理解速度会比重新开始快。之前的积累还在——虽然半个月没碰，但你的 <strong>矩阵基础概念保留率约 70%</strong>，比完全从零开始快很多。
+      </div>
+    </div>
+  </div>
+
+  <!-- Timeline -->
+  <div class="timeline">
+    <div class="timeline-item new-item">
+      <div class="ti-time">今天 · 回归</div>
+      <div class="ti-title">👋 重新开始矩阵乘法练习</div>
+      <div class="ti-summary">做了 3 道基础题找回手感，正确率 100%。虽然速度慢了，但概念都还记得。热身之后感觉可以继续进阶内容了。</div>
+    </div>
+
+    <div class="gap-marker">中断 15 天</div>
+
+    <div class="timeline-item">
+      <div class="ti-time">15 天前 · 第 7 次学习</div>
+      <div class="ti-title">📐 矩阵乘法进阶</div>
+      <div class="ti-summary">开始接触 3×2 与 2×3 矩阵的乘法。理解了维度匹配的规律。正确率 78%。</div>
+    </div>
+    <div class="timeline-item">
+      <div class="ti-time">17 天前 · 第 6 次学习</div>
+      <div class="ti-title">🧮 矩阵加法与标量乘法</div>
+      <div class="ti-summary">完成了矩阵基础运算的入门练习，正确率 92%。对整个"矩阵"的概念有了基本认知。</div>
+    </div>
+    <div class="timeline-item">
+      <div class="ti-time">20 天前 · 第 5 次学习</div>
+      <div class="ti-title">📖 第一次接触矩阵</div>
+      <div class="ti-summary">什么是矩阵？矩阵的形状、元素、基本记号。完成了入门测试，正确率 85%。</div>
+    </div>
+  </div>
+</main>
+
+<!-- Bottom Nav -->
+<nav id="bottom-nav">
+  <button class="nav-tab" data-page="today">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Today</span>
+  </button>
+  <button class="nav-tab active" data-page="growth">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 17l6-6 4 4 8-8M14 7h7v7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Growth</span>
+  </button>
+  <button class="nav-tab" data-page="profile">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>Profile</span>
+  </button>
+  <button class="nav-tab" data-page="more">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/></svg>
+    <span>更多</span>
+  </button>
+</nav>
+
+</body>
+</html>

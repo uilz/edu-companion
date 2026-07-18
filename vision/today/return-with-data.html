@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🍎 中断回来 · Today 状态演示</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+/* ── 本页专属微调 ── */
+.greeting-return {
+  font-size: 30px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px;
+}
+.greeting-return .warm-emoji { display: inline-block; animation: wave 1.5s ease-in-out; }
+@keyframes wave { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(15deg); } 75% { transform: rotate(-10deg); } }
+.last-session-card.return {
+  background: linear-gradient(135deg, var(--color-accent-soft), var(--color-surface));
+  border-left: 3px solid var(--color-accent);
+}
+.last-session-card.return .detail-row {
+  display: flex; gap: var(--space-3); margin-top: 12px;
+  padding-top: 12px; border-top: 1px solid var(--color-divider-soft);
+  font-size: 13px; color: var(--color-ink-secondary);
+}
+.last-session-card.return .detail-row dt { font-weight: 600; color: var(--color-ink-primary); min-width: 60px; }
+.choice-block {
+  display: flex; gap: 10px; margin: var(--space-5) 0;
+  flex-wrap: wrap;
+}
+.choice-block .btn { flex: 1; min-width: 140px; }
+</style>
+</head>
+<body>
+
+<main id="app">
+
+  <!-- State Meta -->
+  <div class="state-meta">
+    <div class="sm-row">
+      <span class="sm-label">Emotion Goal</span>
+      <span class="sm-value"><span class="sm-emotion warm">🟢 warm</span> 被理解 + 被期待 — "它知道我上次学到哪了"</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">AI Behavior</span>
+      <span class="sm-value">"好久不见" 问候 · 精确回忆上次进度 · 详细 last session 卡片 · 复习/继续二选一 · 记忆闪光 · 个性化工具推荐</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">Time Dimension</span>
+      <span class="sm-value">学习 1 个月 · 中断 2 周 · 矩阵求逆 mastery 0.2 · 上次卡在伴随矩阵</span>
+    </div>
+  </div>
+
+  <!-- Quote: warm welcome -->
+  <p class="today-quote">「我不止记得你学了什么。我记得你卡在哪里。」</p>
+
+  <div class="fade-in">
+
+    <!-- Greeting: "好久不见" -->
+    <h1 class="greeting-return"><span class="warm-emoji">🍎</span> 好久不见</h1>
+    <p class="today-date">2026 年 7 月 18 日 · 星期四</p>
+
+    <!-- Observation: precise recall of last session -->
+    <p class="today-observation">
+      好久不见。上次我们在学<strong>「矩阵的逆」</strong>，你当时已经能算 2×2 的逆矩阵了。<br>
+      要复习一下还是继续往前？
+    </p>
+
+    <!-- Memory Pulse: specific memory -->
+    <div class="memory-pulse">
+      <div class="mp-icon">🍎</div>
+      <div class="mp-text">
+        我记得你上次卡在<strong>伴随矩阵</strong>这一步。要不要从那里重新开始？
+      </div>
+    </div>
+
+    <!-- Last Session Card: detailed -->
+    <div class="last-session-card return">
+      <p class="label">上次的学习 · 7 月 3 日</p>
+      <h2 class="title">矩阵的逆 · 伴随矩阵法</h2>
+      <p class="skills">你当时已经能算 2×2 的逆矩阵了，但在伴随矩阵这一步需要再看一遍。</p>
+      <dl class="detail-row">
+        <div>
+          <dt>进度</dt>
+          <dd>2×2 逆矩阵 ✅ → 伴随矩阵 🔄</dd>
+        </div>
+        <div>
+          <dt>理解度</dt>
+          <dd>矩阵求逆 · mastery 20%</dd>
+        </div>
+      </dl>
+    </div>
+
+    <!-- Choice: review or continue -->
+    <div class="choice-block">
+      <button class="btn btn-outline btn-lg">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M12 8v4l3 3M12 2a10 10 0 100 20 10 10 0 000-20z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        复习上次
+      </button>
+      <button class="btn btn-primary btn-lg">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+        继续前进
+      </button>
+    </div>
+
+    <!-- Personalized Tool Recommendations -->
+    <div class="today-tools">
+      <button class="tool-quick">
+        <div class="tq-icon" style="background:var(--color-purple-soft)">🧠</div>
+        <div class="tq-text"><strong>复习卡片：逆矩阵</strong><span>上次创建的记忆卡</span></div>
+      </button>
+      <button class="tool-quick">
+        <div class="tq-icon" style="background:var(--color-warning-soft)">📝</div>
+        <div class="tq-text"><strong>重做上次的练习</strong><span>伴随矩阵步骤</span></div>
+      </button>
+      <button class="tool-quick">
+        <div class="tq-icon" style="background:var(--color-accent-soft)">🧩</div>
+        <div class="tq-text"><strong>画布回顾</strong><span>逆矩阵知识结构</span></div>
+      </button>
+    </div>
+
+  </div>
+</main>
+
+<!-- Bottom Navigation -->
+<nav id="bottom-nav">
+  <button class="nav-tab active" data-page="today">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Today</span>
+  </button>
+  <button class="nav-tab" data-page="growth">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 17l6-6 4 4 8-8M14 7h7v7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Growth</span>
+  </button>
+  <button class="nav-tab" data-page="profile">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>Profile</span>
+  </button>
+  <button class="nav-tab" data-page="more">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/></svg>
+    <span>更多</span>
+  </button>
+</nav>
+
+</body>
+</html>

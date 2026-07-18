@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🍎 苹果果 · Today — 今日完成</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+/* 今日完成 checkmark animation */
+.checkmark-ring {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: var(--color-success-soft);
+  display: grid; place-items: center; margin: 0 auto var(--space-4);
+  animation: popIn 0.4s var(--ease-spring);
+}
+@keyframes popIn {
+  0% { transform: scale(0.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.checkmark-ring svg { width: 36px; height: 36px; stroke: var(--color-success); stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 50; stroke-dashoffset: 50; animation: drawCheck 0.5s 0.2s var(--ease-out) forwards; }
+@keyframes drawCheck { to { stroke-dashoffset: 0; } }
+
+/* Growth tab badge */
+.nav-tab[data-page="growth"] .badge-dot {
+  position: absolute; top: 2px; right: 2px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--color-accent);
+  border: 1.5px solid var(--color-page);
+  animation: pulse 1.5s infinite;
+}
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* 明日 sneak peek card */
+.sneak-peek {
+  background: linear-gradient(135deg, var(--color-accent-soft), transparent);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin: var(--space-5) 0;
+  border-left: 3px solid var(--color-accent);
+}
+.sneak-peek .sp-label { font-size: 12px; color: var(--color-ink-muted); font-weight: 500; margin-bottom: 4px; }
+.sneak-peek .sp-title { font-size: 17px; font-weight: 600; }
+.sneak-peek .sp-desc { font-size: 13.5px; color: var(--color-ink-secondary); margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<main id="app">
+  <!-- State Meta Card (for vision documentation) -->
+  <div class="state-meta">
+    <div class="sm-row">
+      <span class="sm-label">Emotion Goal</span>
+      <span class="sm-value"><span class="sm-emotion warm">🟢 warm</span> 完成感 + 满足 — "今天做完了"</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">AI Behavior</span>
+      <span class="sm-value">Observation: 肯定完成 · Checkmark 动画 · MemoryPulse: 今日成就 · 明日 sneak peek · CTA: "看看今天的成长" vs "明天再来" · Growth tab 有 subtle badge</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">Time Dimension</span>
+      <span class="sm-value">今日已完成 · 明日预告：行列式</span>
+    </div>
+  </div>
+
+  <!-- Quote -->
+  <p class="today-quote">「完成一天的学习，本身就是一种收获。」</p>
+
+  <!-- Main Content -->
+  <div class="fade-in">
+    <!-- Greeting -->
+    <h1 class="today-greeting">🍎 下午好</h1>
+    <p class="today-date">2026 年 7 月 18 日 · 星期六</p>
+
+    <!-- AI Observation — affirming completion -->
+    <p class="today-observation">
+      今天的任务都完成了。做得不错。
+    </p>
+
+    <!-- Completion Indicator -->
+    <div class="checkmark-ring">
+      <svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+    </div>
+    <p style="text-align:center;font-weight:600;font-size:18px;color:var(--color-success);margin-bottom:var(--space-4)">今日完成</p>
+
+    <!-- Memory Pulse: today's achievement summary -->
+    <div class="memory-pulse">
+      <div class="mp-icon">🍎</div>
+      <div class="mp-text">今天你完成了矩阵乘法的练习和反思。矩阵乘法的熟练度又稳了一点。这是你连续学习的第 <strong>7 天</strong>。</div>
+    </div>
+
+    <!-- 明日 sneak peek -->
+    <div class="sneak-peek">
+      <div class="sp-label">🌅 明天预告</div>
+      <div class="sp-title">行列式</div>
+      <div class="sp-desc">明天我们可以看看行列式了。它会帮你理解矩阵「有多大」。</div>
+    </div>
+
+    <!-- Tools recap -->
+    <div class="today-tools" style="opacity:0.7;pointer-events:none">
+      <div class="tool-quick">
+        <div class="tq-icon" style="background:var(--color-success-soft)">✓</div>
+        <div class="tq-text"><strong>今日练习</strong><span>已完成</span></div>
+      </div>
+      <div class="tool-quick">
+        <div class="tq-icon" style="background:var(--color-success-soft)">✓</div>
+        <div class="tq-text"><strong>反思记录</strong><span>已填写</span></div>
+      </div>
+      <div class="tool-quick">
+        <div class="tq-icon" style="background:var(--color-success-soft)">✓</div>
+        <div class="tq-text"><strong>卡片复习</strong><span>已完成</span></div>
+      </div>
+    </div>
+
+    <!-- CTA — two paths -->
+    <div class="cta-block">
+      <button class="btn btn-outline btn-lg" style="width:100%;max-width:300px">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M3 17l6-6 4 4 8-8M14 7h7v7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        看看今天的成长
+      </button>
+      <button class="text-link">明天再来</button>
+    </div>
+  </div>
+</main>
+
+<!-- Bottom Navigation — Growth tab has subtle badge -->
+<nav id="bottom-nav">
+  <button class="nav-tab active" data-page="today">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Today</span>
+  </button>
+  <button class="nav-tab" data-page="growth" style="position:relative">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 17l6-6 4 4 8-8M14 7h7v7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Growth</span>
+    <span class="badge-dot"></span>
+  </button>
+  <button class="nav-tab" data-page="profile">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>Profile</span>
+  </button>
+  <button class="nav-tab" data-page="more">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/></svg>
+    <span>更多</span>
+  </button>
+</nav>
+
+</body>
+</html>

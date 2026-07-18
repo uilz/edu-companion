@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🍎 苹果果 · 刚完成学习返回</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+  @keyframes pulseSlideIn {
+    0% { opacity: 0; transform: translateY(-12px) scale(0.96); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 0 1px var(--color-divider-soft); }
+    50% { box-shadow: 0 0 0 1.5px var(--color-accent), 0 4px 20px var(--color-accent-glow); }
+  }
+  .memory-pulse {
+    animation: pulseSlideIn 0.5s var(--ease-spring);
+  }
+  .memory-pulse .mp-icon {
+    animation: pulseIcon 2s var(--ease-out) infinite;
+  }
+  @keyframes pulseIcon {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+  }
+  .last-session-card.just-done {
+    border-left: 3px solid var(--color-accent);
+    animation: pulseGlow 2s var(--ease-out) infinite;
+  }
+  .cta-row {
+    display: flex; gap: 12px; justify-content: center;
+    animation: slideUp 0.4s var(--ease-out) 0.3s both;
+  }
+  .cta-row .btn { flex: 1; max-width: 200px; }
+</style>
+</head>
+<body>
+
+<main id="app">
+
+  <!-- State Meta -->
+  <div class="state-meta">
+    <div class="sm-row">
+      <span class="sm-label">Emotion Goal</span>
+      <span class="sm-value"><span class="sm-emotion warm">🟢 warm</span> 满足 + 被认可 — "苹果果记住我了"</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">AI Behavior</span>
+      <span class="sm-value">Memory pulse · Observation · Focus card · 双 CTA · Last session 高亮</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">Time Dimension</span>
+      <span class="sm-value">刚完成 Session 返回 · 有最新记忆</span>
+    </div>
+  </div>
+
+  <!-- Today Content -->
+  <p class="today-quote">「困惑是理解的开始。」</p>
+
+  <div class="fade-in">
+    <h1 class="today-greeting">🍎 下午好</h1>
+    <p class="today-date">2026 年 7 月 18 日 星期六</p>
+
+    <!-- Memory Pulse -->
+    <div class="memory-pulse">
+      <div class="mp-icon">🍎</div>
+      <div class="mp-text">
+        <strong>这次你对矩阵乘法又熟了一点。我记下了。</strong>
+      </div>
+    </div>
+
+    <p class="today-observation">
+      今天你在矩阵乘法上很顺。休息一下，明天继续。
+    </p>
+
+    <!-- Focus Card -->
+    <div class="card focus-card">
+      <div class="focus-label">🎯 基于今天的表现，推荐巩固</div>
+      <h2 class="focus-title">矩阵乘法 · 综合练习</h2>
+      <p class="focus-desc">今天做对了大部分，再练一组不同类型巩固一下</p>
+      <div class="focus-meta">
+        <svg viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        <span>预计 15 分钟</span>
+      </div>
+    </div>
+
+    <!-- Last Session Card (highlighted as just completed) -->
+    <div class="last-session-card just-done">
+      <p class="label">刚才完成的学习</p>
+      <h2 class="title">矩阵乘法的练习 🎉</h2>
+      <p class="skills">苹果果对你的理解：正在巩固 · 进步了</p>
+    </div>
+
+    <!-- Dual CTA -->
+    <div class="cta-row">
+      <button class="btn btn-outline btn-lg">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+          <path d="M9 2v20M15 2v20M2 9h20M2 15h20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        休息一下
+      </button>
+      <button class="btn btn-primary btn-lg">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+          <path d="M8 5v14l11-7z" fill="currentColor"/>
+        </svg>
+        再学一会
+      </button>
+    </div>
+    <div class="cta-block" style="margin-top: var(--space-3);">
+      <span class="cta-hint">今天你已经学了 25 分钟</span>
+    </div>
+  </div>
+
+</main>
+
+<!-- Bottom Navigation -->
+<nav id="bottom-nav">
+  <button class="nav-tab active" data-page="today">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span>Today</span>
+  </button>
+  <button class="nav-tab" data-page="growth">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M3 17l6-6 4 4 8-8M14 7h7v7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span>Growth</span>
+  </button>
+  <button class="nav-tab" data-page="profile">
+    <svg viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/>
+      <path d="M4 21c0-4 4-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+    <span>Profile</span>
+  </button>
+  <button class="nav-tab" data-page="more">
+    <svg viewBox="0 0 24 24" fill="none">
+      <circle cx="6" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/>
+      <circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/>
+      <circle cx="18" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/>
+    </svg>
+    <span>更多</span>
+  </button>
+</nav>
+
+</body>
+</html>

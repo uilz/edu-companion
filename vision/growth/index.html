@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Growth 状态矩阵 · AppleGo Product Vision</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+.matrix-page { max-width: 720px; margin: 0 auto; padding: 40px var(--space-4); }
+.matrix-title { font-size: 32px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.02em; }
+.matrix-sub { color: var(--color-ink-secondary); font-size: 15px; margin-bottom: var(--space-6); line-height: 1.7; }
+.state-grid { display: flex; flex-direction: column; gap: 12px; }
+.state-card {
+  background: var(--color-surface); border-radius: var(--radius-lg);
+  padding: var(--space-4); box-shadow: 0 0 0 1px var(--color-divider-soft);
+  display: flex; align-items: center; gap: var(--space-4);
+  transition: all 0.2s; text-decoration: none; color: inherit;
+}
+.state-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.08), 0 0 0 1.5px var(--color-accent); transform: translateY(-2px); }
+.state-card .sc-indicator { width: 4px; height: 48px; border-radius: 2px; flex-shrink: 0; }
+.state-card .sc-info { flex: 1; }
+.state-card .sc-name { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+.state-card .sc-desc { font-size: 12.5px; color: var(--color-ink-muted); line-height: 1.4; }
+.state-card .sc-emotion { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: var(--radius-full); flex-shrink: 0; }
+.sc-emotion.warm { background: var(--color-success-soft); color: var(--color-success); }
+.sc-emotion.neutral { background: var(--color-accent-soft); color: var(--color-accent); }
+.sc-emotion.cautious { background: var(--color-warning-soft); color: var(--color-warning); }
+.indicator-warm { background: var(--color-success); }
+.indicator-neutral { background: var(--color-accent); }
+.indicator-cautious { background: var(--color-warning); }
+.matrix-stats { display: flex; gap: var(--space-4); margin-bottom: var(--space-6); }
+.stat-card { flex:1; background:var(--color-surface); border-radius:var(--radius-md); padding:var(--space-4); text-align:center; box-shadow:0 0 0 1px var(--color-divider-soft); }
+.stat-num { font-size:28px; font-weight:700; }
+.stat-label { font-size:12px; color:var(--color-ink-muted); margin-top:4px; }
+</style>
+</head>
+<body>
+<div class="matrix-page">
+  <h1 class="matrix-title">🌱 Growth — 状态矩阵</h1>
+  <p class="matrix-sub">成长记录页在不同学习阶段、不同成长速度下的呈现。核心不是数据，而是"我越来越了解你"的叙事。</p>
+  
+  <div class="matrix-stats">
+    <div class="stat-card"><div class="stat-num">8</div><div class="stat-label">状态总数</div></div>
+    <div class="stat-card"><div class="stat-num">8</div><div class="stat-label">✅ 已完成</div></div>
+  </div>
+  
+  <div class="state-grid">
+    <a class="state-card" href="breakthrough.html"><div class="sc-indicator indicator-warm"></div><div class="sc-info"><div class="sc-name">🚀 突破性成长</div><div class="sc-desc">熟练度超过 80%。自豪 + 被看见。</div></div><span class="sc-emotion warm">warm</span></a>
+    <a class="state-card" href="small-gain.html"><div class="sc-indicator indicator-neutral"></div><div class="sc-info"><div class="sc-name">🌱 微小成长</div><div class="sc-desc">进步不大但真实。诚实 + 持续。</div></div><span class="sc-emotion neutral">neutral</span></a>
+    <a class="state-card" href="plateau.html"><div class="sc-indicator indicator-cautious"></div><div class="sc-info"><div class="sc-name">🤷 平台期</div><div class="sc-desc">没有明显成长。不焦虑，停下来也没关系。</div></div><span class="sc-emotion cautious">cautious</span></a>
+    <a class="state-card" href="sudden-leap.html"><div class="sc-indicator indicator-warm"></div><div class="sc-info"><div class="sc-name">💡 突然突破</div><div class="sc-desc">卡了很久的问题突然解决。惊喜 + 释放。</div></div><span class="sc-emotion warm">warm</span></a>
+    <a class="state-card" href="own-understanding.html"><div class="sc-indicator indicator-warm"></div><div class="sc-info"><div class="sc-name">🧠 形成自己的理解</div><div class="sc-desc">不再死记硬背，开始用自己的话表达。</div></div><span class="sc-emotion warm">warm</span></a>
+    <a class="state-card" href="style-shift.html"><div class="sc-indicator indicator-neutral"></div><div class="sc-info"><div class="sc-name">🔄 学习方式变化</div><div class="sc-desc">从"先理论"到"先尝试"。找到自己的节奏。</div></div><span class="sc-emotion neutral">neutral</span></a>
+    <a class="state-card" href="long-streak.html"><div class="sc-indicator indicator-warm"></div><div class="sc-info"><div class="sc-name">🔥 长期坚持（30天+）</div><div class="sc-desc">不只是学会知识，培养了一个习惯。</div></div><span class="sc-emotion warm">warm</span></a>
+    <a class="state-card" href="return.html"><div class="sc-indicator indicator-warm"></div><div class="sc-info"><div class="sc-name">👋 中断后回来</div><div class="sc-desc">有历史但不连续。被记住，没被责备。</div></div><span class="sc-emotion warm">warm</span></a>
+  </div>
+
+  <div style="margin-top: var(--space-6); padding: var(--space-5); background: var(--color-surface); border-radius: var(--radius-lg); box-shadow: 0 0 0 1px var(--color-divider-soft);">
+    <h3 style="font-size: 15px; font-weight: 600; margin-bottom: var(--space-3);">🎯 Growth 的核心情绪目标</h3>
+    <p style="font-size: 14px; color: var(--color-ink-secondary); line-height: 1.7;">
+      <strong>用户看到 Growth 应该感受到：</strong><br>
+      ① 我真的在成长<br>
+      ② 苹果果记住的不是分数，是我的变化<br>
+      ③ 哪怕今天进步很小，也被看见了<br><br>
+      <strong>最差的 Growth 体验：</strong><br>
+      ① 只有数据没有叙事<br>
+      ② AI 说"没有新记录"就结束了<br>
+      ③ 看不出时间维度上的变化
+    </p>
+  </div>
+</div>
+</body>
+</html>

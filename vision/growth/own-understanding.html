@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🍎 苹果果 · 自己的理解</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+.insight-grid { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-5); }
+.insight-card {
+  background: var(--color-surface); border-radius: var(--radius-md);
+  padding: var(--space-4); border-left: 3px solid var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-divider-soft);
+  animation: msgIn 0.3s var(--ease-out);
+}
+.insight-card .ic-label { font-size: 11px; font-weight: 600; color: var(--color-accent); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+.insight-card .ic-text { font-size: 14px; color: var(--color-ink-secondary); line-height: 1.7; }
+.insight-card .ic-text strong { color: var(--color-ink-primary); }
+.insight-card.deep { border-left-color: var(--color-purple); }
+.insight-card.deep .ic-label { color: var(--color-purple); }
+.quote-block {
+  font-family: var(--font-serif); font-style: italic;
+  background: var(--color-ai-msg); border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-5); margin-bottom: var(--space-5);
+  font-size: 14px; line-height: 1.8; color: var(--color-ink-primary);
+}
+</style>
+</head>
+<body>
+
+<main id="app">
+  <!-- State Meta -->
+  <div class="state-meta">
+    <div class="sm-row">
+      <span class="sm-label">Emotion Goal</span>
+      <span class="sm-value"><span class="sm-emotion warm">🟢 warm</span> 真正的成长</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">AI Behavior</span>
+      <span class="sm-value">识别理解质变 · 对比过去与现在 · 肯定深度</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">Time Dimension</span>
+      <span class="sm-value">第 10 次学习 · 理解质变</span>
+    </div>
+  </div>
+
+  <!-- Page Title -->
+  <h1 class="page-title">📈 成长记录</h1>
+
+  <!-- Growth Narrative -->
+  <div class="growth-narrative">
+    我注意到你今天不再只背定义，而是用自己的话解释了矩阵乘法。这才是真正的理解。
+  </div>
+
+  <!-- Quote / Student's own words -->
+  <div class="quote-block">
+    "矩阵乘法就像是把两个表格的信息组合起来。A 的行是索引，B 的列是查询，每个结果就是匹配到的值——有点像 Excel 的 VLOOKUP 但更强大。"
+    <div style="font-style:normal;font-size:12px;color:var(--color-ink-muted);margin-top:var(--space-2)">—— 你 · 今天的学习中</div>
+  </div>
+
+  <!-- Insight -->
+  <div class="insight-grid">
+    <div class="insight-card deep">
+      <div class="ic-label">🌱 理解质变</div>
+      <div class="ic-text">
+        从"矩阵乘法就是行乘列"到"矩阵乘法的本质是线性变换的组合"。你不是在复述定义——你建立了<strong>自己的心智模型</strong>。这种理解不会轻易忘记。
+      </div>
+    </div>
+  </div>
+
+  <!-- Timeline -->
+  <div class="timeline">
+    <div class="timeline-item new-item">
+      <div class="ti-time">今天 · 第 10 次学习</div>
+      <div class="ti-title">🧠 用自己的话解释矩阵乘法</div>
+      <div class="ti-summary">不再依赖"左上到右下"这类口诀，而是从"信息组合"的角度理解。能够向一个新手解释矩阵乘法在做什么。</div>
+    </div>
+    <div class="timeline-item">
+      <div class="ti-time">4 天前 · 第 9 次学习</div>
+      <div class="ti-title">开始提出"为什么"问题</div>
+      <div class="ti-summary">"为什么矩阵乘法不满足交换律？""为什么维度必须匹配？"从接受规则转向追问原因。</div>
+    </div>
+    <div class="timeline-item">
+      <div class="ti-time">1 周前 · 第 7 次学习</div>
+      <div class="ti-title">📖 从口诀到概念</div>
+      <div class="ti-summary">开始注意到"行×列"不只是操作步骤，而是有几何意义的。不再用"左右上下"来自我提醒。</div>
+    </div>
+    <div class="timeline-item">
+      <div class="ti-time">2 周前 · 第 4 次学习</div>
+      <div class="ti-title">依赖公式和口诀</div>
+      <div class="ti-summary">用"第一行乘第一列"的口诀完成计算，能算对但说不清为什么这样算。</div>
+    </div>
+  </div>
+</main>
+
+<!-- Bottom Nav -->
+<nav id="bottom-nav">
+  <button class="nav-tab" data-page="today">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Today</span>
+  </button>
+  <button class="nav-tab active" data-page="growth">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 17l6-6 4 4 8-8M14 7h7v7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Growth</span>
+  </button>
+  <button class="nav-tab" data-page="profile">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>Profile</span>
+  </button>
+  <button class="nav-tab" data-page="more">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/></svg>
+    <span>更多</span>
+  </button>
+</nav>
+
+</body>
+</html>
