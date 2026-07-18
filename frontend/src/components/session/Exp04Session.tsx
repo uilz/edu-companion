@@ -25,7 +25,10 @@ import Exp04ReflectionScreen from "./exp04/Exp04ReflectionScreen";
 import Exp04EndScreen from "./exp04/Exp04EndScreen";
 import StageDots from "./exp04/StageDots";
 import ProgressBar from "./exp04/ProgressBar";
-import ToolTray, { type ToolKey } from "./exp04/ToolTray";
+import ResourcesSidebar from "./exp04/ResourcesSidebar";
+import StudioCompanion from "./exp04/StudioCompanion";
+import BottomDock from "./exp04/BottomDock";
+import type { ToolKey } from "./exp04/BottomDock";
 import ActivePrompt from "./exp04/ActivePrompt";
 import FlashcardCreatePanel from "./exp04/FlashcardCreatePanel";
 import PomodoroPanel from "./exp04/PomodoroPanel";
@@ -276,84 +279,96 @@ export default function Exp04Session() {
   const isEnter = sm.stage === "enter";
 
   return (
-    <div className="flex flex-col min-h-screen bg-page">
-      {/* ── Header ── */}
-      {!isFinish && (
-        <header className="flex items-center gap-3 px-4 py-3 border-b border-border bg-page/80 backdrop-blur sticky top-0 z-10">
-          <button onClick={() => router.push("/")} className="p-1.5 rounded-lg hover:bg-surface-hover transition-colors">
-            <ArrowLeft size={20} className="text-ink-muted" />
+    <div className="studio-root">
+      {/* ═══ HEADER ZONE ═══ */}
+      <header className="studio-header">
+        <div className="sh-root">
+          <button onClick={() => router.push("/")} className="sh-back">
+            <ArrowLeft size={20} />
           </button>
-
-          {!isEnter && (
+          <h1 className="sh-title">{session.title || "学习 Session"}</h1>
+          {!isFinish && !isEnter && (
             <>
-              <h1 className="text-base font-semibold text-ink-primary flex-1 truncate">
-                {session.title || "学习 Session"}
-              </h1>
               <StageDots currentState={sm.stage} />
-              <div className="w-2" />
-              <ToolTray
-                nudge={sm.mode === "deep_chat" ? "画布" : null}
-                activeTool={activeTool}
-                onOpenTool={handleOpenTool}
-              />
+              <span className="sh-progress">42%</span>
             </>
           )}
+          <div className="sh-ai-status">
+            <span className="sh-ai-dot"></span>
+            <span>观察中</span>
+          </div>
+          <div className="sh-actions">
+            <button
+              onClick={cancelSession}
+              disabled={transitioning}
+              className="text-xs text-ink-muted hover:text-red-500 disabled:opacity-50 px-2 py-1"
+            >
+              取消
+            </button>
+          </div>
+        </div>
+        {!isFinish && <ProgressBar currentState={sm.stage} />}
+      </header>
 
-          <button
-            onClick={cancelSession}
-            disabled={transitioning}
-            className="text-xs text-ink-muted hover:text-red-500 disabled:opacity-50 px-2 py-1"
-          >
-            取消
-          </button>
-        </header>
-      )}
+      {/* ═══ SIDEBAR ZONE ═══ */}
+      <nav className="studio-sidebar">
+        <ResourcesSidebar />
+      </nav>
 
-      {/* ── Progress Bar ── */}
-      {!isFinish && <ProgressBar currentState={sm.stage} />}
+      {/* ═══ CANVAS ZONE ═══ */}
+      <main className="studio-canvas">
+        <div className="sc-canvas">
+          {!isEnter && !isFinish && sm.stage === "chat" && sm.mode !== "deep_chat" && (
+            <ActivePrompt prompts={prompts} onPromptClick={handlePromptClick} />
+          )}
+          <div className="flex-1 overflow-y-auto">
+            {isFinish ? (
+              <Exp04EndScreen sessionTitle={session.mission?.title} />
+            ) : isEnter ? (
+              <Exp04EnterScreen
+                engine={engine}
+                currentState={sm.currentState}
+                mission={session.mission}
+                lastTitle={null}
+                onStart={handleEnterStart}
+                transitioning={transitioning}
+              />
+            ) : sm.stage === "chat" ? (
+              <ChatScreen
+                engine={engine}
+                currentState={sm.currentState}
+                mission={session.mission}
+                lastTitle={null}
+                onTransition={handleChatTransition}
+                onSetMode={sm.setMode}
+                onOpenTool={handleOpenTool}
+                sessionId={session.id}
+              />
+            ) : (
+              <Exp04ReflectionScreen
+                engine={engine}
+                currentState={sm.currentState}
+                onSkip={handleReflectionSkip}
+                onSubmit={handleReflectionSubmit}
+                transitioning={transitioning}
+                missionTitle={session.title || session.mission?.title}
+              />
+            )}
+          </div>
+        </div>
+      </main>
 
-      {/* ── Active Prompts（仅 chat 阶段） ── */}
-      {!isEnter && !isFinish && sm.stage === "chat" && sm.mode !== "deep_chat" && (
-        <ActivePrompt prompts={prompts} onPromptClick={handlePromptClick} />
-      )}
+      {/* ═══ COMPANION ZONE ═══ */}
+      <aside className="studio-companion">
+        <StudioCompanion sessionTitle={session.mission?.title} />
+      </aside>
 
-      {/* ── Stage Content ── */}
-      <div className="flex-1 overflow-y-auto">
-        {isFinish ? (
-          <Exp04EndScreen sessionTitle={session.mission?.title} />
-        ) : isEnter ? (
-          <Exp04EnterScreen
-            engine={engine}
-            currentState={sm.currentState}
-            mission={session.mission}
-            lastTitle={null}
-            onStart={handleEnterStart}
-            transitioning={transitioning}
-          />
-        ) : sm.stage === "chat" ? (
-          <ChatScreen
-            engine={engine}
-            currentState={sm.currentState}
-            mission={session.mission}
-            lastTitle={null}
-            onTransition={handleChatTransition}
-            onSetMode={sm.setMode}
-            onOpenTool={handleOpenTool}
-            sessionId={session.id}
-          />
-        ) : (
-          <Exp04ReflectionScreen
-            engine={engine}
-            currentState={sm.currentState}
-            onSkip={handleReflectionSkip}
-            onSubmit={handleReflectionSubmit}
-            transitioning={transitioning}
-            missionTitle={session.title || session.mission?.title}
-          />
-        )}
-      </div>
+      {/* ═══ DOCK ZONE ═══ */}
+      <footer className="studio-dock">
+        <BottomDock activeTool={activeTool} onOpenTool={handleOpenTool} />
+      </footer>
 
-      {/* ── Tool Panels ── */}
+      {/* ── Tool Panels（浮层） ── */}
       {flashcardOpen && (
         <FlashcardCreatePanel
           sessionId={sessionId}
