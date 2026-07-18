@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🧠 苹果果的记忆 · AppleGo Product Vision</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+  .memory-subtitle {
+    font-size: 15px; color: var(--color-ink-secondary);
+    line-height: 1.7; margin-bottom: var(--space-6);
+  }
+  .memory-timeline {
+    display: flex; flex-direction: column; gap: var(--space-4);
+  }
+  .memory-card {
+    background: var(--color-surface);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    border-left: 3px solid var(--color-success);
+    box-shadow: 0 0 0 1px var(--color-divider-soft);
+    animation: msgIn 0.4s var(--ease-out);
+    transition: all 0.2s;
+  }
+  .memory-card:hover {
+    box-shadow: 0 4px 20px rgba(0,0,0,0.06), 0 0 0 1.5px var(--color-success-soft);
+    transform: translateY(-2px);
+  }
+  .memory-card .mc-header {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 10px;
+  }
+  .memory-card .mc-icon {
+    width: 36px; height: 36px;
+    background: var(--color-success-soft);
+    border-radius: var(--radius-sm);
+    display: grid; place-items: center;
+    font-size: 20px; flex-shrink: 0;
+  }
+  .memory-card .mc-date {
+    font-size: 12px; color: var(--color-ink-muted);
+    font-weight: 500;
+  }
+  .memory-card .mc-narrative {
+    font-size: 15px; line-height: 1.7;
+    color: var(--color-ink-primary);
+    font-weight: 500;
+    padding-left: 46px;
+  }
+  .memory-card .mc-detail {
+    font-size: 13.5px; line-height: 1.6;
+    color: var(--color-ink-secondary);
+    padding-left: 46px;
+    margin-top: 4px;
+  }
+  .memory-divider {
+    display: flex; align-items: center; gap: 12px;
+    margin: var(--space-2) 0;
+    color: var(--color-ink-muted);
+    font-size: 11px; font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+  .memory-divider::after {
+    content: ''; flex: 1; height: 1px;
+    background: var(--color-divider);
+  }
+  .memory-footer {
+    text-align: center;
+    padding: var(--space-6) var(--space-4);
+    color: var(--color-ink-muted);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .memory-footer .mf-icon {
+    font-size: 28px; display: block;
+    margin-bottom: var(--space-3);
+  }
+  .memory-card:nth-child(1) { animation-delay: 0.05s; }
+  .memory-card:nth-child(2) { animation-delay: 0.10s; }
+  .memory-card:nth-child(3) { animation-delay: 0.15s; }
+  .memory-card:nth-child(4) { animation-delay: 0.20s; }
+  .memory-card:nth-child(5) { animation-delay: 0.25s; }
+  .memory-card:nth-child(6) { animation-delay: 0.30s; }
+  .memory-card:nth-child(7) { animation-delay: 0.35s; }
+  .memory-card:nth-child(8) { animation-delay: 0.40s; }
+</style>
+</head>
+<body>
+
+<main id="app">
+
+  <!-- State Meta -->
+  <div class="state-meta">
+    <div class="sm-row">
+      <span class="sm-label">Emotion Goal</span>
+      <span class="sm-value"><span class="sm-emotion warm">🟢 warm</span> 被深刻记住的感动 — "苹果果记得我的每一个重要瞬间"</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">AI Behavior</span>
+      <span class="sm-value">Memory 不是聊天记录，不是统计数据。是苹果果记住的用户成长中最珍贵的瞬间——全是故事，没有 KPI，没有 streak，没有排行榜。</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">Time Dimension</span>
+      <span class="sm-value">从第一次学习至今 · 累积的珍贵瞬间</span>
+    </div>
+  </div>
+
+  <!-- Page Header -->
+  <h1 class="page-title">🧠 苹果果的记忆</h1>
+  <p class="memory-subtitle">我记得的，都是重要的瞬间。</p>
+
+  <!-- Memory Timeline -->
+  <div class="memory-timeline">
+
+    <div class="memory-card">
+      <div class="mc-header">
+        <div class="mc-icon">🍎</div>
+        <span class="mc-date">2026 年 7 月 18 日</span>
+      </div>
+      <div class="mc-narrative">第一次敢不用原文解释</div>
+      <div class="mc-detail">
+        你用自己的话讲了矩阵乘法是什么。不是背定义，是真的理解了。
+      </div>
+    </div>
+
+    <div class="memory-card">
+      <div class="mc-header">
+        <div class="mc-icon">🍎</div>
+        <span class="mc-date">2026 年 7 月 16 日</span>
+      </div>
+      <div class="mc-narrative">你开始主动举例</div>
+      <div class="mc-detail">
+        学逆矩阵的时候，你自己写了个 2×2 的例子推了一遍。不需要我出题了。
+      </div>
+    </div>
+
+    <div class="memory-card">
+      <div class="mc-header">
+        <div class="mc-icon">🍎</div>
+        <span class="mc-date">2026 年 7 月 14 日</span>
+      </div>
+      <div class="mc-narrative">第一次纠正了自己的理解</div>
+      <div class="mc-detail">
+        你写了一段代码验算，发现结果和预期不符，自己回去查了定义。没有问我，自己找到了问题。
+      </div>
+    </div>
+
+    <div class="memory-card">
+      <div class="mc-header">
+        <div class="mc-icon">🍎</div>
+        <span class="mc-date">2026 年 7 月 11 日</span>
+      </div>
+      <div class="mc-narrative">你开始教别人</div>
+      <div class="mc-detail">
+        你分享说给同学讲了矩阵乘法的"行乘列"规则。教是最好的学——你讲得很清楚。
+      </div>
+    </div>
+
+    <div class="memory-card">
+      <div class="mc-header">
+        <div class="mc-icon">🍎</div>
+        <span class="mc-date">2026 年 7 月 9 日</span>
+      </div>
+      <div class="mc-narrative">你突破了卡了一周的问题</div>
+      <div class="mc-detail">
+        关于矩阵是否可逆的判断条件。你试了 7 天，今天突然通了，在纸上推导出了完整的过程。
+      </div>
+    </div>
+
+    <div class="memory-card">
+      <div class="mc-header">
+        <div class="mc-icon">🍎</div>
+        <span class="mc-date">2026 年 7 月 5 日</span>
+      </div>
+      <div class="mc-narrative">第一次主动要求更难的内容</div>
+      <div class="mc-detail">
+        "还有更复杂的例子吗？"——你第一次主动突破舒适区。
+      </div>
+    </div>
+
+    <div class="memory-card">
+      <div class="mc-header">
+        <div class="mc-icon">🍎</div>
+        <span class="mc-date">2026 年 6 月 28 日</span>
+      </div>
+      <div class="mc-narrative">连续的第三天</div>
+      <div class="mc-detail">
+        你连续第三天来学线性代数。不是被逼的，是自己来的。习惯开始形成了。
+      </div>
+    </div>
+
+    <div class="memory-card">
+      <div class="mc-header">
+        <div class="mc-icon">🍎</div>
+        <span class="mc-date">2026 年 6 月 20 日</span>
+      </div>
+      <div class="mc-narrative">第一次完成完整的学习反思</div>
+      <div class="mc-detail">
+        你不再说"还行"或"懂了"，而是具体地说出了哪里懂了、哪里还有点模糊。
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Footer -->
+  <div class="memory-footer">
+    <span class="mf-icon">💭</span>
+    还有更多记忆正在发生。<br>
+    每一个瞬间，苹果果都记得。
+  </div>
+
+</main>
+
+<!-- Bottom Navigation -->
+<nav id="bottom-nav">
+  <button class="nav-tab" data-page="today">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span>Today</span>
+  </button>
+  <button class="nav-tab" data-page="growth">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M3 17l6-6 4 4 8-8M14 7h7v7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span>Growth</span>
+  </button>
+  <button class="nav-tab" data-page="profile">
+    <svg viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/>
+      <path d="M4 21c0-4 4-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+    <span>Profile</span>
+  </button>
+  <button class="nav-tab active" data-page="memory">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" stroke="currentColor" stroke-width="1.8" fill="none"/>
+      <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M7 12h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="2 2"/>
+    </svg>
+    <span>Memory</span>
+  </button>
+</nav>
+
+</body>
+</html>

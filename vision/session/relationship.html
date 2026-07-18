@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🍎 关系感知的 Session 入口 · Session 状态演示</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+/* ── Session Overlay ── */
+#session-overlay{position:fixed;inset:0;background:var(--color-page);z-index:200;display:none;flex-direction:column;animation:sessionEnter .3s var(--ease-out)}
+#session-overlay.active{display:flex}
+@keyframes sessionEnter{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.session-topbar{background:rgba(255,255,255,.88);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--color-divider);padding:14px var(--space-4);display:flex;align-items:center;gap:var(--space-3);padding-top:calc(14px + env(safe-area-inset-top,0))}
+.session-back{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:var(--color-ink-secondary);flex-shrink:0;transition:background .15s}
+.session-back:hover{background:var(--color-surface-hover)}
+.session-title{flex:1;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.session-tools-trigger{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:var(--color-ink-secondary);transition:all .15s;position:relative}
+.session-tools-trigger:hover{background:var(--color-surface-hover);color:var(--color-ink-primary)}
+.session-stages{display:flex;gap:4px;align-items:center}
+.stage-dot{width:6px;height:6px;border-radius:50%;background:var(--color-divider);transition:all .3s var(--ease-out)}
+.stage-dot.active{background:var(--color-accent);width:18px;border-radius:3px}
+.stage-dot.done{background:var(--color-accent)}
+.session-progress{height:3px;background:var(--color-divider-soft);position:relative}
+.session-progress-fill{position:absolute;left:0;top:0;bottom:0;background:var(--color-accent);border-radius:0 3px 3px 0;transition:width .5s var(--ease-out)}
+.session-body{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+.stage-center{flex:1;display:flex;flex-direction:column;justify-content:center;padding:var(--space-6) var(--space-5);max-width:var(--content-max);margin:0 auto;width:100%}
+.stage-center .ai-quote{font-size:19px;line-height:1.6;font-weight:500;margin-bottom:var(--space-5);letter-spacing:-.01em}
+.card{background:var(--color-surface);border-radius:var(--radius-lg);box-shadow:0 1px 3px rgba(0,0,0,.04),0 0 0 1px var(--color-divider-soft);padding:var(--space-5)}
+.last-session-card{background:var(--color-surface);border-radius:var(--radius-lg);padding:var(--space-5);margin-bottom:var(--space-5);box-shadow:0 0 0 1px var(--color-divider-soft);animation:slideUp .4s var(--ease-spring) 0.1s both}
+.last-session-card .label{font-size:12px;color:var(--color-ink-muted);margin-bottom:6px}
+.last-session-card .title{font-size:18px;font-weight:600;margin-bottom:8px}
+.last-session-card .skills{font-size:12px;color:var(--color-ink-muted)}
+.memory-pulse{margin:var(--space-4) 0;padding:14px 16px;background:linear-gradient(135deg,var(--color-accent-soft),transparent);border-radius:var(--radius-md);border-left:3px solid var(--color-accent);display:flex;gap:10px;align-items:flex-start;animation:msgIn .4s var(--ease-spring)}
+.memory-pulse .mp-icon{font-size:18px;flex-shrink:0}
+.memory-pulse .mp-text{font-size:13.5px;line-height:1.6;color:var(--color-ink-primary)}
+.memory-pulse .mp-text strong{color:var(--color-accent)}
+@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── Page-specific ── */
+.page-wrap{max-width:var(--content-max);margin:0 auto;padding:24px var(--space-4) 100px}
+.session-preview{position:relative;overflow:hidden;border-radius:var(--radius-xl);box-shadow:0 8px 40px rgba(0,0,0,.1);margin-top:var(--space-3)}
+.session-preview #session-overlay{position:relative;display:flex;border-radius:var(--radius-xl);min-height:660px}
+.session-preview .session-back{cursor:default}
+
+/* ── Moment Card ── */
+.moment-highlight{
+  background:linear-gradient(135deg,var(--color-warning-soft),rgba(255,159,10,0.04));
+  border-radius:var(--radius-md);
+  padding:var(--space-4);
+  margin-bottom:var(--space-5);
+  border-left:3px solid var(--color-warning);
+  animation:slideUp .4s var(--ease-spring) 0.15s both;
+}
+.moment-highlight .mh-label{font-size:11px;font-weight:600;color:var(--color-ink-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em}
+.moment-highlight .mh-text{font-size:14px;line-height:1.7;color:var(--color-ink-primary)}
+.moment-highlight .mh-text .quote{font-style:italic;color:var(--color-warning);font-weight:500}
+
+/* ── Understanding Level ── */
+.understanding-level{
+  display:flex;align-items:center;gap:10px;
+  padding:12px 16px;
+  background:var(--color-surface-alt);
+  border-radius:var(--radius-md);
+  margin-bottom:var(--space-5);
+  animation:slideUp .4s var(--ease-spring) 0.2s both;
+}
+.understanding-level .ul-icon{font-size:16px;flex-shrink:0}
+.understanding-level .ul-text{font-size:13px;line-height:1.5;color:var(--color-ink-secondary)}
+.understanding-level .ul-text strong{color:var(--color-ink-primary)}
+
+/* ── Section topic ── */
+.topic-badge{
+  display:inline-block;
+  font-size:15px;font-weight:600;
+  padding:8px 16px;
+  background:var(--color-surface);
+  border-radius:var(--radius-full);
+  box-shadow:0 0 0 1px var(--color-divider-soft);
+  margin-bottom:var(--space-5);
+  animation:slideUp .4s var(--ease-spring) 0.05s both;
+}
+.topic-badge .topic-sub{font-weight:400;color:var(--color-ink-muted);font-size:13px;margin-left:6px}
+
+/* ── Context Note ── */
+.memory-summary{background:var(--color-surface);border-radius:var(--radius-lg);padding:var(--space-4);margin-top:var(--space-4);box-shadow:0 0 0 1px var(--color-divider-soft)}
+.memory-summary .ms-head{font-size:12px;color:var(--color-ink-muted);font-weight:600;margin-bottom:8px}
+.memory-summary .ms-text{font-size:13.5px;line-height:1.7;color:var(--color-ink-secondary)}
+
+/* ── Continuous CTAs ── */
+.cta-block{display:flex;flex-direction:column;align-items:center;gap:10px;animation:slideUp .4s var(--ease-spring) 0.25s both}
+.cta-hint{font-size:12px;color:var(--color-ink-muted)}
+</style>
+</head>
+<body>
+
+<div class="page-wrap">
+
+  <!-- State Meta -->
+  <div class="state-meta">
+    <div class="sm-row">
+      <span class="sm-label">状态</span>
+      <span class="sm-value">Session Relationship — 关系感知的 Session 入口</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">情绪目标</span>
+      <span class="sm-emotion warm">🟢 warm</span>
+      <span class="sm-value">"它记得我们上次停在哪里"</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">AI 行为</span>
+      <span class="sm-value">这不是一次"新的 Session"，而是一次"续篇"。AI 的 intro 体现出跨 Session 的关系感。</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">时间维度</span>
+      <span class="sm-value">第二周 · 第 4 次学习 · intro 阶段 · 距上次学习 2 天</span>
+    </div>
+  </div>
+
+  <!-- Session Preview -->
+  <div class="session-preview">
+    <div id="session-overlay" class="active">
+      <div class="session-topbar">
+        <button class="session-back"><svg viewBox="0 0 24 24" fill="none" width="22" height="22"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <div class="session-title">矩阵乘法的几何意义</div>
+        <button class="session-tools-trigger">
+          <svg viewBox="0 0 24 24" fill="none" width="20" height="20"><path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2-2 2.5-2.5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="session-stages">
+          <div class="stage-dot active"></div>
+          <div class="stage-dot"></div>
+          <div class="stage-dot"></div>
+          <div class="stage-dot"></div>
+        </div>
+      </div>
+      <div class="session-progress"><div class="session-progress-fill" style="width:0%"></div></div>
+      <div class="session-body">
+
+        <div class="stage-center fade-in">
+
+          <!-- AI greeting — relationship-aware, not "new session" -->
+          <p class="ai-quote">
+            昨天你已经在<strong>矩阵乘法的应用</strong>上摸到门槛了。<br>
+            你当时说"几何意义还有点模糊"。今天从这里继续？
+          </p>
+
+          <!-- Topic badge with "(续)" -->
+          <div class="topic-badge">
+            矩阵乘法的几何意义 <span class="topic-sub">（续）</span>
+          </div>
+
+          <!-- The Moment card — specific emotional/cognitive moment from previous session -->
+          <div class="moment-highlight">
+            <div class="mh-label">📌 上次的一个时刻</div>
+            <div class="mh-text">
+              你盯着 (1,0; 0,-1) 这个矩阵看了两分钟，然后说<br>
+              <span class="quote">"所以这是沿 x 轴翻转？"</span><br>
+              —— 那一刻你在真正地理解。
+            </div>
+          </div>
+
+          <!-- Understanding level from previous session -->
+          <div class="understanding-level">
+            <span class="ul-icon">📊</span>
+            <span class="ul-text">
+              <strong>根据上次结束时的理解：</strong>
+              你基本掌握了矩阵乘法的计算，开始触及几何意义
+            </span>
+          </div>
+
+          <!-- Last session summary card -->
+          <div class="last-session-card">
+            <div class="label">昨天我们做了什么</div>
+            <div class="title">矩阵乘法：从规则到应用</div>
+            <div class="skills">
+              讨论了行×列规则 → 点积计算 → 线性组合的理解。<br>
+              你主动问了好几次"为什么是这个顺序"，我们在白板上画过两次向量变换图。
+            </div>
+          </div>
+
+          <!-- CTAs — two options -->
+          <div class="cta-block">
+            <button class="btn btn-primary btn-lg">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+              从这里继续
+            </button>
+            <button class="btn btn-outline">复习一下前面的</button>
+            <button class="text-link">今天想学点别的</button>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Context note -->
+  <div class="memory-summary">
+    <div class="ms-head">🍎 苹果果的内部记录</div>
+    <div class="ms-text">
+      这不是"次日继续"——这是<strong>关系感知的续篇</strong>。苹果果不是简单地记住进度，而是记住了用户"说的那句话"和"那一刻的状态"。用户打开的不是一个冷冰冰的任务续接，而是一个还记得你每一个领悟瞬间的学习伙伴。AI 的 intro 用了"你当时说……"而非"我们上次学了……"，让用户感受到被真正倾听。
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

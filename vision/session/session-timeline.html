@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🍎 苹果果 · 学习轨迹</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+/* ── Session Overlay ── */
+#session-overlay{position:fixed;inset:0;background:var(--color-page);z-index:200;display:flex;flex-direction:column;animation:sessionEnter .3s var(--ease-out)}
+@keyframes sessionEnter{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.session-topbar{background:rgba(255,255,255,.88);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--color-divider);padding:14px var(--space-4);display:flex;align-items:center;gap:var(--space-3);padding-top:calc(14px + env(safe-area-inset-top,0))}
+.session-back{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:var(--color-ink-secondary);flex-shrink:0;transition:background .15s}
+.session-back:hover{background:var(--color-surface-hover)}
+.session-title{flex:1;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.session-stages{display:flex;gap:4px;align-items:center}
+.stage-dot{width:6px;height:6px;border-radius:50%;background:var(--color-divider);transition:all .3s var(--ease-out)}
+.stage-dot.active{background:var(--color-accent);width:18px;border-radius:3px}
+.stage-dot.done{background:var(--color-accent)}
+.session-progress{height:3px;background:var(--color-divider-soft);position:relative}
+.session-progress-fill{position:absolute;left:0;top:0;bottom:0;background:var(--color-accent);border-radius:0 3px 3px 0;transition:width .5s var(--ease-out)}
+.session-body{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+
+/* ── Timeline ── */
+.timeline-page{flex:1;overflow-y:auto;padding:var(--space-5) var(--space-4) var(--space-8)}
+.timeline-container{max-width:480px;margin:0 auto}
+.timeline-heading{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-bottom:4px}
+.timeline-sub{font-size:14px;color:var(--color-ink-muted);margin-bottom:var(--space-6);line-height:1.6}
+.timeline-bar{position:relative;padding-left:32px}
+.timeline-bar::before{content:'';position:absolute;left:11px;top:8px;bottom:8px;width:2px;background:var(--color-divider);border-radius:1px}
+.timeline-item{position:relative;padding:0 0 var(--space-5) 0;opacity:0;transform:translateY(12px)}
+.timeline-item.animate{animation:tlSlideUp .5s var(--ease-out) forwards}
+.timeline-item:last-child{padding-bottom:0}
+@keyframes tlSlideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.timeline-item:nth-child(1).animate{animation-delay:.4s}
+.timeline-item:nth-child(2).animate{animation-delay:.8s}
+.timeline-item:nth-child(3).animate{animation-delay:1.2s}
+.timeline-item:nth-child(4).animate{animation-delay:1.6s}
+.timeline-item:nth-child(5).animate{animation-delay:2.0s}
+.timeline-item:nth-child(6).animate{animation-delay:2.4s}
+.timeline-dot{position:absolute;left:-26px;top:4px;width:16px;height:16px;border-radius:50%;border:2.5px solid;display:grid;place-items:center;background:var(--color-surface);z-index:1}
+.timeline-dot .td-inner{width:6px;height:6px;border-radius:50%}
+.timeline-item.learning .timeline-dot{border-color:var(--color-accent)}
+.timeline-item.learning .td-inner{background:var(--color-accent)}
+.timeline-item.learning .tl-time{color:var(--color-accent)}
+.timeline-item.breakthrough .timeline-dot{border-color:var(--color-success)}
+.timeline-item.breakthrough .td-inner{background:var(--color-success)}
+.timeline-item.breakthrough .tl-time{color:var(--color-success)}
+.timeline-item.progress .timeline-dot{border-color:var(--color-warning)}
+.timeline-item.progress .td-inner{background:var(--color-warning)}
+.timeline-item.progress .tl-time{color:var(--color-warning)}
+.tl-card{background:var(--color-surface);border-radius:var(--radius-md);padding:var(--space-4);box-shadow:0 0 0 1px var(--color-divider-soft);transition:all .2s var(--ease-out)}
+.tl-card:hover{box-shadow:0 0 0 1px var(--color-divider-hover),0 4px 16px rgba(0,0,0,.04);transform:translateY(-1px)}
+.tl-time{font-size:11.5px;font-weight:600;margin-bottom:4px}
+.tl-content{font-size:14px;line-height:1.6;color:var(--color-ink-secondary)}
+.tl-content .tl-icon{font-size:16px;margin-right:4px}
+.learning .tl-content strong{color:var(--color-accent)}
+.breakthrough .tl-content strong{color:var(--color-success)}
+.progress .tl-content strong{color:var(--color-warning)}
+.tl-summary-strip{margin-top:var(--space-6);padding:var(--space-4);background:linear-gradient(135deg,var(--color-accent-soft),transparent);border-radius:var(--radius-md);border-left:3px solid var(--color-accent)}
+.tl-summary-strip .tlss-label{font-size:11px;font-weight:600;color:var(--color-ink-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.tl-summary-strip .tlss-text{font-size:14px;line-height:1.6;color:var(--color-ink-secondary)}
+</style>
+</head>
+<body>
+
+<!-- Session Overlay -->
+<div id="session-overlay">
+  <div class="session-topbar">
+    <button class="session-back">
+      <svg viewBox="0 0 24 24" fill="none" width="22" height="22">
+        <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+    <div class="session-title">理解 TCP 三次握手</div>
+    <button class="session-tools-trigger" style="width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:var(--color-ink-secondary);transition:all .15s" title="学习工具">
+      <svg viewBox="0 0 24 24" fill="none" width="20" height="20">
+        <path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2-2 2.5-2.5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+      </svg>
+    </button>
+    <div class="session-stages">
+      <div class="stage-dot done"></div>
+      <div class="stage-dot done"></div>
+      <div class="stage-dot done"></div>
+      <div class="stage-dot active"></div>
+    </div>
+  </div>
+  <div class="session-progress"><div class="session-progress-fill" style="width:75%"></div></div>
+  <div class="session-body">
+
+    <!-- State Meta -->
+    <div class="state-meta" style="margin:var(--space-3) var(--space-4) 0">
+      <div class="sm-row">
+        <span class="sm-label">Emotion Goal</span>
+        <span class="sm-value"><span class="sm-emotion neutral">🔵 neutral</span> "原来我是这样学会的"</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-label">AI Behavior</span>
+        <span class="sm-value">Stage: learn → reflect transition · 展示学习轨迹 · 不评价只呈现</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-label">Time Dimension</span>
+        <span class="sm-value">第 1 次学习 · 练习阶段结束时· 回顾视角</span>
+      </div>
+    </div>
+
+    <!-- Timeline View -->
+    <div class="timeline-page">
+      <div class="timeline-container">
+        <h2 class="timeline-heading">今天的学习故事</h2>
+        <p class="timeline-sub">这不是聊天记录——这是你学习 TCP 三次握手时走过的路</p>
+
+        <div class="timeline-bar">
+
+          <!-- Item 1: Start -->
+          <div class="timeline-item learning">
+            <div class="timeline-dot"><div class="td-inner"></div></div>
+            <div class="tl-card">
+              <div class="tl-time">09:10</div>
+              <div class="tl-content"><span class="tl-icon">📖</span>开始学习 <strong>TCP 三次握手</strong></div>
+            </div>
+          </div>
+
+          <!-- Item 2: Struggle -->
+          <div class="timeline-item progress">
+            <div class="timeline-dot"><div class="td-inner"></div></div>
+            <div class="tl-card">
+              <div class="tl-time">09:18</div>
+              <div class="tl-content"><span class="tl-icon">🤔</span>第一次解释失败——「为什么不是两次」<strong>卡住了</strong></div>
+            </div>
+          </div>
+
+          <!-- Item 3: Visual thinking -->
+          <div class="timeline-item learning">
+            <div class="timeline-dot"><div class="td-inner"></div></div>
+            <div class="tl-card">
+              <div class="tl-time">09:25</div>
+              <div class="tl-content"><span class="tl-icon">🎨</span>开始画图——在画布上画出 <strong>client/server 时序</strong></div>
+            </div>
+          </div>
+
+          <!-- Item 4: Breakthrough -->
+          <div class="timeline-item breakthrough">
+            <div class="timeline-dot"><div class="td-inner"></div></div>
+            <div class="tl-card">
+              <div class="tl-time">09:31</div>
+              <div class="tl-content"><span class="tl-icon">💡</span>突然想到「是不是因为要<strong>确认双方能力</strong>」</div>
+            </div>
+          </div>
+
+          <!-- Item 5: Articulate -->
+          <div class="timeline-item breakthrough">
+            <div class="timeline-dot"><div class="td-inner"></div></div>
+            <div class="tl-card">
+              <div class="tl-time">09:40</div>
+              <div class="tl-content"><span class="tl-icon">🎯</span>终于讲通了——用自己的话<strong>完整解释了三次握手</strong></div>
+            </div>
+          </div>
+
+          <!-- Item 6: Practice -->
+          <div class="timeline-item progress">
+            <div class="timeline-dot"><div class="td-inner"></div></div>
+            <div class="tl-card">
+              <div class="tl-time">09:45</div>
+              <div class="tl-content"><span class="tl-icon">✅</span>练习正确——<strong>三题全对</strong></div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Summary -->
+        <div class="tl-summary-strip">
+          <div class="tlss-label">🍎 苹果果的记录</div>
+          <div class="tlss-text">今天你在 TCP 三次握手的学习中经历了一次完整的「挫折 → 可视化 → 顿悟 → 掌握」循环。从背诵流程到用自己的话解释，这是理解跃迁的标志。</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Bottom Nav -->
+<nav id="bottom-nav">
+  <button class="nav-tab active" data-page="today">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Today</span>
+  </button>
+  <button class="nav-tab" data-page="growth">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 17l6-6 4 4 8-8M14 7h7v7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Growth</span>
+  </button>
+  <button class="nav-tab" data-page="profile">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>Profile</span>
+  </button>
+  <button class="nav-tab" data-page="more">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/></svg>
+    <span>更多</span>
+  </button>
+</nav>
+
+<script>
+// Animate timeline items on load
+document.addEventListener('DOMContentLoaded', function() {
+  const items = document.querySelectorAll('.timeline-item');
+  items.forEach(function(item, i) {
+    setTimeout(function() {
+      item.classList.add('animate');
+    }, 200 + i * 150);
+  });
+});
+</script>
+
+</body>
+</html>

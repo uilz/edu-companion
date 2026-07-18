@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🎨 思考画布 · AppleGo Product Vision</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+/* ── Session Overlay ── */
+#session-overlay{position:fixed;inset:0;background:var(--color-page);z-index:200;display:none;flex-direction:column;animation:sessionEnter .3s var(--ease-out)}
+#session-overlay.active{display:flex}
+@keyframes sessionEnter{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.session-topbar{background:rgba(255,255,255,.88);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--color-divider);padding:14px var(--space-4);display:flex;align-items:center;gap:var(--space-3);padding-top:calc(14px + env(safe-area-inset-top,0))}
+.session-back{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:var(--color-ink-secondary);flex-shrink:0;transition:background .15s}
+.session-back:hover{background:var(--color-surface-hover)}
+.session-title{flex:1;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.session-stages{display:flex;gap:4px;align-items:center}
+.stage-dot{width:6px;height:6px;border-radius:50%;background:var(--color-divider);transition:all .3s var(--ease-out)}
+.stage-dot.active{background:var(--color-accent);width:18px;border-radius:3px}
+.stage-dot.done{background:var(--color-accent)}
+.session-progress{height:3px;background:var(--color-divider-soft);position:relative}
+.session-progress-fill{position:absolute;left:0;top:0;bottom:0;background:var(--color-accent);border-radius:0 3px 3px 0;transition:width .5s var(--ease-out)}
+.session-body{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+
+/* ── Canvas ── */
+.canvas-container{flex:1;position:relative;overflow:hidden;background:#f8f8fa}
+.canvas-grid{position:absolute;inset:0;background-image:
+  linear-gradient(rgba(200,200,210,.25) 1px,transparent 1px),
+  linear-gradient(90deg,rgba(200,200,210,.25) 1px,transparent 1px);
+  background-size:40px 40px;pointer-events:none}
+.canvas-area{position:relative;width:100%;height:100%;max-width:640px;margin:0 auto;padding:var(--space-6) var(--space-5)}
+
+/* ── Canvas Bubbles ── */
+.canvas-bubble{position:absolute;max-width:280px;padding:16px 20px;font-size:14px;line-height:1.65;border-radius:var(--radius-lg);background:var(--color-surface);box-shadow:0 2px 12px rgba(0,0,0,.06),0 0 0 1px var(--color-divider-soft);animation:msgIn .4s var(--ease-spring);cursor:grab}
+.canvas-bubble:active{cursor:grabbing}
+.canvas-bubble .cb-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.canvas-bubble.user .cb-label{color:var(--color-accent)}
+.canvas-bubble.ai .cb-label{color:var(--color-purple)}
+.canvas-bubble.user{border-left:3px solid var(--color-accent)}
+.canvas-bubble.ai{border-left:3px solid var(--color-purple);background:var(--color-ai-msg)}
+.canvas-bubble.conclusion{border-left:3px solid var(--color-success);background:linear-gradient(135deg,var(--color-success-soft),transparent)}
+.canvas-bubble.conclusion .cb-label{color:var(--color-success)}
+.canvas-bubble .drag-hint{position:absolute;top:-8px;right:-8px;width:20px;height:20px;border-radius:50%;background:var(--color-surface);box-shadow:0 1px 4px rgba(0,0,0,.1);display:grid;place-items:center;font-size:10px;color:var(--color-ink-muted);opacity:0;transition:opacity .2s}
+.canvas-bubble:hover .drag-hint{opacity:1}
+
+/* ── Canvas Arrows ── */
+.canvas-arrow{position:absolute;pointer-events:none;z-index:1}
+.canvas-arrow svg{overflow:visible}
+.canvas-arrow .arrow-line{fill:none;stroke:var(--color-ink-muted);stroke-width:2;stroke-dasharray:6 4}
+.canvas-arrow .arrow-head{fill:var(--color-ink-muted)}
+
+/* ── Floating Toolbar ── */
+.canvas-toolbar{position:absolute;bottom:var(--space-5);left:50%;transform:translateX(-50%);display:flex;gap:4px;background:rgba(255,255,255,.92);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-radius:var(--radius-full);padding:4px;box-shadow:0 4px 20px rgba(0,0,0,.1),0 0 0 1px var(--color-divider-soft);z-index:10}
+.canvas-tool{display:flex;align-items:center;gap:6px;padding:10px 16px;border-radius:var(--radius-full);font-size:13px;font-weight:500;color:var(--color-ink-secondary);transition:all .15s;white-space:nowrap}
+.canvas-tool:hover{background:var(--color-surface-hover);color:var(--color-ink-primary)}
+.canvas-tool.active{background:var(--color-accent);color:#fff}
+.canvas-tool.active:hover{background:var(--color-accent-hover)}
+.canvas-tool-divider{width:1px;background:var(--color-divider);margin:6px 4px}
+
+/* ── Animations ── */
+@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── Page-specific ── */
+.page-wrap{max-width:var(--content-max);margin:0 auto;padding:24px var(--space-4) var(--space-5)}
+.session-preview{position:relative;overflow:hidden;border-radius:var(--radius-xl);box-shadow:0 8px 40px rgba(0,0,0,.1);margin-top:var(--space-3)}
+.session-preview #session-overlay{position:relative;display:flex;border-radius:var(--radius-xl);min-height:660px}
+.session-preview .session-back{cursor:default}
+.memory-summary{background:var(--color-surface);border-radius:var(--radius-lg);padding:var(--space-4);margin-top:var(--space-4);box-shadow:0 0 0 1px var(--color-divider-soft)}
+.memory-summary .ms-head{font-size:12px;color:var(--color-ink-muted);font-weight:600;margin-bottom:8px}
+.memory-summary .ms-text{font-size:13.5px;line-height:1.7;color:var(--color-ink-secondary)}
+</style>
+</head>
+<body>
+
+<div class="page-wrap">
+
+  <!-- State Meta -->
+  <div class="state-meta">
+    <div class="sm-row">
+      <span class="sm-label">状态</span>
+      <span class="sm-value">Thinking Canvas — 共同思考空间</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">情绪目标</span>
+      <span class="sm-emotion warm">🟢 warm</span>
+      <span class="sm-value">"我们一起来想" — 被陪伴的探索感</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">AI 行为</span>
+      <span class="sm-value">Session 中的 Thinking Canvas 模式。不是白板，是苹果果和用户共同推演、共同修改、共同理解的空间。</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">时间维度</span>
+      <span class="sm-value">第一周 · 第 2 次学习 · think 阶段 · 画布协作中</span>
+    </div>
+  </div>
+
+  <!-- Session Preview -->
+  <div class="session-preview">
+    <div id="session-overlay" class="active">
+      <div class="session-topbar">
+        <button class="session-back"><svg viewBox="0 0 24 24" fill="none" width="22" height="22"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <div class="session-title">🎨 思考画布 — TCP 三次握手</div>
+        <button class="session-tools-trigger" style="width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:var(--color-ink-secondary)">
+          <svg viewBox="0 0 24 24" fill="none" width="20" height="20"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <div class="session-stages">
+          <div class="stage-dot done"></div>
+          <div class="stage-dot done"></div>
+          <div class="stage-dot active"></div>
+          <div class="stage-dot"></div>
+        </div>
+      </div>
+      <div class="session-progress"><div class="session-progress-fill" style="width:60%"></div></div>
+      <div class="session-body">
+
+        <div class="canvas-container">
+          <div class="canvas-grid"></div>
+          <div class="canvas-area">
+
+            <!-- User's first bubble -->
+            <div class="canvas-bubble user" style="top:20px;left:10px;animation-delay:0s">
+              <div class="cb-label">👤 你</div>
+              我觉得三次握手是为了确认双方都能收发
+            </div>
+
+            <!-- Arrow 1: user → AI -->
+            <div class="canvas-arrow" style="top:88px;left:260px">
+              <svg width="80" height="60" viewBox="0 0 80 60">
+                <path class="arrow-line" d="M10,50 C30,50 40,10 60,10" />
+                <polygon class="arrow-head" points="60,6 68,10 60,14" />
+              </svg>
+            </div>
+
+            <!-- AI's first bubble -->
+            <div class="canvas-bubble ai" style="top:10px;left:340px;animation-delay:0.15s">
+              <div class="cb-label">🍎 苹果果</div>
+              对。但如果是两次握手会缺什么？
+            </div>
+
+            <!-- Arrow 2: AI → user -->
+            <div class="canvas-arrow" style="top:130px;left:340px">
+              <svg width="80" height="60" viewBox="0 0 80 60">
+                <path class="arrow-line" d="M10,10 C30,10 40,50 60,50" />
+                <polygon class="arrow-head" points="60,46 68,50 60,54" />
+              </svg>
+            </div>
+
+            <!-- User's second bubble -->
+            <div class="canvas-bubble user" style="top:160px;left:10px;animation-delay:0.3s">
+              <div class="cb-label">👤 你</div>
+              服务器收到 SYN 后回复 ACK...
+            </div>
+
+            <!-- Arrow 3: user → AI -->
+            <div class="canvas-arrow" style="top:220px;left:200px">
+              <svg width="100" height="60" viewBox="0 0 100 60">
+                <path class="arrow-line" d="M10,50 C40,50 50,10 80,10" />
+                <polygon class="arrow-head" points="80,6 88,10 80,14" />
+              </svg>
+            </div>
+
+            <!-- AI's second bubble -->
+            <div class="canvas-bubble ai" style="top:180px;left:300px;animation-delay:0.45s">
+              <div class="cb-label">🍎 苹果果</div>
+              然后 SYN+ACK 丢失呢？
+            </div>
+
+            <!-- Arrow 4: AI → user -->
+            <div class="canvas-arrow" style="top:250px;left:360px">
+              <svg width="80" height="60" viewBox="0 0 80 60">
+                <path class="arrow-line" d="M10,10 C30,10 40,50 60,50" />
+                <polygon class="arrow-head" points="60,46 68,50 60,54" />
+              </svg>
+            </div>
+
+            <!-- User's third bubble -->
+            <div class="canvas-bubble user" style="top:310px;left:10px;animation-delay:0.6s">
+              <div class="cb-label">👤 你</div>
+              啊——客户端不知道服务器收到了
+            </div>
+
+            <!-- Arrow 5: final connection -->
+            <div class="canvas-arrow" style="top:380px;left:200px">
+              <svg width="100" height="40" viewBox="0 0 100 40">
+                <path class="arrow-line" d="M10,30 C40,30 50,10 80,10" />
+                <polygon class="arrow-head" points="80,6 88,10 80,14" />
+              </svg>
+            </div>
+
+            <!-- AI conclusion -->
+            <div class="canvas-bubble conclusion" style="top:350px;left:300px;animation-delay:0.75s">
+              <div class="cb-label">✓ 苹果果</div>
+              这就是三次握手的原因
+            </div>
+
+          </div>
+
+          <!-- Floating toolbar -->
+          <div class="canvas-toolbar">
+            <button class="canvas-tool active">✏️ 画</button>
+            <button class="canvas-tool">📝 笔记</button>
+            <div class="canvas-tool-divider"></div>
+            <button class="canvas-tool">💬 回到对话</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Context note -->
+  <div class="memory-summary">
+    <div class="ms-head">🍎 苹果果的内部记录</div>
+    <div class="ms-text">Thinking Canvas 模式运行中。苹果果用"追问—反问"的节奏，在画布上引导用户推演 TCP 三次握手的必要性。用户从"我觉得"到"啊——"的转变，说明理解正在发生。此模式适合需要可视化的逻辑推导场景，不是无限白板，是共同思考空间。</div>
+  </div>
+
+</div>
+
+</body>
+</html>

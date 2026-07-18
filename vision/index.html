@@ -3,13 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppleGo Product Vision v1.0 — 状态矩阵总览</title>
+<title>AppleGo Product Vision v2.0 — Living Companion</title>
 <link rel="stylesheet" href="design-system.css">
 <style>
 .vp-page { max-width: 720px; margin: 0 auto; padding: 40px var(--space-4); }
 .vp-title { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 6px; }
 .vp-sub { color: var(--color-ink-secondary); font-size: 15px; margin-bottom: var(--space-6); line-height: 1.7; }
 .vp-tagline { font-family: var(--font-serif); font-size: 18px; color: var(--color-ink-muted); font-style: italic; margin-bottom: var(--space-6); padding-bottom: var(--space-5); border-bottom: 1px solid var(--color-divider); }
+
+.version-badge {
+  display: inline-block; background: var(--color-success-soft); color: var(--color-success);
+  font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: var(--radius-full);
+  margin-bottom: var(--space-3); letter-spacing: 0.03em;
+}
 
 /* Stats dashboard */
 .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: var(--space-6); }
@@ -28,6 +34,26 @@
 .section-card .sc-title { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
 .section-card .sc-count { font-size: 13px; color: var(--color-ink-muted); margin-bottom: 8px; }
 .section-card .sc-desc { font-size: 13px; color: var(--color-ink-secondary); line-height: 1.5; }
+
+/* Feature grid */
+.feature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: var(--space-6); }
+.feature-card {
+  background: var(--color-surface); border-radius: var(--radius-lg); padding: var(--space-5);
+  box-shadow: 0 0 0 1px var(--color-divider-soft);
+}
+.feature-card .fc-icon { font-size: 28px; margin-bottom: 6px; }
+.feature-card .fc-name { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+.feature-card .fc-desc { font-size: 13px; color: var(--color-ink-secondary); line-height: 1.5; }
+
+.feature-badge {
+  display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 8px;
+  border-radius: var(--radius-full); margin-bottom: 8px;
+}
+.feature-badge.new { background: var(--color-accent-soft); color: var(--color-accent); }
+.feature-badge.evolved { background: var(--color-purple-soft); color: var(--color-purple); }
+
+/* Feature detail expandable */
+.feature-detail { margin-bottom: var(--space-4); }
 
 /* Emotion Map */
 .emotion-map { margin-bottom: var(--space-6); }
@@ -56,67 +82,120 @@
 .td-dot.now { left: 100%; background: var(--color-accent); }
 .td-dot.now .td-label { font-weight: 600; color: var(--color-accent); }
 
-/* AI Behavior Spec */
+/* Spec grid */
 .spec-grid { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-5); }
-.spec-card {
-  background: var(--color-surface); border-radius: var(--radius-md); padding: var(--space-4);
-  box-shadow: 0 0 0 1px var(--color-divider-soft);
-}
+.spec-card { background: var(--color-surface); border-radius: var(--radius-md); padding: var(--space-4); box-shadow: 0 0 0 1px var(--color-divider-soft); }
 .spec-card .spec-page { font-size: 13px; font-weight: 600; color: var(--color-accent); margin-bottom: 4px; }
 .spec-card .spec-principle { font-size: 14px; line-height: 1.6; }
 
 /* File list */
 .file-grid { display: flex; flex-direction: column; gap: 6px; margin-bottom: var(--space-5); }
-.file-row {
-  display: flex; align-items: center; gap: 8px; padding: 6px 10px;
-  border-radius: var(--radius-sm); transition: background 0.1s; text-decoration: none; color: inherit; font-size: 13px;
-}
+.file-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: var(--radius-sm); transition: background 0.1s; text-decoration: none; color: inherit; font-size: 13px; }
 .file-row:hover { background: var(--color-surface-alt); }
 .file-row .fr-num { color: var(--color-ink-muted); min-width: 24px; font-family: var(--font-mono); font-size: 11px; }
 
 @media (max-width: 480px) {
   .stats-row { grid-template-columns: repeat(2, 1fr); }
-  .section-grid { grid-template-columns: 1fr; }
+  .section-grid, .feature-grid { grid-template-columns: 1fr; }
 }
 </style>
 </head>
 <body>
 <div class="vp-page">
-  <h1 class="vp-title">🍎 AppleGo Product Vision v1.0</h1>
-  <p class="vp-tagline">一个会陪我成长的学习伙伴。</p>
-  <p class="vp-sub">本文件是 AppleGo 产品规范（Product Specification）的唯一真相源。所有页面、动画、文案、AI 行为均以此为准。</p>
+  <span class="version-badge">v2.0 · Living Companion</span>
+  <h1 class="vp-title">🍎 AppleGo Product Vision v2.0</h1>
+  <p class="vp-tagline">我感觉桌子对面一直坐着一个人。</p>
+  <p class="vp-sub">
+    Demo 2.0 的目标不是美化 Demo 1.0，而是让用户第一次真正被惊艳。<br>
+    用户在使用结束后，能清晰地感受到：<strong>苹果果不仅记住了我学了什么，更理解了我是怎样学习的人。</strong>
+  </p>
 
   <!-- Stats -->
   <div class="stats-row">
-    <div class="stat-card"><div class="stat-num">4</div><div class="stat-label">核心页面</div></div>
-    <div class="stat-card"><div class="stat-num">35</div><div class="stat-label">状态总数</div></div>
-    <div class="stat-card"><div class="stat-num">34</div><div class="stat-label">✅ 已完成</div></div>
-    <div class="stat-card"><div class="stat-num">1</div><div class="stat-label">🔄 待完善</div></div>
+    <div class="stat-card"><div class="stat-num">5</div><div class="stat-label">核心页面</div></div>
+    <div class="stat-card"><div class="stat-num">42+</div><div class="stat-label">状态总数</div></div>
+    <div class="stat-card"><div class="stat-num">6</div><div class="stat-label">✨ 新增体验</div></div>
+    <div class="stat-card"><div class="stat-num">❤️</div><div class="stat-label">Living Companion</div></div>
   </div>
 
-  <!-- Section Navigation -->
+  <!-- Core Pages -->
   <h2 style="font-size: 13px; color: var(--color-ink-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: var(--space-3);">核心页面</h2>
   <div class="section-grid">
     <a class="section-card" href="today/index.html">
       <div class="sc-title">📅 Today</div>
-      <div class="sc-count">11 种状态</div>
-      <div class="sc-desc">用户每天打开的第一眼——从第一次进入到长期坚持，从成长突破到平台期。情绪目标：我今天愿意开始。</div>
+      <div class="sc-count">12+ 种状态</div>
+      <div class="sc-desc">关系感知的首页。不是"今天学什么"，是"我记得我们昨天在哪里停下来了"。</div>
     </a>
     <a class="section-card" href="session/index.html">
       <div class="sc-title">💬 Session</div>
-      <div class="sc-count">10 种状态</div>
-      <div class="sc-desc">学习过程中的每一分钟——从进入到结束、从卡顿到顿悟、从深度对话到沉默不语。情绪目标：我愿意继续思考。</div>
+      <div class="sc-count">14+ 种状态</div>
+      <div class="sc-desc">学习过程中的每一分钟——Learning Pulse 实时观察、Thinking Canvas 共同思考、Session Timeline 学习故事。</div>
     </a>
     <a class="section-card" href="growth/index.html">
       <div class="sc-title">🌱 Growth</div>
       <div class="sc-count">8 种状态</div>
-      <div class="sc-desc">成长记录的时间线——突破、微小进步、平台期、学习方式变化、中断后回归。情绪目标：我真的在成长。</div>
+      <div class="sc-desc">成长故事，不是成长数据。</div>
     </a>
     <a class="section-card" href="profile/index.html">
       <div class="sc-title">🪞 Profile</div>
-      <div class="sc-count">6 种状态</div>
-      <div class="sc-desc">"苹果果眼中的你"——从第一次查看、半年后深度认知，到 AI 预测学习行为甚至承认看错。情绪目标：苹果果真的认识我。</div>
+      <div class="sc-count">7+ 种状态</div>
+      <div class="sc-desc">Learner Mirror — 以前 vs 现在，看到自己的变化。</div>
     </a>
+    <a class="section-card" href="memory/index.html" style="border-left: 3px solid var(--color-purple);">
+      <div class="sc-title">🧠 Memory</div>
+      <div class="sc-count">✨ 新页面</div>
+      <div class="sc-desc">苹果果记住的重要瞬间。全是故事，没有 KPI。</div>
+    </a>
+  </div>
+
+  <!-- Six New Experiences -->
+  <h2 style="font-size: 13px; color: var(--color-ink-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: var(--space-3);">✨ Demo 2.0 六项新增体验</h2>
+  <p class="vp-sub">不是新增页面，而是让"苹果果正在理解我"的感知贯穿整个产品。</p>
+
+  <div class="feature-grid">
+    <div class="feature-card">
+      <span class="feature-badge new">NEW</span>
+      <div class="fc-icon">💓</div>
+      <div class="fc-name">Learning Pulse</div>
+      <div class="fc-desc">学习过程中，页面左侧一直有一个很小的观察区。AI 实时记录："你开始自己举例了"、"你停顿了很久"。不是评价，只是观察。</div>
+    </div>
+    <div class="feature-card">
+      <span class="feature-badge new">NEW</span>
+      <div class="fc-icon">📊</div>
+      <div class="fc-name">Session Timeline</div>
+      <div class="fc-desc">不是聊天记录。是学习轨迹——"09:18 第一次解释失败 → 09:25 开始画图 → 09:31 突然想到"。学习故事，一直在生长。</div>
+    </div>
+    <div class="feature-card">
+      <span class="feature-badge new">NEW</span>
+      <div class="fc-icon">🎨</div>
+      <div class="fc-name">Thinking Canvas</div>
+      <div class="fc-desc">不是白板。是苹果果和用户共同思考的空间。AI 可以画，用户可以画，一起画。形成共同理解。</div>
+    </div>
+    <div class="feature-card">
+      <span class="feature-badge new">NEW</span>
+      <div class="fc-icon">🪞</div>
+      <div class="fc-name">Learner Mirror</div>
+      <div class="fc-desc">Profile 不再展示统计。而是展示变化——"以前喜欢直接记答案，现在开始主动找原因"。比任何图表都有冲击力。</div>
+    </div>
+    <div class="feature-card">
+      <span class="feature-badge new">NEW</span>
+      <div class="fc-icon">🔮</div>
+      <div class="fc-name">Future Memory</div>
+      <div class="fc-desc">不是回忆，是预测。Session 结束时 AI 预测你两天后可能忘记什么。两天后回来："要不要验证一下？"</div>
+    </div>
+    <div class="feature-card">
+      <span class="feature-badge new">NEW</span>
+      <div class="fc-icon">🤝</div>
+      <div class="fc-name">Relationship</div>
+      <div class="fc-desc">不再是一个个独立的 Session。Today 说"昨天你一直在坚持不用原文解释"，Session 说"上次我们停在这里"。一直陪着的人。</div>
+    </div>
+  </div>
+
+  <!-- NOT adding -->
+  <div style="background: var(--color-surface); border-radius: var(--radius-md); padding: var(--space-4); box-shadow: 0 0 0 1px var(--color-divider-soft); margin-bottom: var(--space-6); font-size: 13px; line-height: 1.8;">
+    <strong style="font-size: 13px; display: block; margin-bottom: 6px;">🚫 Demo 2.0 不会新增</strong>
+    ❌ AI 学习计划 · ❌ 每日任务 · ❌ 打卡 · ❌ 勋章 · ❌ 等级 · ❌ 排名 · ❌ 学习积分
+    <br><span style="color: var(--color-ink-muted);">这些已经有无数产品做过了，而且会削弱 AppleGo 最独特的定位。</span>
   </div>
 
   <!-- Emotion Map -->
@@ -134,11 +213,16 @@
         <a class="emo-chip" href="today/completed.html">✅ 今日完成</a>
         <a class="emo-chip" href="today/growth-found.html">📈 AI 发现成长</a>
         <a class="emo-chip" href="today/return-with-data.html">🔄 中断后回来</a>
-        <a class="emo-chip" href="session/first-session.html">🆕 第一次学习</a>
+        <a class="emo-chip" href="today/relationship.html">🤝 关系感知今天</a>
+        <a class="emo-chip" href="session/learning-pulse.html">💓 Learning Pulse</a>
+        <a class="emo-chip" href="session/thinking-canvas.html">🎨 Thinking Canvas</a>
+        <a class="emo-chip" href="session/future-memory.html">🔮 Future Memory</a>
         <a class="emo-chip" href="session/breakthrough.html">🎉 顿悟时刻</a>
         <a class="emo-chip" href="session/deep-chat.html">💭 深度对话</a>
         <a class="emo-chip" href="session/session-complete.html">✅ 学习完成</a>
         <a class="emo-chip" href="session/next-day-continue.html">🔁 第二天继续</a>
+        <a class="emo-chip" href="session/relationship.html">🤝 关系 Session</a>
+        <a class="emo-chip" href="profile/learner-mirror.html">🪞 Learner Mirror</a>
         <a class="emo-chip" href="growth/breakthrough.html">🚀 突破性成长</a>
         <a class="emo-chip" href="growth/sudden-leap.html">💡 突然突破</a>
         <a class="emo-chip" href="growth/own-understanding.html">🧠 形成自己的理解</a>
@@ -148,6 +232,7 @@
         <a class="emo-chip" href="profile/recognizes-you.html">🔍 模式识别</a>
         <a class="emo-chip" href="profile/corrected-view.html">🔄 AI 修正理解</a>
         <a class="emo-chip" href="profile/admit-mistake.html">🤝 苹果果承认看错</a>
+        <a class="emo-chip" href="memory/index.html">🧠 Memory 页面</a>
       </div>
     </div>
     <div class="emo-section">
@@ -157,6 +242,7 @@
         <a class="emo-chip" href="today/growth-quiet.html">🌿 成长平静期</a>
         <a class="emo-chip" href="today/long-absent.html">🚶 长期未回来</a>
         <a class="emo-chip" href="session/second-session.html">📖 第二次学习</a>
+        <a class="emo-chip" href="session/session-timeline.html">📊 学习叙事</a>
         <a class="emo-chip" href="session/break-reminder.html">☕ 提醒休息</a>
         <a class="emo-chip" href="session/reflection-skipped.html">⏭ 跳过反思</a>
         <a class="emo-chip" href="session/silent-user.html">🤫 用户沉默</a>
@@ -178,7 +264,7 @@
 
   <!-- Time Dimension -->
   <h2 style="font-size: 13px; color: var(--color-ink-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: var(--space-3);">⏱ 时间维度 — 用户旅程</h2>
-  <p class="vp-sub">AppleGo 最大的卖点不是"今天"，而是"今天 → 明天 → 一个月以后"。随着时间推移，AI 对用户的理解深度持续增强。</p>
+  <p class="vp-sub">AppleGo 最大的卖点不是"今天"，而是"今天 → 明天 → 一个月以后"。</p>
   <div class="time-dimension">
     <div class="td-line">
       <div class="td-dot start"><span class="td-label">🆕 第 0 天<br>first-user</span></div>
@@ -196,8 +282,8 @@
     第 1 天  → "昨天我们学了..."，开始记住<br>
     第 7 天  → 周总结 + 成长统计<br>
     14 天    → 模式识别："你周二周四学得最多"<br>
-    1 个月   → 深度洞察：学习方式变化、形成自己的理解<br>
-    6 个月   → AI 开始预测学习行为、修正理解、甚至承认看错
+    1 个月   → Future Memory 预测准确率提升 + 关系感知开始出现<br>
+    6 个月   → AI 修正理解、承认看错、Learner Mirror 展示完整成长弧线
   </div>
 
   <!-- AI Behavior Spec -->
@@ -205,94 +291,94 @@
   
   <div class="spec-grid">
     <div class="spec-card">
-      <div class="spec-page">基本原则</div>
-      <div class="spec-principle">① AI 永远不扮演"知道一切"的角色。诚实比聪明更重要。<br>② 用户沉默时，AI 不追问。用户卡住时，AI 主动帮助。<br>③ AI 可以承认错误。这不会损害权威，反而建立信任。<br>④ 不责备、不催促、不攀比。每个用户有自己的节奏。</div>
+      <div class="spec-page">核心原则</div>
+      <div class="spec-principle">① AI 永远不扮演"知道一切"的角色。诚实比聪明更重要。<br>② Learning Pulse 只观察，不评价。"你停顿了很久" ≠ "你学得慢"。<br>③ AI 可以承认错误。这不会损害权威，反而建立信任。<br>④ 不责备、不催促、不攀比。每个用户有自己的节奏。<br>⑤ 关系 > Session。Today 永远知道昨天发生了什么。</div>
     </div>
     <div class="spec-card">
-      <div class="spec-page">Today - AI 角色</div>
-      <div class="spec-principle">早安伙伴。AI 的首句话决定了用户今天的心情。Observation 要基于真实数据产生叙事，不是冰冷的统计。memory-pulse 只在有"真正的新洞察"时才出现。</div>
+      <div class="spec-page">Today — AI 角色</div>
+      <div class="spec-principle">知情的老朋友。AI 的首句话体现了关系的深度。不是"开始学习"，是"昨天你一直在坚持不用原文解释——今天还继续吗？" memory-pulse 只在有"真正的新洞察"时才出现。</div>
     </div>
     <div class="spec-card">
-      <div class="spec-page">Session - AI 角色</div>
-      <div class="spec-principle">学习向导。AI 的对话节奏要像人类的 tutor：发现卡住就换角度，发现懂了就庆祝，发现累就建议休息。不说话也可以——安静本身也是一种学习状态。</div>
+      <div class="spec-page">Session — AI 角色</div>
+      <div class="spec-principle">一直在旁边的观察者。Learning Pulse 实时记录学习过程中的每个重要瞬间。Thinking Canvas 上 AI 可以画、可以改、可以与用户一起推演。Session Timeline 自动生成学习故事。</div>
     </div>
     <div class="spec-card">
-      <div class="spec-page">Growth - AI 角色</div>
-      <div class="spec-principle">成长见证者。叙事必须诚实：有突破就庆祝，没变化就说"持续本身就是进步"。AI 要能看到时间维度上的变化，不是只看最新一条数据。</div>
+      <div class="spec-page">Growth — AI 角色</div>
+      <div class="spec-principle">成长见证者。叙事必须诚实：有突破就庆祝，没变化就说"持续本身就是进步"。能看到时间维度上的变化。</div>
     </div>
     <div class="spec-card">
-      <div class="spec-page">Profile - AI 角色</div>
-      <div class="spec-principle">了解你的老朋友。Profile 不是"展示数据"，是"让用户看到自己"。AI 会随着时间越来越了解用户，并且让用户感受到这种加深。</div>
+      <div class="spec-page">Profile — AI 角色</div>
+      <div class="spec-principle">Learner Mirror。不是展示数据，是展示变化——"以前喜欢直接记答案，现在开始主动找原因"。让用户看到自己是如何变成现在这样的。</div>
+    </div>
+    <div class="spec-card">
+      <div class="spec-page">Memory — AI 角色</div>
+      <div class="spec-principle">珍贵的记忆保存者。记得那些真正重要的瞬间——"第一次敢不用原文解释"、"第一次纠正了自己的理解"。全是故事，没有数据，没有 streak。</div>
     </div>
   </div>
 
   <!-- Complete File List -->
-  <h2 style="font-size: 13px; color: var(--color-ink-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: var(--space-3);">📂 完整文件清单</h2>
+  <h2 style="font-size: 13px; color: var(--color-ink-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: var(--space-3);">📂 文件清单</h2>
   <div class="file-grid">
     <div class="file-row" style="font-weight:600; font-size:13px;"><span class="fr-num">──</span> 共享</div>
-    <a class="file-row" href="design-system.css"><span class="fr-num">01</span>design-system.css — 设计令牌与组件样式</a>
+    <a class="file-row" href="design-system.css"><span class="fr-num">01</span>design-system.css</a>
     
-    <div class="file-row" style="font-weight:600; font-size:13px; margin-top:8px;"><span class="fr-num">──</span> Today（11 个文件）</div>
-    <a class="file-row" href="today/index.html"><span class="fr-num">02</span>today/index.html — 状态矩阵</a>
-    <a class="file-row" href="today/first-user.html"><span class="fr-num">03</span>today/first-user.html — 第一次进入</a>
-    <a class="file-row" href="today/normal-day.html"><span class="fr-num">04</span>today/normal-day.html — 第二天回来</a>
-    <a class="file-row" href="today/comeback.html"><span class="fr-num">05</span>today/comeback.html — 学习后回来</a>
-    <a class="file-row" href="today/week-later.html"><span class="fr-num">06</span>today/week-later.html — 坚持一周</a>
-    <a class="file-row" href="today/streak.html"><span class="fr-num">07</span>today/streak.html — 长期坚持（14天+）</a>
-    <a class="file-row" href="today/completed.html"><span class="fr-num">08</span>today/completed.html — 今日完成</a>
-    <a class="file-row" href="today/empty-day.html"><span class="fr-num">09</span>today/empty-day.html — 今日无任务</a>
-    <a class="file-row" href="today/growth-found.html"><span class="fr-num">10</span>today/growth-found.html — AI 发现成长</a>
-    <a class="file-row" href="today/growth-quiet.html"><span class="fr-num">11</span>today/growth-quiet.html — 成长平静期</a>
-    <a class="file-row" href="today/long-absent.html"><span class="fr-num">12</span>today/long-absent.html — 长期未回来</a>
-    <a class="file-row" href="today/return-with-data.html"><span class="fr-num">13</span>today/return-with-data.html — 中断后回来</a>
+    <div class="file-row" style="font-weight:600; font-size:13px; margin-top:8px;"><span class="fr-num">──</span> Today</div>
+    <a class="file-row" href="today/index.html"><span class="fr-num">02</span>today/index.html</a>
+    <a class="file-row" href="today/first-user.html"><span class="fr-num">03</span>first-user.html</a>
+    <a class="file-row" href="today/normal-day.html"><span class="fr-num">04</span>normal-day.html</a>
+    <a class="file-row" href="today/comeback.html"><span class="fr-num">05</span>comeback.html</a>
+    <a class="file-row" href="today/week-later.html"><span class="fr-num">06</span>week-later.html</a>
+    <a class="file-row" href="today/streak.html"><span class="fr-num">07</span>streak.html</a>
+    <a class="file-row" href="today/completed.html"><span class="fr-num">08</span>completed.html</a>
+    <a class="file-row" href="today/empty-day.html"><span class="fr-num">09</span>empty-day.html</a>
+    <a class="file-row" href="today/growth-found.html"><span class="fr-num">10</span>growth-found.html</a>
+    <a class="file-row" href="today/growth-quiet.html"><span class="fr-num">11</span>growth-quiet.html</a>
+    <a class="file-row" href="today/long-absent.html"><span class="fr-num">12</span>long-absent.html</a>
+    <a class="file-row" href="today/return-with-data.html"><span class="fr-num">13</span>return-with-data.html</a>
+    <a class="file-row" href="today/relationship.html"><span class="fr-num">14</span>relationship.html ✨</a>
 
-    <div class="file-row" style="font-weight:600; font-size:13px; margin-top:8px;"><span class="fr-num">──</span> Session（10 个文件）</div>
-    <a class="file-row" href="session/index.html"><span class="fr-num">14</span>session/index.html — 状态矩阵</a>
-    <a class="file-row" href="session/first-session.html"><span class="fr-num">15</span>session/first-session.html — 第一次学习</a>
-    <a class="file-row" href="session/second-session.html"><span class="fr-num">16</span>session/second-session.html — 第二次学习</a>
-    <a class="file-row" href="session/stuck-detected.html"><span class="fr-num">17</span>session/stuck-detected.html — 卡住检测</a>
-    <a class="file-row" href="session/breakthrough.html"><span class="fr-num">18</span>session/breakthrough.html — 顿悟时刻</a>
-    <a class="file-row" href="session/break-reminder.html"><span class="fr-num">19</span>session/break-reminder.html — 提醒休息</a>
-    <a class="file-row" href="session/reflection-skipped.html"><span class="fr-num">20</span>session/reflection-skipped.html — 跳过反思</a>
-    <a class="file-row" href="session/deep-chat.html"><span class="fr-num">21</span>session/deep-chat.html — 深度对话</a>
-    <a class="file-row" href="session/silent-user.html"><span class="fr-num">22</span>session/silent-user.html — 用户沉默</a>
-    <a class="file-row" href="session/session-complete.html"><span class="fr-num">23</span>session/session-complete.html — 学习完成</a>
-    <a class="file-row" href="session/next-day-continue.html"><span class="fr-num">24</span>session/next-day-continue.html — 第二天继续</a>
+    <div class="file-row" style="font-weight:600; font-size:13px; margin-top:8px;"><span class="fr-num">──</span> Session</div>
+    <a class="file-row" href="session/index.html"><span class="fr-num">15</span>session/index.html</a>
+    <a class="file-row" href="session/first-session.html"><span class="fr-num">16</span>first-session.html</a>
+    <a class="file-row" href="session/second-session.html"><span class="fr-num">17</span>second-session.html</a>
+    <a class="file-row" href="session/stuck-detected.html"><span class="fr-num">18</span>stuck-detected.html</a>
+    <a class="file-row" href="session/breakthrough.html"><span class="fr-num">19</span>breakthrough.html</a>
+    <a class="file-row" href="session/break-reminder.html"><span class="fr-num">20</span>break-reminder.html</a>
+    <a class="file-row" href="session/reflection-skipped.html"><span class="fr-num">21</span>reflection-skipped.html</a>
+    <a class="file-row" href="session/deep-chat.html"><span class="fr-num">22</span>deep-chat.html</a>
+    <a class="file-row" href="session/silent-user.html"><span class="fr-num">23</span>silent-user.html</a>
+    <a class="file-row" href="session/session-complete.html"><span class="fr-num">24</span>session-complete.html</a>
+    <a class="file-row" href="session/next-day-continue.html"><span class="fr-num">25</span>next-day-continue.html</a>
+    <a class="file-row" href="session/learning-pulse.html"><span class="fr-num">26</span>learning-pulse.html ✨</a>
+    <a class="file-row" href="session/session-timeline.html"><span class="fr-num">27</span>session-timeline.html ✨</a>
+    <a class="file-row" href="session/thinking-canvas.html"><span class="fr-num">28</span>thinking-canvas.html ✨</a>
+    <a class="file-row" href="session/future-memory.html"><span class="fr-num">29</span>future-memory.html ✨</a>
+    <a class="file-row" href="session/relationship.html"><span class="fr-num">30</span>relationship.html ✨</a>
 
-    <div class="file-row" style="font-weight:600; font-size:13px; margin-top:8px;"><span class="fr-num">──</span> Growth（8 个文件）</div>
-    <a class="file-row" href="growth/index.html"><span class="fr-num">25</span>growth/index.html — 状态矩阵</a>
-    <a class="file-row" href="growth/breakthrough.html"><span class="fr-num">26</span>growth/breakthrough.html — 突破性成长</a>
-    <a class="file-row" href="growth/small-gain.html"><span class="fr-num">27</span>growth/small-gain.html — 微小成长</a>
-    <a class="file-row" href="growth/plateau.html"><span class="fr-num">28</span>growth/plateau.html — 平台期</a>
-    <a class="file-row" href="growth/sudden-leap.html"><span class="fr-num">29</span>growth/sudden-leap.html — 突然突破</a>
-    <a class="file-row" href="growth/own-understanding.html"><span class="fr-num">30</span>growth/own-understanding.html — 形成自己的理解</a>
-    <a class="file-row" href="growth/style-shift.html"><span class="fr-num">31</span>growth/style-shift.html — 学习方式变化</a>
-    <a class="file-row" href="growth/long-streak.html"><span class="fr-num">32</span>growth/long-streak.html — 长期坚持</a>
-    <a class="file-row" href="growth/return.html"><span class="fr-num">33</span>growth/return.html — 中断后回来</a>
+    <div class="file-row" style="font-weight:600; font-size:13px; margin-top:8px;"><span class="fr-num">──</span> Growth</div>
+    <a class="file-row" href="growth/index.html"><span class="fr-num">31</span>growth/index.html</a>
 
-    <div class="file-row" style="font-weight:600; font-size:13px; margin-top:8px;"><span class="fr-num">──</span> Profile（6 个文件）</div>
-    <a class="file-row" href="profile/index.html"><span class="fr-num">34</span>profile/index.html — 状态矩阵</a>
-    <a class="file-row" href="profile/first-time.html"><span class="fr-num">35</span>profile/first-time.html — 第一次查看</a>
-    <a class="file-row" href="profile/half-year.html"><span class="fr-num">36</span>profile/half-year.html — 半年以后</a>
-    <a class="file-row" href="profile/recognizes-you.html"><span class="fr-num">37</span>profile/recognizes-you.html — 模式识别</a>
-    <a class="file-row" href="profile/predicts-you.html"><span class="fr-num">38</span>profile/predicts-you.html — 学习预测</a>
-    <a class="file-row" href="profile/corrected-view.html"><span class="fr-num">39</span>profile/corrected-view.html — AI 修正理解</a>
-    <a class="file-row" href="profile/admit-mistake.html"><span class="fr-num">40</span>profile/admit-mistake.html — 苹果果承认看错</a>
+    <div class="file-row" style="font-weight:600; font-size:13px; margin-top:8px;"><span class="fr-num">──</span> Profile</div>
+    <a class="file-row" href="profile/index.html"><span class="fr-num">32</span>profile/index.html</a>
+    <a class="file-row" href="profile/learner-mirror.html"><span class="fr-num">33</span>learner-mirror.html ✨</a>
+
+    <div class="file-row" style="font-weight:600; font-size:13px; margin-top:8px;"><span class="fr-num">──</span> Memory</div>
+    <a class="file-row" href="memory/index.html"><span class="fr-num">34</span>memory/index.html ✨</a>
   </div>
 
   <div style="background: var(--color-surface); border-radius: var(--radius-lg); padding: var(--space-5); box-shadow: 0 0 0 1px var(--color-divider-soft); margin-bottom: var(--space-6);">
-    <h3 style="font-size: 15px; font-weight: 600; margin-bottom: var(--space-2);">📌 产品原则</h3>
+    <h3 style="font-size: 15px; font-weight: 600; margin-bottom: var(--space-2);">📌 Demo 2.0 产品原则</h3>
     <ul style="font-size: 14px; color: var(--color-ink-secondary); line-height: 1.8; padding-left: var(--space-4);">
-      <li><strong>Vision 高于 Runtime</strong> — 任何新增架构如果被删掉用户不会感觉到，则暂缓</li>
-      <li><strong>Emotion 高于 UI</strong> — 每个页面的设计目标不是"好看"，而是"用户感受到什么"</li>
-      <li><strong>时间维度高于单次体验</strong> — 今天好是应该的，明天的记忆和一周后的洞察才是 AppleGo</li>
-      <li><strong>诚实高于完美</strong> — AI 可以不知道、可以猜错、可以承认。信任比正确更重要</li>
-      <li><strong>用户感知高于内部优雅</strong> — 内部架构再完美，用户感觉不到就是零</li>
+      <li><strong>感知先于功能</strong> — "AI 正在理解我"的感知比 AI 实际做了什么更重要</li>
+      <li><strong>故事先于数据</strong> — 成长是故事，不是图表。时间是叙事，不是日志</li>
+      <li><strong>关系先于会话</strong> — 每次打开 AppleGo 都不是一次新的开始，而是一次续篇</li>
+      <li><strong>观察先于评价</strong> — "你停顿了很久" ≠ "你学得慢"。只观察，不下结论</li>
+      <li><strong>记住先于预测</strong> — Future Memory 的意义不是准确率，而是"苹果果记得我可能会忘"</li>
     </ul>
   </div>
 
   <div style="text-align: center; padding: var(--space-5); color: var(--color-ink-muted); font-size: 13px;">
-    AppleGo Product Vision v1.0 — 2026-07-18
+    AppleGo Product Vision v2.0 · Living Companion — 2026-07-18
   </div>
 </div>
 </body>

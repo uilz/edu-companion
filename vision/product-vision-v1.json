@@ -1,6 +1,6 @@
 {
   "meta": {
-    "version": "1.0.0",
+    "version": "2.0.0",
     "date": "2026-07-18",
     "product": "AppleGo",
     "description": "AppleGo Product Vision — machine-readable specification of all user states, emotion map, time dimension, and AI behavior principles"
@@ -10,7 +10,7 @@
       "id": "today",
       "path": "/today",
       "title": "Today",
-      "stateCount": 11,
+      "stateCount": 12,
       "coreEmotion": "warm",
       "states": [
         {
@@ -104,6 +104,16 @@
           "emotionGoal": "平静+持续"
         },
         {
+          "id": "relationship",
+          "path": "today/relationship.html",
+          "title": "关系感知今天",
+          "emotion": "warm",
+          "scenario": "跨Session的关系感，AI记得昨天的具体学习时刻",
+          "timeDimension": "第2天+",
+          "aiBehavior": "「昨天你一直在坚持不用原文解释矩阵乘法。今天如果继续，我觉得你可以尝试自己推导一次。」——体现跨Session的连续性",
+          "emotionGoal": "被持续记住的温暖"
+        },
+        {
           "id": "today-long-absent",
           "path": "/today",
           "title": "长期未回来",
@@ -129,7 +139,7 @@
       "id": "session",
       "path": "/session",
       "title": "Session",
-      "stateCount": 10,
+      "stateCount": 15,
       "coreEmotion": "warm",
       "states": [
         {
@@ -231,6 +241,56 @@
           "timeDimension": "第2天",
           "aiBehavior": "详细 last session",
           "emotionGoal": "连续+被期待"
+        },
+        {
+          "id": "learning-pulse",
+          "path": "session/learning-pulse.html",
+          "title": "Learning Pulse",
+          "emotion": "warm",
+          "scenario": "学习过程中实时观察学习行为变化",
+          "timeDimension": "学习中",
+          "aiBehavior": "左侧Pulse区域实时显示观察：「你开始自己举例了」「你停顿了很久」。不是评价，只是观察。",
+          "emotionGoal": "苹果果一直在旁边"
+        },
+        {
+          "id": "session-timeline",
+          "path": "session/session-timeline.html",
+          "title": "学习叙事时间线",
+          "emotion": "neutral",
+          "scenario": "Session结束后自动生成的学习故事",
+          "timeDimension": "Session结束时/后",
+          "aiBehavior": "以学习时刻（非聊天消息）展示完整学习轨迹：开始→卡住→画图→顿悟→讲通",
+          "emotionGoal": "原来我是这样学会的"
+        },
+        {
+          "id": "thinking-canvas",
+          "path": "session/thinking-canvas.html",
+          "title": "Thinking Canvas",
+          "emotion": "warm",
+          "scenario": "学习中切换到画布模式，与AI共同推演",
+          "timeDimension": "学习中",
+          "aiBehavior": "AI和用户在共享画布上画箭头、改理解、形成共同结论。每个气泡都是推理链的一环",
+          "emotionGoal": "我们一起来想"
+        },
+        {
+          "id": "future-memory",
+          "path": "session/future-memory.html",
+          "title": "Future Memory",
+          "emotion": "warm",
+          "scenario": "Session结束时AI预测用户可能忘记什么",
+          "timeDimension": "Session结束时",
+          "aiBehavior": "「我预测你两天后可能会忘记为什么SYN和ACK不能合并。要不要我先记下来，到时候提醒你？」——主动预测并预约提醒",
+          "emotionGoal": "苹果果记得我可能会忘"
+        },
+        {
+          "id": "relationship",
+          "path": "session/relationship.html",
+          "title": "关系感知Session",
+          "emotion": "warm",
+          "scenario": "进入Session时AI体现跨Session的关系感知",
+          "timeDimension": "第2次+",
+          "aiBehavior": "「昨天你已经在矩阵乘法的应用上摸到门槛了。你当时说'几何意义还有点模糊'。今天从这里继续？」",
+          "emotionGoal": "它记得我们上次的每一刻"
         }
       ]
     },
@@ -327,7 +387,7 @@
       "id": "profile",
       "path": "/profile",
       "title": "Profile",
-      "stateCount": 6,
+      "stateCount": 7,
       "coreEmotion": "neutral",
       "states": [
         {
@@ -349,6 +409,16 @@
           "timeDimension": "6个月",
           "aiBehavior": "43次学习的深刻叙事",
           "emotionGoal": "深刻被理解"
+        },
+        {
+          "id": "learner-mirror",
+          "path": "profile/learner-mirror.html",
+          "title": "Learner Mirror",
+          "emotion": "warm",
+          "scenario": "Profile展示以前vs现在的变化对比",
+          "timeDimension": "长期",
+          "aiBehavior": "展示以前/现在对比卡片：「以前喜欢直接记答案→现在开始主动找原因」——不是数据，是故事",
+          "emotionGoal": "苹果果真的了解我是怎么改变的"
         },
         {
           "id": "profile-recognizes-you",
@@ -391,6 +461,25 @@
           "emotionGoal": "诚实+被尊重"
         }
       ]
+    },
+    {
+      "id": "memory",
+      "path": "memory/index.html",
+      "title": "Memory",
+      "stateCount": 1,
+      "coreEmotion": "被深刻记住的感动",
+      "states": [
+        {
+          "id": "memory-main",
+          "path": "memory/index.html",
+          "title": "苹果果的记忆",
+          "emotion": "warm",
+          "scenario": "全新页面，展示AI记住的用户成长中的重要瞬间",
+          "timeDimension": "全部时间",
+          "aiBehavior": "展示8个珍贵记忆瞬间（第一次敢不用原文解释、开始主动举例等）。全是故事，没有数据，没有KPI。",
+          "emotionGoal": "被深刻记住的感动"
+        }
+      ]
     }
   ],
   "emotionMap": {
@@ -415,7 +504,14 @@
       "profile-half-year",
       "profile-recognizes-you",
       "profile-corrected-view",
-      "profile-admit-mistake"
+      "profile-admit-mistake",
+      "relationship",
+      "learning-pulse",
+      "thinking-canvas",
+      "future-memory",
+      "relationship",
+      "learner-mirror",
+      "memory-main"
     ],
     "neutral": [
       "today-normal-day",
@@ -428,7 +524,8 @@
       "growth-small-gain",
       "growth-style-shift",
       "profile-first-time",
-      "profile-predicts-you"
+      "profile-predicts-you",
+      "session-timeline"
     ],
     "cautious": [
       "today-empty-day",
@@ -592,6 +689,6 @@
         "description": "AI 的定位是学习伴侣而非评价者，持续提供建设性鼓励"
       }
     ],
-    "totalStateCount": 35
+    "totalStateCount": 43
   }
 }

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🪞 学习镜像 · Profile 状态演示</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+.page-wrap{max-width:var(--content-max);margin:0 auto;padding:24px var(--space-4) 100px}
+
+/* ── Page Title ── */
+.page-title{font-size:28px;font-weight:700;letter-spacing:-.02em;margin-bottom:var(--space-5);line-height:1.3}
+.page-title .sub{display:block;font-size:15px;font-weight:400;color:var(--color-ink-secondary);letter-spacing:0;margin-top:6px}
+
+/* ── Comparison Cards ── */
+.comparison-list{display:flex;flex-direction:column;gap:var(--space-3);margin-bottom:var(--space-6)}
+.comparison-card{
+  background:var(--color-surface);
+  border-radius:var(--radius-lg);
+  padding:var(--space-5);
+  box-shadow:0 0 0 1px var(--color-divider-soft);
+  animation:fadeIn .4s var(--ease-out) both;
+  transition:box-shadow .2s;
+}
+.comparison-card:hover{box-shadow:0 0 0 1.5px var(--color-accent),0 4px 20px rgba(0,0,0,.06)}
+.comparison-card:nth-child(1){animation-delay:0.05s}
+.comparison-card:nth-child(2){animation-delay:0.1s}
+.comparison-card:nth-child(3){animation-delay:0.15s}
+.comparison-card:nth-child(4){animation-delay:0.2s}
+.cc-row{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
+.cc-before{flex:1;min-width:0;font-size:14px;color:var(--color-ink-muted);line-height:1.6}
+.cc-before strong{color:var(--color-ink-secondary)}
+.cc-arrow{
+  font-size:20px;
+  color:var(--color-accent);
+  flex-shrink:0;
+  font-weight:700;
+  animation:arrowPulse 2s var(--ease-out) infinite;
+  padding:0 4px;
+}
+@keyframes arrowPulse{
+  0%,100%{transform:translateX(0);opacity:.8}
+  50%{transform:translateX(4px);opacity:1}
+}
+.cc-after{flex:1;min-width:0;font-size:14px;color:var(--color-ink-secondary);line-height:1.6}
+.cc-after strong{color:var(--color-ink-primary)}
+
+/* ── Profile Mirror Narrative ── */
+.profile-mirror{
+  font-family:var(--font-serif);
+  font-size:17px;line-height:1.85;
+  padding:var(--space-5);
+  background:var(--color-surface);
+  border-radius:var(--radius-lg);
+  box-shadow:0 0 0 1px var(--color-divider-soft);
+  margin-bottom:var(--space-6);
+  color:var(--color-ink-secondary);
+}
+.profile-mirror .highlight{
+  background:linear-gradient(transparent 60%,var(--color-accent-soft) 60%);
+  padding:0 4px;
+  font-weight:500;
+  color:var(--color-ink-primary);
+}
+
+/* ── Human Stats ── */
+.human-stats{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  margin-bottom:var(--space-6);
+}
+.human-stat{
+  background:var(--color-surface);
+  border-radius:var(--radius-md);
+  padding:var(--space-4);
+  box-shadow:0 0 0 1px var(--color-divider-soft);
+  display:flex;
+  align-items:center;
+  gap:var(--space-3);
+  animation:slideUp .4s var(--ease-out) both;
+  transition:all .15s;
+}
+.human-stat:hover{box-shadow:0 0 0 1px var(--color-divider-hover);transform:translateY(-1px)}
+.human-stat:nth-child(1){animation-delay:0.25s}
+.human-stat:nth-child(2){animation-delay:0.3s}
+.human-stat:nth-child(3){animation-delay:0.35s}
+.human-stat .hs-icon{font-size:20px;flex-shrink:0;width:36px;height:36px;display:grid;place-items:center;background:var(--color-surface-alt);border-radius:50%}
+.human-stat .hs-text{font-size:14px;color:var(--color-ink-secondary);line-height:1.5}
+.human-stat .hs-text strong{color:var(--color-ink-primary)}
+
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+
+<div class="page-wrap">
+
+  <!-- State Meta -->
+  <div class="state-meta">
+    <div class="sm-row">
+      <span class="sm-label">状态</span>
+      <span class="sm-value">Learner Mirror — 学习镜像</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">情绪目标</span>
+      <span class="sm-emotion warm">🟢 warm</span>
+      <span class="sm-value">被深刻理解 + 看到自己的成长弧线</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">AI 行为</span>
+      <span class="sm-value">Profile 不展示统计。展示变化——"以前 → 现在"的对比。让用户看到自己是如何变成现在这样的。</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">时间维度</span>
+      <span class="sm-value">使用中 · 第 43 天 · Profile 页面</span>
+    </div>
+  </div>
+
+  <!-- Page Title -->
+  <h1 class="page-title">
+    🪞 苹果果眼中的你 — 变化
+    <span class="sub">不是数据，是故事</span>
+  </h1>
+
+  <!-- Comparison Cards: 以前 → 现在 -->
+  <div class="comparison-list">
+    <div class="comparison-card">
+      <div class="cc-row">
+        <div class="cc-before">以前：<strong>喜欢直接问"答案是什么？"</strong></div>
+        <div class="cc-arrow">→</div>
+        <div class="cc-after">现在：<strong>越来越多问"为什么？"</strong></div>
+      </div>
+    </div>
+    <div class="comparison-card">
+      <div class="cc-row">
+        <div class="cc-before">以前：<strong>一句话就结束</strong></div>
+        <div class="cc-arrow">→</div>
+        <div class="cc-after">现在：<strong>越来越喜欢举例</strong></div>
+      </div>
+    </div>
+    <div class="comparison-card">
+      <div class="cc-row">
+        <div class="cc-before">以前：<strong>先看理论再做题</strong></div>
+        <div class="cc-arrow">→</div>
+        <div class="cc-after">现在：<strong>先动手再总结</strong></div>
+      </div>
+    </div>
+    <div class="comparison-card">
+      <div class="cc-row">
+        <div class="cc-before">以前：<strong>不知道怎么面对难点</strong></div>
+        <div class="cc-arrow">→</div>
+        <div class="cc-after">现在：<strong>会停下来画图</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Profile Mirror Narrative -->
+  <div class="profile-mirror">
+    从我们第一次见面到现在这段时间，我注意到你最大的变化不在知识量——<span class="highlight">在于你开始相信自己的理解。</span>
+    你不再急着找答案，而是先想一遍。
+    这是比学会任何公式都重要的变化。
+  </div>
+
+  <!-- Human Language Stats -->
+  <div class="human-stats">
+    <div class="human-stat">
+      <span class="hs-icon">📅</span>
+      <span class="hs-text">我们认识 <strong>43 天</strong>了</span>
+    </div>
+    <div class="human-stat">
+      <span class="hs-icon">🧠</span>
+      <span class="hs-text">你学了 <strong>15 个新概念</strong></span>
+    </div>
+    <div class="human-stat">
+      <span class="hs-icon">❓</span>
+      <span class="hs-text">你主动问过 <strong>28 次"为什么"</strong></span>
+    </div>
+  </div>
+
+  <!-- Bottom Nav: Profile active -->
+  <nav id="bottom-nav">
+    <button class="nav-tab"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="9" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="3" width="7" height="5" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="3" y="15" width="7" height="6" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="11" width="7" height="10" rx="1.5" stroke="currentColor" stroke-width="1.6"/></svg><span>Today</span></button>
+    <button class="nav-tab"><svg viewBox="0 0 24 24" fill="none"><path d="M4 4h16v14a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 9h8M8 13h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Session</span></button>
+    <button class="nav-tab"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M2 17l10 5 10-5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg><span>Growth</span></button>
+    <button class="nav-tab active"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.6"/><path d="M4 20c0-4.418 3.582-8 8-8s8 3.582 8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Profile</span></button>
+  </nav>
+
+</div>
+
+</body>
+</html>
