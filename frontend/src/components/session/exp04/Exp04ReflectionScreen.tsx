@@ -12,10 +12,11 @@
 
 import { useState, useCallback, useRef } from "react";
 import { Loader2, Sparkles } from "lucide-react";
+import type { Exp04State } from "@/lib/exp04/types";
 
 interface ReflectionScreenProps {
-  engine: any;
-  currentState: string;
+  engine?: any;
+  currentState?: Exp04State;
   onSkip: () => Promise<void>;
   onSubmit: (content: string) => Promise<void>;
   transitioning: boolean;

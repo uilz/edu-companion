@@ -4,14 +4,19 @@
 // Vision finish-hero:
 //   🍎
 //   "今天就到这里。我会记住今天。"
-//   "返回首页" 按钮
+//   "下次再打开，你会变得不一样。"
+//   额外：Session 统计 + 成长记录
 // ============================================================
 
 "use client";
 
 import { useRouter } from "next/navigation";
 
-export default function Exp04EndScreen() {
+interface Props {
+  sessionTitle?: string | null;
+}
+
+export default function Exp04EndScreen({ sessionTitle }: Props) {
   const router = useRouter();
 
   return (
@@ -22,9 +27,21 @@ export default function Exp04EndScreen() {
           <div className="text-[48px] mb-6">🍎</div>
 
           {/* 结束语 */}
-          <p className="font-serif text-[21px] text-ink-primary leading-relaxed mb-8">
-            今天就到这里。我会记住今天。
+          <p className="font-serif text-[21px] text-ink-primary leading-relaxed mb-3">
+            今天就到这里。
           </p>
+
+          {/* Vision 对齐：温暖的第二行 */}
+          <p className="text-[21px] text-ink-primary leading-relaxed mb-2 font-serif">
+            我会记住今天的。
+          </p>
+
+          {/* 新增：温暖提示 */}
+          {sessionTitle && (
+            <p className="text-[15px] text-ink-muted leading-relaxed mb-6 mt-4">
+              「{sessionTitle}」—— 下次再打开，你会变得不一样。
+            </p>
+          )}
 
           {/* 返回首页按钮 */}
           <button

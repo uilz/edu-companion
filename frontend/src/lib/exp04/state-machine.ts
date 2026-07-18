@@ -1,156 +1,137 @@
 // ============================================================
-// EXP-04 State Machine
+// EXP-04 State Machine — Stage + Mode 双轴模型
 //
-// Session 状态机。管理 ENTER → LEARN → COGNITIVE_SEARCH →
-// SELF_VALIDATION → REFLECTION → END 的状态转换。
-// 对齐 Vision 5 段：intro → learn → practice → reflect → finish
+// Stage（进度）：enter → chat → reflect → finish（不可逆，对应 4 个圆点）
+// Mode（体验）：normal / deep_chat / stuck / silent / breakthrough（在 chat 阶段可切换）
 //
-// 每条转换规则都对应 Implementation Model Layer B 的定义。
+// Mode 转换由 Exp04Session 中的行为检测驱动（非自动）。
 // ============================================================
 
-import { useReducer, useCallback, useRef } from "react";
+import { useReducer, useCallback } from "react";
 import type {
+  SessionStage,
+  SessionMode,
   Exp04State,
   StateEvent,
 } from "./types";
+import { getStageIndex } from "./types";
 
-// ── 转换表 ────────────────────────────────────────────────
+// ── Stage 转换表 ──────────────────────────────────────────
 
-/**
- * 合法的状态转换。
- * key = 当前状态，value = 允许的事件类型集合。
- */
-const TRANSITIONS: Record<Exp04State, Set<StateEvent["type"]>> = {
-  ENTER: new Set<StateEvent["type"]>([
-    "START_CLICKED", "ENTER_TIMEOUT", "SESSION_CANCELLED",
+/** 合法的 stage 转换事件 */
+const STAGE_TRANSITIONS: Record<SessionStage, Set<StateEvent["type"]>> = {
+  enter: new Set<StateEvent["type"]>(["START_CLICKED", "ENTER_TIMEOUT", "SESSION_CANCELLED"]),
+  chat: new Set<StateEvent["type"]>(["REFLECTION_REQUESTED", "SESSION_CANCELLED",
+    "TOOL_OPENED", "TOOL_CLOSED", "FLASHCARD_CREATED", "PRACTICE_STARTED", "PRACTICE_DONE",
   ]),
-  LEARN: new Set<StateEvent["type"]>([
-    "INACTIVITY_DETECTED",
-    "VALIDATION_REQUESTED",
-    "SESSION_CANCELLED",
-    // 工具 / 练习 / 主动提示 / 闪卡
-    "TOOL_OPENED",
-    "TOOL_CLOSED",
-    "PRACTICE_STARTED",
-    "PRACTICE_DONE",
-    "FLASHCARD_CREATED",
-    "PROMPT_CLICKED",
+  reflect: new Set<StateEvent["type"]>(["REFLECTION_DONE", "SESSION_CANCELLED",
+    "TOOL_OPENED", "TOOL_CLOSED", "FLASHCARD_CREATED",
   ]),
-  COGNITIVE_SEARCH: new Set<StateEvent["type"]>([
-    "INTERACTION_RESUMED", "SESSION_CANCELLED",
-  ]),
-  SELF_VALIDATION: new Set<StateEvent["type"]>([
-    "BACK_TO_LEARN",
-    "VALIDATION_DONE",
-    "SESSION_CANCELLED",
-    // 工具 / 练习 / 闪卡
-    "TOOL_OPENED",
-    "TOOL_CLOSED",
-    "PRACTICE_STARTED",
-    "PRACTICE_DONE",
-    "FLASHCARD_CREATED",
-    "PROMPT_CLICKED",
-  ]),
-  REFLECTION: new Set<StateEvent["type"]>([
-    "REFLECTION_DONE",
-    "SESSION_CANCELLED",
-    // 工具 / 闪卡
-    "TOOL_OPENED",
-    "TOOL_CLOSED",
-    "FLASHCARD_CREATED",
-    "PROMPT_CLICKED",
-  ]),
-  END: new Set<StateEvent["type"]>([]), // 终态，不可转换
+  finish: new Set<StateEvent["type"]>(), // 终态
 };
 
-/**
- * 事件 → 目标状态的映射。
- */
-const NEXT_STATE: Record<string, Record<string, Exp04State>> = {
-  ENTER: {
-    START_CLICKED: "LEARN",
-    ENTER_TIMEOUT: "LEARN",
-    SESSION_CANCELLED: "END",
+/** 事件 → 目标 stage 的映射 */
+const NEXT_STAGE: Record<string, Record<string, SessionStage>> = {
+  enter: {
+    START_CLICKED: "chat",
+    ENTER_TIMEOUT: "chat",
+    SESSION_CANCELLED: "finish",
   },
-  LEARN: {
-    INACTIVITY_DETECTED: "COGNITIVE_SEARCH",
-    VALIDATION_REQUESTED: "SELF_VALIDATION",
-    SESSION_CANCELLED: "END",
-    // 工具 / 练习 / 主动提示 / 闪卡均为自环
-    TOOL_OPENED: "LEARN",
-    TOOL_CLOSED: "LEARN",
-    PRACTICE_STARTED: "LEARN",
-    PRACTICE_DONE: "LEARN",
-    FLASHCARD_CREATED: "LEARN",
-    PROMPT_CLICKED: "LEARN",
+  chat: {
+    REFLECTION_REQUESTED: "reflect",
+    SESSION_CANCELLED: "finish",
+    // 自环事件
+    TOOL_OPENED: "chat",
+    TOOL_CLOSED: "chat",
+    FLASHCARD_CREATED: "chat",
+    PRACTICE_STARTED: "chat",
+    PRACTICE_DONE: "chat",
   },
-  COGNITIVE_SEARCH: {
-    INTERACTION_RESUMED: "LEARN",
-    SESSION_CANCELLED: "END",
+  reflect: {
+    REFLECTION_DONE: "finish",
+    SESSION_CANCELLED: "finish",
+    TOOL_OPENED: "reflect",
+    TOOL_CLOSED: "reflect",
+    FLASHCARD_CREATED: "reflect",
   },
-  SELF_VALIDATION: {
-    BACK_TO_LEARN: "LEARN",
-    VALIDATION_DONE: "REFLECTION",
-    SESSION_CANCELLED: "END",
-    // 工具 / 闪卡 / 练习自环
-    TOOL_OPENED: "SELF_VALIDATION",
-    TOOL_CLOSED: "SELF_VALIDATION",
-    PRACTICE_STARTED: "SELF_VALIDATION",
-    PRACTICE_DONE: "SELF_VALIDATION",
-    FLASHCARD_CREATED: "SELF_VALIDATION",
-    PROMPT_CLICKED: "SELF_VALIDATION",
-  },
-  REFLECTION: {
-    REFLECTION_DONE: "END",
-    SESSION_CANCELLED: "END",
-    // 工具 / 闪卡自环
-    TOOL_OPENED: "REFLECTION",
-    TOOL_CLOSED: "REFLECTION",
-    FLASHCARD_CREATED: "REFLECTION",
-    PROMPT_CLICKED: "REFLECTION",
-  },
-  END: {},
+  finish: {},
 };
+
+// ── Mode 管理 ────────────────────────────────────────────
+
+/** Mode 的合法转换映射（当前 mode → 可切换到的 mode 集合） */
+const MODE_TRANSITIONS: Record<SessionMode, Set<SessionMode>> = {
+  normal: new Set<SessionMode>(["deep_chat", "stuck", "silent"]),
+  deep_chat: new Set<SessionMode>(["normal"]),
+  stuck: new Set<SessionMode>(["breakthrough", "normal"]),
+  silent: new Set<SessionMode>(["normal", "deep_chat"]),
+  breakthrough: new Set<SessionMode>(["normal"]),
+};
+
+export function canTransitionMode(from: SessionMode, to: SessionMode): boolean {
+  const allowed = MODE_TRANSITIONS[from];
+  return allowed ? allowed.has(to) : false;
+}
 
 // ── State ──────────────────────────────────────────────────
 
 interface StateMachineState {
-  current: Exp04State;
-  previous: Exp04State | null;
+  stage: SessionStage;
+  mode: SessionMode;
   transitionCount: number;
 }
 
 type Action =
   | { type: "TRANSITION"; event: StateEvent }
-  | { type: "INIT"; state: Exp04State };
+  | { type: "SET_MODE"; mode: SessionMode }
+  | { type: "INIT"; state: Partial<{ stage: SessionStage; mode: SessionMode }> };
 
-function reducer(
-  state: StateMachineState,
-  action: Action
-): StateMachineState {
+function reducer(state: StateMachineState, action: Action): StateMachineState {
   switch (action.type) {
     case "INIT":
-      return { current: action.state, previous: null, transitionCount: 0 };
+      return {
+        stage: action.state.stage || "enter",
+        mode: action.state.mode || "normal",
+        transitionCount: 0,
+      };
 
     case "TRANSITION": {
-      const allowed = TRANSITIONS[state.current];
+      const currentStage = state.stage;
+
+      // 检查 stage 转换是否合法
+      const allowed = STAGE_TRANSITIONS[currentStage];
       if (!allowed || !allowed.has(action.event.type)) {
-        // 非法转换 → 静默忽略（不进 END，不抛错）
         console.debug(
-          `[EXP04 SM] 非法转换: ${state.current} → ${action.event.type}`
+          `[EXP04 SM] 非法 stage 转换: ${currentStage} → ${action.event.type}`
         );
         return state;
       }
 
-      const nextStateMap = NEXT_STATE[state.current];
-      if (!nextStateMap) return state;
+      const nextStageMap = NEXT_STAGE[currentStage];
+      if (!nextStageMap) return state;
 
-      const next = nextStateMap[action.event.type];
-      if (!next) return state;
+      const nextStage = nextStageMap[action.event.type];
+      if (!nextStage) return state;
+
+      const isStageChange = nextStage !== currentStage;
 
       return {
-        current: next,
-        previous: state.current,
+        stage: nextStage,
+        mode: isStageChange ? state.mode : state.mode, // mode 在 stage 转换时不重置
+        transitionCount: state.transitionCount + 1,
+      };
+    }
+
+    case "SET_MODE": {
+      if (!canTransitionMode(state.mode, action.mode)) {
+        console.debug(
+          `[EXP04 SM] 非法 mode 转换: ${state.mode} → ${action.mode}`
+        );
+        return state;
+      }
+      return {
+        ...state,
+        mode: action.mode,
         transitionCount: state.transitionCount + 1,
       };
     }
@@ -160,37 +141,46 @@ function reducer(
   }
 }
 
-// ── Hook ───────────────────────────────────────────────────
-
 const initialState: StateMachineState = {
-  current: "ENTER",
-  previous: null,
+  stage: "enter",
+  mode: "normal",
   transitionCount: 0,
 };
 
-export function useExp04StateMachine(initial?: Exp04State) {
+// ── Hook ───────────────────────────────────────────────────
+
+export function useExp04StateMachine(
+  initial?: Partial<{ stage: SessionStage; mode: SessionMode }>
+) {
   const [state, dispatch] = useReducer(reducer, {
     ...initialState,
-    current: initial || "ENTER",
+    ...(initial || {}),
   });
 
   const transition = useCallback((event: StateEvent) => {
     dispatch({ type: "TRANSITION", event });
   }, []);
 
+  const setMode = useCallback((mode: SessionMode) => {
+    dispatch({ type: "SET_MODE", mode });
+  }, []);
+
   const canTransition = useCallback(
     (eventType: StateEvent["type"]): boolean => {
-      const allowed = TRANSITIONS[state.current];
+      const allowed = STAGE_TRANSITIONS[state.stage];
       return allowed ? allowed.has(eventType) : false;
     },
-    [state.current]
+    [state.stage]
   );
 
   return {
-    currentState: state.current,
-    previousState: state.previous,
+    currentState: { stage: state.stage, mode: state.mode } as Exp04State,
+    stage: state.stage,
+    mode: state.mode,
+    stageIndex: getStageIndex(state.stage),
     transitionCount: state.transitionCount,
     transition,
+    setMode,
     canTransition,
   } as const;
 }

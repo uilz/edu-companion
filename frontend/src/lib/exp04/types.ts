@@ -1,74 +1,115 @@
 // ============================================================
 // EXP-04 类型定义
 //
+// Stage(进度) + Mode(体验) 双轴状态模型。
 // Session State Machine + Conversation Engine 的类型系统。
 // 所有 EXP-04 组件共享的类型定义。
 // ============================================================
 
 // ── 状态 ──────────────────────────────────────────────────
 
-/** EXP-04 的 5 个 Session 状态（+ 结束态）。对齐 Vision: intro → learn → practice → reflect → finish */
-export type Exp04State =
-  | "ENTER"
-  | "LEARN"
-  | "COGNITIVE_SEARCH"
-  | "SELF_VALIDATION"
-  | "REFLECTION"
-  | "END";
+/** Session 进度阶段（3 段 + finish，对应顶部 4 个圆点） */
+export type SessionStage = "enter" | "chat" | "reflect" | "finish";
 
-/** 旧 Session 的 stage 字符串 → EXP-04 状态映射（用于兼容） */
-export const BACKEND_STAGE_TO_EXP04: Record<string, Exp04State> = {
-  intro: "ENTER",
-  learn: "LEARN",
-  practice: "SELF_VALIDATION",
-  reflect: "REFLECTION",
-  finish: "END",
+/** 体验模式：AI 根据用户行为动态选择 */
+export type SessionMode =
+  | "normal"         // 默认对话
+  | "deep_chat"      // 用户追问轮次多 → 深度对话
+  | "stuck"          // 停留检测 → 卡住状态
+  | "silent"         // 用户很少回复 → 安静讲解
+  | "breakthrough";  // 卡住后答对 → 顿悟庆祝
+
+/** 情绪基调（影响视觉风格和文案语气） */
+export type SessionMood = "warm" | "neutral" | "cautious";
+
+/** 新状态类型：进度 + 体验双轴 */
+export interface Exp04State {
+  stage: SessionStage;
+  mode: SessionMode;
+}
+
+// ── 状态辅助函数 ──────────────────────────────────────────
+
+export function getStageIndex(stage: SessionStage): number {
+  return ["enter", "chat", "reflect", "finish"].indexOf(stage);
+}
+
+export function getStageCount(): number {
+  return 4;
+}
+
+export function getMood(mode: SessionMode): SessionMood {
+  switch (mode) {
+    case "deep_chat":
+    case "breakthrough":
+      return "warm";
+    case "stuck":
+    case "silent":
+      return "cautious";
+    default:
+      return "neutral";
+  }
+}
+
+/** 旧 Session 的 stage 字符串 → 新 Exp04State 映射（用于兼容） */
+export const BACKEND_STAGE_TO_EXP04: Record<string, Partial<{ stage: SessionStage; mode: SessionMode }>> = {
+  intro: { stage: "enter", mode: "normal" },
+  learn: { stage: "chat", mode: "normal" },
+  practice: { stage: "chat", mode: "normal" },
+  reflect: { stage: "reflect", mode: "normal" },
+  finish: { stage: "finish", mode: "normal" },
 };
 
-export const EXP04_TO_BACKEND_STAGE: Partial<Record<Exp04State, string>> = {
-  ENTER: "intro",
-  LEARN: "learn",
-  SELF_VALIDATION: "practice",
-  REFLECTION: "reflect",
-  END: "completed",
+export const EXP04_TO_BACKEND_STAGE: Record<SessionStage, string> = {
+  enter: "intro",
+  chat: "learn",
+  reflect: "reflect",
+  finish: "completed",
 };
 
 // ── 状态事件 ──────────────────────────────────────────────
 
 export type StateEvent =
-  | { type: "SESSION_ENTERED" }
+  // 进度转换事件
   | { type: "START_CLICKED" }
   | { type: "ENTER_TIMEOUT" }
-  | { type: "INACTIVITY_DETECTED" }
-  | { type: "INTERACTION_RESUMED" }
-  | { type: "VALIDATION_REQUESTED" }
-  | { type: "BACK_TO_LEARN" }
-  | { type: "VALIDATION_DONE" }
+  | { type: "REFLECTION_REQUESTED" }
   | { type: "REFLECTION_DONE" }
   | { type: "SESSION_CANCELLED" }
-  // 工具 / 练习 / 主动提示 / 闪卡事件（自环，用于追踪交互）
-  | { type: "TOOL_OPENED"; tool: string }
-  | { type: "TOOL_CLOSED"; tool: string }
+  // 体验模式检测事件
+  | { type: "INACTIVITY_DETECTED" }
+  | { type: "INTERACTION_RESUMED" }
+  | { type: "STUCK_RESOLVED" }       // 卡住后答对
+  | { type: "SILENT_MODE" }
+  | { type: "DEEP_CHAT_MODE" }
+  | { type: "MODE_RESET" }
+  // 练习事件（在对话流中内联）
   | { type: "PRACTICE_STARTED" }
   | { type: "PRACTICE_DONE"; correct: boolean }
-  | { type: "FLASHCARD_CREATED"; cardId?: string }
-  | { type: "PROMPT_CLICKED"; prompt: string };
+  // 工具 / 闪卡自环
+  | { type: "TOOL_OPENED"; tool: string }
+  | { type: "TOOL_CLOSED"; tool: string }
+  | { type: "FLASHCARD_CREATED"; cardId?: string };
 
 // ── 对话触发 ──────────────────────────────────────────────
 
 export type ConversationTrigger =
+  // 现有 trigger
   | "SESSION_ENTER"
   | "USER_MESSAGE"
-  | "SEARCH_DETECTED"
-  | "VALIDATION_REQUESTED"
   | "REFLECTION_ENTERED"
   | "ENERGY_DECLINING"
   | "SESSION_ENDING"
-  // 工具 / 练习 / 主动提示 / 闪卡触发
+  // 工具 / 练习 / 闪卡
   | "TOOL_NUDGE"
   | "PRACTICE_PROMPT"
   | "PRACTICE_FEEDBACK"
-  | "FLASHCARD_SUGGESTION";
+  | "FLASHCARD_SUGGESTION"
+  // 模式感知 trigger（新增）
+  | "STUCK_DETECTED"
+  | "BREAKTHROUGH_DETECTED"
+  | "SILENT_MODE_ACTIVE"
+  | "DEEP_CHAT_ACTIVE";
 
 // ── 消息规格 ──────────────────────────────────────────────
 

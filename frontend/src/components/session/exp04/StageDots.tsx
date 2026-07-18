@@ -1,27 +1,22 @@
 "use client";
 
-import type { Exp04State } from "@/lib/exp04/types";
+import type { SessionStage } from "@/lib/exp04/types";
+import { getStageIndex } from "@/lib/exp04/types";
 
-const STAGES: Exp04State[] = ["ENTER", "LEARN", "SELF_VALIDATION", "REFLECTION"];
-
-function normalize(state: Exp04State): Exp04State {
-  if (state === "COGNITIVE_SEARCH") return "LEARN";
-  return state;
-}
+const STAGE_LABELS: SessionStage[] = ["enter", "chat", "reflect"];
 
 interface Props {
-  currentState: Exp04State;
+  currentState: SessionStage;
 }
 
 export default function StageDots({ currentState }: Props) {
-  const normalized = normalize(currentState);
-  const activeIndex = STAGES.indexOf(normalized);
+  const index = getStageIndex(currentState);
 
   return (
     <div className="flex items-center gap-1" aria-label="session-stages">
-      {STAGES.map((stage, i) => {
-        const isActive = i === activeIndex;
-        const isDone = i < activeIndex;
+      {STAGE_LABELS.map((stage, i) => {
+        const isActive = i === index;
+        const isDone = i < index;
         return (
           <span
             key={stage}
