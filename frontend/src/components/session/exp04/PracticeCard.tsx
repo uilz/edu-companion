@@ -106,10 +106,13 @@ export default function PracticeCard({ question, onDone, onClose, sessionId }: P
             <div className="mb-4 p-4 rounded-xl bg-surface border border-border/50">
               <p className="text-sm font-medium text-ink-primary mb-3">做成一张卡记住它</p>
               {flashcardCreated ? (
-                <p className="text-sm text-success flex items-center gap-1.5">
-                  <Check size={16} />
-                  已经加进你的卡片了。下次复习会再见到。
-                </p>
+                <>
+                  <p className="text-sm text-success flex items-center gap-1.5">
+                    <Check size={16} />
+                    已经加进你的卡片了。下次复习会再见到。
+                  </p>
+                  <p className="text-sm text-ink-secondary mt-2">做成卡片了。继续学习还是去反思？</p>
+                </>
               ) : (
                 <button
                   onClick={handleCreateFlashcard}
