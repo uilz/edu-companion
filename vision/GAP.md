@@ -5,20 +5,15 @@
 
 ---
 
-## Latest PR: Growth 叙事字体对齐 Vision（font-serif）
+## Latest PR: TodayQuote 字体对齐 Vision（font-serif）
 
 ### 改动内容
-1. **globals.css**: 新增 `--font-serif` CSS 变量（`'Noto Serif SC', 'Iowan Old Style', 'Songti SC', serif`），对齐 Vision 的衬线体定义
-2. **GrowthPage.tsx**: 成长叙事容器字体从 `var(--font-display)` 改为 `var(--font-serif)`
+1. **TodayPage.tsx**: `TodayQuote` 组件 fontFamily 从 `var(--font-display)` 改为 `var(--font-serif)`（对齐 preview.html:79）
 
 ### 收敛的 Gap
-- [x] Growth 叙事字体使用 `var(--font-display)` 而非 Vision 指定的 `var(--font-serif)`
-
-### 同期确认已关闭的 Gap
-- [x] **Flashcard 创建后"去反思"导航缺失过渡文案** — **关闭（经复查，PracticeCard.tsx:114 和 Exp04SelfValidationScreen.tsx:199 均已包含过渡文案"做成卡片了。继续学习还是去反思？"/"做成卡片了。去反思还是继续这个主题？"。此 Gap 已在之前 Loop 中实现但 GAP.md 未同步）**
+- [x] TodayQuote 字体使用 `var(--font-display)` 而非 Vision 的 `var(--font-serif)`
 
 ### 待关闭的 Gap
-- [ ] TodayQuote 字体使用 `var(--font-display)` 而非 Vision 的 `var(--font-serif)`（对应 preview.html:79）
 - [ ] Profile 镜像叙事 CSS class 使用 `var(--font-display)` 而非 Vision 的 `var(--font-serif)`（对应 preview.html:355）
 
 ---
@@ -37,8 +32,8 @@
 
 ## Next Gap
 
-**TodayQuote 字体使用 `var(--font-serif)` 对齐 Vision**
+**Profile 镜像叙事 CSS 使用 `var(--font-serif)` 对齐 Vision**
 
-[TodayPage.tsx](file:///home/deploy/edu-companion/frontend/src/components/today/TodayPage.tsx#L276) 中 `TodayQuote` 组件使用 `fontFamily: "var(--font-display)"`，但 Vision ([preview.html#L79](file:///home/deploy/edu-companion/vision/preview.html#L79)) 指定 `.today-quote` 使用 `font-family: var(--font-serif)`。下周轮次可收敛此 Gap。
+[globals.css#L1461](file:///home/deploy/edu-companion/frontend/src/app/globals.css#L1461) 中 `.profile-mirror` 使用 `var(--font-display)`，但 Vision ([preview.html#L355](file:///home/deploy/edu-companion/vision/preview.html#L355)) 指定 `.profile-mirror` 使用 `font-family: var(--font-serif)`。
 
-Refer to: [preview.html#L79](file:///home/deploy/edu-companion/vision/preview.html#L79)（每日一言的衬线体）
+Refer to: [preview.html#L355](file:///home/deploy/edu-companion/vision/preview.html#L355)（Profile 镜像叙事的衬线体）

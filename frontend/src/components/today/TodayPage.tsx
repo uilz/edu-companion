@@ -273,7 +273,7 @@ function TodayQuote({ text }: { text: string }) {
   return (
     <p
       className="text-center text-sm italic text-ink-muted mb-4 leading-relaxed"
-      style={{ fontFamily: "var(--font-display)" }}
+      style={{ fontFamily: "var(--font-serif)" }}
     >
       「{text}」
     </p>
