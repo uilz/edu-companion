@@ -73,7 +73,7 @@ export default function Exp04ReflectionScreen({
           </p>
 
           <h1 className="text-[28px] font-bold text-ink-primary leading-[1.2] mb-3 tracking-tight">
-            今天最大的变化是什么？
+            今天你学到了什么？
           </h1>
 
           <p className="text-base text-ink-muted leading-relaxed mb-4">
@@ -123,7 +123,7 @@ export default function Exp04ReflectionScreen({
                 保存中
               </span>
             ) : (
-              "记下来"
+              "完成今天"
             )}
           </button>
         </div>

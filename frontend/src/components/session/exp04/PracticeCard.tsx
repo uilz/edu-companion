@@ -108,7 +108,7 @@ export default function PracticeCard({ question, onDone, onClose, sessionId }: P
               {flashcardCreated ? (
                 <p className="text-sm text-success flex items-center gap-1.5">
                   <Check size={16} />
-                  已经加进你的卡片了
+                  已经加进你的卡片了。下次复习会再见到。
                 </p>
               ) : (
                 <button

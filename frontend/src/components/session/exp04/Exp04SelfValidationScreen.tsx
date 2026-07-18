@@ -11,10 +11,11 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, Sparkles, Check } from "lucide-react";
 import { generateQuestions } from "@/lib/api/practice-api";
 import type { V7Question } from "@/lib/api/practice-api";
 import OptionButton from "@/components/practice/components/OptionButton";
+import { createSessionFlashcard } from "@/lib/api/session-tool-api";
 
 
 interface SelfValidationScreenProps {
@@ -58,6 +59,8 @@ export default function Exp04SelfValidationScreen({
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [flashcardCreating, setFlashcardCreating] = useState(false);
+  const [flashcardCreated, setFlashcardCreated] = useState(false);
 
   // ── 反思文字（可选） ──
   const [text, setText] = useState("");
@@ -91,12 +94,30 @@ export default function Exp04SelfValidationScreen({
 
   // 再来一道
   const handleRetry = () => {
+    setFlashcardCreated(false);
     loadQuestion();
   };
 
   // 去反思
   const handleGoReflect = () => {
     onContinue();
+  };
+
+  // 创建闪卡
+  const handleCreateFlashcard = async () => {
+    if (!sessionId || flashcardCreating || flashcardCreated) return;
+    setFlashcardCreating(true);
+    try {
+      await createSessionFlashcard(sessionId, {
+        front_text: question?.stem || "",
+        tags: ["practice", "session"],
+      });
+      setFlashcardCreated(true);
+    } catch {
+      // 静默失败
+    } finally {
+      setFlashcardCreating(false);
+    }
   };
 
   return (
@@ -164,6 +185,28 @@ export default function Exp04SelfValidationScreen({
                       </p>
                     </div>
                   </div>
+
+                  {/* 做成一张卡记住它 */}
+                  {sessionId && (
+                    <div className="mt-4 p-4 rounded-xl bg-surface border border-border/50">
+                      <p className="text-sm font-medium text-ink-primary mb-3">做成一张卡记住它</p>
+                      {flashcardCreated ? (
+                        <p className="text-sm text-success flex items-center gap-1.5">
+                          <Check size={16} />
+                          已经加进你的卡片了。下次复习会再见到。
+                        </p>
+                      ) : (
+                        <button
+                          onClick={handleCreateFlashcard}
+                          disabled={flashcardCreating}
+                          className="flex items-center gap-1.5 text-sm font-medium text-[#F4B400] hover:text-[#e5a800] transition-colors disabled:opacity-40"
+                        >
+                          {flashcardCreating ? <Loader2 size={16} className="animate-spin" /> : <span className="text-base leading-none">＋</span>}
+                          {flashcardCreating ? "创建中…" : "创建"}
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   {/* 再来一道 / 去反思 */}
                   <div className="flex gap-3 mt-4">

@@ -670,6 +670,7 @@ function StageContent({
           sessionId={session.id}
           convId={session.conversation_id}
           onToolNudge={onToolNudge}
+          onReflect={handleValidationDone}
         />
       );
     case "SELF_VALIDATION":

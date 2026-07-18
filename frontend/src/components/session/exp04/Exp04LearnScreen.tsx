@@ -229,20 +229,14 @@ export default function Exp04LearnScreen({
             setMessages((prev) => [
               ...prev,
               {
-                id: `guide-${Date.now()}`,
+                id: `nudge-${Date.now()}`,
                 role: "assistant",
-                content: "要不要去练习一下，检验刚才的理解？",
-                isTyping: false,
-              },
-              {
-                id: `tool-nudge-${Date.now()}`,
-                role: "assistant",
-                content: "要不要把它在画布上摆开看？",
+                content: "这个概念有点抽象。要不要把它在画布上摆开看？",
                 isTyping: false,
               },
             ]);
-            setSuggestions(["去练习", "打开画布看看"]);
-          }, 600);
+            setSuggestions(["去练习", "打开画布看看", "今天就到这里"]);
+          }, 800);
         } else {
           setSuggestions(buildSuggestions(mission));
         }
