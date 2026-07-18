@@ -1711,3 +1711,43 @@
   padding: 2px 6px; border-radius: 4px; cursor: pointer;
 }
 .rcb-close:hover { background: var(--color-divider, #ddd); }
+
+/* ── Layout Toggle ── */
+.sh-layout-toggle { display: flex; align-items: center; gap: 2px; }
+.sh-layout-btn {
+  font-size: 14px; padding: 4px 6px; border-radius: 6px;
+  cursor: pointer; opacity: 0.4; transition: opacity 0.12s, background 0.12s; line-height: 1;
+}
+.sh-layout-btn:hover { opacity: 0.7; background: var(--color-surface-hover, #f0efe9); }
+.sh-layout-btn.active { opacity: 1; background: var(--color-surface-alt, #ecebe6); }
+
+/* ── Adaptive Layout Modes ── */
+.studio-root { transition: grid-template-columns 0.25s ease; }
+
+/* dialogue: sidebar collapsed */
+.studio-root.mode-dialogue { grid-template-columns: 48px 1fr 280px; }
+.studio-root.mode-dialogue .rs-root { padding: 0; }
+.studio-root.mode-dialogue .rs-header,
+.studio-root.mode-dialogue .rs-sublabel,
+.studio-root.mode-dialogue .rs-label { display: none; }
+.studio-root.mode-dialogue .rs-item { justify-content: center; padding: 10px 0; }
+.studio-root.mode-dialogue .rs-icon { margin: 0; }
+.studio-root.mode-dialogue .rs-list { padding: 0 4px; }
+
+/* focus: sidebar + companion hidden */
+.studio-root.mode-focus { grid-template-columns: 0 1fr 0; }
+.studio-root.mode-focus .studio-sidebar,
+.studio-root.mode-focus .studio-companion,
+.studio-root.mode-focus .studio-dock { overflow: hidden; opacity: 0; pointer-events: none; }
+
+/* ── Focus Mode Floating AI Button ── */
+.sh-focus-ai {
+  position: fixed; bottom: 24px; right: 24px;
+  width: 48px; height: 48px; border-radius: 50%;
+  background: linear-gradient(135deg, #c4a3d4 0%, #7a5a8c 100%);
+  display: grid; place-items: center; font-size: 24px;
+  cursor: pointer; z-index: 50;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.sh-focus-ai:hover { transform: scale(1.08); box-shadow: 0 4px 20px rgba(0,0,0,0.2); }

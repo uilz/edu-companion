@@ -101,6 +101,7 @@ export default function Exp04Session() {
   const [prompts, setPrompts] = useState<string[]>([]);
   const [messageCount, setMessageCount] = useState(0);
   const [activeResource, setActiveResource] = useState<ResourceKey>("web");
+  const [layoutMode, setLayoutMode] = useState<"explore" | "dialogue" | "focus">("explore");
 
   // ── Fetch Session ──
   const fetchSession = useCallback(async () => {
@@ -283,7 +284,7 @@ export default function Exp04Session() {
   const isEnter = sm.stage === "enter";
 
   return (
-    <div className="studio-root">
+    <div className={`studio-root mode-${layoutMode}`}>
       {/* ═══ HEADER ZONE ═══ */}
       <header className="studio-header">
         <div className="sh-root">
@@ -300,6 +301,18 @@ export default function Exp04Session() {
           <div className="sh-ai-status">
             <span className="sh-ai-dot"></span>
             <span>观察中</span>
+          </div>
+          <div className="sh-layout-toggle">
+            {(["explore", "dialogue", "focus"] as const).map((m) => (
+              <button
+                key={m}
+                className={`sh-layout-btn ${layoutMode === m ? "active" : ""}`}
+                onClick={() => setLayoutMode(m)}
+                title={m === "explore" ? "浏览模式" : m === "dialogue" ? "对话模式" : "专注模式"}
+              >
+                {m === "explore" ? "🔭" : m === "dialogue" ? "💬" : "🎯"}
+              </button>
+            ))}
           </div>
           <div className="sh-actions">
             <button
@@ -402,6 +415,17 @@ export default function Exp04Session() {
       <VoicePanel convId={session?.conversation_id} sessionId={session?.id} open={voiceOpen} onClose={() => setVoiceOpen(false)} />
       <HandwritingPanel open={handwritingOpen} onClose={() => setHandwritingOpen(false)} />
       <FileListPanel sessionTitle={session?.mission?.title} open={filesOpen} onClose={() => setFilesOpen(false)} />
+
+      {/* ── 聚焦模式浮动按钮 ── */}
+      {layoutMode === "focus" && (
+        <button
+          className="sh-focus-ai"
+          onClick={() => setLayoutMode("dialogue")}
+          title="打开对话"
+        >
+          🍎
+        </button>
+      )}
     </div>
   );
 }
