@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>AppleGo — 心流</title>
+  <link rel="stylesheet" href="../design-system.css" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0f0f12;
+      color: #f5f5f7;
+      font-family: 'Inter', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    ::selection { background: rgba(10, 132, 255, 0.25); }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #3a3a3c; border-radius: 3px; }
+
+    .workspace-grid {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      grid-template-rows: 56px 1fr auto;
+      grid-template-areas:
+        "topbar topbar"
+        "sidebar main"
+        "sidebar tools";
+      min-height: 100vh;
+      max-width: 900px;
+      margin: 0 auto;
+      padding-bottom: 68px;
+    }
+
+    .top-bar {
+      grid-area: topbar;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 20px; height: 56px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      background: rgba(15,15,18,0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      position: sticky; top: 0; z-index: 10;
+    }
+    .top-bar-left { display: flex; align-items: center; gap: 12px; }
+    .top-bar-logo { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; color: #f5f5f7; }
+    .top-bar-logo span { color: #0a84ff; }
+    .top-bar-title { font-size: 13px; color: #aeaeb2; display: flex; align-items: center; gap: 6px; }
+    .top-bar-right { display: flex; align-items: center; gap: 16px; }
+    .mode-badge {
+      font-size: 11px; font-weight: 600; color: #636366;
+      background: rgba(255,255,255,0.03);
+      padding: 4px 10px; border-radius: 9999px;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .nav-icon { display: none; }
+
+    .obs-sidebar {
+      grid-area: sidebar;
+      padding: 20px 16px;
+      border-right: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+      opacity: 0.35;
+      transition: opacity 0.5s;
+    }
+    .obs-sidebar:hover { opacity: 0.7; }
+    .obs-label {
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.08em; color: #636366;
+    }
+    .obs-card {
+      background: rgba(255,255,255,0.03);
+      border-radius: 10px; padding: 12px;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .obs-card .obs-text { font-size: 13px; line-height: 1.5; color: #aeaeb2; }
+    .obs-card .obs-sub { font-size: 11px; color: #636366; margin-top: 6px; }
+    .obs-card .flow-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #34c759;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .obs-card .flow-indicator .flow-dot {
+      width: 8px; height: 8px;
+      background: #34c759;
+      border-radius: 50%;
+      animation: flowPulse 2s ease-in-out infinite;
+    }
+
+    .main-content {
+      grid-area: main;
+      padding: 32px 28px 20px;
+      overflow-y: auto;
+      max-width: 520px;
+    }
+
+    .flow-content {
+      font-size: 15px;
+      line-height: 1.85;
+      color: #d1d1d6;
+    }
+    .flow-content p { margin-bottom: 16px; }
+    .flow-content .math-block {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin: 16px 0;
+      font-family: 'SF Mono', 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: #aeaeb2;
+      text-align: center;
+    }
+
+    .flow-timer {
+      position: fixed;
+      bottom: 100px;
+      right: 24px;
+      font-size: 11px;
+      color: #636366;
+      background: rgba(15,15,18,0.8);
+      backdrop-filter: blur(12px);
+      padding: 8px 14px;
+      border-radius: 9999px;
+      border: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .flow-timer .dot {
+      width: 6px; height: 6px;
+      background: #34c759;
+      border-radius: 50%;
+      animation: flowPulse 2s ease-in-out infinite;
+    }
+
+    .tools-drawer {
+      grid-area: tools;
+      padding: 12px 28px 16px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      display: flex; gap: 8px; flex-wrap: wrap;
+      opacity: 0.4;
+      transition: opacity 0.3s;
+    }
+    .tools-drawer:hover { opacity: 0.8; }
+    .tool-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 8px; color: #8e8e93;
+      font-size: 12px; font-weight: 500;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .tool-btn:hover { background: rgba(255,255,255,0.08); color: #f5f5f7; }
+
+    #bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      height: 68px;
+      background: rgba(15,15,18,0.92);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid rgba(255,255,255,0.08);
+      display: flex; justify-content: center; align-items: center;
+      gap: 28px; z-index: 100;
+      padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+    .nav-tab {
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      color: #636366; font-size: 10.5px; font-weight: 500;
+      padding: 8px 10px; border-radius: 10px;
+      transition: color 0.15s; min-width: 56px;
+      cursor: pointer; background: none; border: none; font-family: inherit;
+    }
+    .nav-tab:hover { color: #8e8e93; }
+    .nav-tab.active { color: #0a84ff; }
+    .nav-tab .nav-icon-tab { font-size: 20px; }
+
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes flowPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.85); } }
+
+    @media (max-width: 640px) {
+      .workspace-grid {
+        grid-template-columns: 1fr;
+        grid-template-areas: "topbar" "main" "tools";
+      }
+      .obs-sidebar { display: none; }
+      .main-content { padding: 24px 16px; }
+      .tools-drawer { padding: 12px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- STATE-META
+  Emotion Goal: Deep focus, uninterrupted flow state, peaceful absorption
+  AI Behavior: Intentionally invisible — no suggestions, no interventions, just silent observation
+  Time Dimension: Deep concentration phase, user has been in flow for 15+ minutes
+-->
+
+<div class="workspace-grid">
+
+  <header class="top-bar">
+    <div class="top-bar-left">
+      <div class="top-bar-logo">🍎 <span>AppleGo</span></div>
+      <div class="top-bar-title">📖 阅读模式</div>
+    </div>
+    <div class="top-bar-right">
+      <span class="mode-badge">🌊 心流</span>
+    </div>
+  </header>
+
+  <aside class="obs-sidebar">
+    <div class="obs-label">状态</div>
+
+    <div class="obs-card">
+      <div class="flow-indicator">
+        <span class="flow-dot"></span>
+        🌊 心流状态
+      </div>
+      <div class="obs-sub">持续 18 分钟 · AI 已静默</div>
+    </div>
+
+    <div class="obs-card">
+      <div class="obs-text">你在专注中</div>
+      <div class="obs-sub">不打扰你</div>
+    </div>
+  </aside>
+
+  <main class="main-content">
+
+    <div class="flow-content">
+
+      <p>当我们把矩阵看作一个线性变换时，矩阵的乘法就有了一个非常直观的几何解释：
+        两个矩阵相乘，相当于依次执行两个线性变换。</p>
+
+      <p>假设有一个向量 <strong>v</strong>，我们先对它应用变换 A，再应用变换 B。
+        最终得到的结果，就相当于对 <strong>v</strong> 应用了变换 BA。</p>
+
+      <div class="math-block">B · (A · v) = (BA) · v</div>
+
+      <p>让我们看一个具体的例子。假设 A 是一个绕原点逆时针旋转 90° 的变换矩阵，
+        B 是一个沿 x 轴拉伸 2 倍的变换矩阵。那么 BA 就表示：先旋转，再拉伸。</p>
+
+      <p>注意，如果交换顺序，AB 表示先拉伸再旋转。结果会完全不同。
+        这就是矩阵乘法不满足交换律的几何原因——变换的顺序改变了结果，
+        就像先穿袜子再穿鞋，与先穿鞋再穿袜子的区别一样。</p>
+
+    </div>
+
+  </main>
+
+  <div class="tools-drawer">
+    <button class="tool-btn">✏️ 标注</button>
+    <button class="tool-btn">📝 笔记</button>
+    <button class="tool-btn">💬 提问</button>
+  </div>
+
+</div>
+
+<div class="flow-timer">
+  <span class="dot"></span>
+  心流 · 18:24
+</div>
+
+<nav id="bottom-nav">
+  <button class="nav-tab active">
+    <span class="nav-icon-tab">🔲</span> Workspace
+  </button>
+  <button class="nav-tab">
+    <span class="nav-icon-tab">🧠</span> Memory
+  </button>
+  <button class="nav-tab">
+    <span class="nav-icon-tab">🧬</span> Brain
+  </button>
+  <button class="nav-tab">
+    <span class="nav-icon-tab">🌌</span> Universe
+  </button>
+  <button class="nav-tab">
+    <span class="nav-icon-tab">🤝</span> Relationship
+  </button>
+</nav>
+
+</body>
+</html>

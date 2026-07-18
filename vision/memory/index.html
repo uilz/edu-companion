@@ -3,242 +3,301 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>🧠 苹果果的记忆 · AppleGo Product Vision</title>
+<title>🧠 苹果果的记忆 · AppleGo</title>
 <link rel="stylesheet" href="../design-system.css">
 <style>
-  .memory-subtitle {
-    font-size: 15px; color: var(--color-ink-secondary);
-    line-height: 1.7; margin-bottom: var(--space-6);
+  /* ── Dark Theme Override ── */
+  body { background: #0f0f12; color: #e5e5ea; }
+  #bottom-nav { background: rgba(15,15,18,0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top-color: rgba(255,255,255,0.06); }
+  .nav-tab { color: rgba(255,255,255,0.35); }
+  .nav-tab:hover { color: rgba(255,255,255,0.65); }
+  .nav-tab.active { color: #0a84ff; }
+  ::selection { background: rgba(10,132,255,0.25); }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* ── Top Bar ── */
+  .top-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: var(--space-3) 0; margin-bottom: var(--space-5);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
   }
-  .memory-timeline {
-    display: flex; flex-direction: column; gap: var(--space-4);
-  }
-  .memory-card {
-    background: var(--color-surface);
-    border-radius: var(--radius-lg);
-    padding: var(--space-5);
-    border-left: 3px solid var(--color-success);
-    box-shadow: 0 0 0 1px var(--color-divider-soft);
-    animation: msgIn 0.4s var(--ease-out);
-    transition: all 0.2s;
-  }
-  .memory-card:hover {
-    box-shadow: 0 4px 20px rgba(0,0,0,0.06), 0 0 0 1.5px var(--color-success-soft);
-    transform: translateY(-2px);
-  }
-  .memory-card .mc-header {
+  .top-bar .tb-brand { font-size: 15px; font-weight: 700; }
+  .top-bar .tb-tab { font-size: 13px; color: rgba(255,255,255,0.35); font-weight: 500; padding: 4px 12px; }
+  .top-bar .tb-tab.active { color: #0a84ff; }
+
+  /* ── Header ── */
+  .mem-header { margin-bottom: var(--space-5); }
+  .mem-header h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: var(--space-3); color: #fff; }
+  .mem-header .search-bar {
     display: flex; align-items: center; gap: 10px;
-    margin-bottom: 10px;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: var(--radius-full); padding: 10px 18px;
+    transition: border-color 0.2s;
   }
-  .memory-card .mc-icon {
-    width: 36px; height: 36px;
-    background: var(--color-success-soft);
-    border-radius: var(--radius-sm);
-    display: grid; place-items: center;
-    font-size: 20px; flex-shrink: 0;
+  .mem-header .search-bar:focus-within { border-color: #0a84ff; }
+  .mem-header .search-bar input {
+    flex: 1; background: none; border: none; outline: none;
+    font-size: 14px; color: #fff;
   }
-  .memory-card .mc-date {
-    font-size: 12px; color: var(--color-ink-muted);
-    font-weight: 500;
+  .mem-header .search-bar input::placeholder { color: rgba(255,255,255,0.3); }
+  .mem-header .search-bar .sb-icon { font-size: 16px; opacity: 0.4; }
+
+  /* ── Filter Tabs ── */
+  .filter-tabs {
+    display: flex; gap: 6px; margin-bottom: var(--space-5);
+    overflow-x: auto; scrollbar-width: none; padding-bottom: 2px;
   }
-  .memory-card .mc-narrative {
-    font-size: 15px; line-height: 1.7;
-    color: var(--color-ink-primary);
-    font-weight: 500;
-    padding-left: 46px;
+  .filter-tabs::-webkit-scrollbar { display: none; }
+  .filter-tab {
+    flex-shrink: 0; padding: 7px 16px; border-radius: var(--radius-full);
+    font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.4);
+    background: rgba(255,255,255,0.04);
+    transition: all 0.2s; white-space: nowrap;
   }
-  .memory-card .mc-detail {
-    font-size: 13.5px; line-height: 1.6;
-    color: var(--color-ink-secondary);
-    padding-left: 46px;
+  .filter-tab:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); }
+  .filter-tab.active { background: #0a84ff; color: #fff; }
+
+  /* ── Timeline ── */
+  .mem-timeline { display: flex; flex-direction: column; gap: var(--space-3); }
+
+  .mem-card {
+    background: rgba(255,255,255,0.04);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    border-left: 3px solid;
+    transition: all 0.2s;
+    animation: slideUp 0.4s var(--ease-out);
+    cursor: pointer;
+  }
+  .mem-card:hover { background: rgba(255,255,255,0.07); transform: translateY(-1px); }
+
+  .mem-card.type-observation { border-left-color: #5ac8fa; }
+  .mem-card.type-artifact    { border-left-color: #af52de; }
+  .mem-card.type-moment      { border-left-color: #ff9f0a; }
+  .mem-card.type-reflection  { border-left-color: #34c759; }
+  .mem-card.type-connection  { border-left-color: #ff2d92; }
+
+  .mem-card .mc-row {
+    display: flex; align-items: flex-start; gap: 10px;
+  }
+  .mem-card .mc-icon { font-size: 20px; flex-shrink: 0; margin-top: 2px; }
+  .mem-card .mc-body { flex: 1; min-width: 0; }
+  .mem-card .mc-meta {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11.5px; color: rgba(255,255,255,0.35); margin-bottom: 6px;
+  }
+  .mem-card .mc-meta .mc-type {
+    font-weight: 600; padding: 1px 8px; border-radius: var(--radius-full);
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .mem-card.type-observation .mc-meta .mc-type { color: #5ac8fa; background: rgba(90,200,250,0.12); }
+  .mem-card.type-artifact .mc-meta .mc-type    { color: #af52de; background: rgba(175,82,222,0.12); }
+  .mem-card.type-moment .mc-meta .mc-type      { color: #ff9f0a; background: rgba(255,159,10,0.12); }
+  .mem-card.type-reflection .mc-meta .mc-type  { color: #34c759; background: rgba(52,199,89,0.12); }
+  .mem-card.type-connection .mc-meta .mc-type  { color: #ff2d92; background: rgba(255,45,146,0.12); }
+
+  .mem-card .mc-narrative { font-size: 15px; line-height: 1.7; color: #e5e5ea; font-weight: 500; }
+  .mem-card .mc-detail {
+    font-size: 13px; line-height: 1.6;
+    color: rgba(255,255,255,0.5);
     margin-top: 4px;
   }
-  .memory-divider {
+  .mem-card .mc-preview {
+    margin-top: 10px; padding: 10px 12px;
+    background: rgba(255,255,255,0.03);
+    border-radius: var(--radius-sm);
+    font-size: 12px; color: rgba(255,255,255,0.4);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .mem-card .mc-preview .thumb {
+    width: 44px; height: 32px; background: rgba(175,82,222,0.15);
+    border-radius: 4px; display: grid; place-items: center;
+    font-size: 16px; flex-shrink: 0;
+  }
+
+  .mem-divider {
     display: flex; align-items: center; gap: 12px;
-    margin: var(--space-2) 0;
-    color: var(--color-ink-muted);
-    font-size: 11px; font-weight: 600;
-    letter-spacing: 0.05em;
+    margin: var(--space-1) 0; color: rgba(255,255,255,0.2);
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em;
   }
-  .memory-divider::after {
+  .mem-divider::after {
     content: ''; flex: 1; height: 1px;
-    background: var(--color-divider);
+    background: rgba(255,255,255,0.06);
   }
-  .memory-footer {
-    text-align: center;
-    padding: var(--space-6) var(--space-4);
-    color: var(--color-ink-muted);
-    font-size: 13px;
-    line-height: 1.7;
+
+  /* ── Footer ── */
+  .mem-footer {
+    text-align: center; padding: var(--space-8) var(--space-4);
+    color: rgba(255,255,255,0.25); font-size: 13px; line-height: 1.8;
   }
-  .memory-footer .mf-icon {
-    font-size: 28px; display: block;
-    margin-bottom: var(--space-3);
+  .mem-footer .mf-icon { font-size: 28px; display: block; margin-bottom: var(--space-3); }
+
+  /* ── Animations ── */
+  .mem-card:nth-child(1) { animation-delay: 0.02s; }
+  .mem-card:nth-child(2) { animation-delay: 0.05s; }
+  .mem-card:nth-child(3) { animation-delay: 0.08s; }
+  .mem-card:nth-child(4) { animation-delay: 0.11s; }
+  .mem-card:nth-child(5) { animation-delay: 0.14s; }
+  .mem-card:nth-child(6) { animation-delay: 0.17s; }
+  .mem-card:nth-child(7) { animation-delay: 0.20s; }
+
+  @media (max-width: 480px) {
+    .mem-header h1 { font-size: 22px; }
   }
-  .memory-card:nth-child(1) { animation-delay: 0.05s; }
-  .memory-card:nth-child(2) { animation-delay: 0.10s; }
-  .memory-card:nth-child(3) { animation-delay: 0.15s; }
-  .memory-card:nth-child(4) { animation-delay: 0.20s; }
-  .memory-card:nth-child(5) { animation-delay: 0.25s; }
-  .memory-card:nth-child(6) { animation-delay: 0.30s; }
-  .memory-card:nth-child(7) { animation-delay: 0.35s; }
-  .memory-card:nth-child(8) { animation-delay: 0.40s; }
 </style>
 </head>
 <body>
 
-<main id="app">
+<div id="app">
 
-  <!-- State Meta -->
-  <div class="state-meta">
-    <div class="sm-row">
-      <span class="sm-label">Emotion Goal</span>
-      <span class="sm-value"><span class="sm-emotion warm">🟢 warm</span> 被深刻记住的感动 — "苹果果记得我的每一个重要瞬间"</span>
-    </div>
-    <div class="sm-row">
-      <span class="sm-label">AI Behavior</span>
-      <span class="sm-value">Memory 不是聊天记录，不是统计数据。是苹果果记住的用户成长中最珍贵的瞬间——全是故事，没有 KPI，没有 streak，没有排行榜。</span>
-    </div>
-    <div class="sm-row">
-      <span class="sm-label">Time Dimension</span>
-      <span class="sm-value">从第一次学习至今 · 累积的珍贵瞬间</span>
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <span class="tb-brand">🍎 AppleGo</span>
+    <span class="tb-tab active">Memory</span>
+  </div>
+
+  <!-- Header -->
+  <div class="mem-header">
+    <h1>🧠 苹果果的记忆</h1>
+    <div class="search-bar">
+      <span class="sb-icon">🔍</span>
+      <input type="text" placeholder="搜索记忆…" />
     </div>
   </div>
 
-  <!-- Page Header -->
-  <h1 class="page-title">🧠 苹果果的记忆</h1>
-  <p class="memory-subtitle">我记得的，都是重要的瞬间。</p>
+  <!-- Filter Tabs -->
+  <div class="filter-tabs">
+    <button class="filter-tab active">全部</button>
+    <button class="filter-tab">观察</button>
+    <button class="filter-tab">作品</button>
+    <button class="filter-tab">时刻</button>
+    <button class="filter-tab">反思</button>
+    <button class="filter-tab">连接</button>
+  </div>
 
-  <!-- Memory Timeline -->
-  <div class="memory-timeline">
+  <!-- Timeline -->
+  <div class="mem-timeline">
 
-    <div class="memory-card">
-      <div class="mc-header">
-        <div class="mc-icon">🍎</div>
-        <span class="mc-date">2026 年 7 月 18 日</span>
-      </div>
-      <div class="mc-narrative">第一次敢不用原文解释</div>
-      <div class="mc-detail">
-        你用自己的话讲了矩阵乘法是什么。不是背定义，是真的理解了。
+    <!-- Observation -->
+    <div class="mem-card type-observation">
+      <div class="mc-row">
+        <span class="mc-icon">🪶</span>
+        <div class="mc-body">
+          <div class="mc-meta">
+            <span class="mc-type">观察</span>
+            <span>7/18</span>
+          </div>
+          <div class="mc-narrative">你开始用自己的话解释了矩阵乘法的几何意义</div>
+          <div class="mc-detail">不再是背公式——你说"矩阵乘法就像一个函数把向量映射到另一个向量"。</div>
+        </div>
       </div>
     </div>
 
-    <div class="memory-card">
-      <div class="mc-header">
-        <div class="mc-icon">🍎</div>
-        <span class="mc-date">2026 年 7 月 16 日</span>
-      </div>
-      <div class="mc-narrative">你开始主动举例</div>
-      <div class="mc-detail">
-        学逆矩阵的时候，你自己写了个 2×2 的例子推了一遍。不需要我出题了。
+    <div class="mem-divider">7 月 17 日</div>
+
+    <!-- Artifact -->
+    <div class="mem-card type-artifact">
+      <div class="mc-row">
+        <span class="mc-icon">📦</span>
+        <div class="mc-body">
+          <div class="mc-meta">
+            <span class="mc-type">作品</span>
+            <span>7/17</span>
+          </div>
+          <div class="mc-narrative">你画了一张线性变换的示意图</div>
+          <div class="mc-detail">在 Canvas 上手绘了向量经过矩阵变换前后的位置变化。</div>
+          <div class="mc-preview">
+            <span class="thumb">🎨</span>
+            <span>线性变换示意 · Canvas 手绘</span>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="memory-card">
-      <div class="mc-header">
-        <div class="mc-icon">🍎</div>
-        <span class="mc-date">2026 年 7 月 14 日</span>
-      </div>
-      <div class="mc-narrative">第一次纠正了自己的理解</div>
-      <div class="mc-detail">
-        你写了一段代码验算，发现结果和预期不符，自己回去查了定义。没有问我，自己找到了问题。
+    <div class="mem-divider">7 月 15 日</div>
+
+    <!-- Moment -->
+    <div class="mem-card type-moment">
+      <div class="mc-row">
+        <span class="mc-icon">💡</span>
+        <div class="mc-body">
+          <div class="mc-meta">
+            <span class="mc-type">时刻</span>
+            <span>7/15</span>
+          </div>
+          <div class="mc-narrative">第一次理解了为什么矩阵不满足交换律</div>
+          <div class="mc-detail">你举了一个具体的 2×2 例子，亲手算出了 AB ≠ BA，然后说"原来如此"。</div>
+        </div>
       </div>
     </div>
 
-    <div class="memory-card">
-      <div class="mc-header">
-        <div class="mc-icon">🍎</div>
-        <span class="mc-date">2026 年 7 月 11 日</span>
-      </div>
-      <div class="mc-narrative">你开始教别人</div>
-      <div class="mc-detail">
-        你分享说给同学讲了矩阵乘法的"行乘列"规则。教是最好的学——你讲得很清楚。
+    <div class="mem-divider">7 月 14 日</div>
+
+    <!-- Reflection -->
+    <div class="mem-card type-reflection">
+      <div class="mc-row">
+        <span class="mc-icon">📝</span>
+        <div class="mc-body">
+          <div class="mc-meta">
+            <span class="mc-type">反思</span>
+            <span>7/14</span>
+          </div>
+          <div class="mc-narrative">今天发现几何直觉比公式记忆更重要</div>
+          <div class="mc-detail">"以前总是死记硬背公式，今天画了图才发现一切其实很直观。"</div>
+        </div>
       </div>
     </div>
 
-    <div class="memory-card">
-      <div class="mc-header">
-        <div class="mc-icon">🍎</div>
-        <span class="mc-date">2026 年 7 月 9 日</span>
-      </div>
-      <div class="mc-narrative">你突破了卡了一周的问题</div>
-      <div class="mc-detail">
-        关于矩阵是否可逆的判断条件。你试了 7 天，今天突然通了，在纸上推导出了完整的过程。
-      </div>
-    </div>
+    <div class="mem-divider">7 月 13 日</div>
 
-    <div class="memory-card">
-      <div class="mc-header">
-        <div class="mc-icon">🍎</div>
-        <span class="mc-date">2026 年 7 月 5 日</span>
-      </div>
-      <div class="mc-narrative">第一次主动要求更难的内容</div>
-      <div class="mc-detail">
-        "还有更复杂的例子吗？"——你第一次主动突破舒适区。
-      </div>
-    </div>
-
-    <div class="memory-card">
-      <div class="mc-header">
-        <div class="mc-icon">🍎</div>
-        <span class="mc-date">2026 年 6 月 28 日</span>
-      </div>
-      <div class="mc-narrative">连续的第三天</div>
-      <div class="mc-detail">
-        你连续第三天来学线性代数。不是被逼的，是自己来的。习惯开始形成了。
-      </div>
-    </div>
-
-    <div class="memory-card">
-      <div class="mc-header">
-        <div class="mc-icon">🍎</div>
-        <span class="mc-date">2026 年 6 月 20 日</span>
-      </div>
-      <div class="mc-narrative">第一次完成完整的学习反思</div>
-      <div class="mc-detail">
-        你不再说"还行"或"懂了"，而是具体地说出了哪里懂了、哪里还有点模糊。
+    <!-- Connection -->
+    <div class="mem-card type-connection">
+      <div class="mc-row">
+        <span class="mc-icon">🔗</span>
+        <div class="mc-body">
+          <div class="mc-meta">
+            <span class="mc-type">连接</span>
+            <span>7/13</span>
+          </div>
+          <div class="mc-narrative">矩阵乘法 ↔ 线性变换</div>
+          <div class="mc-detail">AI 发现：你在两个不同时间讨论的概念本质上是同一件事。知识开始联结。</div>
+        </div>
       </div>
     </div>
 
   </div>
 
   <!-- Footer -->
-  <div class="memory-footer">
-    <span class="mf-icon">💭</span>
-    还有更多记忆正在发生。<br>
-    每一个瞬间，苹果果都记得。
+  <div class="mem-footer">
+    <span class="mf-icon">✨</span>
+    每一个重要的瞬间，苹果果都记得。<br>
+    还有更多记忆正在发生。
   </div>
 
-</main>
+</div>
 
 <!-- Bottom Navigation -->
 <nav id="bottom-nav">
-  <button class="nav-tab" data-page="today">
-    <svg viewBox="0 0 24 24" fill="none">
-      <path d="M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-    <span>Today</span>
-  </button>
-  <button class="nav-tab" data-page="growth">
-    <svg viewBox="0 0 24 24" fill="none">
-      <path d="M3 17l6-6 4 4 8-8M14 7h7v7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-    <span>Growth</span>
-  </button>
-  <button class="nav-tab" data-page="profile">
-    <svg viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/>
-      <path d="M4 21c0-4 4-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-    </svg>
-    <span>Profile</span>
+  <button class="nav-tab" data-page="workspace">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 3h7v7H3V3zM14 3h7v7h-7V3zM3 14h7v7H3v-7zM14 14h7v7h-7v-7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+    <span>Workspace</span>
   </button>
   <button class="nav-tab active" data-page="memory">
-    <svg viewBox="0 0 24 24" fill="none">
-      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" stroke="currentColor" stroke-width="1.8" fill="none"/>
-      <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-      <path d="M7 12h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="2 2"/>
-    </svg>
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M12 6v6l4 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
     <span>Memory</span>
+  </button>
+  <button class="nav-tab" data-page="brain">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 4a4 4 0 014 4c0 1.5-.8 2.8-2 3.5V14a2 2 0 01-2 2 2 2 0 01-2-2v-2.5c-1.2-.7-2-2-2-3.5a4 4 0 014-4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 19h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>Brain</span>
+  </button>
+  <button class="nav-tab" data-page="universe">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>Universe</span>
+  </button>
+  <button class="nav-tab" data-page="relationship">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 21s-8-5-8-10a8 8 0 1116 0c0 5-8 10-8 10z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="11" r="3" stroke="currentColor" stroke-width="1.8"/></svg>
+    <span>Rel.</span>
   </button>
 </nav>
 

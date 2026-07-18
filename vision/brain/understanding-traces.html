@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🔍 理解轨迹 · Brain · AppleGo</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+/* ── Dark Theme ── */
+body { background: #0f0f12; color: #e5e5ea; }
+#app { max-width: var(--content-max); margin: 0 auto; padding: 0 var(--space-4) var(--space-6); }
+
+/* ── Top Bar ── */
+.top-bar {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: 16px var(--space-4); padding-top: calc(16px + env(safe-area-inset-top, 0));
+  background: rgba(15,15,18,0.92); backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  position: sticky; top: 0; z-index: 50;
+}
+.top-bar .tb-brand { font-size: 16px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; }
+.top-bar .tb-brand span { color: rgba(255,255,255,0.4); font-weight: 400; }
+
+/* ── Tab Bar ── */
+.tab-bar {
+  display: flex; gap: 0; overflow-x: auto;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: rgba(15,15,18,0.95);
+  scrollbar-width: none; position: sticky; top: 57px; z-index: 49;
+}
+.tab-bar::-webkit-scrollbar { display: none; }
+.tab-item {
+  flex-shrink: 0; padding: 12px 16px;
+  font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.4);
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s var(--ease-out); white-space: nowrap;
+  text-decoration: none; cursor: pointer;
+}
+.tab-item:hover { color: rgba(255,255,255,0.7); }
+.tab-item.active { color: #5ac8fa; border-bottom-color: #5ac8fa; }
+
+/* ── Page Hero ── */
+.page-hero { padding: var(--space-5) 0 var(--space-4); }
+.page-hero h1 { font-size: 26px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+.page-hero p { font-size: 14px; color: rgba(255,255,255,0.5); line-height: 1.7; }
+
+/* ── Concept Selector ── */
+.concept-selector {
+  display: flex; gap: 8px; overflow-x: auto; margin-bottom: var(--space-5);
+  scrollbar-width: none; padding-bottom: 4px;
+}
+.concept-selector::-webkit-scrollbar { display: none; }
+.cs-btn {
+  flex-shrink: 0; padding: 8px 16px; border-radius: var(--radius-full);
+  font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.5);
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.06);
+  transition: all 0.15s; cursor: pointer; white-space: nowrap;
+}
+.cs-btn:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); }
+.cs-btn.active { background: rgba(90,200,250,0.12); color: #5ac8fa; border-color: rgba(90,200,250,0.3); }
+
+/* ── Timeline ── */
+.trace-timeline { position: relative; padding-left: 28px; margin-bottom: var(--space-6); }
+.trace-timeline::before {
+  content: ''; position: absolute; left: 10px; top: 0; bottom: 0;
+  width: 2px; background: rgba(255,255,255,0.06);
+}
+.trace-node {
+  position: relative; margin-bottom: var(--space-4);
+  animation: slideUp 0.3s var(--ease-out) both;
+  cursor: pointer;
+}
+.trace-node::before {
+  content: ''; position: absolute; left: -20px; top: 10px;
+  width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid; transition: all 0.2s;
+}
+.trace-node:hover::before { transform: scale(1.3); }
+.trace-node:nth-child(1) { animation-delay: 0.05s; }
+.trace-node:nth-child(2) { animation-delay: 0.10s; }
+.trace-node:nth-child(3) { animation-delay: 0.15s; }
+.trace-node:nth-child(4) { animation-delay: 0.20s; }
+.trace-node:nth-child(5) { animation-delay: 0.25s; }
+
+.trace-node.level-1::before { border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.05); }
+.trace-node.level-2::before { border-color: rgba(90,200,250,0.3); background: rgba(90,200,250,0.1); }
+.trace-node.level-3::before { border-color: #5ac8fa; background: rgba(90,200,250,0.2); }
+.trace-node.level-4::before { border-color: #34c759; background: rgba(52,199,89,0.2); }
+
+.trace-card {
+  background: rgba(255,255,255,0.04); border-radius: var(--radius-lg);
+  padding: var(--space-4); border: 1px solid rgba(255,255,255,0.06);
+  transition: all 0.2s;
+}
+.trace-card:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); }
+.trace-card .tc-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.trace-card .tc-date { font-size: 11px; color: rgba(255,255,255,0.3); font-weight: 500; }
+.trace-card .tc-level {
+  font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: var(--radius-full);
+}
+.trace-card .tc-question { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+.trace-card .tc-insight { font-size: 12.5px; color: rgba(255,255,255,0.55); line-height: 1.6; }
+
+/* ── Detail Drawer ── */
+.detail-drawer {
+  display: none; margin-top: 12px; padding: var(--space-4) var(--space-4) var(--space-3);
+  background: rgba(255,255,255,0.03); border-radius: var(--radius-md);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.detail-drawer.open { display: block; animation: slideUp 0.25s var(--ease-out); }
+.detail-drawer .dd-label { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.3); margin-bottom: var(--space-2); text-transform: uppercase; letter-spacing: 0.05em; }
+.detail-drawer .dd-text { font-size: 12.5px; color: rgba(255,255,255,0.6); line-height: 1.6; }
+.detail-drawer .dd-tag {
+  display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 8px;
+  border-radius: var(--radius-full); margin-top: 8px;
+}
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="top-bar">
+  <div class="tb-brand">🍎 AppleGo <span>| Brain</span></div>
+</div>
+
+<!-- Tab Bar -->
+<nav class="tab-bar">
+  <a class="tab-item" href="index.html">能力地图</a>
+  <a class="tab-item" href="learning-patterns.html">学习模式</a>
+  <a class="tab-item active" href="understanding-traces.html">理解轨迹</a>
+  <a class="tab-item" href="model-evolution.html">模型进化</a>
+</nav>
+
+<main id="app">
+
+  <!-- State Meta -->
+  <div class="state-meta">
+    <div class="sm-row">
+      <span class="sm-label">Emotion Goal</span>
+      <span class="sm-value"><span class="sm-emotion warm">🟢 warm</span> "我看到自己是怎么从不懂到懂的"——理解轨迹是认知演变的活档案</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">AI Behavior</span>
+      <span class="sm-value">对一个概念的理解会从模糊到清晰。AI 通过分析 Session、Observation、Artifact 来构建理解轨迹。</span>
+    </div>
+  </div>
+
+  <!-- Hero -->
+  <div class="page-hero">
+    <h1>🔍 理解轨迹</h1>
+    <p>选择一个概念，查看你的理解是如何随时间演变的。</p>
+  </div>
+
+  <!-- Concept Selector -->
+  <div class="concept-selector">
+    <button class="cs-btn active" onclick="switchConcept(this, '矩阵乘法')">矩阵乘法</button>
+    <button class="cs-btn" onclick="switchConcept(this, '线性变换')">线性变换</button>
+    <button class="cs-btn" onclick="switchConcept(this, '特征向量')">特征向量</button>
+  </div>
+
+  <!-- Timeline -->
+  <div class="trace-timeline" id="trace-timeline">
+    <!-- Populated by JS -->
+  </div>
+
+</main>
+
+<!-- Bottom Navigation -->
+<nav id="bottom-nav" style="background: rgba(15,15,18,0.88); border-top-color: rgba(255,255,255,0.06);">
+  <button class="nav-tab" data-page="workspace" style="color: rgba(255,255,255,0.4);">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M3 3h7v7H3V3zM14 3h7v7h-7V3zM3 14h7v7H3v-7zM14 14h7v7h-7v-7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+    </svg>
+    <span>Workspace</span>
+  </button>
+  <button class="nav-tab" data-page="memory" style="color: rgba(255,255,255,0.4);">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" stroke="currentColor" stroke-width="1.8" fill="none"/>
+      <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+    <span>Memory</span>
+  </button>
+  <button class="nav-tab active" data-page="brain">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M12 2C7.58 2 4 5.58 4 10c0 2.5 1.5 4.5 3 6v4h10v-4c1.5-1.5 3-3.5 3-6 0-4.42-3.58-8-8-8z" stroke="currentColor" stroke-width="1.8" fill="none"/>
+      <path d="M9 10h6M12 7v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+    <span>Brain</span>
+  </button>
+  <button class="nav-tab" data-page="universe" style="color: rgba(255,255,255,0.4);">
+    <svg viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/>
+      <circle cx="4" cy="6" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="20" cy="8" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="6" cy="19" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="18" cy="18" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M4 6l6.5 4.5M20 8l-5.5 3M6 19l4.5-5M18 18l-4-4" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3"/>
+    </svg>
+    <span>Universe</span>
+  </button>
+  <button class="nav-tab" data-page="relationship" style="color: rgba(255,255,255,0.4);">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M12 21l-2-2H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2h-5l-2 2z" stroke="currentColor" stroke-width="1.8" fill="none"/>
+      <path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <span>Rel.</span>
+  </button>
+</nav>
+
+<script>
+const traces = {
+  '矩阵乘法': [
+    {
+      date: '7月10日', level: 1, label: '初次接触',
+      question: '"什么是矩阵乘法？"',
+      insight: '你第一次遇到矩阵乘法。了解了基本定义——行乘列，但还很抽象。',
+      detail: '来源: Session · 你打开了一个关于矩阵的网页，第一反应是"这和普通乘法一样吗？"',
+      tag: { text: '第一次接触', color: 'rgba(255,255,255,0.3)' }
+    },
+    {
+      date: '7月11日', level: 1, label: '初步了解',
+      question: '"矩阵乘法怎么算"',
+      insight: '你动手算了几个 2×2 的例子。能正确操作，但还在"背步骤"阶段。',
+      detail: '来源: Session · 在纸上手动计算了 4 道矩阵乘法题，2 道正确，2 道需要提醒顺序。',
+      tag: { text: '练习中', color: 'rgba(255,255,255,0.3)' }
+    },
+    {
+      date: '7月12日', level: 2, label: '理解加深',
+      question: '"为什么是行乘列？"',
+      insight: '你开始追问规则背后的原因，不再满足于机械操作。这是一个重要的转变。',
+      detail: '来源: Observation · "你停下来问为什么矩阵乘法不按元素乘——开始触及定义了"',
+      tag: { text: '开始追问', color: '#5ac8fa' }
+    },
+    {
+      date: '7月15日', level: 3, label: '概念飞跃',
+      question: '"矩阵乘法代表线性变换"',
+      insight: '把矩阵乘法和几何变换联系起来——这是一个认知跃迁。你开始从"怎么算"到"为什么这样设计"。',
+      detail: '来源: Session · 你在 Canvas 上画了矩阵乘法如何对应线性变换的合成。理解从代数转向了几何。',
+      tag: { text: '认知跃迁', color: '#34c759' }
+    },
+    {
+      date: '7月16日', level: 4, label: '深度追问',
+      question: '"矩阵乘法为什么没有交换律"',
+      insight: '你不再接受"规则就是这样"。你用自己的例子验证了 AB ≠ BA，并试图从几何角度理解原因。',
+      detail: '来源: Artifact · 你写了 Python 代码分别计算 AB 和 BA，画了两种变换顺序的效果对比图。',
+      tag: { text: '深度探究', color: '#34c759' }
+    }
+  ],
+  '线性变换': [
+    {
+      date: '7月13日', level: 1, label: '初次接触',
+      question: '"线性变换是什么？"',
+      insight: '第一次了解线性变换的概念。把它理解为"对向量的操作"，还比较模糊。',
+      detail: '来源: Session · 在学习矩阵乘法时顺带接触了线性变换的概念。',
+      tag: { text: '第一次接触', color: 'rgba(255,255,255,0.3)' }
+    },
+    {
+      date: '7月14日', level: 2, label: '建立直觉',
+      question: '"矩阵怎么对应变换？"',
+      insight: '通过画图建立了初步几何直觉。能把矩阵和旋转变换对应起来。',
+      detail: '来源: Session · 你在纸上画出了单位正方形经过不同矩阵变换后的形状。',
+      tag: { text: '几何直觉', color: '#5ac8fa' }
+    },
+    {
+      date: '7月15日', level: 3, label: '概念飞跃',
+      question: '"所有线性变换都可以用矩阵表示"',
+      insight: '理解了矩阵和线性变换的对应关系。这是理解线性代数本质的关键一步。',
+      detail: '来源: Observation · "你突然说：所以矩阵的每一列就是变换后的基向量——抓住了核心"',
+      tag: { text: '认知跃迁', color: '#34c759' }
+    }
+  ],
+  '特征向量': [
+    {
+      date: '7月17日', level: 1, label: '初次接触',
+      question: '"特征向量是什么？"',
+      insight: '你刚接触到这个新概念。了解了 Ax = λx 的基本定义，开始理解它的几何意义。',
+      detail: '来源: Session · 在学完线性变换后自然延伸到特征向量。你问了"特征向量在现实中有什么用"。',
+      tag: { text: '刚起步', color: 'rgba(255,255,255,0.3)' }
+    }
+  ]
+};
+
+const levelConfig = {
+  1: { label: '初学者', css: 'level-1' },
+  2: { label: '探索者', css: 'level-2' },
+  3: { label: '理解者', css: 'level-3' },
+  4: { label: '深度理解', css: 'level-4' }
+};
+
+function renderTrace(concept) {
+  const container = document.getElementById('trace-timeline');
+  const data = traces[concept];
+  if (!data) return;
+
+  container.innerHTML = data.map((item, i) => `
+    <div class="trace-node ${levelConfig[item.level].css}" onclick="toggleDetail(this)">
+      <div class="trace-card">
+        <div class="tc-header">
+          <span class="tc-date">${item.date}</span>
+          <span class="tc-level" style="background: ${item.tag.color}1a; color: ${item.tag.color};">${item.tag.text}</span>
+        </div>
+        <div class="tc-question">${item.question}</div>
+        <div class="tc-insight">${item.insight}</div>
+        <div class="detail-drawer">
+          <div class="dd-label">📎 来源追溯</div>
+          <div class="dd-text">${item.detail}</div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleDetail(node) {
+  const drawer = node.querySelector('.detail-drawer');
+  drawer.classList.toggle('open');
+}
+
+function switchConcept(btn, concept) {
+  document.querySelectorAll('.cs-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTrace(concept);
+}
+
+// Initial render
+renderTrace('矩阵乘法');
+</script>
+
+</body>
+</html>

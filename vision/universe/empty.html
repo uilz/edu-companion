@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🌌 你的知识宇宙 · AppleGo</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+/* ── Dark Theme ── */
+body { background: #0f0f12; color: #e5e5ea; }
+#app { max-width: var(--content-max); margin: 0 auto; padding: 0 var(--space-4) var(--space-6); }
+
+/* ── Top Bar ── */
+.top-bar {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: 16px var(--space-4); padding-top: calc(16px + env(safe-area-inset-top, 0));
+  background: rgba(15,15,18,0.92); backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  position: sticky; top: 0; z-index: 50;
+}
+.top-bar .tb-brand { font-size: 16px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; }
+.top-bar .tb-brand span { color: rgba(255,255,255,0.4); font-weight: 400; }
+
+/* ── Tab Bar ── */
+.tab-bar {
+  display: flex; gap: 0; overflow-x: auto;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: rgba(15,15,18,0.95);
+  scrollbar-width: none; position: sticky; top: 57px; z-index: 49;
+}
+.tab-bar::-webkit-scrollbar { display: none; }
+.tab-item {
+  flex-shrink: 0; padding: 12px 16px;
+  font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.4);
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s var(--ease-out); white-space: nowrap;
+  text-decoration: none; cursor: pointer;
+}
+.tab-item:hover { color: rgba(255,255,255,0.7); }
+.tab-item.active { color: #5ac8fa; border-bottom-color: #5ac8fa; }
+
+/* ── Empty State Hero ── */
+.empty-hero {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; min-height: 60vh; padding: var(--space-8) var(--space-4);
+  position: relative; overflow: hidden;
+}
+
+/* ── Stars Background ── */
+.starry-sky {
+  position: absolute; inset: 0; overflow: hidden;
+}
+.star {
+  position: absolute; border-radius: 50%; background: rgba(255,255,255,0.15);
+  animation: twinkle 4s var(--ease-out) infinite;
+}
+.star:nth-child(1) { width: 2px; height: 2px; top: 15%; left: 20%; animation-delay: 0s; }
+.star:nth-child(2) { width: 1.5px; height: 1.5px; top: 25%; left: 70%; animation-delay: 1s; background: rgba(90,200,250,0.2); }
+.star:nth-child(3) { width: 2px; height: 2px; top: 40%; left: 45%; animation-delay: 0.5s; background: rgba(255,255,255,0.1); }
+.star:nth-child(4) { width: 1px; height: 1px; top: 55%; left: 30%; animation-delay: 2s; background: rgba(175,82,222,0.15); }
+.star:nth-child(5) { width: 1.5px; height: 1.5px; top: 60%; left: 75%; animation-delay: 1.5s; }
+.star:nth-child(6) { width: 1px; height: 1px; top: 35%; left: 10%; animation-delay: 3s; }
+.star:nth-child(7) { width: 2px; height: 2px; top: 70%; left: 55%; animation-delay: 2.5s; background: rgba(52,199,89,0.15); }
+.star:nth-child(8) { width: 1px; height: 1px; top: 80%; left: 15%; animation-delay: 0.8s; }
+.star:nth-child(9) { width: 1.5px; height: 1.5px; top: 45%; left: 85%; animation-delay: 3.2s; }
+.star:nth-child(10) { width: 2px; height: 2px; top: 85%; left: 65%; animation-delay: 1.2s; background: rgba(255,159,10,0.12); }
+.star:nth-child(11) { width: 1px; height: 1px; top: 10%; left: 50%; animation-delay: 2.8s; }
+.star:nth-child(12) { width: 1.5px; height: 1.5px; top: 75%; left: 40%; animation-delay: 0.3s; }
+.star:nth-child(13) { width: 1px; height: 1px; top: 30%; left: 35%; animation-delay: 4s; }
+.star:nth-child(14) { width: 2px; height: 2px; top: 90%; left: 25%; animation-delay: 1.8s; background: rgba(255,255,255,0.08); }
+.star:nth-child(15) { width: 1px; height: 1px; top: 20%; left: 90%; animation-delay: 2.2s; }
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.5); }
+}
+
+/* ── Content ── */
+.empty-content {
+  position: relative; z-index: 1;
+}
+.empty-content .ec-icon {
+  font-size: 56px; margin-bottom: var(--space-4); display: block;
+}
+.empty-content h1 {
+  font-size: 28px; font-weight: 700; color: #fff;
+  letter-spacing: -0.02em; margin-bottom: var(--space-4);
+}
+.empty-content .ec-subtitle {
+  font-size: 16px; color: rgba(255,255,255,0.45);
+  line-height: 1.8; max-width: 360px; margin: 0 auto var(--space-6);
+  font-family: var(--font-serif);
+}
+.empty-content .ec-message {
+  font-size: 14px; color: rgba(255,255,255,0.35);
+  line-height: 1.8; max-width: 340px; margin: 0 auto var(--space-8);
+  font-style: italic;
+}
+.empty-content .ec-cta {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 14px 32px; border-radius: var(--radius-full);
+  font-size: 15px; font-weight: 600; color: #fff;
+  background: #5ac8fa; border: none; cursor: pointer;
+  transition: all 0.15s; text-decoration: none;
+  box-shadow: 0 4px 20px rgba(90,200,250,0.2);
+}
+.empty-content .ec-cta:hover { background: #4ab8ea; transform: translateY(-2px); }
+
+/* ── Bottom Hint ── */
+.empty-hint {
+  text-align: center; padding: var(--space-6) var(--space-4);
+  color: rgba(255,255,255,0.2); font-size: 12px; line-height: 1.7;
+}
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="top-bar">
+  <div class="tb-brand">🍎 AppleGo <span>| Universe</span></div>
+</div>
+
+<!-- Tab Bar -->
+<nav class="tab-bar">
+  <a class="tab-item active" href="index.html">宇宙视图</a>
+  <a class="tab-item" href="mission-view.html">Missions</a>
+  <a class="tab-item" href="discovery.html">发现</a>
+</nav>
+
+<main id="app">
+
+  <!-- State Meta -->
+  <div class="state-meta">
+    <div class="sm-row">
+      <span class="sm-label">Emotion Goal</span>
+      <span class="sm-value"><span class="sm-emotion warm">🟢 warm</span> "一切还没开始——但我已经开始期待了"</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">AI Behavior</span>
+      <span class="sm-value">对于全新用户，Universe 不是空的。它是"等待被点亮"的夜空。不展示空白，展示可能性。</span>
+    </div>
+  </div>
+
+  <!-- Empty Hero -->
+  <div class="empty-hero">
+    <div class="starry-sky">
+      <div class="star"></div><div class="star"></div><div class="star"></div>
+      <div class="star"></div><div class="star"></div><div class="star"></div>
+      <div class="star"></div><div class="star"></div><div class="star"></div>
+      <div class="star"></div><div class="star"></div><div class="star"></div>
+      <div class="star"></div><div class="star"></div><div class="star"></div>
+    </div>
+
+    <div class="empty-content">
+      <span class="ec-icon">🌌</span>
+      <h1>你的知识宇宙</h1>
+      <p class="ec-subtitle">当你开始学习，星星就会亮起。</p>
+      <p class="ec-message">
+        "每一次思考、每一次提问、每一次尝试——<br>都是点亮宇宙的光。"
+      </p>
+      <a class="ec-cta" href="../workspace/index.html">🚀 开始第一次学习</a>
+    </div>
+  </div>
+
+  <!-- Bottom Hint -->
+  <div class="empty-hint">
+    等你学了一些内容之后，这里会长出属于你的知识星座。
+  </div>
+
+</main>
+
+<!-- Bottom Navigation -->
+<nav id="bottom-nav" style="background: rgba(15,15,18,0.88); border-top-color: rgba(255,255,255,0.06);">
+  <button class="nav-tab" data-page="workspace" style="color: rgba(255,255,255,0.4);">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M3 3h7v7H3V3zM14 3h7v7h-7V3zM3 14h7v7H3v-7zM14 14h7v7h-7v-7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+    </svg>
+    <span>Workspace</span>
+  </button>
+  <button class="nav-tab" data-page="memory" style="color: rgba(255,255,255,0.4);">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" stroke="currentColor" stroke-width="1.8" fill="none"/>
+      <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+    <span>Memory</span>
+  </button>
+  <button class="nav-tab" data-page="brain" style="color: rgba(255,255,255,0.4);">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M12 2C7.58 2 4 5.58 4 10c0 2.5 1.5 4.5 3 6v4h10v-4c1.5-1.5 3-3.5 3-6 0-4.42-3.58-8-8-8z" stroke="currentColor" stroke-width="1.8" fill="none"/>
+      <path d="M9 10h6M12 7v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+    <span>Brain</span>
+  </button>
+  <button class="nav-tab active" data-page="universe">
+    <svg viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/>
+      <circle cx="4" cy="6" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="20" cy="8" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="6" cy="19" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="18" cy="18" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M4 6l6.5 4.5M20 8l-5.5 3M6 19l4.5-5M18 18l-4-4" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3"/>
+    </svg>
+    <span>Universe</span>
+  </button>
+  <button class="nav-tab" data-page="relationship" style="color: rgba(255,255,255,0.4);">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M12 21l-2-2H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2h-5l-2 2z" stroke="currentColor" stroke-width="1.8" fill="none"/>
+      <path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <span>Rel.</span>
+  </button>
+</nav>
+
+</body>
+</html>

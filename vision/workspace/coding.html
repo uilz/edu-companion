@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>AppleGo — 编程</title>
+  <link rel="stylesheet" href="../design-system.css" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0f0f12;
+      color: #f5f5f7;
+      font-family: 'Inter', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    ::selection { background: rgba(10, 132, 255, 0.25); }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #3a3a3c; border-radius: 3px; }
+
+    .workspace-grid {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      grid-template-rows: 56px 1fr auto;
+      grid-template-areas:
+        "topbar topbar"
+        "sidebar main"
+        "sidebar tools";
+      min-height: 100vh;
+      max-width: 900px;
+      margin: 0 auto;
+      padding-bottom: 68px;
+    }
+
+    .top-bar {
+      grid-area: topbar;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 20px; height: 56px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      background: rgba(15,15,18,0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      position: sticky; top: 0; z-index: 10;
+    }
+    .top-bar-left { display: flex; align-items: center; gap: 12px; }
+    .top-bar-logo { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; color: #f5f5f7; }
+    .top-bar-logo span { color: #0a84ff; }
+    .top-bar-title { font-size: 13px; color: #aeaeb2; display: flex; align-items: center; gap: 6px; }
+    .mode-badge {
+      font-size: 11px; font-weight: 600; color: #34c759;
+      background: rgba(52,199,89,0.1);
+      padding: 4px 10px; border-radius: 9999px;
+      border: 1px solid rgba(52,199,89,0.2);
+    }
+    .top-bar-right { display: flex; align-items: center; gap: 16px; }
+    .nav-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      display: grid; place-items: center;
+      color: #8e8e93; cursor: pointer; transition: all 0.15s; font-size: 16px;
+    }
+    .nav-icon:hover { background: rgba(255,255,255,0.06); color: #f5f5f7; }
+
+    .obs-sidebar {
+      grid-area: sidebar;
+      padding: 20px 16px;
+      border-right: 1px solid rgba(255,255,255,0.06);
+      display: flex; flex-direction: column; gap: 16px;
+      overflow-y: auto;
+    }
+    .obs-label {
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.08em; color: #636366;
+    }
+    .obs-card {
+      background: rgba(255,255,255,0.03);
+      border-radius: 10px; padding: 12px;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .obs-card .obs-text { font-size: 13px; line-height: 1.5; color: #aeaeb2; }
+    .obs-card .obs-sub { font-size: 11px; color: #636366; margin-top: 6px; }
+    .obs-card .obs-code-note {
+      font-size: 13px; line-height: 1.5; color: #ff9f0a;
+      padding: 8px 10px; background: rgba(255,159,10,0.06);
+      border-radius: 8px; margin-top: 8px; border-left: 2px solid #ff9f0a;
+    }
+
+    .main-content {
+      grid-area: main;
+      padding: 16px 28px 20px;
+      overflow-y: auto;
+      max-width: 560px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .editor-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .editor-header .eh-file {
+      font-size: 12px; color: #636366; font-family: 'SF Mono', 'JetBrains Mono', monospace;
+    }
+    .editor-header .eh-lang {
+      font-size: 11px; color: #34c759; font-weight: 500;
+    }
+    .code-editor {
+      background: #161618;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 16px;
+      font-family: 'SF Mono', 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      overflow-x: auto;
+      color: #d1d1d6;
+    }
+    .code-editor .line { display: flex; }
+    .code-editor .line-num {
+      color: #48484a;
+      min-width: 28px;
+      text-align: right;
+      margin-right: 16px;
+      user-select: none;
+    }
+    .code-editor .keyword { color: #ff7ab2; }
+    .code-editor .func { color: #5ac8fa; }
+    .code-editor .string { color: #34c759; }
+    .code-editor .comment { color: #636366; font-style: italic; }
+    .code-editor .number { color: #ff9f0a; }
+    .code-editor .op { color: #aeaeb2; }
+    .code-editor .highlight-line {
+      background: rgba(255,159,10,0.08);
+      border-left: 2px solid #ff9f0a;
+      padding-left: 8px;
+      margin: 0 -16px;
+      padding-right: 16px;
+    }
+
+    .terminal {
+      background: #0a0a0c;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-family: 'SF Mono', 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      color: #34c759;
+    }
+    .terminal .prompt { color: #636366; }
+    .terminal .output { color: #aeaeb2; }
+
+    .tools-drawer {
+      grid-area: tools;
+      padding: 12px 28px 16px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      display: flex; gap: 8px; flex-wrap: wrap;
+    }
+    .tool-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 8px; color: #8e8e93;
+      font-size: 12px; font-weight: 500;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .tool-btn:hover { background: rgba(255,255,255,0.08); color: #f5f5f7; }
+    .tool-btn.run {
+      background: rgba(52,199,89,0.12);
+      border-color: rgba(52,199,89,0.2);
+      color: #34c759;
+    }
+    .tool-btn.run:hover { background: rgba(52,199,89,0.2); }
+
+    #bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      height: 68px;
+      background: rgba(15,15,18,0.92);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid rgba(255,255,255,0.08);
+      display: flex; justify-content: center; align-items: center;
+      gap: 28px; z-index: 100;
+      padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+    .nav-tab {
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      color: #636366; font-size: 10.5px; font-weight: 500;
+      padding: 8px 10px; border-radius: 10px;
+      transition: color 0.15s; min-width: 56px;
+      cursor: pointer; background: none; border: none; font-family: inherit;
+    }
+    .nav-tab:hover { color: #8e8e93; }
+    .nav-tab.active { color: #0a84ff; }
+    .nav-tab .nav-icon-tab { font-size: 20px; }
+
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+
+    @media (max-width: 640px) {
+      .workspace-grid {
+        grid-template-columns: 1fr;
+        grid-template-areas: "topbar" "main" "tools";
+      }
+      .obs-sidebar { display: none; }
+      .main-content { padding: 16px; }
+      .tools-drawer { padding: 12px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- STATE-META
+  Emotion Goal: Productive, in the zone with code, feeling AI's non-intrusive code review support
+  AI Behavior: Track coding patterns, spot potential issues silently, offer review only when helpful
+  Time Dimension: Deep coding phase within a study session
+-->
+
+<div class="workspace-grid">
+
+  <header class="top-bar">
+    <div class="top-bar-left">
+      <div class="top-bar-logo">🍎 <span>AppleGo</span></div>
+      <div class="top-bar-title">💻 编程模式 · 矩阵乘法实现</div>
+    </div>
+    <div class="top-bar-right">
+      <span class="mode-badge">💻 编程中</span>
+      <div class="nav-icon">🔔</div>
+      <div class="nav-icon">👤</div>
+    </div>
+  </header>
+
+  <aside class="obs-sidebar">
+    <div class="obs-label">AI 观察</div>
+
+    <div class="obs-card">
+      <div class="obs-text">你写了 15 行，改了 3 次</div>
+      <div class="obs-sub">代码在逐步变好</div>
+    </div>
+
+    <div class="obs-card">
+      <div class="obs-text">你在查 numpy 文档</div>
+      <div class="obs-sub">np.dot vs @ operator</div>
+    </div>
+
+    <div class="obs-card">
+      <div class="obs-text">你尝试了两种实现</div>
+      <div class="obs-sub">for 循环版本 vs 列表推导式</div>
+    </div>
+
+    <div class="obs-card">
+      <div class="obs-code-note">🔍 我发现一个问题：第 12 行循环边界可能是 n 而不是 m。确认一下？</div>
+    </div>
+  </aside>
+
+  <main class="main-content">
+
+    <div class="editor-header">
+      <span class="eh-file">📄 matrix_mul.py</span>
+      <span class="eh-lang">Python 3.11</span>
+    </div>
+
+    <div class="code-editor">
+      <div class="line"><span class="line-num">1</span><span class="keyword">import</span> numpy <span class="keyword">as</span> np</div>
+      <div class="line"><span class="line-num">2</span></div>
+      <div class="line"><span class="line-num">3</span><span class="comment"># 实现矩阵乘法：验证线性变换的复合</span></div>
+      <div class="line"><span class="line-num">4</span></div>
+      <div class="line"><span class="line-num">5</span><span class="keyword">def</span> <span class="func">matrix_multiply</span>(A, B):</div>
+      <div class="line"><span class="line-num">6</span>    <span class="string">"""矩阵乘法 A @ B"""</span></div>
+      <div class="line"><span class="line-num">7</span>    m, n = A.shape</div>
+      <div class="line"><span class="line-num">8</span>    n2, p = B.shape</div>
+      <div class="line"><span class="line-num">9</span>    <span class="keyword">if</span> n != n2:</div>
+      <div class="line"><span class="line-num">10</span>        <span class="keyword">raise</span> ValueError(<span class="string">"维度不匹配"</span>)</div>
+      <div class="line"><span class="line-num">11</span>    <span class="comment"># 初始化结果矩阵</span></div>
+      <div class="line highlight-line"><span class="line-num">12</span>    C = [[<span class="number">0</span> <span class="keyword">for</span> _ <span class="keyword">in</span> <span class="func">range</span>(p)] <span class="keyword">for</span> _ <span class="keyword">in</span> <span class="func">range</span>(m)]</div>
+      <div class="line"><span class="line-num">13</span>    <span class="keyword">for</span> i <span class="keyword">in</span> <span class="func">range</span>(m):</div>
+      <div class="line"><span class="line-num">14</span>        <span class="keyword">for</span> j <span class="keyword">in</span> <span class="func">range</span>(p):</div>
+      <div class="line"><span class="line-num">15</span>            <span class="keyword">for</span> k <span class="keyword">in</span> <span class="func">range</span>(n):</div>
+      <div class="line"><span class="line-num">16</span>                C[i][j] += A[i][k] * B[k][j]</div>
+      <div class="line"><span class="line-num">17</span>    <span class="keyword">return</span> np.array(C)</div>
+      <div class="line"><span class="line-num">18</span></div>
+      <div class="line"><span class="line-num">19</span><span class="comment"># 验证：旋转矩阵乘法</span></div>
+      <div class="line"><span class="line-num">20</span>theta = np.pi / <span class="number">4</span>  <span class="comment"># 45度</span></div>
+      <div class="line"><span class="line-num">21</span>R = [[np.cos(theta), -np.sin(theta)],</div>
+      <div class="line"><span class="line-num">22</span>     [np.sin(theta),  np.cos(theta)]]</div>
+    </div>
+
+    <div class="terminal">
+      <div class="output">$ python matrix_mul.py</div>
+      <div class="output">旋转矩阵 R(45°) 验证通过 ✓</div>
+      <div class="output">A @ B ≠ B @ A （如预期，不满足交换律）</div>
+      <div class="prompt">$ </div>
+    </div>
+
+  </main>
+
+  <div class="tools-drawer">
+    <button class="tool-btn run">▶️ 运行</button>
+    <button class="tool-btn">🐛 调试</button>
+    <button class="tool-btn">📋 审查</button>
+    <button class="tool-btn">📝 笔记</button>
+    <button class="tool-btn">📊 可视化</button>
+  </div>
+
+</div>
+
+<nav id="bottom-nav">
+  <button class="nav-tab active">
+    <span class="nav-icon-tab">🔲</span> Workspace
+  </button>
+  <button class="nav-tab">
+    <span class="nav-icon-tab">🧠</span> Memory
+  </button>
+  <button class="nav-tab">
+    <span class="nav-icon-tab">🧬</span> Brain
+  </button>
+  <button class="nav-tab">
+    <span class="nav-icon-tab">🌌</span> Universe
+  </button>
+  <button class="nav-tab">
+    <span class="nav-icon-tab">🤝</span> Relationship
+  </button>
+</nav>
+
+</body>
+</html>

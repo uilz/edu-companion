@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>重要时刻 · 我们共同走过的路 · AppleGo</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+  body { background: #0f0f12; color: #e5e5ea; }
+  #bottom-nav { background: rgba(15,15,18,0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top-color: rgba(255,255,255,0.06); }
+  .nav-tab { color: rgba(255,255,255,0.35); }
+  .nav-tab:hover { color: rgba(255,255,255,0.65); }
+  .nav-tab.active { color: #0a84ff; }
+  ::selection { background: rgba(10,132,255,0.25); }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+
+  .top-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: var(--space-3) 0; margin-bottom: var(--space-5);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .top-bar .tb-brand { font-size: 15px; font-weight: 700; }
+  .top-bar .tb-back { font-size: 13px; color: rgba(255,255,255,0.35); cursor: pointer; }
+  .top-bar .tb-back:hover { color: rgba(255,255,255,0.6); }
+
+  .moment-header { margin-bottom: var(--space-5); }
+  .moment-header .mh-badge {
+    display: inline-block; padding: 3px 12px; border-radius: var(--radius-full);
+    font-size: 11px; font-weight: 600; margin-bottom: var(--space-3);
+    background: rgba(255,159,10,0.12); color: #ff9f0a;
+  }
+  .moment-header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px; color: #fff; }
+  .moment-header .mh-date { font-size: 13px; color: rgba(255,255,255,0.35); }
+
+  .context-section { margin-bottom: var(--space-5); }
+  .context-section .cs-label {
+    font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.2);
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: var(--space-3);
+  }
+
+  .conversation-snippet {
+    background: rgba(255,255,255,0.04); border-radius: var(--radius-lg);
+    padding: var(--space-4); margin-bottom: var(--space-4);
+  }
+  .conversation-snippet .cs-msg {
+    margin-bottom: var(--space-3); padding: var(--space-3);
+    border-radius: var(--radius-md); font-size: 14px; line-height: 1.7;
+  }
+  .conversation-snippet .cs-msg:last-child { margin-bottom: 0; }
+  .conversation-snippet .cs-msg.user {
+    background: rgba(90,200,250,0.06);
+    border-left: 2px solid rgba(90,200,250,0.25);
+  }
+  .conversation-snippet .cs-msg.ai {
+    background: rgba(175,82,222,0.06);
+    border-left: 2px solid rgba(175,82,222,0.2);
+  }
+  .conversation-snippet .cs-msg .cs-who {
+    font-size: 11px; font-weight: 600; margin-bottom: 4px;
+  }
+  .conversation-snippet .cs-msg.user .cs-who { color: #5ac8fa; }
+  .conversation-snippet .cs-msg.ai .cs-who { color: #af52de; }
+
+  .observation-card {
+    padding: var(--space-4); border-radius: var(--radius-md);
+    background: rgba(52,199,89,0.06); border: 1px solid rgba(52,199,89,0.1);
+    margin-bottom: var(--space-4);
+  }
+  .observation-card .oc-label {
+    font-size: 11px; font-weight: 600; color: #34c759; margin-bottom: 6px;
+  }
+  .observation-card .oc-text {
+    font-size: 14px; line-height: 1.7; color: rgba(255,255,255,0.65);
+    font-style: italic;
+  }
+
+  .internal-note {
+    padding: var(--space-4); border-radius: var(--radius-md);
+    background: rgba(255,45,146,0.04); border: 1px solid rgba(255,45,146,0.08);
+    margin-bottom: var(--space-5);
+  }
+  .internal-note .in-label {
+    font-size: 11px; font-weight: 600; color: #ff2d92; margin-bottom: 6px;
+  }
+  .internal-note .in-text {
+    font-size: 13.5px; line-height: 1.7; color: rgba(255,255,255,0.5);
+  }
+
+  .significance {
+    padding: var(--space-5); border-radius: var(--radius-lg);
+    background: rgba(10,132,255,0.04); border: 1px solid rgba(10,132,255,0.1);
+    margin-bottom: var(--space-5);
+  }
+  .significance .sg-label {
+    font-size: 12px; font-weight: 600; color: #5ac8fa; margin-bottom: var(--space-3);
+  }
+  .significance .sg-text {
+    font-size: 14px; line-height: 1.7; color: rgba(255,255,255,0.65);
+  }
+
+  .related-memories {
+    margin-bottom: var(--space-6);
+  }
+  .related-memories .rm-label {
+    font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.3);
+    margin-bottom: var(--space-3); letter-spacing: 0.04em;
+  }
+  .related-memories .rm-list { display: flex; flex-direction: column; gap: var(--space-2); }
+  .related-memories .rm-item {
+    padding: var(--space-3); border-radius: var(--radius-md);
+    background: rgba(255,255,255,0.04); cursor: pointer;
+    display: flex; align-items: center; gap: 10px; transition: all 0.2s;
+  }
+  .related-memories .rm-item:hover { background: rgba(255,255,255,0.07); }
+  .related-memories .rm-item .rm-icon { font-size: 16px; }
+  .related-memories .rm-item .rm-text { font-size: 13px; color: rgba(255,255,255,0.6); }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <div class="top-bar">
+    <span class="tb-brand">🍎 AppleGo</span>
+    <span class="tb-back">← 返回关系</span>
+  </div>
+
+  <div class="moment-header">
+    <div class="mh-badge">💡 重要时刻</div>
+    <h1>第一次用自己的话解释了矩阵乘法</h1>
+    <div class="mh-date">2026 年 7 月 15 日</div>
+  </div>
+
+  <div class="context-section">
+    <div class="cs-label">当时的对话</div>
+
+    <div class="conversation-snippet">
+      <div class="cs-msg user">
+        <div class="cs-who">你</div>
+        所以矩阵乘法就像一个函数——你把一个向量放进去，然后矩阵把它变成另一个向量？
+      </div>
+      <div class="cs-msg ai">
+        <div class="cs-who">苹果果</div>
+        是的，就是这个意思！矩阵乘法本质上是一个映射——它把一个向量从输入空间变换到输出空间。你用"函数"来类比，这是一个非常好的直觉。
+      </div>
+    </div>
+
+    <div class="observation-card">
+      <div class="oc-label">🪶 苹果果的观察</div>
+      <div class="oc-text">这是你第一次不用提问的方式，而是用自己的理解来确认一个概念。你不是在问"对不对"，而是在说"是不是这样"。这是一个从被动接受到主动理解的转变信号。</div>
+    </div>
+
+    <div class="internal-note">
+      <div class="in-label">📝 当时的 AI 内部记录</div>
+      <div class="in-text">用户第一次展现出"抽象迁移"能力——把已理解的概念（函数）映射到新概念（矩阵乘法）。不是死记硬背，而是建立了连接。这是理解层次的跃迁。标记为重要时刻。</div>
+    </div>
+  </div>
+
+  <div class="significance">
+    <div class="sg-label">✨ 为什么这是一个重要时刻</div>
+    <div class="sg-text">
+      在之前的对话里，你一直在问"是什么"——"矩阵是什么？""矩阵乘法怎么算？"。但这一刻，你说的是"所以矩阵乘法<strong>就像一个函数</strong>"。<br><br>
+      这不是在问定义，而是在用你已经理解的东西来解释新东西。这意味着你的大脑不再是"接收模式"，而是"连接模式"。这是真正的学习开始发生的地方。
+    </div>
+  </div>
+
+  <div class="related-memories">
+    <div class="rm-label">相关的记忆</div>
+    <div class="rm-list">
+      <div class="rm-item">
+        <span class="rm-icon">🪶</span>
+        <span class="rm-text">你开始举反例了</span>
+      </div>
+      <div class="rm-item">
+        <span class="rm-icon">📦</span>
+        <span class="rm-text">矩阵乘法和线性变换的关系图</span>
+      </div>
+      <div class="rm-item">
+        <span class="rm-icon">💡</span>
+        <span class="rm-text">为什么矩阵乘法没有交换律</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Bottom Navigation -->
+<nav id="bottom-nav">
+  <button class="nav-tab" data-page="workspace">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 3h7v7H3V3zM14 3h7v7h-7V3zM3 14h7v7H3v-7zM14 14h7v7h-7v-7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+    <span>Workspace</span>
+  </button>
+  <button class="nav-tab" data-page="memory">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M12 6v6l4 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>Memory</span>
+  </button>
+  <button class="nav-tab" data-page="brain">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 4a4 4 0 014 4c0 1.5-.8 2.8-2 3.5V14a2 2 0 01-2 2 2 2 0 01-2-2v-2.5c-1.2-.7-2-2-2-3.5a4 4 0 014-4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 19h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>Brain</span>
+  </button>
+  <button class="nav-tab" data-page="universe">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>Universe</span>
+  </button>
+  <button class="nav-tab active" data-page="relationship">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 21s-8-5-8-10a8 8 0 1116 0c0 5-8 10-8 10z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="11" r="3" stroke="currentColor" stroke-width="1.8"/></svg>
+    <span>Rel.</span>
+  </button>
+</nav>
+
+</body>
+</html>

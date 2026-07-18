@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🎯 Missions · Universe · AppleGo</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+/* ── Dark Theme ── */
+body { background: #0f0f12; color: #e5e5ea; }
+#app { max-width: var(--content-max); margin: 0 auto; padding: 0 var(--space-4) var(--space-6); }
+
+/* ── Top Bar ── */
+.top-bar {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: 16px var(--space-4); padding-top: calc(16px + env(safe-area-inset-top, 0));
+  background: rgba(15,15,18,0.92); backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  position: sticky; top: 0; z-index: 50;
+}
+.top-bar .tb-brand { font-size: 16px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; }
+.top-bar .tb-brand span { color: rgba(255,255,255,0.4); font-weight: 400; }
+
+/* ── Tab Bar ── */
+.tab-bar {
+  display: flex; gap: 0; overflow-x: auto;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: rgba(15,15,18,0.95);
+  scrollbar-width: none; position: sticky; top: 57px; z-index: 49;
+}
+.tab-bar::-webkit-scrollbar { display: none; }
+.tab-item {
+  flex-shrink: 0; padding: 12px 16px;
+  font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.4);
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s var(--ease-out); white-space: nowrap;
+  text-decoration: none; cursor: pointer;
+}
+.tab-item:hover { color: rgba(255,255,255,0.7); }
+.tab-item.active { color: #5ac8fa; border-bottom-color: #5ac8fa; }
+
+/* ── Page Hero ── */
+.page-hero { padding: var(--space-5) 0 var(--space-4); }
+.page-hero h1 { font-size: 26px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+.page-hero p { font-size: 14px; color: rgba(255,255,255,0.5); line-height: 1.7; }
+
+/* ── Mission Card ── */
+.mission-card {
+  background: rgba(90,200,250,0.04); border-radius: var(--radius-xl);
+  padding: var(--space-5); border: 1px solid rgba(90,200,250,0.12);
+  margin-bottom: var(--space-5);
+}
+.mission-card .mc-label { font-size: 11px; font-weight: 600; color: #5ac8fa; letter-spacing: 0.05em; margin-bottom: 6px; }
+.mission-card .mc-name { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+.mission-card .mc-desc { font-size: 13px; color: rgba(255,255,255,0.5); line-height: 1.6; margin-bottom: var(--space-4); }
+.mission-card .mc-progress { display: flex; align-items: center; gap: var(--space-3); margin-bottom: 6px; }
+.mission-card .mc-bar {
+  flex: 1; height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden;
+}
+.mission-card .mc-bar-fill {
+  height: 100%; background: #5ac8fa; border-radius: 2px;
+  width: 60%; transition: width 1s var(--ease-out);
+}
+.mission-card .mc-pct { font-size: 12px; color: #5ac8fa; font-weight: 600; }
+
+/* ── Pathway ── */
+.pathway { position: relative; padding-left: 36px; margin-bottom: var(--space-6); }
+.pathway::before {
+  content: ''; position: absolute; left: 15px; top: 8px; bottom: 8px;
+  width: 2px; background: rgba(255,255,255,0.06);
+}
+.path-node {
+  position: relative; margin-bottom: var(--space-4);
+  animation: slideUp 0.3s var(--ease-out) both;
+}
+.path-node::before {
+  content: ''; position: absolute; left: -24px; top: 12px;
+  width: 12px; height: 12px; border-radius: 50%;
+  z-index: 1; transition: all 0.2s;
+}
+.path-node:nth-child(1) { animation-delay: 0.05s; }
+.path-node:nth-child(2) { animation-delay: 0.10s; }
+.path-node:nth-child(3) { animation-delay: 0.15s; }
+.path-node:nth-child(4) { animation-delay: 0.20s; }
+.path-node:nth-child(5) { animation-delay: 0.25s; }
+.path-node.completed::before { background: #34c759; border: 2px solid #34c759; }
+.path-node.current::before { background: #5ac8fa; border: 2px solid #5ac8fa; box-shadow: 0 0 12px rgba(90,200,250,0.4); }
+.path-node.upcoming::before { background: transparent; border: 2px solid rgba(255,255,255,0.15); }
+
+.path-card {
+  background: rgba(255,255,255,0.04); border-radius: var(--radius-lg);
+  padding: var(--space-4); border: 1px solid rgba(255,255,255,0.06);
+  transition: all 0.2s;
+}
+.path-card:hover { background: rgba(255,255,255,0.06); }
+.path-node.current .path-card { border-color: rgba(90,200,250,0.25); background: rgba(90,200,250,0.06); }
+.path-card .pc-header {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
+}
+.path-card .pc-status {
+  font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: var(--radius-full);
+}
+.path-card .pc-name { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+.path-card .pc-name .pc-check { color: #34c759; font-size: 14px; }
+.path-card .pc-insight { font-size: 12px; color: rgba(255,255,255,0.45); line-height: 1.5; }
+
+/* ── Caveat ── */
+.caveat {
+  background: rgba(255,159,10,0.06); border-radius: var(--radius-lg);
+  padding: var(--space-4); border: 1px solid rgba(255,159,10,0.1);
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.caveat .cv-icon { font-size: 18px; flex-shrink: 0; }
+.caveat .cv-text { font-size: 12.5px; color: rgba(255,255,255,0.5); line-height: 1.6; }
+.caveat .cv-text strong { color: rgba(255,255,255,0.7); }
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="top-bar">
+  <div class="tb-brand">🍎 AppleGo <span>| Universe</span></div>
+</div>
+
+<!-- Tab Bar -->
+<nav class="tab-bar">
+  <a class="tab-item" href="index.html">宇宙视图</a>
+  <a class="tab-item active" href="mission-view.html">Missions</a>
+  <a class="tab-item" href="discovery.html">发现</a>
+</nav>
+
+<main id="app">
+
+  <!-- State Meta -->
+  <div class="state-meta">
+    <div class="sm-row">
+      <span class="sm-label">Emotion Goal</span>
+      <span class="sm-value"><span class="sm-emotion warm">🟢 warm</span> "我看到了一个自然的路径——这不是课程，是我自己走出来的路"</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">AI Behavior</span>
+      <span class="sm-value">Missions 不是预置课程。是 AI 从你的学习行为中发现的概念集群，是你走过的路。</span>
+    </div>
+  </div>
+
+  <!-- Hero -->
+  <div class="page-hero">
+    <h1>🎯 Missions</h1>
+    <p>以下是你正在自然形成的知识路线。不是必修课，是我看到的你的学习轨迹。</p>
+  </div>
+
+  <!-- Active Mission -->
+  <div class="mission-card">
+    <div class="mc-label">🎯 活跃任务</div>
+    <div class="mc-name">理解线性代数的几何意义</div>
+    <div class="mc-desc">从矩阵的代数运算到几何变换的直觉。你已经开始建立这种连接。</div>
+    <div class="mc-progress">
+      <div class="mc-bar"><div class="mc-bar-fill"></div></div>
+      <span class="mc-pct">60%</span>
+    </div>
+  </div>
+
+  <!-- Pathway -->
+  <div class="pathway">
+
+    <div class="path-node completed">
+      <div class="path-card">
+        <div class="pc-header">
+          <span class="pc-status" style="background: rgba(52,199,89,0.12); color: #34c759;">已完成</span>
+        </div>
+        <div class="pc-name"><span class="pc-check">✅</span> 矩阵乘法</div>
+        <div class="pc-insight">你已掌握矩阵乘法的计算规则，并开始理解它背后的线性映射含义。建立了基础。</div>
+      </div>
+    </div>
+
+    <div class="path-node completed">
+      <div class="path-card">
+        <div class="pc-header">
+          <span class="pc-status" style="background: rgba(52,199,89,0.12); color: #34c759;">已完成</span>
+        </div>
+        <div class="pc-name"><span class="pc-check">✅</span> 行列式</div>
+        <div class="pc-insight">理解了行列式作为"线性变换对面积的缩放因子"的几何意义。能将代数计算和几何解释对应起来。</div>
+      </div>
+    </div>
+
+    <div class="path-node completed">
+      <div class="path-card">
+        <div class="pc-header">
+          <span class="pc-status" style="background: rgba(52,199,89,0.12); color: #34c759;">已完成</span>
+        </div>
+        <div class="pc-name"><span class="pc-check">✅</span> 线性变换</div>
+        <div class="pc-insight">你建立了矩阵与线性变换的对应关系。能从几何角度理解矩阵的作用——这是关键的认知跃迁。</div>
+      </div>
+    </div>
+
+    <div class="path-node current">
+      <div class="path-card">
+        <div class="pc-header">
+          <span class="pc-status" style="background: rgba(90,200,250,0.12); color: #5ac8fa;">进行中</span>
+        </div>
+        <div class="pc-name">🌀 特征向量</div>
+        <div class="pc-insight">你刚接触特征向量的概念。接下来的探索方向是理解"为什么有的方向在变换中保持不变"。</div>
+      </div>
+    </div>
+
+    <div class="path-node upcoming">
+      <div class="path-card">
+        <div class="pc-header">
+          <span class="pc-status" style="background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.3);">即将探索</span>
+        </div>
+        <div class="pc-name">↗️ 基变换</div>
+        <div class="pc-insight">理解同一向量在不同基下的表示——这是连接线性代数和实际应用的桥梁。</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Caveat -->
+  <div class="caveat">
+    <span class="cv-icon">💡</span>
+    <div class="cv-text">
+      <strong>这是根据你的学习自然形成的路径。不是课程。</strong><br>
+      你不需要按照这个顺序学习。这只是我看到的你自然的认知发展序列。你想先探索什么，我们就探索什么。
+    </div>
+  </div>
+
+</main>
+
+<!-- Bottom Navigation -->
+<nav id="bottom-nav" style="background: rgba(15,15,18,0.88); border-top-color: rgba(255,255,255,0.06);">
+  <button class="nav-tab" data-page="workspace" style="color: rgba(255,255,255,0.4);">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M3 3h7v7H3V3zM14 3h7v7h-7V3zM3 14h7v7H3v-7zM14 14h7v7h-7v-7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+    </svg>
+    <span>Workspace</span>
+  </button>
+  <button class="nav-tab" data-page="memory" style="color: rgba(255,255,255,0.4);">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" stroke="currentColor" stroke-width="1.8" fill="none"/>
+      <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+    <span>Memory</span>
+  </button>
+  <button class="nav-tab" data-page="brain" style="color: rgba(255,255,255,0.4);">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M12 2C7.58 2 4 5.58 4 10c0 2.5 1.5 4.5 3 6v4h10v-4c1.5-1.5 3-3.5 3-6 0-4.42-3.58-8-8-8z" stroke="currentColor" stroke-width="1.8" fill="none"/>
+      <path d="M9 10h6M12 7v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+    <span>Brain</span>
+  </button>
+  <button class="nav-tab active" data-page="universe">
+    <svg viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/>
+      <circle cx="4" cy="6" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="20" cy="8" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="6" cy="19" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="18" cy="18" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M4 6l6.5 4.5M20 8l-5.5 3M6 19l4.5-5M18 18l-4-4" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3"/>
+    </svg>
+    <span>Universe</span>
+  </button>
+  <button class="nav-tab" data-page="relationship" style="color: rgba(255,255,255,0.4);">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M12 21l-2-2H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2h-5l-2 2z" stroke="currentColor" stroke-width="1.8" fill="none"/>
+      <path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <span>Rel.</span>
+  </button>
+</nav>
+
+</body>
+</html>

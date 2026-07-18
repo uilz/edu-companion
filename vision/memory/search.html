@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>搜索 · 苹果果的记忆 · AppleGo</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+  body { background: #0f0f12; color: #e5e5ea; }
+  #bottom-nav { background: rgba(15,15,18,0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top-color: rgba(255,255,255,0.06); }
+  .nav-tab { color: rgba(255,255,255,0.35); }
+  .nav-tab:hover { color: rgba(255,255,255,0.65); }
+  .nav-tab.active { color: #0a84ff; }
+  ::selection { background: rgba(10,132,255,0.25); }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+
+  .top-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: var(--space-3) 0; margin-bottom: var(--space-4);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .top-bar .tb-brand { font-size: 15px; font-weight: 700; }
+
+  .search-section { margin-bottom: var(--space-5); }
+  .search-bar {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(255,255,255,0.06); border: 1px solid #0a84ff;
+    border-radius: var(--radius-full); padding: 12px 18px;
+  }
+  .search-bar input {
+    flex: 1; background: none; border: none; outline: none;
+    font-size: 15px; color: #fff;
+  }
+  .search-bar .sb-clear { font-size: 16px; opacity: 0.3; cursor: pointer; }
+  .search-bar .sb-clear:hover { opacity: 0.6; }
+
+  .search-stats {
+    font-size: 12.5px; color: rgba(255,255,255,0.3);
+    margin-bottom: var(--space-4); margin-top: var(--space-2);
+  }
+
+  .result-item {
+    background: rgba(255,255,255,0.04); border-radius: var(--radius-md);
+    padding: var(--space-4); margin-bottom: var(--space-3);
+    border-left: 3px solid;
+    transition: all 0.2s; cursor: pointer;
+  }
+  .result-item:hover { background: rgba(255,255,255,0.07); transform: translateY(-1px); }
+
+  .result-item .ri-row { display: flex; align-items: flex-start; gap: 10px; }
+  .result-item .ri-icon { font-size: 18px; flex-shrink: 0; margin-top: 2px; }
+  .result-item .ri-body { flex: 1; min-width: 0; }
+  .result-item .ri-meta {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; color: rgba(255,255,255,0.35); margin-bottom: 4px;
+  }
+  .result-item .ri-badge {
+    font-weight: 600; padding: 1px 8px; border-radius: var(--radius-full);
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .result-item .ri-title { font-size: 14.5px; font-weight: 600; color: #e5e5ea; margin-bottom: 2px; }
+  .result-item .ri-excerpt { font-size: 13px; color: rgba(255,255,255,0.45); line-height: 1.6; }
+  .result-item .ri-match {
+    font-size: 12px; color: #5ac8fa; margin-top: 6px;
+    background: rgba(90,200,250,0.08); display: inline-block;
+    padding: 2px 10px; border-radius: var(--radius-full);
+  }
+
+  .result-item.observation { border-left-color: #5ac8fa; }
+  .result-item.observation .ri-badge { color: #5ac8fa; background: rgba(90,200,250,0.12); }
+  .result-item.moment { border-left-color: #ff9f0a; }
+  .result-item.moment .ri-badge { color: #ff9f0a; background: rgba(255,159,10,0.12); }
+  .result-item.artifact { border-left-color: #af52de; }
+  .result-item.artifact .ri-badge { color: #af52de; background: rgba(175,82,222,0.12); }
+  .result-item.session { border-left-color: #34c759; }
+  .result-item.session .ri-badge { color: #34c759; background: rgba(52,199,89,0.12); }
+
+  .suggestions {
+    margin: var(--space-5) 0; display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  .suggestions .tag {
+    padding: 5px 14px; border-radius: var(--radius-full);
+    font-size: 12px; font-weight: 500;
+    background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5);
+    cursor: pointer; transition: all 0.2s;
+  }
+  .suggestions .tag:hover { background: rgba(10,132,255,0.15); color: #5ac8fa; }
+
+  .ai-connect {
+    margin-top: var(--space-5);
+    padding: var(--space-4); border-radius: var(--radius-md);
+    background: rgba(10,132,255,0.06); border: 1px solid rgba(10,132,255,0.12);
+    font-size: 14px; line-height: 1.7; color: rgba(255,255,255,0.7);
+  }
+  .ai-connect .ac-icon { font-size: 16px; margin-right: 8px; }
+  .ai-connect strong { color: #e5e5ea; }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <div class="top-bar">
+    <span class="tb-brand">🍎 AppleGo</span>
+  </div>
+
+  <div class="search-section">
+    <div class="search-bar">
+      <span>🔍</span>
+      <input type="text" value="矩阵" autofocus />
+      <span class="sb-clear">✕</span>
+    </div>
+  </div>
+
+  <div class="search-stats">找到 4 条与"矩阵"相关的记忆</div>
+
+  <!-- Results -->
+  <div class="result-item moment">
+    <div class="ri-row">
+      <span class="ri-icon">💡</span>
+      <div class="ri-body">
+        <div class="ri-meta"><span class="ri-badge">时刻</span><span>7/15</span></div>
+        <div class="ri-title">矩阵乘法的几何意义</div>
+        <div class="ri-excerpt">第一次从几何角度理解矩阵乘法——不再把它看作数字运算，而是空间的变换。</div>
+        <span class="ri-match">匹配"矩阵"</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="result-item session">
+    <div class="ri-row">
+      <span class="ri-icon">💬</span>
+      <div class="ri-body">
+        <div class="ri-meta"><span class="ri-badge">对话</span><span>7/14</span></div>
+        <div class="ri-title">矩阵乘法为什么没有交换律</div>
+        <div class="ri-excerpt">讨论了 AB 和 BA 为什么不同，你举了具体的 2×2 反例验证了这一点。</div>
+        <span class="ri-match">匹配"矩阵"</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="result-item artifact">
+    <div class="ri-row">
+      <span class="ri-icon">📦</span>
+      <div class="ri-body">
+        <div class="ri-meta"><span class="ri-badge">作品</span><span>7/13</span></div>
+        <div class="ri-title">矩阵乘法和线性变换的关系图</div>
+        <div class="ri-excerpt">你在白板上画了矩阵乘法对应线性变换组合的示意图。</div>
+        <span class="ri-match">匹配"矩阵"</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="result-item observation">
+    <div class="ri-row">
+      <span class="ri-icon">🪶</span>
+      <div class="ri-body">
+        <div class="ri-meta"><span class="ri-badge">观察</span><span>7/12</span></div>
+        <div class="ri-title">你开始理解矩阵是变换</div>
+        <div class="ri-excerpt">你不再把矩阵看作数字表格，而是"能把一个向量变成另一个向量的东西"。</div>
+        <span class="ri-match">匹配"矩阵"</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Related Tags -->
+  <div class="suggestions">
+    <span class="tag">线性变换</span>
+    <span class="tag">行列式</span>
+    <span class="tag">向量空间</span>
+    <span class="tag">特征值</span>
+  </div>
+
+  <!-- AI Connect -->
+  <div class="ai-connect">
+    <span class="ac-icon">🤖</span>
+    <strong>这些都是你对线性代数理解的不同方面。</strong> 从几何意义到交换律，从关系图到核心洞察——你的线性代数体系正在成型。
+  </div>
+
+</div>
+
+<!-- Bottom Navigation -->
+<nav id="bottom-nav">
+  <button class="nav-tab" data-page="workspace">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 3h7v7H3V3zM14 3h7v7h-7V3zM3 14h7v7H3v-7zM14 14h7v7h-7v-7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+    <span>Workspace</span>
+  </button>
+  <button class="nav-tab active" data-page="memory">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M12 6v6l4 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>Memory</span>
+  </button>
+  <button class="nav-tab" data-page="brain">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 4a4 4 0 014 4c0 1.5-.8 2.8-2 3.5V14a2 2 0 01-2 2 2 2 0 01-2-2v-2.5c-1.2-.7-2-2-2-3.5a4 4 0 014-4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 19h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>Brain</span>
+  </button>
+  <button class="nav-tab" data-page="universe">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>Universe</span>
+  </button>
+  <button class="nav-tab" data-page="relationship">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 21s-8-5-8-10a8 8 0 1116 0c0 5-8 10-8 10z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="11" r="3" stroke="currentColor" stroke-width="1.8"/></svg>
+    <span>Rel.</span>
+  </button>
+</nav>
+
+</body>
+</html>

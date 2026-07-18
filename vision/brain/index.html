@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🧩 Brain · 苹果果如何理解你 · AppleGo</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+/* ── Dark Theme Override ── */
+body { background: #0f0f12; color: #e5e5ea; }
+#app { max-width: var(--content-max); margin: 0 auto; padding: 0 var(--space-4) var(--space-6); }
+
+/* ── Top Bar ── */
+.top-bar {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: 16px var(--space-4); padding-top: calc(16px + env(safe-area-inset-top, 0));
+  background: rgba(15,15,18,0.92); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  position: sticky; top: 0; z-index: 50;
+}
+.top-bar .tb-brand { font-size: 16px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; }
+.top-bar .tb-brand span { color: rgba(255,255,255,0.4); font-weight: 400; }
+
+/* ── Tab Bar ── */
+.tab-bar {
+  display: flex; gap: 0; overflow-x: auto;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: rgba(15,15,18,0.95);
+  scrollbar-width: none; position: sticky; top: 57px; z-index: 49;
+}
+.tab-bar::-webkit-scrollbar { display: none; }
+.tab-item {
+  flex-shrink: 0; padding: 12px 16px;
+  font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.4);
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s var(--ease-out); white-space: nowrap;
+  text-decoration: none; cursor: pointer;
+}
+.tab-item:hover { color: rgba(255,255,255,0.7); }
+.tab-item.active { color: #5ac8fa; border-bottom-color: #5ac8fa; }
+
+/* ── Page Hero ── */
+.page-hero { padding: var(--space-6) 0 var(--space-5); }
+.page-hero .ph-label { font-size: 12px; font-weight: 600; color: #5ac8fa; letter-spacing: 0.05em; margin-bottom: 6px; }
+.page-hero h1 { font-size: 28px; font-weight: 700; color: #fff; letter-spacing: -0.02em; margin-bottom: 8px; }
+.page-hero p { font-size: 14px; color: rgba(255,255,255,0.5); line-height: 1.7; max-width: 480px; }
+
+/* ── Capability Cards ── */
+.cap-list { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-6); }
+.cap-card {
+  background: rgba(255,255,255,0.04); border-radius: var(--radius-lg);
+  padding: var(--space-5); border: 1px solid rgba(255,255,255,0.06);
+  transition: all 0.2s; animation: slideUp 0.4s var(--ease-out) both;
+}
+.cap-card:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); }
+.cap-card:nth-child(1) { animation-delay: 0.05s; }
+.cap-card:nth-child(2) { animation-delay: 0.10s; }
+.cap-card:nth-child(3) { animation-delay: 0.15s; }
+.cap-card:nth-child(4) { animation-delay: 0.20s; }
+.cap-card .cc-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+.cap-card .cc-icon {
+  width: 36px; height: 36px; border-radius: var(--radius-sm);
+  display: grid; place-items: center; font-size: 18px; flex-shrink: 0;
+}
+.cap-card .cc-domain { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 2px; }
+.cap-card .cc-desc { font-size: 13.5px; color: rgba(255,255,255,0.55); line-height: 1.6; }
+.cap-card .cc-footer { display: flex; align-items: center; gap: var(--space-3); margin-top: 12px; }
+.cap-card .cc-evidence {
+  font-size: 11.5px; color: rgba(255,255,255,0.3); display: flex; align-items: center; gap: 4px;
+}
+.cap-card .cc-btn {
+  font-size: 12px; font-weight: 600; color: #5ac8fa;
+  padding: 5px 12px; border-radius: var(--radius-full);
+  background: rgba(90,200,250,0.1); transition: all 0.15s;
+}
+.cap-card .cc-btn:hover { background: rgba(90,200,250,0.2); }
+
+/* ── Evidence Detail Panel ── */
+.evidence-panel {
+  display: none; margin-top: 14px; padding: var(--space-4);
+  background: rgba(255,255,255,0.03); border-radius: var(--radius-md);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.evidence-panel.open { display: block; animation: slideUp 0.25s var(--ease-out); }
+.evidence-panel .ep-title { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.3); margin-bottom: var(--space-3); }
+.evidence-list { display: flex; flex-direction: column; gap: 10px; }
+.evidence-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; background: rgba(255,255,255,0.03); border-radius: var(--radius-sm);
+}
+.evidence-item .ei-dot { width: 6px; height: 6px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
+.evidence-item .ei-text { font-size: 12.5px; color: rgba(255,255,255,0.6); line-height: 1.5; }
+.evidence-item .ei-text strong { color: rgba(255,255,255,0.8); font-weight: 500; }
+
+/* ── Footer ── */
+.brain-footer {
+  text-align: center; padding: var(--space-6) var(--space-4);
+  color: rgba(255,255,255,0.3); font-size: 13px; line-height: 1.7;
+}
+.brain-footer .bf-icon { font-size: 24px; display: block; margin-bottom: var(--space-3); }
+.brain-footer .bf-link { color: #5ac8fa; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.brain-footer .bf-link:hover { color: #7ad4ff; }
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="top-bar">
+  <div class="tb-brand">🍎 AppleGo <span>| Brain</span></div>
+</div>
+
+<!-- Tab Bar -->
+<nav class="tab-bar">
+  <a class="tab-item active" href="index.html">能力地图</a>
+  <a class="tab-item" href="learning-patterns.html">学习模式</a>
+  <a class="tab-item" href="understanding-traces.html">理解轨迹</a>
+  <a class="tab-item" href="model-evolution.html">模型进化</a>
+</nav>
+
+<main id="app">
+
+  <!-- State Meta -->
+  <div class="state-meta">
+    <div class="sm-row">
+      <span class="sm-label">Emotion Goal</span>
+      <span class="sm-value"><span class="sm-emotion warm">🟢 warm</span> 苹果果真的了解我是怎么学习的 — 每一条理解都可追溯</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">AI Behavior</span>
+      <span class="sm-value">Brain 展示苹果果对学习者的理解。不是分数，不是排名 —— 是描述性的能力画像，每一条都有证据可查。</span>
+    </div>
+    <div class="sm-row">
+      <span class="sm-label">Traceability</span>
+      <span class="sm-value">每条判断可追溯至具体 Observation / Artifact / Session。用户可以验证、可以质疑。</span>
+    </div>
+  </div>
+
+  <!-- Hero -->
+  <div class="page-hero">
+    <div class="ph-label">🧩 苹果果眼中的你</div>
+    <h1>能力画像</h1>
+    <p>以下是我对你当前学习能力的理解。不是评分，是我观察到的情况。每一条都可以查看依据。</p>
+  </div>
+
+  <!-- Capability Cards -->
+  <div class="cap-list">
+
+    <div class="cap-card">
+      <div class="cc-header">
+        <div class="cc-icon" style="background: rgba(90,200,250,0.12);">📐</div>
+        <div>
+          <div class="cc-domain">矩阵运算</div>
+          <div class="cc-desc">你在应用层面已经比较熟悉，开始触及原理。能独立完成 3×3 矩阵乘法，开始理解背后的线性映射含义。</div>
+        </div>
+      </div>
+      <div class="cc-footer">
+        <span class="cc-evidence">📎 基于 8 次学习活动</span>
+        <button class="cc-btn" onclick="toggleEvidence(this)">🔍 查看依据</button>
+      </div>
+      <div class="evidence-panel">
+        <div class="ep-title">📎 判断依据</div>
+        <div class="evidence-list">
+          <div class="evidence-item">
+            <div class="ei-dot" style="background: #5ac8fa;"></div>
+            <div class="ei-text"><strong>Session · 7月15日</strong> 独立完成 5 道矩阵乘法题，全部正确，并主动尝试用代码验证</div>
+          </div>
+          <div class="evidence-item">
+            <div class="ei-dot" style="background: #5ac8fa;"></div>
+            <div class="ei-text"><strong>Observation · 7月16日</strong> "你开始用自己的话解释矩阵乘法的意义，不再只是背步骤"</div>
+          </div>
+          <div class="evidence-item">
+            <div class="ei-dot" style="background: #5ac8fa;"></div>
+            <div class="ei-text"><strong>Artifact · 7月16日</strong> 在 Canvas 上画了矩阵乘法的几何解释图</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cap-card">
+      <div class="cc-header">
+        <div class="cc-icon" style="background: rgba(175,82,222,0.12);">↗️</div>
+        <div>
+          <div class="cc-domain">线性变换</div>
+          <div class="cc-desc">你正在建立几何直觉。能从变换的角度理解矩阵，但在抽象推导上还需要更多练习。</div>
+        </div>
+      </div>
+      <div class="cc-footer">
+        <span class="cc-evidence">📎 基于 5 次学习活动</span>
+        <button class="cc-btn" onclick="toggleEvidence(this)">🔍 查看依据</button>
+      </div>
+      <div class="evidence-panel">
+        <div class="ep-title">📎 判断依据</div>
+        <div class="evidence-list">
+          <div class="evidence-item">
+            <div class="ei-dot" style="background: #af52de;"></div>
+            <div class="ei-text"><strong>Session · 7月14日</strong> 你画出了单位矩阵经过线性变换后的图像，准确表达了旋转</div>
+          </div>
+          <div class="evidence-item">
+            <div class="ei-dot" style="background: #af52de;"></div>
+            <div class="ei-text"><strong>Observation · 7月15日</strong> "你在推导向量变换时停顿了三次——概念清晰，计算还不够熟练"</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cap-card">
+      <div class="cc-header">
+        <div class="cc-icon" style="background: rgba(255,159,10,0.12);">✍️</div>
+        <div>
+          <div class="cc-domain">证明</div>
+          <div class="cc-desc">你还在建立基础。能够理解已有的证明思路，但独立构造证明链还需要培养。</div>
+        </div>
+      </div>
+      <div class="cc-footer">
+        <span class="cc-evidence">📎 基于 3 次学习活动</span>
+        <button class="cc-btn" onclick="toggleEvidence(this)">🔍 查看依据</button>
+      </div>
+      <div class="evidence-panel">
+        <div class="ep-title">📎 判断依据</div>
+        <div class="evidence-list">
+          <div class="evidence-item">
+            <div class="ei-dot" style="background: #ff9f0a;"></div>
+            <div class="ei-text"><strong>Session · 7月12日</strong> 你阅读了矩阵乘法结合律的证明，能复述主要步骤</div>
+          </div>
+          <div class="evidence-item">
+            <div class="ei-dot" style="background: #ff9f0a;"></div>
+            <div class="ei-text"><strong>Observation · 7月13日</strong> "尝试独立证明分配律时，你在中间步骤中断了——需要更多练习"</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cap-card">
+      <div class="cc-header">
+        <div class="cc-icon" style="background: rgba(52,199,89,0.12);">💻</div>
+        <div>
+          <div class="cc-domain">编程验证</div>
+          <div class="cc-desc">你习惯用代码验证数学结论。Python + NumPy 已经比较熟练，能编写验证脚本。</div>
+        </div>
+      </div>
+      <div class="cc-footer">
+        <span class="cc-evidence">📎 基于 6 次学习活动</span>
+        <button class="cc-btn" onclick="toggleEvidence(this)">🔍 查看依据</button>
+      </div>
+      <div class="evidence-panel">
+        <div class="ep-title">📎 判断依据</div>
+        <div class="evidence-list">
+          <div class="evidence-item">
+            <div class="ei-dot" style="background: #34c759;"></div>
+            <div class="ei-text"><strong>Artifact · 7月14日</strong> 你写了 30 行 Python 代码验证矩阵乘法的结合律和分配律</div>
+          </div>
+          <div class="evidence-item">
+            <div class="ei-dot" style="background: #34c759;"></div>
+            <div class="ei-text"><strong>Observation · 7月16日</strong> "你自然地说'我用代码跑一下'——编程已成为你的学习工具"</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Footer -->
+  <div class="brain-footer">
+    <span class="bf-icon">🧩</span>
+    以上理解基于 <strong style="color: rgba(255,255,255,0.5);">43 次学习活动</strong>。<br>
+    如果觉得不准确，可以<a class="bf-link" onclick="alert('反馈已记录 🍎 苹果果会重新审视')">直接指出</a>。
+  </div>
+
+</main>
+
+<!-- Bottom Navigation -->
+<nav id="bottom-nav" style="background: rgba(15,15,18,0.88); border-top-color: rgba(255,255,255,0.06);">
+  <button class="nav-tab" data-page="workspace" style="color: rgba(255,255,255,0.4);">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M3 3h7v7H3V3zM14 3h7v7h-7V3zM3 14h7v7H3v-7zM14 14h7v7h-7v-7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+    </svg>
+    <span>Workspace</span>
+  </button>
+  <button class="nav-tab" data-page="memory" style="color: rgba(255,255,255,0.4);">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" stroke="currentColor" stroke-width="1.8" fill="none"/>
+      <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+    <span>Memory</span>
+  </button>
+  <button class="nav-tab active" data-page="brain">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M12 2C7.58 2 4 5.58 4 10c0 2.5 1.5 4.5 3 6v4h10v-4c1.5-1.5 3-3.5 3-6 0-4.42-3.58-8-8-8z" stroke="currentColor" stroke-width="1.8" fill="none"/>
+      <path d="M9 10h6M12 7v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+    <span>Brain</span>
+  </button>
+  <button class="nav-tab" data-page="universe" style="color: rgba(255,255,255,0.4);">
+    <svg viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/>
+      <circle cx="4" cy="6" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="20" cy="8" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="6" cy="19" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="18" cy="18" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M4 6l6.5 4.5M20 8l-5.5 3M6 19l4.5-5M18 18l-4-4" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3"/>
+    </svg>
+    <span>Universe</span>
+  </button>
+  <button class="nav-tab" data-page="relationship" style="color: rgba(255,255,255,0.4);">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M12 21l-2-2H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2h-5l-2 2z" stroke="currentColor" stroke-width="1.8" fill="none"/>
+      <path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <span>Rel.</span>
+  </button>
+</nav>
+
+<script>
+function toggleEvidence(btn) {
+  const panel = btn.closest('.cap-card').querySelector('.evidence-panel');
+  const isOpen = panel.classList.toggle('open');
+  btn.textContent = isOpen ? '🔽 收起依据' : '🔍 查看依据';
+}
+</script>
+
+</body>
+</html>

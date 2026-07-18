@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>记忆 · 苹果果的记忆 · AppleGo</title>
+<link rel="stylesheet" href="../design-system.css">
+<style>
+  body { background: #0f0f12; color: #e5e5ea; overflow: hidden; }
+  #bottom-nav { background: rgba(15,15,18,0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top-color: rgba(255,255,255,0.06); }
+  .nav-tab { color: rgba(255,255,255,0.35); }
+  .nav-tab:hover { color: rgba(255,255,255,0.65); }
+  .nav-tab.active { color: #0a84ff; }
+  ::selection { background: rgba(10,132,255,0.25); }
+
+  .top-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: var(--space-3) 0; margin-bottom: var(--space-5);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .top-bar .tb-brand { font-size: 15px; font-weight: 700; }
+
+  /* ── Empty State ── */
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; min-height: 60vh;
+    text-align: center; padding: var(--space-4);
+    position: relative;
+  }
+
+  .glow-point {
+    width: 4px; height: 4px; border-radius: 50%;
+    background: #0a84ff; margin-bottom: var(--space-6);
+    position: relative;
+    animation: glowPulse 3s ease-in-out infinite;
+  }
+  .glow-point::before {
+    content: ''; position: absolute;
+    top: -20px; left: -20px; right: -20px; bottom: -20px;
+    background: radial-gradient(circle, rgba(10,132,255,0.08) 0%, transparent 70%);
+    border-radius: 50%;
+    animation: glowExpand 3s ease-in-out infinite;
+  }
+  @keyframes glowPulse {
+    0%, 100% { box-shadow: 0 0 4px 2px rgba(10,132,255,0.3); }
+    50% { box-shadow: 0 0 8px 4px rgba(10,132,255,0.6); }
+  }
+  @keyframes glowExpand {
+    0%, 100% { transform: scale(1); opacity: 0.5; }
+    50% { transform: scale(1.5); opacity: 1; }
+  }
+
+  .empty-state h1 {
+    font-size: 28px; font-weight: 700; letter-spacing: -0.02em;
+    color: #fff; margin-bottom: var(--space-3);
+  }
+  .empty-state .es-sub {
+    font-size: 15px; color: rgba(255,255,255,0.4);
+    line-height: 1.7; margin-bottom: var(--space-6);
+    max-width: 300px;
+  }
+  .empty-state .es-poem {
+    font-size: 13.5px; color: rgba(255,255,255,0.25);
+    line-height: 1.9; font-style: italic;
+    margin-bottom: var(--space-8);
+    max-width: 320px;
+  }
+  .empty-state .es-cta {
+    display: inline-block; padding: 14px 36px;
+    border-radius: var(--radius-full);
+    background: #0a84ff; color: #fff;
+    font-size: 15px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+    box-shadow: 0 4px 20px rgba(10,132,255,0.2);
+  }
+  .empty-state .es-cta:hover {
+    background: #0070e0; transform: translateY(-1px);
+    box-shadow: 0 6px 28px rgba(10,132,255,0.3);
+  }
+
+  @media (max-width: 480px) {
+    .empty-state h1 { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <div class="top-bar">
+    <span class="tb-brand">🍎 AppleGo</span>
+    <span style="font-size:13px;color:rgba(255,255,255,0.35);">Memory</span>
+  </div>
+
+  <div class="empty-state">
+    <div class="glow-point"></div>
+
+    <h1>🧠 苹果果的记忆</h1>
+    <div class="es-sub">记忆从第一次学习开始。</div>
+    <div class="es-poem">
+      每一条观察、每一份作品、<br>
+      每一个突破的时刻——<br>
+      都会变成这里的光。
+    </div>
+
+    <div class="es-cta">开始第一次学习</div>
+  </div>
+
+</div>
+
+<!-- Bottom Navigation -->
+<nav id="bottom-nav">
+  <button class="nav-tab" data-page="workspace">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M3 3h7v7H3V3zM14 3h7v7h-7V3zM3 14h7v7H3v-7zM14 14h7v7h-7v-7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+    <span>Workspace</span>
+  </button>
+  <button class="nav-tab active" data-page="memory">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M12 6v6l4 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>Memory</span>
+  </button>
+  <button class="nav-tab" data-page="brain">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 4a4 4 0 014 4c0 1.5-.8 2.8-2 3.5V14a2 2 0 01-2 2 2 2 0 01-2-2v-2.5c-1.2-.7-2-2-2-3.5a4 4 0 014-4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 19h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>Brain</span>
+  </button>
+  <button class="nav-tab" data-page="universe">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>Universe</span>
+  </button>
+  <button class="nav-tab" data-page="relationship">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 21s-8-5-8-10a8 8 0 1116 0c0 5-8 10-8 10z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="11" r="3" stroke="currentColor" stroke-width="1.8"/></svg>
+    <span>Rel.</span>
+  </button>
+</nav>
+
+</body>
+</html>
