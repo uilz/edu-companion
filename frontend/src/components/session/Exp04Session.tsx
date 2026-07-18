@@ -98,6 +98,7 @@ export default function Exp04Session() {
   const [handwritingOpen, setHandwritingOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [prompts, setPrompts] = useState<string[]>([]);
+  const [messageCount, setMessageCount] = useState(0);
 
   // ── Fetch Session ──
   const fetchSession = useCallback(async () => {
@@ -168,6 +169,7 @@ export default function Exp04Session() {
   // ChatScreen 的 transition 包装：SM 转换 + 后端同步
   const handleChatTransition = useCallback(async (event: any) => {
     sm.transition(event);
+    setMessageCount((c) => c + 1);
     // REFLECTION_REQUESTED 需要同步后端到 reflect 阶段
     if (event.type === "REFLECTION_REQUESTED") {
       await transitionStage(EXP04_TO_BACKEND_STAGE.reflect);
@@ -360,7 +362,16 @@ export default function Exp04Session() {
 
       {/* ═══ COMPANION ZONE ═══ */}
       <aside className="studio-companion">
-        <StudioCompanion sessionTitle={session.mission?.title} />
+        <StudioCompanion
+          stage={sm.stage}
+          mode={sm.mode}
+          toolState={toolState}
+          messageCount={messageCount}
+          sessionTitle={session.mission?.title}
+          onOpenCanvas={() => handleOpenTool("canvas")}
+          onOpenFlashcard={() => handleOpenTool("flashcard")}
+          onOpenPractice={() => handleOpenTool("canvas")} /* 练习 → 画布暂代 */
+        />
       </aside>
 
       {/* ═══ DOCK ZONE ═══ */}
