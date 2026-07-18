@@ -12,19 +12,58 @@
 
 /* ── Layout ── */
 body { overflow: hidden; height: 100vh; padding-bottom: 0; }
+
+/* Grid base: all modes share header + dock rows */
 #studio {
   display: grid;
-  grid-template-columns: 220px 1fr 300px;
   grid-template-rows: auto 1fr auto;
-  grid-template-areas:
-    "header  header  header"
-    "sidebar canvas  companion"
-    "dock    dock    dock";
   height: 100vh;
   background: var(--color-page);
   max-width: 1440px;
   margin: 0 auto;
+  transition: grid-template-columns 0.45s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+/* ── Layout Mode: Explore (default) ── */
+#studio.mode-explore {
+  grid-template-columns: 220px 1fr 300px;
+  grid-template-areas:
+    "header  header  header"
+    "sidebar canvas  companion"
+    "dock    dock    dock";
+}
+
+/* ── Layout Mode: Dialogue (conversation centered) ── */
+#studio.mode-dialogue {
+  grid-template-columns: 52px 1fr 280px;
+  grid-template-areas:
+    "header  header  header"
+    "sidebar canvas  context"
+    "dock    dock    dock";
+}
+#studio.mode-dialogue #sh-sidebar { padding: var(--space-3) 6px; align-items: center; }
+#studio.mode-dialogue #sh-sidebar .sb-section-label,
+#studio.mode-dialogue #sh-sidebar .sb-label,
+#studio.mode-dialogue #sh-sidebar .sb-meta { display: none; }
+#studio.mode-dialogue #sh-sidebar .sb-item { justify-content: center; padding: 8px; }
+#studio.mode-dialogue #sh-sidebar .sb-item + .sb-item { margin-top: 2px; }
+#studio.mode-dialogue #sh-companion { display: none; }
+#studio.mode-dialogue #canvas-default { display: none; }
+#studio.mode-dialogue #canvas-dialogue { display: flex; }
+#studio.mode-dialogue #context-panel { display: flex; }
+
+/* ── Layout Mode: Focus (tool / reading fills workspace) ── */
+#studio.mode-focus {
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "header"
+    "canvas"
+    "dock";
+}
+#studio.mode-focus #sh-sidebar { display: none; }
+#studio.mode-focus #sh-companion { display: none; }
+#studio.mode-focus .sh-mission { display: none; }
+#studio.mode-focus .sh-progress { display: none; }
 
 /* ── Header ── */
 #sh-header {
@@ -398,6 +437,125 @@ body { overflow: hidden; height: 100vh; padding-bottom: 0; }
   background: var(--color-accent-soft); color: var(--color-accent);
 }
 
+/* ── Header: Layout Mode Toggle ── */
+.sh-layout-toggle {
+  display: flex; gap: 2px; margin-left: 4px; flex-shrink: 0;
+  background: var(--color-surface-alt);
+  padding: 2px; border-radius: 8px;
+}
+.sh-layout-btn {
+  padding: 5px 10px; border-radius: 6px; font-size: 12px;
+  color: var(--color-ink-muted); cursor: pointer; font-weight: 500;
+  transition: all 0.15s; white-space: nowrap;
+}
+.sh-layout-btn:hover { color: var(--color-ink-primary); }
+.sh-layout-btn.active { background: #fff; color: var(--color-ink-primary); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+
+/* ── Dialogue Canvas View ── */
+#canvas-dialogue { display: none; flex-direction: column; }
+.canvas-dialogue-header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: var(--space-3); padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-divider-soft);
+}
+.canvas-dialogue-header .cdh-avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: linear-gradient(135deg, #c4a3d4 0%, #7a5a8c 100%);
+  display: grid; place-items: center; font-size: 20px; flex-shrink: 0;
+}
+.canvas-dialogue-header .cdh-info { flex: 1; }
+.canvas-dialogue-header .cdh-name { font-weight: 600; font-size: 15px; }
+.canvas-dialogue-header .cdh-status { font-size: 12px; color: var(--color-ink-muted); }
+.canvas-dialogue-body {
+  flex: 1; overflow-y: auto; display: flex; flex-direction: column;
+  gap: var(--space-3); padding-right: var(--space-2);
+}
+.dialogue-msg {
+  display: flex; gap: 10px; align-items: flex-start;
+  max-width: 85%; animation: slideUp 0.3s var(--ease-out);
+}
+.dialogue-msg.user { flex-direction: row-reverse; margin-left: auto; }
+.dialogue-msg .dm-avatar {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--color-accent); color: #fff;
+  display: grid; place-items: center; font-size: 13px; flex-shrink: 0;
+}
+.dialogue-msg.user .dm-avatar { background: var(--color-accent-soft); color: var(--color-accent); }
+.dialogue-msg .dm-avatar.applego { background: linear-gradient(135deg,#c4a3d4,#7a5a8c); }
+.dialogue-msg .dm-bubble {
+  padding: 12px 16px; border-radius: 3px 16px 16px 16px;
+  background: var(--color-ai-msg); font-size: 14.5px; line-height: 1.7;
+  font-family: var(--font-serif);
+}
+.dialogue-msg.user .dm-bubble {
+  border-radius: 16px 16px 3px 16px;
+  background: var(--color-user-msg); font-family: inherit;
+}
+.dialogue-input-area {
+  display: flex; gap: 8px; margin-top: var(--space-3);
+  padding-top: var(--space-3); border-top: 1px solid var(--color-divider-soft);
+}
+.dialogue-input-area input {
+  flex: 1; padding: 12px 16px; border-radius: var(--radius-full);
+  border: 1.5px solid var(--color-divider); font-size: 14px;
+  background: var(--color-surface); outline: none; transition: border 0.15s;
+}
+.dialogue-input-area input:focus { border-color: var(--color-accent); }
+.dialogue-input-area button {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--color-accent); color: #fff;
+  display: grid; place-items: center; cursor: pointer; flex-shrink: 0;
+}
+.dialogue-input-area button:hover { background: var(--color-accent-hover); }
+
+/* ── Context Panel (right side in dialogue mode) ── */
+#context-panel {
+  grid-area: context;
+  display: none; flex-direction: column;
+  background: var(--color-surface); overflow: hidden;
+  border-left: 1px solid var(--color-divider-soft);
+}
+.cp-header {
+  padding: var(--space-4); font-size: 11px; font-weight: 600;
+  color: var(--color-ink-muted); text-transform: uppercase; letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--color-divider-soft);
+}
+.cp-body { flex: 1; overflow-y: auto; padding: var(--space-3); }
+.cp-card {
+  background: var(--color-surface-alt); border-radius: var(--radius-md);
+  padding: var(--space-3); margin-bottom: var(--space-2);
+  font-size: 13px; line-height: 1.6; color: var(--color-ink-secondary);
+  cursor: pointer; transition: background 0.12s;
+}
+.cp-card:hover { background: var(--color-ai-msg); }
+.cp-card .cp-label { font-size: 11px; font-weight: 600; color: var(--color-ink-muted); margin-bottom: 4px; }
+.cp-card .cp-highlight { color: var(--color-accent); font-weight: 500; }
+
+/* ── Floating Companion (focus mode) ── */
+.floating-companion {
+  position: fixed; bottom: 80px; right: 24px; z-index: 100;
+  display: none; align-items: center; gap: 8px;
+}
+#studio.mode-focus .floating-companion { display: flex; }
+.fc-badge {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: linear-gradient(135deg,#c4a3d4,#7a5a8c);
+  color: #fff; display: grid; place-items: center;
+  font-size: 22px; cursor: pointer; flex-shrink: 0;
+  box-shadow: 0 4px 16px rgba(122,90,140,0.25);
+  transition: transform 0.15s var(--ease-spring);
+}
+.fc-badge:hover { transform: scale(1.08); }
+.fc-tooltip {
+  background: #fff; padding: 10px 16px; border-radius: var(--radius-md);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1); font-size: 13px;
+  color: var(--color-ink-primary); line-height: 1.5;
+  animation: slideUp 0.25s var(--ease-out); max-width: 220px;
+}
+
+/* ── Smooth fade/slide helpers ── */
+.mode-transition { transition: all 0.35s cubic-bezier(0.4,0,0.2,1); }
+
 /* ── Responsive ── */
 @media (max-width: 1024px) {
   #studio {
@@ -450,6 +608,12 @@ body { overflow: hidden; height: 100vh; padding-bottom: 0; }
     <div class="sh-ai-status">
       <span class="sh-ai-dot"></span>
       <span>观察中</span>
+    </div>
+
+    <div class="sh-layout-toggle">
+      <button class="sh-layout-btn active" data-mode="explore" onclick="switchLayout('explore')" title="浏览模式">🔭 浏览</button>
+      <button class="sh-layout-btn" data-mode="dialogue" onclick="switchLayout('dialogue')" title="对话模式">💬 对话</button>
+      <button class="sh-layout-btn" data-mode="focus" onclick="switchLayout('focus')" title="专注模式">🎯 专注</button>
     </div>
   </header>
 
@@ -636,6 +800,50 @@ body { overflow: hidden; height: 100vh; padding-bottom: 0; }
       </div>
     </div>
 
+    <!-- ═══ Dialogue View (centered conversation) ═══ -->
+    <div id="canvas-dialogue" class="sh-canvas-content">
+      <div class="canvas-dialogue-header">
+        <div class="cdh-avatar">🍎</div>
+        <div class="cdh-info">
+          <div class="cdh-name">与 AppleGo 对话</div>
+          <div class="cdh-status">正在深入探讨 TCP 三次握手</div>
+        </div>
+        <button onclick="switchLayout('explore')" style="font-size:16px;color:var(--color-ink-muted);padding:4px 8px;cursor:pointer">✕</button>
+      </div>
+      <div class="canvas-dialogue-body" id="dialogue-body">
+        <!-- 动态插入消息 -->
+        <div class="dialogue-msg">
+          <div class="dm-avatar applego">🍎</div>
+          <div class="dm-bubble"><strong>我注意到你第三次读这段关于三次握手的文字。</strong><br>而且停在「ACK 为什么存在」这里。要不要一起画一张图？</div>
+        </div>
+        <div class="dialogue-msg user">
+          <div class="dm-avatar">你</div>
+          <div class="dm-bubble">为什么两次握手不够？</div>
+        </div>
+        <div class="dialogue-msg">
+          <div class="dm-avatar applego">🍎</div>
+          <div class="dm-bubble">好问题。<br><br>假设只有两次握手：客户端发 SYN，服务端回 SYN-ACK，连接建立。<br><br>问题在于<strong>服务端不知道自己的 SYN-ACK 有没有被客户端收到</strong>。如果第一个 SYN 延迟重传，服务端会建立两个连接。<br><br>第三次握手就是告诉服务端：<strong>「你的 SYN-ACK 我收到了，现在是真的。」</strong></div>
+        </div>
+        <div class="dialogue-msg user">
+          <div class="dm-avatar">你</div>
+          <div class="dm-bubble">所以第三次握手其实是服务端的「保险」？</div>
+        </div>
+        <div class="dialogue-msg">
+          <div class="dm-avatar applego">🍎</div>
+          <div class="dm-bubble">对，就是这个意思。<br>没有第三次 ACK，服务端永远悬着——这个连接是真的还是旧的？<br><span style="color:var(--color-ink-muted);font-size:13px">你看，你其实已经理解了。:)</span></div>
+        </div>
+        <div id="dialogue-latest-msg"></div>
+      </div>
+      <div class="dialogue-input-area">
+        <input type="text" id="dialogue-input" placeholder="跟 AppleGo 说说……" onkeydown="if(event.key==='Enter')sendDialogueMsg()">
+        <button onclick="sendDialogueMsg()">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+            <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
   </main>
 
   <!-- ═══ RIGHT SIDEBAR: AppleGo Companion ═══ -->
@@ -699,6 +907,40 @@ body { overflow: hidden; height: 100vh; padding-bottom: 0; }
     </div>
   </aside>
 
+  <!-- ═══ CONTEXT PANEL (right side in dialogue mode) ═══ -->
+  <aside id="context-panel">
+    <div class="cp-header">当前上下文</div>
+    <div class="cp-body">
+      <div class="cp-card" onclick="switchLayout('explore');switchResource('book')">
+        <div class="cp-label">📖 正在阅读</div>
+        计算机网络（第 7 版）· p.142<br>
+        <span class="cp-highlight">3.5.4 三次握手</span>
+      </div>
+      <div class="cp-card" onclick="switchLayout('explore');switchResource('note');setTimeout(()=>switchLayout('focus'),350)">
+        <div class="cp-label">📝 相关笔记</div>
+        三次握手的本质：<span class="cp-highlight">双方证明自己收发都 ok</span>；两次不够的原因
+      </div>
+      <div class="cp-card">
+        <div class="cp-label">🧩 导图节点</div>
+        TCP 连接建立 → <span class="cp-highlight">为什么不是两次？</span>（尚未展开）
+      </div>
+      <div class="cp-card" onclick="switchLayout('explore');switchResource('video')">
+        <div class="cp-label">🎬 视频位置</div>
+        TCP 三次握手深入 · <span class="cp-highlight">32:18</span>
+      </div>
+      <div class="cp-card">
+        <div class="cp-label">🧠 闪卡（最近）</div>
+        Q: 第三次握手的作用？<br>
+        <span class="cp-highlight">A: 告知服务端 SYN-ACK 已收到</span>
+      </div>
+      <div class="cp-card" style="background:var(--color-success-soft);border:1px solid var(--color-success-soft)">
+        <div class="cp-label">✅ 练习记录</div>
+        三次握手选择题 · <span style="color:var(--color-success);font-weight:500">正确率 80%</span><br>
+        薄弱点：第三次握手的确认号计算
+      </div>
+    </div>
+  </aside>
+
   <!-- ═══ BOTTOM DOCK ═══ -->
   <div id="sh-dock">
     <div class="dock-item active" data-tool="note" onclick="activateTool('note')">
@@ -755,6 +997,12 @@ body { overflow: hidden; height: 100vh; padding-bottom: 0; }
 
 </div>
 
+<!-- ── Floating Companion (focus mode) ── -->
+<div class="floating-companion" id="floating-companion">
+  <div class="fc-tooltip" id="fc-tooltip">📊 你在看 PDF 已经 18 分钟了。要帮你总结吗？</div>
+  <div class="fc-badge" onclick="switchLayout('dialogue')">🍎</div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════════════════════
 // AppleGo Studio 4.0 — Demo Script
@@ -800,6 +1048,106 @@ function switchResource(id) {
   if (id !== 'welcome') {
     addAiObservation(activeResource);
   }
+}
+
+// ── Adaptive Layout: Explore / Dialogue / Focus ──
+let currentLayout = 'explore';
+
+function switchLayout(mode) {
+  if (mode === currentLayout) return;
+  currentLayout = mode;
+
+  const studio = document.getElementById('studio');
+  studio.className = ''; // reset all mode classes
+
+  // set new mode with transition
+  requestAnimationFrame(() => {
+    studio.classList.add('mode-' + mode);
+  });
+
+  // update header toggle buttons
+  document.querySelectorAll('.sh-layout-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+
+  // update floating tooltip text
+  const tip = document.getElementById('fc-tooltip');
+  const labels = {
+    explore: '📖 你在浏览学习资源',
+    dialogue: '💬 你在和 AppleGo 深入对话',
+    focus: '🎯 你在专注阅读',
+  };
+  if (tip) tip.textContent = labels[mode] || '';
+
+  // when entering dialogue, sync resource context to dialogue view
+  if (mode === 'dialogue') {
+    syncContextToDialogue();
+  }
+}
+
+// ── Dialogue Messaging ──
+const dialogueReplies = {
+  '为什么': '因为双向确认需要三句话。<br><br>第一次：客户端说「我要连」<br>第二次：服务端说「好，这是我的序号」<br>第三次：客户端说「我收到了你的序号，可以开始了」<br><br>如果只有两次，服务端永远不知道自己的 SYN-ACK 是否到达了客户端。',
+  '什么是': 'SYN（Synchronize Sequence Numbers）是 TCP 头部的标志位，表示「同步序列号」。<br><br>建立连接时，双方需要协商一个初始序号。SYN 就是用来做这个的。',
+  '好': '好的，那我们继续。需要我给你出一道题检验理解吗？',
+  '继续': '好。你已经理解了三次握手的基本流程。下一步我们聊聊「半连接队列」和「SYN Flood」？',
+  '理解': '太好了。你大概是我见过最快理解三次握手的同学之一。',
+  '吧': '好啊。那我们一起看看你的笔记里还有什么可以完善的地方？',
+  '谢谢': '不客气。帮到你我很开心。',
+};
+
+function sendDialogueMsg() {
+  const input = document.getElementById('dialogue-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+
+  const body = document.getElementById('dialogue-body');
+
+  // user message
+  const userDiv = document.createElement('div');
+  userDiv.className = 'dialogue-msg user';
+  userDiv.style.animation = 'slideUp 0.25s var(--ease-out)';
+  userDiv.innerHTML = `
+    <div class="dm-avatar">你</div>
+    <div class="dm-bubble">${escapeHtml(text)}</div>
+  `;
+  body.insertBefore(userDiv, document.getElementById('dialogue-latest-msg'));
+
+  // AI reply
+  const reply = Object.keys(dialogueReplies).find(k => text.includes(k)) || null;
+  const replyText = reply ? dialogueReplies[reply] : '让我想想……<br><br>这个问题很好。第三次握手的存在，本质是为了解决「延迟重传」问题。你从哪个角度考虑的？';
+
+  setTimeout(() => {
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'dialogue-msg';
+    aiDiv.style.animation = 'slideUp 0.25s var(--ease-out)';
+    aiDiv.innerHTML = `
+      <div class="dm-avatar applego">🍎</div>
+      <div class="dm-bubble">${replyText}</div>
+    `;
+    body.insertBefore(aiDiv, document.getElementById('dialogue-latest-msg'));
+    body.scrollTop = body.scrollHeight;
+  }, 500 + Math.random() * 300);
+
+  body.scrollTop = body.scrollHeight;
+}
+
+function syncContextToDialogue() {
+  const contextIndicator = document.getElementById('dialogue-latest-msg');
+  if (!contextIndicator) return;
+  const resources = {
+    book: '📖 正在参考：计算机网络 p.142 — 三次握手',
+    video: '🎬 讨论中引用了：视频 32:18 处的板书',
+    note: '📝 你的笔记已被纳入对话语境',
+    mindmap: '🧩 对话关联导图节点：「为什么不是两次」',
+    web: '🌐 对话引用自 RFC 793 原始规范',
+  };
+  const note = document.createElement('div');
+  note.style.cssText = 'font-size:11px;color:var(--color-ink-muted);text-align:center;padding:4px 0;border-top:1px solid var(--color-divider-soft);margin-top:4px';
+  note.textContent = resources[activeResource] || '💬 与 AppleGo 自然对话';
+  contextIndicator.innerHTML = '';
+  contextIndicator.appendChild(note);
 }
 
 // ── AI Companion: 观察 + 建议 ──
@@ -903,8 +1251,8 @@ function openCanvasFromSuggestion() {
         <strong>你看看对不对？</strong>
       </div>
       <div class="ac-actions">
-        <button class="ac-action-btn primary">对的，继续</button>
-        <button class="ac-action-btn">不太一样</button>
+        <button class="ac-action-btn primary" onclick="switchLayout('dialogue');addAiReply('对的，继续。')">对的，继续</button>
+        <button class="ac-action-btn" onclick="switchLayout('dialogue')">不太一样</button>
       </div>
     `;
   }
@@ -925,8 +1273,8 @@ function showExplanation() {
         「你的 SYN-ACK 我收到了，现在是真的。」
       </div>
       <div class="ac-actions" style="margin-top:12px">
-        <button class="ac-action-btn primary" onclick="addAiReply('明白了。所以第三次握手其实是服务端的「保险」。')">明白了</button>
-        <button class="ac-action-btn">还是有点绕</button>
+        <button class="ac-action-btn primary" onclick="switchLayout('dialogue');addAiReply('明白了。所以第三次握手其实是服务端的「保险」。')">明白了</button>
+        <button class="ac-action-btn" onclick="switchLayout('dialogue')">还是有点绕</button>
       </div>
     `;
   }
@@ -941,45 +1289,15 @@ function sendAiMessage() {
   if (!text) return;
   input.value = '';
 
-  const body = document.getElementById('ac-body');
-  const div = document.createElement('div');
-  div.className = 'ac-card ac-observation';
-  div.style.animation = 'msgIn 0.3s var(--ease-spring)';
-  div.innerHTML = `
-    <div class="ac-time">你 · 刚刚</div>
-    <div class="ac-text" style="color:var(--color-ink-primary)">${escapeHtml(text)}</div>
-  `;
-  const dynamic = document.getElementById('ac-dynamic');
-  body.insertBefore(div, dynamic);
+  // Auto-switch to dialogue mode when user sends a substantive message
+  switchLayout('dialogue');
 
-  // 模拟 AI 回复
-  const replies = {
-    '为什么需要三次': '因为在不可靠的信道上，双方需要确认彼此的发送和接收能力。两次不够——服务端不知道客户端收到了自己的 SYN-ACK。',
-    '什么是 SYN': 'SYN （Synchronize Sequence Numbers） 是 TCP 头部的一个标志位，表示「我要开始同步序列号了」。第一次握手的 SYN 报文就是在说：嘿，我想建立连接，这是我的初始序号。',
-    '三次握手和两次有什么区别': '两次握手的问题在于：如果旧的 SYN 延迟到达，服务端会建立一个客户端已经不想要的连接，浪费资源。三次握手通过第三次 ACK 让服务端确认：这个连接是客户端真正想要的。',
-    '默认': '这个问题很好。让我想想从哪个角度回答最清晰。',
-    '好的': '好，我们就从这个方向走。需要什么随时叫我。',
-    '谢谢': '不客气。能帮上忙，我很高兴。',
-  };
-
-  setTimeout(() => {
-    const reply = Object.keys(replies).find(k => text.includes(k)) || '默认';
-    const div2 = document.createElement('div');
-    div2.className = 'ac-card ac-suggestion';
-    div2.style.animation = 'msgIn 0.3s var(--ease-spring)';
-    div2.innerHTML = `
-      <div class="ac-time">🍎 AppleGo · 刚刚</div>
-      <div class="ac-text">${replies[reply]}</div>
-      <div class="ac-actions" style="margin-top:8px">
-        <button class="ac-action-btn primary" onclick="addAiReply('继续。')">继续</button>
-        <button class="ac-action-btn">再讲细一点</button>
-      </div>
-    `;
-    body.insertBefore(div2, dynamic);
-    body.scrollTop = body.scrollHeight;
-  }, 600);
-
-  body.scrollTop = body.scrollHeight;
+  // Also mirror the message into the dialogue view
+  const dialogueInput = document.getElementById('dialogue-input');
+  if (dialogueInput) {
+    dialogueInput.value = text;
+    sendDialogueMsg();
+  }
 }
 
 // ── Tool Dock ──
