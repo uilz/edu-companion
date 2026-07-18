@@ -19,9 +19,17 @@ Agent 读取 /manuflow/LOOP.md 自动进入当前阶段工作流。
 
 ## 当前阶段
 
-**Architecture Freeze（2026-07-18 生效）**
+**Development Mode（2026-07-18 生效）**
 
-Demo3.0 已完成。禁止编写业务代码。先把 Demo 完整沉淀为工程规范。
+Architecture Freeze 已完成。进入 VDD 循环开发模式。
+
+每轮 Loop 固定四步：
+1. **Vision 有没有变化？**（如果有，先改 Demo）
+2. **Spec 有没有更新？**（如果有，更新 Product Spec）
+3. **Architecture 是否需要调整？**
+4. **最后才允许写代码。**
+
+当前 Roadmap: `manuflow/Roadmap.md` — Release 0.1（M1: 第一次完整学习）
 
 ---
 

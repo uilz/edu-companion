@@ -90,7 +90,7 @@ export default function GrowthPage() {
       {summary?.growth_narrative && (
         <div
           className="bg-surface rounded-lg p-space-5 mb-space-6 text-[17px] leading-[1.7] text-ink-primary shadow-[0_0_0_1px_var(--color-divider-soft)]"
-          style={{ fontFamily: "var(--font-display)" }}
+          style={{ fontFamily: "var(--font-serif)" }}
         >
           {summary.growth_narrative}
         </div>

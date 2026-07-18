@@ -64,6 +64,23 @@ def build_growth_narrative(growth_summary: dict) -> str:
     elif streak >= 3 and total >= 3:
         parts.append("过去几天你保持了连续学习，节奏正在形成。")
 
+    # ── 第一句话记忆（长期用户才引用，体现"我记得你开始的样子"） ──
+    if total >= 15:
+        first_record = growth_summary.get("first_record")
+        if first_record:
+            quote = (
+                (first_record.get("reflection_snippet") or "").strip()
+                or (first_record.get("summary") or "").strip()
+            )
+            if quote and len(quote) > 5:
+                if len(quote) > 35:
+                    quote = quote[:35] + "…"
+                parts.append(
+                    f"还记得你开始的时候说："
+                    f"“{quote}”。"
+                    f"今天你已经完全不一样了。"
+                )
+
     return "".join(parts)
 
 
