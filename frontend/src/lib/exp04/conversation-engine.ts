@@ -41,19 +41,10 @@ function isSilenced(state: Exp04State, trigger: ConversationTrigger): boolean {
       return trigger !== "SEARCH_DETECTED";
 
     case "SELF_VALIDATION":
-      // SELF_VALIDATION：进入验证、工具/闪卡提示可说话；用户写的过程中其他触发静默
-      return !["VALIDATION_REQUESTED", "TOOL_NUDGE", "FLASHCARD_SUGGESTION"].includes(
+      // SELF_VALIDATION：进入验证、练习、工具/闪卡提示可说话；用户写的过程中其他触发静默
+      return !["VALIDATION_REQUESTED", "TOOL_NUDGE", "PRACTICE_PROMPT", "PRACTICE_FEEDBACK", "FLASHCARD_SUGGESTION"].includes(
         trigger
       );
-
-    case "OBSERVATION":
-      // OBSERVATION：练习、工具、闪卡提示可说话
-      return ![
-        "TOOL_NUDGE",
-        "PRACTICE_PROMPT",
-        "PRACTICE_FEEDBACK",
-        "FLASHCARD_SUGGESTION",
-      ].includes(trigger);
 
     case "REFLECTION":
       // REFLECTION 只在进入时说一句提取问题；闪卡建议可轻声提示

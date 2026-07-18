@@ -11,7 +11,7 @@ from typing import Literal
 from uuid import uuid4
 
 
-SessionStage = Literal["intro", "learn", "practice", "reflect"]
+SessionStage = Literal["intro", "learn", "practice", "reflect", "finish"]
 
 
 class SessionDomainError(Exception):
@@ -71,7 +71,7 @@ class Session:
             raise SessionDomainError(
                 f"Cannot transition stage: session is {self.status}"
             )
-        valid_order = {"intro": 0, "learn": 1, "practice": 2, "reflect": 3}
+        valid_order = {"intro": 0, "learn": 1, "practice": 2, "reflect": 3, "finish": 4}
         if valid_order.get(new_stage, -1) <= valid_order.get(self.stage, -1):
             raise SessionDomainError(
                 f"Stage transition not allowed: {self.stage} → {new_stage}"
@@ -122,7 +122,7 @@ class Session:
         import time
         self.status = "completed"
         self.finished_at = time.time()
-        self.stage = "reflect"  # 强制进入 reflect
+        self.stage = "finish"  # 强制进入 finish
 
         if reflection:
             self.reflection_text = reflection.get("content", "")

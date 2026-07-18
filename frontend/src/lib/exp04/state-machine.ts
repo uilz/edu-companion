@@ -3,6 +3,7 @@
 //
 // Session 状态机。管理 ENTER → LEARN → COGNITIVE_SEARCH →
 // SELF_VALIDATION → REFLECTION → END 的状态转换。
+// 对齐 Vision 5 段：intro → learn → practice → reflect → finish
 //
 // 每条转换规则都对应 Implementation Model Layer B 的定义。
 // ============================================================
@@ -41,15 +42,6 @@ const TRANSITIONS: Record<Exp04State, Set<StateEvent["type"]>> = {
   SELF_VALIDATION: new Set<StateEvent["type"]>([
     "BACK_TO_LEARN",
     "VALIDATION_DONE",
-    "SESSION_CANCELLED",
-    // 工具 / 闪卡
-    "TOOL_OPENED",
-    "TOOL_CLOSED",
-    "FLASHCARD_CREATED",
-    "PROMPT_CLICKED",
-  ]),
-  OBSERVATION: new Set<StateEvent["type"]>([
-    "OBSERVATION_DONE",
     "SESSION_CANCELLED",
     // 工具 / 练习 / 闪卡
     "TOOL_OPENED",
@@ -98,24 +90,15 @@ const NEXT_STATE: Record<string, Record<string, Exp04State>> = {
   },
   SELF_VALIDATION: {
     BACK_TO_LEARN: "LEARN",
-    VALIDATION_DONE: "OBSERVATION",
+    VALIDATION_DONE: "REFLECTION",
     SESSION_CANCELLED: "END",
-    // 工具 / 闪卡自环
+    // 工具 / 闪卡 / 练习自环
     TOOL_OPENED: "SELF_VALIDATION",
     TOOL_CLOSED: "SELF_VALIDATION",
+    PRACTICE_STARTED: "SELF_VALIDATION",
+    PRACTICE_DONE: "SELF_VALIDATION",
     FLASHCARD_CREATED: "SELF_VALIDATION",
     PROMPT_CLICKED: "SELF_VALIDATION",
-  },
-  OBSERVATION: {
-    OBSERVATION_DONE: "REFLECTION",
-    SESSION_CANCELLED: "END",
-    // 工具 / 练习 / 闪卡自环
-    TOOL_OPENED: "OBSERVATION",
-    TOOL_CLOSED: "OBSERVATION",
-    PRACTICE_STARTED: "OBSERVATION",
-    PRACTICE_DONE: "OBSERVATION",
-    FLASHCARD_CREATED: "OBSERVATION",
-    PROMPT_CLICKED: "OBSERVATION",
   },
   REFLECTION: {
     REFLECTION_DONE: "END",

@@ -1,45 +1,30 @@
 # Founder Workflow
 
-> 你（橙子）只需要发一句话：`LOOP`
-> 其余一切由 Agent 按 Vision-Driven 流程自动推进。
+> 你（橙子）只需要发一个字：`LOOP`
+> 其余由 Agent 按 LOOP.md 自动推进。
 
 ---
 
 ## 一句话启动
 
+发送：
+
 ```
 LOOP
 ```
 
-Agent 会读取 `/prompts/LOOP.md`，自动进入：
-
-```
-Vision Guardian → 选 Gap → Architecture Planner → 等你批准 → Implementation Lead → Release Reviewer → 更新 GAP.md → 回到起点
-```
+Agent 会读取 `/manuflow/LOOP.md`，判断当前阶段并推进。
 
 ---
 
 ## 你的参与点
 
-| 环节 | 你要做什么 |
+| 阶段 | 你要做什么 |
 |------|-----------|
-| **启动** | 说 `LOOP` |
-| **选 Gap 后** | 听 Agent 汇报 Architecture Plan，说 `批准` 或 `换另一个 Gap` |
-| **实现后** | 体验 Reality，确认是否更接近 Vision |
+| **启动 Loop** | 说 `LOOP` |
+| **每个 Phase 完成** | 确认是否通过，说 `继续` 或 `重做` |
+| **实现完成后** | 体验 Reality，确认是否更接近 Vision |
 | **争议时** | 你说了算 |
-
----
-
-## 你不需要做的事
-
-- 写 Prompt
-- 写 Story
-- Review 代码
-- 管 Release
-- 维护 Dashboard
-- 追进度
-
-Agent 会自动读取 `/prompts/` 下的四个角色 Prompt，并更新 `/vision/GAP.md`。
 
 ---
 
@@ -47,7 +32,7 @@ Agent 会自动读取 `/prompts/` 下的四个角色 Prompt，并更新 `/vision
 
 直接说：
 
-> "你重新读 /vision/preview.html，现在偏离 Vision 了。"
+> "你重新读 /vision/preview.html，现在偏离 Demo了。"
 
 或：
 
@@ -59,16 +44,7 @@ Agent 会自动读取 `/prompts/` 下的四个角色 Prompt，并更新 `/vision
 
 | 文件 | 作用 |
 |------|------|
-| `/vision/preview.html` | 最终产品原型，唯一真相源 |
-| `/vision/VISION.md` | 产品理念 |
-| `/vision/GAP.md` | 当前 Reality 与 Vision 的差距 |
-| `/vision/ROADMAP.md` | 按 Gap 排序的长期计划 |
-| `/prompts/LOOP.md` | 你给 Agent 的唯一指令 |
-| `/prompts/01-vision-guardian.md` | 角色 1 |
-| `/prompts/02-architecture-planner.md` | 角色 2 |
-| `/prompts/03-implementation-lead.md` | 角色 3 |
-| `/prompts/04-release-reviewer.md` | 角色 4 |
-
----
-
-> **核心原则：Vision 永远不变，Reality 持续靠近。**
+| `/manuflow/LOOP.md` | 当前阶段执行步骤 |
+| `/manuflow/rule.md` | 全局规则（哲学） |
+| `/manuflow/Project Dashboard.md` | 每日进度 |
+| `/vision/preview.html` | Demo3.0 — 唯一产品真相 |

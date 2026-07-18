@@ -7,13 +7,12 @@
 
 // ── 状态 ──────────────────────────────────────────────────
 
-/** EXP-04 的 6 个 Session 状态（+ 结束态） */
+/** EXP-04 的 5 个 Session 状态（+ 结束态）。对齐 Vision: intro → learn → practice → reflect → finish */
 export type Exp04State =
   | "ENTER"
   | "LEARN"
   | "COGNITIVE_SEARCH"
   | "SELF_VALIDATION"
-  | "OBSERVATION"
   | "REFLECTION"
   | "END";
 
@@ -23,6 +22,7 @@ export const BACKEND_STAGE_TO_EXP04: Record<string, Exp04State> = {
   learn: "LEARN",
   practice: "SELF_VALIDATION",
   reflect: "REFLECTION",
+  finish: "END",
 };
 
 export const EXP04_TO_BACKEND_STAGE: Partial<Record<Exp04State, string>> = {
@@ -44,7 +44,6 @@ export type StateEvent =
   | { type: "VALIDATION_REQUESTED" }
   | { type: "BACK_TO_LEARN" }
   | { type: "VALIDATION_DONE" }
-  | { type: "OBSERVATION_DONE" }
   | { type: "REFLECTION_DONE" }
   | { type: "SESSION_CANCELLED" }
   // 工具 / 练习 / 主动提示 / 闪卡事件（自环，用于追踪交互）

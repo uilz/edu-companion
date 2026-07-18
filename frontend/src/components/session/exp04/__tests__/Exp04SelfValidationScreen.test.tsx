@@ -1,21 +1,28 @@
 // ============================================================
-// EXP-04 V2 · Self-Validation Screen 单元测试
+// EXP-04 V2 · Self-Validation / Practice Screen 单元测试
 //
-// V2 变化：
-//   - 仅有输入阶段（无 Compare phase，移到了 OBSERVATION）
-//   - 提交时触发 LI-02 API 调用
-//   - "写好了" → 触发 onContinue
-//   - "再看看" → 返回 LEARN
+// 对齐 Vision: 练习题 → 答题反馈 → "再来一道"/"去反思"
 // ============================================================
 
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Exp04SelfValidationScreen from "@/components/session/exp04/Exp04SelfValidationScreen";
 
-// Mock authedFetch to resolve quickly
-vi.mock("@/lib/api/api", () => ({
-  authedFetch: vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({}) })),
+// Mock generateQuestions to return a predictable question
+const mockQuestion = {
+  id: "q1", bank_id: "test", question_type: "single" as const,
+  stem: "1 + 1 等于多少？",
+  options: [
+    { letter: "A", text: "1", is_correct: false },
+    { letter: "B", text: "2", is_correct: true },
+    { letter: "C", text: "3", is_correct: false },
+  ],
+  difficulty: 1, cognitive_node_ids: [], metadata: {},
+};
+
+vi.mock("@/lib/api/practice-api", () => ({
+  generateQuestions: vi.fn(() => Promise.resolve({ questions: [mockQuestion] })),
 }));
 
 function setup(overrides: Partial<Parameters<typeof Exp04SelfValidationScreen>[0]> = {}) {
@@ -37,97 +44,126 @@ function setup(overrides: Partial<Parameters<typeof Exp04SelfValidationScreen>[0
   return { ...utils, onBackToLearn, onContinue };
 }
 
-describe("V2 SELF_VALIDATION — 基础渲染", () => {
-  it("渲染引导标题", () => {
+describe("SELF_VALIDATION — 基础渲染", () => {
+  it("渲染 '练一练' section label", () => {
     setup();
-    expect(screen.getByText("试着讲给苹果果听")).toBeDefined();
+    expect(screen.getByText("练一练")).toBeDefined();
   });
 
-  it("渲染 textarea", () => {
+  it("渲染标题 '来检验一下吧'", () => {
     setup();
-    const textarea = screen.getByPlaceholderText(/把你对/);
-    expect(textarea).toBeDefined();
+    expect(screen.getByText("来检验一下吧")).toBeDefined();
   });
 
-  it("渲染 '写好了' 按钮", () => {
+  it("显示加载状态后加载题目", async () => {
     setup();
-    expect(screen.getByText("写好了")).toBeDefined();
+    // 初始显示 "苹果果在出题…"
+    expect(screen.getByText("苹果果在出题…")).toBeDefined();
+
+    // 等待题目加载
+    await waitFor(() => {
+      expect(screen.getByText("1 + 1 等于多少？")).toBeDefined();
+    });
   });
 
-  it("渲染 '再看看' 按钮", () => {
+  it("渲染选项按钮", async () => {
     setup();
-    expect(screen.getByText("再看看")).toBeDefined();
+    await waitFor(() => {
+      expect(screen.getByText("1")).toBeDefined();
+      expect(screen.getByText("2")).toBeDefined();
+      expect(screen.getByText("3")).toBeDefined();
+    });
   });
 
-  it("空内容时 '写好了' 按钮 disabled", () => {
+  it("渲染底部 '返回学习' 按钮", () => {
     setup();
-    const btn = screen.getByText("写好了");
-    expect((btn as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("返回学习")).toBeDefined();
   });
 
-  it("输入内容后 '写好了' 按钮可用", async () => {
+  it("渲染底部 '继续' 按钮", () => {
     setup();
-    const user = userEvent.setup();
-    const textarea = screen.getByPlaceholderText(/把你对/);
-    await user.type(textarea, "TCP 是可靠的传输协议");
-    const btn = screen.getByText("写好了");
-    expect((btn as HTMLButtonElement).disabled).toBe(false);
+    const buttons = screen.getAllByText("继续");
+    // 至少有一个「继续」按钮（底部）
+    expect(buttons.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("渲染 section-title", () => {
-    setup();
-    expect(screen.getByText("Self Validation")).toBeDefined();
+  it("missionTitle 显示在描述中", () => {
+    setup({ missionTitle: "矩阵乘法" });
+    expect(screen.getByText(/矩阵乘法/)).toBeDefined();
   });
 });
 
-describe("V2 SELF_VALIDATION — 按钮交互", () => {
-  it("点击 '再看看' 触发 onBackToLearn", async () => {
+describe("SELF_VALIDATION — 答题交互", () => {
+  it("点击选项后显示反馈区", async () => {
+    setup();
+    await waitFor(() => {
+      expect(screen.getByText("1 + 1 等于多少？")).toBeDefined();
+    });
+
+    // 点击正确选项 B (text "2")
+    const user = userEvent.setup();
+    await user.click(screen.getByText("2"));
+
+    // 应该出现反馈
+    await waitFor(() => {
+      expect(screen.getByText("算对了。")).toBeDefined();
+    });
+  });
+
+  it("答题后显示 '再来一道' 和 '去反思'", async () => {
+    setup();
+    await waitFor(() => {
+      expect(screen.getByText("1 + 1 等于多少？")).toBeDefined();
+    });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByText("2"));
+
+    await waitFor(() => {
+      expect(screen.getByText("再来一道")).toBeDefined();
+      expect(screen.getByText("去反思")).toBeDefined();
+    });
+  });
+
+  it("点击 '去反思' 触发 onContinue", async () => {
+    const { onContinue } = setup();
+    await waitFor(() => {
+      expect(screen.getByText("1 + 1 等于多少？")).toBeDefined();
+    });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByText("2"));
+
+    await waitFor(() => {
+      expect(screen.getByText("去反思")).toBeDefined();
+    });
+
+    await user.click(screen.getByText("去反思"));
+    expect(onContinue).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("SELF_VALIDATION — 按钮交互", () => {
+  it("点击 '返回学习' 触发 onBackToLearn", async () => {
     const { onBackToLearn } = setup();
     const user = userEvent.setup();
-    await user.click(screen.getByText("再看看"));
+    await user.click(screen.getByText("返回学习"));
     expect(onBackToLearn).toHaveBeenCalledTimes(1);
   });
 
-  it("点击 '写好了' 触发 onContinue", async () => {
+  it("底部 '继续' 触发 onContinue", async () => {
     const { onContinue } = setup();
     const user = userEvent.setup();
-    const textarea = screen.getByPlaceholderText(/把你对/);
-    await user.type(textarea, "TCP 可靠传输");
-    await user.click(screen.getByText("写好了"));
+    // 底部「继续」
+    const buttons = screen.getAllByText("继续");
+    const bottomBtn = buttons[buttons.length - 1]; // 最后一个
+    await user.click(bottomBtn);
     expect(onContinue).toHaveBeenCalledTimes(1);
   });
 
-  it("transitioning 时 '写好了' disabled", () => {
+  it("transitioning 时按钮 disabled", () => {
     setup({ transitioning: true });
-    const btn = screen.getByText("写好了");
-    expect((btn as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  it("transitioning 时 '再看看' disabled", () => {
-    setup({ transitioning: true });
-    const btn = screen.getByText("再看看");
-    expect((btn as HTMLButtonElement).disabled).toBe(true);
-  });
-});
-
-describe("V2 SELF_VALIDATION — 加载状态", () => {
-  it("提交后触发 onContinue", async () => {
-    const { onContinue } = setup();
-    const user = userEvent.setup();
-    const textarea = screen.getByPlaceholderText(/把你对/);
-    await user.type(textarea, "TCP 可靠传输");
-    await user.click(screen.getByText("写好了"));
-    // 由于 mock authedFetch 立即 resolve，analyze state 瞬间闪过
-    // 验证最终 onContinue 被调用即可
-    await waitFor(() => {
-      expect(onContinue).toHaveBeenCalledTimes(1);
-    });
-  });
-});
-
-describe("V2 SELF_VALIDATION — Mission title", () => {
-  it("渲染 mission title 在描述中", () => {
-    setup({ missionTitle: "TCP 三次握手" });
-    expect(screen.getByText(/TCP 三次握手/)).toBeDefined();
+    const bottomBtn = screen.getByText("准备中…");
+    expect(bottomBtn).toBeDefined();
   });
 });

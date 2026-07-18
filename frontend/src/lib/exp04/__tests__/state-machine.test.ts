@@ -82,28 +82,14 @@ describe("EXP-04 State Machine — 合法转换", () => {
     expect(result.current.currentState).toBe("LEARN");
   });
 
-  it("SELF_VALIDATION → OBSERVATION (VALIDATION_DONE)", () => {
+  it("SELF_VALIDATION → REFLECTION (VALIDATION_DONE)", () => {
     const { result } = setup("SELF_VALIDATION");
     act(() => result.current.transition({ type: "VALIDATION_DONE" }));
-    expect(result.current.currentState).toBe("OBSERVATION");
+    expect(result.current.currentState).toBe("REFLECTION");
   });
 
   it("SELF_VALIDATION → END (SESSION_CANCELLED)", () => {
     const { result } = setup("SELF_VALIDATION");
-    act(() => result.current.transition({ type: "SESSION_CANCELLED" }));
-    expect(result.current.currentState).toBe("END");
-  });
-
-  // ── OBSERVATION ──
-
-  it("OBSERVATION → REFLECTION (OBSERVATION_DONE)", () => {
-    const { result } = setup("OBSERVATION");
-    act(() => result.current.transition({ type: "OBSERVATION_DONE" }));
-    expect(result.current.currentState).toBe("REFLECTION");
-  });
-
-  it("OBSERVATION → END (SESSION_CANCELLED)", () => {
-    const { result } = setup("OBSERVATION");
     act(() => result.current.transition({ type: "SESSION_CANCELLED" }));
     expect(result.current.currentState).toBe("END");
   });
@@ -129,7 +115,7 @@ describe("EXP-04 State Machine — 合法转换", () => {
     const events = [
       "START_CLICKED", "INACTIVITY_DETECTED", "INTERACTION_RESUMED",
       "VALIDATION_REQUESTED", "BACK_TO_LEARN", "VALIDATION_DONE",
-      "OBSERVATION_DONE", "REFLECTION_DONE", "SESSION_CANCELLED",
+      "REFLECTION_DONE", "SESSION_CANCELLED",
     ] as const;
     for (const event of events) {
       act(() => result.current.transition({ type: event }));
@@ -170,16 +156,10 @@ describe("EXP-04 State Machine — 非法转换被忽略", () => {
     act(() => result.current.transition({ type: "START_CLICKED" }));
     expect(result.current.currentState).toBe("REFLECTION");
   });
-
-  it("OBSERVATION 不接受 START_CLICKED", () => {
-    const { result } = setup("OBSERVATION");
-    act(() => result.current.transition({ type: "START_CLICKED" }));
-    expect(result.current.currentState).toBe("OBSERVATION");
-  });
 });
 
 describe("EXP-04 State Machine — 完整流程", () => {
-  it("ENTER → LEARN → COGNITIVE_SEARCH → LEARN → SELF_VALIDATION → OBSERVATION → REFLECTION → END", () => {
+  it("ENTER → LEARN → COGNITIVE_SEARCH → LEARN → SELF_VALIDATION → REFLECTION → END", () => {
     const { result } = setup("ENTER");
 
     act(() => result.current.transition({ type: "START_CLICKED" }));
@@ -195,15 +175,12 @@ describe("EXP-04 State Machine — 完整流程", () => {
     expect(result.current.currentState).toBe("SELF_VALIDATION");
 
     act(() => result.current.transition({ type: "VALIDATION_DONE" }));
-    expect(result.current.currentState).toBe("OBSERVATION");
-
-    act(() => result.current.transition({ type: "OBSERVATION_DONE" }));
     expect(result.current.currentState).toBe("REFLECTION");
 
     act(() => result.current.transition({ type: "REFLECTION_DONE" }));
     expect(result.current.currentState).toBe("END");
 
-    expect(result.current.transitionCount).toBe(7);
+    expect(result.current.transitionCount).toBe(6);
   });
 
   it("ENTER → 取消 (中途取消全流程)", () => {

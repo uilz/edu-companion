@@ -10,8 +10,8 @@
 
 "use client";
 
-import { useState, useCallback } from "react";
-import { Loader2 } from "lucide-react";
+import { useState, useCallback, useRef } from "react";
+import { Loader2, Sparkles } from "lucide-react";
 
 interface ReflectionScreenProps {
   engine: any;
@@ -19,6 +19,7 @@ interface ReflectionScreenProps {
   onSkip: () => Promise<void>;
   onSubmit: (content: string) => Promise<void>;
   transitioning: boolean;
+  missionTitle?: string;
 }
 
 export default function Exp04ReflectionScreen({
@@ -26,8 +27,31 @@ export default function Exp04ReflectionScreen({
   onSkip,
   onSubmit,
   transitioning,
+  missionTitle,
 }: ReflectionScreenProps) {
   const [text, setText] = useState("");
+  const [draftFilled, setDraftFilled] = useState(false);
+  const draftTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // 生成草稿：基于 mission 标题的苹果果整理
+  const draftText = missionTitle
+    ? `今天我对「${missionTitle}」有了新的理解。之前的困惑慢慢打开了。`
+    : "今天我对这个主题有了新的理解。之前觉得模糊的地方，现在清楚多了。";
+
+  const handleFillDraft = useCallback(() => {
+    if (draftFilled) return;
+    setDraftFilled(true);
+    setText("");
+    let i = 0;
+    draftTimerRef.current = setInterval(() => {
+      if (i <= draftText.length) {
+        setText(draftText.slice(0, i));
+        i += 2;
+      } else {
+        if (draftTimerRef.current) clearInterval(draftTimerRef.current);
+      }
+    }, 14);
+  }, [draftFilled, draftText]);
 
   const handleSubmit = useCallback(async () => {
     if (transitioning) return;
@@ -52,9 +76,20 @@ export default function Exp04ReflectionScreen({
             今天最大的变化是什么？
           </h1>
 
-          <p className="text-base text-ink-muted leading-relaxed mb-8">
+          <p className="text-base text-ink-muted leading-relaxed mb-4">
             不用写很多。一句话也可以。理解上的任何变化都值得记下来。
           </p>
+
+          {/* 苹果果帮你整理 — 草稿填充 */}
+          {!draftFilled && (
+            <button
+              onClick={handleFillDraft}
+              className="flex items-center gap-1.5 text-sm text-[#F4B400] font-medium mb-5 hover:opacity-70 transition-opacity"
+            >
+              <Sparkles size={15} />
+              苹果果帮你整理
+            </button>
+          )}
 
           {/* 输入框 */}
           <textarea

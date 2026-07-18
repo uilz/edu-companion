@@ -2,7 +2,7 @@
 
 import type { Exp04State } from "@/lib/exp04/types";
 
-const STAGES: Exp04State[] = ["ENTER", "LEARN", "SELF_VALIDATION", "OBSERVATION", "REFLECTION"];
+const STAGES: Exp04State[] = ["ENTER", "LEARN", "SELF_VALIDATION", "REFLECTION"];
 
 function normalize(state: Exp04State): Exp04State {
   if (state === "COGNITIVE_SEARCH") return "LEARN";

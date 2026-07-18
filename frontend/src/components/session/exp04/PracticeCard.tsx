@@ -1,20 +1,24 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { X, Lightbulb } from "lucide-react";
+import { X, Lightbulb, Check, Loader2 } from "lucide-react";
 import type { V7Question, V7Option } from "@/lib/api/practice-api";
+import { createSessionFlashcard } from "@/lib/api/session-tool-api";
 import OptionButton from "@/components/practice/components/OptionButton";
 
 interface Props {
   question: V7Question;
   onDone: (correct: boolean) => void;
   onClose?: () => void;
+  sessionId?: string;
 }
 
-export default function PracticeCard({ question, onDone, onClose }: Props) {
+export default function PracticeCard({ question, onDone, onClose, sessionId }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [showHint, setShowHint] = useState(false);
+  const [creatingFlashcard, setCreatingFlashcard] = useState(false);
+  const [flashcardCreated, setFlashcardCreated] = useState(false);
 
   const correctLetters = useMemo(
     () => question.options.filter((o: V7Option) => o.is_correct).map((o) => o.letter),
@@ -30,6 +34,22 @@ export default function PracticeCard({ question, onDone, onClose }: Props) {
 
   const handleDone = () => {
     onDone(isCorrect);
+  };
+
+  const handleCreateFlashcard = async () => {
+    if (!sessionId || creatingFlashcard || flashcardCreated) return;
+    setCreatingFlashcard(true);
+    try {
+      await createSessionFlashcard(sessionId, {
+        front_text: question.stem,
+        tags: ["practice", "session"],
+      });
+      setFlashcardCreated(true);
+    } catch {
+      // 静默失败，不影响继续学习
+    } finally {
+      setCreatingFlashcard(false);
+    }
   };
 
   return (
@@ -78,6 +98,32 @@ export default function PracticeCard({ question, onDone, onClose }: Props) {
               <p className="text-sm opacity-80">
                 正确选项：{correctLetters.join(", ")}
               </p>
+            </div>
+          )}
+
+          {/* ── 嵌入: 做成一张卡 ── */}
+          {submitted && sessionId && (
+            <div className="mb-4 p-4 rounded-xl bg-surface border border-border/50">
+              <p className="text-sm font-medium text-ink-primary mb-3">做成一张卡记住它</p>
+              {flashcardCreated ? (
+                <p className="text-sm text-success flex items-center gap-1.5">
+                  <Check size={16} />
+                  已经加进你的卡片了
+                </p>
+              ) : (
+                <button
+                  onClick={handleCreateFlashcard}
+                  disabled={creatingFlashcard}
+                  className="flex items-center gap-1.5 text-sm font-medium text-[#F4B400] hover:text-[#e5a800] transition-colors disabled:opacity-40"
+                >
+                  {creatingFlashcard ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <span className="text-base leading-none">＋</span>
+                  )}
+                  {creatingFlashcard ? "创建中…" : "创建"}
+                </button>
+              )}
             </div>
           )}
 

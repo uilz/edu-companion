@@ -63,6 +63,14 @@ describe("EXP-04 Conversation Engine — canSpeak (沉默规则)", () => {
     expect(engine.canSpeak("SELF_VALIDATION", "VALIDATION_REQUESTED")).toBe(true);
   });
 
+  it("SELF_VALIDATION: PRACTICE_PROMPT 可以说话", () => {
+    expect(engine.canSpeak("SELF_VALIDATION", "PRACTICE_PROMPT")).toBe(true);
+  });
+
+  it("SELF_VALIDATION: PRACTICE_FEEDBACK 可以说话", () => {
+    expect(engine.canSpeak("SELF_VALIDATION", "PRACTICE_FEEDBACK")).toBe(true);
+  });
+
   it("SELF_VALIDATION: USER_MESSAGE 不可以说话", () => {
     expect(engine.canSpeak("SELF_VALIDATION", "USER_MESSAGE")).toBe(false);
   });

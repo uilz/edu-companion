@@ -26,7 +26,6 @@ import { BACKEND_STAGE_TO_EXP04 } from "@/lib/exp04/types";
 import Exp04EnterScreen from "./exp04/Exp04EnterScreen";
 import Exp04LearnScreen from "./exp04/Exp04LearnScreen";
 import Exp04SelfValidationScreen from "./exp04/Exp04SelfValidationScreen";
-import Exp04ObservationScreen from "./exp04/Exp04ObservationScreen";
 import Exp04ReflectionScreen from "./exp04/Exp04ReflectionScreen";
 import Exp04EndScreen from "./exp04/Exp04EndScreen";
 import StageDots from "./exp04/StageDots";
@@ -431,28 +430,21 @@ export default function Exp04Session() {
     toast.info("苹果果听到了", prompt);
   }, [handleOpenTool, handleStartPractice, sm]);
 
+  const handleToolNudge = useCallback(() => {
+    patchToolState({ nudges: ["tool"] });
+  }, [patchToolState]);
+
   // 根据当前状态维护主动提示
   useEffect(() => {
     const next: string[] = [];
     if (sm.currentState === "LEARN") {
-      if (!toolState.practiceDone) next.push("来检验一下理解吧～");
+      // 苹果果的陪伴式提示 — 不只催进度，也关心状态
+      if (!toolState.practiceDone) next.push("有没有哪里还不清楚的？");
       if (!toolState.cardCreated) next.push("这个点值得记下来");
-    } else if (sm.currentState === "OBSERVATION") {
-      if (!toolState.practiceDone) next.push("再练一道");
-      if (!toolState.cardCreated) next.push("做成一张卡记住它");
+      next.push("来检验一下理解吧～");
     }
     setPrompts(next);
   }, [sm.currentState, toolState.practiceDone, toolState.cardCreated]);
-
-  // 一段时间后轻轻提示工具托盘（仅在 LEARN 且未主动展开过工具）
-  useEffect(() => {
-    if (sm.currentState !== "LEARN") return;
-    if (toolState.nudges?.length || activeTool) return;
-    const timer = setTimeout(() => {
-      patchToolState({ nudges: ["tool"] });
-    }, 8000);
-    return () => clearTimeout(timer);
-  }, [sm.currentState, toolState.nudges, activeTool, patchToolState]);
 
   // ── 原文参考（EPIC-04: 后端生成前，从 mission 提取 fallback） ──
 
@@ -527,18 +519,15 @@ export default function Exp04Session() {
       {/* ── Progress Bar ── */}
       {showHeader && <ProgressBar currentState={sm.currentState} />}
 
-      {/* ── Active Prompts ── */}
-      {!isEnter && !isEnd && (
+      {/* ── Active Prompts ──（LEARN 阶段建议已内嵌在对话中） */}
+      {!isEnter && !isEnd && sm.currentState !== "LEARN" && sm.currentState !== "COGNITIVE_SEARCH" && (
         <ActivePrompt prompts={prompts} onPromptClick={handlePromptClick} />
       )}
 
       {/* ── Stage Content ── */}
       <div className="flex-1 overflow-y-auto">
         {isEnd ? (
-          <Exp04EndScreen
-            engine={engine}
-            reflectionContent={reflectionContent}
-          />
+          <Exp04EndScreen />
         ) : (
           <StageContent
             session={session}
@@ -552,7 +541,7 @@ export default function Exp04Session() {
             onValidationDone={handleValidationDone}
             onReflectionSubmit={handleReflectionSubmit}
             onReflectionSkip={handleReflectionSkip}
-            onObservationDone={() => sm.transition({ type: "OBSERVATION_DONE" })}
+            onToolNudge={handleToolNudge}
           />
         )}
       </div>
@@ -563,6 +552,7 @@ export default function Exp04Session() {
           question={practiceQuestion}
           onDone={handlePracticeDone}
           onClose={() => setPracticeOpen(false)}
+          sessionId={sessionId}
         />
       )}
 
@@ -621,6 +611,7 @@ function mapBackendStageToEvent(stage: string): StateEvent | null {
     case "learn":   return { type: "START_CLICKED" };
     case "practice":return { type: "VALIDATION_REQUESTED" };
     case "reflect": return { type: "VALIDATION_DONE" };
+    case "finish":  return null;
     default:        return null;
   }
 }
@@ -639,7 +630,7 @@ function StageContent({
   onValidationDone,
   onReflectionSubmit,
   onReflectionSkip,
-  onObservationDone,
+  onToolNudge,
 }: {
   session: SessionData;
   currentState: Exp04State;
@@ -652,7 +643,7 @@ function StageContent({
   onValidationDone: () => Promise<void>;
   onReflectionSubmit: (content: string) => Promise<void>;
   onReflectionSkip: () => Promise<void>;
-  onObservationDone: () => void;
+  onToolNudge: () => void;
 }) {
   switch (currentState) {
     case "ENTER":
@@ -678,6 +669,7 @@ function StageContent({
           transitioning={transitioning}
           sessionId={session.id}
           convId={session.conversation_id}
+          onToolNudge={onToolNudge}
         />
       );
     case "SELF_VALIDATION":
@@ -694,17 +686,6 @@ function StageContent({
           missionTitle={session.title || session.mission?.title}
         />
       );
-    case "OBSERVATION":
-      return (
-        <Exp04ObservationScreen
-          mission={session.mission}
-          referenceText={referenceText}
-          onContinue={onObservationDone}
-          transitioning={transitioning}
-          sessionId={session.id}
-          missionTitle={session.title || session.mission?.title}
-        />
-      );
     case "REFLECTION":
       return (
         <Exp04ReflectionScreen
@@ -713,6 +694,7 @@ function StageContent({
           onSkip={onReflectionSkip}
           onSubmit={onReflectionSubmit}
           transitioning={transitioning}
+          missionTitle={session.title || session.mission?.title}
         />
       );
     default:
