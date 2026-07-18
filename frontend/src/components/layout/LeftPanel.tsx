@@ -42,6 +42,7 @@ import {
   FileText,
   TrendingUp,
   User,
+  Grid3x3,
   ChevronRight,
   type LucideIcon,
 } from "lucide-react";
@@ -57,7 +58,7 @@ type GroupKey = "daily" | "study" | "system";
 const GROUP_META: Record<GroupKey, { title: string; items: string[] }> = {
   daily: {
     title: "日常",
-    items: ["/", "/growth", "/profile"],
+    items: ["/", "/growth", "/profile", "/tools"],
   },
   study: {
     title: "学习工具",
@@ -83,6 +84,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   "/": Bell,
   "/growth": TrendingUp,
   "/profile": User,
+  "/tools": Grid3x3,
   "/project": Folder,
   "/resources": Library,
   "/files": FileText,
