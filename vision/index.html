@@ -16,7 +16,12 @@ body { overflow: hidden; height: 100vh; padding-bottom: 0; }
 /* Grid base: all modes share header + dock rows */
 #studio {
   display: grid;
+  grid-template-columns: 220px 1fr 300px; /* fallback: explore */
   grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    "header  header  header"
+    "sidebar canvas  companion"
+    "dock    dock    dock";
   height: 100vh;
   background: var(--color-page);
   max-width: 1440px;
@@ -48,7 +53,7 @@ body { overflow: hidden; height: 100vh; padding-bottom: 0; }
 #studio.mode-dialogue #sh-sidebar .sb-item { justify-content: center; padding: 8px; }
 #studio.mode-dialogue #sh-sidebar .sb-item + .sb-item { margin-top: 2px; }
 #studio.mode-dialogue #sh-companion { display: none; }
-#studio.mode-dialogue #canvas-default { display: none; }
+#studio.mode-dialogue #sh-canvas .resource-view.active { display: none; }
 #studio.mode-dialogue #canvas-dialogue { display: flex; }
 #studio.mode-dialogue #context-panel { display: flex; }
 
@@ -583,7 +588,7 @@ body { overflow: hidden; height: 100vh; padding-bottom: 0; }
 </head>
 <body>
 
-<div id="studio">
+<div id="studio" class="mode-explore">
 
   <!-- ═══ HEADER ═══ -->
   <header id="sh-header">
@@ -1058,12 +1063,9 @@ function switchLayout(mode) {
   currentLayout = mode;
 
   const studio = document.getElementById('studio');
-  studio.className = ''; // reset all mode classes
-
-  // set new mode with transition
-  requestAnimationFrame(() => {
-    studio.classList.add('mode-' + mode);
-  });
+  // remove all mode- classes, then add the new one
+  studio.className = studio.className.replace(/mode-\S+/g, '').trim();
+  studio.classList.add('mode-' + mode);
 
   // update header toggle buttons
   document.querySelectorAll('.sh-layout-btn').forEach(btn => {
