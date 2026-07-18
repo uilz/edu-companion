@@ -229,13 +229,13 @@ export default function Exp04Session() {
     if (tool === "flashcard") {
       setFlashcardDefaultFront(""); setFlashcardOpen(true);
     } else if (tool === "pomodoro") { setPomodoroOpen(true); }
-    else if (tool === "canvas") { setCanvasOpen(true); }
+    else if (tool === "canvas" || tool === "mindmap") { setCanvasOpen(true); }
     else if (tool === "voice") { setVoiceOpen(true); }
     else if (tool === "handwriting") { setHandwritingOpen(true); }
     else if (tool === "files") { setFilesOpen(true); }
     else {
       sm.transition({ type: "TOOL_OPENED", tool });
-      toast.info(`即将开放`, "先专注当前学习吧");
+      toast.info(`即将开放`, `先专注当前学习吧`);
     }
   }, [patchToolState, sm]);
 
@@ -379,7 +379,7 @@ export default function Exp04Session() {
           sessionTitle={session.mission?.title}
           onOpenCanvas={() => handleOpenTool("canvas")}
           onOpenFlashcard={() => handleOpenTool("flashcard")}
-          onOpenPractice={() => handleOpenTool("canvas")}
+          onOpenPractice={() => handleOpenTool("practice")}
         />
       </aside>
 
