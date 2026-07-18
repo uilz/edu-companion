@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AppleGo Demo 3.0 — Learning OS · Product Design</title>
+<link rel="stylesheet" href="design-system.css">
+<style>
+/* ── Demo 3.0 Design Document Styles ── */
+body { background: #0f0f12; color: #e5e5ea; max-width: 1100px; margin: 0 auto; padding: 0; line-height: 1.7; }
+.d3-container { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+
+/* ── Sidebar ── */
+.d3-sidebar {
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  padding: 40px 20px; border-right: 1px solid rgba(255,255,255,0.06);
+}
+.d3-sidebar::-webkit-scrollbar { width: 3px; }
+.d3-sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+.d3-logo { font-size: 14px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+.d3-tagline { font-size: 11px; color: rgba(255,255,255,0.3); margin-bottom: 32px; }
+.d3-toc { list-style: none; padding: 0; }
+.d3-toc li { margin-bottom: 2px; }
+.d3-toc a {
+  display: block; padding: 7px 10px; border-radius: 8px; font-size: 12.5px;
+  color: rgba(255,255,255,0.5); transition: all 0.15s; text-decoration: none;
+}
+.d3-toc a:hover { color: #fff; background: rgba(255,255,255,0.05); }
+.d3-toc .toc-h2 { font-weight: 600; color: rgba(255,255,255,0.7); margin-top: 16px; }
+.d3-toc .toc-h3 { padding-left: 20px; font-size: 12px; }
+
+/* ── Main Content ── */
+.d3-main { padding: 60px 48px 100px; max-width: 780px; }
+.d3-section { margin-bottom: 64px; scroll-margin-top: 40px; }
+.d3-section h2 {
+  font-size: 22px; font-weight: 700; color: #fff; margin-bottom: 16px;
+  letter-spacing: -0.01em; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.d3-section h3 { font-size: 17px; font-weight: 600; color: #fff; margin-top: 28px; margin-bottom: 10px; }
+.d3-section h4 { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.8); margin-top: 20px; margin-bottom: 8px; }
+.d3-section p { font-size: 14px; color: rgba(255,255,255,0.65); margin-bottom: 12px; line-height: 1.8; }
+.d3-section strong { color: rgba(255,255,255,0.85); }
+.d3-section ul, .d3-section ol { font-size: 14px; color: rgba(255,255,255,0.65); margin-bottom: 12px; padding-left: 20px; }
+.d3-section li { margin-bottom: 6px; line-height: 1.7; }
+
+/* ── Blockquote ── */
+.d3-quote {
+  margin: 20px 0; padding: 20px 24px; background: rgba(255,255,255,0.03);
+  border-left: 3px solid rgba(52,199,89,0.5); border-radius: 12px;
+  font-family: var(--font-serif); font-size: 15px; color: rgba(255,255,255,0.7);
+  font-style: italic; line-height: 1.8;
+}
+
+/* ── Cards ── */
+.d3-card {
+  background: rgba(255,255,255,0.04); border-radius: 14px; padding: 24px;
+  margin: 16px 0; border: 1px solid rgba(255,255,255,0.06);
+}
+.d3-card-title { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 8px; }
+
+/* ── Mode Grid ── */
+.mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+.mode-card {
+  background: rgba(255,255,255,0.03); border-radius: 12px; padding: 16px;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.mode-card .mc-icon { font-size: 22px; margin-bottom: 6px; }
+.mode-card .mc-name { font-size: 13px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+.mode-card .mc-desc { font-size: 12px; color: rgba(255,255,255,0.5); line-height: 1.5; }
+
+/* ── Tag ── */
+.tag {
+  display: inline-block; font-size: 10.5px; font-weight: 600; padding: 3px 10px;
+  border-radius: 999px; margin-right: 4px; margin-bottom: 4px;
+}
+.tag-system { background: rgba(10,132,255,0.15); color: #5ac8fa; }
+.tag-experience { background: rgba(52,199,89,0.15); color: #34c759; }
+.tag-ai { background: rgba(175,82,222,0.15); color: #af52de; }
+.tag-structural { background: rgba(255,159,10,0.15); color: #ff9f0a; }
+
+/* ── State Table ── */
+.state-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+.state-table th {
+  text-align: left; padding: 10px 12px; background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.5); font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.state-table td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); color: rgba(255,255,255,0.65); }
+.state-table tr:hover td { background: rgba(255,255,255,0.02); }
+.state-table .st-emotion { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; display: inline-block; }
+.st-emotion.warm { background: rgba(52,199,89,0.15); color: #34c759; }
+.st-emotion.neutral { background: rgba(10,132,255,0.15); color: #5ac8fa; }
+.st-emotion.cautious { background: rgba(255,159,10,0.15); color: #ff9f0a; }
+.st-emotion.concern { background: rgba(255,59,48,0.15); color: #ff453a; }
+
+/* ── System Layer Diagram ── */
+.layer-diagram { margin: 20px 0; }
+.layer-row {
+  display: flex; align-items: center; gap: 16px;
+  padding: 12px 16px; border-radius: 10px; margin-bottom: 6px;
+  background: rgba(255,255,255,0.03);
+}
+.layer-row .lr-label { font-size: 11px; font-weight: 600; min-width: 100px; text-transform: uppercase; letter-spacing: 0.04em; }
+.layer-row .lr-name { font-size: 14px; color: #fff; font-weight: 600; min-width: 130px; }
+.layer-row .lr-desc { font-size: 12.5px; color: rgba(255,255,255,0.5); }
+.layer-row.layer-core { background: rgba(10,132,255,0.08); border-left: 3px solid #0a84ff; }
+.layer-row.layer-memory { background: rgba(52,199,89,0.08); border-left: 3px solid #34c759; }
+.layer-row.layer-intel { background: rgba(175,82,222,0.08); border-left: 3px solid #af52de; }
+.layer-row.layer-surface { background: rgba(255,159,10,0.08); border-left: 3px solid #ff9f0a; }
+
+/* ── Page Title ── */
+.d3-hero { margin-bottom: 48px; }
+.d3-hero .dh-version { font-size: 11px; font-weight: 600; color: #34c759; letter-spacing: 0.05em; margin-bottom: 8px; }
+.d3-hero h1 { font-size: 36px; font-weight: 700; color: #fff; letter-spacing: -0.02em; margin-bottom: 12px; line-height: 1.2; }
+.d3-hero p { font-size: 15px; color: rgba(255,255,255,0.5); line-height: 1.7; max-width: 600px; }
+
+/* ── Interactive Arc ── */
+.ia-tree { margin: 16px 0; }
+.ia-node { margin-bottom: 8px; }
+.ia-node .ia-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 10px;
+  background: rgba(255,255,255,0.03); transition: background 0.15s; cursor: default;
+}
+.ia-node .ia-row:hover { background: rgba(255,255,255,0.06); }
+.ia-node .ia-icon { font-size: 18px; min-width: 28px; text-align: center; }
+.ia-node .ia-label { font-size: 14px; font-weight: 600; color: #fff; }
+.ia-node .ia-role { font-size: 11px; color: rgba(255,255,255,0.35); margin-left: 8px; }
+.ia-children { margin-left: 36px; margin-top: 4px; }
+.ia-child {
+  padding: 7px 12px; font-size: 13px; color: rgba(255,255,255,0.55);
+  border-left: 2px solid rgba(255,255,255,0.06); margin-bottom: 2px;
+  display: flex; align-items: center; gap: 8px;
+}
+.ia-child:hover { color: rgba(255,255,255,0.8); }
+
+/* ── Divider ── */
+.d3-divider { border: none; height: 1px; background: rgba(255,255,255,0.06); margin: 48px 0; }
+
+@media (max-width: 768px) {
+  .d3-container { grid-template-columns: 1fr; }
+  .d3-sidebar { display: none; }
+  .d3-main { padding: 40px 20px 80px; }
+  .mode-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="d3-container">
+
+<!-- ═══ SIDEBAR ═══ -->
+<nav class="d3-sidebar">
+  <div class="d3-logo">🍎 AppleGo <span style="font-weight:400;color:rgba(255,255,255,0.3)">Dem o 3 . 0</span></div>
+  <div class="d3-tagline">Learning OS — Product Design</div>
+  <ul class="d3-toc">
+    <li><a href="#positioning" class="toc-h2">1. 产品定位</a></li>
+    <li><a href="#product-vision" class="toc-h3">产品愿景</a></li>
+    <li><a href="#core-shifts" class="toc-h3">核心转变</a></li>
+    <li><a href="#guiding-principles" class="toc-h3">指导原则</a></li>
+
+    <li><a href="#ia" class="toc-h2">2. 信息架构</a></li>
+    <li><a href="#ia-system" class="toc-h3">系统层级</a></li>
+    <li><a href="#ia-navigation" class="toc-h3">导航体系</a></li>
+
+    <li><a href="#workspace" class="toc-h2">3. Workspace 系统</a></li>
+    <li><a href="#ws-core" class="toc-h3">核心设计</a></li>
+    <li><a href="#ws-modes" class="toc-h3">学习模式</a></li>
+    <li><a href="#ws-layouts" class="toc-h3">自适应布局</a></li>
+    <li><a href="#ws-observation" class="toc-h3">Observation Layer</a></li>
+    <li><a href="#ws-states" class="toc-h3">状态与交互</a></li>
+
+    <li><a href="#memory" class="toc-h2">4. Living Memory</a></li>
+    <li><a href="#mem-architecture" class="toc-h3">记忆架构</a></li>
+    <li><a href="#mem-types" class="toc-h3">记忆类型</a></li>
+    <li><a href="#mem-page" class="toc-h3">Memory 页面</a></li>
+
+    <li><a href="#brain" class="toc-h2">5. Brain</a></li>
+    <li><a href="#brain-design" class="toc-h3">核心设计</a></li>
+    <li><a href="#brain-panels" class="toc-h3">信息面板</a></li>
+    <li><a href="#brain-traceable" class="toc-h3">可追溯性</a></li>
+
+    <li><a href="#universe" class="toc-h2">6. Knowledge Universe</a></li>
+    <li><a href="#ku-design" class="toc-h3">设计</a></li>
+    <li><a href="#ku-missions" class="toc-h3">Missions</a></li>
+
+    <li><a href="#relationship" class="toc-h2">7. Relationship</a></li>
+    <li><a href="#rel-timeline" class="toc-h3">关系时间线</a></li>
+    <li><a href="#rel-growth" class="toc-h3">成长叙事</a></li>
+
+    <li><a href="#ai-layer" class="toc-h2">8. AI Behavior Layer</a></li>
+    <li><a href="#ai-observations" class="toc-h3">持续观察</a></li>
+    <li><a href="#ai-memory" class="toc-h3">主动记忆</a></li>
+    <li><a href="#ai-relationship" class="toc-h3">关系管理</a></li>
+
+    <li><a href="#pages" class="toc-h2">9. 页面与状态总览</a></li>
+
+    <li><a href="#future" class="toc-h2">10. 未来扩展方向</a></li>
+  </ul>
+</nav>
+
+<!-- ═══ MAIN CONTENT ═══ -->
+<main class="d3-main">
+
+  <div class="d3-hero">
+    <div class="dh-version">AppleGo Product Vision · Demo 3.0</div>
+    <h1>Learning OS<br><span style="color:rgba(255,255,255,0.3);font-weight:400;">—— 未来五年的 AppleGo</span></h1>
+    <p>这不是 Demo 2.0 的优化。这是对 AppleGo 产品形态的重新定义。<br>Session 只是其中一种学习方式。Workspace 才是 AppleGo。</p>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════
+       SECTION 1: 产品定位
+       ════════════════════════════════════════════════════ -->
+  <section class="d3-section" id="positioning">
+    <h2>1. 产品定位</h2>
+
+    <div class="d3-quote">
+      AppleGo 不再是一个"AI 学习会话"产品。<br>
+      AppleGo 是一个 Learning Operating System（学习操作系统）。<br>
+      Session 只是其中一种学习方式。
+    </div>
+
+    <h3 id="product-vision">产品愿景</h3>
+    <p>AppleGo 3.0 的愿景是：<strong>让每一种学习方式都能被 AI 理解、支持和增强</strong>。</p>
+    <p>无论是阅读一篇论文、写一段代码、在白板上画图、和朋友讨论概念、还是一个人安静地思考——AppleGo 都在那里。它不打断你，它观察你。它不指挥你，它理解你。它不评价你，它记住你。</p>
+
+    <h3 id="core-shifts">从 Demo 2.0 到 Demo 3.0 的核心转变</h3>
+    <table class="state-table">
+      <thead>
+        <tr><th>维度</th><th>Demo 2.0</th><th>Demo 3.0</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>产品形态</strong></td><td>AI 学习助手</td><td>Learning Operating System</td></tr>
+        <tr><td><strong>学习方式</strong></td><td>对话式 Session</td><td>12+ 种学习模式（阅读/编程/画图/讨论...）</td></tr>
+        <tr><td><strong>空间概念</strong></td><td>多个独立页面</td><td>单一 Workspace，模式自适应</td></tr>
+        <tr><td><strong>AI 存在感</strong></td><td>聊天对话</td><td>持续 Observation Layer</td></tr>
+        <tr><td><strong>记忆</strong></td><td>页面功能</td><td>系统基础设施</td></tr>
+        <tr><td><strong>用户模型</strong></td><td>Profile（静态）</td><td>Brain（动态、透明、可追溯）</td></tr>
+        <tr><td><strong>知识组织</strong></td><td>知识树</td><td>Knowledge Universe（图结构）</td></tr>
+        <tr><td><strong>成长表达</strong></td><td>成长记录</td><td>Relationship Timeline（故事）</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="guiding-principles">指导原则</h3>
+    <div class="d3-card">
+      <div class="d3-card-title">🍎 七条设计铁律</div>
+      <ol>
+        <li><strong>一种学习方式，一种 Workspace 形态。</strong>阅读、编程、画图、讨论——每种学习方式都有最适合它的界面。</li>
+        <li><strong>AI 在观察，不是在被调用。</strong>用户不需要@AI。AI 一直存在，只在需要时介入。</li>
+        <li><strong>每一种学习活动都产生记忆。</strong>无论你是在阅读、画图还是写代码。没有无意义的活动。</li>
+        <li><strong>Brain 中的每一条理解都可追溯。</strong>用户可以看到"苹果果认为我擅长什么"以及"它为什么这么认为"。</li>
+        <li><strong>成长是一段关系，不是一个分数。</strong>没有排行榜。没有等级。只有"我们一起走过的路"。</li>
+        <li><strong>Workspace 知道你在做什么。</strong>不需要手动切换模式。AI 可以通过上下文感知当前学习方式。</li>
+        <li><strong>Knowledge Universe 从连接中生长。</strong>知识不是被放置的，是在学习过程中自然建立的。</li>
+      </ol>
+    </div>
+  </section>
+
+  <hr class="d3-divider">
+
+  <!-- ════════════════════════════════════════════════════
+       SECTION 2: 信息架构
+       ════════════════════════════════════════════════════ -->
+  <section class="d3-section" id="ia">
+    <h2>2. 信息架构</h2>
+
+    <h3 id="ia-system">系统层级</h3>
+    <p>Demo 3.0 由四个系统层 + 一个界面层构成，每一层都有独立职责：</p>
+
+    <div class="layer-diagram">
+      <div class="layer-row layer-surface">
+        <div class="lr-label" style="color:#ff9f0a;">Surface</div>
+        <div class="lr-name">Workspace</div>
+        <div class="lr-desc">学习发生的唯一界面。自适应不同学习模式。</div>
+      </div>
+      <div class="layer-row layer-intel">
+        <div class="lr-label" style="color:#af52de;">Intelligence</div>
+        <div class="lr-name">Observation Layer</div>
+        <div class="lr-desc">持续观察学习过程，产生 Observation / Memory / Relationship</div>
+      </div>
+      <div class="layer-row layer-memory">
+        <div class="lr-label" style="color:#34c759;">Memory</div>
+        <div class="lr-name">Living Memory</div>
+        <div class="lr-desc">所有学习活动的长期存储。可检索、可关联、可叙事。</div>
+      </div>
+      <div class="layer-row layer-core">
+        <div class="lr-label" style="color:#0a84ff;">Core</div>
+        <div class="lr-name">Brain + Knowledge Universe</div>
+        <div class="lr-desc">学习者模型 + 知识图谱。透明、可追溯、持续进化。</div>
+      </div>
+    </div>
+
+    <h3 id="ia-navigation">导航体系</h3>
+    <div class="ia-tree">
+      <div class="ia-node">
+        <div class="ia-row"><span class="ia-icon">🏠</span><span class="ia-label">Workspace</span><span class="ia-role">主要界面</span></div>
+        <div class="ia-children">
+          <div class="ia-child">🔄 自适应模式切换（阅读 / 编程 / 画图 / 讨论 / ...）</div>
+          <div class="ia-child">👁 Observation Sidebar（AI 实时观察）</div>
+          <div class="ia-child">🧰 Tools Drawer（模式上下文工具）</div>
+          <div class="ia-child">🏁 流动入口（上次做到哪里？）</div>
+        </div>
+      </div>
+      <div class="ia-node">
+        <div class="ia-row"><span class="ia-icon">🧠</span><span class="ia-label">Memory</span><span class="ia-role">系统页面</span></div>
+        <div class="ia-children">
+          <div class="ia-child">📜 记忆时间线</div>
+          <div class="ia-child">📦 Artifact 收集</div>
+          <div class="ia-child">🔗 连接视图</div>
+        </div>
+      </div>
+      <div class="ia-node">
+        <div class="ia-row"><span class="ia-icon">🧩</span><span class="ia-label">Brain</span><span class="ia-role">系统页面</span></div>
+        <div class="ia-children">
+          <div class="ia-child">🗺 能力地图（非分数）</div>
+          <div class="ia-child">📊 学习模式</div>
+          <div class="ia-child">🔍 理解轨迹</div>
+          <div class="ia-child">📈 模型进化</div>
+        </div>
+      </div>
+      <div class="ia-node">
+        <div class="ia-row"><span class="ia-icon">🌌</span><span class="ia-label">Knowledge Universe</span><span class="ia-role">系统页面</span></div>
+        <div class="ia-children">
+          <div class="ia-child">🔮 概念图</div>
+          <div class="ia-child">🎯 Missions</div>
+          <div class="ia-child">✨ 发现</div>
+        </div>
+      </div>
+      <div class="ia-node">
+        <div class="ia-row"><span class="ia-icon">🤝</span><span class="ia-label">Relationship</span><span class="ia-role">系统页面</span></div>
+        <div class="ia-children">
+          <div class="ia-child">📖 关系时间线</div>
+          <div class="ia-child">🌱 成长叙事</div>
+          <div class="ia-child">🪞 Mirror</div>
+        </div>
+      </div>
+    </div>
+
+    <p><strong>底部导航</strong>保持 5 个入口：Workspace · Memory · Brain · Universe · Relationship。Workspace 是默认首页，也是唯一的学习发生地。</p>
+  </section>
+
+  <hr class="d3-divider">
+
+  <!-- ════════════════════════════════════════════════════
+       SECTION 3: Workspace 系统
+       ════════════════════════════════════════════════════ -->
+  <section class="d3-section" id="workspace">
+    <h2>3. Workspace 系统</h2>
+
+    <div class="d3-quote">
+      Session 只是其中一种学习方式。<br>
+      Workspace 才是 AppleGo。
+    </div>
+
+    <h3 id="ws-core">核心设计</h3>
+    <p>Workspace 取代了 Demo 1.0/2.0 中的 Today 和 Session 两个页面。它是<strong>用户进入 AppleGo 后看到的唯一界面</strong>。所有学习行为——阅读、编程、画图、讨论、思考、练习——都在同一个 Workspace 中发生。</p>
+    <p>Workspace 的核心能力是<strong>自适应</strong>：它根据用户当前的学习行为自动调整布局、工具和 AI 行为。</p>
+
+    <div class="d3-card">
+      <div class="d3-card-title">🎯 Workspace 的情绪目标</div>
+      <p style="margin:0; font-size:14px; color:rgba(255,255,255,0.65);">
+        用户进入 Workspace 时应该感受到：<br>
+        ① 我知道我上次停在哪里<br>
+        ② 我现在可以随时开始学习<br>
+        ③ 苹果果在这里，但不会打扰我<br>
+        ④ 我可以选择任何一种方式学习
+      </p>
+    </div>
+
+    <h3 id="ws-modes">学习模式（12+ 种）</h3>
+    <p>Workspace 的核心创新：<strong>学习模式</strong>。每种模式定义了一种独立的学习体验——不仅仅是工具不同，而是布局、交互、AI 角色都不同。</p>
+
+    <div class="mode-grid">
+      <div class="mode-card"><div class="mc-icon">📖</div><div class="mc-name">Read</div><div class="mc-desc">阅读模式。专注内容，可标注、高亮、摘录。AI 在旁边安静等待。</div></div>
+      <div class="mode-card"><div class="mc-icon">▶️</div><div class="mc-name">Watch</div><div class="mc-desc">观看模式。视频/课程播放，右侧可做笔记。AI 自动抓取关键帧和文字。</div></div>
+      <div class="mode-card"><div class="mc-icon">🤔</div><div class="mc-name">Think</div><div class="mc-desc">思考模式。空白画布，只有你和你的想法。AI 只在被邀请时回应。</div></div>
+      <div class="mode-card"><div class="mc-icon">✍️</div><div class="mc-name">Practice</div><div class="mc-desc">练习模式。自适应题目，即时反馈。AI 关注错误模式。</div></div>
+      <div class="mode-card"><div class="mc-icon">💬</div><div class="mc-name">Discuss</div><div class="mc-desc">讨论模式（原 Session）。对话界面，AI 引导，深度提问。</div></div>
+      <div class="mode-card"><div class="mc-icon">💻</div><div class="mc-name">Code</div><div class="mc-desc">编程模式。编辑器 + 终端。AI 阅读代码，而非聊天。</div></div>
+      <div class="mode-card"><div class="mc-icon">📐</div><div class="mc-name">Project</div><div class="mc-desc">项目模式。长期任务。AI 追踪进展，而非单次对话。</div></div>
+      <div class="mode-card"><div class="mc-icon">🎨</div><div class="mc-name">Canvas</div><div class="mc-desc">画布模式。无限空间。AI 可以画，用户可以画。共同推演。</div></div>
+      <div class="mode-card"><div class="mc-icon">🗣️</div><div class="mc-name">Voice</div><div class="mc-desc">语音模式。边走边学。AI 只通过声音交互。</div></div>
+      <div class="mode-card"><div class="mc-icon">📄</div><div class="mc-name">PDF</div><div class="mc-desc">文档模式。专注论文/书籍。AI 辅助理解复杂结构。</div></div>
+      <div class="mode-card"><div class="mc-icon">🌐</div><div class="mc-name">Browser</div><div class="mc-desc">浏览器模式。内嵌浏览器。AI 可阅读网页内容。</div></div>
+      <div class="mode-card"><div class="mc-icon">🔍</div><div class="mc-name">Research</div><div class="mc-desc">研究模式。多源对比。AI 帮助连接不同来源的信息。</div></div>
+    </div>
+
+    <h3 id="ws-layouts">自适应布局</h3>
+    <p>每种模式拥有不同的布局结构。Workspace 自动检测用户当前行为并切换布局。用户也可以手动覆盖。</p>
+
+    <table class="state-table">
+      <thead><tr><th>模式</th><th>布局结构</th><th>工具 Drawer</th><th>AI 角色</th></tr></thead>
+      <tbody>
+        <tr><td>📖 Read</td><td>中央阅读区 + 左侧 Observation</td><td>高亮、标注、摘录</td><td>安静等待，被邀请时回应</td></tr>
+        <tr><td>💬 Discuss</td><td>左侧对话 + 右侧参考</td><td>追问、总结、换角度</td><td>主动引导，苏格拉底式提问</td></tr>
+        <tr><td>💻 Code</td><td>编辑区 + 终端 + 左侧 Observation</td><td>运行、调试、审查</td><td>阅读代码，不做未请求的建议</td></tr>
+        <tr><td>🎨 Canvas</td><td>全屏画布 + 浮动工具栏</td><td>画、连线、笔记、标签</td><td>可以画、可以改、共同推演</td></tr>
+        <tr><td>🤔 Think</td><td>全屏空白 + 底部输入</td><td>空白、仅"邀请 AI"</td><td>只在被明确邀请时回应</td></tr>
+        <tr><td>📐 Project</td><td>看板视图 + 时间线</td><td>任务、进展、回顾</td><td>追踪进展，定期总结</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="ws-observation">Observation Layer</h3>
+    <p>Observation Layer 是 Workspace 最具标志性的设计。它不再是 Demo 2.0 中的 Learning Pulse 侧栏，而是<strong>Workspace 的永久组成部分</strong>——无论用户在哪种模式下，Observation Layer 始终存在。</p>
+
+    <div class="d3-card">
+      <div class="d3-card-title">👁 Observation Layer 设计</div>
+      <ul>
+        <li><strong>位置</strong>：Workspace 左侧，约 200px 宽</li>
+        <li><strong>透明度</strong>：默认低透明度（不干扰主内容），hover 时全亮</li>
+        <li><strong>内容</strong>：AI 实时观察到的学习行为。每条观察形如"你开始自己举例了"——<strong>不是评价，不是建议，只是观察</strong></li>
+        <li><strong>沉淀</strong>：旧的观察沉淀为 Memory，可检索</li>
+        <li><strong>介入</strong>：当 AI 认为有真正重要的洞察时，Observation 区域会短暂高亮</li>
+        <li><strong>默认</strong>：用户可折叠 Observation Layer，但永远知道它存在</li>
+      </ul>
+    </div>
+
+    <h3 id="ws-states">状态与交互</h3>
+    <table class="state-table">
+      <thead><tr><th>状态</th><th>触发条件</th><th>Workspace 表现</th><th>AI 行为</th><th>情绪</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>🆕 Entering</td>
+          <td>用户进入 Workspace</td>
+          <td>显示上次离开的状态 + "继续"入口</td>
+          <td>"上次你在学矩阵乘法……"</td>
+          <td><span class="st-emotion warm">warm</span></td>
+        </tr>
+        <tr>
+          <td>📖 Reading</td>
+          <td>用户打开阅读材料</td>
+          <td>中央阅读区 + Observation</td>
+          <td>安静，等待"问"</td>
+          <td><span class="st-emotion neutral">neutral</span></td>
+        </tr>
+        <tr>
+          <td>🤔 Stuck</td>
+          <td>用户在同一位置停留过久</td>
+          <td>Observation 轻微高亮</td>
+          <td>"需要换个角度看看吗？"</td>
+          <td><span class="st-emotion cautious">cautious</span></td>
+        </tr>
+        <tr>
+          <td>💡 Flow</td>
+          <td>用户持续输出/创作</td>
+          <td>Observation 保持低调</td>
+          <td>不做任何打断</td>
+          <td><span class="st-emotion warm">warm</span></td>
+        </tr>
+        <tr>
+          <td>💬 Discussing</td>
+          <td>用户主动对话</td>
+          <td>对话区 + 参考面板</td>
+          <td>主动引导，深度追问</td>
+          <td><span class="st-emotion warm">warm</span></td>
+        </tr>
+        <tr>
+          <td>💻 Coding</td>
+          <td>用户进入编程模式</td>
+          <td>编辑器 + 终端</td>
+          <td>阅读代码，记录模式</td>
+          <td><span class="st-emotion neutral">neutral</span></td>
+        </tr>
+        <tr>
+          <td>☕ Break</td>
+          <td>检测到长时间连续学习</td>
+          <td>Observation 提示休息</td>
+          <td>"你已经在持续思考了。休息一下效果更好。"</td>
+          <td><span class="st-emotion neutral">neutral</span></td>
+        </tr>
+        <tr>
+          <td>🏁 Ending</td>
+          <td>用户准备离开</td>
+          <td>Future Memory 预测 + 总结</td>
+          <td>预测遗忘点 + 预约提醒</td>
+          <td><span class="st-emotion warm">warm</span></td>
+        </tr>
+        <tr>
+          <td>🚶 Long Absent</td>
+          <td>用户 7 天+ 未回来</td>
+          <td>"好久不见" + 上次的瞬间</td>
+          <td>不责备，只欢迎</td>
+          <td><span class="st-emotion neutral">neutral</span></td>
+        </tr>
+        <tr>
+          <td>🆕 First Time</td>
+          <td>全新用户</td>
+          <td>欢迎 + 模式引导</td>
+          <td>"我们可以从任何你喜欢的方式开始"</td>
+          <td><span class="st-emotion warm">warm</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <hr class="d3-divider">
+
+  <!-- ════════════════════════════════════════════════════
+       SECTION 4: Living Memory
+       ════════════════════════════════════════════════════ -->
+  <section class="d3-section" id="memory">
+    <h2>4. Living Memory 系统</h2>
+
+    <div class="d3-quote">
+      在 Demo 3.0 中，Memory 不是一页。<br>
+      Memory 是基础设施。
+    </div>
+
+    <h3 id="mem-architecture">记忆架构</h3>
+    <p>Living Memory 是 Demo 3.0 最核心的底层系统。它从 Workspace 中持续捕获有意义的学习信号，将其组织为可检索、可关联、可叙事的长期记忆。</p>
+    <p>关键在于：<strong>所有学习活动都产生记忆</strong>。不仅 Reflection。包括阅读、画图、录音、代码、练习、聊天、Canvas——没有无意义的活动。</p>
+
+    <div class="d3-card">
+      <div class="d3-card-title">🎯 Memory 系统的情绪目标</div>
+      <p style="margin:0; font-size:14px; color:rgba(255,255,255,0.65);">
+        用户在使用 Memory 时应感受到：<br>
+        ① 苹果果记得我做的每一件有意义的事<br>
+        ② 它不是日志。它是故事。<br>
+        ③ 我看到过去的知识，仍然感觉它们是我的
+      </p>
+    </div>
+
+    <h3 id="mem-types">记忆类型</h3>
+    <table class="state-table">
+      <thead><tr><th>类型</th><th>来源</th><th>示例</th><th>可见性</th></tr></thead>
+      <tbody>
+        <tr><td>🪶 <strong>Observation</strong></td><td>AI 实时观察</td><td>"你开始自己举例了"</td><td>Workspace Observation Layer</td></tr>
+        <tr><td>📦 <strong>Artifact</strong></td><td>用户创作</td><td>画布、代码片段、笔记</td><td>Memory 页面</td></tr>
+        <tr><td>💡 <strong>Moment</strong></td><td>学习中的显著转折</td><td>"第一次突破卡了一周的问题"</td><td>Memory + Relationship</td></tr>
+        <tr><td>📝 <strong>Reflection</strong></td><td>用户主动记录</td><td>"今天我意识到……"</td><td>Memory + Brain</td></tr>
+        <tr><td>🔗 <strong>Connection</strong></td><td>AI 发现的知识关联</td><td>"矩阵乘法与线性变换的关系"</td><td>Memory + Universe</td></tr>
+        <tr><td>📊 <strong>Pattern</strong></td><td>AI 识别的学习模式</td><td>"你每次遇到抽象概念会先画图"</td><td>Brain</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="mem-page">Memory 页面</h3>
+    <p>Memory 页面从 Demo 2.0 的故事合集进化为<strong>完整的时间线 + 检索系统</strong>。它不再是固定故事，而是用户所有学习活动的活档案。</p>
+
+    <table class="state-table">
+      <thead><tr><th>状态</th><th>内容</th><th>AI 行为</th><th>情绪</th></tr></thead>
+      <tbody>
+        <tr><td>📜 时间线</td><td>所有记忆按时间排列</td><td>无，用户自主浏览</td><td><span class="st-emotion neutral">neutral</span></td></tr>
+        <tr><td>🔍 搜索</td><td>按关键词/类型/日期搜索</td><td>帮助连接相关记忆</td><td><span class="st-emotion neutral">neutral</span></td></tr>
+        <tr><td>💡 今日记忆</td><td>今天的活动汇总</td><td>"你今天完成了 4 件事"</td><td><span class="st-emotion warm">warm</span></td></tr>
+        <tr><td>🔗 关联视图</td><td>记忆之间的关系图</td><td>"你在画布上的推演与这篇论文有关"</td><td><span class="st-emotion warm">warm</span></td></tr>
+        <tr><td>🆕 空状态</td><td>新用户无记忆</td><td>"我们还在开始——每次学习都会成为记忆"</td><td><span class="st-emotion warm">warm</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <hr class="d3-divider">
+
+  <!-- ════════════════════════════════════════════════════
+       SECTION 5: Brain
+       ════════════════════════════════════════════════════ -->
+  <section class="d3-section" id="brain">
+    <h2>5. Brain 系统</h2>
+
+    <div class="d3-quote">
+      Brain 不是 Profile。Profile 展示用户填写的个人信息。<br>
+      Brain 展示苹果果对学习者的理解，而且每一条理解都可追溯。
+    </div>
+
+    <h3 id="brain-design">核心设计</h3>
+    <p>Brain 是 Demo 3.0 全新的页面，替换了 Demo 1.0/2.0 的 Profile。它不再展示"姓名、学校、年级"这类静态信息，而是展示<strong>苹果果如何理解学习者</strong>——学习模式、能力分布、知识结构、行为特征。</p>
+    <p>关键原则：<strong>没有黑盒</strong>。Brain 中的每一条理解必须能够追溯到具体的证据（来自 Observation / Artifact / Session 等）。用户不仅可以知道自己被如何认知，还可以验证 AI 的判断是否准确。</p>
+
+    <div class="d3-card">
+      <div class="d3-card-title">🎯 Brain 的情绪目标</div>
+      <p style="margin:0; font-size:14px; color:rgba(255,255,255,0.65);">
+        用户打开 Brain 时应感受到：<br>
+        ① 苹果果真的了解我是怎么学习的<br>
+        ② 它的理解不是猜的——我知道它为什么这么认为<br>
+        ③ 我看到自己变了——以前的我和现在的我不一样
+      </p>
+    </div>
+
+    <h3 id="brain-panels">信息面板</h3>
+    <table class="state-table">
+      <thead><tr><th>面板</th><th>内容</th><th>可追溯性</th></tr></thead>
+      <tbody>
+        <tr><td>🗺 <strong>能力地图</strong></td><td>知识领域的能力分布。不是分数，是"现阶段表现"。</td><td>每条能力标记 → 追溯至具体 Artifact/Observation</td></tr>
+        <tr><td>📊 <strong>学习模式</strong></td><td>用户的偏好模型：先实践还是先理论？喜欢画图还是文字？</td><td>追溯至多条 Observation 汇总的模式</td></tr>
+        <tr><td>🔍 <strong>理解轨迹</strong></td><td>对一个概念的理解随时间如何演化。"初学者→模糊→清晰"。</td><td>追溯至每次相关 Session/Artifact</td></tr>
+        <tr><td>📈 <strong>模型进化</strong></td><td>Brain 自身的变化——苹果果如何修正了对你的理解。</td><td>每次修正都有时间戳 + 触发事件</td></tr>
+        <tr><td>🪞 <strong>学习者镜像</strong></td><td>"以前喜欢直接记答案 → 现在开始主动找原因"</td><td>对比来自不同时间段的 Artifact 风格</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="brain-traceable">可追溯性设计</h3>
+    <p>这是 Brain 区别于任何用户画像系统的关键设计：</p>
+    <ul>
+      <li>每条理解旁边有一个 🔍 图标，点击展开"证据链"</li>
+      <li>例如：能力地图中"矩阵乘法 — 较熟练" → 点击 🔍 → 展示 3 个证据：① Session 记录（7 月 15 日 独立算对 5 题）② Observation（"你开始用自己的话解释"）③ Artifact（你在 Canvas 上画的图）</li>
+      <li>用户可以<strong>纠正</strong>苹果果的理解："我不觉得我擅长这个" → 这条反馈也成为 Brain 的输入</li>
+    </ul>
+  </section>
+
+  <hr class="d3-divider">
+
+  <!-- ════════════════════════════════════════════════════
+       SECTION 6: Knowledge Universe
+       ════════════════════════════════════════════════════ -->
+  <section class="d3-section" id="universe">
+    <h2>6. Knowledge Universe</h2>
+
+    <div class="d3-quote">
+      知识不再是一棵树。<br>
+      知识是一个不断连接的学习宇宙。
+    </div>
+
+    <h3 id="ku-design">设计</h3>
+    <p>Knowledge Universe 不再将知识组织为层级树。它采用<strong>图结构</strong>：概念和技能是节点，学习活动中发现的关系是边。图从用户的学习行为中自然生长，不需要手动维护。</p>
+    <p>树的问题在于：它隐含了"基础知识 → 高级知识"的线性假设。但学习不是线性的——一个画家学习线性代数的方式和一个程序员完全不同。Knowledge Universe 允许<strong>每个用户的宇宙都不同</strong>。</p>
+
+    <div class="d3-card">
+      <div class="d3-card-title">🎯 Knowledge Universe 的情绪目标</div>
+      <p style="margin:0; font-size:14px; color:rgba(255,255,255,0.65);">
+        用户打开 Universe 时应感受到：<br>
+        ① 这是属于我的知识宇宙<br>
+        ② 我看到知识是如何连接起来的<br>
+        ③ 我看到自己走过的学习路径
+      </p>
+    </div>
+
+    <h3 id="ku-missions">Missions</h3>
+    <p>Missions 是 Universe 中的方向性结构。一个 Mission 是一组在用户学习过程中自然形成的概念集群——例如"理解线性代数的几何意义"可能包含矩阵乘法、行列式、特征向量等概念。Missions 不是预置的课程，而是对用户学习路径的描述性组织。</p>
+
+    <table class="state-table">
+      <thead><tr><th>视图</th><th>内容</th><th>交互</th></tr></thead>
+      <tbody>
+        <tr><td>🌌 <strong>宇宙视图</strong></td><td>所有概念节点的全景图</td><td>缩放、拖拽、点击展开</td></tr>
+        <tr><td>🎯 <strong>Mission 视图</strong></td><td>当前正在进行的学习路径</td><td>查看进展、节点关联</td></tr>
+        <tr><td>✨ <strong>发现视图</strong></td><td>AI 推荐的可能连接</td><td>"你学的矩阵乘法和制图有关"</td></tr>
+        <tr><td>🆕 <strong>空状态</strong></td><td>新用户无宇宙</td><td>"每次学习都会点亮一颗星"</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <hr class="d3-divider">
+
+  <!-- ════════════════════════════════════════════════════
+       SECTION 7: Relationship
+       ════════════════════════════════════════════════════ -->
+  <section class="d3-section" id="relationship">
+    <h2>7. Relationship 系统</h2>
+
+    <div class="d3-quote">
+      成长不是统计。<br>
+      成长是故事。<br>
+      苹果果不是数据面板。苹果果是共同走过一段时间的人。
+    </div>
+
+    <h3 id="rel-timeline">关系时间线</h3>
+    <p>Relationship 页面展示用户与 AppleGo 共同走过的重要瞬间。这不是 Growth Record（成长记录），而是<strong>关系时间线</strong>——人和 AI 之间不断加深的理解和信任的编年史。</p>
+
+    <table class="state-table">
+      <thead><tr><th>时间线条目类型</th><th>示例</th><th>触发条件</th></tr></thead>
+      <tbody>
+        <tr><td>🆕 <strong>初次见面</strong></td><td>"我们第一次一起学习——你还有一些不确定"</td><td>首次使用</td></tr>
+        <tr><td>💡 <strong>理解突破</strong></td><td>"你第一次用自己的话解释了矩阵乘法——不只是背诵"</td><td>AI 检测到认知跃迁</td></tr>
+        <tr><td>🔄 <strong>学习方式变化</strong></td><td>"你开始先动手再阅读了——找到了自己的节奏"</td><td>模式识别到变化</td></tr>
+        <tr><td>🤝 <strong>信任建立</strong></td><td>"你第一次接受了我推荐的一个你本来不会尝试的方法"</td><td>用户采纳建议</td></tr>
+        <tr><td>🔮 <strong>未来预测成真</strong></td><td>"我上次预测你会忘记 SYN 细节——你确实忘了。现在记住了。"</td><td>Future Memory 验证</td></tr>
+        <tr><td>📅 <strong>里程碑</strong></td><td>"我们一起走过了一个月——你从一开始到现在变化很大"</td><td>时间里程碑</td></tr>
+        <tr><td>🔁 <strong>中断后回归</strong></td><td>"你回来了。记录都在。我们从上次停下的地方继续。"</td><td>长期 absence 后回归</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="rel-growth">成长叙事</h3>
+    <p>Relationship 页面的核心不是列表，而是<strong>AI 生成的成长叙事</strong>。它会根据用户的整个学习历程，生成一段有起承转合的故事——开头、探索、困难、突破、变化、新的开始。每一段叙事都连接到具体的 Memory 条目，用户可以点击"展开证据"。叙事不是一次生成就固定——它随着时间推移持续生长。</p>
+  </section>
+
+  <hr class="d3-divider">
+
+  <!-- ════════════════════════════════════════════════════
+       SECTION 8: AI Behavior Layer
+       ════════════════════════════════════════════════════ -->
+  <section class="d3-section" id="ai-layer">
+    <h2>8. AI Behavior Layer</h2>
+
+    <div class="d3-quote">
+      Demo 3.0 最重要的设计不是界面。<br>
+      是 AI 如何存在。
+    </div>
+
+    <p>在 Demo 3.0 中，AI 不再是一个"你问它答"的聊天机器人。AI 是 Workspace 的永久层——它持续观察、异步记忆、在合适的时机介入。AI 的存在方式已经从<strong>被动响应（Reactive）</strong>变为<strong>持续在场（Omnipresent）</strong>。</p>
+
+    <h3 id="ai-observations">持续观察</h3>
+    <div class="d3-card">
+      <div class="d3-card-title">Observation 的生成规则</div>
+      <ul>
+        <li><strong>粒度</strong>：Observation 必须足够细。不是"你今天学习了"，而是"你开始自己举例了"</li>
+        <li><strong>语气</strong>：只观察，不评价。"你停顿了很久" ≠ "你学得慢"</li>
+        <li><strong>频率</strong>：不密集。有意义时才输出。一个 session 中 3-8 条 Observation</li>
+        <li><strong>沉淀</strong>：Observation 自动成为 Memory 条目</li>
+        <li><strong>模式</strong>：多条 Observation 可组合为 Pattern（进入 Brain）</li>
+      </ul>
+    </div>
+
+    <h3 id="ai-memory">主动记忆</h3>
+    <p>AI 不再等待用户结束学习才生成记忆。AI 在 Workspace 中异步工作：</p>
+    <ul>
+      <li><strong>实时</strong>：Observation 产生 → Memory 条目</li>
+      <li><strong>事后</strong>：学习结束后 → AI 总结 + Future Memory 预测</li>
+      <li><strong>定期</strong>：每周/每月 → Relationship Timeline 更新</li>
+      <li><strong>即时</strong>：检测到重要时刻 → 高亮标记为 Moment</li>
+    </ul>
+
+    <h3 id="ai-relationship">关系管理</h3>
+    <p>AI 维护关系的核心不是"记住更多"，而是<strong>记住对的</strong>：</p>
+    <ul>
+      <li>优先记住：认知跃迁、学习方式变化、情感 moment</li>
+      <li>不记住：用户的失误、重复错误、未完成的任务</li>
+      <li>每个关系条目都服务于"让用户感觉被理解"而不是"让 AI 更准确"</li>
+      <li>AI 可以主动提及过去的关系记忆——但不是为了炫耀，而是为了<strong>延续对话</strong></li>
+    </ul>
+  </section>
+
+  <hr class="d3-divider">
+
+  <!-- ════════════════════════════════════════════════════
+       SECTION 9: 页面与状态总览
+       ════════════════════════════════════════════════════ -->
+  <section class="d3-section" id="pages">
+    <h2>9. 页面与状态总览</h2>
+
+    <table class="state-table">
+      <thead><tr><th>页面</th><th>状态数</th><th>关键状态</th><th>核心情绪</th></tr></thead>
+      <tbody>
+        <tr><td>🏠 Workspace</td><td><strong>10+</strong></td><td>Entering / Reading / Think(Flow) / Stuck / Coding / Discussing / Break / Ending / Long Absent / First Time</td><td>"我可以随时开始学习"</td></tr>
+        <tr><td>🧠 Memory</td><td><strong>5+</strong></td><td>时间线 / 搜索 / 今日记忆 / 关联视图 / 空状态</td><td>"苹果果记得我的每一步"</td></tr>
+        <tr><td>🧩 Brain</td><td><strong>5+</strong></td><td>能力地图 / 学习模式 / 理解轨迹 / 模型进化 / 学习者镜像</td><td>"苹果果真的了解我"</td></tr>
+        <tr><td>🌌 Knowledge Universe</td><td><strong>4+</strong></td><td>宇宙视图 / Mission 视图 / 发现视图 / 空状态</td><td>"这是属于我的知识宇宙"</td></tr>
+        <tr><td>🤝 Relationship</td><td><strong>5+</strong></td><td>关系时间线 / 成长叙事 / Moment 详情 / 中断后回归 / 首次见面</td><td>"我们一起走过了一段路"</td></tr>
+        <tr><td style="color:rgba(255,255,255,0.3);">Total</td><td><strong>~29+</strong></td><td style="color:rgba(255,255,255,0.3);">比 Demo 2.0 少 14 个状态——但体验深一倍</td><td></td></tr>
+      </tbody>
+    </table>
+
+    <p style="margin-top: 16px;"><strong>状态为什么从 43 减少到 29？</strong>因为 Today 和 Session 合并为 Workspace，Profile 进化为 Brain，Growth 和部分 Profile 合并为 Relationship。Demo 3.0 更少页面，更深体验。</p>
+  </section>
+
+  <hr class="d3-divider">
+
+  <!-- ════════════════════════════════════════════════════
+       SECTION 10: 未来扩展方向
+       ════════════════════════════════════════════════════ -->
+  <section class="d3-section" id="future">
+    <h2>10. 未来扩展方向</h2>
+
+    <p>以下方向不在 Demo 3.0 的初始设计中，但已预留扩展空间：</p>
+
+    <div class="mode-grid">
+      <div class="mode-card">
+        <div class="mc-icon">👥</div>
+        <div class="mc-name">Collaborative Workspace</div>
+        <div class="mc-desc">多人共享 Workspace。AI 理解小组动态，同时追踪每个人的学习路径。</div>
+      </div>
+      <div class="mode-card">
+        <div class="mc-icon">📱</div>
+        <div class="mc-name">Mobile-First Modes</div>
+        <div class="mc-desc">Voice、Camera、AR 学习模式。Workspace 在移动端的全新形态。</div>
+      </div>
+      <div class="mode-card">
+        <div class="mc-icon">🧪</div>
+        <div class="mc-name">Lab Mode</div>
+        <div class="mc-desc">用户对 AI 模型做实验：用自己的数据训练自己的理解模型。</div>
+      </div>
+      <div class="mode-card">
+        <div class="mc-icon">🔌</div>
+        <div class="mc-name">API & Integration</div>
+        <div class="mc-desc">第三方应用接入：笔记工具、学习平台、研究数据库。Workspace 成为学习中枢。</div>
+      </div>
+      <div class="mode-card">
+        <div class="mc-icon">🌍</div>
+        <div class="mc-name">Learning Network</div>
+        <div class="mc-desc">匿名学习模式的聚合视图——帮助 AI 理解"人类如何学"而不暴露个体。</div>
+      </div>
+      <div class="mode-card">
+        <div class="mc-icon">🧬</div>
+        <div class="mc-name">Personal AI Evolution</div>
+        <div class="mc-desc">用户的 AppleGo 随着时间进化出独特的理解风格——每个用户的 AI 都不一样。</div>
+      </div>
+    </div>
+
+    <div class="d3-quote" style="margin-top: 32px; border-left-color: rgba(10,132,255,0.5);">
+      Demo 3.0 不是终点。<br>
+      "一个会陪你成长的学习伙伴"——这个方向还能走很多年。
+    </div>
+  </section>
+
+  <hr class="d3-divider">
+
+  <!-- ═══ FOOTER ═══ -->
+  <div style="text-align:center; padding: 40px 0 20px; color: rgba(255,255,255,0.2); font-size: 12px;">
+    AppleGo Demo 3.0 — Learning OS · Product Design<br>
+    2026-07-18 · 该文档不包含任何实施方案。是纯产品设计。
+  </div>
+
+</main>
+</div>
+</body>
+</html>
