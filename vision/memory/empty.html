@@ -1,22 +1,22 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="theme-beige">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>记忆 · 苹果果的记忆 · AppleGo</title>
 <link rel="stylesheet" href="../design-system.css">
 <style>
-  body { background: #0f0f12; color: #e5e5ea; overflow: hidden; }
-  #bottom-nav { background: rgba(15,15,18,0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top-color: rgba(255,255,255,0.06); }
-  .nav-tab { color: rgba(255,255,255,0.35); }
-  .nav-tab:hover { color: rgba(255,255,255,0.65); }
+  body { background: var(--page-bg); color: var(--text-primary); overflow: hidden; }
+  #bottom-nav { background: var(--nav-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top-color: var(--border-light); }
+  .nav-tab { color: var(--text-muted); }
+  .nav-tab:hover { color: var(--text-secondary); }
   .nav-tab.active { color: #0a84ff; }
   ::selection { background: rgba(10,132,255,0.25); }
 
   .top-bar {
     display: flex; align-items: center; justify-content: space-between;
     padding: var(--space-3) 0; margin-bottom: var(--space-5);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    border-bottom: 1px solid var(--border-light);
   }
   .top-bar .tb-brand { font-size: 15px; font-weight: 700; }
 
@@ -52,15 +52,15 @@
 
   .empty-state h1 {
     font-size: 28px; font-weight: 700; letter-spacing: -0.02em;
-    color: #fff; margin-bottom: var(--space-3);
+    color: var(--text-primary); margin-bottom: var(--space-3);
   }
   .empty-state .es-sub {
-    font-size: 15px; color: rgba(255,255,255,0.4);
+    font-size: 15px; color: var(--text-secondary);
     line-height: 1.7; margin-bottom: var(--space-6);
     max-width: 300px;
   }
   .empty-state .es-poem {
-    font-size: 13.5px; color: rgba(255,255,255,0.25);
+    font-size: 13.5px; color: var(--text-muted);
     line-height: 1.9; font-style: italic;
     margin-bottom: var(--space-8);
     max-width: 320px;
@@ -89,7 +89,7 @@
 
   <div class="top-bar">
     <span class="tb-brand">🍎 AppleGo</span>
-    <span style="font-size:13px;color:rgba(255,255,255,0.35);">Memory</span>
+    <span style="font-size:13px;color:var(--text-muted);">Memory</span>
   </div>
 
   <div class="empty-state">

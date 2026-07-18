@@ -1,58 +1,58 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="theme-beige">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>📈 模型进化 · Brain · AppleGo</title>
 <link rel="stylesheet" href="../design-system.css">
 <style>
-/* ── Dark Theme ── */
-body { background: #0f0f12; color: #e5e5ea; }
+/* ── Beige Theme ── */
+body { background: var(--page-bg); color: var(--text-primary); }
 #app { max-width: var(--content-max); margin: 0 auto; padding: 0 var(--space-4) var(--space-6); }
 
 /* ── Top Bar ── */
 .top-bar {
   display: flex; align-items: center; gap: var(--space-3);
   padding: 16px var(--space-4); padding-top: calc(16px + env(safe-area-inset-top, 0));
-  background: rgba(15,15,18,0.92); backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: var(--nav-bg); backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border-light);
   position: sticky; top: 0; z-index: 50;
 }
-.top-bar .tb-brand { font-size: 16px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; }
-.top-bar .tb-brand span { color: rgba(255,255,255,0.4); font-weight: 400; }
+.top-bar .tb-brand { font-size: 16px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
+.top-bar .tb-brand span { color: var(--text-muted); font-weight: 400; }
 
 /* ── Tab Bar ── */
 .tab-bar {
   display: flex; gap: 0; overflow-x: auto;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  background: rgba(15,15,18,0.95);
+  border-bottom: 1px solid var(--border-light);
+  background: var(--surface-bg);
   scrollbar-width: none; position: sticky; top: 57px; z-index: 49;
 }
 .tab-bar::-webkit-scrollbar { display: none; }
 .tab-item {
   flex-shrink: 0; padding: 12px 16px;
-  font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.4);
+  font-size: 13px; font-weight: 500; color: var(--text-muted);
   border-bottom: 2px solid transparent;
   transition: all 0.15s var(--ease-out); white-space: nowrap;
   text-decoration: none; cursor: pointer;
 }
-.tab-item:hover { color: rgba(255,255,255,0.7); }
+.tab-item:hover { color: var(--text-secondary); }
 .tab-item.active { color: #5ac8fa; border-bottom-color: #5ac8fa; }
 
 /* ── Page Hero ── */
 .page-hero { padding: var(--space-5) 0 var(--space-5); }
-.page-hero h1 { font-size: 26px; font-weight: 700; color: #fff; margin-bottom: 6px; }
-.page-hero p { font-size: 14px; color: rgba(255,255,255,0.5); line-height: 1.7; }
+.page-hero h1 { font-size: 26px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; }
+.page-hero p { font-size: 14px; color: var(--text-secondary); line-height: 1.7; }
 
 /* ── Evolution Timeline ── */
 .evo-list { display: flex; flex-direction: column; gap: var(--space-4); margin-bottom: var(--space-6); }
 .evo-card {
-  background: rgba(255,255,255,0.04); border-radius: var(--radius-lg);
-  padding: var(--space-5); border: 1px solid rgba(255,255,255,0.06);
+  background: var(--surface-alt); border-radius: var(--radius-lg);
+  padding: var(--space-5); border: 1px solid var(--border-light);
   animation: slideUp 0.4s var(--ease-out) both;
   transition: all 0.2s;
 }
-.evo-card:hover { background: rgba(255,255,255,0.06); }
+.evo-card:hover { background: var(--surface-bg); }
 .evo-card:nth-child(1) { animation-delay: 0.05s; }
 .evo-card:nth-child(2) { animation-delay: 0.10s; }
 .evo-card:nth-child(3) { animation-delay: 0.15s; }
@@ -62,20 +62,20 @@ body { background: #0f0f12; color: #e5e5ea; }
   width: 36px; height: 36px; border-radius: var(--radius-sm);
   display: grid; place-items: center; font-size: 18px; flex-shrink: 0;
 }
-.evo-card .ec-date { font-size: 11px; color: rgba(255,255,255,0.3); font-weight: 500; }
-.evo-card .ec-title { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+.evo-card .ec-date { font-size: 11px; color: var(--text-muted); font-weight: 500; }
+.evo-card .ec-title { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
 .evo-card .ec-shift {
   display: flex; align-items: center; gap: var(--space-3);
-  padding: 10px 14px; background: rgba(255,255,255,0.03);
+  padding: 10px 14px; background: var(--surface-alt);
   border-radius: var(--radius-md); margin-bottom: 10px;
 }
-.evo-card .ec-from { font-size: 13px; color: rgba(255,255,255,0.4); flex: 1; }
-.evo-card .ec-from strong { color: rgba(255,255,255,0.6); }
+.evo-card .ec-from { font-size: 13px; color: var(--text-muted); flex: 1; }
+.evo-card .ec-from strong { color: var(--text-secondary); }
 .evo-card .ec-arrow { font-size: 16px; color: #5ac8fa; flex-shrink: 0; }
-.evo-card .ec-to { font-size: 13px; color: rgba(255,255,255,0.6); flex: 1; }
+.evo-card .ec-to { font-size: 13px; color: var(--text-secondary); flex: 1; }
 .evo-card .ec-to strong { color: #5ac8fa; }
-.evo-card .ec-trigger { font-size: 12px; color: rgba(255,255,255,0.35); line-height: 1.6; }
-.evo-card .ec-trigger strong { color: rgba(255,255,255,0.55); }
+.evo-card .ec-trigger { font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+.evo-card .ec-trigger strong { color: var(--text-secondary); }
 .evo-card .ec-detail-toggle {
   font-size: 12px; font-weight: 600; color: #5ac8fa;
   padding: 4px 0; cursor: pointer; display: inline-block; margin-top: 6px;
@@ -83,12 +83,12 @@ body { background: #0f0f12; color: #e5e5ea; }
 .evo-card .ec-detail-toggle:hover { color: #7ad4ff; }
 .evo-card .ec-detail {
   display: none; margin-top: 12px; padding: var(--space-3);
-  background: rgba(255,255,255,0.03); border-radius: var(--radius-md);
+  background: var(--surface-alt); border-radius: var(--radius-md);
 }
 .evo-card .ec-detail.open { display: block; animation: slideUp 0.25s var(--ease-out); }
 .evo-card .ec-detail .ed-list { display: flex; flex-direction: column; gap: 8px; }
 .evo-card .ec-detail .ed-item {
-  font-size: 12.5px; color: rgba(255,255,255,0.5); line-height: 1.5;
+  font-size: 12.5px; color: var(--text-muted); line-height: 1.5;
   padding: 0 0 0 12px; border-left: 2px solid rgba(90,200,250,0.3);
 }
 
@@ -99,7 +99,7 @@ body { background: #0f0f12; color: #e5e5ea; }
   margin-bottom: var(--space-6);
 }
 .why-section h3 { font-size: 15px; font-weight: 600; color: #5ac8fa; margin-bottom: var(--space-3); }
-.why-section p { font-size: 13px; color: rgba(255,255,255,0.55); line-height: 1.7; margin-bottom: 8px; }
+.why-section p { font-size: 13px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 8px; }
 .why-section p:last-child { margin-bottom: 0; }
 </style>
 </head>
@@ -259,14 +259,14 @@ body { background: #0f0f12; color: #e5e5ea; }
 </main>
 
 <!-- Bottom Navigation -->
-<nav id="bottom-nav" style="background: rgba(15,15,18,0.88); border-top-color: rgba(255,255,255,0.06);">
-  <button class="nav-tab" data-page="workspace" style="color: rgba(255,255,255,0.4);">
+<nav id="bottom-nav" style="background: var(--nav-bg); border-top-color: var(--border-light);">
+  <button class="nav-tab" data-page="workspace" style="color: var(--text-muted);">
     <svg viewBox="0 0 24 24" fill="none">
       <path d="M3 3h7v7H3V3zM14 3h7v7h-7V3zM3 14h7v7H3v-7zM14 14h7v7h-7v-7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
     </svg>
     <span>Workspace</span>
   </button>
-  <button class="nav-tab" data-page="memory" style="color: rgba(255,255,255,0.4);">
+  <button class="nav-tab" data-page="memory" style="color: var(--text-muted);">
     <svg viewBox="0 0 24 24" fill="none">
       <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" stroke="currentColor" stroke-width="1.8" fill="none"/>
       <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -280,7 +280,7 @@ body { background: #0f0f12; color: #e5e5ea; }
     </svg>
     <span>Brain</span>
   </button>
-  <button class="nav-tab" data-page="universe" style="color: rgba(255,255,255,0.4);">
+  <button class="nav-tab" data-page="universe" style="color: var(--text-muted);">
     <svg viewBox="0 0 24 24" fill="none">
       <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/>
       <circle cx="4" cy="6" r="1.5" stroke="currentColor" stroke-width="1.5"/>
@@ -291,7 +291,7 @@ body { background: #0f0f12; color: #e5e5ea; }
     </svg>
     <span>Universe</span>
   </button>
-  <button class="nav-tab" data-page="relationship" style="color: rgba(255,255,255,0.4);">
+  <button class="nav-tab" data-page="relationship" style="color: var(--text-muted);">
     <svg viewBox="0 0 24 24" fill="none">
       <path d="M12 21l-2-2H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2h-5l-2 2z" stroke="currentColor" stroke-width="1.8" fill="none"/>
       <path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>

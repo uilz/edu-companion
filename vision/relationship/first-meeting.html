@@ -1,27 +1,27 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="theme-beige">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>第一次见面 · 我们共同走过的路 · AppleGo</title>
 <link rel="stylesheet" href="../design-system.css">
 <style>
-  body { background: #0f0f12; color: #e5e5ea; }
-  #bottom-nav { background: rgba(15,15,18,0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top-color: rgba(255,255,255,0.06); }
-  .nav-tab { color: rgba(255,255,255,0.35); }
-  .nav-tab:hover { color: rgba(255,255,255,0.65); }
-  .nav-tab.active { color: #0a84ff; }
+  body { background: var(--page-bg); color: var(--text-primary); }
+  #bottom-nav { background: var(--nav-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top-color: var(--border-light); }
+  .nav-tab { color: var(--text-muted); }
+  .nav-tab:hover { color: var(--text-secondary); }
+  .nav-tab.active { color: var(--color-accent); }
   ::selection { background: rgba(10,132,255,0.25); }
-  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+  ::-webkit-scrollbar-thumb { background: var(--border-light); }
 
   .top-bar {
     display: flex; align-items: center; justify-content: space-between;
     padding: var(--space-3) 0; margin-bottom: var(--space-5);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    border-bottom: 1px solid var(--border-light);
   }
-  .top-bar .tb-brand { font-size: 15px; font-weight: 700; }
-  .top-bar .tb-tab { font-size: 13px; color: rgba(255,255,255,0.35); font-weight: 500; padding: 4px 12px; }
-  .top-bar .tb-tab.active { color: #0a84ff; }
+  .top-bar .tb-brand { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+  .top-bar .tb-tab { font-size: 13px; color: var(--text-muted); font-weight: 500; padding: 4px 12px; }
+  .top-bar .tb-tab.active { color: var(--color-accent); }
 
   .meeting-hero {
     text-align: center; padding: var(--space-8) var(--space-4);
@@ -29,39 +29,39 @@
   }
   .meeting-hero::after {
     content: ''; position: absolute; bottom: 0; left: 30%; right: 30%;
-    height: 1px; background: rgba(255,255,255,0.06);
+    height: 1px; background: var(--border-light);
   }
   .meeting-hero .mh-icon { font-size: 56px; display: block; margin-bottom: var(--space-4); }
   .meeting-hero h1 {
     font-size: 28px; font-weight: 700; letter-spacing: -0.02em;
-    color: #fff; margin-bottom: var(--space-3);
+    color: var(--text-primary); margin-bottom: var(--space-3);
   }
   .meeting-hero .mh-sub {
     font-size: 15px; line-height: 1.7;
-    color: rgba(255,255,255,0.45); max-width: 340px; margin: 0 auto;
+    color: var(--text-secondary); max-width: 340px; margin: 0 auto;
     margin-bottom: var(--space-6);
   }
 
   .explanation {
     margin: var(--space-6) 0;
     padding: var(--space-5); border-radius: var(--radius-lg);
-    background: rgba(255,255,255,0.04);
+    background: var(--surface-alt);
   }
   .explanation .ex-label {
     font-size: 12px; font-weight: 600; color: rgba(10,132,255,0.6);
     margin-bottom: var(--space-3); letter-spacing: 0.04em;
   }
   .explanation .ex-text {
-    font-size: 14px; line-height: 1.7; color: rgba(255,255,255,0.6);
+    font-size: 14px; line-height: 1.7; color: var(--text-secondary);
   }
 
   .future-section { margin-bottom: var(--space-6); }
   .future-section .fs-label {
-    font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.2);
+    font-size: 11px; font-weight: 600; color: var(--text-muted);
     text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: var(--space-4);
   }
   .future-section .fs-hint {
-    font-size: 13px; color: rgba(255,255,255,0.25);
+    font-size: 13px; color: var(--text-muted);
     margin-bottom: var(--space-4); font-style: italic;
   }
 
@@ -69,24 +69,24 @@
   .placeholder-item {
     display: flex; align-items: flex-start; gap: 14px;
     padding: var(--space-4); border-radius: var(--radius-md);
-    background: rgba(255,255,255,0.04);
+    background: var(--surface-alt);
     position: relative;
   }
   .placeholder-item .pi-dot {
     width: 10px; height: 10px; border-radius: 50%;
-    border: 2px solid rgba(255,255,255,0.08);
+    border: 2px solid var(--border-light);
     flex-shrink: 0; margin-top: 4px;
     position: relative;
   }
   .placeholder-item .pi-dot::after {
     content: ''; position: absolute; top: 12px; left: 3px;
-    width: 2px; height: 40px; background: rgba(255,255,255,0.04);
+    width: 2px; height: 40px; background: var(--border-light);
   }
   .placeholder-item:last-child .pi-dot::after { display: none; }
   .placeholder-item .pi-body { flex: 1; }
   .placeholder-item .pi-text {
     font-size: 13.5px; line-height: 1.6;
-    color: rgba(255,255,255,0.25);
+    color: var(--text-muted);
   }
   .placeholder-item .pi-icon { font-size: 14px; opacity: 0.3; }
 
@@ -96,16 +96,16 @@
   .cta-section .cta-btn {
     display: inline-block; padding: 14px 36px;
     border-radius: var(--radius-full);
-    background: #0a84ff; color: #fff;
+    background: var(--color-accent); color: #fff;
     font-size: 15px; font-weight: 600; cursor: pointer;
     transition: all 0.2s;
     box-shadow: 0 4px 20px rgba(10,132,255,0.2);
   }
   .cta-section .cta-btn:hover {
-    background: #0070e0; transform: translateY(-1px);
+    background: var(--color-accent-hover); transform: translateY(-1px);
   }
   .cta-section .cta-hint {
-    margin-top: 10px; font-size: 12px; color: rgba(255,255,255,0.2);
+    margin-top: 10px; font-size: 12px; color: var(--text-muted);
   }
 </style>
 </head>

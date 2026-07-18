@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="theme-beige">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="design-system.css">
 <style>
 body {
-  background: #0f0f12;
+  background: var(--page-bg);
   display: grid;
   place-items: center;
   min-height: 100vh;
@@ -25,12 +25,12 @@ body {
 .rd-title {
   font-size: 22px;
   font-weight: 700;
-  color: #fff;
+  color: var(--text-primary);
   margin-bottom: 6px;
 }
 .rd-summary {
   font-size: 15px;
-  color: rgba(255,255,255,0.4);
+  color: var(--text-muted);
   margin-bottom: 24px;
 }
 .rd-link {

@@ -1,42 +1,42 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="theme-beige">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>🤝 我们共同走过的路 · AppleGo</title>
 <link rel="stylesheet" href="../design-system.css">
 <style>
-  body { background: #0f0f12; color: #e5e5ea; }
-  #bottom-nav { background: rgba(15,15,18,0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top-color: rgba(255,255,255,0.06); }
-  .nav-tab { color: rgba(255,255,255,0.35); }
-  .nav-tab:hover { color: rgba(255,255,255,0.65); }
-  .nav-tab.active { color: #0a84ff; }
+  body { background: var(--page-bg); color: var(--text-primary); }
+  #bottom-nav { background: var(--nav-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top-color: var(--border-light); }
+  .nav-tab { color: var(--text-muted); }
+  .nav-tab:hover { color: var(--text-secondary); }
+  .nav-tab.active { color: var(--color-accent); }
   ::selection { background: rgba(10,132,255,0.25); }
-  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+  ::-webkit-scrollbar-thumb { background: var(--border-light); }
 
   .top-bar {
     display: flex; align-items: center; justify-content: space-between;
     padding: var(--space-3) 0; margin-bottom: var(--space-5);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    border-bottom: 1px solid var(--border-light);
   }
-  .top-bar .tb-brand { font-size: 15px; font-weight: 700; }
-  .top-bar .tb-tab { font-size: 13px; color: rgba(255,255,255,0.35); font-weight: 500; padding: 4px 12px; }
-  .top-bar .tb-tab.active { color: #0a84ff; }
+  .top-bar .tb-brand { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+  .top-bar .tb-tab { font-size: 13px; color: var(--text-muted); font-weight: 500; padding: 4px 12px; }
+  .top-bar .tb-tab.active { color: var(--color-accent); }
 
   .rel-header { margin-bottom: var(--space-5); }
-  .rel-header h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px; color: #fff; }
+  .rel-header h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px; color: var(--text-primary); }
 
   .narrative-summary {
     font-size: 15px; line-height: 1.8;
-    color: rgba(255,255,255,0.65);
+    color: var(--text-secondary);
     padding: var(--space-5); border-radius: var(--radius-lg);
-    background: rgba(255,255,255,0.04);
+    background: var(--surface-alt);
     margin-bottom: var(--space-6);
     font-style: italic;
   }
 
   .section-label {
-    font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.3);
+    font-size: 12px; font-weight: 600; color: var(--text-muted);
     text-transform: uppercase; letter-spacing: 0.06em;
     margin-bottom: var(--space-4);
   }
@@ -44,11 +44,11 @@
   .milestones { display: flex; flex-direction: column; gap: var(--space-2); }
 
   .milestone {
-    background: rgba(255,255,255,0.04); border-radius: var(--radius-md);
+    background: var(--surface-alt); border-radius: var(--radius-md);
     padding: var(--space-4); cursor: pointer;
     transition: all 0.2s;
   }
-  .milestone:hover { background: rgba(255,255,255,0.07); transform: translateX(3px); }
+  .milestone:hover { background: var(--surface-bg); transform: translateX(3px); }
 
   .milestone .ms-row { display: flex; align-items: flex-start; gap: 12px; }
   .milestone .ms-icon {
@@ -63,23 +63,23 @@
   .milestone .ms-icon.type-return { background: rgba(255,45,146,0.12); }
 
   .milestone .ms-body { flex: 1; min-width: 0; }
-  .milestone .ms-title { font-size: 14px; font-weight: 600; color: #e5e5ea; }
+  .milestone .ms-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
   .milestone .ms-date {
-    font-size: 11px; color: rgba(255,255,255,0.3);
+    font-size: 11px; color: var(--text-muted);
     margin-top: 2px; margin-bottom: 4px;
   }
   .milestone .ms-desc {
-    font-size: 13px; color: rgba(255,255,255,0.5);
+    font-size: 13px; color: var(--text-secondary);
     line-height: 1.6;
   }
   .milestone .ms-expand {
-    font-size: 12px; color: #0a84ff; margin-top: 6px;
+    font-size: 12px; color: var(--color-accent); margin-top: 6px;
     display: inline-block;
   }
 
   .rel-footer {
     text-align: center; padding: var(--space-8) var(--space-4);
-    color: rgba(255,255,255,0.2); font-size: 13px; line-height: 1.8;
+    color: var(--text-muted); font-size: 13px; line-height: 1.8;
   }
 </style>
 </head>

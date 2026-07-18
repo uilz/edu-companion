@@ -1,42 +1,42 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="theme-beige">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>🌌 你的知识宇宙 · AppleGo</title>
 <link rel="stylesheet" href="../design-system.css">
 <style>
-/* ── Dark Theme ── */
-body { background: #0f0f12; color: #e5e5ea; }
+/* ── Beige Theme ── */
+body { background: var(--page-bg); color: var(--text-primary); }
 #app { max-width: var(--content-max); margin: 0 auto; padding: 0 var(--space-4) var(--space-6); }
 
 /* ── Top Bar ── */
 .top-bar {
   display: flex; align-items: center; gap: var(--space-3);
   padding: 16px var(--space-4); padding-top: calc(16px + env(safe-area-inset-top, 0));
-  background: rgba(15,15,18,0.92); backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: var(--nav-bg); backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border-light);
   position: sticky; top: 0; z-index: 50;
 }
-.top-bar .tb-brand { font-size: 16px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; }
-.top-bar .tb-brand span { color: rgba(255,255,255,0.4); font-weight: 400; }
+.top-bar .tb-brand { font-size: 16px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
+.top-bar .tb-brand span { color: var(--text-muted); font-weight: 400; }
 
 /* ── Tab Bar ── */
 .tab-bar {
   display: flex; gap: 0; overflow-x: auto;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  background: rgba(15,15,18,0.95);
+  border-bottom: 1px solid var(--border-light);
+  background: var(--surface-bg);
   scrollbar-width: none; position: sticky; top: 57px; z-index: 49;
 }
 .tab-bar::-webkit-scrollbar { display: none; }
 .tab-item {
   flex-shrink: 0; padding: 12px 16px;
-  font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.4);
+  font-size: 13px; font-weight: 500; color: var(--text-muted);
   border-bottom: 2px solid transparent;
   transition: all 0.15s var(--ease-out); white-space: nowrap;
   text-decoration: none; cursor: pointer;
 }
-.tab-item:hover { color: rgba(255,255,255,0.7); }
+.tab-item:hover { color: var(--text-secondary); }
 .tab-item.active { color: #5ac8fa; border-bottom-color: #5ac8fa; }
 
 /* ── Empty State Hero ── */
@@ -51,12 +51,12 @@ body { background: #0f0f12; color: #e5e5ea; }
   position: absolute; inset: 0; overflow: hidden;
 }
 .star {
-  position: absolute; border-radius: 50%; background: rgba(255,255,255,0.15);
+  position: absolute; border-radius: 50%; background: var(--text-muted);
   animation: twinkle 4s var(--ease-out) infinite;
 }
 .star:nth-child(1) { width: 2px; height: 2px; top: 15%; left: 20%; animation-delay: 0s; }
 .star:nth-child(2) { width: 1.5px; height: 1.5px; top: 25%; left: 70%; animation-delay: 1s; background: rgba(90,200,250,0.2); }
-.star:nth-child(3) { width: 2px; height: 2px; top: 40%; left: 45%; animation-delay: 0.5s; background: rgba(255,255,255,0.1); }
+.star:nth-child(3) { width: 2px; height: 2px; top: 40%; left: 45%; animation-delay: 0.5s; background: var(--text-muted); }
 .star:nth-child(4) { width: 1px; height: 1px; top: 55%; left: 30%; animation-delay: 2s; background: rgba(175,82,222,0.15); }
 .star:nth-child(5) { width: 1.5px; height: 1.5px; top: 60%; left: 75%; animation-delay: 1.5s; }
 .star:nth-child(6) { width: 1px; height: 1px; top: 35%; left: 10%; animation-delay: 3s; }
@@ -67,7 +67,7 @@ body { background: #0f0f12; color: #e5e5ea; }
 .star:nth-child(11) { width: 1px; height: 1px; top: 10%; left: 50%; animation-delay: 2.8s; }
 .star:nth-child(12) { width: 1.5px; height: 1.5px; top: 75%; left: 40%; animation-delay: 0.3s; }
 .star:nth-child(13) { width: 1px; height: 1px; top: 30%; left: 35%; animation-delay: 4s; }
-.star:nth-child(14) { width: 2px; height: 2px; top: 90%; left: 25%; animation-delay: 1.8s; background: rgba(255,255,255,0.08); }
+.star:nth-child(14) { width: 2px; height: 2px; top: 90%; left: 25%; animation-delay: 1.8s; background: var(--text-muted); }
 .star:nth-child(15) { width: 1px; height: 1px; top: 20%; left: 90%; animation-delay: 2.2s; }
 
 @keyframes twinkle {
@@ -83,16 +83,16 @@ body { background: #0f0f12; color: #e5e5ea; }
   font-size: 56px; margin-bottom: var(--space-4); display: block;
 }
 .empty-content h1 {
-  font-size: 28px; font-weight: 700; color: #fff;
+  font-size: 28px; font-weight: 700; color: var(--text-primary);
   letter-spacing: -0.02em; margin-bottom: var(--space-4);
 }
 .empty-content .ec-subtitle {
-  font-size: 16px; color: rgba(255,255,255,0.45);
+  font-size: 16px; color: var(--text-secondary);
   line-height: 1.8; max-width: 360px; margin: 0 auto var(--space-6);
   font-family: var(--font-serif);
 }
 .empty-content .ec-message {
-  font-size: 14px; color: rgba(255,255,255,0.35);
+  font-size: 14px; color: var(--text-muted);
   line-height: 1.8; max-width: 340px; margin: 0 auto var(--space-8);
   font-style: italic;
 }
@@ -109,7 +109,7 @@ body { background: #0f0f12; color: #e5e5ea; }
 /* ── Bottom Hint ── */
 .empty-hint {
   text-align: center; padding: var(--space-6) var(--space-4);
-  color: rgba(255,255,255,0.2); font-size: 12px; line-height: 1.7;
+  color: var(--text-muted); font-size: 12px; line-height: 1.7;
 }
 </style>
 </head>
@@ -170,21 +170,21 @@ body { background: #0f0f12; color: #e5e5ea; }
 </main>
 
 <!-- Bottom Navigation -->
-<nav id="bottom-nav" style="background: rgba(15,15,18,0.88); border-top-color: rgba(255,255,255,0.06);">
-  <button class="nav-tab" data-page="workspace" style="color: rgba(255,255,255,0.4);">
+<nav id="bottom-nav">
+  <button class="nav-tab" data-page="workspace">
     <svg viewBox="0 0 24 24" fill="none">
       <path d="M3 3h7v7H3V3zM14 3h7v7h-7V3zM3 14h7v7H3v-7zM14 14h7v7h-7v-7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
     </svg>
     <span>Workspace</span>
   </button>
-  <button class="nav-tab" data-page="memory" style="color: rgba(255,255,255,0.4);">
+  <button class="nav-tab" data-page="memory">
     <svg viewBox="0 0 24 24" fill="none">
       <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" stroke="currentColor" stroke-width="1.8" fill="none"/>
       <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
     </svg>
     <span>Memory</span>
   </button>
-  <button class="nav-tab" data-page="brain" style="color: rgba(255,255,255,0.4);">
+  <button class="nav-tab" data-page="brain">
     <svg viewBox="0 0 24 24" fill="none">
       <path d="M12 2C7.58 2 4 5.58 4 10c0 2.5 1.5 4.5 3 6v4h10v-4c1.5-1.5 3-3.5 3-6 0-4.42-3.58-8-8-8z" stroke="currentColor" stroke-width="1.8" fill="none"/>
       <path d="M9 10h6M12 7v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -202,7 +202,7 @@ body { background: #0f0f12; color: #e5e5ea; }
     </svg>
     <span>Universe</span>
   </button>
-  <button class="nav-tab" data-page="relationship" style="color: rgba(255,255,255,0.4);">
+  <button class="nav-tab" data-page="relationship">
     <svg viewBox="0 0 24 24" fill="none">
       <path d="M12 21l-2-2H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2h-5l-2 2z" stroke="currentColor" stroke-width="1.8" fill="none"/>
       <path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>

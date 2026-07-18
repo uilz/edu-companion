@@ -1,48 +1,48 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="theme-beige">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>成长叙事 · 我们共同走过的路 · AppleGo</title>
 <link rel="stylesheet" href="../design-system.css">
 <style>
-  body { background: #0f0f12; color: #e5e5ea; }
-  #bottom-nav { background: rgba(15,15,18,0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top-color: rgba(255,255,255,0.06); }
-  .nav-tab { color: rgba(255,255,255,0.35); }
-  .nav-tab:hover { color: rgba(255,255,255,0.65); }
-  .nav-tab.active { color: #0a84ff; }
+  body { background: var(--page-bg); color: var(--text-primary); }
+  #bottom-nav { background: var(--nav-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top-color: var(--border-light); }
+  .nav-tab { color: var(--text-muted); }
+  .nav-tab:hover { color: var(--text-secondary); }
+  .nav-tab.active { color: var(--color-accent); }
   ::selection { background: rgba(10,132,255,0.25); }
-  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+  ::-webkit-scrollbar-thumb { background: var(--border-light); }
 
   .top-bar {
     display: flex; align-items: center; justify-content: space-between;
     padding: var(--space-3) 0; margin-bottom: var(--space-5);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    border-bottom: 1px solid var(--border-light);
   }
-  .top-bar .tb-brand { font-size: 15px; font-weight: 700; }
-  .top-bar .tb-back { font-size: 13px; color: rgba(255,255,255,0.35); cursor: pointer; }
-  .top-bar .tb-back:hover { color: rgba(255,255,255,0.6); }
+  .top-bar .tb-brand { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+  .top-bar .tb-back { font-size: 13px; color: var(--text-muted); cursor: pointer; }
+  .top-bar .tb-back:hover { color: var(--text-secondary); }
 
   .narrative-header { margin-bottom: var(--space-5); }
-  .narrative-header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px; color: #fff; }
-  .narrative-header .nh-sub { font-size: 13px; color: rgba(255,255,255,0.35); font-style: italic; }
+  .narrative-header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px; color: var(--text-primary); }
+  .narrative-header .nh-sub { font-size: 13px; color: var(--text-muted); font-style: italic; }
 
   .story { font-family: var(--font-serif); }
 
   .chapter {
     margin-bottom: var(--space-6);
     padding: var(--space-5); border-radius: var(--radius-lg);
-    background: rgba(255,255,255,0.04);
+    background: var(--surface-alt);
   }
   .chapter .ch-label {
-    font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.2);
+    font-size: 11px; font-weight: 600; color: var(--text-muted);
     text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: var(--space-3);
   }
   .chapter .ch-text {
     font-size: 16px; line-height: 1.85;
-    color: rgba(255,255,255,0.7);
+    color: var(--text-secondary);
   }
-  .chapter .ch-text strong { color: #e5e5ea; font-weight: 600; }
+  .chapter .ch-text strong { color: var(--text-primary); font-weight: 600; }
 
   .chapter .ch-evidence {
     margin-top: var(--space-4);
@@ -56,7 +56,7 @@
 
   .epilogue {
     text-align: center; padding: var(--space-6) var(--space-4);
-    color: rgba(255,255,255,0.2); font-size: 14px; line-height: 1.8;
+    color: var(--text-muted); font-size: 14px; line-height: 1.8;
     font-style: italic;
   }
 </style>

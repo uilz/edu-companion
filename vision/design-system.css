@@ -325,6 +325,32 @@ a { text-decoration: none; color: inherit; }
 .state-meta .sm-emotion.cautious { background: var(--color-warning-soft); color: var(--color-warning); }
 .state-meta .sm-emotion.concern { background: var(--color-danger-soft); color: var(--color-danger); }
 
+/* ═══════════════════════════════════════════════════════════════
+   AppleGo Demo 3.0 — Beige Theme
+   Applied by adding class="theme-beige" to <html> or <body>.
+   ═══════════════════════════════════════════════════════════════ */
+.theme-beige {
+  --page-bg: #f5f0eb;
+  --surface-bg: #fdfbf7;
+  --surface-alt: #f8f5f0;
+  --text-primary: #2d2a24;
+  --text-secondary: #6b6559;
+  --text-muted: #9c9588;
+  --border-light: #e8e2d8;
+  --border-subtle: #f0ece6;
+  --card-shadow: 0 2px 8px rgba(45,42,36,0.06);
+  --nav-bg: rgba(253,251,247,0.85);
+  --ai-msg-bg: #efe9de;
+  --user-msg-bg: #e8e2d6;
+  --pulse-warm: rgba(45,42,36,0.04);
+}
+.theme-beige .state-meta {
+  background: rgba(45,42,36,0.90);
+  color: #e8e4de;
+}
+.theme-beige .state-meta .sm-label { color: #9c9588; }
+.theme-beige .state-meta .sm-value { color: #f5f0eb; }
+
 /* ── Responsive ── */
 @media (max-width: 480px) {
   #app { padding: 72px var(--space-3) var(--space-5); }

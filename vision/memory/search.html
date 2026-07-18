@@ -1,65 +1,65 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="theme-beige">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>搜索 · 苹果果的记忆 · AppleGo</title>
 <link rel="stylesheet" href="../design-system.css">
 <style>
-  body { background: #0f0f12; color: #e5e5ea; }
-  #bottom-nav { background: rgba(15,15,18,0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top-color: rgba(255,255,255,0.06); }
-  .nav-tab { color: rgba(255,255,255,0.35); }
-  .nav-tab:hover { color: rgba(255,255,255,0.65); }
+  body { background: var(--page-bg); color: var(--text-primary); }
+  #bottom-nav { background: var(--nav-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top-color: var(--border-light); }
+  .nav-tab { color: var(--text-muted); }
+  .nav-tab:hover { color: var(--text-secondary); }
   .nav-tab.active { color: #0a84ff; }
   ::selection { background: rgba(10,132,255,0.25); }
-  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+  ::-webkit-scrollbar-thumb { background: var(--text-muted); }
 
   .top-bar {
     display: flex; align-items: center; justify-content: space-between;
     padding: var(--space-3) 0; margin-bottom: var(--space-4);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    border-bottom: 1px solid var(--border-light);
   }
   .top-bar .tb-brand { font-size: 15px; font-weight: 700; }
 
   .search-section { margin-bottom: var(--space-5); }
   .search-bar {
     display: flex; align-items: center; gap: 10px;
-    background: rgba(255,255,255,0.06); border: 1px solid #0a84ff;
+    background: var(--surface-bg); border: 1px solid #0a84ff;
     border-radius: var(--radius-full); padding: 12px 18px;
   }
   .search-bar input {
     flex: 1; background: none; border: none; outline: none;
-    font-size: 15px; color: #fff;
+    font-size: 15px; color: var(--text-primary);
   }
   .search-bar .sb-clear { font-size: 16px; opacity: 0.3; cursor: pointer; }
   .search-bar .sb-clear:hover { opacity: 0.6; }
 
   .search-stats {
-    font-size: 12.5px; color: rgba(255,255,255,0.3);
+    font-size: 12.5px; color: var(--text-muted);
     margin-bottom: var(--space-4); margin-top: var(--space-2);
   }
 
   .result-item {
-    background: rgba(255,255,255,0.04); border-radius: var(--radius-md);
+    background: var(--surface-alt); border-radius: var(--radius-md);
     padding: var(--space-4); margin-bottom: var(--space-3);
     border-left: 3px solid;
     transition: all 0.2s; cursor: pointer;
   }
-  .result-item:hover { background: rgba(255,255,255,0.07); transform: translateY(-1px); }
+  .result-item:hover { background: var(--surface-bg); transform: translateY(-1px); }
 
   .result-item .ri-row { display: flex; align-items: flex-start; gap: 10px; }
   .result-item .ri-icon { font-size: 18px; flex-shrink: 0; margin-top: 2px; }
   .result-item .ri-body { flex: 1; min-width: 0; }
   .result-item .ri-meta {
     display: flex; align-items: center; gap: 8px;
-    font-size: 11px; color: rgba(255,255,255,0.35); margin-bottom: 4px;
+    font-size: 11px; color: var(--text-muted); margin-bottom: 4px;
   }
   .result-item .ri-badge {
     font-weight: 600; padding: 1px 8px; border-radius: var(--radius-full);
     font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
   }
-  .result-item .ri-title { font-size: 14.5px; font-weight: 600; color: #e5e5ea; margin-bottom: 2px; }
-  .result-item .ri-excerpt { font-size: 13px; color: rgba(255,255,255,0.45); line-height: 1.6; }
+  .result-item .ri-title { font-size: 14.5px; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }
+  .result-item .ri-excerpt { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
   .result-item .ri-match {
     font-size: 12px; color: #5ac8fa; margin-top: 6px;
     background: rgba(90,200,250,0.08); display: inline-block;
@@ -81,7 +81,7 @@
   .suggestions .tag {
     padding: 5px 14px; border-radius: var(--radius-full);
     font-size: 12px; font-weight: 500;
-    background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5);
+    background: var(--surface-alt); color: var(--text-secondary);
     cursor: pointer; transition: all 0.2s;
   }
   .suggestions .tag:hover { background: rgba(10,132,255,0.15); color: #5ac8fa; }
@@ -90,10 +90,10 @@
     margin-top: var(--space-5);
     padding: var(--space-4); border-radius: var(--radius-md);
     background: rgba(10,132,255,0.06); border: 1px solid rgba(10,132,255,0.12);
-    font-size: 14px; line-height: 1.7; color: rgba(255,255,255,0.7);
+    font-size: 14px; line-height: 1.7; color: var(--text-secondary);
   }
   .ai-connect .ac-icon { font-size: 16px; margin-right: 8px; }
-  .ai-connect strong { color: #e5e5ea; }
+  .ai-connect strong { color: var(--text-primary); }
 </style>
 </head>
 <body>
