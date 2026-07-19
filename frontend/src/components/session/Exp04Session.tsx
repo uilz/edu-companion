@@ -234,6 +234,7 @@ export default function Exp04Session() {
     else if (tool === "voice") { setVoiceOpen(true); }
     else if (tool === "handwriting") { setHandwritingOpen(true); }
     else if (tool === "files") { setFilesOpen(true); }
+    else if (tool === "plan") { toast.info("规划", "查看学习路线规划"); }
     else {
       sm.transition({ type: "TOOL_OPENED", tool });
       toast.info(`即将开放`, `先专注当前学习吧`);

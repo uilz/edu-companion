@@ -1,8 +1,8 @@
 "use client";
 
-import { StickyNote, Mic, Palette, PenTool, FileText, Clock, Search, Calculator, FolderKanban, CheckSquare } from "lucide-react";
+import { StickyNote, Mic, Palette, PenTool, FileText, Clock, Search, Calculator, FolderKanban, CheckSquare, Map } from "lucide-react";
 
-export type ToolKey = "flashcard" | "canvas" | "voice" | "handwriting" | "files" | "pomodoro" | "mindmap" | "practice" | "project" | "search";
+export type ToolKey = "flashcard" | "canvas" | "voice" | "handwriting" | "files" | "pomodoro" | "mindmap" | "practice" | "project" | "plan" | "search";
 
 interface ToolItem {
   key: ToolKey;
@@ -18,6 +18,7 @@ const TOOLS: ToolItem[] = [
   { key: "voice", label: "语音", icon: <Mic size={15} /> },
   { key: "pomodoro", label: "番茄钟", icon: <Clock size={15} /> },
   { key: "project", label: "项目", icon: <FolderKanban size={15} /> },
+  { key: "plan", label: "规划", icon: <Map size={15} /> },
   { key: "handwriting", label: "手写", icon: <PenTool size={15} /> },
   { key: "files", label: "文件", icon: <FileText size={15} /> },
   { key: "search", label: "搜索", icon: <Search size={15} /> },

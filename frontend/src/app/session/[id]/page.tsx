@@ -1,15 +1,12 @@
 // ============================================================
 // /session/[id] 路由 — Learning Session
 //
-// Feature Flag 路由：
-//   - exp04_enabled=true  → Exp04Session（新状态机驱动）
-//   - exp04_enabled=false → SessionPage（旧实现，fallback）
-//
-// EPIC-01: Session Runtime Foundation
+// 直接渲染 Exp04Session（AppleGo Studio 工作空间布局）
+// 旧设计 SessionPage 已移除，旧模式已过时。
 // ============================================================
 
-import { SessionRouter } from "./SessionRouter";
+import Exp04Session from "@/components/session/Exp04Session";
 
 export default function SessionRoute() {
-  return <SessionRouter />;
+  return <Exp04Session />;
 }

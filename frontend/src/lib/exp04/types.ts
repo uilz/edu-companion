@@ -51,7 +51,13 @@ export function getMood(mode: SessionMode): SessionMood {
   }
 }
 
-/** 旧 Session 的 stage 字符串 → 新 Exp04State 映射（用于兼容） */
+/**
+ * Old backend stage → Exp04 state mapping.
+ *
+ * Studio 设计理念：practice 是 chat 阶段的内联活动（通过 ActivePrompt
+ * + BottomDock 工具触发），不独立为一个阶段。因此 learn 和 practice
+ * 都映射到 chat。后端仅跟踪 session 整体进度，细粒度活动由前端状态机管理。
+ */
 export const BACKEND_STAGE_TO_EXP04: Record<string, Partial<{ stage: SessionStage; mode: SessionMode }>> = {
   intro: { stage: "enter", mode: "normal" },
   learn: { stage: "chat", mode: "normal" },
