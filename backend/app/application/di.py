@@ -86,6 +86,15 @@ class AppContainer:
         # ── WorkspaceRuntime (AppleGo Demo6.0) ──
         self.workspace_runtime = self._create_workspace_runtime()
 
+        # ── ReadingRuntime (AppleGo Demo6.0) ──
+        self.reading_runtime = self._create_reading_runtime()
+
+        # ── ConversationRuntime (AppleGo Demo6.0) ──
+        self.conversation_runtime = self._create_conversation_runtime()
+
+        # ── PracticeRuntime (AppleGo Demo6.0) ──
+        self.practice_runtime = self._create_practice_runtime()
+
         # ── Growth 服务 (AppleGo Domain Model v1.2) ──
         self.growth_service = self._create_growth_service()
         self.growth_engine = self._create_growth_engine()
@@ -216,6 +225,26 @@ class AppContainer:
         """创建 WorkspaceRuntime (AppleGo Demo6.0)。"""
         from app.services.workspace_runtime import WorkspaceRuntime
         return WorkspaceRuntime(event_bus=self.event_bus)
+
+    def _create_reading_runtime(self):
+        """创建 ReadingRuntime (AppleGo Demo6.0)。"""
+        from app.services.reading_runtime import ReadingRuntime
+        return ReadingRuntime(event_bus=self.event_bus)
+
+    def _create_conversation_runtime(self):
+        """创建 ConversationRuntime (AppleGo Demo6.0)。"""
+        from app.services.conversation_runtime import ConversationRuntime
+        return ConversationRuntime(event_bus=self.event_bus)
+
+    def _create_practice_runtime(self):
+        """创建 PracticeRuntime (AppleGo Demo6.0)。"""
+        from app.services.practice_runtime import PracticeRuntime
+        return PracticeRuntime(event_bus=self.event_bus)
+
+    def _create_growth_engine_v2(self):
+        """创建 GrowthEngine (AppleGo Demo6.0)。"""
+        from app.services.growth_engine import GrowthEngine
+        return GrowthEngine(event_bus=self.event_bus)
 
     def _create_growth_service(self):
         """创建 Growth 查询服务 (AppleGo Domain Model v1.2)。"""
@@ -627,6 +656,26 @@ def get_growth_service():
 def get_workspace_runtime():
     """获取 WorkspaceRuntime (AppleGo Demo6.0)。"""
     return container.workspace_runtime
+
+
+def get_reading_runtime():
+    """获取 ReadingRuntime (AppleGo Demo6.0)。"""
+    return container.reading_runtime
+
+
+def get_conversation_runtime():
+    """获取 ConversationRuntime (AppleGo Demo6.0)。"""
+    return container.conversation_runtime
+
+
+def get_practice_runtime():
+    """获取 PracticeRuntime (AppleGo Demo6.0)。"""
+    return container.practice_runtime
+
+
+def get_growth_engine():
+    """获取 GrowthEngine (AppleGo Demo6.0)。"""
+    return container.growth_engine_v2
 
 
 # ── 事件处理辅助函数 ──

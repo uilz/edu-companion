@@ -24,7 +24,6 @@ import ChatScreen from "./exp04/ChatScreen";
 import Exp04ReflectionScreen from "./exp04/Exp04ReflectionScreen";
 import Exp04EndScreen from "./exp04/Exp04EndScreen";
 import StageDots from "./exp04/StageDots";
-import ProgressBar from "./exp04/ProgressBar";
 import ResourcesSidebar, { type ResourceKey } from "./exp04/ResourcesSidebar";
 import ResourceContextBar from "./exp04/ResourceContextBar";
 import StudioCompanion from "./exp04/StudioCompanion";
@@ -283,38 +282,65 @@ export default function Exp04Session() {
 
   const isFinish = sm.stage === "finish";
   const isEnter = sm.stage === "enter";
+  // 进度百分比：enter=5% / chat=42% / reflect=75% / finish=100%（Demo openSession 默认 42%）
+  const progressPct = isFinish ? 100 : sm.stage === "reflect" ? 75 : sm.stage === "chat" ? 42 : 5;
 
   return (
-    <div className={`studio-root mode-${layoutMode}`}>
+    <div className={`studio-root ${layoutMode === "explore" ? "visible" : `mode-${layoutMode}`}`}>
       {/* ═══ HEADER ZONE ═══ */}
       <header className="studio-header">
         <div className="sh-root">
-          <button onClick={() => router.push("/")} className="sh-back">
+          <button onClick={() => router.push("/")} className="sh-back" title="返回首页">
             <ArrowLeft size={20} />
           </button>
-          <h1 className="sh-title">{session.title || "学习 Session"}</h1>
+          {/* 任务标题（label + title 双行，Demo §header-mission 对齐） */}
+          <div className="sh-mission">
+            <div className="sh-m-label">{isEnter ? "准备开始" : isFinish ? "已完成" : "学习中"}</div>
+            <div className="sh-m-title">{session.title || session.mission?.title || "学习 Session"}</div>
+          </div>
+
+          {/* Session 指示器：stage dots + 72px 进度条（Demo §session-indicators 对齐） */}
           {!isFinish && !isEnter && (
-            <>
+            <div className="sh-session-indicators">
               <StageDots currentState={sm.stage} />
-              <span className="sh-progress">42%</span>
-            </>
+              <div className="sh-progress-bar">
+                <div
+                  className="sh-progress-fill"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+            </div>
           )}
+
+          {/* AI 状态 */}
           <div className="sh-ai-status">
             <span className="sh-ai-dot"></span>
-            <span>观察中</span>
+            <span>{isFinish ? "陪伴中" : "观察中"}</span>
           </div>
-          <div className="sh-layout-toggle">
+
+          {/* 模式切换：pill 样式（Demo §mode-toggle 对齐） */}
+          <div className="sh-mode-toggle">
             {(["explore", "dialogue", "focus"] as const).map((m) => (
               <button
                 key={m}
-                className={`sh-layout-btn ${layoutMode === m ? "active" : ""}`}
+                className={`sh-mode-btn ${layoutMode === m ? "active" : ""}`}
                 onClick={() => setLayoutMode(m)}
-                title={m === "explore" ? "浏览模式" : m === "dialogue" ? "对话模式" : "专注模式"}
+                title={m === "explore" ? "浏览模式 — 完整工作区" : m === "dialogue" ? "对话模式 — 聚焦对话" : "专注模式 — 沉浸学习"}
               >
-                {m === "explore" ? "🔭" : m === "dialogue" ? "💬" : "🎯"}
+                {m === "explore" ? "浏览" : m === "dialogue" ? "对话" : "专注"}
               </button>
             ))}
           </div>
+
+          {/* 搜索按钮（Demo §search-btn 对齐） */}
+          <button
+            className="sh-search-btn"
+            onClick={() => handleOpenTool("search")}
+            title="全局搜索"
+          >
+            ⌕
+          </button>
+
           <div className="sh-actions">
             <button
               onClick={cancelSession}
@@ -325,7 +351,6 @@ export default function Exp04Session() {
             </button>
           </div>
         </div>
-        {!isFinish && <ProgressBar currentState={sm.stage} />}
       </header>
 
       {/* ═══ SIDEBAR ZONE ═══ */}

@@ -1,0 +1,61 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>Contract 02 · Resource</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}
+body{font:14px/1.7 'Inter','Noto Sans SC',sans-serif;background:#f5f0e8;color:#2a2420;padding:32px 24px;max-width:900px;margin:0 auto}
+h1{font-size:24px;margin-bottom:4px}.sub{color:#7a7068;margin-bottom:32px}
+.sec{background:#fff;border-radius:12px;padding:20px 24px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.sec h2{font-size:14px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #e8e1d8;text-transform:uppercase;letter-spacing:.5px;color:#8f7a62}
+.g{display:flex;align-items:flex-start;gap:10px;margin:6px 0;padding:8px 14px;border-radius:6px;border-left:3px solid}
+.g.intent{background:#f0f4f8;border-left-color:#5a7a9f}
+.g.inv{background:#f0f8f0;border-left-color:#5a8f6b}
+.g.life{background:#fdf8f0;border-left-color:#c8a05f}
+.g.own{background:#f8f0f8;border-left-color:#8a6a9f}
+.g.cons{background:#f0f0f8;border-left-color:#6a6aaf}
+.g.dom{background:#f5f0e8;border-left-color:#a69c8f}
+.num{font-family:monospace;font-weight:700;min-width:22px}.txt{flex:1;font-size:13px}
+.in{font-weight:600;color:#2a5a32}
+.tag{font-family:monospace;font-size:11px;background:#2a2420;color:#e8e1d8;padding:1px 7px;border-radius:4px;margin:2px 2px;display:inline-block}
+.lc{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0;font-size:13px}
+.lc .st{padding:3px 10px;border-radius:6px;font-size:12px;font-weight:600;white-space:nowrap}
+.st.closed{background:#f0e8dc;color:#7a7068}.st.open{background:#d4e8d8;color:#2a5a32}.st.comp{background:#e8f0f8;color:#3a5a8a}
+.lc .arr{color:#a69c8f;font-weight:600}
+.lc-row{font-size:12px;margin:3px 0 3px 16px;color:#777}
+</style></head><body>
+
+<h1>Contract 02 · Resource</h1>
+<p class="sub">PDFs, videos, webpages — any material consumed inside the Workspace.</p>
+
+<div class="sec"><h2>1. Intent</h2>
+<div class="g intent"><span class="num">—</span><span class="txt">Learner engages with external material. AI observes silently during intake. Environment protects the flow state.</span></div>
+
+<div class="sec"><h2>2. Invariants</h2>
+<div class="g inv"><span class="num">I1</span><span class="txt"><span class="in">Every Resource has exactly one ReadingState per learner.</span> Not per session. Reopening resumes from last position across sessions.</span></div>
+<div class="g inv"><span class="num">I2</span><span class="txt"><span class="in">ReadingState always carries latest position (page, scroll).</span> Updated on every position change. Debounced 5s.</span></div>
+<div class="g inv"><span class="num">I3</span><span class="txt"><span class="in">Highlights belong to Resource, not Session.</span> Survive session boundaries. Deleting session does not delete highlights.</span></div>
+<div class="g inv"><span class="num">I4</span><span class="txt"><span class="in">Notes can reference Resource + position.</span> Note created during reading carries link back to resource context.</span></div>
+<div class="g inv"><span class="num">I5</span><span class="txt"><span class="in">Conversation can reference any Highlight or Note.</span> "你在这里标记的重点..."</span></div>
+<div class="g inv"><span class="num">I6</span><span class="txt"><span class="in">Deleting Highlight never loses ReadingState.</span> Annotations and reading progress are independent.</span></div>
+<div class="g inv"><span class="num">I7</span><span class="txt"><span class="in">Highlights are semantically indexed.</span> After creation, text is embedded. Queryable: "what did I highlight about ε-δ?"</span></div>
+
+<div class="sec"><h2>3. Lifecycle</h2>
+<div class="lc"><span class="st closed">Closed</span><span class="arr">→</span><span class="st open">Open</span><span class="arr">→</span><span class="st comp">Completed</span></div>
+<div class="lc-row"><b>Closed → Open:</b> User opens. Load ReadingState. Restore position. Companion switches to observe-mode.</div>
+<div class="lc-row"><b>Open → Closed:</b> User closes. Save ReadingState. Companion resumes normal observation.</div>
+<div class="lc-row"><b>Open → Completed:</b> User marks as finished. Milestone. Companion may suggest review or next resource.</div>
+<div style="margin-top:8px;font-size:12px;color:#7a7068">Publishes: ResourceOpened | ReadingProgressed | HighlightCreated | ResourceClosed | ResourceCompleted</div>
+
+<div class="sec"><h2>4. Ownership</h2>
+<div class="g own"><span class="num">→</span><span class="txt"><span class="in">Owned by:</span> <span class="tag">Workspace</span></span></div>
+<div class="g own"><span class="num">→</span><span class="txt"><span class="in">Owns:</span> <span class="tag">ReadingState</span> <span class="tag">Highlight</span></span></div>
+<div class="g own"><span class="num">→</span><span class="txt"><span class="in">Referenced by:</span> <span class="tag">Note</span> <span class="tag">Conversation.Turn</span> <span class="tag">Practice.Question</span></span></div>
+
+<div class="sec"><h2>5. Consistency</h2>
+<div class="g cons"><span class="num">→</span><span class="txt"><span class="in">Immediate:</span> Open/close state. Resource metadata.</span></div>
+<div class="g cons"><span class="num">→</span><span class="txt"><span class="in">Debounced:</span> ReadingState position — every 5s, not every scroll event.</span></div>
+<div class="g cons"><span class="num">→</span><span class="txt"><span class="in">Async:</span> Highlight semantic embedding. Concept linking from highlight text.</span></div>
+
+<div class="sec"><h2>6. Domains</h2>
+<div class="g dom"><span class="num"></span><span class="txt">
+<span class="tag">Resource</span> <span class="tag">ReadingState</span> <span class="tag">Highlight</span> <span class="tag">Note</span> <span class="tag">LearningEvent</span>
+</span></div>
+
+</body></html>

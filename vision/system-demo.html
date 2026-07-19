@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AppleGo System Demo — Developer Inspector</title>
+<style>
+  :root {
+    --bg: #f8f6f3;
+    --sidebar-bg: #1e1e2e;
+    --sidebar-text: #cdd6f4;
+    --sidebar-active: #2a2a3e;
+    --sidebar-hover: #252538;
+    --sidebar-accent: #cba6f7;
+    --panel-bg: #fff;
+    --panel-border: #e6ddd0;
+    --ink: #1a1a1a;
+    --ink-2: #666;
+    --ink-3: #999;
+    --label: #888;
+    --field-bg: #f4f1ec;
+    --highlight: #f5f0e8;
+    --badge-active: #a6e3a1;
+    --badge-pending: #f9e2af;
+    --badge-info: #89b4fa;
+    --r: 8px;
+    --font-mono: 'SF Mono','Fira Code','Cascadia Code',monospace;
+    --font: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { display:flex; height:100vh; font-family:var(--font); background:var(--bg); overflow:hidden; }
+
+  #sidebar {
+    width: 240px; min-width:240px; background:var(--sidebar-bg); color:var(--sidebar-text);
+    display:flex; flex-direction:column; font-size:13px; overflow-y:auto;
+  }
+  .sb-header {
+    padding:14px 16px; border-bottom:1px solid rgba(255,255,255,.06);
+    font-weight:600; font-size:12px; letter-spacing:.04em; color:#a6adc8;
+    display:flex; align-items:center; gap:8px;
+  }
+  .sb-header .dot { width:7px; height:7px; border-radius:50%; background:#a6e3a1; }
+  .sb-node {
+    display:flex; align-items:center; gap:8px; padding:9px 16px; cursor:pointer;
+    transition:background .1s; border-left:2px solid transparent; user-select:none;
+  }
+  .sb-node:hover { background:var(--sidebar-hover); }
+  .sb-node.active { background:var(--sidebar-active); border-left-color:var(--sidebar-accent); }
+  .sb-node .icon { font-size:12px; width:18px; text-align:center; flex-shrink:0; }
+  .sb-node .name { flex:1; }
+  .sb-divider {
+    padding:14px 16px 4px; font-size:10px; font-weight:600; letter-spacing:.05em;
+    color:#585b70; text-transform:uppercase;
+  }
+
+  #panel {
+    flex:1; overflow-y:auto; padding:28px 36px; background:var(--panel-bg);
+  }
+  #panel h1 { font-size:20px; font-weight:700; margin-bottom:4px; }
+  #panel .subtitle { font-size:12px; color:var(--ink-3); margin-bottom:24px; }
+
+  .section { margin-bottom:24px; }
+  .section-title {
+    font-size:10px; font-weight:600; letter-spacing:.05em; color:var(--label);
+    text-transform:uppercase; margin-bottom:10px;
+  }
+  .field {
+    display:flex; align-items:flex-start; padding:7px 0;
+    border-bottom:1px solid var(--panel-border);
+  }
+  .field:last-child { border-bottom:none; }
+  .field-label {
+    width:130px; flex-shrink:0; font-size:11px; color:var(--label);
+    font-family:var(--font-mono);
+  }
+  .field-value { flex:1; font-size:13px; color:var(--ink); line-height:1.5; }
+
+  .trace {
+    margin-top:4px; font-size:11px; color:var(--ink-3); font-style:italic;
+  }
+  .trace::before { content:'↳ Demo: '; font-style:normal; font-weight:500; color:var(--label); }
+
+  .welcome {
+    background:var(--highlight); border-radius:var(--r); padding:16px 20px;
+    margin-bottom:24px; font-size:13px; color:var(--ink-2); line-height:1.6;
+  }
+  .welcome strong { color:var(--ink); }
+</style>
+</head>
+<body>
+
+<!-- ════════════════ SIDEBAR ════════════════ -->
+<div id="sidebar">
+  <div class="sb-header">
+    <span class="dot"></span> AppleGo System
+  </div>
+  <div class="sb-divider">Architecture</div>
+  <div class="sb-node" data-node="architecture">
+    <span class="icon">⌂</span><span class="name">Architecture</span>
+  </div>
+  <div class="sb-divider">Contracts</div>
+  <div class="sb-node" data-node="contracts">
+    <span class="icon">⊡</span><span class="name">Contracts (8)</span>
+  </div>
+  <div class="sb-divider">7 Domains</div>
+  <div class="sb-node active" data-node="environment">
+    <span class="icon">◎</span><span class="name">Environment</span>
+  </div>
+  <div class="sb-node" data-node="learning">
+    <span class="icon">⟐</span><span class="name">Learning</span>
+  </div>
+  <div class="sb-node" data-node="companion">
+    <span class="icon">✦</span><span class="name">Companion</span>
+  </div>
+  <div class="sb-node" data-node="time">
+    <span class="icon">⟳</span><span class="name">Time</span>
+  </div>
+  <div class="sb-node" data-node="learner">
+    <span class="icon">◎</span><span class="name">Learner</span>
+  </div>
+  <div class="sb-node" data-node="memory">
+    <span class="icon">◉</span><span class="name">Memory</span>
+  </div>
+  <div class="sb-node" data-node="knowledge">
+    <span class="icon">⬡</span><span class="name">Knowledge</span>
+  </div>
+</div>
+
+<!-- ════════════════ PANEL ════════════════ -->
+<div id="panel">
+
+  <!-- 01 Environment -->
+  <div id="view-environment">
+    <h1>Environment</h1>
+    <p class="subtitle">What kind of space does learning happen in?</p>
+
+    <div class="welcome">
+      <strong>AI-Native Learning Environment. Not an App.</strong><br>
+      Moat = accumulated learning time, not features. ChatGPT can add PDF/mindmap in months.<br>
+      It cannot replicate three years of history, evolved structures, and a companion that knows you.
+    </div>
+
+    <div class="section">
+      <div class="section-title">P1: Remembers</div>
+      <div class="field"><span class="field-value">Not files. Learning. Every event, understanding shift, path taken.<span class="trace">"上次你在数学基础，停在了 ε-δ"</span></span></div>
+    </div>
+    <div class="section">
+      <div class="section-title">P2: Evolves</div>
+      <div class="field"><span class="field-value">Self-organizes. Concepts cluster. Adapts to learner style.<span class="trace">TCP+HTTP+Socket → "Network" cluster emerges</span></span></div>
+    </div>
+    <div class="section">
+      <div class="section-title">P3: Protects Learning</div>
+      <div class="field"><span class="field-value">Silence during intake. Presence during struggle. Space for mistakes.<span class="trace">AI silent when reading. No scores. No streaks.</span></span></div>
+    </div>
+    <div class="section">
+      <div class="section-title">P4: Connects Across Time</div>
+      <div class="field"><span class="field-value">Not just concepts. Moments. Day 1 → Day 365. The full story.<span class="trace">"三个月前卡在这里，现在一眼就看懂了"</span></span></div>
+    </div>
+  </div>
+
+  <!-- 02 Learning -->
+  <div id="view-learning" style="display:none">
+    <h1>Learning</h1>
+    <p class="subtitle">What does AppleGo believe learning is?</p>
+
+    <div class="welcome">
+      <strong>Learning is the progressive deepening of understanding, driven by engagement, over time.</strong><br>
+      Not consuming content. Not being taught. Not completing lessons.
+    </div>
+
+    <div class="section">
+      <div class="section-title">6 Learning Behaviors</div>
+      <div class="field"><span class="field-label">Intake</span><span class="field-value">Reading, watching. Mind working even when hands are still.</span></div>
+      <div class="field"><span class="field-label">Understanding</span><span class="field-value">Active struggle. "What does this mean?" Most vulnerable moment.</span></div>
+      <div class="field"><span class="field-label">Externalization</span><span class="field-value">Drawing, writing, mindmapping. Making thinking visible.</span></div>
+      <div class="field"><span class="field-label">Testing</span><span class="field-value">Solving, explaining back. Discovery — not assessment.</span></div>
+      <div class="field"><span class="field-label">Consolidation</span><span class="field-value">Summarizing, flashcards. Making learning durable.</span></div>
+      <div class="field"><span class="field-label">Reflection</span><span class="field-value">Stepping back. "What did I learn? How?"</span></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Core Oscillation</div>
+      <div class="field"><span class="field-value">Intake ⇄ Understanding ⇄ Externalization ⇄ Testing<br>No fixed sequence. Driven by confusion and insight.</span></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Objects That Appear Here</div>
+      <div class="field"><span class="field-label">Session</span><span class="field-value">Bounded learning event. Not a chat. A slice of learning time.</span></div>
+      <div class="field"><span class="field-label">Mission</span><span class="field-value">Co-produced direction. What the learner is trying to accomplish.</span></div>
+      <div class="field"><span class="field-label">Artifact</span><span class="field-value">PDF, mindmap, notes — learning materials. Persist after Session.</span></div>
+    </div>
+  </div>
+
+  <!-- 03 Companion -->
+  <div id="view-companion" style="display:none">
+    <h1>Companion</h1>
+    <p class="subtitle">Who is AppleGo's AI?</p>
+
+    <div class="welcome">
+      <strong>Not a teacher. Not a tutor. Not a chatbot.</strong><br>
+      A companion who participates in the learner's entire learning life — through confusion and clarity, silence and conversation, Day 1 and Day 365.
+    </div>
+
+    <div class="section">
+      <div class="section-title">6 Responsibilities</div>
+      <div class="field"><span class="field-label">Observe</span><span class="field-value">What is the learner doing? Where is attention?</span></div>
+      <div class="field"><span class="field-label">Sense</span><span class="field-value">Read rhythm. Flow → space. Hesitation → ready. Silence → wait.</span></div>
+      <div class="field"><span class="field-label">Adapt</span><span class="field-value">Formal not working? Try visual. Deep questions? Go deeper.</span></div>
+      <div class="field"><span class="field-label">Orchestrate</span><span class="field-value">Coordinate artifacts. "要不要打开 PDF 上次的地方？"<span class="trace">What makes AppleGo ≠ chatbot</span></span></div>
+      <div class="field"><span class="field-label">Remember</span><span class="field-value">Not "scored 80%." But "hesitated on formal, flowed through visual."</span></div>
+      <div class="field"><span class="field-label">Guide</span><span class="field-value">Quiet nudge. "上次卡在这里。继续，还是换条路？"</span></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">When Silent</div>
+      <div class="field"><span class="field-value">Reading. Drawing. Writing. Coding. Thinking. In flow.<br><strong>Silence is not absence. It is respect for learning.</strong></span></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">What Companion Never Does</div>
+      <div class="field"><span class="field-value">Gives answers. Interrupts intake. Evaluates with scores. Pushes when rest needed.</span></div>
+    </div>
+  </div>
+
+  <!-- 04 Time -->
+  <div id="view-time" style="display:none">
+    <h1>Time</h1>
+    <p class="subtitle">How does AppleGo understand time?</p>
+
+    <div class="welcome">
+      <strong>AppleGo's fundamental asset is accumulated learning time.</strong><br>
+      A chatbot exists in the present. AppleGo exists across yesterday, today, and tomorrow.
+    </div>
+
+    <div class="section">
+      <div class="section-title">Time Scales</div>
+      <div class="field"><span class="field-label">Session</span><span class="field-value">Smallest unit. What happened right now.</span></div>
+      <div class="field"><span class="field-label">Day</span><span class="field-value">Natural rhythm. Yesterday → Today → Tomorrow.</span></div>
+      <div class="field"><span class="field-label">Week</span><span class="field-value">Patterns emerge. "This week: limits from intuitive to formal."</span></div>
+      <div class="field"><span class="field-label">Month</span><span class="field-value">Change visible. "A month ago you didn't know sockets."</span></div>
+      <div class="field"><span class="field-label">Year</span><span class="field-value">Full story. 100+ events, 23 stuck moments, 7 breakthroughs.</span></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Environment Evolution</div>
+      <div class="field"><span class="field-label">Day 0</span><span class="field-value">Empty space. Name. Icon. Possibility.</span></div>
+      <div class="field"><span class="field-label">Day 7</span><span class="field-value">Rhythm forms. First concept connections.</span></div>
+      <div class="field"><span class="field-label">Day 30</span><span class="field-value">Rich. Multiple mindmaps. Companion knows style and pace.</span></div>
+      <div class="field"><span class="field-label">Day 90</span><span class="field-value">Identity. Space reflects learner's thinking shape.</span></div>
+      <div class="field"><span class="field-label">Day 365</span><span class="field-value">World. A year of learning. Space tells the story.</span></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Objects That Appear Here</div>
+      <div class="field"><span class="field-label">Growth</span><span class="field-value">Time made visible. "You used to avoid proofs. Last week you wrote one."</span></div>
+    </div>
+  </div>
+
+  <!-- 05 Learner -->
+  <div id="view-learner" style="display:none">
+    <h1>Learner</h1>
+    <p class="subtitle">How does AppleGo understand the learner?</p>
+
+    <div class="welcome">
+      <strong>Understanding = accumulated observation, not a profile form.</strong><br>
+      Patterns emerge over weeks. The learner may not know themselves.
+    </div>
+
+    <div class="section">
+      <div class="section-title">What AppleGo Knows</div>
+      <div class="field"><span class="field-label">Style</span><span class="field-value">Visual before formal. Draws first. Learns by building.</span></div>
+      <div class="field"><span class="field-label">Pace</span><span class="field-value">30-45 min sessions. Deep focus. Self-directed.</span></div>
+      <div class="field"><span class="field-label">Current</span><span class="field-value">Energy: engaged. Understanding: building. Emotion: curious.</span></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">What AppleGo Never Tracks</div>
+      <div class="field"><span class="field-value">Demographics. Grades. Scores. Rankings. Private thoughts.</span></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Depth Over Time</div>
+      <div class="field"><span class="field-label">Day 1</span><span class="field-value">Nothing. Watches.</span></div>
+      <div class="field"><span class="field-label">Day 30</span><span class="field-value">Clear picture. Anticipates needs.</span></div>
+      <div class="field"><span class="field-label">Day 90</span><span class="field-value">Knows when breakthrough is coming.</span></div>
+      <div class="field"><span class="field-label">Day 365</span><span class="field-value">Can tell the learner who they've become.</span></div>
+    </div>
+  </div>
+
+  <!-- 06 Memory -->
+  <div id="view-memory" style="display:none">
+    <h1>Memory</h1>
+    <p class="subtitle">What is worth remembering for years?</p>
+
+    <div class="welcome">
+      <strong>Memory = the Environment's capacity to remember what happened.</strong><br>
+      Not a database. Not chat history. What is meaningful for future learning.
+    </div>
+
+    <div class="section">
+      <div class="section-title">What Enters Memory</div>
+      <div class="field"><span class="field-label">Events</span><span class="field-value">Read Ch3. Drew mindmap. Solved 5 problems. Built server.</span></div>
+      <div class="field"><span class="field-label">Understanding</span><span class="field-value">ε-δ intuitive Day 3 → formal Day 14.</span></div>
+      <div class="field"><span class="field-label">Moments</span><span class="field-value">Breakthroughs. Connections made. Struggles before clarity.</span></div>
+      <div class="field"><span class="field-label">Patterns</span><span class="field-value">Prefers visual. 30-45 min sessions. Energy peaks mid.</span></div>
+      <div class="field"><span class="field-label">Pathways</span><span class="field-value">Day 1 read → Day 3 draw → Day 7 try → Day 14 understood.</span></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">What Does Not Enter</div>
+      <div class="field"><span class="field-value">Trivial exchanges. Raw logs. Temporary states. External scores.</span></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Three Tiers</div>
+      <div class="field"><span class="field-label">Session</span><span class="field-value">What happened in this event. Hot. Active.</span></div>
+      <div class="field"><span class="field-label">Workspace</span><span class="field-value">All Sessions in one subject. Knowledge state. Artifact history.</span></div>
+      <div class="field"><span class="field-label">Global</span><span class="field-value">Across all Workspaces. Knows the learner — not just one subject.</span></div>
+    </div>
+  </div>
+
+  <!-- 07 Knowledge -->
+  <div id="view-knowledge" style="display:none">
+    <h1>Knowledge</h1>
+    <p class="subtitle">What is knowledge in AppleGo?</p>
+
+    <div class="welcome">
+      <strong>Knowledge is the structured understanding built through learning.</strong><br>
+      Not facts. Not curriculum. Has shape. Depth. Connections. Evolves.
+    </div>
+
+    <div class="section">
+      <div class="section-title">Structure</div>
+      <div class="field"><span class="field-label">Concepts</span><span class="field-value">Limit. Derivative. TCP handshake. The basic unit.</span></div>
+      <div class="field"><span class="field-label">Connections</span><span class="field-value">Derivative builds on limits. TCP/UDP are alternatives.</span></div>
+      <div class="field"><span class="field-label">Clusters</span><span class="field-value">Self-organized. TCP+HTTP+Socket → "Network."<span class="trace">Environment recognizes patterns</span></span></div>
+      <div class="field"><span class="field-label">Depth</span><span class="field-value">Surface → Understand → Apply → Connect → Create.</span></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Knowledge vs Memory</div>
+      <div class="field"><span class="field-label">Knowledge</span><span class="field-value"><em>What</em> you understand. Structure. Concepts and connections.</span></div>
+      <div class="field"><span class="field-label">Memory</span><span class="field-value"><em>How and when</em> you learned. Narrative. Events and patterns.</span></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Evolution</div>
+      <div class="field"><span class="field-label">Widening</span><span class="field-value">New concepts added.</span></div>
+      <div class="field"><span class="field-label">Deepening</span><span class="field-value">"I know the definition" → "I can prove theorems."</span></div>
+      <div class="field"><span class="field-label">Reorg</span><span class="field-value">Connections shift. Isolated → cluster member.</span></div>
+      <div class="field"><span class="field-label">Correction</span><span class="field-value">Misunderstandings resolved. Corrections are milestones.</span></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+document.querySelectorAll('.sb-node').forEach(node => {
+  node.addEventListener('click', () => {
+    document.querySelectorAll('.sb-node').forEach(n => n.classList.remove('active'));
+    node.classList.add('active');
+    const nodeName = node.dataset.node;
+    document.querySelectorAll('#panel > div').forEach(v => v.style.display = 'none');
+    const target = document.getElementById('view-' + nodeName);
+    if (target) target.style.display = 'block';
+  });
+});
+</script>
+
+</body>
+</html>

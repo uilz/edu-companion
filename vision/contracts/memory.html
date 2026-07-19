@@ -1,0 +1,61 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>Contract 05 · Memory</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}
+body{font:14px/1.7 'Inter','Noto Sans SC',sans-serif;background:#f5f0e8;color:#2a2420;padding:32px 24px;max-width:900px;margin:0 auto}
+h1{font-size:24px;margin-bottom:4px}.sub{color:#7a7068;margin-bottom:32px}
+.sec{background:#fff;border-radius:12px;padding:20px 24px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.sec h2{font-size:14px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #e8e1d8;text-transform:uppercase;letter-spacing:.5px;color:#8f7a62}
+.g{display:flex;align-items:flex-start;gap:10px;margin:6px 0;padding:8px 14px;border-radius:6px;border-left:3px solid}
+.g.intent{background:#f0f4f8;border-left-color:#5a7a9f}.g.inv{background:#f0f8f0;border-left-color:#5a8f6b}
+.g.life{background:#fdf8f0;border-left-color:#c8a05f}.g.own{background:#f8f0f8;border-left-color:#8a6a9f}
+.g.cons{background:#f0f0f8;border-left-color:#6a6aaf}.g.dom{background:#f5f0e8;border-left-color:#a69c8f}
+.num{font-family:monospace;font-weight:700;min-width:22px}.txt{flex:1;font-size:13px}
+.in{font-weight:600;color:#2a5a32}
+.tag{font-family:monospace;font-size:11px;background:#2a2420;color:#e8e1d8;padding:1px 7px;border-radius:4px;margin:2px 2px;display:inline-block}
+.lc{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0;font-size:13px}
+.lc .st{padding:3px 10px;border-radius:6px;font-size:12px;font-weight:600;white-space:nowrap}
+.st.raw{background:#f0e8dc;color:#7a7068}.st.obs{background:#f0e8d0;color:#8a6a20}
+.st.pat{background:#e8f0d8;color:#3a6a20}.st.nar{background:#d4e8d8;color:#2a5a32}
+.lc .arr{color:#a69c8f;font-weight:600}
+.lc-row{font-size:12px;margin:3px 0 3px 16px;color:#777}
+.discard{background:#fff0e8;border:1px solid #f0d0b0;padding:8px 12px;border-radius:6px;margin:4px 0;font-size:12px}
+.keep{background:#f0f8f0;padding:8px 12px;border-radius:6px;font-size:12px;color:#2a5a32}
+</style></head><body>
+
+<h1>Contract 05 · Memory</h1>
+<p class="sub">What the system remembers. What is worth keeping for years. The moat.</p>
+
+<div class="sec"><h2>1. Intent</h2>
+<div class="g intent"><span class="num">—</span><span class="txt">Remember what matters. Trivial exchanges discarded. Meaningful events, understanding shifts, and breakthroughs preserved across time.</span></div>
+
+<div class="sec"><h2>2. Invariants</h2>
+<div class="g inv"><span class="num">I1</span><span class="txt"><span class="in">Three-tiered.</span> Session (hot, disposable) → Workspace (warm, per-subject) → Global (cold, cross-workspace).</span></div>
+<div class="g inv"><span class="num">I2</span><span class="txt"><span class="in">Formation: Observation → Pattern → Narrative.</span> Raw → filtered → confirmed.</span></div>
+<div class="g inv"><span class="num">I3</span><span class="txt"><span class="in">Write filter applied before storage.</span> Trivial exchanges and transient states discarded.</span></div>
+<div class="g inv"><span class="num">I4</span><span class="txt"><span class="in">Immutable.</span> Once stored, never modified. Corrections create new entries.</span></div>
+<div class="g inv"><span class="num">I5</span><span class="txt"><span class="in">Queryable by time, concept, type.</span> "What about ε-δ last month?" "When was last breakthrough?"</span></div>
+<div class="g inv"><span class="num">I6</span><span class="txt"><span class="in">Traceable to source.</span> Every entry has detail_ref to originating LearningEvent.</span></div>
+<div class="g inv"><span class="num">I7</span><span class="txt"><span class="in">Promotion on session end.</span> Session → Workspace on close. Workspace → Global on pattern threshold.</span></div>
+
+<div class="sec"><h2>3. Lifecycle</h2>
+<div class="lc"><span class="st raw">Raw Event</span><span class="arr">→</span><span class="st obs">Observation</span><span class="arr">→</span><span class="st pat">Pattern</span><span class="arr">→</span><span class="st nar">Narrative</span></div>
+<div class="lc-row"><b>Raw → Observation:</b> Write filter. Trivial discarded. Meaningful events become observations at Session tier.</div>
+<div class="lc-row"><b>Observation → Pattern:</b> Session ends. Observations promoted to Workspace tier. Repeated → pattern.</div>
+<div class="lc-row"><b>Pattern → Narrative:</b> Confirmed 3+ times. Promoted to Global tier. Cross-workspace learner knowledge.</div>
+<div style="margin-top:8px;font-size:12px;color:#7a7068">Publishes: MemoryObservation | MemoryPatternDetected | MemoryNarrativeFormed</div>
+
+<div class="sec"><h2>4. Ownership</h2>
+<div class="g own"><span class="num">→</span><span class="txt"><span class="in">Session tier:</span> owned by <span class="tag">Session</span>. Disposable.</span></div>
+<div class="g own"><span class="num">→</span><span class="txt"><span class="in">Workspace tier:</span> owned by <span class="tag">Workspace</span>. Persistent.</span></div>
+<div class="g own"><span class="num">→</span><span class="txt"><span class="in">Global tier:</span> owned by <span class="tag">Learner</span>. Cross-workspace.</span></div>
+
+<div class="sec"><h2>5. Consistency</h2>
+<div class="g cons"><span class="num">→</span><span class="txt"><span class="in">Immediate:</span> Raw event recording. Nothing blocks user actions.</span></div>
+<div class="g cons"><span class="num">→</span><span class="txt"><span class="in">Background:</span> Write filter. Promotion to higher tiers. Pattern detection.</span></div>
+<div class="g cons"><span class="num">→</span><span class="txt"><span class="in">Never blocks:</span> Memory is always eventually consistent. User experience never waits for memory processing.</span></div>
+
+<div class="sec"><h2>6. Domains</h2>
+<div class="g dom"><span class="num"></span><span class="txt">
+<span class="tag">Memory.Entry</span> <span class="tag">LearningEvent</span> <span class="tag">Learner.Pattern</span> <span class="tag">Session</span> <span class="tag">Workspace</span>
+</span></div>
+
+</body></html>

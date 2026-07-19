@@ -1,0 +1,318 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Architecture · AppleGo</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}
+body{font:13px/1.6 'Inter',system-ui,sans-serif;background:#1a1a1a;color:#ccc;padding:0;display:flex;min-height:100vh}
+nav{width:240px;background:#111;padding:24px 0;position:fixed;top:0;left:0;bottom:0;overflow-y:auto}
+nav h2{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:#666;padding:0 20px;margin-bottom:12px}
+nav a{display:block;padding:6px 20px;color:#888;text-decoration:none;font-size:12px;border-left:2px solid transparent}
+nav a:hover,nav a.active{color:#ddd;background:#1a1a1a;border-left-color:#5a8f6b}
+nav .sub{padding-left:36px;font-size:11px;color:#555}
+main{margin-left:240px;flex:1;padding:32px 40px;max-width:1000px}
+h1{font-size:22px;color:#e8e1d8;margin-bottom:4px}
+.sub{color:#777;margin-bottom:32px;font-size:13px}
+.card{background:#222;border:1px solid #333;border-radius:8px;margin-bottom:20px;overflow:hidden}
+.card h3{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#888;background:#1a1a1a;padding:10px 16px;border-bottom:1px solid #333}
+table{width:100%;border-collapse:collapse;font-size:12px}
+td,th{padding:7px 14px;text-align:left;border-bottom:1px solid #2a2a2a;vertical-align:top}
+th{font-weight:600;color:#999;font-size:11px;text-transform:uppercase;white-space:nowrap}
+.ag{color:#8fb87f;font-weight:600}.sv{color:#c8a05f}.ev{color:#7a9ec8}.rp{color:#a87fa8}
+.tag{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;margin:1px 2px}
+.t-agg{background:#1a2a1a;color:#8fb87f}.t-svc{background:#1a180f;color:#c8a05f}.t-ev{background:#0f1a28;color:#7a9ec8}.t-repo{background:#1a0f1a;color:#a87fa8}
+.bar{display:flex;align-items:center;gap:8px;margin:4px 0}
+.st{dot:4px solid #888;width:4px;height:4px;border-radius:50%;background:#888}
+.section{margin:32px 0}
+</style></head><body>
+
+<nav>
+  <h2>Architecture</h2>
+  <a href="#overview" class="active">Overview</a>
+  <a href="#agg">Aggregates</a>
+  <a href="#svc">Runtime Services</a>
+  <a href="#evt">Event Flow</a>
+  <a href="#repo">Repositories</a>
+  <a href="#map">Contract → Code Map</a>
+  <a href="#dir">Directory Structure</a>
+  <a href="#runtime-model">Runtime Model</a>
+</nav>
+
+<main>
+<h1>AppleGo Architecture</h1>
+<p class="sub">Contracts → Aggregates → Services → Events → Code. Every contract maps to exactly one software component in under 30 seconds.</p>
+
+<div class="card" id="overview">
+  <h3>Architecture Overview — 7 Aggregates, 6 Runtime Services</h3>
+  <table>
+    <tr><th>Contract</th><th>Aggregate Root</th><th>Owns</th><th>Runtime</th><th>Key Events</th></tr>
+    <tr>
+      <td class="ag">Workspace</td>
+      <td class="ag">Workspace</td>
+      <td>Session, Resource, Memory, Knowledge</td>
+      <td class="sv">WorkspaceRuntime</td>
+      <td class="ev">WorkspaceActivated, SessionCreated</td>
+    </tr>
+    <tr>
+      <td class="ag">Resource</td>
+      <td class="ag">Resource</td>
+      <td>ReadingState, Highlight</td>
+      <td class="sv">ReadingRuntime</td>
+      <td class="ev">ResourceOpened, HighlightCreated</td>
+    </tr>
+    <tr>
+      <td class="ag">Conversation</td>
+      <td class="ag">Conversation</td>
+      <td>Turn, ContextSnapshot, OrchestrationAction</td>
+      <td class="sv">ConversationRuntime</td>
+      <td class="ev">TurnCreated, ResponseStreaming, ConversationPaused</td>
+    </tr>
+    <tr>
+      <td class="ag">Practice</td>
+      <td class="ag">Practice</td>
+      <td>Question, Attempt</td>
+      <td class="sv">PracticeRuntime</td>
+      <td class="ev">AttemptSubmitted, BreakthroughDetected</td>
+    </tr>
+    <tr>
+      <td class="ag">Memory</td>
+      <td class="ag">Memory</td>
+      <td>Entry (3 tiers)</td>
+      <td class="sv">MemoryEngine</td>
+      <td class="ev">MemoryObservation, MemoryPatternDetected</td>
+    </tr>
+    <tr>
+      <td class="ag">Growth</td>
+      <td class="ag">Growth</td>
+      <td>Milestone, EvolutionSnapshot</td>
+      <td class="sv">GrowthEngine</td>
+      <td class="ev">MilestoneDetected, EvolutionSnapshotComputed</td>
+    </tr>
+    <tr>
+      <td class="ag">Knowledge</td>
+      <td class="ag">Knowledge</td>
+      <td>Concept, Connection, Cluster</td>
+      <td>— (passive)</td>
+      <td class="ev">ConceptDepthChanged, ClusterDetected</td>
+    </tr>
+  </table>
+</div>
+
+<div class="card" id="agg">
+  <h3>Aggregate Boundaries — Transaction Scope</h3>
+  <table>
+    <tr><th>Aggregate</th><th>Root</th><th>Children (same tx)</th><th>References (by ID only)</th></tr>
+    <tr>
+      <td class="ag">Workspace</td>
+      <td>workspaces.id</td>
+      <td>— (metadata only)</td>
+      <td>active_session_id → sessions</td>
+    </tr>
+    <tr>
+      <td class="ag">Session</td>
+      <td>sessions.id</td>
+      <td>session_artifacts</td>
+      <td>workspace_id, mission_id, project_id</td>
+    </tr>
+    <tr>
+      <td class="ag">Resource</td>
+      <td>resources.id</td>
+      <td>reading_states, highlights</td>
+      <td>workspace_id</td>
+    </tr>
+    <tr>
+      <td class="ag">Conversation</td>
+      <td>conversations.id</td>
+      <td>turns, context_snapshots</td>
+      <td>session_id, orchestration_actions.artifact_id</td>
+    </tr>
+    <tr>
+      <td class="ag">Practice</td>
+      <td>practices.id</td>
+      <td>questions, attempts</td>
+      <td>workspace_id, concept_ids</td>
+    </tr>
+    <tr>
+      <td class="ag">Memory</td>
+      <td>memory_entries.id</td>
+      <td>— (entry is self-contained)</td>
+      <td>workspace_id, session_id, learner_pattern_id</td>
+    </tr>
+    <tr>
+      <td class="ag">Knowledge</td>
+      <td>concepts.id</td>
+      <td>connections</td>
+      <td>workspace_id</td>
+    </tr>
+    <tr>
+      <td class="ag">Growth</td>
+      <td>milestones.id</td>
+      <td>evolution_snapshots</td>
+      <td>workspace_id, concept_id</td>
+    </tr>
+  </table>
+</div>
+
+<div class="card" id="svc">
+  <h3>Runtime Services — Coordination Logic</h3>
+  <table>
+    <tr><th>Runtime Service</th><th>Manages</th><th>Reads</th><th>Writes</th><th>Triggers on</th></tr>
+    <tr>
+      <td class="sv">WorkspaceRuntime</td>
+      <td>Session lifecycle</td>
+      <td>Workspace, Memory, Resource</td>
+      <td>Session, SessionArtifact</td>
+      <td>User enter / leave</td>
+    </tr>
+    <tr>
+      <td class="sv">ReadingRuntime</td>
+      <td>Intake observation</td>
+      <td>Resource, ReadingState, Companion</td>
+      <td>ReadingState, Highlight, LearningEvent</td>
+      <td>User open / scroll / highlight</td>
+    </tr>
+    <tr>
+      <td class="sv">ConversationRuntime</td>
+      <td>AI dialogue + orchestration</td>
+      <td>Context (Memory, Knowledge, ReadingState, Learner)</td>
+      <td>Turn, ContextSnapshot, Memory.Entry</td>
+      <td>User message</td>
+    </tr>
+    <tr>
+      <td class="sv">PracticeRuntime</td>
+      <td>Practice generation + review</td>
+      <td>Knowledge, Resource</td>
+      <td>Question, Attempt, Knowledge.Concept</td>
+      <td>User initiate / Companion suggest</td>
+    </tr>
+    <tr>
+      <td class="sv">MemoryEngine</td>
+      <td>Write filter + tier promotion</td>
+      <td>LearningEvent stream</td>
+      <td>Memory.Entry (all tiers)</td>
+      <td>Session end / pattern threshold</td>
+    </tr>
+    <tr>
+      <td class="sv">GrowthEngine</td>
+      <td>Milestone detection + snapshots</td>
+      <td>Session events, Practice.Attempt, Knowledge</td>
+      <td>Milestone, EvolutionSnapshot</td>
+      <td>Session end (async)</td>
+    </tr>
+  </table>
+</div>
+
+<div class="card" id="evt">
+  <h3>Event Flow — Who Publishes / Who Subscribes</h3>
+  <table>
+    <tr><th>Event</th><th>Publisher</th><th>Subscriber → Action</th></tr>
+    <tr><td class="ev">ResourceOpened</td><td>ReadingRuntime</td><td>Companion → observe learner_state=reading</td></tr>
+    <tr><td class="ev">ReadingProgressed</td><td>ReadingRuntime</td><td>MemoryEngine → track reading_progress</td></tr>
+    <tr><td class="ev">HighlightCreated</td><td>ReadingRuntime</td><td>Knowledge → index semantically, link concepts</td></tr>
+    <tr><td class="ev">ConversationStarted</td><td>ConversationRuntime</td><td>MemoryEngine → track conversation_session</td></tr>
+    <tr><td class="ev">TurnCreated</td><td>ConversationRuntime</td><td>MemoryEngine → write filter; GrowthEngine → observe</td></tr>
+    <tr><td class="ev">OrchestrationDecided</td><td>ConversationRuntime</td><td>Frontend → open_artifact / suggest_practice</td></tr>
+    <tr><td class="ev">ConversationPaused</td><td>WorkspaceRuntime</td><td>MemoryEngine → promote to workspace tier; GrowthEngine → snapshot</td></tr>
+    <tr><td class="ev">AttemptSubmitted</td><td>PracticeRuntime</td><td>GrowthEngine → observe; Knowledge → update depth_evidence</td></tr>
+    <tr><td class="ev">BreakthroughDetected</td><td>PracticeRuntime</td><td>GrowthEngine → create milestone; MemoryEngine → narrative</td></tr>
+    <tr><td class="ev">MilestoneDetected</td><td>GrowthEngine</td><td>MemoryEngine → promote to global tier</td></tr>
+    <tr><td class="ev">EvolutionSnapshotComputed</td><td>GrowthEngine</td><td>Today → narrative display</td></tr>
+    <tr><td class="ev">ConceptDepthChanged</td><td>Knowledge</td><td>GrowthEngine → observe trajectory</td></tr>
+    <tr><td class="ev">ClusterDetected</td><td>Knowledge</td><td>Workspace → self-organization visible</td></tr>
+  </table>
+</div>
+
+<div class="card" id="repo">
+  <h3>Repository Interfaces — What Each Aggregate Must Answer</h3>
+  <table>
+    <tr><th>Repository</th><th>Must Answer</th></tr>
+    <tr><td class="rp">WorkspaceRepo</td><td>findById(id), findByUser(userId), findWithActiveSession(id), save(ws)</td></tr>
+    <tr><td class="rp">SessionRepo</td><td>findActiveByWorkspace(wsId), findPausedByWorkspace(wsId), save(sess), updateState(id, state)</td></tr>
+    <tr><td class="rp">ResourceRepo</td><td>findById(id), findByWorkspace(wsId), findWithReadingState(id, userId), save(res)</td></tr>
+    <tr><td class="rp">ReadingStateRepo</td><td>findByResourceAndUser(resId, userId), upsert(state)</td></tr>
+    <tr><td class="rp">ConversationRepo</td><td>findBySession(id), findWithTurns(id), pushTurn(convId, turn), saveSnapshot(snap)</td></tr>
+    <tr><td class="rp">PracticeRepo</td><td>findByWorkspace(wsId), save(p), pushAttempt(pId, attempt), findAttempts(id)</td></tr>
+    <tr><td class="rp">MemoryRepo</td><td>findByTier(wsId, tier), pushEntry(entry), promoteEntry(id, tier), findByConcept(wsId, concept)</td></tr>
+    <tr><td class="rp">KnowledgeRepo</td><td>findConcept(id), findConnections(conceptId, depth), upsertConceptDepth(id, depth, evidence), detectClusters(wsId)</td></tr>
+    <tr><td class="rp">GrowthRepo</td><td>findMilestones(wsId, from, to), computeSnapshot(wsId, day), findTrajectory(wsId, conceptId)</td></tr>
+  </table>
+</div>
+
+<div class="card" id="map">
+  <h3>Contract → Code Map (30-second rule)</h3>
+  <table>
+    <tr><th>Contract</th><th>Aggregate</th><th>Service</th><th>Events</th><th>Repository</th></tr>
+    <tr><td>/contracts/workspace.html</td><td class="ag">Workspace</td><td class="sv">WorkspaceRuntime</td><td class="ev">5 events</td><td class="rp">WorkspaceRepo</td></tr>
+    <tr><td>/contracts/resource.html</td><td class="ag">Resource</td><td class="sv">ReadingRuntime</td><td class="ev">5 events</td><td class="rp">ResourceRepo, ReadingStateRepo</td></tr>
+    <tr><td>/contracts/conversation.html</td><td class="ag">Conversation</td><td class="sv">ConversationRuntime</td><td class="ev">7 events</td><td class="rp">ConversationRepo</td></tr>
+    <tr><td>/contracts/practice.html</td><td class="ag">Practice</td><td class="sv">PracticeRuntime</td><td class="ev">5 events</td><td class="rp">PracticeRepo</td></tr>
+    <tr><td>/contracts/memory.html</td><td class="ag">Memory</td><td class="sv">MemoryEngine</td><td class="ev">3 events</td><td class="rp">MemoryRepo</td></tr>
+    <tr><td>/contracts/growth.html</td><td class="ag">Growth</td><td class="sv">GrowthEngine</td><td class="ev">3 events</td><td class="rp">GrowthRepo</td></tr>
+    <tr><td>/contracts/project.html</td><td class="ag">Project</td><td class="sv">WorkspaceRuntime</td><td class="ev">3 events</td><td class="rp">(via WorkspaceRepo)</td></tr>
+    <tr><td>/contracts/mission.html</td><td class="ag">Mission</td><td class="sv">WorkspaceRuntime</td><td class="ev">4 events</td><td class="rp">(via WorkspaceRepo)</td></tr>
+  </table>
+</div>
+
+<div class="card" id="dir">
+  <h3>Recommended Directory Structure</h3>
+  <pre style="font-family:monospace;font-size:12px;color:#aaa;padding:12px;line-height:1.8">
+/backend/src/
+├── domain/
+│   ├── workspace/          # Workspace aggregate + repo interface
+│   ├── session/            # Session aggregate + repo interface
+│   ├── resource/           # Resource + ReadingState + Highlight
+│   ├── conversation/       # Conversation + Turn + ContextSnapshot
+│   ├── practice/           # Practice + Question + Attempt
+│   ├── memory/             # Memory entry + tiers + write filter
+│   ├── knowledge/          # Concept + Connection + Cluster
+│   ├── growth/             # Milestone + EvolutionSnapshot
+│   ├── mission/            # Mission
+│   └── project/            # Project
+├── runtime/
+│   ├── workspace-runtime.ts    # Session lifecycle orchestration
+│   ├── reading-runtime.ts      # Intake observation
+│   ├── conversation-runtime.ts # AI dialogue + context assembly
+│   ├── practice-runtime.ts     # Practice generation + review
+│   ├── memory-engine.ts        # Write filter + tier promotion
+│   └── growth-engine.ts        # Milestone detection + snapshots
+├── events/
+│   ├── event-bus.ts            # PG NOTIFY → typed bus
+│   ├── event-types.ts          # All event type definitions
+│   └── subscribers/            # Per-aggregate subscribers
+└── transport/
+    ├── rest/                   # REST handlers
+    ├── ws/                     # WebSocket handlers
+    └── sse/                    # SSE streaming
+  </pre>
+</div>
+
+<div class="card" id="runtime-model">
+  <h3>Runtime Model — Decision Layer for All Runtime Services</h3>
+  <p style="padding:8px 14px;font-size:11px;color:#888;border-bottom:1px solid #333">
+  <a href="/vision/architecture/runtime-model.html" style="color:#7a9ec8">Full Runtime Model →</a> — What every Runtime Service knows, observes, decides, and remembers. No database. No prompt. No UI.
+  </p>
+  <table>
+    <tr><th>Model</th><th>Purpose</th><th>Consumed By</th></tr>
+    <tr><td class="ag">Learning State</td><td>4 concurrent dimensions: Activity, Depth, Load, Momentum. Not pipeline stages.</td><td>All Runtime Services</td></tr>
+    <tr><td class="ag">Learning Signal</td><td>12 observable signals + 5 compound patterns. Pure observation, no inference.</td><td>State Model</td></tr>
+    <tr><td class="ag">AI Decision</td><td>7 action types + 14 decision scenarios + 3 principles. State+Signal → Action.</td><td>ConversationRuntime, Companion</td></tr>
+    <tr><td class="ag">Growth Evidence</td><td>9 evidence types + milestone mapping + anti-patterns. No scores, no completion.</td><td>GrowthEngine, MemoryEngine</td></tr>
+  </table>
+  <div style="padding:8px 14px;font-size:11px;color:#666;line-height:1.8">
+    <b>During Session:</b> Signals → State → Decision (real-time)<br>
+    <b>End of Session:</b> State transitions + Decision history → Evidence (crystallized)<br>
+    <b>Start of Next:</b> Evidence → Memory → Context (accumulated growth becomes today's context)
+  </div>
+</div>
+
+<div class="card" style="background:#1a1f16;border-color:#2a3a26">
+  <h3 style="color:#8fb87f">Architecture Freeze Check</h3>
+  <table>
+    <tr><td style="color:#8fb87f">✓</td><td>Every Contract → exactly 1 Aggregate + 1 Runtime (or Engine)</td></tr>
+    <tr><td style="color:#8fb87f">✓</td><td>Every Aggregate → exactly 1 Repository with defined queries</td></tr>
+    <tr><td style="color:#8fb87f">✓</td><td>Every event has a known publisher and subscriber</td></tr>
+    <tr><td style="color:#8fb87f">✓</td><td>No aggregate directly references another (ID only)</td></tr>
+    <tr><td style="color:#8fb87f">✓</td><td>Background engines (Memory, Growth) never block user actions</td></tr>
+    <tr><td style="color:#8fb87f">✓</td><td>Developer can find any component in &lt; 30 seconds</td></tr>
+    <tr><td style="color:#8fb87f">✓</td><td>Runtime Model defined: State, Signal, Decision, Evidence — shared decision layer for all services</td></tr>
+  </table>
+</div>
+
+</main>
+</body></html>

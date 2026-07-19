@@ -1490,8 +1490,8 @@
 /* ── Grid ── */
 .studio-root {
   display: grid;
-  grid-template-columns: 220px 1fr 300px;
-  grid-template-rows: auto 1fr auto;
+  grid-template-columns: 236px 1fr 280px;
+  grid-template-rows: 54px 1fr 50px;
   grid-template-areas:
     "header    header    header"
     "sidebar   canvas    companion"
@@ -1500,6 +1500,13 @@
   background: var(--color-page, #faf9f7);
   max-width: 1440px;
   margin: 0 auto;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.45s ease, transform 0.45s ease, grid-template-columns 0.35s ease;
+}
+.studio-root.visible {
+  opacity: 1;
+  transform: translateY(0);
 }
 .studio-header  { grid-area: header; }
 .studio-sidebar { grid-area: sidebar; }
@@ -1512,25 +1519,94 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 16px;
-  height: 52px;
+  padding: 0 var(--g-lg, 16px);
+  height: 54px;
   border-bottom: 1px solid var(--color-divider-soft, rgba(0,0,0,0.06));
   background: var(--color-page, #faf9f7);
 }
-.sh-back { padding: 6px; border-radius: 8px; cursor: pointer; color: var(--color-ink-muted, #8b8b8b); }
-.sh-back:hover { background: var(--color-surface-hover, #f0efe9); }
-.sh-title { font-size: 15px; font-weight: 600; color: var(--color-ink-primary, #1a1a1a); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sh-progress { font-size: 12px; color: var(--color-ink-muted, #8b8b8b); }
-.sh-ai-status { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--color-ink-muted, #8b8b8b); }
+.sh-back {
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--color-ink-muted, #8b8b8b);
+  flex-shrink: 0;
+  transition: background 0.12s, color 0.12s;
+}
+.sh-back:hover { background: var(--color-surface-hover, #f0efe9); color: var(--color-ink-primary, #1a1a1a); }
+
+/* Mission（label + title 双行） */
+.sh-mission { flex: 1; min-width: 0; }
+.sh-m-label {
+  font-size: 9px;
+  color: var(--color-ink-muted, #8b8b8b);
+  letter-spacing: 0.03em;
+}
+.sh-m-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-ink-primary, #1a1a1a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Session 指示器：stage dots + 72px 进度条 */
+.sh-session-indicators {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.sh-stage-dots {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.stage-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--color-divider, #e0ddd6);
+  transition: all 0.3s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.stage-dot.active {
+  background: var(--color-accent, #8b6f9e);
+  width: 18px;
+  border-radius: 3px;
+}
+.stage-dot.done {
+  background: var(--color-accent, #8b6f9e);
+}
+.sh-progress-bar {
+  width: 72px;
+  height: 4px;
+  background: var(--color-divider, #e0ddd6);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.sh-progress-fill {
+  height: 100%;
+  background: var(--color-accent, #8b6f9e);
+  border-radius: 2px;
+  transition: width 0.5s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.sh-ai-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--color-ink-muted, #8b8b8b);
+  flex-shrink: 0;
+}
 .sh-ai-dot { width: 6px; height: 6px; border-radius: 50%; background: #4ade80; }
-.sh-actions { display: flex; align-items: center; gap: 4px; }
+.sh-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 
 /* ── Sidebar: Resources ── */
 .rs-root {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--color-surface, #f5f4f0);
+  background: var(--color-surface-alt, #ecebe6);
   border-right: 1px solid var(--color-divider-soft, rgba(0,0,0,0.06));
   overflow: hidden;
 }
@@ -1570,127 +1646,235 @@
   background: var(--color-page, #faf9f7);
 }
 
-/* ── Companion ── */
-.sc-root {
+/* ══════════════════════════════════════════════════════════
+   Workspace Intelligence 面板（Demo §intelligence 对齐）
+   ══════════════════════════════════════════════════════════ */
+.wi-root {
   display: flex;
   flex-direction: column;
   height: 100%;
   border-left: 1px solid var(--color-divider-soft, rgba(0,0,0,0.06));
-  background: var(--color-surface, #f5f4f0);
+  background: var(--color-surface-alt, #ecebe6);
   overflow: hidden;
 }
-.sc-header {
+
+/* ── Header ── */
+.wi-header {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 16px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--color-divider-soft, rgba(0,0,0,0.06));
   flex-shrink: 0;
 }
-.sc-avatar {
+.wi-avatar {
   width: 32px; height: 32px; border-radius: 50%;
-  background: linear-gradient(135deg, #c4a3d4 0%, #7a5a8c 100%);
-  display: grid; place-items: center; font-size: 18px; flex-shrink: 0;
-}
-.sc-header-info { flex: 1; }
-.sc-name { font-size: 14px; font-weight: 600; color: var(--color-ink-primary, #1a1a1a); }
-.sc-status { font-size: 11px; color: var(--color-ink-muted, #8b8b8b); }
-
-.sc-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.sc-card {
-  padding: 12px;
-  border-radius: 12px;
-  font-size: 13px;
-  line-height: 1.6;
-}
-.sc-card.sc-observation {
-  background: var(--color-ai-msg, #f5f0eb);
-  color: var(--color-ink-primary, #1a1a1a);
-}
-.sc-card.sc-suggestion {
-  background: #fff;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-}
-.sc-time { font-size: 11px; color: var(--color-ink-muted, #8b8b8b); margin-bottom: 6px; }
-.sc-text { color: var(--color-ink-primary, #1a1a1a); }
-.sc-text strong { font-weight: 600; }
-.sc-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
-.sc-action-btn {
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  background: var(--color-surface-alt, #ecebe6);
-  color: var(--color-ink-primary, #1a1a1a);
-  transition: background 0.12s;
-}
-.sc-action-btn:hover { background: var(--color-divider, #ddd); }
-.sc-action-btn.primary {
   background: var(--color-accent, #8b6f9e);
-  color: #fff;
+  display: grid; place-items: center;
+  font-size: 14px; color: #fff; font-weight: 600; flex-shrink: 0;
 }
-.sc-action-btn.primary:hover { opacity: 0.9; }
+.wi-header-info { flex: 1; min-width: 0; }
+.wi-name { font-size: 13px; font-weight: 600; color: var(--color-ink-primary, #1a1a1a); }
+.wi-status {
+  font-size: 10px; color: var(--color-ink-muted, #8b8b8b);
+  display: flex; align-items: center; gap: 5px; margin-top: 2px;
+}
+.wi-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--color-success, #4ade80); flex-shrink: 0;
+}
 
-.sc-input-area {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+/* ── Body（可滚动） ── */
+.wi-body {
+  flex: 1; overflow-y: auto;
+}
+
+/* ── Sections ── */
+.wi-section {
   padding: 12px 16px;
-  border-top: 1px solid var(--color-divider-soft, rgba(0,0,0,0.06));
-  flex-shrink: 0;
+  border-bottom: 1px solid var(--color-divider-soft, rgba(0,0,0,0.06));
 }
-.sc-input {
-  flex: 1;
-  padding: 8px 14px;
-  border-radius: 20px;
-  border: 1.5px solid var(--color-divider, #e0ddd6);
-  font-size: 13px;
-  background: var(--color-page, #faf9f7);
-  outline: none;
-  transition: border 0.15s;
+.wi-section:last-child { border-bottom: none; }
+.wi-section-label {
+  font-size: 9px; font-weight: 600;
+  color: var(--color-ink-muted, #8b8b8b);
+  letter-spacing: 0.02em;
+  margin-bottom: 8px;
+  display: flex; align-items: center; gap: 5px;
 }
-.sc-input:focus { border-color: var(--color-accent, #8b6f9e); }
-.sc-send-btn {
-  width: 34px; height: 34px; border-radius: 50%;
-  background: var(--color-accent, #8b6f9e); color: #fff;
-  display: grid; place-items: center; cursor: pointer; flex-shrink: 0;
-}
-.sc-send-btn:hover { opacity: 0.9; }
 
-/* ── Bottom Dock ── */
+/* ── Activity items（正在观察 / 正在生成） ── */
+.wi-activity { display: flex; flex-direction: column; gap: 5px; }
+.wi-activity-item {
+  display: flex; align-items: flex-start; gap: 7px;
+  font-size: 12px; line-height: 1.5;
+  color: var(--color-ink-secondary, #4a4a4a);
+  padding: 4px 0;
+}
+.wi-ai-check {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--color-divider-soft, rgba(0,0,0,0.08));
+  display: grid; place-items: center;
+  font-size: 8px; color: var(--color-ink-muted, #8b8b8b);
+  flex-shrink: 0; margin-top: 2px;
+}
+.wi-ai-spin {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--color-divider-soft, rgba(0,0,0,0.08));
+  border-top-color: var(--color-ink-muted, #8b8b8b);
+  animation: wi-spin 0.8s linear infinite;
+  flex-shrink: 0; margin-top: 2px;
+  box-sizing: border-box;
+}
+@keyframes wi-spin { to { transform: rotate(360deg); } }
+.wi-ai-bullet {
+  font-size: 14px; flex-shrink: 0; margin-top: 1px;
+  color: var(--color-ink-muted, #8b8b8b);
+}
+.wi-activity-item strong {
+  color: var(--color-accent, #8b6f9e);
+  font-weight: 600;
+}
+
+/* ── Insight cards（正在连接知识） ── */
+.wi-insight {
+  background: var(--color-accent-soft, rgba(139,111,158,0.12));
+  border-radius: 6px;
+  padding: 9px 12px;
+  font-size: 12px; line-height: 1.6;
+  color: var(--color-ink-primary, #1a1a1a);
+  margin-bottom: 6px;
+}
+.wi-insight:last-child { margin-bottom: 0; }
+.wi-insight-label {
+  font-size: 9px; font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--color-accent, #8b6f9e);
+  display: block; margin-bottom: 2px;
+}
+
+/* ── Smart Actions（sticky bottom） ── */
+.wi-actions {
+  margin-top: auto;
+  padding: 10px 12px;
+  border-top: 1px solid var(--color-divider-soft, rgba(0,0,0,0.06));
+  display: flex; flex-direction: column; gap: 4px;
+  flex-shrink: 0;
+  background: var(--color-surface-alt, #ecebe6);
+}
+.wi-action-btn {
+  width: 100%;
+  padding: 9px 14px;
+  border-radius: var(--radius-full, 9999px);
+  font-size: 13px; font-weight: 500;
+  cursor: pointer;
+  background: var(--color-surface, #f5f4f0);
+  color: var(--color-ink-secondary, #4a4a4a);
+  border: 1.5px solid var(--color-divider-strong, #ccc8c0);
+  transition: all 0.12s;
+  text-align: center;
+}
+.wi-action-btn:hover {
+  border-color: var(--color-accent, #8b6f9e);
+  color: var(--color-accent, #8b6f9e);
+  background: var(--color-accent-soft, rgba(139,111,158,0.12));
+}
+.wi-action-btn.primary {
+  border-color: var(--color-divider-strong, #ccc8c0);
+  color: var(--color-ink-primary, #1a1a1a);
+  background: var(--color-accent-soft-2, rgba(139,111,158,0.08));
+}
+.wi-action-btn.primary:hover {
+  border-color: var(--color-accent, #8b6f9e);
+  color: var(--color-accent, #8b6f9e);
+  background: var(--color-accent-soft, rgba(139,111,158,0.12));
+}
+.wi-action-btn.muted {
+  background: transparent;
+  color: var(--color-ink-muted, #8b8b8b);
+  border-color: transparent;
+}
+.wi-action-btn.muted:hover {
+  border-color: var(--color-ink-muted, #8b8b8b);
+  color: var(--color-ink-primary, #1a1a1a);
+  background: transparent;
+}
+
+/* ═══ Bottom Dock（Demo §dock 对齐） ═══ */
 .bd-root {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  padding: 6px 16px;
+  gap: 0;
+  padding: 4px 16px;
   border-top: 1px solid var(--color-divider-soft, rgba(0,0,0,0.06));
-  background: var(--color-surface, #f5f4f0);
+  background: var(--color-page, #faf9f7);
   overflow-x: auto;
 }
-.bd-item {
+.dock-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.dock-divider {
+  width: 1px; height: 24px;
+  background: var(--color-divider-soft, rgba(0,0,0,0.08));
+  margin: 0 6px;
+  flex-shrink: 0;
+}
+.dock-item {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  padding: 6px 10px;
-  border-radius: 8px;
+  padding: 5px 12px;
+  border-radius: 6px;
   cursor: pointer;
   color: var(--color-ink-muted, #8b8b8b);
-  transition: color 0.12s, background 0.12s;
+  font-size: 10px;
+  font-weight: 500;
+  transition: color 0.12s, background 0.12s, transform 0.12s;
   flex-shrink: 0;
+  min-width: 48px;
 }
-.bd-item:hover { color: var(--color-ink-primary, #1a1a1a); background: var(--color-surface-hover, #f0efe9); }
-.bd-item.active { color: var(--color-accent, #8b6f9e); }
-.bd-label { font-size: 10px; font-weight: 500; }
+.dock-item:hover {
+  color: var(--color-ink-primary, #1a1a1a);
+  background: var(--color-surface-hover, #f0efe9);
+}
+.dock-item:active { transform: scale(0.94); }
+.dock-item.active {
+  color: var(--color-accent, #8b6f9e);
+  background: var(--color-accent-soft, rgba(139,111,158,0.12));
+}
+.dock-item .di-icon {
+  font-size: 17px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dock-item .di-label { font-size: 10px; font-weight: 500; }
+.dock-item .di-count {
+  position: absolute;
+  top: 2px; right: 8px;
+  min-width: 14px; height: 14px;
+  border-radius: 7px;
+  background: var(--color-ink-muted, #8b8b8b);
+  color: #fff;
+  font-size: 9px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1; padding: 0 4px;
+}
+.dock-item .di-badge {
+  font-size: 7px; font-weight: 700;
+  background: var(--color-ink-muted, #8b8b8b);
+  color: #fff;
+  border-radius: 3px;
+  padding: 1px 4px;
+  line-height: 1.2;
+  margin-top: -2px;
+}
 
 /* ── Resource Context Bar ── */
 .rcb-root {
@@ -1712,20 +1896,52 @@
 }
 .rcb-close:hover { background: var(--color-divider, #ddd); }
 
-/* ── Layout Toggle ── */
-.sh-layout-toggle { display: flex; align-items: center; gap: 2px; }
-.sh-layout-btn {
-  font-size: 14px; padding: 4px 6px; border-radius: 6px;
-  cursor: pointer; opacity: 0.4; transition: opacity 0.12s, background 0.12s; line-height: 1;
+/* ── Mode Toggle（pill 样式，Demo §mode-toggle 对齐） ── */
+.sh-mode-toggle {
+  display: flex;
+  background: var(--color-surface-alt, #ecebe6);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 1px;
+  flex-shrink: 0;
 }
-.sh-layout-btn:hover { opacity: 0.7; background: var(--color-surface-hover, #f0efe9); }
-.sh-layout-btn.active { opacity: 1; background: var(--color-surface-alt, #ecebe6); }
+.sh-mode-btn {
+  padding: 5px 10px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-ink-muted, #8b8b8b);
+  transition: color 0.12s, background 0.12s, box-shadow 0.12s;
+  cursor: pointer;
+}
+.sh-mode-btn:hover { color: var(--color-ink-secondary, #4a4a4a); }
+.sh-mode-btn.active {
+  background: var(--color-surface, #f5f4f0);
+  color: var(--color-ink-primary, #1a1a1a);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
 
-/* ── Adaptive Layout Modes ── */
-.studio-root { transition: grid-template-columns 0.25s ease; }
+/* ── Search 按钮（Demo §search-btn 对齐） ── */
+.sh-search-btn {
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  display: grid; place-items: center;
+  font-size: 15px;
+  color: var(--color-ink-muted, #8b8b8b);
+  transition: background 0.12s, color 0.12s;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.sh-search-btn:hover { background: var(--color-surface-hover, #f0efe9); color: var(--color-ink-primary, #1a1a1a); }
 
-/* dialogue: sidebar collapsed */
-.studio-root.mode-dialogue { grid-template-columns: 48px 1fr 280px; }
+/* ── Adaptive Layout Modes（Demo §studio.mode-* 对齐） ── */
+.studio-root { transition: grid-template-columns 0.35s ease; }
+
+/* dialogue: sidebar collapsed to icons, companion stays at 280px */
+.studio-root.mode-dialogue { grid-template-columns: 50px 1fr 280px; }
 .studio-root.mode-dialogue .rs-root { padding: 0; }
 .studio-root.mode-dialogue .rs-header,
 .studio-root.mode-dialogue .rs-sublabel,
@@ -1733,12 +1949,16 @@
 .studio-root.mode-dialogue .rs-item { justify-content: center; padding: 10px 0; }
 .studio-root.mode-dialogue .rs-icon { margin: 0; }
 .studio-root.mode-dialogue .rs-list { padding: 0 4px; }
+/* dialogue 模式隐藏 session indicators（Demo 中 dialogue 无 stage dots） */
+.studio-root.mode-dialogue .sh-session-indicators { display: none; }
+/* dialogue 模式 mission label 变化 */
+.studio-root.mode-dialogue .sh-m-label { display: none; }
 
-/* focus: sidebar + companion hidden */
-.studio-root.mode-focus { grid-template-columns: 0 1fr 0; }
+/* focus: sidebar + companion + dock hidden */
+.studio-root.mode-focus { grid-template-columns: 1fr; }
 .studio-root.mode-focus .studio-sidebar,
 .studio-root.mode-focus .studio-companion,
-.studio-root.mode-focus .studio-dock { overflow: hidden; opacity: 0; pointer-events: none; }
+.studio-root.mode-focus .studio-dock { display: none; }
 
 /* ── Focus Mode Floating AI Button ── */
 .sh-focus-ai {

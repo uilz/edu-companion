@@ -1,0 +1,64 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>Contract 03 · Conversation</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}
+body{font:14px/1.7 'Inter','Noto Sans SC',sans-serif;background:#f5f0e8;color:#2a2420;padding:32px 24px;max-width:900px;margin:0 auto}
+h1{font-size:24px;margin-bottom:4px}.sub{color:#7a7068;margin-bottom:32px}
+.sec{background:#fff;border-radius:12px;padding:20px 24px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.sec h2{font-size:14px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #e8e1d8;text-transform:uppercase;letter-spacing:.5px;color:#8f7a62}
+.g{display:flex;align-items:flex-start;gap:10px;margin:6px 0;padding:8px 14px;border-radius:6px;border-left:3px solid}
+.g.intent{background:#f0f4f8;border-left-color:#5a7a9f}
+.g.inv{background:#f0f8f0;border-left-color:#5a8f6b}
+.g.life{background:#fdf8f0;border-left-color:#c8a05f}
+.g.own{background:#f8f0f8;border-left-color:#8a6a9f}
+.g.cons{background:#f0f0f8;border-left-color:#6a6aaf}
+.g.dom{background:#f5f0e8;border-left-color:#a69c8f}
+.num{font-family:monospace;font-weight:700;min-width:22px}.txt{flex:1;font-size:13px}
+.in{font-weight:600;color:#2a5a32}
+.tag{font-family:monospace;font-size:11px;background:#2a2420;color:#e8e1d8;padding:1px 7px;border-radius:4px;margin:2px 2px;display:inline-block}
+.lc{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0;font-size:13px}
+.lc .st{padding:3px 10px;border-radius:6px;font-size:12px;font-weight:600;white-space:nowrap}
+.st.created{background:#f0e8dc;color:#7a7068}.st.active{background:#d4e8d8;color:#2a5a32}
+.st.paused{background:#f0e8d0;color:#8a6a20}.st.closed{background:#f0e0e0;color:#8a3a3a}
+.lc .arr{color:#a69c8f;font-weight:600}
+.lc-row{font-size:12px;margin:3px 0 3px 16px;color:#777}
+</style></head><body>
+
+<h1>Contract 03 · Conversation</h1>
+<p class="sub">AI dialogue. One way learning happens — not the only way.</p>
+
+<div class="sec"><h2>1. Intent</h2>
+<div class="g intent"><span class="num">—</span><span class="txt">Continuous dialogue with full Workspace context. Conversation is embedded in a learning session, not an isolated chat window.</span></div>
+
+<div class="sec"><h2>2. Invariants</h2>
+<div class="g inv"><span class="num">I1</span><span class="txt"><span class="in">Never loses context.</span> Every AI response assembled from: reading position + workspace memory + learner model + knowledge state + recent events.</span></div>
+<div class="g inv"><span class="num">I2</span><span class="txt"><span class="in">Can reference any Resource, Highlight, Note, Canvas.</span> Traceable citations.</span></div>
+<div class="g inv"><span class="num">I3</span><span class="txt"><span class="in">Can create side effects.</span> Generate Notes, Flashcards, Practice. With traceability back to the conversation turn.</span></div>
+<div class="g inv"><span class="num">I4</span><span class="txt"><span class="in">Never directly edits user artifacts.</span> Suggest, generate, propose — not overwrite without consent.</span></div>
+<div class="g inv"><span class="num">I5</span><span class="txt"><span class="in">Updates Workspace Memory.</span> Each response may create memory entries: understanding shifts, strategy outcomes, breakthroughs.</span></div>
+<div class="g inv"><span class="num">I6</span><span class="txt"><span class="in">Replayable.</span> Every turn — user message + context snapshot + AI response — preserved.</span></div>
+<div class="g inv"><span class="num">I7</span><span class="txt"><span class="in">Streaming does not block events.</span> SSE streaming. User events (scroll, highlight) written to DB during streaming.</span></div>
+<div class="g inv"><span class="num">I8</span><span class="txt"><span class="in">Post-response orchestration decision is mandatory.</span> Companion decides: open artifact, suggest practice, or stay silent.</span></div>
+
+<div class="sec"><h2>3. Lifecycle</h2>
+<div class="lc"><span class="st created">Created</span><span class="arr">→</span><span class="st active">Active</span><span class="arr">→</span><span class="st paused">Paused</span><span class="arr">→</span><span class="st active">Active</span><span class="arr">→</span><span class="st closed">Closed</span></div>
+<div class="lc-row"><b>Created → Active:</b> Session starts. First context snapshot assembled. Companion observation begins.</div>
+<div class="lc-row"><b>Active → Paused:</b> User leaves. Full snapshot saved: conversation state + AI context + artifact positions.</div>
+<div class="lc-row"><b>Paused → Active:</b> User returns. Context restored from snapshot. New session created with continuity.</div>
+<div class="lc-row"><b>Active → Closed:</b> Session ends naturally. End-of-session pipeline: title → memory → knowledge → learner.</div>
+<div style="margin-top:8px;font-size:12px;color:#7a7068">Publishes: ConversationStarted | TurnCreated | ResponseStreaming | ResponseComplete | OrchestrationDecided | ConversationPaused | ConversationClosed</div>
+
+<div class="sec"><h2>4. Ownership</h2>
+<div class="g own"><span class="num">→</span><span class="txt"><span class="in">Owned by:</span> <span class="tag">Workspace</span> (via Session)</span></div>
+<div class="g own"><span class="num">→</span><span class="txt"><span class="in">Owns:</span> <span class="tag">Turn</span> <span class="tag">ContextSnapshot</span> <span class="tag">OrchestrationAction</span></span></div>
+<div class="g own"><span class="num">→</span><span class="txt"><span class="in">Produces:</span> <span class="tag">Memory.Entry</span> <span class="tag">Knowledge.Evidence</span> <span class="tag">Note</span> (via orchestration) <span class="tag">Flashcard</span></span></div>
+
+<div class="sec"><h2>5. Consistency</h2>
+<div class="g cons"><span class="num">→</span><span class="txt"><span class="in">Immediate:</span> Turn messages. Context snapshot metadata. Respond lock.</span></div>
+<div class="g cons"><span class="num">→</span><span class="txt"><span class="in">Streamed:</span> AI response tokens via SSE during generation.</span></div>
+<div class="g cons"><span class="num">→</span><span class="txt"><span class="in">Async:</span> Memory updates. Knowledge depth changes. Learner pattern updates. Orchestration execution.</span></div>
+
+<div class="sec"><h2>6. Domains</h2>
+<div class="g dom"><span class="num"></span><span class="txt">
+<span class="tag">Conversation</span> <span class="tag">Turn</span> <span class="tag">ContextSnapshot</span> <span class="tag">Reference</span> <span class="tag">OrchestrationAction</span> <span class="tag">Memory.Entry</span>
+</span></div>
+
+</body></html>

@@ -1,11 +1,27 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useMemo } from "react";
+
+// ============================================================
+// StudioCompanion — Workspace Intelligence 面板
+//
+// Vision 来源：vision/index.html §intelligence (lines 1221–1302)
+// 6 区垂直堆叠：
+//   1. Header（头像 + 名字 + 实时状态）
+//   2. 正在观察（用户行为 ✓ activity）
+//   3. 正在连接知识（跨工作区 + 本工作区 accent_soft 卡片）
+//   4. 正在生成（spinner / ✓ activity）
+//   5. 对你的理解（学习风格 · 专注 · 会话数）
+//   6. Smart Actions（底部 sticky：主操作 + 次操作）
+//
+// 注意：移除了原来的 input box。Demo 中对话输入在 canvas 中央
+// （cd-input），Companion 不再有重复输入入口。
+// ============================================================
 
 interface Props {
   stage: string;
   mode: string;
-  toolState: { practiceDone?: boolean; cardCreated?: boolean; };
+  toolState: { practiceDone?: boolean; cardCreated?: boolean };
   messageCount: number;
   resourceKey?: string;
   sessionTitle?: string | null;
@@ -32,249 +48,343 @@ const RESOURCE_ICONS: Record<string, string> = {
   web: "🌐",
 };
 
-// ── 观察引擎：根据真实状态生成文案 ──
+// ── 类型 ──
 
-function buildObservations(props: Props) {
-  const { stage, mode, toolState, messageCount, resourceKey, sessionTitle } = props;
-  const list: Array<{
-    id: number;
-    time: string;
-    text: string;
-    type: "observation" | "suggestion";
-    actions?: Array<{ label: string; key: string; primary?: boolean }>;
-  }> = [];
-  let id = 0;
+interface ActivityItem {
+  text: string; // 支持 HTML（<strong>）
+  state?: "check" | "spin";
+}
+
+interface InsightItem {
+  label: string;
+  content: string; // 支持 HTML
+}
+
+// ── 实时状态文案（stage + mode + messageCount） ──
+
+function getStatusText(stage: string, mode: string, messageCount: number): string {
+  if (stage === "enter") return "正在工作";
+  if (stage === "finish") return "陪伴中";
+  if (stage === "reflect") return "分析中";
+  if (mode === "stuck") return "关注中";
+  if (mode === "breakthrough") return "陪伴中";
+  if (mode === "deep_chat") return "分析中";
+  if (messageCount >= 3) return "分析中";
+  if (messageCount > 0) return "观察中";
+  return "正在工作";
+}
+
+// ── Builder：正在观察 ──
+
+function buildObserving(props: Props): ActivityItem[] {
+  const { stage, mode, toolState, messageCount, resourceKey } = props;
+  const items: ActivityItem[] = [];
 
   if (stage === "enter") {
     const resName = resourceKey ? RESOURCE_NAMES[resourceKey] : null;
     const resIcon = resourceKey ? RESOURCE_ICONS[resourceKey] : null;
-    const resRef = resName && resIcon ? `${resIcon} ${resName}` : null;
-
-    list.push({
-      id: id++,
-      time: "刚刚",
-      text: resRef
-        ? `准备好了吗？今天我们在看<strong>${resRef}</strong>`
-        : `准备好了吗？今天的 Mission 是：<strong>${sessionTitle || "探索新知识"}</strong>`,
-      type: "observation",
+    items.push({
+      text: resName && resIcon
+        ? `你打开了 <strong>${resIcon} ${resName}</strong>，准备开始`
+        : "你回到了学习空间，准备开始今天的 Mission",
+      state: "check",
     });
-    list.push({
-      id: id++,
-      time: "",
-      text: "我知道你已经有一些基础。<br>我们一起深入。",
-      type: "observation",
-    });
-  }
-
-  if (stage === "chat") {
-    // 模式感知
-    if (mode === "stuck") {
-      list.push({
-        id: id++,
-        time: "刚刚",
-        text: "你好像卡住了。要不要换个角度想想？<br><span style=\"font-size:12px;color:var(--color-ink-muted)\">已经在这个点停留了一段时间</span>",
-        type: "suggestion",
-        actions: [{ label: "换个角度", key: "explain", primary: true }],
-      });
-    } else if (mode === "breakthrough") {
-      list.push({
-        id: id++,
-        time: "刚刚",
-        text: "感觉你有了新的理解！<br><strong>趁热来一道题？</strong>",
-        type: "observation",
-      });
-      if (!toolState.practiceDone) {
-        list.push({
-          id: id++,
-          time: "现在",
-          text: "检验一下理解，也帮我确认我的引导方向对不对。",
-          type: "suggestion",
-          actions: [{ label: "来一道", key: "practice", primary: true }],
-        });
-      }
-    } else if (mode === "silent") {
-      list.push({
-        id: id++,
-        time: "刚刚",
-        text: "不用着急。有些概念需要时间沉淀。<br>我可以给你讲一段。",
-        type: "observation",
-      });
-    } else {
-      // normal / deep_chat
-      if (messageCount === 0) {
-        const resRef = resourceKey ? `${RESOURCE_ICONS[resourceKey] || ""} ${RESOURCE_NAMES[resourceKey] || ""}`.trim() : null;
-        list.push({
-          id: id++,
-          time: "刚刚",
-          text: `我们刚刚开始。${resRef ? `你在看<strong>${resRef}</strong>，` : ""}你对这个话题已经了解多少了？`,
-          type: "observation",
-        });
-      } else if (messageCount <= 2) {
-        list.push({
-          id: id++,
-          time: "刚刚",
-          text: "你已经开始深入了。感觉到你的思考方向。",
-          type: "observation",
-        });
-      } else {
-        list.push({
-          id: id++,
-          time: "刚刚",
-          text: "你已经在深入讨论了。需要我帮你理一下思路？",
-          type: "observation",
-        });
-      }
-
-      // 建议：练习 / 闪卡 / 画布
-      if (!toolState.practiceDone && messageCount > 0) {
-        list.push({
-          id: id++,
-          time: "建议",
-          text: "检验一下理解？让我看看你有没有跟上。",
-          type: "suggestion",
-          actions: [{ label: "来一道题", key: "practice", primary: true }],
-        });
-      }
-      if (!toolState.cardCreated && messageCount > 1) {
-        list.push({
-          id: id++,
-          time: "建议",
-          text: "这个点值得记下来，以后复习会用到。",
-          type: "suggestion",
-          actions: [{ label: "记闪卡", key: "flashcard" }],
-        });
-      }
-      if (messageCount > 0) {
-        list.push({
-          id: id++,
-          time: "也可以",
-          text: "把思考过程画出来，会更直观。",
-          type: "suggestion",
-          actions: [{ label: "打开画布", key: "canvas" }],
-        });
-      }
-    }
-  }
-
-  if (stage === "reflect") {
-    const resRef = resourceKey ? `${RESOURCE_ICONS[resourceKey] || ""} ${RESOURCE_NAMES[resourceKey] || ""}`.trim() : null;
-    list.push({
-      id: id++,
-      time: "刚刚",
-      text: resRef
-        ? `关于<strong>${resRef}</strong>的内容学完了。把今天的理解写下来吧？<br><span style="font-size:12px;color:var(--color-ink-muted)">没有对错，苹果果只是想知道你记住了什么。</span>`
-        : `全部学完了。把今天的理解写下来吧？<br><span style="font-size:12px;color:var(--color-ink-muted)">没有对错，苹果果只是想知道你记住了什么。</span>`,
-      type: "observation",
-    });
+    return items;
   }
 
   if (stage === "finish") {
-    list.push({
-      id: id++,
-      time: "刚刚",
-      text: "今天学完了。<br><strong>你的理解又深了一层。</strong><br><span style=\"font-size:12px;color:var(--color-ink-muted)\">明天见，橙子。我会记住今天的。</span>",
-      type: "observation",
-    });
+    items.push({ text: "你完成了今天的学习", state: "check" });
+    items.push({ text: "你对这个主题的理解又深了一层", state: "check" });
+    return items;
   }
 
-  return list;
+  if (stage === "reflect") {
+    items.push({ text: "你正在写下自己的理解", state: "check" });
+    return items;
+  }
+
+  // chat 阶段
+  if (mode === "stuck") {
+    items.push({ text: "你在这个点停留了一会儿，<strong>可能遇到卡点</strong>", state: "check" });
+    items.push({ text: "你习惯先看例子再理解定义", state: "check" });
+    return items;
+  }
+
+  if (mode === "breakthrough") {
+    items.push({ text: "你刚才的回答抓住了<strong>核心</strong>", state: "check" });
+    return items;
+  }
+
+  if (mode === "silent") {
+    items.push({ text: "你在安静地消化刚才的内容", state: "check" });
+    return items;
+  }
+
+  // normal / deep_chat
+  if (messageCount === 0) {
+    const resName = resourceKey ? RESOURCE_NAMES[resourceKey] : null;
+    items.push({
+      text: resName
+        ? `你在看 <strong>${RESOURCE_ICONS[resourceKey!] || ""} ${resName}</strong>`
+        : "你刚刚开始今天的对话",
+      state: "check",
+    });
+  } else if (messageCount <= 2) {
+    items.push({ text: "你已经在主动追问，<strong>思考方向很清晰</strong>", state: "check" });
+    items.push({ text: "你习惯先理解原理再做题", state: "check" });
+  } else {
+    items.push({ text: "你在<strong>深入讨论</strong>，连续专注中", state: "check" });
+    items.push({ text: "下午是你的高效时段", state: "check" });
+  }
+
+  return items;
 }
 
+// ── Builder：正在连接知识 ──
+
+function buildConnecting(props: Props): InsightItem[] {
+  const { stage, resourceKey, sessionTitle } = props;
+  if (stage === "finish" || stage === "enter") return [];
+
+  const topic = sessionTitle || (resourceKey ? RESOURCE_NAMES[resourceKey] : "当前主题");
+
+  return [
+    {
+      label: "跨工作区关联",
+      content: `${topic} ← 你之前学过的相关知识<br><span style="font-size:10px;color:var(--color-ink-muted);display:block;margin-top:3px">苹果果在帮你把新旧知识连起来</span>`,
+    },
+    {
+      label: "本工作区关联",
+      content: `和「${topic}」相关的概念正在浮现`,
+    },
+  ];
+}
+
+// ── Builder：正在生成 ──
+
+function buildGenerating(props: Props): ActivityItem[] {
+  const { stage, toolState, messageCount } = props;
+  const items: ActivityItem[] = [];
+
+  if (stage === "finish") {
+    items.push({ text: "更新 <strong>成长记录</strong>——添加今日学习洞察", state: "check" });
+    return items;
+  }
+
+  if (stage === "enter") return [];
+
+  if (toolState.practiceDone) {
+    items.push({ text: "已根据你的回答调整了练习难度", state: "check" });
+  } else if (messageCount >= 2) {
+    items.push({ text: "基于你的理解进度<strong>生成练习题</strong>", state: "spin" });
+  }
+
+  if (toolState.cardCreated) {
+    items.push({ text: "已为你<strong>归档闪卡</strong>，下次复习会出现", state: "check" });
+  } else if (messageCount > 1) {
+    items.push({ text: "识别到值得记下的点", state: "spin" });
+  }
+
+  if (messageCount > 0) {
+    items.push({ text: "更新 <strong>成长记录</strong>——记录今日学习", state: "check" });
+  }
+
+  return items;
+}
+
+// ── Builder：对你的理解（Memory Snapshot） ──
+
+function buildUnderstanding(props: Props): ActivityItem[] {
+  const { stage, messageCount } = props;
+
+  if (stage === "enter") {
+    return [
+      { text: "<strong>学习风格：</strong>喜欢先理解原理再做题" },
+      { text: "你最近常在下午学习" },
+    ];
+  }
+
+  return [
+    { text: "<strong>学习风格：</strong>喜欢先理解原理再做题" },
+    { text: `本周完成 <strong>${stage === "finish" ? 1 : 0} 个会话</strong>，理解在累积` },
+    { text: messageCount > 0 ? "你今天主动思考的频率很高" : "你今天还没开始对话" },
+  ];
+}
+
+// ── Smart Actions ──
+
+function buildActions(props: Props): { primary?: { label: string; key: string }; secondary?: { label: string; key: string } } {
+  const { stage, toolState, messageCount } = props;
+
+  if (stage === "finish") {
+    return {
+      primary: { label: "回到学习空间", key: "home" },
+    };
+  }
+
+  if (stage === "enter") {
+    return {
+      primary: { label: "从这里开始", key: "start" },
+    };
+  }
+
+  if (stage === "reflect") {
+    return {
+      primary: { label: "继续写反思", key: "reflect" },
+    };
+  }
+
+  // chat
+  if (!toolState.practiceDone && messageCount > 0) {
+    return {
+      primary: { label: "做几道巩固练习", key: "practice" },
+      secondary: toolState.cardCreated ? undefined : { label: "记下这个点", key: "flashcard" },
+    };
+  }
+
+  if (!toolState.cardCreated && messageCount > 1) {
+    return {
+      primary: { label: "记下这个点", key: "flashcard" },
+      secondary: { label: "打开画布", key: "canvas" },
+    };
+  }
+
+  if (messageCount > 0) {
+    return {
+      primary: { label: "打开画布", key: "canvas" },
+    };
+  }
+
+  return {};
+}
+
+// ── 主组件 ──
+
 export default function StudioCompanion(props: Props) {
-  const [inputValue, setInputValue] = useState("");
-  const [userMessages, setUserMessages] = useState<string[]>([]);
-  const bodyRef = useRef<HTMLDivElement>(null);
+  const status = getStatusText(props.stage, props.mode, props.messageCount);
 
-  // 每次 props 变化重新生成观察
-  const cards = useMemo(() => buildObservations(props), [
-    props.stage, props.mode, props.toolState.practiceDone,
-    props.toolState.cardCreated, props.messageCount, props.resourceKey, props.sessionTitle,
+  const observing = useMemo(() => buildObserving(props), [
+    props.stage, props.mode, props.messageCount, props.resourceKey,
   ]);
-
-  // 滚动到底部
-  useEffect(() => {
-    if (bodyRef.current) {
-      bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
-    }
-  }, [cards, userMessages]);
+  const connecting = useMemo(() => buildConnecting(props), [
+    props.stage, props.resourceKey, props.sessionTitle,
+  ]);
+  const generating = useMemo(() => buildGenerating(props), [
+    props.stage, props.toolState.practiceDone, props.toolState.cardCreated, props.messageCount,
+  ]);
+  const understanding = useMemo(() => buildUnderstanding(props), [
+    props.stage, props.messageCount,
+  ]);
+  const actions = useMemo(() => buildActions(props), [
+    props.stage, props.toolState.practiceDone, props.toolState.cardCreated, props.messageCount,
+  ]);
 
   const handleAction = (key: string) => {
     if (key === "canvas") props.onOpenCanvas?.();
     else if (key === "flashcard") props.onOpenFlashcard?.();
     else if (key === "practice") props.onOpenPractice?.();
-    else if (key === "explain") props.onOpenCanvas?.(); // 换个角度 → 画
-  };
-
-  const handleSend = () => {
-    const text = inputValue.trim();
-    if (!text) return;
-    setUserMessages((prev) => [...prev, text]);
-    setInputValue("");
+    // home / start / reflect / canvas-explain：仅状态提示，不直接打开工具
   };
 
   return (
-    <div className="sc-root">
-      {/* Header */}
-      <div className="sc-header">
-        <div className="sc-avatar">🍎</div>
-        <div className="sc-header-info">
-          <div className="sc-name">AppleGo</div>
-          <div className="sc-status">● {props.stage === "finish" ? "学完了" : "观察中"}</div>
+    <div className="wi-root">
+      {/* ── Header ── */}
+      <div className="wi-header">
+        <div className="wi-avatar">果</div>
+        <div className="wi-header-info">
+          <div className="wi-name">苹果果</div>
+          <div className="wi-status">
+            <span className="wi-dot"></span>{status}
+          </div>
         </div>
       </div>
 
-      {/* Body */}
-      <div className="sc-body" ref={bodyRef}>
-        {cards.map((card) => (
-          <div
-            key={card.id}
-            className={`sc-card ${card.type === "observation" ? "sc-observation" : "sc-suggestion"}`}
-          >
-            {card.time && <div className="sc-time">{card.time}</div>}
-            <div
-              className="sc-text"
-              dangerouslySetInnerHTML={{ __html: card.text }}
-            />
-            {card.actions && card.actions.length > 0 && (
-              <div className="sc-actions">
-                {card.actions.map((a) => (
-                  <button
-                    key={a.key}
-                    className={`sc-action-btn ${a.primary ? "primary" : ""}`}
-                    onClick={() => handleAction(a.key)}
-                  >
-                    {a.label}
-                  </button>
-                ))}
+      {/* ── Body（可滚动） ── */}
+      <div className="wi-body">
+        {/* 正在观察 */}
+        {observing.length > 0 && (
+          <div className="wi-section">
+            <div className="wi-section-label">正在观察</div>
+            <div className="wi-activity">
+              {observing.map((item, i) => (
+                <div className="wi-activity-item" key={`o-${i}`}>
+                  <span className={`wi-ai-${item.state || "check"}`}>
+                    {item.state === "spin" ? "" : "✓"}
+                  </span>
+                  <span dangerouslySetInnerHTML={{ __html: item.text }} />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 正在连接知识 */}
+        {connecting.length > 0 && (
+          <div className="wi-section">
+            <div className="wi-section-label">正在连接知识</div>
+            {connecting.map((item, i) => (
+              <div className="wi-insight" key={`c-${i}`}>
+                <span className="wi-insight-label">{item.label}</span>
+                <span dangerouslySetInnerHTML={{ __html: item.content }} />
               </div>
-            )}
+            ))}
           </div>
-        ))}
+        )}
 
-        {/* 用户通过 Companion 发送的消息 */}
-        {userMessages.map((msg, i) => (
-          <div key={`u-${i}`} className="sc-card sc-observation" style={{ background: "var(--color-user-msg, #e8e3de)" }}>
-            <div className="sc-time">你 · 刚刚</div>
-            <div className="sc-text">{msg}</div>
+        {/* 正在生成 */}
+        {generating.length > 0 && (
+          <div className="wi-section">
+            <div className="wi-section-label">正在生成</div>
+            <div className="wi-activity">
+              {generating.map((item, i) => (
+                <div className="wi-activity-item" key={`g-${i}`}>
+                  <span className={`wi-ai-${item.state || "check"}`}>
+                    {item.state === "spin" ? "" : "✓"}
+                  </span>
+                  <span dangerouslySetInnerHTML={{ __html: item.text }} />
+                </div>
+              ))}
+            </div>
           </div>
-        ))}
+        )}
+
+        {/* 对你的理解 */}
+        {understanding.length > 0 && (
+          <div className="wi-section">
+            <div className="wi-section-label">对你的理解</div>
+            <div className="wi-activity">
+              {understanding.map((item, i) => (
+                <div className="wi-activity-item" key={`u-${i}`}>
+                  <span className="wi-ai-bullet">·</span>
+                  <span dangerouslySetInnerHTML={{ __html: item.text }} />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Input */}
-      <div className="sc-input-area">
-        <input
-          className="sc-input"
-          placeholder="跟 AppleGo 说说……"
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSend()}
-        />
-        <button className="sc-send-btn" onClick={handleSend}>
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
-            <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-      </div>
+      {/* ── Smart Actions（sticky bottom） ── */}
+      {(actions.primary || actions.secondary) && (
+        <div className="wi-actions">
+          {actions.primary && (
+            <button
+              className={`wi-action-btn ${actions.secondary ? "primary" : "solo"}`}
+              onClick={() => handleAction(actions.primary!.key)}
+            >
+              {actions.primary.label}
+            </button>
+          )}
+          {actions.secondary && (
+            <button
+              className="wi-action-btn muted"
+              onClick={() => handleAction(actions.secondary!.key)}
+            >
+              {actions.secondary.label}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

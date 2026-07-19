@@ -1,0 +1,62 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>Contract 01 · Workspace</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}
+body{font:14px/1.7 'Inter','Noto Sans SC',sans-serif;background:#f5f0e8;color:#2a2420;padding:32px 24px;max-width:900px;margin:0 auto}
+h1{font-size:24px;margin-bottom:4px}.sub{color:#7a7068;margin-bottom:32px}
+.sec{background:#fff;border-radius:12px;padding:20px 24px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.sec h2{font-size:14px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #e8e1d8;text-transform:uppercase;letter-spacing:.5px;color:#8f7a62}
+.g{display:flex;align-items:flex-start;gap:10px;margin:6px 0;padding:8px 14px;border-radius:6px;border-left:3px solid}
+.g.intent{background:#f0f4f8;border-left-color:#5a7a9f}
+.g.inv{background:#f0f8f0;border-left-color:#5a8f6b}
+.g.life{background:#fdf8f0;border-left-color:#c8a05f}
+.g.own{background:#f8f0f8;border-left-color:#8a6a9f}
+.g.cons{background:#f0f0f8;border-left-color:#6a6aaf}
+.g.dom{background:#f5f0e8;border-left-color:#a69c8f}
+.li .num{font-family:monospace;font-weight:700;min-width:22px}
+.txt{flex:1;font-size:13px}
+.in{font-weight:600;color:#2a5a32}
+.tag{font-family:monospace;font-size:11px;background:#2a2420;color:#e8e1d8;padding:1px 7px;border-radius:4px;margin:2px 2px;display:inline-block}
+.lc{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0;font-size:13px}
+.lc .st{padding:3px 10px;border-radius:6px;font-size:12px;font-weight:600;white-space:nowrap}
+.lc .st.created{background:#e8f0f8;color:#3a5a8a}.lc .st.active{background:#d4e8d8;color:#2a5a32}
+.lc .st.dormant{background:#f0e8d0;color:#8a6a20}.lc .st.ended{background:#f0e0e0;color:#8a3a3a}
+.lc .arr{color:#a69c8f;font-weight:600}
+.lc-row{font-size:12px;margin:3px 0 3px 16px;color:#777}
+</style></head><body>
+
+<h1>Contract 01 · Workspace</h1>
+<p class="sub">A living learning world that continuously evolves with the learner. The aggregation root.</p>
+
+<div class="sec"><h2>1. Intent</h2>
+<div class="g intent"><span class="num">—</span><span class="txt">Persistent learning space that remembers everything and grows over years. Not a folder. A relationship container between learner, AI, knowledge, time, and artifacts.</span></div>
+
+<div class="sec"><h2>2. Invariants</h2>
+<div class="g inv"><span class="num">I1</span><span class="txt"><span class="in">One learner owns one Workspace.</span> Never shared in V1.</span></div>
+<div class="g inv"><span class="num">I2</span><span class="txt"><span class="in">Permanent.</span> Created once. Never archived, deleted, or frozen by the system.</span></div>
+<div class="g inv"><span class="num">I3</span><span class="txt"><span class="in">One active Session per Workspace.</span> Opening resumes the paused session or creates a new one.</span></div>
+<div class="g inv"><span class="num">I4</span><span class="txt"><span class="in">All Resources, Notes, Practices, Conversations, Highlights, Memories, Knowledge Concepts belong to exactly one Workspace.</span></span></div>
+<div class="g inv"><span class="num">I5</span><span class="txt"><span class="in">AI cannot create, rename, or delete Workspaces.</span> User Owns Workspace.</span></div>
+<div class="g inv"><span class="num">I6</span><span class="txt"><span class="in">Cross-Workspace Memory is global to the learner.</span> Learner Model spans all workspaces.</span></div>
+
+<div class="sec"><h2>3. Lifecycle</h2>
+<div class="lc"><span class="st created">Created</span><span class="arr">→</span><span class="st active">Active</span><span class="arr">→</span><span class="st dormant">Dormant</span><span class="arr">→</span><span class="st ended">Ended</span></div>
+<div class="lc-row"><b>Created → Active:</b> User creates. No session yet. First open triggers session creation.</div>
+<div class="lc-row"><b>Active → Dormant:</b> No activity for N days. Still listed. Not highlighted.</div>
+<div class="lc-row"><b>Dormant → Active:</b> User returns. Creates new session with continuity.</div>
+<div class="lc-row"><b>Any → Ended:</b> User explicitly closes. Irreversible. Data retained.</div>
+<div style="margin-top:8px;font-size:12px;color:#7a7068">Publishes: WorkspaceCreated | WorkspaceActivated | WorkspaceDormant | WorkspaceEnded</div>
+
+<div class="sec"><h2>4. Ownership</h2>
+<div class="g own"><span class="num">→</span><span class="txt"><span class="in">Owns:</span> <span class="tag">Session</span> <span class="tag">Resource</span> <span class="tag">Note</span> <span class="tag">Highlight</span> <span class="tag">Conversation</span> <span class="tag">Practice</span> <span class="tag">Memory</span> <span class="tag">Knowledge</span> <span class="tag">Project</span> <span class="tag">Mission</span></span></div>
+<div class="g own"><span class="num">→</span><span class="txt"><span class="in">Observed by:</span> <span class="tag">Growth</span> <span class="tag">Learner</span></span></div>
+
+<div class="sec"><h2>5. Consistency</h2>
+<div class="g cons"><span class="num">→</span><span class="txt"><span class="in">Immediate:</span> Workspace metadata (name, icon, color). Session active flag.</span></div>
+<div class="g cons"><span class="num">→</span><span class="txt"><span class="in">Eventually:</span> session_count, total_minutes, concept_count — derived from child data, recomputed periodically.</span></div>
+<div class="g cons"><span class="num">→</span><span class="txt"><span class="in">Async:</span> Knowledge cluster detection runs after session end. Learner model updates.</span></div>
+
+<div class="sec"><h2>6. Domains</h2>
+<div class="g dom"><span class="num"></span><span class="txt">
+<span class="tag">Workspace</span> <span class="tag">Session</span> <span class="tag">SessionArtifact</span> <span class="tag">Memory.Entry</span> <span class="tag">Knowledge.Concept</span> <span class="tag">Learner.Model</span> <span class="tag">Time.EvolutionSnapshot</span>
+</span></div>
+
+</body></html>

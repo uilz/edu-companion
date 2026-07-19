@@ -1,0 +1,612 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Domain Freeze · AppleGo</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}
+body{font:13px/1.65 'Inter',system-ui,sans-serif;background:#0d0d0d;color:#bbb;padding:32px 40px;max-width:1100px;margin:0 auto}
+h1{font-size:20px;color:#e0d8cc;margin-bottom:2px}h1 .v{color:#666;font-size:12px;margin-left:8px}
+.sub{color:#666;margin-bottom:28px;font-size:12px}
+.card{background:#141414;border:1px solid#222;border-radius:6px;margin-bottom:18px;overflow:hidden}
+.card h2{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:#777;background:#0f0f0f;padding:9px 14px;border-bottom:1px solid#222}
+.card h3{font-size:13px;color:#c8d8bf;padding:12px 14px 4px}
+.card h4{font-size:11px;color:#666;padding:0 14px;margin:10px 0 4px;text-transform:uppercase}
+table{width:100%;border-collapse:collapse;font-size:11px}
+td,th{padding:6px 12px;text-align:left;border-bottom:1px solid#1f1f1f;vertical-align:top}
+th{font-weight:600;color:#888;font-size:10px;text-transform:uppercase}
+code{font-family:'JetBrains Mono',monospace;font-size:11px;background:#1a1a1a;padding:0 4px;border-radius:2px;color:#aaa}
+.tag{display:inline-block;padding:1px 5px;border-radius:2px;font-size:9px;margin:1px;font-weight:600}
+.tag-agg{background:#102010;color:#7ab87a}.tag-ent{background:#101020;color:#7a9ec8}
+.tag-vo{background:#201010;color:#c87a7a}.tag-ev{background:#101810;color:#c8a870}
+.tag-svc{background:#181010;color:#c88a7a}
+.map-row{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0}
+.map-box{flex:1;min-width:140px;border:1px solid#222;border-radius:4px;padding:10px;font-size:11px}
+.map-box h5{font-size:10px;color:#888;margin-bottom:6px;text-transform:uppercase}
+.map-box .item{padding:2px 0;color:#aaa}
+.map-box .root{color:#8fb87f;font-weight:600}
+.map-box .ch{color:#999;padding-left:8px;font-size:10px}
+.map-box .ref{color:#666;padding-left:8px;font-size:10px;font-style:italic}
+.evt-row{display:flex;gap:4px;align-items:center;margin:3px 0;font-size:11px}
+.evt-name{min-width:160px;color:#c8a870}
+.evt-arr{color:#444}
+.schema{font-family:'JetBrains Mono',monospace;font-size:10px;color:#777;background:#0d0d0d;padding:8px 12px;border-radius:4px;margin:6px 0;line-height:1.7;white-space:pre}
+.schema .k{color:#7a9ec8}.schema .t{color:#8fb87f}.schema .c{color:#555}
+.rm{display:flex;gap:10px;flex-wrap:wrap}
+</style></head><body>
+
+<h1>AppleGo Domain Freeze <span class="v">v1.1</span></h1>
+<p class="sub">Contracts → Domain → Schema → Code. Backend-ready. No product philosophy.</p>
+
+<!-- ========== 1. DOMAIN MAP ========== -->
+<div class="card" id="map">
+  <h2>1. Domain Map</h2>
+  <div class="rm">
+
+    <div class="map-box">
+      <h5>Workspace</h5>
+      <div class="item root">Workspace <span class="tag tag-agg">AGG</span></div>
+      <div class="item ch">Project</div>
+      <div class="item"><span class="tag tag-vo">VO</span> WorkspaceState</div>
+      <div class="item ref">→ Session (by ID)</div>
+    </div>
+
+    <div class="map-box">
+      <h5>Session</h5>
+      <div class="item root">Session <span class="tag tag-agg">AGG</span></div>
+      <div class="item ch">Mission</div>
+      <div class="item ch">SessionArtifact</div>
+      <div class="item"><span class="tag tag-vo">VO</span> MissionSource</div>
+      <div class="item"><span class="tag tag-vo">VO</span> SessionState</div>
+      <div class="item ref">→ Workspace (by ID)</div>
+    </div>
+
+    <div class="map-box">
+      <h5>Resource</h5>
+      <div class="item root">Resource <span class="tag tag-agg">AGG</span></div>
+      <div class="item ch">ReadingState</div>
+      <div class="item ch">Highlight</div>
+      <div class="item"><span class="tag tag-vo">VO</span> ResourceType</div>
+      <div class="item ref">→ Workspace (by ID)</div>
+    </div>
+
+    <div class="map-box">
+      <h5>Conversation</h5>
+      <div class="item root">Conversation <span class="tag tag-agg">AGG</span></div>
+      <div class="item ch">Turn</div>
+      <div class="item ch">ContextSnapshot</div>
+      <div class="item ch">OrchestrationAction</div>
+      <div class="item"><span class="tag tag-vo">VO</span> ConversationState</div>
+      <div class="item ref">→ Session (by ID)</div>
+    </div>
+
+    <div class="map-box">
+      <h5>Practice</h5>
+      <div class="item root">Practice <span class="tag tag-agg">AGG</span></div>
+      <div class="item ch">Question</div>
+      <div class="item ch">Attempt</div>
+      <div class="item"><span class="tag tag-vo">VO</span> PracticeState</div>
+      <div class="item ref">→ Workspace (by ID)</div>
+      <div class="item ref">→ Concept (by ID)</div>
+    </div>
+
+    <div class="map-box">
+      <h5>Memory</h5>
+      <div class="item root">MemoryEntry <span class="tag tag-agg">AGG</span></div>
+      <div class="item"><span class="tag tag-vo">VO</span> MemoryTier</div>
+      <div class="item"><span class="tag tag-vo">VO</span> EntryType</div>
+      <div class="item ref">→ Workspace (by ID)</div>
+      <div class="item ref">→ Session (by ID)</div>
+    </div>
+
+    <div class="map-box">
+      <h5>Knowledge</h5>
+      <div class="item root">Concept <span class="tag tag-agg">AGG</span></div>
+      <div class="item ch">Connection</div>
+      <div class="item"><span class="tag tag-vo">VO</span> DepthLevel</div>
+      <div class="item"><span class="tag tag-vo">VO</span> DepthEvidence</div>
+      <div class="item ref">→ Workspace (by ID)</div>
+    </div>
+
+    <div class="map-box">
+      <h5>Growth</h5>
+      <div class="item root">Milestone <span class="tag tag-agg">AGG</span></div>
+      <div class="item ch">EvolutionSnapshot</div>
+      <div class="item"><span class="tag tag-vo">VO</span> MilestoneType</div>
+      <div class="item ref">→ Workspace (by ID)</div>
+      <div class="item ref">→ Concept (by ID)</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ========== 2. AGGREGATE DESIGN ========== -->
+<div class="card" id="aggregates">
+  <h2>2. Aggregate Design</h2>
+
+  <h3>2.1 Workspace</h3>
+  <h4>Responsibility</h4>
+  <div style="padding:0 14px;font-size:11px;color:#888">Persistent learning space. Lifecycle management. Owns collection of all learning objects (by ID).</div>
+  <h4>Boundary</h4>
+  <div style="padding:0 14px;font-size:11px;color:#888">
+    <b>Inside:</b> Workspace metadata, Project[], lifecycle state machine<br>
+    <b>Outside:</b> Session details, Resource contents, Conversation turns — referenced by ID only<br>
+    <b>Invariants:</b> One active session per workspace. AI cannot create/rename/delete.
+  </div>
+  <h4>Schema Hint</h4>
+  <div class="schema"><span class="k">workspaces</span> (<span class="t">id</span> uuid pk, <span class="t">user_id</span> uuid, <span class="t">name</span> text, <span class="t">icon</span> text, <span class="t">color</span> text, <span class="t">state</span> text, <span class="t">active_session_id</span> uuid, <span class="t">day_count</span> int, <span class="t">created_at</span> timestamptz, <span class="t">updated_at</span> timestamptz)
+<span class="k">projects</span> (<span class="t">id</span> uuid pk, <span class="t">workspace_id</span> uuid fk, <span class="t">name</span> text, <span class="t">state</span> text, <span class="t">created_at</span> timestamptz)
+<span class="c">-- project_artifacts (join table: project_id → artifact_type + artifact_id)</span></div>
+
+  <h3>2.2 Session</h3>
+  <h4>Responsibility</h4>
+  <div style="padding:0 14px;font-size:11px;color:#888">A single learning event. Created when user enters workspace. Carries Mission + active artifacts. State machine: Created → Active ⇄ Paused → Ended.</div>
+  <h4>Boundary</h4>
+  <div style="padding:0 14px;font-size:11px;color:#888">
+    <b>Inside:</b> Session metadata, Mission (VO), SessionArtifact[] (snapshot of what's open)<br>
+    <b>Outside:</b> Conversation, Resource details, Memory entries — referenced by ID<br>
+    <b>Invariants:</b> Only one active session per workspace. Paused session auto-refreshes daily.
+  </div>
+  <h4>Schema Hint</h4>
+  <div class="schema"><span class="k">sessions</span> (<span class="t">id</span> uuid pk, <span class="t">workspace_id</span> uuid fk, <span class="t">project_id</span> uuid, <span class="t">state</span> text, <span class="t">title</span> text, <span class="t">mission_source</span> text, <span class="t">mission_text</span> text, <span class="t">mission_state</span> text, <span class="t">last_refresh</span> timestamptz, <span class="t">created_at</span> timestamptz, <span class="t">ended_at</span> timestamptz)
+<span class="k">session_artifacts</span> (<span class="t">id</span> uuid pk, <span class="t">session_id</span> uuid fk, <span class="t">artifact_type</span> text, <span class="t">artifact_id</span> uuid, <span class="t">position</span> jsonb)
+<span class="c">-- Mission is a value object stored as columns, not a separate table</span></div>
+
+  <h3>2.3 Resource</h3>
+  <h4>Responsibility</h4>
+  <div style="padding:0 14px;font-size:11px;color:#888">External material consumed inside workspace. Tracks reading position per learner. Owns highlights. AI is silent during reading.</div>
+  <h4>Boundary</h4>
+  <div style="padding:0 14px;font-size:11px;color:#888">
+    <b>Inside:</b> Resource metadata, ReadingState, Highlight[]<br>
+    <b>Outside:</b> Notes (reference resource by ID), Conversation (reference highlights by ID)<br>
+    <b>Invariants:</b> Exactly one ReadingState per (resource, user). Deleting highlight never loses ReadingState.
+  </div>
+  <h4>Schema Hint</h4>
+  <div class="schema"><span class="k">resources</span> (<span class="t">id</span> uuid pk, <span class="t">workspace_id</span> uuid fk, <span class="t">type</span> text, <span class="t">title</span> text, <span class="t">source_url</span> text, <span class="t">created_at</span> timestamptz)
+<span class="k">reading_states</span> (<span class="t">resource_id</span> uuid pk, <span class="t">user_id</span> uuid pk, <span class="t">position</span> jsonb, <span class="t">completed</span> bool, <span class="t">updated_at</span> timestamptz)
+<span class="k">highlights</span> (<span class="t">id</span> uuid pk, <span class="t">resource_id</span> uuid fk, <span class="t">text</span> text, <span class="t">position</span> jsonb, <span class="t">note</span> text, <span class="t">embedding</span> vector(1536), <span class="t">created_at</span> timestamptz)
+<span class="c">-- pgvector for highlight semantic search</span></div>
+
+  <h3>2.4 Conversation</h3>
+  <h4>Responsibility</h4>
+  <div style="padding:0 14px;font-size:11px;color:#888">AI dialogue. Context assembly per turn. Orchestration decisions. State machine: Created → Active ⇄ Paused → Closed.</div>
+  <h4>Boundary</h4>
+  <div style="padding:0 14px;font-size:11px;color:#888">
+    <b>Inside:</b> Conversation, Turn[], ContextSnapshot, OrchestrationAction<br>
+    <b>Outside:</b> Session (by ID), Resources + Highlights + Notes (referenced in snapshot by ID)<br>
+    <b>Invariants:</b> Never loses context. Never directly edits user artifacts. Replayable. respondLock prevents concurrent AI generation.
+  </div>
+  <h4>Schema Hint</h4>
+  <div class="schema"><span class="k">conversations</span> (<span class="t">id</span> uuid pk, <span class="t">session_id</span> uuid fk, <span class="t">state</span> text, <span class="t">created_at</span> timestamptz)
+<span class="k">turns</span> (<span class="t">id</span> uuid pk, <span class="t">conversation_id</span> uuid fk, <span class="t">role</span> text, <span class="t">content</span> text, <span class="t">snapshot_id</span> uuid, <span class="t">respond_lock</span> bool, <span class="t">created_at</span> timestamptz)
+<span class="k">context_snapshots</span> (<span class="t">id</span> uuid pk, <span class="t">conversation_id</span> uuid fk, <span class="t">reading_position</span> jsonb, <span class="t">active_artifacts</span> jsonb, <span class="t">knowledge</span> jsonb, <span class="t">memory</span> jsonb, <span class="t">created_at</span> timestamptz)
+<span class="k">orchestration_actions</span> (<span class="t">id</span> uuid pk, <span class="t">turn_id</span> uuid fk, <span class="t">action_type</span> text, <span class="t">target_artifact</span> jsonb, <span class="t">executed</span> bool, <span class="t">created_at</span> timestamptz)
+<span class="c">-- respondLock ensures only one AI response generating at a time</span></div>
+
+  <h3>2.5 Practice</h3>
+  <h4>Responsibility</h4>
+  <div style="padding:0 14px;font-size:11px;color:#888">Self-testing. Questions generated from knowledge gaps. Attempts are immutable. AI reviews without revealing answers. Breakthroughs detected.</div>
+  <h4>Boundary</h4>
+  <div style="padding:0 14px;font-size:11px;color:#888">
+    <b>Inside:</b> Practice, Question[], Attempt[]<br>
+    <b>Outside:</b> Knowledge concepts (by ID), Resource (by ID for question context)<br>
+    <b>Invariants:</b> Attempts never overwritten. AI never reveals answer. Results update Knowledge depth.
+  </div>
+  <h4>Schema Hint</h4>
+  <div class="schema"><span class="k">practices</span> (<span class="t">id</span> uuid pk, <span class="t">workspace_id</span> uuid fk, <span class="t">concept_ids</span> uuid[], <span class="t">state</span> text, <span class="t">created_at</span> timestamptz)
+<span class="k">questions</span> (<span class="t">id</span> uuid pk, <span class="t">practice_id</span> uuid fk, <span class="t">text</span> text, <span class="t">concept_id</span> uuid, <span class="t">context_ref</span> jsonb)
+<span class="k">attempts</span> (<span class="t">id</span> uuid pk, <span class="t">question_id</span> uuid fk, <span class="t">answer</span> text, <span class="t">is_correct</span> bool, <span class="t">ai_review</span> text, <span class="t">created_at</span> timestamptz)
+<span class="c">-- Attempts are append-only. Never UPDATE.</span></div>
+
+  <h3>2.6 Memory</h3>
+  <h4>Responsibility</h4>
+  <div style="padding:0 14px;font-size:11px;color:#888">Long-term system memory. Three tiers. Write filter discards trivial events. Formation: Raw → Observation → Pattern → Narrative.</div>
+  <h4>Boundary</h4>
+  <div style="padding:0 14px;font-size:11px;color:#888">
+    <b>Inside:</b> MemoryEntry (self-contained JSONB payload)<br>
+    <b>Outside:</b> Workspace (by ID), Session (by ID), Learner pattern (by ID for global tier)<br>
+    <b>Invariants:</b> Immutable. Tier promotion is append-only — old entry stays, new entry at higher tier.
+  </div>
+  <h4>Schema Hint</h4>
+  <div class="schema"><span class="k">memory_entries</span> (<span class="t">id</span> uuid pk, <span class="t">workspace_id</span> uuid, <span class="t">session_id</span> uuid, <span class="t">tier</span> text, <span class="t">entry_type</span> text, <span class="t">payload</span> jsonb, <span class="t">source_event_id</span> uuid, <span class="t">created_at</span> timestamptz)
+<span class="c">-- GIN index on payload for JSONB queries</span>
+<span class="c">-- tier: 'session' | 'workspace' | 'global'</span>
+<span class="c">-- Write filter runs BEFORE insert. Trivial events never reach this table.</span></div>
+
+  <h3>2.7 Knowledge</h3>
+  <h4>Responsibility</h4>
+  <div style="padding:0 14px;font-size:11px;color:#888">Concept graph. Depth tracking per concept. Self-organizing clusters. Answers: "what does the learner know about X and how well?"</div>
+  <h4>Boundary</h4>
+  <div style="padding:0 14px;font-size:11px;color:#888">
+    <b>Inside:</b> Concept, Connection[]<br>
+    <b>Outside:</b> Workspace (by ID)<br>
+    <b>Invariants:</b> Depth is derived from evidence, not manually set. Clusters detected from connection density.
+  </div>
+  <h4>Schema Hint</h4>
+  <div class="schema"><span class="k">concepts</span> (<span class="t">id</span> uuid pk, <span class="t">workspace_id</span> uuid fk, <span class="t">name</span> text, <span class="t">depth</span> decimal, <span class="t">depth_evidence</span> jsonb, <span class="t">cluster_id</span> uuid, <span class="t">updated_at</span> timestamptz)
+<span class="k">connections</span> (<span class="t">id</span> uuid pk, <span class="t">source_id</span> uuid fk, <span class="t">target_id</span> uuid fk, <span class="t">strength</span> decimal, <span class="t">connection_type</span> text, <span class="t">created_at</span> timestamptz)
+<span class="c">-- Recursive CTE for multi-hop queries:</span>
+<span class="c">--   "all prerequisites of concept X up to depth 4"</span>
+<span class="c">-- Cluster detection: graph density analysis on session end</span></div>
+
+  <h3>2.8 Growth</h3>
+  <h4>Responsibility</h4>
+  <div style="padding:0 14px;font-size:11px;color:#888">The story of learning told through time. Consumer only — never produces its own events. Milestones detected from patterns. Snapshots materialized.</div>
+  <h4>Boundary</h4>
+  <div style="padding:0 14px;font-size:11px;color:#888">
+    <b>Inside:</b> Milestone, EvolutionSnapshot<br>
+    <b>Outside:</b> All other aggregates (observes, never modifies)<br>
+    <b>Invariants:</b> Consumer-only. Snapshots recomputable — never lose historical data. Window functions for cross-time queries.
+  </div>
+  <h4>Schema Hint</h4>
+  <div class="schema"><span class="k">milestones</span> (<span class="t">id</span> uuid pk, <span class="t">workspace_id</span> uuid fk, <span class="t">type</span> text, <span class="t">concept_id</span> uuid, <span class="t">description</span> text, <span class="t">metadata</span> jsonb, <span class="t">created_at</span> timestamptz)
+<span class="k">evolution_snapshots</span> (<span class="t">workspace_id</span> uuid pk, <span class="t">day_number</span> int pk, <span class="t">sessions</span> int, <span class="t">concepts</span> int, <span class="t">connections</span> int, <span class="t">top_concepts</span> jsonb, <span class="t">computed_at</span> timestamptz)
+<span class="c">-- Snapshots are materialized views, recomputed on session end</span>
+<span class="c">-- Window functions: LAG(day) for trajectory queries</span></div>
+
+</div>
+
+<!-- ========== 3. EVENT STORMING ========== -->
+<div class="card" id="events">
+  <h2>3. Event Storming</h2>
+
+  <table>
+    <tr><th>Event</th><th>Publisher</th><th>Consumer 1</th><th>Consumer 2</th><th>Consumer 3</th></tr>
+    <tr>
+      <td class="evt-name">WorkspaceActivated</td>
+      <td><span class="tag tag-svc">WorkspaceRuntime</span></td>
+      <td><span class="tag tag-svc">Companion</span> → load_context</td>
+      <td><span class="tag tag-svc">MemoryEngine</span> → track_entry</td>
+      <td>&mdash;</td>
+    </tr>
+    <tr>
+      <td class="evt-name">SessionCreated</td>
+      <td><span class="tag tag-svc">WorkspaceRuntime</span></td>
+      <td><span class="tag tag-svc">Companion</span> → establish_mission</td>
+      <td><span class="tag tag-svc">MemoryEngine</span> → session_start</td>
+      <td>&mdash;</td>
+    </tr>
+    <tr>
+      <td class="evt-name">ResourceOpened</td>
+      <td><span class="tag tag-svc">ReadingRuntime</span></td>
+      <td><span class="tag tag-svc">Companion</span> → learner_state=reading</td>
+      <td><span class="tag tag-svc">MemoryEngine</span> → track_event</td>
+      <td>&mdash;</td>
+    </tr>
+    <tr>
+      <td class="evt-name">ReadingProgressed</td>
+      <td><span class="tag tag-svc">ReadingRuntime</span></td>
+      <td><span class="tag tag-svc">Companion</span> → observe (silent)</td>
+      <td><span class="tag tag-svc">MemoryEngine</span> → track_progress</td>
+      <td>&mdash;</td>
+    </tr>
+    <tr>
+      <td class="evt-name">HighlightCreated</td>
+      <td><span class="tag tag-svc">ReadingRuntime</span></td>
+      <td><span class="tag tag-agg">Knowledge</span> → index + link_concepts</td>
+      <td><span class="tag tag-svc">MemoryEngine</span> → track_highlight</td>
+      <td>&mdash;</td>
+    </tr>
+    <tr>
+      <td class="evt-name">ConversationStarted</td>
+      <td><span class="tag tag-svc">ConversationRuntime</span></td>
+      <td><span class="tag tag-svc">MemoryEngine</span> → track_event</td>
+      <td>&mdash;</td><td>&mdash;</td>
+    </tr>
+    <tr>
+      <td class="evt-name">TurnCreated</td>
+      <td><span class="tag tag-svc">ConversationRuntime</span></td>
+      <td><span class="tag tag-svc">MemoryEngine</span> → write_filter</td>
+      <td><span class="tag tag-svc">GrowthEngine</span> → observe_learning</td>
+      <td>&mdash;</td>
+    </tr>
+    <tr>
+      <td class="evt-name">ResponseStreaming</td>
+      <td><span class="tag tag-svc">ConversationRuntime</span></td>
+      <td>Frontend → SSE render</td>
+      <td>&mdash;</td><td>&mdash;</td>
+    </tr>
+    <tr>
+      <td class="evt-name">ResponseComplete</td>
+      <td><span class="tag tag-svc">ConversationRuntime</span></td>
+      <td><span class="tag tag-svc">Companion</span> → orchestrate</td>
+      <td><span class="tag tag-svc">MemoryEngine</span> → track_response</td>
+      <td>&mdash;</td>
+    </tr>
+    <tr>
+      <td class="evt-name">OrchestrationDecided</td>
+      <td><span class="tag tag-svc">ConversationRuntime</span></td>
+      <td>Frontend → open/suggest action</td>
+      <td>&mdash;</td><td>&mdash;</td>
+    </tr>
+    <tr>
+      <td class="evt-name">ConversationPaused</td>
+      <td><span class="tag tag-svc">WorkspaceRuntime</span></td>
+      <td><span class="tag tag-svc">MemoryEngine</span> → promote_to_workspace</td>
+      <td><span class="tag tag-svc">GrowthEngine</span> → compute_snapshot</td>
+      <td><span class="tag tag-agg">Knowledge</span> → detect_clusters</td>
+    </tr>
+    <tr>
+      <td class="evt-name">ConversationClosed</td>
+      <td><span class="tag tag-svc">WorkspaceRuntime</span></td>
+      <td><span class="tag tag-svc">MemoryEngine</span> → finalize_promotion</td>
+      <td><span class="tag tag-svc">GrowthEngine</span> → milestone_check</td>
+      <td><span class="tag tag-agg">Knowledge</span> → finalize_depths</td>
+    </tr>
+    <tr>
+      <td class="evt-name">AttemptSubmitted</td>
+      <td><span class="tag tag-svc">PracticeRuntime</span></td>
+      <td><span class="tag tag-agg">Knowledge</span> → update_depth_evidence</td>
+      <td><span class="tag tag-svc">GrowthEngine</span> → observe_attempt</td>
+      <td>&mdash;</td>
+    </tr>
+    <tr>
+      <td class="evt-name">AnswerReviewed</td>
+      <td><span class="tag tag-svc">PracticeRuntime</span></td>
+      <td><span class="tag tag-agg">Knowledge</span> → update_depth</td>
+      <td><span class="tag tag-svc">GrowthEngine</span> → observe_review</td>
+      <td>&mdash;</td>
+    </tr>
+    <tr>
+      <td class="evt-name">BreakthroughDetected</td>
+      <td><span class="tag tag-svc">PracticeRuntime</span></td>
+      <td><span class="tag tag-svc">GrowthEngine</span> → create_milestone</td>
+      <td><span class="tag tag-svc">MemoryEngine</span> → promote_narrative</td>
+      <td>&mdash;</td>
+    </tr>
+    <tr>
+      <td class="evt-name">ConceptDepthChanged</td>
+      <td><span class="tag tag-agg">Knowledge</span></td>
+      <td><span class="tag tag-svc">GrowthEngine</span> → observe_trajectory</td>
+      <td>&mdash;</td><td>&mdash;</td>
+    </tr>
+    <tr>
+      <td class="evt-name">ClusterDetected</td>
+      <td><span class="tag tag-agg">Knowledge</span></td>
+      <td><span class="tag tag-agg">Workspace</span> → self_organization</td>
+      <td>&mdash;</td><td>&mdash;</td>
+    </tr>
+    <tr>
+      <td class="evt-name">MilestoneDetected</td>
+      <td><span class="tag tag-svc">GrowthEngine</span></td>
+      <td><span class="tag tag-svc">MemoryEngine</span> → promote_to_global</td>
+      <td>&mdash;</td><td>&mdash;</td>
+    </tr>
+    <tr>
+      <td class="evt-name">EvolutionSnapshotComputed</td>
+      <td><span class="tag tag-svc">GrowthEngine</span></td>
+      <td>Frontend → Today narrative</td>
+      <td>&mdash;</td><td>&mdash;</td>
+    </tr>
+  </table>
+</div>
+
+<!-- ========== 4. CONTEXT MAP ========== -->
+<div class="card" id="context-map">
+  <h2>4. Context Map</h2>
+
+  <table>
+    <tr><th>Domain A</th><th>Relationship</th><th>Domain B</th><th>Contract</th></tr>
+    <tr>
+      <td><span class="tag tag-agg">Workspace</span></td>
+      <td style="color:#8fb87f">Shared Identity</td>
+      <td><span class="tag tag-agg">Session</span></td>
+      <td style="font-size:10px;color:#888">WorkspaceID shared. Session lifecycle managed by WorkspaceRuntime.</td>
+    </tr>
+    <tr>
+      <td><span class="tag tag-agg">Session</span></td>
+      <td style="color:#8fb87f">Containment</td>
+      <td><span class="tag tag-agg">Conversation</span></td>
+      <td style="font-size:10px;color:#888">One Conversation per active Session. SessionID foreign key.</td>
+    </tr>
+    <tr>
+      <td><span class="tag tag-agg">Resource</span></td>
+      <td style="color:#c8a870">Reference</td>
+      <td><span class="tag tag-agg">Conversation</span></td>
+      <td style="font-size:10px;color:#888">Conversation Turner references Resource + Highlight by ID.</td>
+    </tr>
+    <tr>
+      <td><span class="tag tag-agg">Conversation</span></td>
+      <td style="color:#c8a870">Event-Driven</td>
+      <td><span class="tag tag-agg">Memory</span></td>
+      <td style="font-size:10px;color:#888">ConversationClosed → MemoryEngine promotion. Async.</td>
+    </tr>
+    <tr>
+      <td><span class="tag tag-agg">Conversation</span></td>
+      <td style="color:#c8a870">Event-Driven</td>
+      <td><span class="tag tag-agg">Growth</span></td>
+      <td style="font-size:10px;color:#888">TurnCreated → GrowthEngine observation. Async.</td>
+    </tr>
+    <tr>
+      <td><span class="tag tag-agg">Practice</span></td>
+      <td style="color:#c8a870">Reference + Event</td>
+      <td><span class="tag tag-agg">Knowledge</span></td>
+      <td style="font-size:10px;color:#888">Practice reads Knowledge gaps. AttemptSubmitted → Knowledge depth update.</td>
+    </tr>
+    <tr>
+      <td><span class="tag tag-agg">Practice</span></td>
+      <td style="color:#c8a870">Event-Driven</td>
+      <td><span class="tag tag-agg">Growth</span></td>
+      <td style="font-size:10px;color:#888">BreakthroughDetected → GrowthEngine milestone creation. Async.</td>
+    </tr>
+    <tr>
+      <td><span class="tag tag-agg">Knowledge</span></td>
+      <td style="color:#c8a870">Event-Driven</td>
+      <td><span class="tag tag-agg">Growth</span></td>
+      <td style="font-size:10px;color:#888">ConceptDepthChanged → GrowthEngine trajectory. ClusterDetected → Workspace.</td>
+    </tr>
+    <tr>
+      <td><span class="tag tag-agg">Memory</span></td>
+      <td style="color:#c8a870">Event-Driven</td>
+      <td><span class="tag tag-agg">Growth</span></td>
+      <td style="font-size:10px;color:#888">MemoryPatternDetected feeds into Growth milestones. Both async.</td>
+    </tr>
+    <tr>
+      <td><span class="tag tag-svc">ConversationRuntime</span></td>
+      <td style="color:#c87a7a">Orchestrator</td>
+      <td><span class="tag tag-agg">Resource</span></td>
+      <td style="font-size:10px;color:#888">Reads ContextSnapshot to assemble AI context. Decides orchestration actions.</td>
+    </tr>
+  </table>
+
+  <h4>Collaboration Patterns</h4>
+  <div style="padding:0 14px;font-size:11px;color:#888;">
+    <div style="margin:4px 0"><b>Shared Identity:</b> Aggregates share the same ID (WorkspaceID, SessionID). Used for ownership chains.</div>
+    <div style="margin:4px 0"><b>Containment:</b> Parent aggregate's lifecycle controls child. Parent end → child end.</div>
+    <div style="margin:4px 0"><b>Reference:</b> Loose coupling by ID. No lifecycle dependency. Can exist independently.</div>
+    <div style="margin:4px 0"><b>Event-Driven:</b> Async communication via PG NOTIFY. Producer never waits for consumer. Consumer must handle idempotency.</div>
+    <div style="margin:4px 0"><b>Orchestrator:</b> Runtime service coordinates multiple aggregates. Reads many, writes one. Decision engine.</div>
+  </div>
+</div>
+
+<!-- ========== FREEZE CHECK ========== -->
+<div class="card" style="background:#101810;border-color:#1a2a1a">
+  <h2 style="color:#7ab87a">5. Supporting Tables</h2>
+  <table>
+    <tr><th>Table</th><th>Purpose</th><th>Owned by</th><th>Schema</th></tr>
+    <tr>
+      <td style="color:#c8a870">learning_events</td>
+      <td>Append-only event log. Source of truth for all domain events. Memory and Growth consume from here.</td>
+      <td>Infrastructure</td>
+      <td style="font-family:monospace;font-size:10px;color:#888">id uuid pk, event_type text, aggregate_id uuid, payload jsonb, created_at timestamptz DEFAULT now()</td>
+    </tr>
+    <tr>
+      <td style="color:#c8a870">notes</td>
+      <td>User-created notes. Can reference Resource + position. Owned by Workspace.</td>
+      <td><span class="tag tag-agg">Workspace</span></td>
+      <td style="font-family:monospace;font-size:10px;color:#888">id uuid pk, workspace_id uuid fk, title text, content text, ref_type text, ref_id uuid, ref_position jsonb, created_at timestamptz</td>
+    </tr>
+    <tr>
+      <td style="color:#c8a870">flashcards</td>
+      <td>Spaced repetition cards. Generated by AI. Revision tracking.</td>
+      <td><span class="tag tag-agg">Workspace</span></td>
+      <td style="font-family:monospace;font-size:10px;color:#888">id uuid pk, workspace_id uuid fk, front text, back text, concept_id uuid, source turn_id uuid, ease decimal, interval int, next_review timestamptz, created_at timestamptz</td>
+    </tr>
+    <tr>
+      <td style="color:#c8a870">learner_patterns</td>
+      <td>Cross-workspace learner model. Global tier memory feeds into here. Used by Companion for personalization.</td>
+      <td><span class="tag tag-agg">Memory</span> (global)</td>
+      <td style="font-family:monospace;font-size:10px;color:#888">id uuid pk, user_id uuid, pattern_type text, description text, confidence decimal, evidence_count int, created_at timestamptz</td>
+    </tr>
+  </table>
+</div>
+
+<!-- ========== V1 INFRA ========== -->
+<div class="card">
+  <h2>6. V1 Infrastructure</h2>
+
+  <h4>PostgreSQL</h4>
+  <div style="padding:0 14px;font-size:11px;color:#888">
+    <div style="margin:2px 0"><b>Extensions:</b> <code>uuid-ossp</code>, <code>pgvector</code> (highlight embeddings), <code>pg_trgm</code> (text search)</div>
+    <div style="margin:2px 0"><b>Key features:</b> Recursive CTE (Knowledge graph), JSONB+GIN (Memory), Window functions (Growth trajectory), NOTIFY/LISTEN (event bus)</div>
+    <div style="margin:2px 0"><b>Indexes:</b> GIN on <code>memory_entries.payload</code>, GIN on <code>highlights.embedding</code> (vector), B-tree on all foreign keys</div>
+  </div>
+
+  <h4>Event Bus (PG NOTIFY/LISTEN)</h4>
+  <div style="padding:0 14px;font-size:11px;color:#888">
+    <div style="margin:2px 0">Every aggregate write publishes a NOTIFY on channel <code>'applego_events'</code>.</div>
+    <div style="margin:2px 0">Payload: <code>{"event_type":"TurnCreated","aggregate_id":"...","payload":{...},"timestamp":"..."}</code></div>
+    <div style="margin:2px 0">Subscribers: MemoryEngine, GrowthEngine, Knowledge. Each LISTENs and filters by event_type.</div>
+    <div style="margin:2px 0">Guarantee: At-least-once delivery. Subscribers must be idempotent (dedup by event id).</div>
+  </div>
+
+  <h4>Runtime Services (Node.js / TypeScript)</h4>
+  <div style="padding:0 14px;font-size:11px;color:#888">
+    <div style="margin:2px 0"><b>WorkspaceRuntime:</b> Session lifecycle. Single instance. Handles enter/pause/return.</div>
+    <div style="margin:2px 0"><b>ReadingRuntime:</b> Per-session. Observes intake. Silent companion state management.</div>
+    <div style="margin:2px 0"><b>ConversationRuntime:</b> Per-session. Context assembly + AI call + orchestration + SSE stream.</div>
+    <div style="margin:2px 0"><b>PracticeRuntime:</b> Per-session. Question generation + attempt recording + AI review.</div>
+    <div style="margin:2px 0"><b>MemoryEngine:</b> Singleton. Write filter + tier promotion. Background worker.</div>
+    <div style="margin:2px 0"><b>GrowthEngine:</b> Singleton. Milestone detection + snapshot computation. Background worker.</div>
+  </div>
+</div>
+
+<!-- ========== FIRST DEPLOYMENT ========== -->
+<div class="card" style="background:#101018;border-color:#1a1a2f">
+  <h2 style="color:#7a9ec8">7. First Deployment — LOOP 1: WorkspaceRuntime</h2>
+
+  <h4>Migration 001: Core Tables</h4>
+  <div class="schema"><span class="c">-- Run first. Creates all tables needed for WorkspaceRuntime.</span>
+<span class="k">CREATE EXTENSION</span> IF NOT EXISTS <span class="t">"uuid-ossp"</span>;
+
+<span class="k">CREATE TABLE</span> <span class="k">workspaces</span> (
+  <span class="t">id</span> uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  <span class="t">user_id</span> uuid NOT NULL,
+  <span class="t">name</span> text NOT NULL,
+  <span class="t">icon</span> text DEFAULT 'book',
+  <span class="t">color</span> text DEFAULT '#5a8f6b',
+  <span class="t">state</span> text NOT NULL DEFAULT 'created',
+  <span class="t">active_session_id</span> uuid,
+  <span class="t">day_count</span> int DEFAULT 0,
+  <span class="t">created_at</span> timestamptz DEFAULT now(),
+  <span class="t">updated_at</span> timestamptz DEFAULT now()
+);
+
+<span class="k">CREATE TABLE</span> <span class="k">sessions</span> (
+  <span class="t">id</span> uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  <span class="t">workspace_id</span> uuid NOT NULL REFERENCES workspaces(id),
+  <span class="t">project_id</span> uuid,
+  <span class="t">state</span> text NOT NULL DEFAULT 'created',
+  <span class="t">title</span> text,
+  <span class="t">mission_source</span> text,
+  <span class="t">mission_text</span> text,
+  <span class="t">mission_state</span> text DEFAULT 'active',
+  <span class="t">last_refresh</span> timestamptz DEFAULT now(),
+  <span class="t">created_at</span> timestamptz DEFAULT now(),
+  <span class="t">ended_at</span> timestamptz
+);
+
+<span class="k">CREATE TABLE</span> <span class="k">session_artifacts</span> (
+  <span class="t">id</span> uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  <span class="t">session_id</span> uuid NOT NULL REFERENCES sessions(id),
+  <span class="t">artifact_type</span> text NOT NULL,
+  <span class="t">artifact_id</span> uuid NOT NULL,
+  <span class="t">position</span> jsonb
+);
+
+<span class="k">CREATE TABLE</span> <span class="k">projects</span> (
+  <span class="t">id</span> uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  <span class="t">workspace_id</span> uuid NOT NULL REFERENCES workspaces(id),
+  <span class="t">name</span> text NOT NULL,
+  <span class="t">state</span> text DEFAULT 'active',
+  <span class="t">created_at</span> timestamptz DEFAULT now()
+);
+
+<span class="k">CREATE TABLE</span> <span class="k">learning_events</span> (
+  <span class="t">id</span> uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  <span class="t">event_type</span> text NOT NULL,
+  <span class="t">aggregate_id</span> uuid NOT NULL,
+  <span class="t">payload</span> jsonb NOT NULL DEFAULT '{}',
+  <span class="t">created_at</span> timestamptz DEFAULT now()
+);
+
+<span class="c">-- Indexes</span>
+<span class="k">CREATE INDEX</span> idx_sessions_workspace ON sessions(workspace_id, state);
+<span class="k">CREATE INDEX</span> idx_learning_events_type ON learning_events(event_type, created_at);
+<span class="k">CREATE UNIQUE INDEX</span> idx_one_active_session ON sessions(workspace_id) WHERE state = 'active';</div>
+
+  <h4>What LOOP 1 Delivers</h4>
+  <div style="padding:0 14px;font-size:11px;color:#888">
+    <div style="margin:2px 0"><b>Aggregates:</b> Workspace, Session</div>
+    <div style="margin:2px 0"><b>Service:</b> WorkspaceRuntime (createWorkspace, enterWorkspace, pauseSession, returnToWorkspace, endSession)</div>
+    <div style="margin:2px 0"><b>Events:</b> WorkspaceCreated, WorkspaceActivated, SessionCreated, SessionPaused, SessionResumed, SessionEnded</div>
+    <div style="margin:2px 0"><b>Transport:</b> <code>POST /workspaces</code>, <code>GET /workspaces</code>, <code>GET /workspaces/:id</code>, <code>POST /workspaces/:id/enter</code>, <code>POST /workspaces/:id/pause</code></div>
+    <div style="margin:2px 0"><b>PG:</b> Migration 001. Event bus channel setup.</div>
+  </div>
+</div>
+
+<!-- ========== FREEZE CHECK ========== -->
+<div class="card" style="background:#101810;border-color:#1a2a1a">
+  <h2 style="color:#7ab87a">8. Domain Freeze Check</h2>
+  <table>
+    <tr><td style="color:#7ab87a">✓</td><td>8 Aggregates with defined responsibility, boundary, invariants, schema</td></tr>
+    <tr><td style="color:#7ab87a">✓</td><td>19 Events with publisher + consumers mapped</td></tr>
+    <tr><td style="color:#7ab87a">✓</td><td>5 Collaboration patterns + 4 supporting tables (events, notes, flashcards, learner)</td></tr>
+    <tr><td style="color:#7ab87a">✓</td><td>No aggregate directly references another aggregate's internal state</td></tr>
+    <tr><td style="color:#7ab87a">✓</td><td>Background engines (Memory, Growth) exclusively event-driven + async</td></tr>
+    <tr><td style="color:#7ab87a">✓</td><td>Every schema maps 1:1 to a Contract</td></tr>
+    <tr><td style="color:#7ab87a">✓</td><td>Database decisions flow from aggregates, not the reverse</td></tr>
+    <tr><td style="color:#7ab87a">✓</td><td>PG extensions defined (uuid-ossp, pgvector, pg_trgm)</td></tr>
+    <tr><td style="color:#7ab87a">✓</td><td>Event bus architecture (PG NOTIFY/LISTEN) with payload contract</td></tr>
+    <tr><td style="color:#7ab87a">✓</td><td>6 Runtime services with scope (singleton vs per-session)</td></tr>
+    <tr><td style="color:#7ab87a">✓</td><td>LOOP 1 Migration 001 ready — copy-paste to run</td></tr>
+    <tr><td style="color:#7ab87a">✓</td><td>Developer can go Contract → Domain Freeze → Migration → Code in &lt; 30 seconds</td></tr>
+  </table>
+</div>
+
+</body></html>

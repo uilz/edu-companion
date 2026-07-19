@@ -18,6 +18,7 @@ interface AppShellProps {
 }
 
 const FULLSCREEN_ROUTES = ['/focus'];
+const STUDIO_ROUTES = ['/workspace/'];
 
 /**
  * 判断当前路径是否是 Cockpit 驾驶舱路由
@@ -48,6 +49,7 @@ export default function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const isCockpit = useIsCockpitRoute();
   const isFullscreen = FULLSCREEN_ROUTES.some((r) => pathname?.startsWith(r));
+  const isStudioRoute = pathname === "/" || STUDIO_ROUTES.some((r) => pathname?.startsWith(r));
 
   // 汉堡菜单状态 (tablet 模式)
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -63,6 +65,16 @@ export default function AppShell({ children }: AppShellProps) {
       <div className="min-h-screen bg-page flex items-center justify-center text-ink-muted text-sm">
         加载中…
       </div>
+    );
+  }
+
+  // ── Studio Routes (Landing + Workspace) — Render children directly ──
+  if (isStudioRoute) {
+    return (
+      <>
+        {children}
+        <ActionFeedbackToast />
+      </>
     );
   }
 

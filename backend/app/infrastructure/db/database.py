@@ -197,6 +197,20 @@ class Database:
             cur.close()
             self.put_conn(conn)
 
+    def insert(self, table: str, data: dict) -> None:
+        """纯插入，冲突则报错"""
+        conn = self.get_conn()
+        try:
+            columns = ", ".join(data.keys())
+            placeholders = ", ".join(f"%({k})s" for k in data)
+            sql = f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"
+            cur = conn.cursor()
+            cur.execute(sql, self._serialize(data))
+            conn.commit()
+        finally:
+            cur.close()
+            self.put_conn(conn)
+
     def upsert(self, table: str, data: dict, pk_col: str) -> None:
         """插入或更新"""
         conn = self.get_conn()

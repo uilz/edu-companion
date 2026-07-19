@@ -62,6 +62,21 @@ from app.api.knowledge_graph_sse import router as kg_sse_router
 # 项目工作台
 from app.api.project import router as project_router
 
+# 工作区系统
+from app.api.workspace import router as workspace_router
+
+# 资源/阅读系统 (AppleGo Demo6.0)
+from app.api.resource import router as resource_router
+
+# 对话系统 (AppleGo Demo6.0)
+from app.api.conversations import router as conversations_runtime_router
+
+# 练习系统 (AppleGo Demo6.0)
+from app.api.practices import router as practices_runtime_router
+
+# 成长系统 (AppleGo Demo6.0)
+from app.api.growth import router as growth_runtime_router
+
 # 规划模块（ADR 0006）
 from app.api.planning import router as planning_router
 
@@ -569,6 +584,13 @@ app.include_router(reading_router)
 
 # 项目工作台
 app.include_router(project_router)
+
+# 工作区系统
+app.include_router(workspace_router)
+app.include_router(resource_router)
+app.include_router(conversations_runtime_router)
+app.include_router(practices_runtime_router)
+app.include_router(growth_runtime_router)
 
 # LanguageRoom 实时语音房间（ADR 0004）
 app.include_router(liveroom_router)

@@ -1,0 +1,442 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Runtime Model · AppleGo</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}
+body{font:13px/1.65 'Inter',system-ui,sans-serif;background:#0d0d0d;color:#bbb;padding:32px 40px;max-width:1100px;margin:0 auto}
+h1{font-size:20px;color:#e0d8cc;margin-bottom:2px}h1 .v{color:#666;font-size:12px;margin-left:8px}
+.sub{color:#666;margin-bottom:28px;font-size:12px}
+.card{background:#141414;border:1px solid#222;border-radius:6px;margin-bottom:18px;overflow:hidden}
+.card h2{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:#777;background:#0f0f0f;padding:9px 14px;border-bottom:1px solid#222}
+.card h3{font-size:13px;color:#c8d8bf;padding:12px 14px 4px}
+.card h4{font-size:11px;color:#666;padding:0 14px;margin:10px 0 4px;text-transform:uppercase}
+table{width:100%;border-collapse:collapse;font-size:11px}
+td,th{padding:7px 12px;text-align:left;border-bottom:1px solid#1f1f1f;vertical-align:top}
+th{font-weight:600;color:#888;font-size:10px;text-transform:uppercase;white-space:nowrap}
+.tag{display:inline-block;padding:1px 6px;border-radius:2px;font-size:9px;margin:1px 2px;font-weight:600}
+.t-dim{background:#101820;color:#7a9ec8}.t-st{background:#101810;color:#8fb87f}
+.t-sig{background:#181010;color:#c8a05f}.t-dec{background:#181010;color:#c87a7a}
+.t-act{background:#101810;color:#7ab87a}.t-evid{background:#101018;color:#a87fa8}
+.dim-row{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0}
+.dim-box{flex:1;min-width:220px;border:1px solid#222;border-radius:4px;padding:10px;font-size:11px}
+.dim-box h5{font-size:10px;color:#888;margin-bottom:6px;text-transform:uppercase}
+.dim-box .state{padding:3px 8px;border-radius:3px;font-size:10px;margin:2px 2px;display:inline-block}
+.st-1{background:#1a2216;color:#8fb87f}.st-2{background:#1a1a22;color:#7a9ec8}
+.st-3{background:#221a10;color:#c8a05f}.st-4{background:#1a101a;color:#a87fa8}
+.st-5{background:#221010;color:#c87a7a}
+.dec-row{display:flex;align-items:flex-start;gap:6px;margin:4px 0;font-size:11px}
+.dec-cond{min-width:140px;color:#c8a05f;font-size:10px}.dec-arrow{color:#444}.dec-act{color:#7ab87a;font-weight:600}
+.dec-why{color:#666;font-size:10px}
+.ev-row{display:flex;align-items:flex-start;gap:8px;margin:6px 0;padding:6px 10px;border-radius:4px;background:#0f0f0f;font-size:11px}
+.ev-icon{min-width:18px;color:#7ab87a;font-weight:700}
+.principle{padding:8px 14px;border-left:3px solid#5a8f6b;margin:6px 0;background:#101810;border-radius:0 4px 4px 0}
+.principle .head{color:#8fb87f;font-weight:600;margin-bottom:2px}
+.principle .body{color:#888;font-size:11px}
+</style></head><body>
+
+<h1>AppleGo Runtime Model <span class="v">v1.0</span></h1>
+<p class="sub">What every Runtime Service knows, observes, decides, and remembers. No database. No prompt. No UI.</p>
+
+<!-- ========== 1. LEARNING STATE MODEL ========== -->
+<div class="card" id="state">
+  <h2>1. Learning State Model</h2>
+  <p style="padding:8px 14px;font-size:11px;color:#666;border-bottom:1px solid#222">
+  <b>Not pipeline stages.</b> These are <b>four concurrent dimensions</b>. The runtime can be in multiple states simultaneously — e.g. <code>intaking</code> material while <code>processing</code> mentally, with <code>optimal</code> cognitive load and high <code>focus</code>.
+  </p>
+
+  <div class="dim-row" style="padding:8px 14px">
+
+    <div class="dim-box">
+      <h5><span class="tag t-dim">D1</span> Activity — what is happening?</h5>
+      <span class="state st-1">intaking</span> <span class="state st-1">processing</span> <span class="state st-1">externalizing</span>
+      <span class="state st-1">dialoguing</span> <span class="state st-1">testing</span> <span class="state st-1">connecting</span>
+      <span class="state st-1">resting</span> <span class="state st-2">orienting</span>
+      <div style="font-size:10px;color:#666;margin-top:4px">Derived from: active tool, last interaction type, event stream</div>
+    </div>
+
+    <div class="dim-box">
+      <h5><span class="tag t-dim">D2</span> Depth — per concept</h5>
+      <span class="state st-2">unaware</span> <span class="state st-2">encountered</span> <span class="state st-3">wrestling</span>
+      <span class="state st-3">fragile</span> <span class="state st-1">stable</span> <span class="state st-1">deep</span>
+      <div style="font-size:10px;color:#666;margin-top:4px">Derived from: practice accuracy, question type, explanation quality, highlights</div>
+    </div>
+
+    <div class="dim-box">
+      <h5><span class="tag t-dim">D3</span> Load — cognitive capacity</h5>
+      <span class="state st-1">low</span> <span class="state st-1">optimal</span> <span class="state st-3">elevated</span>
+      <span class="state st-5">overloaded</span>
+      <div style="font-size:10px;color:#666;margin-top:4px">Derived from: scroll velocity, re-read count, idle frequency, session duration</div>
+    </div>
+
+    <div class="dim-box">
+      <h5><span class="tag t-dim">D4</span> Momentum — is it moving?</h5>
+      <span class="state st-1">advancing</span> <span class="state st-1">deepening</span>
+      <span class="state st-3">looping</span> <span class="state st-5">stalled</span>
+      <span class="state st-2">retreating</span>
+      <div style="font-size:10px;color:#666;margin-top:4px">Derived from: topic change rate, concept depth deltas, re-read patterns</div>
+    </div>
+
+  </div>
+
+  <h4>State Transitions — how dimensions change</h4>
+  <div style="padding:0 14px 10px;font-size:11px;color:#888">
+    <div style="margin:2px 0"><b>Activity:</b> User switches tool or interaction type → activity changes immediately. Last-activity timeout (30s idle → resting).</div>
+    <div style="margin:2px 0"><b>Depth:</b> Wrestling → Fragile: first correct answer after confusion. Fragile → Stable: 3+ consecutive correct answers across sessions. Stable → Deep: self-explanation or application in new context.</div>
+    <div style="margin:2px 0"><b>Load:</b> Re-read count > 3 in 2 minutes → elevated. Scroll velocity < 50px/s sustained 60s + idle bursts → overloaded.</div>
+    <div style="margin:2px 0"><b>Momentum:</b> Same topic with increasing depth → deepening. Same position 3+ times → looping. Moving to prerequisites → retreating.</div>
+  </div>
+</div>
+
+<!-- ========== 2. LEARNING SIGNAL MODEL ========== -->
+<div class="card" id="signal">
+  <h2>2. Learning Signal Model</h2>
+  <p style="padding:8px 14px;font-size:11px;color:#666;border-bottom:1px solid#222">
+  <b>Observable only.</b> No inference. What does the runtime actually see from user behavior and system events?
+  </p>
+
+  <table>
+    <tr><th>#</th><th>Signal</th><th>Type</th><th>Raw Value</th><th>How It Changes</th><th>Meaning When...</th></tr>
+
+    <tr>
+      <td>S1</td><td><span class="tag t-sig">scroll_velocity</span></td>
+      <td>Movement</td>
+      <td>px/sec, windowed 30s</td>
+      <td>Decreases: slowing down to read. Spikes: skipping. Flat: left page.</td>
+      <td style="font-size:10px;color:#888">Falling below 50px/s sustained → deep reading or confusion</td>
+    </tr>
+    <tr>
+      <td>S2</td><td><span class="tag t-sig">dwell_time</span></td>
+      <td>Temporal</td>
+      <td>seconds at position</td>
+      <td>Per-section accumulation. Resets on position change > 200px.</td>
+      <td style="font-size:10px;color:#888">> 120s on same section → processing or stuck</td>
+    </tr>
+    <tr>
+      <td>S3</td><td><span class="tag t-sig">re_read_count</span></td>
+      <td>Movement</td>
+      <td>integer, per section</td>
+      <td>Increments when user returns to previously visited section.</td>
+      <td style="font-size:10px;color:#888">> 3 returns → confused. > 5 → potentially overloaded.</td>
+    </tr>
+    <tr>
+      <td>S4</td><td><span class="tag t-sig">highlight_rate</span></td>
+      <td>Artifact</td>
+      <td>highlights/min</td>
+      <td>Rolling window. Spikes indicate important sections.</td>
+      <td style="font-size:10px;color:#888">Dense cluster → key discovery. Sparse → passive reading.</td>
+    </tr>
+    <tr>
+      <td>S5</td><td><span class="tag t-sig">note_velocity</span></td>
+      <td>Artifact</td>
+      <td>chars typed/min</td>
+      <td>Windowed. Burst = active externalization. Zero = consuming.</td>
+      <td style="font-size:10px;color:#888">Sustained over 2 min → deep processing. Follows confusion → breakthrough attempt.</td>
+    </tr>
+    <tr>
+      <td>S6</td><td><span class="tag t-sig">question_complexity</span></td>
+      <td>Conversation</td>
+      <td>message length + concept refs</td>
+      <td>Rolling average over session. Increasing = deepening understanding.</td>
+      <td style="font-size:10px;color:#888">"What is X?" → "How does X relate to Y?" → complexity rising.</td>
+    </tr>
+    <tr>
+      <td>S7</td><td><span class="tag t-sig">response_latency</span></td>
+      <td>Conversation</td>
+      <td>seconds between AI prompt and user reply</td>
+      <td>Per-question. Compare across same concept.</td>
+      <td style="font-size:10px;color:#888">Decreasing over sessions → fluency growing. Sudden spike → confusion.</td>
+    </tr>
+    <tr>
+      <td>S8</td><td><span class="tag t-sig">answer_accuracy</span></td>
+      <td>Practice</td>
+      <td>correct/incorrect</td>
+      <td>Rolling window per concept. Accumulates across sessions.</td>
+      <td style="font-size:10px;color:#888">3+ consecutive correct → depth transition fragile→stable.</td>
+    </tr>
+    <tr>
+      <td>S9</td><td><span class="tag t-sig">tool_switch_count</span></td>
+      <td>Movement</td>
+      <td>switches/min</td>
+      <td>PDF→Canvas→Conversation transitions. High = exploration.</td>
+      <td style="font-size:10px;color:#888">Rapid switching (< 10s/tool) → scattered. Deliberate (> 2min/tool) → focused.</td>
+    </tr>
+    <tr>
+      <td>S10</td><td><span class="tag t-sig">idle_duration</span></td>
+      <td>Temporal</td>
+      <td>seconds since last interaction</td>
+      <td>Resets on any user action. Accumulates.</td>
+      <td style="font-size:10px;color:#888">> 60s → thinking or distracted. > 5min → left workspace.</td>
+    </tr>
+    <tr>
+      <td>S11</td><td><span class="tag t-sig">session_duration</span></td>
+      <td>Session</td>
+      <td>minutes active (excluding idle > 3min)</td>
+      <td>Monotonic increase during session. Compare to historical.</td>
+      <td style="font-size:10px;color:#888">> 60min → fatigue risk. < 5min → possibly distracted or exploratory.</td>
+    </tr>
+    <tr>
+      <td>S12</td><td><span class="tag t-sig">return_cadence</span></td>
+      <td>Session</td>
+      <td>hours since last session end</td>
+      <td>Days between workspace visits. Decreasing = habit forming.</td>
+      <td style="font-size:10px;color:#888">< 24h → daily learner. > 7d → needs stronger continuity.</td>
+    </tr>
+  </table>
+
+  <h4>Signal Patterns — compound observations</h4>
+  <div style="padding:0 14px 10px;font-size:11px;color:#888">
+    <div style="margin:3px 0"><b>Engaged Flow:</b> scroll_velocity moderate + dwell_time < 90s + highlight_rate steady + idle_duration < 30s</div>
+    <div style="margin:3px 0"><b>Confusion:</b> re_read_count ↑ + dwell_time ↑ + scroll_velocity ↓ + no questions yet (trying to figure it out alone)</div>
+    <div style="margin:3px 0"><b>Breakthrough Attempt:</b> confusion pattern → rapid note_velocity burst → question_complexity spike (externalizing, then asking)</div>
+    <div style="margin:3px 0"><b>Fatigue Warning:</b> session_duration > 60min + idle_duration trending up + scroll_velocity falling + re_read increasing</div>
+    <div style="margin:3px 0"><b>Mastery Signal:</b> answer_accuracy 3+ correct + response_latency decreasing + question_complexity increasing + tool_switch_count low (focused application)</div>
+  </div>
+</div>
+
+<!-- ========== 3. AI DECISION MODEL ========== -->
+<div class="card" id="decision">
+  <h2>3. AI Decision Model</h2>
+  <p style="padding:8px 14px;font-size:11px;color:#666;border-bottom:1px solid#222">
+  Given the <b>current state</b> (all 4 dimensions) + <b>recent signals</b> + <b>session context</b> → what action does the Companion take? Not hard rules. Decision principles.
+  </p>
+
+  <h4>Decision Types</h4>
+  <div style="padding:0 14px 8px;display:flex;gap:8px;flex-wrap:wrap;font-size:10px">
+    <span style="padding:2px 8px;background:#1a2216;color:#8fb87f;border-radius:3px">🔇 SILENCE — do nothing, protect flow</span>
+    <span style="padding:2px 8px;background:#1a1a22;color:#7a9ec8;border-radius:3px">👁 OBSERVE — track, no action yet</span>
+    <span style="padding:2px 8px;background:#221a10;color:#c8a05f;border-radius:3px">💬 RESPOND — answer the question</span>
+    <span style="padding:2px 8px;background:#1a1018;color:#a87fa8;border-radius:3px">💡 SUGGEST — offer a nudge</span>
+    <span style="padding:2px 8px;background:#10101a;color:#6a9ec8;border-radius:3px">🎯 ORCHESTRATE — open tool / artifact</span>
+    <span style="padding:2px 8px;background:#221010;color:#c87a7a;border-radius:3px">📋 SUMMARIZE — synthesize session</span>
+    <span style="padding:2px 8px;background:#1a1010;color:#c88a4a;border-radius:3px">⏮ RESTORE — resume from last session</span>
+  </div>
+
+  <h4>Decision Matrix — Principles, Not Rules</h4>
+  <table>
+    <tr><th>When...</th><th>Action</th><th>Because...</th></tr>
+
+    <tr>
+      <td style="font-size:10px">Activity = <b>intaking</b> AND scroll_velocity > 0<br><span style="color:#666">User is actively reading.</span></td>
+      <td><span class="tag t-act">SILENCE</span></td>
+      <td style="font-size:10px;color:#666">Every interruption during intake breaks the mental model being built. The most valuable AI action is no action.</td>
+    </tr>
+    <tr>
+      <td style="font-size:10px">Activity = <b>intaking</b> AND dwell_time > 120s<br><span style="color:#666">Long pause on one section.</span></td>
+      <td><span class="tag t-act">OBSERVE</span></td>
+      <td style="font-size:10px;color:#666">Could be deep processing (valuable) or confusion. Don't interrupt. Watch for re-read or question signals.</td>
+    </tr>
+    <tr>
+      <td style="font-size:10px">Activity = <b>dialoguing</b> AND user message received<br><span style="color:#666">User asked something.</span></td>
+      <td><span class="tag t-act">RESPOND</span></td>
+      <td style="font-size:10px;color:#666">Assemble context snapshot. Include reading position, related highlights, active concepts, and relevant memory. Never answer without context.</td>
+    </tr>
+    <tr>
+      <td style="font-size:10px">Depth = <b>wrestling</b> AND re_read_count > 3<br><span style="color:#666">Same section, repeatedly. No question asked.</span></td>
+      <td><span class="tag t-act">SUGGEST</span></td>
+      <td style="font-size:10px;color:#666">Don't explain. Suggest a mode switch: "要不要试着画出来？" or "看看这个例子？" The insight must come from the learner.</td>
+    </tr>
+    <tr>
+      <td style="font-size:10px">Momentum = <b>looping</b> AND session_duration > 10min since last progress<br><span style="color:#666">Stuck in a loop.</span></td>
+      <td><span class="tag t-act">SUGGEST</span> (different angle)</td>
+      <td style="font-size:10px;color:#666">Same explanation isn't working. Change modality: visual, analogy, prerequisite review, concrete example.</td>
+    </tr>
+    <tr>
+      <td style="font-size:10px">Signal pattern = <b>Breakthrough Attempt</b> detected<br><span style="color:#666">Confusion → externalization → question.</span></td>
+      <td><span class="tag t-act">RESPOND</span> (invested)</td>
+      <td style="font-size:10px;color:#666">Full attention. This is the most important moment. Answer thoroughly. Validate the insight. Mark it for Growth.</td>
+    </tr>
+    <tr>
+      <td style="font-size:10px">Depth transition: wrestling → fragile<br><span style="color:#666">First correct answer after confusion.</span></td>
+      <td><span class="tag t-act">SUGGEST</span> (reinforce)</td>
+      <td style="font-size:10px;color:#666">"对，就是这个意思。" Then offer one more similar question to solidify. Don't celebrate yet — fragile understanding needs reinforcement.</td>
+    </tr>
+    <tr>
+      <td style="font-size:10px">Depth = <b>stable</b> (3+ correct) AND no self-explanation yet<br><span style="color:#666">Learner can answer but hasn't articulated why.</span></td>
+      <td><span class="tag t-act">SUGGEST</span> (articulate)</td>
+      <td style="font-size:10px;color:#666">"你能用自己的话说说为什么吗？" True understanding is demonstrated through explanation, not just correct answers.</td>
+    </tr>
+    <tr>
+      <td style="font-size:10px">Load = <b>overloaded</b><br><span style="color:#666">Re-read spike, velocity dropped, idle bursts.</span></td>
+      <td><span class="tag t-act">SUGGEST</span> (lighten)</td>
+      <td style="font-size:10px;color:#666">Offer a break. Review what IS clear. Don't push through. Cognitive overload destroys learning.</td>
+    </tr>
+    <tr>
+      <td style="font-size:10px">Session_duration > 60min AND fatigue pattern<br><span style="color:#666">Long session + declining signals.</span></td>
+      <td><span class="tag t-act">SUGGEST</span> (pause)</td>
+      <td style="font-size:10px;color:#666">"今天就到这里？你已经学了很久了。" Protecting the learner from diminishing returns.</td>
+    </tr>
+    <tr>
+      <td style="font-size:10px">Session ending (user closes or pauses)<br><span style="color:#666">Natural end or explicit pause.</span></td>
+      <td><span class="tag t-act">SUMMARIZE</span></td>
+      <td style="font-size:10px;color:#666">Synthesize session: what changed, what was hard, what was understood, what's next. Create memory entries. Trigger Growth snapshot.</td>
+    </tr>
+    <tr>
+      <td style="font-size:10px">Session starting (user returns)<br><span style="color:#666">Workspace activated. Previous session exists.</span></td>
+      <td><span class="tag t-act">RESTORE</span></td>
+      <td style="font-size:10px;color:#666">Load last session state. Present continuity: "上次你卡在ε-δ的形式化定义。数学基础已经67天了。今天继续吗？" Never start cold.</td>
+    </tr>
+    <tr>
+      <td style="font-size:10px">Depth = <b>deep</b> on concept A AND concept B is prerequisite<br><span style="color:#666">Strong on one, missing a connected concept.</span></td>
+      <td><span class="tag t-act">ORCHESTRATE</span></td>
+      <td style="font-size:10px;color:#666">Open the connected concept. "你理解了极限。连续性和极限是同一件事的不同面。要不要看看？" Self-organization in action.</td>
+    </tr>
+    <tr>
+      <td style="font-size:10px">Highlight density cluster detected on one topic<br><span style="color:#666">Multiple highlights on same concept area.</span></td>
+      <td><span class="tag t-act">ORCHESTRATE</span></td>
+      <td style="font-size:10px;color:#666">Suggest creating flashcards from highlights. "这里你标记了很多重点。要不要做成卡片？" Convert intake into active recall material.</td>
+    </tr>
+  </table>
+
+  <h4>Three Decision Principles</h4>
+  <div class="principle"><div class="head">P1 — Intake Is Sacred</div><div class="body">When Activity = intaking, the default is SILENCE. Companion only breaks silence when Depth = wrestling persists beyond threshold (3 re-reads + no question), or when explicitly asked. Reading time is thinking time.</div></div>
+  <div class="principle"><div class="head">P2 — Struggle Is the Signal, Not the Enemy</div><div class="body">Wrestling, looping, confused — these are not failures. They are the moments before understanding. Companion observes struggle, validates it ("这里确实容易绕"), and offers alternative paths — but never removes the struggle. Removing struggle removes learning.</div></div>
+  <div class="principle"><div class="head">P3 — Context Before Content</div><div class="body">Every RESPOND action assembles full context first: reading position, active highlights, related concepts, recent memory, current Mission. AI never answers from a blank slate. The answer is the last 5% of the work. The first 95% is knowing what the learner needs to hear.</div></div>
+</div>
+
+<!-- ========== 4. GROWTH EVIDENCE MODEL ========== -->
+<div class="card" id="growth">
+  <h2>4. Growth Evidence Model</h2>
+  <p style="padding:8px 14px;font-size:11px;color:#666;border-bottom:1px solid#222">
+  <b>Not scores. Not completion.</b> What runtime evidence crystallizes into Growth? Each evidence item has: what happened, when, confidence, and source events.
+  </p>
+
+  <table>
+    <tr><th>#</th><th>Evidence Type</th><th>When It Crystallizes</th><th>Confidence Rule</th><th>Why It Matters</th></tr>
+
+    <tr>
+      <td>E1</td>
+      <td><span class="tag t-evid">Depth Transition</span></td>
+      <td style="font-size:10px;color:#888">Any concept state change: unaware→encountered→wrestling→fragile→stable→deep</td>
+      <td style="font-size:10px;color:#888">Direct observation. Confidence = 1.0. Source: Knowledge depth field change event.</td>
+      <td style="font-size:10px;color:#666">The most fundamental unit of growth. Every depth increase is a milestone.</td>
+    </tr>
+    <tr>
+      <td>E2</td>
+      <td><span class="tag t-evid">Breakthrough</span></td>
+      <td style="font-size:10px;color:#888">Depth goes wrestling→fragile or wrestling→stable within one session.<br>Requires: confusion pattern + externalization + correct answer sequence.</td>
+      <td style="font-size:10px;color:#888">High (0.9). Requires: dwelling+re-reading pattern, then note burst or question, then correct answer.</td>
+      <td style="font-size:10px;color:#666">The most emotionally significant learning event. Marks the moment "I got it."</td>
+    </tr>
+    <tr>
+      <td>E3</td>
+      <td><span class="tag t-evid">Persistence</span></td>
+      <td style="font-size:10px;color:#888">Same concept in wrestling state across 3+ sessions, then transitions to stable.</td>
+      <td style="font-size:10px;color:#888">High (0.85). Multiple sessions = sustained effort. Single-session breakthrough = lower persistence value.</td>
+      <td style="font-size:10px;color:#666">Demonstrates grit. Hard things took time. This is what 三年学习 looks like.</td>
+    </tr>
+    <tr>
+      <td>E4</td>
+      <td><span class="tag t-evid">Connection</span></td>
+      <td style="font-size:10px;color:#888">New Connection row created between two concepts that were previously isolated.<br>OR: user explicitly links concepts in conversation or notes.</td>
+      <td style="font-size:10px;color:#888">Medium (0.7) for auto-detected. High (0.95) for user-articulated: "这个和上周的极限概念是一样的。"</td>
+      <td style="font-size:10px;color:#666">Knowledge is the graph. Growth is the graph getting denser and more connected.</td>
+    </tr>
+    <tr>
+      <td>E5</td>
+      <td><span class="tag t-evid">Autonomy</span></td>
+      <td style="font-size:10px;color:#888">Question frequency about concept X decreases across sessions while answer accuracy stays high.<br>OR: learner answers own question before AI responds.</td>
+      <td style="font-size:10px;color:#888">Medium (0.65). Requires 3+ sessions of trend. Noise filtered by requiring accuracy to remain ≥ stable.</td>
+      <td style="font-size:10px;color:#666">The goal isn't knowing — it's not needing the AI. Autonomy is the ultimate growth signal.</td>
+    </tr>
+    <tr>
+      <td>E6</td>
+      <td><span class="tag t-evid">Self-Correction</span></td>
+      <td style="font-size:10px;color:#888">Practice: wrong answer → user edits before AI review.<br>Conversation: user states something, pauses, corrects themselves.</td>
+      <td style="font-size:10px;color:#888">High (0.9). Self-correction is metacognition in action. Directly observable.</td>
+      <td style="font-size:10px;color:#666">Shows the learner is monitoring their own understanding. Stronger than getting it right the first time.</td>
+    </tr>
+    <tr>
+      <td>E7</td>
+      <td><span class="tag t-evid">Application</span></td>
+      <td style="font-size:10px;color:#888">Concept applied in a new context: project, different subject, real-world problem.<br>Detected when: concept used in a workspace where it wasn't originally learned.</td>
+      <td style="font-size:10px;color:#888">Medium (0.7). Cross-workspace reference is strong evidence. Single-workspace application: lower confidence.</td>
+      <td style="font-size:10px;color:#666">Transfer. The holy grail of learning. Applying knowledge outside its original context.</td>
+    </tr>
+    <tr>
+      <td>E8</td>
+      <td><span class="tag t-evid">Articulation</span></td>
+      <td style="font-size:10px;color:#888">Learner explains concept in own words — in notes or in conversation — using original language, not textbook phrasing.</td>
+      <td style="font-size:10px;color:#888">High (0.85). Detected by: paraphrase similarity to source text is LOW (original wording) but concept accuracy is HIGH.</td>
+      <td style="font-size:10px;color:#666">You don't understand something until you can explain it in your own words. Articulation IS understanding externalized.</td>
+    </tr>
+    <tr>
+      <td>E9</td>
+      <td><span class="tag t-evid">Evolution Snapshot Delta</span></td>
+      <td style="font-size:10px;color:#888">Per-day aggregate: session_count, concept_count, connection_count, top_concepts. Delta from previous snapshot.</td>
+      <td style="font-size:10px;color:#888">Always computed (1.0). Materialized view. No inference — pure counting.</td>
+      <td style="font-size:10px;color:#666">The quantitative shadow of qualitative growth. "30 days ago: 3 concepts, 0 connections. Today: 12 concepts, 8 connections."</td>
+    </tr>
+  </table>
+
+  <h4>Evidence → Milestone Mapping</h4>
+  <div style="padding:0 14px 10px;font-size:11px;color:#888">
+    <div style="margin:3px 0"><b>Concept-First:</b> E1 (first encounter with concept). Milestone when depth reaches encountered for the first time.</div>
+    <div style="margin:3px 0"><b>Breakthrough:</b> E2 (wrestling→fragile/stable in one session). Milestone immediately. Permanent marker in workspace history.</div>
+    <div style="margin:3px 0"><b>Mastery:</b> E1 (stable→deep) + E5 (autonomy) + E7 (application). Milestone when any two of three are present.</div>
+    <div style="margin:3px 0"><b>Connection:</b> E4 (concept link formed). Milestone when 3+ connections form a cluster. Triggers self-organization in workspace.</div>
+    <div style="margin:3px 0"><b>Grit:</b> E3 (persistence over 3+ sessions). Milestone when wrestling→stable after sustained effort. Narrative: "你在ε-δ上卡了三周。今天你懂了。这才是真正的学习。"</div>
+  </div>
+
+  <h4>What Does NOT Count as Growth</h4>
+  <div style="padding:0 14px 8px;font-size:10px;color:#666">
+    <div style="margin:2px 0">✗ Time spent. Minutes don't equal learning.</div>
+    <div style="margin:2px 0">✗ Pages read. Scrolling isn't understanding.</div>
+    <div style="margin:2px 0">✗ Messages sent. Chatting isn't learning.</div>
+    <div style="margin:2px 0">✗ Artifacts created. More notes ≠ deeper understanding.</div>
+    <div style="margin:2px 0">✗ "Completed" checkmarks. Completion is an illusion.</div>
+    <div style="margin:2px 0">✗ AI praise. "Great job!" is not evidence.</div>
+  </div>
+</div>
+
+<!-- ========== MODEL CONVERGENCE ========== -->
+<div class="card" style="background:#101810;border-color:#1a2a1a">
+  <h2 style="color:#8fb87f">How the Four Models Flow Together</h2>
+
+  <table>
+    <tr><th>Layer</th><th>What It Does</th><th>Consumed By</th></tr>
+    <tr>
+      <td style="color:#c8a05f">Signals</td>
+      <td>Raw observables from user behavior. Updated continuously during session.</td>
+      <td>State Model (to compute dimensions)</td>
+    </tr>
+    <tr>
+      <td style="color:#7a9ec8">State</td>
+      <td>Four concurrent dimensions derived from signals. Updated per signal change.</td>
+      <td>Decision Model (to choose action)</td>
+    </tr>
+    <tr>
+      <td style="color:#c87a7a">Decision</td>
+      <td>Given state + context → action. Principles, not rules. Updated per significant state change.</td>
+      <td>Companion (executes action), Orchestrator (tool control)</td>
+    </tr>
+    <tr>
+      <td style="color:#a87fa8">Evidence</td>
+      <td>Significant state transitions + patterns that indicate real growth. Crystallized at session end.</td>
+      <td>GrowthEngine (milestones), MemoryEngine (narrative), Today (display)</td>
+    </tr>
+  </table>
+
+  <div style="padding:12px 14px;font-size:11px;color:#888;line-height:1.8">
+    <b>During Session:</b> Signals → State → Decision. Real-time. Every scroll, highlight, question, answer flows through.<br>
+    <b>End of Session:</b> State transitions + Decision history → Evidence. Growth crystallized. Memory formed. Snapshot computed.<br>
+    <b>Start of Next Session:</b> Evidence → Memory → Context. The accumulated growth from all past sessions becomes the context for today.
+  </div>
+</div>
+
+<!-- ========== FREEZE CHECK ========== -->
+<div class="card" style="background:#101018;border-color:#1a1a2f">
+  <h2 style="color:#7a9ec8">Architecture Freeze Complete</h2>
+  <table>
+    <tr><td style="color:#7a9ec8">✓</td><td>4 Learning Runtime Models: State, Signal, Decision, Evidence</td></tr>
+    <tr><td style="color:#7a9ec8">✓</td><td>State: 4 concurrent dimensions (Activity, Depth, Load, Momentum), not pipeline stages</td></tr>
+    <tr><td style="color:#7a9ec8">✓</td><td>Signal: 12 observable signals + 5 compound patterns. Pure observation, no inference.</td></tr>
+    <tr><td style="color:#7a9ec8">✓</td><td>Decision: 7 action types + 14 decision scenarios + 3 principles. All Runtime Services share this model.</td></tr>
+    <tr><td style="color:#7a9ec8">✓</td><td>Evidence: 9 evidence types + milestone mapping + explicit anti-patterns. No scores, no completion.</td></tr>
+    <tr><td style="color:#7a9ec8">✓</td><td>Models flow: Signals → State → Decision (real-time) → Evidence (session end) → Context (next session)</td></tr>
+    <tr><td style="color:#7a9ec8">✓</td><td>Zero database design. Zero API. Zero prompt. Zero UI. Pure runtime decision logic.</td></tr>
+  </table>
+</div>
+
+<div style="text-align:center;padding:24px 0;color:#555;font-size:11px">
+AppleGo Demo6.0 · Architecture Freeze · Ready for Development<br>
+<code style="color:#7ab87a">LOOP</code> to begin
+</div>
+
+</body></html>
