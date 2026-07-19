@@ -83,6 +83,9 @@ class AppContainer:
         # ── Session 服务 (AppleGo Domain Model v1.2) ──
         self.session_service = self._create_session()
 
+        # ── WorkspaceRuntime (AppleGo Demo6.0) ──
+        self.workspace_runtime = self._create_workspace_runtime()
+
         # ── Growth 服务 (AppleGo Domain Model v1.2) ──
         self.growth_service = self._create_growth_service()
         self.growth_engine = self._create_growth_engine()
@@ -208,6 +211,11 @@ class AppContainer:
             repo=get_session_repo(),
             event_bus=self.event_bus,
         )
+
+    def _create_workspace_runtime(self):
+        """创建 WorkspaceRuntime (AppleGo Demo6.0)。"""
+        from app.services.workspace_runtime import WorkspaceRuntime
+        return WorkspaceRuntime(event_bus=self.event_bus)
 
     def _create_growth_service(self):
         """创建 Growth 查询服务 (AppleGo Domain Model v1.2)。"""
@@ -614,6 +622,11 @@ def get_session_service():
 def get_growth_service():
     """获取 Growth 查询服务 (AppleGo Domain Model v1.2)。"""
     return container.growth_service
+
+
+def get_workspace_runtime():
+    """获取 WorkspaceRuntime (AppleGo Demo6.0)。"""
+    return container.workspace_runtime
 
 
 # ── 事件处理辅助函数 ──
