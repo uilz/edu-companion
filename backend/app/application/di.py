@@ -99,6 +99,9 @@ class AppContainer:
         self.growth_service = self._create_growth_service()
         self.growth_engine = self._create_growth_engine()
 
+        # ── GrowthEngine (AppleGo Demo6.0) ──
+        self.growth_engine_v2 = self._create_growth_engine_v2()
+
         # ── Knowledge 服务 (四实体解耦架构) ──
         self.knowledge_services = self._create_knowledge_services()
 
@@ -620,6 +623,16 @@ class AppContainer:
             "ReflectionGenerated",
             self.growth_engine.on_reflection_generated,
         )
+
+        # ═══ Demo6.0 Runtime Events → GrowthEngine v2 ═══
+        # GrowthEngine is a passive consumer that derives milestones + snapshots
+        # from runtime events published by Workspace / Reading / Practice Runtimes.
+        if hasattr(self, "growth_engine_v2") and self.growth_engine_v2:
+            bus.subscribe("WorkspaceCreated", self.growth_engine_v2.on_workspace_created)
+            bus.subscribe("SessionCreated", self.growth_engine_v2.on_session_created)
+            bus.subscribe("SessionEnded", self.growth_engine_v2.on_session_ended)
+            bus.subscribe("ResourceCompleted", self.growth_engine_v2.on_resource_completed)
+            bus.subscribe("BreakthroughDetected", self.growth_engine_v2.on_breakthrough_detected)
 
         logger.info("🔗 注册 %d 个事件订阅", sum(len(v) for v in bus._handlers.values()))
 

@@ -1,5 +1,4 @@
-"""
-GrowthEngine — Consumer of all runtime events.
+"""GrowthEngine — Consumer of all runtime events.
 
 Per Contract /vision/contracts/growth.html:
 - I1: Workspace-level AND user-level snapshots
@@ -36,6 +35,75 @@ class GrowthEngine:
                 await self._event_bus.publish(event)
             except Exception:
                 logger.exception("Failed to publish %s", type(event).__name__)
+
+    # ═══════════════════════════════════════════════════════════════
+    # Event Consumers (Contract I2: receive events from other runtimes)
+    # ═══════════════════════════════════════════════════════════════
+
+    async def on_session_created(self, event) -> None:
+        """Consume SessionCreated → track session count, detect habit milestones."""
+        ws_id = str(event.workspace_id)
+        uid = str(event.user_id)
+
+        # Count sessions in this workspace for habit detection
+        from app.infrastructure.db.database import get_db
+        db = get_db()
+        row = db.fetchone(
+            "SELECT COUNT(*) as cnt FROM sessions WHERE workspace_id = %s",
+            (ws_id,),
+        )
+        session_count = row["cnt"] if row else 0
+
+        try:
+            await self.detect_habit(ws_id, uid, session_count)
+        except Exception:
+            logger.debug("Habit detection skipped for ws=%s session_count=%d", ws_id, session_count)
+
+    async def on_session_ended(self, event) -> None:
+        """Consume SessionEnded → compute evolution snapshot. Contract I4."""
+        ws_id = str(event.workspace_id)
+        uid = str(event.user_id)
+
+        try:
+            await self.compute_snapshot(ws_id, uid)
+        except Exception:
+            logger.exception("Snapshot computation failed for ws=%s", ws_id)
+
+    async def on_resource_completed(self, event) -> None:
+        """Consume ResourceCompleted → detect completion milestone."""
+        resource_id = str(event.resource_id)
+        ws_id = str(event.workspace_id) if hasattr(event, "workspace_id") else ""
+        uid = str(event.user_id)
+        title = getattr(event, "resource_title", "") or getattr(event, "title", "")
+
+        if ws_id:
+            try:
+                await self.detect_completion(resource_id, ws_id, uid, title)
+            except Exception:
+                logger.debug("Completion detection skipped for resource=%s", resource_id)
+
+    async def on_breakthrough_detected(self, event) -> None:
+        """Consume BreakthroughDetected → create breakthrough milestone."""
+        practice_id = str(event.practice_id)
+        ws_id = str(event.workspace_id) if hasattr(event, "workspace_id") else ""
+        uid = str(event.user_id)
+        question_id = getattr(event, "question_id", "")
+        concept_id = getattr(event, "concept_id", "")
+
+        if ws_id:
+            try:
+                await self.detect_breakthrough(practice_id, question_id, ws_id, uid, concept_id)
+            except Exception:
+                logger.debug("Breakthrough detection skipped for practice=%s", practice_id)
+
+    async def on_workspace_created(self, event) -> None:
+        """Consume WorkspaceCreated → track new workspace."""
+        logger.info("Growth tracking: new workspace %s for user %s",
+                    event.workspace_id, event.user_id)
+
+    # ═══════════════════════════════════════════════════════════════
+    # Milestone Detectors
+    # ═══════════════════════════════════════════════════════════════
 
     async def detect_breakthrough(self, practice_id: str, question_id: str,
                                    workspace_id: str, user_id: str,

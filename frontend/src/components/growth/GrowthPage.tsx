@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { BarChart3 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { BarChart3, Milestone, TrendingUp, Camera } from "lucide-react";
 import { authedFetch } from "@/lib/api/api";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { useGrowthRuntime } from "@/hooks/useGrowthRuntime";
 
 // ── 类型 ──
 
@@ -37,8 +39,22 @@ interface GrowthSummary {
 // ── 页面组件 ──
 
 export default function GrowthPage() {
+  const searchParams = useSearchParams();
+  const wsId = searchParams.get("ws") || "";
+
   const [summary, setSummary] = useState<GrowthSummary | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Demo6.0 GrowthRuntime integration
+  const { milestones, snapshots, loadMilestones, loadSnapshots, loading: rtLoading } =
+    useGrowthRuntime();
+
+  useEffect(() => {
+    if (wsId) {
+      loadMilestones(wsId);
+      loadSnapshots(wsId);
+    }
+  }, [wsId, loadMilestones, loadSnapshots]);
 
   useEffect(() => {
     const load = async () => {
@@ -110,6 +126,62 @@ export default function GrowthPage() {
               </p>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ── Demo6.0 Growth: Milestones ── */}
+      {wsId && milestones.length > 0 && (
+        <div className="mb-space-6">
+          <h2 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Milestone size={14} className="text-accent" />
+            里程碑
+          </h2>
+          <div className="space-y-2">
+            {milestones.slice(0, 5).map((m) => (
+              <div
+                key={m.id}
+                className="flex items-start gap-3 p-3 rounded-lg bg-surface border border/50"
+              >
+                <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center flex-shrink-0">
+                  <TrendingUp size={14} className="text-accent" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-ink-primary">{m.title}</p>
+                  <p className="text-xs text-ink-muted mt-0.5">{m.description}</p>
+                  <p className="text-[10px] text-ink-muted mt-1">
+                    Day {m.dayNumber} · {m.type}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Demo6.0 Growth: Snapshots ── */}
+      {wsId && snapshots.length > 0 && (
+        <div className="mb-space-6">
+          <h2 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Camera size={14} className="text-accent" />
+            进化快照
+          </h2>
+          <div className="grid grid-cols-2 gap-2">
+            {snapshots.slice(0, 4).map((s) => (
+              <div
+                key={s.id}
+                className="p-3 rounded-lg bg-surface border border/50"
+              >
+                <p className="text-[10px] text-ink-muted">Day {s.dayNumber}</p>
+                <p className="text-lg font-bold text-ink-primary">
+                  {s.conceptCount} 概念
+                </p>
+                <div className="flex items-center gap-3 mt-1 text-[10px] text-ink-muted">
+                  <span>{s.sessionCount} 会话</span>
+                  <span>{s.connectionCount} 关联</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

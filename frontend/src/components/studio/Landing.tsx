@@ -15,6 +15,8 @@ export interface WorkspaceItem {
 export interface LandingMemory {
   workspaceName: string;
   topic: string;
+  workspaceId: string;
+  sessionId: string | null;
 }
 
 export interface LandingProps {
@@ -114,7 +116,7 @@ export default function Landing({
           }}
         >
           <button
-            onClick={() => onEnter("math", "limits")}
+            onClick={() => onEnter(memory.workspaceId, memory.sessionId || undefined)}
             className="inline-flex items-center gap-2 px-8 py-[14px] text-[14px] font-semibold rounded-full transition-colors duration-150 active:scale-[0.97]"
             style={{ background: "#8f7a62", color: "#fff" }}
           >

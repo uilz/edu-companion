@@ -1,76 +1,99 @@
 // ============================================================
 // / — AppleGo Landing（Vision Layer 0）
-// 展示：问候 + 记忆叙事 + CTA + 工作区列表 + 搜索
+// Demo6.0: connected to WorkspaceRuntime backend
 // ============================================================
 
 "use client";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { authedFetch } from "@/lib/api/api";
 import Landing from "@/components/studio/Landing";
 import SearchOverlay from "@/components/studio/SearchOverlay";
-import type { WorkspaceItem, LandingMemory } from "@/components/studio/Landing";
+import {
+  listWorkspaces,
+  createWorkspace,
+  enterWorkspace,
+  getLandingMemory,
+  searchWorkspace,
+  type WorkspaceItem,
+  type LandingMemory,
+} from "@/lib/api/workspace-api";
 
-// ── Types ──────────────────────────────────────────────────
-interface BackendWorkspace {
-  id: string;
-  name: string;
-  icon: string;
-  active_sessions_count: number;
-  completed_sessions_count: number;
-}
-
-interface SearchResult {
-  type: string;
-  title: string;
-  snippet: string;
-  meta: string;
-  badge: string;
-}
-
-const DEFAULT_MEMORY: LandingMemory = {
+const FALLBACK_MEMORY: LandingMemory = {
   workspaceName: "数学基础",
   topic: "ε-δ 定义",
+  workspaceId: "",
+  sessionId: null,
 };
 
-const DEFAULT_WORKSPACES: WorkspaceItem[] = [
-  { id: "math", icon: "M", name: "数学基础", activeCount: 1, completedCount: 2 },
-  { id: "network", icon: "N", name: "计算机网络", activeCount: 1, completedCount: 1 },
+const FALLBACK_WS: WorkspaceItem[] = [
+  {
+    id: "math",
+    icon: "M",
+    name: "数学基础",
+    activeCount: 1,
+    completedCount: 2,
+    color: "#5a8f6b",
+    state: "active",
+    dayCount: 0,
+    createdAt: "",
+  },
 ];
 
 export default function RootPage() {
   const router = useRouter();
 
-  const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>(DEFAULT_WORKSPACES);
-  const [memory, setMemory] = useState<LandingMemory>(DEFAULT_MEMORY);
+  const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>(FALLBACK_WS);
+  const [memory, setMemory] = useState<LandingMemory>(FALLBACK_MEMORY);
   const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
-    authedFetch("/api/workspaces")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: BackendWorkspace[] | null) => {
-        if (data?.length) {
-          setWorkspaces(
-            data.map((w) => ({
-              id: w.id,
-              icon: w.icon,
-              name: w.name,
-              activeCount: w.active_sessions_count,
-              completedCount: w.completed_sessions_count,
-            })),
-          );
+    Promise.all([listWorkspaces(), getLandingMemory()])
+      .then(([ws, mem]) => {
+        if (ws.length > 0) {
+          setWorkspaces(ws);
+        }
+        if (mem) {
+          setMemory(mem);
         }
       })
       .catch(() => {});
   }, []);
 
-  const handleEnter = (workspaceId: string) => {
-    router.push(`/workspace/${workspaceId}`);
+  const handleEnter = async (workspaceId: string, sessionId?: string) => {
+    try {
+      const result = await enterWorkspace(workspaceId);
+      router.push(
+        `/workspace/${workspaceId}?session=${result.sessionId}`
+      );
+    } catch {
+      router.push(`/workspace/${workspaceId}`);
+    }
+  };
+
+  const handleCreate = async (name: string) => {
+    try {
+      const ws = await createWorkspace(name);
+      setWorkspaces((prev) => [ws, ...prev]);
+      handleEnter(ws.id);
+    } catch {
+      // ignore
+    }
   };
 
   const handleSearch = (query: string) => {
     setSearchOpen(true);
+  };
+
+  const doSearch = async (q: string) => {
+    if (!q.trim()) return [];
+    const results: { type: string; title: string; snippet: string; meta: string; badge: string }[] = [];
+    for (const ws of workspaces) {
+      const r = await searchWorkspace(ws.id, q);
+      results.push(...r);
+      if (results.length >= 10) break;
+    }
+    return results;
   };
 
   return (
@@ -84,10 +107,7 @@ export default function RootPage() {
       <SearchOverlay
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
-        onSearch={async (q: string) => {
-          // Landing search: try all workspaces or generic search
-          return [];
-        }}
+        onSearch={doSearch}
       />
     </>
   );
