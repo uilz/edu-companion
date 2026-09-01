@@ -1,0 +1,1346 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>苹果果 · 开发状态实时展示</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   DESIGN TOKENS — Paper-Ink Warm Tone
+   ═══════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;500&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --page: #f7f3ed; --page-alt: #efe9e1;
+  --surface: #fff; --surface-alt: #f3eee7; --surface-hover: #e8e1d8;
+  --ink: #2a2420; --ink-2: #7a7068; --ink-3: #a69c8f;
+  --accent: #8f7a62; --accent-hover: #7d6952; --accent-soft: rgba(143,122,98,.1);
+  --success: #5a8f6b; --success-soft: rgba(90,143,107,.1);
+  --challenge: #c8503c; --challenge-soft: rgba(200,80,60,.1);
+  --warm: #c8a05f; --warm-soft: rgba(200,160,95,.1);
+  --blue: #4a6c9c; --blue-soft: rgba(74,108,156,.1);
+  --purple: #7c6c9c; --purple-soft: rgba(124,108,156,.1);
+  --divider: #dcd0c2; --divider-soft: #e6dcd0;
+  --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 20px; --r-full: 9999px;
+  --shadow-card: 0 1px 3px rgba(0,0,0,.04), 0 0 0 1px var(--divider-soft);
+  --shadow-hover: 0 4px 12px rgba(0,0,0,.06), 0 0 0 1px var(--divider);
+  --shadow-overlay: 0 8px 32px rgba(0,0,0,.08);
+  --font: 'Inter','Noto Sans SC',system-ui,sans-serif;
+  --font-serif: 'Noto Serif SC','Iowan Old Style',serif;
+  --font-mono: 'JetBrains Mono','Fira Code',monospace;
+  --ease: cubic-bezier(.4,0,.2,1);
+  --duration: .15s;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-font-smoothing:antialiased;font-family:var(--font)}
+body{background:var(--page);color:var(--ink);min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+
+/* ═══════════════════════════════════════════════════════════════
+   HEADER
+   ═══════════════════════════════════════════════════════════════ */
+.header {
+  position:sticky; top:0; z-index:100;
+  background:var(--page); border-bottom:1px solid var(--divider-soft);
+  padding:20px 32px;
+}
+.header-inner {
+  max-width:1200px; margin:0 auto;
+  display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px;
+}
+.header-left { display:flex; align-items:center; gap:12px; }
+.header-logo { font-size:28px; }
+.header-title { font-size:20px; font-weight:700; letter-spacing:-.02em; }
+.header-subtitle { font-size:13px; color:var(--ink-3); margin-top:2px; }
+.stats-bar {
+  display:flex; gap:20px; flex-wrap:wrap;
+}
+.stat-item {
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  padding:8px 16px; background:var(--surface); border-radius:var(--r-md);
+  border:1px solid var(--divider-soft);
+}
+.stat-value { font-size:18px; font-weight:700; color:var(--accent); font-family:var(--font-mono); }
+.stat-label { font-size:10px; color:var(--ink-3); text-transform:uppercase; letter-spacing:.05em; }
+.stat-badge {
+  display:inline-flex; align-items:center; gap:4px;
+  font-size:11px; font-weight:600; padding:3px 8px; border-radius:var(--r-full);
+}
+.stat-badge.success { background:var(--success-soft); color:var(--success); }
+
+/* ═══════════════════════════════════════════════════════════════
+   MAIN CONTAINER
+   ═══════════════════════════════════════════════════════════════ */
+.main { max-width:1200px; margin:0 auto; padding:32px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   SECTION: Architecture
+   ═══════════════════════════════════════════════════════════════ */
+.section-title {
+  font-size:13px; font-weight:600; color:var(--ink-3);
+  letter-spacing:.06em; text-transform:uppercase; margin-bottom:20px;
+  display:flex; align-items:center; gap:8px;
+}
+.section-title::after {
+  content:''; flex:1; height:1px; background:var(--divider-soft);
+}
+
+.arch-container {
+  background:var(--surface); border-radius:var(--r-lg); padding:32px;
+  border:1px solid var(--divider-soft); margin-bottom:40px;
+  overflow-x:auto;
+}
+.arch-diagram {
+  display:flex; flex-direction:column; align-items:center; gap:0;
+  min-width:700px;
+}
+.arch-layer {
+  width:100%; max-width:680px; padding:20px; border-radius:var(--r-md);
+  position:relative;
+}
+.arch-layer.frontend { background:var(--blue-soft); border:1.5px solid rgba(74,108,156,.25); }
+.arch-layer.backend { background:var(--accent-soft); border:1.5px solid rgba(143,122,98,.25); }
+.arch-layer.data { background:var(--success-soft); border:1.5px solid rgba(90,143,107,.25); }
+.arch-layer-title {
+  font-size:12px; font-weight:700; letter-spacing:.04em; margin-bottom:14px;
+  display:flex; align-items:center; gap:6px;
+}
+.arch-layer.frontend .arch-layer-title { color:var(--blue); }
+.arch-layer.backend .arch-layer-title { color:var(--accent); }
+.arch-layer.data .arch-layer-title { color:var(--success); }
+
+.arch-modules {
+  display:grid; grid-template-columns:repeat(4,1fr); gap:10px;
+}
+.arch-module {
+  background:var(--surface); border-radius:var(--r-sm); padding:12px;
+  text-align:center; border:1px solid var(--divider-soft);
+  transition:all var(--duration) var(--ease);
+}
+.arch-module:hover {
+  transform:translateY(-2px); box-shadow:var(--shadow-hover);
+}
+.arch-module-icon { font-size:20px; margin-bottom:4px; }
+.arch-module-name { font-size:12px; font-weight:600; color:var(--ink); }
+.arch-module-desc { font-size:10px; color:var(--ink-3); margin-top:2px; }
+
+.arch-arrow {
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  padding:12px 0; color:var(--ink-3);
+}
+.arch-arrow-line {
+  width:2px; height:24px; background:var(--divider);
+  position:relative;
+}
+.arch-arrow-line::after {
+  content:''; position:absolute; bottom:-4px; left:50%; transform:translateX(-50%);
+  border-left:5px solid transparent; border-right:5px solid transparent;
+  border-top:6px solid var(--divider);
+}
+.arch-arrow-label {
+  font-size:10px; font-weight:500; color:var(--ink-3);
+  background:var(--page); padding:2px 8px; border-radius:var(--r-full);
+  border:1px solid var(--divider-soft);
+}
+
+.arch-data-row {
+  display:grid; grid-template-columns:repeat(3,1fr); gap:10px;
+  width:100%; max-width:680px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SECTION: Module Tabs
+   ═══════════════════════════════════════════════════════════════ */
+.tabs-container { margin-bottom:40px; }
+.tabs-nav {
+  display:flex; gap:4px; padding:4px; background:var(--surface-alt);
+  border-radius:var(--r-md); margin-bottom:20px; overflow-x:auto;
+}
+.tab-btn {
+  padding:10px 18px; font-size:13px; font-weight:500;
+  border-radius:var(--r-sm); color:var(--ink-2);
+  transition:all var(--duration) var(--ease); white-space:nowrap;
+  display:flex; align-items:center; gap:6px;
+}
+.tab-btn:hover { color:var(--ink); background:var(--surface); }
+.tab-btn.active {
+  background:var(--surface); color:var(--ink);
+  box-shadow:0 1px 3px rgba(0,0,0,.06);
+  font-weight:600;
+}
+.tab-btn .tab-icon { font-size:14px; }
+
+.tab-panel {
+  display:none; animation:fadeIn .3s var(--ease);
+}
+.tab-panel.active { display:block; }
+
+@keyframes fadeIn {
+  from{opacity:0;transform:translateY(8px)}
+  to{opacity:1;transform:translateY(0)}
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MODULE: AI Chat
+   ═══════════════════════════════════════════════════════════════ */
+.chat-container {
+  display:grid; grid-template-columns:240px 1fr; gap:0;
+  background:var(--surface); border-radius:var(--r-lg); overflow:hidden;
+  border:1px solid var(--divider-soft); height:480px;
+}
+.chat-sidebar {
+  border-right:1px solid var(--divider-soft); padding:16px;
+  display:flex; flex-direction:column; gap:8px; overflow-y:auto;
+}
+.chat-sidebar-title {
+  font-size:11px; font-weight:600; color:var(--ink-3);
+  letter-spacing:.04em; margin-bottom:8px;
+}
+.chat-list-item {
+  padding:10px 12px; border-radius:var(--r-sm); cursor:pointer;
+  transition:all var(--duration) var(--ease);
+}
+.chat-list-item:hover { background:var(--surface-hover); }
+.chat-list-item.active { background:var(--accent-soft); }
+.chat-list-item-title { font-size:13px; font-weight:500; margin-bottom:2px; }
+.chat-list-item-time { font-size:11px; color:var(--ink-3); }
+
+.chat-main { display:flex; flex-direction:column; }
+.chat-messages {
+  flex:1; padding:20px; overflow-y:auto;
+  display:flex; flex-direction:column; gap:16px;
+}
+.chat-msg {
+  display:flex; gap:10px; max-width:85%;
+  animation:fadeIn .3s var(--ease);
+}
+.chat-msg.user { align-self:flex-end; flex-direction:row-reverse; }
+.chat-msg.ai { align-self:flex-start; }
+
+.chat-avatar {
+  width:32px; height:32px; border-radius:var(--r-full);
+  display:flex; align-items:center; justify-content:center;
+  font-size:14px; flex-shrink:0;
+}
+.chat-msg.user .chat-avatar { background:var(--accent-soft); }
+.chat-msg.ai .chat-avatar { background:var(--success-soft); }
+
+.chat-bubble {
+  padding:12px 16px; border-radius:var(--r-lg); font-size:14px; line-height:1.6;
+}
+.chat-msg.user .chat-bubble {
+  background:var(--accent); color:#fff;
+  border-bottom-right-radius:4px;
+}
+.chat-msg.ai .chat-bubble {
+  background:var(--surface-alt); color:var(--ink);
+  border-bottom-left-radius:4px;
+}
+
+.chat-followups {
+  display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;
+}
+.chat-followup {
+  padding:6px 12px; font-size:12px; border-radius:var(--r-full);
+  border:1px solid var(--divider); color:var(--ink-2);
+  transition:all var(--duration) var(--ease); cursor:pointer;
+}
+.chat-followup:hover {
+  border-color:var(--accent); color:var(--accent); background:var(--accent-soft);
+}
+
+.chat-input {
+  padding:16px 20px; border-top:1px solid var(--divider-soft);
+  display:flex; gap:10px; align-items:center;
+}
+.chat-input-field {
+  flex:1; padding:10px 16px; border-radius:var(--r-full);
+  border:1.5px solid var(--divider); font-size:14px;
+  font-family:var(--font); background:var(--surface-alt);
+  outline:none; transition:border-color var(--duration);
+}
+.chat-input-field:focus { border-color:var(--accent); }
+.chat-input-btn {
+  width:36px; height:36px; border-radius:var(--r-full);
+  display:flex; align-items:center; justify-content:center;
+  background:var(--accent); color:#fff; font-size:14px;
+  transition:all var(--duration) var(--ease);
+}
+.chat-input-btn:hover { background:var(--accent-hover); transform:scale(1.05); }
+.chat-input-btn.mic { background:var(--surface-alt); color:var(--ink-2); }
+
+/* Streaming cursor */
+.streaming-cursor {
+  display:inline-block; width:2px; height:14px; background:var(--accent);
+  margin-left:2px; animation:blink 1s step-end infinite;
+  vertical-align:text-bottom;
+}
+@keyframes blink { 50%{opacity:0} }
+
+/* ═══════════════════════════════════════════════════════════════
+   MODULE: Practice
+   ═══════════════════════════════════════════════════════════════ */
+.practice-container {
+  background:var(--surface); border-radius:var(--r-lg);
+  border:1px solid var(--divider-soft); overflow:hidden;
+}
+.practice-header {
+  padding:20px 24px; border-bottom:1px solid var(--divider-soft);
+  display:flex; align-items:center; justify-content:space-between;
+}
+.practice-title { font-size:18px; font-weight:700; }
+.practice-progress { display:flex; align-items:center; gap:12px; }
+.practice-progress-bar {
+  width:160px; height:8px; background:var(--surface-alt);
+  border-radius:var(--r-full); overflow:hidden;
+}
+.practice-progress-fill {
+  height:100%; background:var(--success); border-radius:var(--r-full);
+  transition:width .5s var(--ease);
+}
+.practice-progress-text { font-size:13px; color:var(--ink-2); font-weight:500; }
+
+.practice-queue {
+  padding:20px 24px; border-bottom:1px solid var(--divider-soft);
+}
+.practice-queue-title { font-size:12px; font-weight:600; color:var(--ink-3); margin-bottom:12px; letter-spacing:.04em; }
+.practice-queue-items { display:flex; gap:10px; }
+.queue-item {
+  flex:1; padding:12px; border-radius:var(--r-sm); text-align:center;
+  border:1px solid var(--divider-soft);
+}
+.queue-item.review { background:var(--challenge-soft); border-color:rgba(200,80,60,.2); }
+.queue-item.zpd { background:var(--warm-soft); border-color:rgba(200,160,95,.2); }
+.queue-item.explore { background:var(--blue-soft); border-color:rgba(74,108,156,.2); }
+.queue-item-label { font-size:11px; color:var(--ink-3); margin-bottom:4px; }
+.queue-item-count { font-size:22px; font-weight:700; }
+.queue-item.review .queue-item-count { color:var(--challenge); }
+.queue-item.zpd .queue-item-count { color:var(--warm); }
+.queue-item.explore .queue-item-count { color:var(--blue); }
+.queue-item-weight { font-size:10px; color:var(--ink-3); margin-top:2px; }
+
+.practice-card {
+  padding:24px;
+}
+.practice-question {
+  font-size:16px; font-weight:600; line-height:1.6; margin-bottom:20px;
+}
+.practice-options { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px; }
+.practice-option {
+  padding:14px 16px; border-radius:var(--r-sm); border:1.5px solid var(--divider);
+  font-size:14px; text-align:left; transition:all var(--duration) var(--ease);
+  display:flex; align-items:center; gap:10px;
+}
+.practice-option:hover { border-color:var(--accent); background:var(--accent-soft); }
+.practice-option.correct { border-color:var(--success); background:var(--success-soft); }
+.practice-option.wrong { border-color:var(--challenge); background:var(--challenge-soft); }
+.practice-option-label {
+  width:24px; height:24px; border-radius:var(--r-full);
+  background:var(--surface-alt); display:flex; align-items:center; justify-content:center;
+  font-size:12px; font-weight:600; color:var(--ink-2); flex-shrink:0;
+}
+.practice-option.correct .practice-option-label { background:var(--success); color:#fff; }
+.practice-option.wrong .practice-option-label { background:var(--challenge); color:#fff; }
+
+.practice-explanation {
+  padding:16px; background:var(--surface-alt); border-radius:var(--r-sm);
+  border-left:3px solid var(--success); font-size:13px; line-height:1.6; color:var(--ink-2);
+}
+.practice-meta {
+  display:flex; gap:16px; margin-top:12px; font-size:11px; color:var(--ink-3);
+}
+.practice-meta-item { display:flex; align-items:center; gap:4px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   MODULE: Knowledge Graph
+   ═══════════════════════════════════════════════════════════════ */
+.graph-container {
+  background:var(--surface); border-radius:var(--r-lg);
+  border:1px solid var(--divider-soft); overflow:hidden;
+  height:480px; position:relative;
+}
+.graph-header {
+  padding:16px 20px; border-bottom:1px solid var(--divider-soft);
+  display:flex; align-items:center; justify-content:space-between;
+}
+.graph-title { font-size:15px; font-weight:600; }
+.graph-legend { display:flex; gap:12px; }
+.graph-legend-item { display:flex; align-items:center; gap:4px; font-size:11px; color:var(--ink-3); }
+.graph-legend-dot { width:10px; height:10px; border-radius:var(--r-full); }
+
+.graph-canvas {
+  width:100%; height:calc(100% - 52px); position:relative;
+}
+.graph-canvas svg { width:100%; height:100%; }
+
+/* ═══════════════════════════════════════════════════════════════
+   MODULE: Dashboard
+   ═══════════════════════════════════════════════════════════════ */
+.dashboard-container {
+  display:grid; grid-template-columns:1fr 1fr; gap:16px;
+}
+.dash-card {
+  background:var(--surface); border-radius:var(--r-lg);
+  border:1px solid var(--divider-soft); padding:20px;
+}
+.dash-card-title {
+  font-size:12px; font-weight:600; color:var(--ink-3);
+  letter-spacing:.04em; margin-bottom:16px;
+}
+.dash-card.full-width { grid-column:1/-1; }
+
+/* Radar Chart */
+.radar-chart { display:flex; justify-content:center; }
+.radar-chart svg { width:200px; height:200px; }
+
+/* Trend Chart */
+.trend-chart svg { width:100%; height:160px; }
+
+/* Heatmap */
+.heatmap-grid {
+  display:grid; grid-template-columns:repeat(7,1fr); gap:4px;
+}
+.heatmap-cell {
+  aspect-ratio:1; border-radius:3px;
+  background:var(--surface-alt);
+}
+.heatmap-cell.l1 { background:rgba(90,143,107,.2); }
+.heatmap-cell.l2 { background:rgba(90,143,107,.4); }
+.heatmap-cell.l3 { background:rgba(90,143,107,.6); }
+.heatmap-cell.l4 { background:rgba(90,143,107,.85); }
+
+/* Stats Grid */
+.stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.stat-card {
+  padding:16px; border-radius:var(--r-md); text-align:center;
+  background:var(--surface-alt);
+}
+.stat-card-value { font-size:24px; font-weight:700; color:var(--accent); }
+.stat-card-label { font-size:11px; color:var(--ink-3); margin-top:4px; }
+.stat-card-trend { font-size:11px; color:var(--success); margin-top:2px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   MODULE: Secretary
+   ═══════════════════════════════════════════════════════════════ */
+.secretary-container {
+  background:var(--surface); border-radius:var(--r-lg);
+  border:1px solid var(--divider-soft); overflow:hidden;
+}
+.secretary-header {
+  padding:20px 24px; border-bottom:1px solid var(--divider-soft);
+  display:flex; align-items:center; justify-content:space-between;
+}
+.secretary-title { font-size:18px; font-weight:700; }
+.secretary-status {
+  display:flex; align-items:center; gap:6px;
+  font-size:12px; color:var(--ink-3);
+}
+.secretary-status-dot {
+  width:8px; height:8px; border-radius:var(--r-full); background:var(--success);
+  animation:pulse 2s infinite;
+}
+@keyframes pulse {
+  0%,100%{opacity:1} 50%{opacity:.5}
+}
+
+.secretary-cards { padding:20px 24px; display:flex; flex-direction:column; gap:12px; }
+.secretary-card {
+  padding:16px; border-radius:var(--r-md);
+  border:1px solid var(--divider-soft);
+  display:flex; gap:14px; align-items:flex-start;
+  transition:all var(--duration) var(--ease);
+}
+.secretary-card:hover { box-shadow:var(--shadow-hover); }
+.secretary-card-icon {
+  width:40px; height:40px; border-radius:var(--r-md);
+  display:flex; align-items:center; justify-content:center;
+  font-size:18px; flex-shrink:0;
+}
+.secretary-card.review .secretary-card-icon { background:var(--challenge-soft); }
+.secretary-card.fatigue .secretary-card-icon { background:var(--warm-soft); }
+.secretary-card.report .secretary-card-icon { background:var(--blue-soft); }
+.secretary-card-content { flex:1; }
+.secretary-card-title { font-size:14px; font-weight:600; margin-bottom:4px; }
+.secretary-card-desc { font-size:13px; color:var(--ink-2); line-height:1.5; }
+.secretary-card-action {
+  margin-top:10px; padding:6px 14px; border-radius:var(--r-full);
+  font-size:12px; font-weight:500; border:1px solid var(--divider);
+  color:var(--ink-2); transition:all var(--duration) var(--ease);
+}
+.secretary-card-action:hover {
+  border-color:var(--accent); color:var(--accent); background:var(--accent-soft);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MODULE: Habit
+   ═══════════════════════════════════════════════════════════════ */
+.habit-container {
+  display:grid; grid-template-columns:1fr 1fr; gap:16px;
+}
+.habit-card {
+  background:var(--surface); border-radius:var(--r-lg);
+  border:1px solid var(--divider-soft); padding:20px;
+}
+.habit-card.full-width { grid-column:1/-1; }
+.habit-card-title {
+  font-size:12px; font-weight:600; color:var(--ink-3);
+  letter-spacing:.04em; margin-bottom:16px;
+}
+
+/* Streak */
+.streak-display {
+  display:flex; align-items:center; gap:16px;
+}
+.streak-fire { font-size:48px; animation:fireGlow 1.5s ease-in-out infinite; }
+@keyframes fireGlow {
+  0%,100%{transform:scale(1)} 50%{transform:scale(1.1)}
+}
+.streak-info { flex:1; }
+.streak-count { font-size:36px; font-weight:700; color:var(--challenge); }
+.streak-label { font-size:14px; color:var(--ink-2); }
+.streak-days { display:flex; gap:6px; margin-top:12px; }
+.streak-day {
+  width:32px; height:32px; border-radius:var(--r-full);
+  display:flex; align-items:center; justify-content:center;
+  font-size:11px; font-weight:500;
+}
+.streak-day.done { background:var(--success); color:#fff; }
+.streak-day.today { background:var(--accent); color:#fff; }
+.streak-day.missed { background:var(--surface-alt); color:var(--ink-3); }
+
+/* Circular Progress */
+.circular-progress {
+  width:120px; height:120px; position:relative; margin:0 auto;
+}
+.circular-progress svg { width:100%; height:100%; transform:rotate(-90deg); }
+.circular-progress-bg { fill:none; stroke:var(--surface-alt); stroke-width:8; }
+.circular-progress-fill {
+  fill:none; stroke:var(--accent); stroke-width:8;
+  stroke-linecap:round; transition:stroke-dashoffset 1s var(--ease);
+}
+.circular-progress-text {
+  position:absolute; inset:0; display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+}
+.circular-progress-value { font-size:24px; font-weight:700; color:var(--accent); }
+.circular-progress-label { font-size:11px; color:var(--ink-3); }
+
+/* Achievements */
+.achievements-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.achievement {
+  text-align:center; padding:12px 8px; border-radius:var(--r-md);
+  background:var(--surface-alt); transition:all var(--duration) var(--ease);
+}
+.achievement:hover { transform:translateY(-2px); box-shadow:var(--shadow-hover); }
+.achievement-icon { font-size:28px; margin-bottom:6px; }
+.achievement-name { font-size:11px; font-weight:500; color:var(--ink); }
+.achievement-desc { font-size:10px; color:var(--ink-3); margin-top:2px; }
+
+/* Pomodoro */
+.pomodoro-display {
+  text-align:center; padding:20px 0;
+}
+.pomodoro-time {
+  font-size:48px; font-weight:700; font-family:var(--font-mono);
+  color:var(--accent); letter-spacing:2px;
+}
+.pomodoro-label { font-size:12px; color:var(--ink-3); margin-top:4px; }
+.pomodoro-btns { display:flex; gap:8px; justify-content:center; margin-top:16px; }
+.pomodoro-btn {
+  padding:8px 20px; border-radius:var(--r-full); font-size:13px; font-weight:500;
+  transition:all var(--duration) var(--ease);
+}
+.pomodoro-btn.primary { background:var(--accent); color:#fff; }
+.pomodoro-btn.primary:hover { background:var(--accent-hover); }
+.pomodoro-btn.secondary { border:1px solid var(--divider); color:var(--ink-2); }
+.pomodoro-btn.secondary:hover { border-color:var(--accent); color:var(--accent); }
+
+/* Stats Row */
+.habit-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+.habit-stat {
+  text-align:center; padding:16px; border-radius:var(--r-md);
+  background:var(--surface-alt);
+}
+.habit-stat-value { font-size:20px; font-weight:700; color:var(--ink); }
+.habit-stat-label { font-size:11px; color:var(--ink-3); margin-top:4px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   FOOTER
+   ═══════════════════════════════════════════════════════════════ */
+.footer {
+  max-width:1200px; margin:0 auto; padding:32px;
+  display:flex; align-items:center; justify-content:space-between;
+  border-top:1px solid var(--divider-soft); font-size:12px; color:var(--ink-3);
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     HEADER
+     ═══════════════════════════════════════════════════════════════ -->
+<header class="header">
+  <div class="header-inner">
+    <div class="header-left">
+      <span class="header-logo">🍎</span>
+      <div>
+        <div class="header-title">苹果果 · 开发状态实时展示</div>
+        <div class="header-subtitle">Architecture + Core Modules Inspector</div>
+      </div>
+    </div>
+    <div class="stats-bar">
+      <div class="stat-item">
+        <span class="stat-value">106</span>
+        <span class="stat-label">Backend Files</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-value">24.6K</span>
+        <span class="stat-label">Python LOC</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-value">84</span>
+        <span class="stat-label">Frontend Files</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-value">15.6K</span>
+        <span class="stat-label">TS/TSX LOC</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-value">220</span>
+        <span class="stat-label">Tests</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-badge success">✅ 16/16</span>
+        <span class="stat-label">Phases</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="main">
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SECTION 1: ARCHITECTURE
+     ═══════════════════════════════════════════════════════════════ -->
+<div class="section-title">System Architecture</div>
+
+<div class="arch-container">
+  <div class="arch-diagram">
+
+    <!-- Frontend Layer -->
+    <div class="arch-layer frontend">
+      <div class="arch-layer-title">🖥️ Frontend · Next.js 14 + Zustand</div>
+      <div class="arch-modules">
+        <div class="arch-module">
+          <div class="arch-module-icon">💬</div>
+          <div class="arch-module-name">AI 对话</div>
+          <div class="arch-module-desc">WS 流式 · 情绪注入</div>
+        </div>
+        <div class="arch-module">
+          <div class="arch-module-icon">📝</div>
+          <div class="arch-module-name">自适应练习</div>
+          <div class="arch-module-desc">SM-2 队列 · 三级优先</div>
+        </div>
+        <div class="arch-module">
+          <div class="arch-module-icon">🗺️</div>
+          <div class="arch-module-name">知识图谱</div>
+          <div class="arch-module-desc">力导向 · 5 层级</div>
+        </div>
+        <div class="arch-module">
+          <div class="arch-module-icon">📊</div>
+          <div class="arch-module-name">学情看板</div>
+          <div class="arch-module-desc">雷达图 · 遗忘曲线</div>
+        </div>
+        <div class="arch-module">
+          <div class="arch-module-icon">🔔</div>
+          <div class="arch-module-name">智能秘书</div>
+          <div class="arch-module-desc">7 模块 · 主动服务</div>
+        </div>
+        <div class="arch-module">
+          <div class="arch-module-icon">🔥</div>
+          <div class="arch-module-name">习惯养成</div>
+          <div class="arch-module-desc">Streak · 番茄钟</div>
+        </div>
+        <div class="arch-module">
+          <div class="arch-module-icon">❤️</div>
+          <div class="arch-module-name">心理陪伴</div>
+          <div class="arch-module-desc">11 类情绪 · 趋势</div>
+        </div>
+        <div class="arch-module">
+          <div class="arch-module-icon">✨</div>
+          <div class="arch-module-name">智能创造</div>
+          <div class="arch-module-desc">变式题 · 关联发现</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Arrow -->
+    <div class="arch-arrow">
+      <div class="arch-arrow-line"></div>
+      <div class="arch-arrow-label">REST + WebSocket</div>
+      <div class="arch-arrow-line"></div>
+    </div>
+
+    <!-- Backend Layer -->
+    <div class="arch-layer backend">
+      <div class="arch-layer-title">⚙️ Backend · FastAPI + Python 3.11</div>
+      <div class="arch-modules">
+        <div class="arch-module">
+          <div class="arch-module-icon">🧠</div>
+          <div class="arch-module-name">LLM Core</div>
+          <div class="arch-module-desc">流式生成 · 工具调用</div>
+        </div>
+        <div class="arch-module">
+          <div class="arch-module-icon">🧩</div>
+          <div class="arch-module-name">认知追踪</div>
+          <div class="arch-module-desc">15 子系统 · 22 方程</div>
+        </div>
+        <div class="arch-module">
+          <div class="arch-module-icon">📋</div>
+          <div class="arch-module-name">秘书引擎</div>
+          <div class="arch-module-desc">诊断 · 提案 · 策略</div>
+        </div>
+        <div class="arch-module">
+          <div class="arch-module-icon">👁️</div>
+          <div class="arch-module-name">视觉理解</div>
+          <div class="arch-module-desc">OCR · 拍题 · 分析</div>
+        </div>
+        <div class="arch-module">
+          <div class="arch-module-icon">🎯</div>
+          <div class="arch-module-name">练习引擎</div>
+          <div class="arch-module-desc">SM-2 · Beta 信念</div>
+        </div>
+        <div class="arch-module">
+          <div class="arch-module-icon">🗂️</div>
+          <div class="arch-module-name">分类器</div>
+          <div class="arch-module-desc">向量检索 · 3 模式</div>
+        </div>
+        <div class="arch-module">
+          <div class="arch-module-icon">🌳</div>
+          <div class="arch-module-name">树操作</div>
+          <div class="arch-module-desc">CRUD · 同步 · 命名</div>
+        </div>
+        <div class="arch-module">
+          <div class="arch-module-icon">🔊</div>
+          <div class="arch-module-name">多模态</div>
+          <div class="arch-module-desc">TTS · 视频 · 卡片</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Arrow -->
+    <div class="arch-arrow">
+      <div class="arch-arrow-line"></div>
+      <div class="arch-arrow-label">SQL + Vector + Cache</div>
+      <div class="arch-arrow-line"></div>
+    </div>
+
+    <!-- Data Layer -->
+    <div class="arch-data-row">
+      <div class="arch-layer data" style="max-width:none">
+        <div class="arch-layer-title">🗄️ PostgreSQL 14/16</div>
+        <div class="arch-modules" style="grid-template-columns:1fr">
+          <div class="arch-module">
+            <div class="arch-module-name">pgvector</div>
+            <div class="arch-module-desc">语义检索 · 向量分类</div>
+          </div>
+        </div>
+      </div>
+      <div class="arch-layer data" style="max-width:none">
+        <div class="arch-layer-title">⚡ Redis 7</div>
+        <div class="arch-modules" style="grid-template-columns:1fr">
+          <div class="arch-module">
+            <div class="arch-module-name">Cache + Queue</div>
+            <div class="arch-module-desc">缓存 · 事件队列</div>
+          </div>
+        </div>
+      </div>
+      <div class="arch-layer data" style="max-width:none">
+        <div class="arch-layer-title">🤖 AI APIs</div>
+        <div class="arch-modules" style="grid-template-columns:1fr">
+          <div class="arch-module">
+            <div class="arch-module-name">DeepSeek / GPT-4o</div>
+            <div class="arch-module-desc">LiteLLM 路由</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SECTION 2: MODULE TABS
+     ═══════════════════════════════════════════════════════════════ -->
+<div class="section-title">Core Module Showcase</div>
+
+<div class="tabs-container">
+  <nav class="tabs-nav">
+    <button class="tab-btn active" data-tab="chat"><span class="tab-icon">💬</span> AI 对话</button>
+    <button class="tab-btn" data-tab="practice"><span class="tab-icon">📝</span> 自适应练习</button>
+    <button class="tab-btn" data-tab="graph"><span class="tab-icon">🗺️</span> 知识图谱</button>
+    <button class="tab-btn" data-tab="dashboard"><span class="tab-icon">📊</span> 学情看板</button>
+    <button class="tab-btn" data-tab="secretary"><span class="tab-icon">🔔</span> 智能秘书</button>
+    <button class="tab-btn" data-tab="habit"><span class="tab-icon">🔥</span> 习惯养成</button>
+  </nav>
+
+  <!-- ═══ TAB: AI Chat ═══ -->
+  <div class="tab-panel active" id="tab-chat">
+    <div class="chat-container">
+      <div class="chat-sidebar">
+        <div class="chat-sidebar-title">对话列表</div>
+        <div class="chat-list-item active">
+          <div class="chat-list-item-title">微积分-导数学习</div>
+          <div class="chat-list-item-time">今天 14:30</div>
+        </div>
+        <div class="chat-list-item">
+          <div class="chat-list-item-title">线性代数-特征值</div>
+          <div class="chat-list-item-time">昨天 20:15</div>
+        </div>
+        <div class="chat-list-item">
+          <div class="chat-list-item-title">物理-牛顿定律</div>
+          <div class="chat-list-item-time">3天前</div>
+        </div>
+        <div class="chat-list-item">
+          <div class="chat-list-item-title">概率论-贝叶斯</div>
+          <div class="chat-list-item-time">1周前</div>
+        </div>
+      </div>
+      <div class="chat-main">
+        <div class="chat-messages">
+          <div class="chat-msg user">
+            <div class="chat-avatar">👤</div>
+            <div class="chat-bubble">导数的几何意义是什么？能举个例子吗？</div>
+          </div>
+          <div class="chat-msg ai">
+            <div class="chat-avatar">🤖</div>
+            <div>
+              <div class="chat-bubble">
+                导数的几何意义是<strong>函数图像在某一点处切线的斜率</strong>。<br><br>
+                举个例子：假设你正在开车，你的位置随时间变化的函数是 s(t)。那么 s'(t) 就是你的<strong>瞬时速度</strong>——也就是在某一刻的"变化快慢"。<br><br>
+                如果 s(t) = t²，那么 s'(t) = 2t。当 t=3 时，瞬时速度就是 6 m/s。
+                <span class="streaming-cursor"></span>
+              </div>
+              <div class="chat-followups">
+                <span class="chat-followup">🔗 导数和积分有什么关系？</span>
+                <span class="chat-followup">📐 链式法则怎么用？</span>
+                <span class="chat-followup">🎯 做几道练习题</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="chat-input">
+          <button class="chat-input-btn mic">🎤</button>
+          <input class="chat-input-field" placeholder="输入你的问题..." readonly>
+          <button class="chat-input-btn">➤</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB: Practice ═══ -->
+  <div class="tab-panel" id="tab-practice">
+    <div class="practice-container">
+      <div class="practice-header">
+        <div class="practice-title">📝 今日练习</div>
+        <div class="practice-progress">
+          <div class="practice-progress-bar">
+            <div class="practice-progress-fill" style="width:60%"></div>
+          </div>
+          <span class="practice-progress-text">12 / 20 完成</span>
+        </div>
+      </div>
+      <div class="practice-queue">
+        <div class="practice-queue-title">自适应队列 · SM-2 三级优先级</div>
+        <div class="practice-queue-items">
+          <div class="queue-item review">
+            <div class="queue-item-label">🔥 复习</div>
+            <div class="queue-item-count">8</div>
+            <div class="queue-item-weight">权重 ×2</div>
+          </div>
+          <div class="queue-item zpd">
+            <div class="queue-item-label">🎯 ZPD 甜点</div>
+            <div class="queue-item-count">6</div>
+            <div class="queue-item-weight">权重 ×1.5</div>
+          </div>
+          <div class="queue-item explore">
+            <div class="queue-item-label">✨ 探索</div>
+            <div class="queue-item-count">4</div>
+            <div class="queue-item-weight">权重 ×0.5</div>
+          </div>
+        </div>
+      </div>
+      <div class="practice-card">
+        <div class="practice-question">下列哪个是 f(x) = x² 的导数？</div>
+        <div class="practice-options">
+          <button class="practice-option wrong">
+            <span class="practice-option-label">A</span>
+            <span>f'(x) = x</span>
+          </button>
+          <button class="practice-option correct">
+            <span class="practice-option-label">B</span>
+            <span>f'(x) = 2x</span>
+          </button>
+          <button class="practice-option">
+            <span class="practice-option-label">C</span>
+            <span>f'(x) = 2x²</span>
+          </button>
+          <button class="practice-option">
+            <span class="practice-option-label">D</span>
+            <span>f'(x) = x³</span>
+          </button>
+        </div>
+        <div class="practice-explanation">
+          <strong>✅ 正确！</strong> 根据幂函数求导法则：(xⁿ)' = nxⁿ⁻¹，所以 (x²)' = 2x¹ = 2x。
+        </div>
+        <div class="practice-meta">
+          <span class="practice-meta-item">📊 掌握度: 72%</span>
+          <span class="practice-meta-item">⏰ 下次复习: 3天后</span>
+          <span class="practice-meta-item">🎯 难度: 中等</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB: Knowledge Graph ═══ -->
+  <div class="tab-panel" id="tab-graph">
+    <div class="graph-container">
+      <div class="graph-header">
+        <div class="graph-title">🗺️ 知识图谱 · 力导向可视化</div>
+        <div class="graph-legend">
+          <div class="graph-legend-item"><div class="graph-legend-dot" style="background:#c8503c"></div> 掌握 &lt;30%</div>
+          <div class="graph-legend-item"><div class="graph-legend-dot" style="background:#c8a05f"></div> 掌握 30-70%</div>
+          <div class="graph-legend-item"><div class="graph-legend-dot" style="background:#5a8f6b"></div> 掌握 &gt;70%</div>
+        </div>
+      </div>
+      <div class="graph-canvas">
+        <svg viewBox="0 0 800 400">
+          <!-- Connections -->
+          <line x1="400" y1="200" x2="200" y2="120" stroke="#dcd0c2" stroke-width="1.5"/>
+          <line x1="400" y1="200" x2="600" y2="120" stroke="#dcd0c2" stroke-width="1.5"/>
+          <line x1="400" y1="200" x2="300" y2="320" stroke="#dcd0c2" stroke-width="1.5"/>
+          <line x1="400" y1="200" x2="520" y2="320" stroke="#dcd0c2" stroke-width="1.5"/>
+          <line x1="200" y1="120" x2="100" y2="60" stroke="#dcd0c2" stroke-width="1"/>
+          <line x1="200" y1="120" x2="160" y2="50" stroke="#dcd0c2" stroke-width="1"/>
+          <line x1="600" y1="120" x2="680" y2="60" stroke="#dcd0c2" stroke-width="1"/>
+          <line x1="600" y1="120" x2="720" y2="160" stroke="#dcd0c2" stroke-width="1"/>
+          <line x1="300" y1="320" x2="220" y2="370" stroke="#dcd0c2" stroke-width="1"/>
+          <line x1="520" y1="320" x2="600" y2="370" stroke="#dcd0c2" stroke-width="1"/>
+          <line x1="520" y1="320" x2="480" y2="380" stroke="#dcd0c2" stroke-width="1"/>
+
+          <!-- Center Node: 数学 (Partition) -->
+          <circle cx="400" cy="200" r="35" fill="#8f7a62" opacity="0.15" stroke="#8f7a62" stroke-width="2"/>
+          <text x="400" y="204" text-anchor="middle" font-size="14" font-weight="700" fill="#8f7a62">数学</text>
+
+          <!-- Domain Nodes -->
+          <circle cx="200" cy="120" r="26" fill="#c8a05f" opacity="0.2" stroke="#c8a05f" stroke-width="1.5"/>
+          <text x="200" y="124" text-anchor="middle" font-size="11" font-weight="600" fill="#c8a05f">微积分</text>
+
+          <circle cx="600" cy="120" r="26" fill="#5a8f6b" opacity="0.2" stroke="#5a8f6b" stroke-width="1.5"/>
+          <text x="600" y="124" text-anchor="middle" font-size="11" font-weight="600" fill="#5a8f6b">线性代数</text>
+
+          <circle cx="300" cy="320" r="26" fill="#c8503c" opacity="0.2" stroke="#c8503c" stroke-width="1.5"/>
+          <text x="300" y="324" text-anchor="middle" font-size="11" font-weight="600" fill="#c8503c">概率论</text>
+
+          <circle cx="520" cy="320" r="26" fill="#c8a05f" opacity="0.2" stroke="#c8a05f" stroke-width="1.5"/>
+          <text x="520" y="324" text-anchor="middle" font-size="11" font-weight="600" fill="#c8a05f">离散数学</text>
+
+          <!-- Topic Nodes -->
+          <circle cx="100" cy="60" r="18" fill="#c8503c" opacity="0.25" stroke="#c8503c" stroke-width="1"/>
+          <text x="100" y="64" text-anchor="middle" font-size="9" fill="#c8503c">导数</text>
+
+          <circle cx="160" cy="50" r="18" fill="#5a8f6b" opacity="0.25" stroke="#5a8f6b" stroke-width="1"/>
+          <text x="160" y="54" text-anchor="middle" font-size="9" fill="#5a8f6b">积分</text>
+
+          <circle cx="680" cy="60" r="18" fill="#5a8f6b" opacity="0.25" stroke="#5a8f6b" stroke-width="1"/>
+          <text x="680" y="64" text-anchor="middle" font-size="9" fill="#5a8f6b">特征值</text>
+
+          <circle cx="720" cy="160" r="18" fill="#c8a05f" opacity="0.25" stroke="#c8a05f" stroke-width="1"/>
+          <text x="720" y="164" text-anchor="middle" font-size="9" fill="#c8a05f">矩阵</text>
+
+          <circle cx="220" cy="370" r="18" fill="#c8503c" opacity="0.25" stroke="#c8503c" stroke-width="1"/>
+          <text x="220" y="374" text-anchor="middle" font-size="9" fill="#c8503c">贝叶斯</text>
+
+          <circle cx="600" cy="370" r="18" fill="#c8a05f" opacity="0.25" stroke="#c8a05f" stroke-width="1"/>
+          <text x="600" y="374" text-anchor="middle" font-size="9" fill="#c8a05f">图论</text>
+
+          <circle cx="480" cy="380" r="18" fill="#5a8f6b" opacity="0.25" stroke="#5a8f6b" stroke-width="1"/>
+          <text x="480" y="384" text-anchor="middle" font-size="9" fill="#5a8f6b">逻辑</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB: Dashboard ═══ -->
+  <div class="tab-panel" id="tab-dashboard">
+    <div class="dashboard-container">
+      <!-- Radar Chart -->
+      <div class="dash-card">
+        <div class="dash-card-title">能力雷达图</div>
+        <div class="radar-chart">
+          <svg viewBox="0 0 200 200">
+            <!-- Grid -->
+            <polygon points="100,20 170,65 150,150 50,150 30,65" fill="none" stroke="#e6dcd0" stroke-width="1"/>
+            <polygon points="100,40 150,72 135,135 65,135 50,72" fill="none" stroke="#e6dcd0" stroke-width="1"/>
+            <polygon points="100,60 130,80 120,120 80,120 70,80" fill="none" stroke="#e6dcd0" stroke-width="1"/>
+            <polygon points="100,80 115,88 110,105 90,105 85,88" fill="none" stroke="#e6dcd0" stroke-width="1"/>
+            <!-- Axes -->
+            <line x1="100" y1="100" x2="100" y2="20" stroke="#dcd0c2" stroke-width="0.5"/>
+            <line x1="100" y1="100" x2="170" y2="65" stroke="#dcd0c2" stroke-width="0.5"/>
+            <line x1="100" y1="100" x2="150" y2="150" stroke="#dcd0c2" stroke-width="0.5"/>
+            <line x1="100" y1="100" x2="50" y2="150" stroke="#dcd0c2" stroke-width="0.5"/>
+            <line x1="100" y1="100" x2="30" y2="65" stroke="#dcd0c2" stroke-width="0.5"/>
+            <!-- Data -->
+            <polygon points="100,35 155,70 140,140 60,130 45,75" fill="rgba(143,122,98,.15)" stroke="#8f7a62" stroke-width="2"/>
+            <!-- Labels -->
+            <text x="100" y="14" text-anchor="middle" font-size="10" fill="#7a7068">记忆</text>
+            <text x="178" y="65" text-anchor="start" font-size="10" fill="#7a7068">理解</text>
+            <text x="155" y="160" text-anchor="start" font-size="10" fill="#7a7068">应用</text>
+            <text x="45" y="160" text-anchor="end" font-size="10" fill="#7a7068">分析</text>
+            <text x="22" y="65" text-anchor="end" font-size="10" fill="#7a7068">创造</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Trend Chart -->
+      <div class="dash-card">
+        <div class="dash-card-title">7 日掌握度趋势</div>
+        <div class="trend-chart">
+          <svg viewBox="0 0 300 160">
+            <!-- Grid lines -->
+            <line x1="40" y1="20" x2="290" y2="20" stroke="#e6dcd0" stroke-width="0.5"/>
+            <line x1="40" y1="50" x2="290" y2="50" stroke="#e6dcd0" stroke-width="0.5"/>
+            <line x1="40" y1="80" x2="290" y2="80" stroke="#e6dcd0" stroke-width="0.5"/>
+            <line x1="40" y1="110" x2="290" y2="110" stroke="#e6dcd0" stroke-width="0.5"/>
+            <line x1="40" y1="140" x2="290" y2="140" stroke="#e6dcd0" stroke-width="0.5"/>
+            <!-- Y axis labels -->
+            <text x="35" y="24" text-anchor="end" font-size="9" fill="#a69c8f">100%</text>
+            <text x="35" y="54" text-anchor="end" font-size="9" fill="#a69c8f">75%</text>
+            <text x="35" y="84" text-anchor="end" font-size="9" fill="#a69c8f">50%</text>
+            <text x="35" y="114" text-anchor="end" font-size="9" fill="#a69c8f">25%</text>
+            <text x="35" y="144" text-anchor="end" font-size="9" fill="#a69c8f">0%</text>
+            <!-- Area fill -->
+            <path d="M55,110 L95,95 L135,85 L175,75 L215,60 L255,50 L290,40 L290,140 L55,140 Z" fill="rgba(143,122,98,.1)"/>
+            <!-- Line -->
+            <polyline points="55,110 95,95 135,85 175,75 215,60 255,50 290,40" fill="none" stroke="#8f7a62" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <!-- Dots -->
+            <circle cx="55" cy="110" r="4" fill="#fff" stroke="#8f7a62" stroke-width="2"/>
+            <circle cx="95" cy="95" r="4" fill="#fff" stroke="#8f7a62" stroke-width="2"/>
+            <circle cx="135" cy="85" r="4" fill="#fff" stroke="#8f7a62" stroke-width="2"/>
+            <circle cx="175" cy="75" r="4" fill="#fff" stroke="#8f7a62" stroke-width="2"/>
+            <circle cx="215" cy="60" r="4" fill="#fff" stroke="#8f7a62" stroke-width="2"/>
+            <circle cx="255" cy="50" r="4" fill="#fff" stroke="#8f7a62" stroke-width="2"/>
+            <circle cx="290" cy="40" r="5" fill="#8f7a62" stroke="#fff" stroke-width="2"/>
+            <!-- X axis labels -->
+            <text x="55" y="155" text-anchor="middle" font-size="9" fill="#a69c8f">周一</text>
+            <text x="95" y="155" text-anchor="middle" font-size="9" fill="#a69c8f">周二</text>
+            <text x="135" y="155" text-anchor="middle" font-size="9" fill="#a69c8f">周三</text>
+            <text x="175" y="155" text-anchor="middle" font-size="9" fill="#a69c8f">周四</text>
+            <text x="215" y="155" text-anchor="middle" font-size="9" fill="#a69c8f">周五</text>
+            <text x="255" y="155" text-anchor="middle" font-size="9" fill="#a69c8f">周六</text>
+            <text x="290" y="155" text-anchor="middle" font-size="9" fill="#a69c8f">今天</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Heatmap -->
+      <div class="dash-card">
+        <div class="dash-card-title">学习热力图 · 近 4 周</div>
+        <div class="heatmap-grid">
+          <div class="heatmap-cell l2"></div><div class="heatmap-cell l3"></div><div class="heatmap-cell l1"></div><div class="heatmap-cell l4"></div><div class="heatmap-cell l2"></div><div class="heatmap-cell"></div><div class="heatmap-cell l1"></div>
+          <div class="heatmap-cell l3"></div><div class="heatmap-cell l2"></div><div class="heatmap-cell l4"></div><div class="heatmap-cell l1"></div><div class="heatmap-cell l3"></div><div class="heatmap-cell l2"></div><div class="heatmap-cell"></div>
+          <div class="heatmap-cell l1"></div><div class="heatmap-cell l4"></div><div class="heatmap-cell l2"></div><div class="heatmap-cell l3"></div><div class="heatmap-cell"></div><div class="heatmap-cell l1"></div><div class="heatmap-cell l2"></div>
+          <div class="heatmap-cell l4"></div><div class="heatmap-cell l2"></div><div class="heatmap-cell l3"></div><div class="heatmap-cell l1"></div><div class="heatmap-cell l4"></div><div class="heatmap-cell l3"></div><div class="heatmap-cell l2"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:10px;color:var(--ink-3)">
+          <span>少</span>
+          <div class="heatmap-cell" style="width:12px;height:12px;display:inline-block"></div>
+          <div class="heatmap-cell l1" style="width:12px;height:12px;display:inline-block"></div>
+          <div class="heatmap-cell l2" style="width:12px;height:12px;display:inline-block"></div>
+          <div class="heatmap-cell l3" style="width:12px;height:12px;display:inline-block"></div>
+          <div class="heatmap-cell l4" style="width:12px;height:12px;display:inline-block"></div>
+          <span>多</span>
+        </div>
+      </div>
+
+      <!-- Stats Cards -->
+      <div class="dash-card">
+        <div class="dash-card-title">今日数据</div>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-card-value">2.5h</div>
+            <div class="stat-card-label">学习时长</div>
+            <div class="stat-card-trend">↑ 15% vs 昨天</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-value">7</div>
+            <div class="stat-card-label">连续天数</div>
+            <div class="stat-card-trend">🔥 保持中</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-value">68%</div>
+            <div class="stat-card-label">平均掌握</div>
+            <div class="stat-card-trend">↑ 5% 本周</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-value">23</div>
+            <div class="stat-card-label">新掌握概念</div>
+            <div class="stat-card-trend">↑ 15% vs 上周</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB: Secretary ═══ -->
+  <div class="tab-panel" id="tab-secretary">
+    <div class="secretary-container">
+      <div class="secretary-header">
+        <div class="secretary-title">🔔 智能秘书</div>
+        <div class="secretary-status">
+          <div class="secretary-status-dot"></div>
+          7 模块运行中 · 最后诊断: 2 分钟前
+        </div>
+      </div>
+      <div class="secretary-cards">
+        <div class="secretary-card review">
+          <div class="secretary-card-icon">📚</div>
+          <div class="secretary-card-content">
+            <div class="secretary-card-title">复习提醒</div>
+            <div class="secretary-card-desc">
+              <strong>线性代数-特征值</strong> 已 3 天未复习，遗忘概率升至 42%。
+              建议今天花 15 分钟回顾关键概念。
+            </div>
+            <button class="secretary-card-action">开始复习 →</button>
+          </div>
+        </div>
+        <div class="secretary-card fatigue">
+          <div class="secretary-card-icon">😴</div>
+          <div class="secretary-card-content">
+            <div class="secretary-card-title">疲劳管理</div>
+            <div class="secretary-card-desc">
+              已连续学习 <strong>2.1 小时</strong>，认知负荷指数 0.78（偏高）。
+              建议休息 15 分钟，或切换到轻松的复习任务。
+            </div>
+            <button class="secretary-card-action">休息一下 →</button>
+          </div>
+        </div>
+        <div class="secretary-card report">
+          <div class="secretary-card-icon">📊</div>
+          <div class="secretary-card-content">
+            <div class="secretary-card-title">学习简报</div>
+            <div class="secretary-card-desc">
+              本周掌握 <strong>23 个概念</strong>，较上周 +15%。
+              微积分进步最大（+22%），概率论需加强。
+            </div>
+            <button class="secretary-card-action">查看详情 →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB: Habit ═══ -->
+  <div class="tab-panel" id="tab-habit">
+    <div class="habit-container">
+      <!-- Streak -->
+      <div class="habit-card">
+        <div class="habit-card-title">🔥 连续学习</div>
+        <div class="streak-display">
+          <div class="streak-fire">🔥</div>
+          <div class="streak-info">
+            <div class="streak-count">7 天</div>
+            <div class="streak-label">连续学习中</div>
+            <div class="streak-days">
+              <div class="streak-day done">一</div>
+              <div class="streak-day done">二</div>
+              <div class="streak-day done">三</div>
+              <div class="streak-day done">四</div>
+              <div class="streak-day done">五</div>
+              <div class="streak-day done">六</div>
+              <div class="streak-day today">日</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Daily Goal -->
+      <div class="habit-card">
+        <div class="habit-card-title">🎯 今日目标</div>
+        <div class="circular-progress">
+          <svg viewBox="0 0 120 120">
+            <circle class="circular-progress-bg" cx="60" cy="60" r="50"/>
+            <circle class="circular-progress-fill" cx="60" cy="60" r="50"
+              stroke-dasharray="314" stroke-dashoffset="78"/>
+          </svg>
+          <div class="circular-progress-text">
+            <div class="circular-progress-value">75%</div>
+            <div class="circular-progress-label">1.5h / 2h</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pomodoro -->
+      <div class="habit-card">
+        <div class="habit-card-title">🍅 番茄钟</div>
+        <div class="pomodoro-display">
+          <div class="pomodoro-time">25:00</div>
+          <div class="pomodoro-label">专注时间</div>
+          <div class="pomodoro-btns">
+            <button class="pomodoro-btn primary">开始</button>
+            <button class="pomodoro-btn secondary">重置</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="habit-card">
+        <div class="habit-card-title">📈 学习统计</div>
+        <div class="habit-stats">
+          <div class="habit-stat">
+            <div class="habit-stat-value">12.5h</div>
+            <div class="habit-stat-label">本周</div>
+          </div>
+          <div class="habit-stat">
+            <div class="habit-stat-value">48h</div>
+            <div class="habit-stat-label">本月</div>
+          </div>
+          <div class="habit-stat">
+            <div class="habit-stat-value">320h</div>
+            <div class="habit-stat-label">总计</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Achievements -->
+      <div class="habit-card full-width">
+        <div class="habit-card-title">🏆 成就徽章</div>
+        <div class="achievements-grid">
+          <div class="achievement">
+            <div class="achievement-icon">🏆</div>
+            <div class="achievement-name">首次登录</div>
+            <div class="achievement-desc">完成注册</div>
+          </div>
+          <div class="achievement">
+            <div class="achievement-icon">⭐</div>
+            <div class="achievement-name">连续 3 天</div>
+            <div class="achievement-desc">坚持学习</div>
+          </div>
+          <div class="achievement">
+            <div class="achievement-icon">🎯</div>
+            <div class="achievement-name">完成 100 题</div>
+            <div class="achievement-desc">练习达人</div>
+          </div>
+          <div class="achievement">
+            <div class="achievement-icon">📚</div>
+            <div class="achievement-name">知识达人</div>
+            <div class="achievement-desc">掌握 50 概念</div>
+          </div>
+          <div class="achievement">
+            <div class="achievement-icon">🔥</div>
+            <div class="achievement-name">连续 7 天</div>
+            <div class="achievement-desc">周冠军</div>
+          </div>
+          <div class="achievement">
+            <div class="achievement-icon">💡</div>
+            <div class="achievement-name">好奇心</div>
+            <div class="achievement-desc">提出 10 追问</div>
+          </div>
+          <div class="achievement">
+            <div class="achievement-icon">🌙</div>
+            <div class="achievement-name">夜猫子</div>
+            <div class="achievement-desc">深夜学习</div>
+          </div>
+          <div class="achievement">
+            <div class="achievement-icon">🎖️</div>
+            <div class="achievement-name">月度之星</div>
+            <div class="achievement-desc">本月 TOP 1</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</main>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     FOOTER
+     ═══════════════════════════════════════════════════════════════ -->
+<footer class="footer">
+  <span>v0.9.4 · Last updated: 2026-06-12</span>
+  <span>Built with ❤️ by uilz</span>
+</footer>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     JAVASCRIPT
+     ═══════════════════════════════════════════════════════════════ -->
+<script>
+// Tab switching
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// Chat list item switching
+document.querySelectorAll('.chat-list-item').forEach(item => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.chat-list-item').forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+  });
+});
+
+// Practice option click
+document.querySelectorAll('.practice-option').forEach(opt => {
+  opt.addEventListener('click', () => {
+    document.querySelectorAll('.practice-option').forEach(o => {
+      o.classList.remove('correct', 'wrong');
+    });
+    // Simulate answer
+    setTimeout(() => {
+      opt.classList.add('correct');
+    }, 200);
+  });
+});
+
+// Follow-up click
+document.querySelectorAll('.chat-followup').forEach(fup => {
+  fup.addEventListener('click', () => {
+    fup.style.borderColor = 'var(--accent)';
+    fup.style.background = 'var(--accent-soft)';
+    fup.style.color = 'var(--accent)';
+  });
+});
+
+// Intersection Observer for fade-in
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.style.opacity = '1';
+      entry.target.style.transform = 'translateY(0)';
+    }
+  });
+}, { threshold: 0.1 });
+
+document.querySelectorAll('.arch-layer, .arch-module, .dash-card, .secretary-card, .habit-card, .achievement').forEach(el => {
+  el.style.opacity = '0';
+  el.style.transform = 'translateY(12px)';
+  el.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+  observer.observe(el);
+});
+
+// Trigger initial elements
+setTimeout(() => {
+  document.querySelectorAll('.arch-layer, .arch-module').forEach(el => {
+    el.style.opacity = '1';
+    el.style.transform = 'translateY(0)';
+  });
+}, 100);
+</script>
+
+</body>
+</html>
