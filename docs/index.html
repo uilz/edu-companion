@@ -48,7 +48,7 @@ a{color:var(--accent);text-decoration:none}
   max-width:1200px; margin:0 auto;
   display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px;
 }
-.header-left { display:flex; align-items:center; gap:12px; }
+.header-left { display:flex; align-items:center; gap:12px; position:relative; }
 .header-logo { font-size:28px; }
 .header-title { font-size:20px; font-weight:700; letter-spacing:-.02em; }
 .header-subtitle { font-size:13px; color:var(--ink-3); margin-top:2px; }
@@ -577,6 +577,96 @@ a{color:var(--accent);text-decoration:none}
   max-width:1200px; margin:0 auto; padding:32px;
   display:flex; align-items:center; justify-content:space-between;
   border-top:1px solid var(--divider-soft); font-size:12px; color:var(--ink-3);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVE
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Header */
+  .header { padding:16px; }
+  .header-inner { flex-direction:column; align-items:flex-start; gap:12px; }
+  .header-left { width:100%; }
+  .github-link { position:absolute; top:16px; right:16px; }
+  .stats-bar { width:100%; overflow-x:auto; flex-wrap:nowrap; padding-bottom:4px; -webkit-overflow-scrolling:touch; }
+  .stat-item { min-width:70px; padding:6px 10px; }
+  .stat-value { font-size:14px; }
+  .stat-label { font-size:9px; }
+
+  /* Main */
+  .main { padding:16px; }
+
+  /* Architecture */
+  .arch-container { padding:16px; overflow-x:auto; }
+  .arch-modules { grid-template-columns:repeat(2,1fr) !important; gap:8px; }
+  .arch-module { padding:10px 8px; }
+  .arch-module-icon { font-size:16px; }
+  .arch-module-name { font-size:11px; }
+  .arch-module-desc { font-size:9px; }
+  .arch-data-row { grid-template-columns:1fr !important; }
+  .arch-layer { padding:14px; }
+
+  /* Tabs */
+  .tabs-nav { gap:2px; padding:3px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .tab-btn { padding:8px 12px; font-size:12px; white-space:nowrap; }
+
+  /* Chat */
+  .chat-container { grid-template-columns:1fr !important; height:auto; }
+  .chat-sidebar { display:none; }
+  .chat-messages { padding:16px; min-height:300px; }
+  .chat-msg { max-width:95%; }
+  .chat-bubble { font-size:13px; padding:10px 14px; }
+  .chat-followups { flex-direction:column; }
+  .chat-followup { width:100%; text-align:center; }
+  .chat-input { padding:12px 16px; }
+
+  /* Practice */
+  .practice-header { flex-direction:column; align-items:flex-start; gap:12px; padding:16px; }
+  .practice-progress { width:100%; }
+  .practice-progress-bar { flex:1; }
+  .practice-queue { padding:16px; }
+  .practice-queue-items { flex-direction:column; gap:8px; }
+  .queue-item { padding:10px; }
+  .practice-card { padding:16px; }
+  .practice-options { grid-template-columns:1fr !important; }
+  .practice-option { padding:12px; }
+
+  /* Graph */
+  .graph-container { height:350px; }
+  .graph-header { flex-direction:column; align-items:flex-start; gap:8px; padding:14px; }
+  .graph-legend { flex-wrap:wrap; gap:8px; }
+
+  /* Dashboard */
+  .dashboard-container { grid-template-columns:1fr !important; }
+  .dash-card { padding:16px; }
+  .radar-chart svg { width:160px; height:160px; }
+
+  /* Secretary */
+  .secretary-header { flex-direction:column; align-items:flex-start; gap:8px; padding:16px; }
+  .secretary-cards { padding:16px; }
+  .secretary-card { flex-direction:column; gap:10px; }
+  .secretary-card-icon { width:36px; height:36px; font-size:16px; }
+
+  /* Habit */
+  .habit-container { grid-template-columns:1fr !important; }
+  .habit-card { padding:16px; }
+  .streak-display { flex-direction:column; text-align:center; }
+  .streak-days { justify-content:center; }
+  .achievements-grid { grid-template-columns:repeat(2,1fr) !important; }
+  .pomodoro-time { font-size:36px; }
+  .habit-stats { grid-template-columns:1fr !important; gap:8px; }
+
+  /* Footer */
+  .footer { flex-direction:column; gap:8px; text-align:center; padding:24px 16px; }
+}
+
+@media (max-width: 480px) {
+  .header-title { font-size:16px; }
+  .header-subtitle { font-size:11px; }
+  .arch-modules { grid-template-columns:1fr !important; }
+  .stats-grid { grid-template-columns:1fr !important; }
+  .heatmap-grid { gap:3px; }
+  .heatmap-cell { border-radius:2px; }
 }
 </style>
 </head>
