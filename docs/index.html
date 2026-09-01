@@ -584,14 +584,17 @@ a{color:var(--accent);text-decoration:none}
    ═══════════════════════════════════════════════════════════════ */
 @media (max-width: 768px) {
   /* Header */
-  .header { padding:16px; }
-  .header-inner { flex-direction:column; align-items:flex-start; gap:12px; }
-  .header-left { width:100%; }
-  .github-link { position:absolute; top:16px; right:16px; }
-  .stats-bar { width:100%; overflow-x:auto; flex-wrap:nowrap; padding-bottom:4px; -webkit-overflow-scrolling:touch; }
-  .stat-item { min-width:70px; padding:6px 10px; }
-  .stat-value { font-size:14px; }
-  .stat-label { font-size:9px; }
+  .header { padding:10px 12px; }
+  .header-inner { gap:8px; }
+  .header-logo { font-size:20px; }
+  .header-title { font-size:14px; }
+  .header-subtitle { display:none; }
+  .github-link { position:absolute; top:10px; right:12px; width:28px; height:28px; }
+  .github-link svg { width:16px; height:16px; }
+  .stats-bar { gap:6px; overflow-x:auto; flex-wrap:nowrap; padding-bottom:2px; -webkit-overflow-scrolling:touch; }
+  .stat-item { min-width:50px; padding:4px 8px; }
+  .stat-value { font-size:12px; }
+  .stat-label { font-size:8px; }
 
   /* Main */
   .main { padding:16px; }
@@ -661,8 +664,9 @@ a{color:var(--accent);text-decoration:none}
 }
 
 @media (max-width: 480px) {
-  .header-title { font-size:16px; }
-  .header-subtitle { font-size:11px; }
+  .header { padding:8px 10px; }
+  .header-logo { font-size:18px; }
+  .header-title { font-size:13px; }
   .arch-modules { grid-template-columns:1fr !important; }
   .stats-grid { grid-template-columns:1fr !important; }
   .heatmap-grid { gap:3px; }
